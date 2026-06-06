@@ -16,13 +16,10 @@ import {
   RadarData,
   SOURCE_SITE_URL,
   formatDateTime,
-  getExpectationLabel,
+  getRadarViewModel,
   getRefreshIntervalLabel,
   getRefreshIntervalMs,
   probabilityToPercent,
-  translateAction,
-  translateSourceText,
-  translateStatus,
 } from "@/lib/radar";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
@@ -97,7 +94,8 @@ export function RadarDashboard() {
     void fetchRadar();
   }, [fetchRadar]);
 
-  const probability24h = state.data?.prediction?.probability_24h;
+  const viewModel = useMemo(() => getRadarViewModel(state.data), [state.data]);
+  const probability24h = viewModel.probability24h;
   const refreshMs = useMemo(
     () => getRefreshIntervalMs(probability24h),
     [probability24h],
@@ -110,9 +108,6 @@ export function RadarDashboard() {
 
     return () => window.clearInterval(timer);
   }, [fetchRadar, refreshMs]);
-
-  const expectation = getExpectationLabel(probability24h);
-  const status = translateStatus(state.data?.status, state.data?.window_open);
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
@@ -170,7 +165,7 @@ export function RadarDashboard() {
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                  現在のリセット期待度：{expectation}
+                  現在のリセット期待度：{viewModel.expectation}
                 </h2>
               </div>
               <Gauge className="h-7 w-7 text-teal-700" />
@@ -180,17 +175,15 @@ export function RadarDashboard() {
               <Metric label="24時間以内" value={probabilityToPercent(probability24h)} />
               <Metric
                 label="48時間以内"
-                value={probabilityToPercent(
-                  state.data?.prediction?.probability_48h,
-                )}
+                value={probabilityToPercent(viewModel.probability48h)}
               />
             </div>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label="現在の状態" value={status} />
+              <InfoRow label="現在の状態" value={viewModel.status} />
               <InfoRow
                 label="推奨アクション"
-                value={translateAction(state.data?.recommended_action)}
+                value={viewModel.action}
               />
               <InfoRow
                 label="取得間隔"
@@ -206,30 +199,28 @@ export function RadarDashboard() {
                   最新リセット
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                  {translateSourceText(state.data?.last_window?.title)}
+                  {viewModel.latestWindow.title}
                 </h2>
               </div>
               <Sparkles className="h-7 w-7 text-amber-600" />
             </div>
 
             <p className="mt-4 text-sm leading-6 text-slate-700">
-              {state.data?.last_window?.summary
-                ? translateSourceText(state.data.last_window.summary)
-                : "概要は取得できていません。"}
+              {viewModel.latestWindow.summary}
             </p>
 
             <dl className="mt-5 space-y-4">
               <InfoRow
                 label="対象プラン"
-                value={translateSourceText(state.data?.last_window?.scope)}
+                value={viewModel.latestWindow.scope}
               />
               <InfoRow
                 label="シグナル発生時刻"
-                value={formatDateTime(state.data?.last_window?.opened_at)}
+                value={formatDateTime(viewModel.latestWindow.openedAt)}
               />
               <InfoRow
                 label="リセット時刻"
-                value={formatDateTime(state.data?.last_window?.closed_at)}
+                value={formatDateTime(viewModel.latestWindow.closedAt)}
               />
             </dl>
           </article>
@@ -240,7 +231,7 @@ export function RadarDashboard() {
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Clock className="h-5 w-5 text-slate-500" />
               <span>
-                最終更新時刻：{formatDateTime(state.data?.checked_at)}
+                最終更新時刻：{formatDateTime(viewModel.lastUpdated)}
               </span>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-700">
