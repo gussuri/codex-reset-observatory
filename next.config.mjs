@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const isDevelopment = process.env.NODE_ENV !== "production";
+
 const securityHeaders = [
   {
     key: "X-Content-Type-Options",
@@ -26,8 +28,8 @@ const securityHeaders = [
       "object-src 'none'",
       "img-src 'self' data: blob:",
       "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "connect-src 'self' https://codex-reset-radar.pages.dev ws: wss:",
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
+      `connect-src 'self' https://codex-reset-radar.pages.dev${isDevelopment ? " ws: wss:" : ""}`,
     ].join("; "),
   },
 ];

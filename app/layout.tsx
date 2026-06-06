@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/og-image.svg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: siteTitle,
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: `${siteTitle} | Codexリセット予測・履歴・最新情報`,
     description: siteDescription,
-    images: ["/og-image.svg"],
+    images: ["/og-image.png"],
   },
 };
 

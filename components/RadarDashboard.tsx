@@ -32,13 +32,13 @@ type LoadState = {
   loading: boolean;
 };
 
-export function RadarDashboard() {
+export function RadarDashboard({ initialData }: { initialData?: RadarData | null }) {
   const [state, setState] = useState<LoadState>({
-    data: null,
-    fetchedAt: null,
+    data: initialData ?? null,
+    fetchedAt: initialData ? new Date().toISOString() : null,
     isFallback: false,
     error: null,
-    loading: true,
+    loading: !initialData,
   });
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
