@@ -1,0 +1,8 @@
+node_modules
+.next
+.vercel
+.tools
+*.tgz
+pnpm.cjs
+dev-server*.log
+.pnpm-debug.log

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(20, 184, 166, 0.18), transparent 30rem),
+    radial-gradient(circle at 84% 4%, rgba(245, 158, 11, 0.14), transparent 26rem),
+    linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #f7f7f0 100%);
+  color: #111827;
+}
+
+a {
+  color: inherit;
+}
+
+.radar-grid {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.radar-sweep {
+  background:
+    conic-gradient(from 240deg, rgba(20, 184, 166, 0.28), rgba(20, 184, 166, 0.02) 35%, transparent 36%),
+    radial-gradient(circle, transparent 0 29%, rgba(15, 23, 42, 0.16) 30% 31%, transparent 32% 55%, rgba(15, 23, 42, 0.13) 56% 57%, transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.62));
+  animation: sweep 9s linear infinite;
+}
+
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
