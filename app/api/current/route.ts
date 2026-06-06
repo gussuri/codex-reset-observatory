@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 
 const CURRENT_JSON_URL = "https://codex-reset-radar.pages.dev/current.json";
+const FETCH_TIMEOUT_MS = 8000;
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
     const response = await fetch(CURRENT_JSON_URL, {
       headers: {
         accept: "application/json",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: `Upstream returned ${response.status}` },
+        { error: "Failed to fetch current data" },
         { status: 502 },
       );
     }
@@ -27,10 +32,12 @@ export async function GET() {
         "Cache-Control": "no-store",
       },
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch current.json";
-
-    return NextResponse.json({ error: message }, { status: 502 });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to fetch current data" },
+      { status: 502 },
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
