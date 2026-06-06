@@ -113,17 +113,17 @@ export function RadarDashboard() {
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
         <header className="flex flex-col gap-4 rounded-lg border border-slate-200/80 bg-white/82 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-200 radar-grid">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 radar-grid sm:h-16 sm:w-16">
               <div className="absolute inset-2 rounded-full border border-slate-300" />
               <div className="radar-sweep absolute inset-2 rounded-full" />
               <Radio className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-teal-700" />
             </div>
             <div>
-              <p className="text-sm font-medium text-teal-700">
-                Codex Reset Radar 日本語ビュー
+              <p className="text-sm font-medium leading-6 text-teal-700">
+                Codexリセット予測・履歴・最新情報
               </p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
               </h1>
             </div>
@@ -131,7 +131,7 @@ export function RadarDashboard() {
 
           <button
             aria-label="最新データを取得"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
             disabled={state.loading}
             onClick={() => void fetchRadar()}
             type="button"
