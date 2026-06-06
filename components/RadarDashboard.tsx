@@ -123,7 +123,7 @@ export function RadarDashboard() {
               <p className="text-sm font-medium leading-6 text-teal-700">
                 Codexリセット予測・履歴・最新情報
               </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+              <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
               </h1>
             </div>
@@ -164,8 +164,8 @@ export function RadarDashboard() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                  現在のリセット期待度：{viewModel.expectation}
+                <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
+                  リセット期待度：{viewModel.expectation}
                 </h2>
               </div>
               <Gauge className="h-7 w-7 text-teal-700" />
@@ -180,13 +180,13 @@ export function RadarDashboard() {
             </div>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label="現在の状態" value={viewModel.status} />
+              <InfoRow label="リセット状況" value={viewModel.status} />
               <InfoRow
-                label="推奨アクション"
+                label="おすすめの対応"
                 value={viewModel.action}
               />
               <InfoRow
-                label="取得間隔"
+                label="自動更新の目安"
                 value={getRefreshIntervalLabel(probability24h)}
               />
             </dl>
@@ -196,9 +196,9 @@ export function RadarDashboard() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">
-                  最新リセット
+                  最新のリセット
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+                <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   {viewModel.latestWindow.title}
                 </h2>
               </div>
@@ -215,11 +215,11 @@ export function RadarDashboard() {
                 value={viewModel.latestWindow.scope}
               />
               <InfoRow
-                label="シグナル発生時刻"
+                label="検知時刻"
                 value={formatDateTime(viewModel.latestWindow.openedAt)}
               />
               <InfoRow
-                label="リセット時刻"
+                label="リセット実施時刻"
                 value={formatDateTime(viewModel.latestWindow.closedAt)}
               />
             </dl>
@@ -237,14 +237,14 @@ export function RadarDashboard() {
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Activity className="h-5 w-5 text-slate-500" />
               <span>
-                取得成功時刻：{formatDateTime(state.fetchedAt)}
+                データ取得時刻：{formatDateTime(state.fetchedAt)}
               </span>
             </div>
           </div>
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-          <p className="text-sm text-slate-300">Source:</p>
+          <p className="text-sm text-slate-300">出典:</p>
           <a
             className="mt-1 inline-flex items-center gap-2 text-base font-semibold underline-offset-4 hover:underline"
             href={SOURCE_SITE_URL}

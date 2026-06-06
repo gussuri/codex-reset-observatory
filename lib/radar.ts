@@ -224,16 +224,16 @@ export function translateStatus(
   isWindowOpen: boolean | undefined,
 ) {
   if (isWindowOpen) {
-    return "リセット期間が開いています";
+    return "リセットが実施中です";
   }
 
   switch (status) {
     case "none":
-      return "開いているリセット期間はありません";
+      return "現在リセットは実施されていません";
     case "open":
-      return "リセット期間が開いています";
+      return "リセットが実施中です";
     case "closed":
-      return "直近のリセット期間は終了済みです";
+      return "直近のリセットは終了しています";
     default:
       return status || "不明";
   }
@@ -242,11 +242,11 @@ export function translateStatus(
 export function translateAction(action: string | undefined) {
   switch (action) {
     case "wait":
-      return "様子見";
+      return "様子を見る";
     case "use_quota":
-      return "残り枠の利用を検討";
+      return "必要なら残り枠を使う";
     case "watch":
-      return "続報を確認";
+      return "続報を確認する";
     default:
       return action || "不明";
   }
@@ -258,12 +258,12 @@ export function translateSourceText(value: string | undefined) {
   }
 
   const dictionary: Record<string, string> = {
-    "Codex 可靠性事故补偿重置": "Codex 信頼性障害の補償リセット",
+    "Codex 可靠性事故补偿重置": "Codex障害に伴う補償リセット",
     "所有付费计划": "全有料プラン",
     "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。":
-      "Tibo が、過去24時間に Codex の信頼性へ影響する小規模な障害が3件あったとして、全有料プランの Codex 利用制限をリセットしたと発表しました。",
-    "暂无正式速蹬窗口": "現在、正式なリセット期間はありません",
-    "当前没有开启的速蹬窗口": "現在、開いているリセット期間はありません",
+      "過去24時間にCodexの信頼性に影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
+    "暂无正式速蹬窗口": "現在リセットは実施されていません",
+    "当前没有开启的速蹬窗口": "現在リセットは実施されていません",
     "未来 24-48 小时": "今後24〜48時間",
   };
 
