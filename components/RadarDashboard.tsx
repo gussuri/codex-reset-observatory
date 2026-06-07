@@ -238,9 +238,14 @@ export function RadarDashboard({
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <Metric label="24時間以内" value={probabilityToPercent(probability24h)} />
+              <Metric
+                label="24時間以内"
+                probability={probability24h}
+                value={probabilityToPercent(probability24h)}
+              />
               <Metric
                 label="48時間以内"
+                probability={viewModel.probability48h}
                 value={probabilityToPercent(viewModel.probability48h)}
               />
             </div>
@@ -376,13 +381,73 @@ export function RadarDashboard({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  probability,
+  value,
+}: {
+  label: string;
+  probability: number | undefined;
+  value: string;
+}) {
+  const tone = getProbabilityTone(probability);
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="mt-2 text-3xl font-semibold text-slate-950">{value}</dd>
+    <div className={`rounded-lg border p-4 ${tone.card}`}>
+      <dt className={`text-sm font-medium ${tone.label}`}>{label}</dt>
+      <dd className={`mt-2 text-3xl font-semibold ${tone.value}`}>{value}</dd>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/75">
+        <div
+          className={`h-full rounded-full ${tone.bar}`}
+          style={{ width: getProbabilityBarWidth(probability) }}
+        />
+      </div>
     </div>
   );
+}
+
+function getProbabilityTone(probability: number | undefined) {
+  if (typeof probability !== "number" || Number.isNaN(probability)) {
+    return {
+      bar: "bg-slate-400",
+      card: "border-slate-200 bg-slate-50",
+      label: "text-slate-500",
+      value: "text-slate-950",
+    };
+  }
+
+  if (probability <= 0.33) {
+    return {
+      bar: "bg-sky-500",
+      card: "border-sky-200 bg-sky-50",
+      label: "text-sky-700",
+      value: "text-sky-950",
+    };
+  }
+
+  if (probability <= 0.66) {
+    return {
+      bar: "bg-orange-500",
+      card: "border-orange-200 bg-orange-50",
+      label: "text-orange-700",
+      value: "text-orange-950",
+    };
+  }
+
+  return {
+    bar: "bg-rose-500",
+    card: "border-rose-200 bg-rose-50",
+    label: "text-rose-700",
+    value: "text-rose-950",
+  };
+}
+
+function getProbabilityBarWidth(probability: number | undefined) {
+  if (typeof probability !== "number" || Number.isNaN(probability)) {
+    return "0%";
+  }
+
+  return `${Math.min(100, Math.max(0, Math.round(probability * 100)))}%`;
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
