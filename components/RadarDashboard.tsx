@@ -9,7 +9,6 @@ import {
   Gauge,
   History,
   Info,
-  Lightbulb,
   Radio,
   RotateCw,
   Sparkles,
@@ -21,7 +20,6 @@ import {
   SOURCE_SITE_URL,
   formatDateTime,
   getRadarViewModel,
-  getRefreshIntervalLabel,
   getRefreshIntervalMs,
   isSafeHttpUrl,
   probabilityToPercent,
@@ -249,10 +247,6 @@ export function RadarDashboard({
             <dl className="mt-5 space-y-4">
               <InfoRow label="リセット状況" value={viewModel.status} />
               <InfoRow label="おすすめの対応" value={viewModel.action} />
-              <InfoRow
-                label="次回更新の目安"
-                value={getRefreshIntervalLabel(probability24h)}
-              />
             </dl>
           </article>
 
@@ -291,22 +285,7 @@ export function RadarDashboard({
           </article>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-2">
-          <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <Lightbulb className="mt-1 h-6 w-6 shrink-0 text-teal-700" />
-              <div>
-                <p className="text-sm font-medium text-slate-500">行動ガイド</p>
-                <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
-                  {viewModel.actionGuide.title}
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-slate-700">
-                  {viewModel.actionGuide.body}
-                </p>
-              </div>
-            </div>
-          </article>
-
+        <section>
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <Info className="mt-1 h-6 w-6 shrink-0 text-slate-700" />
@@ -320,27 +299,6 @@ export function RadarDashboard({
                 </p>
               </div>
             </div>
-
-            {viewModel.signalSummary ? (
-              <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <SignalItem
-                  label="観測"
-                  value={viewModel.signalSummary.observed}
-                />
-                <SignalItem
-                  label="候補"
-                  value={viewModel.signalSummary.candidates}
-                />
-                <SignalItem
-                  label="新規"
-                  value={viewModel.signalSummary.fresh}
-                />
-                <SignalItem
-                  label="Status"
-                  value={viewModel.signalSummary.status}
-                />
-              </dl>
-            ) : null}
           </article>
         </section>
 
@@ -445,7 +403,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm font-semibold leading-6 text-slate-900 sm:text-right">
+      <dd className="text-sm font-semibold leading-6 text-slate-900 sm:max-w-xl">
         {value}
       </dd>
     </div>
@@ -478,23 +436,6 @@ function MiniInfo({
         ) : (
           value
         )}
-      </dd>
-    </div>
-  );
-}
-
-function SignalItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | undefined;
-}) {
-  return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <dt className="text-xs font-semibold text-slate-500">{label}</dt>
-      <dd className="mt-1 text-xl font-semibold text-slate-950">
-        {typeof value === "number" ? value : "不明"}
       </dd>
     </div>
   );

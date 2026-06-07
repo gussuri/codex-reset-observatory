@@ -124,21 +124,7 @@ export type RadarViewModel = {
     openedAt?: string | null;
     source?: string | null;
   };
-  actionGuide: {
-    title: string;
-    body: string;
-    tone: "calm" | "watch" | "urgent";
-  };
   reasoningSummary: string;
-  signalSummary?: {
-    observed?: number;
-    candidates?: number;
-    fresh?: number;
-    official?: number;
-    community?: number;
-    status?: number;
-    market?: number;
-  };
   latestWindow: {
     title: string;
     summary: string;
@@ -360,7 +346,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     expectation: getExpectationLabel(predictionLevel ?? probability24h),
     probability24h,
     probability48h,
-    action: translateAction(source?.recommended_action),
+    action: getRecommendedAction(source, probability24h),
     lastUpdated:
       source?.checked_at ??
       source?.monitored_at ??
@@ -368,9 +354,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
       source?.prediction?.updated_at ??
       null,
     activeWindow: getActiveWindow(source),
-    actionGuide: getActionGuide(source, probability24h),
     reasoningSummary: getReasoningSummary(source, probability24h, probability48h),
-    signalSummary: getSignalSummary(source?.prediction?.signal_summary_24h),
     latestWindow: {
       title: translateSourceText(latestWindow?.title),
       summary: latestWindow?.summary
@@ -416,52 +400,32 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
   };
 }
 
-function getActionGuide(
+function getRecommendedAction(
   data: RadarData | null,
   probability24h: number | undefined,
-): RadarViewModel["actionGuide"] {
+) {
   const activeWindow = getActiveWindow(data);
 
   if (activeWindow.active) {
-    return {
-      title: "残り枠の消化を検討",
-      body: "公式リセット予告が出ています。リセット前に残り枠を使うか、重要な作業を前倒しする判断を優先してください。",
-      tone: "urgent",
-    };
+    return "公式リセット予告が出ています。リセット前に残り枠を使うか、重要な作業を前倒しする判断を優先してください。";
   }
 
   const normalized =
     typeof probability24h === "number" ? normalizeProbability(probability24h) : 0;
 
   if (normalized >= 0.6) {
-    return {
-      title: "続報をこまめに確認",
-      body: "24時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。",
-      tone: "urgent",
-    };
+    return "24時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。";
   }
 
   if (normalized >= 0.3) {
-    return {
-      title: "残り枠の使いどころを意識",
-      body: "リセットの可能性はやや高めです。急ぎでない大きな作業は、残り枠と最新情報を見ながら進めるのがおすすめです。",
-      tone: "watch",
-    };
+    return "リセットの可能性はやや高めです。急ぎでない大きな作業は、残り枠と最新情報を見ながら進めるのがおすすめです。";
   }
 
   if (normalized >= 0.1) {
-    return {
-      title: "通常利用しつつ様子見",
-      body: "中程度の見立てです。公式予告はないため、必要な作業は進めながら、数時間おきに変化を確認してください。",
-      tone: "watch",
-    };
+    return "中程度の見立てです。公式予告はないため、必要な作業は進めながら、数時間おきに変化を確認してください。";
   }
 
-  return {
-    title: "通常どおり利用",
-    body: "リセットの見込みは低めです。公式予告もないため、急いで残り枠を消化する必要性は高くありません。",
-    tone: "calm",
-  };
+  return translateAction(data?.recommended_action);
 }
 
 function getReasoningSummary(
