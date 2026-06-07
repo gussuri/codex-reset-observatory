@@ -9,7 +9,6 @@ import {
   Gauge,
   History,
   Radio,
-  RotateCw,
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -134,19 +133,6 @@ export function RadarDashboard({
               </h1>
             </div>
           </div>
-
-          <button
-            aria-label="最新データを取得"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
-            disabled={state.loading}
-            onClick={() => void fetchRadar()}
-            type="button"
-          >
-            <RotateCw
-              className={`h-4 w-4 ${state.loading ? "animate-spin" : ""}`}
-            />
-            更新
-          </button>
         </header>
 
         {state.error ? (
