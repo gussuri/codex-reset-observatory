@@ -186,7 +186,7 @@ export function RadarDashboard({ initialData }: { initialData?: RadarData | null
                 value={viewModel.action}
               />
               <InfoRow
-                label="自動更新の目安"
+                label="次回更新の目安"
                 value={getRefreshIntervalLabel(probability24h)}
               />
             </dl>
@@ -215,7 +215,7 @@ export function RadarDashboard({ initialData }: { initialData?: RadarData | null
                 value={viewModel.latestWindow.scope}
               />
               <InfoRow
-                label="検知時刻"
+                label="リセット検知時刻"
                 value={formatDateTime(viewModel.latestWindow.openedAt)}
               />
               <InfoRow
