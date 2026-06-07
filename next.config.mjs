@@ -29,7 +29,7 @@ const securityHeaders = [
       "img-src 'self' data: blob:",
       "style-src 'self' 'unsafe-inline'",
       `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
-      `connect-src 'self' https://codex-reset-radar.pages.dev${isDevelopment ? " ws: wss:" : ""}`,
+      `connect-src 'self' https://codexradar.com https://codex-reset-radar.pages.dev${isDevelopment ? " ws: wss:" : ""}`,
     ].join("; "),
   },
 ];

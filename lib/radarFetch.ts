@@ -1,7 +1,7 @@
 import type { RadarData } from "@/lib/radar";
 
 export const CURRENT_JSON_URL =
-  "https://codex-reset-radar.pages.dev/current.json";
+  "https://codexradar.com/current.json";
 
 export const API_CACHE_CONTROL = "s-maxage=300, stale-while-revalidate=600";
 

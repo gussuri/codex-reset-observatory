@@ -21,25 +21,14 @@ export type RadarData = {
     opened_at?: string | null;
     source?: string | null;
   };
-  last_window?: {
-    id?: string;
-    title?: string;
-    status?: string;
-    opened_at?: string | null;
-    closed_at?: string | null;
-    completed_at?: string | null;
-    window_minutes?: number;
-    window_human?: string;
-    scope?: string;
-    summary?: string;
-    sources?: Array<{
-      type?: string;
-      url?: string | null;
-    }>;
-  };
+  last_window?: WindowLike;
   latest_reset?: WindowLike;
   last_reset?: WindowLike;
   latest_window?: WindowLike;
+  metrics?: {
+    last_3_months_window_minutes?: number;
+    last_3_months_window_human?: string;
+  };
   prediction?: {
     level?: ProbabilityLevel | string;
     probability_24h?: number;
@@ -50,10 +39,18 @@ export type RadarData = {
     probability_48_hours?: number;
     expected_window?: string;
     reasoning_summary?: string;
+    display_summary?: string;
+    display_summary_en?: string;
     updated_at?: string;
+    signal_summary_24h?: SignalSummaryLike;
     probability_history?: {
       events?: Array<WindowEventLike>;
     };
+    cooldown?: {
+      active?: boolean;
+      until?: string | null;
+    };
+    should_notify?: boolean;
   };
   probabilities?: {
     probability_24h?: number;
@@ -79,14 +76,33 @@ export type WindowLike = {
   opened_at?: string | null;
   closed_at?: string | null;
   completed_at?: string | null;
+  window_minutes?: number;
+  window_human?: string;
   scope?: string;
   summary?: string;
   source?: string | null;
   link?: string | null;
+  sources?: Array<{
+    type?: string;
+    url?: string | null;
+  }>;
 };
 
 export type WindowEventLike = WindowLike & {
   kind?: string;
+  date?: string;
+  label?: string;
+};
+
+export type SignalSummaryLike = {
+  observation_total?: number;
+  candidate_total?: number;
+  new_total?: number;
+  seen_total?: number;
+  observation_counts?: Record<string, number>;
+  new_counts?: Record<string, number>;
+  total?: number;
+  counts?: Record<string, number>;
 };
 
 export type CachedRadarData = {
@@ -101,16 +117,50 @@ export type RadarViewModel = {
   probability48h?: number;
   action: string;
   lastUpdated?: string | null;
+  activeWindow: {
+    active: boolean;
+    label: string;
+    summary: string;
+    openedAt?: string | null;
+    source?: string | null;
+  };
+  actionGuide: {
+    title: string;
+    body: string;
+    tone: "calm" | "watch" | "urgent";
+  };
+  reasoningSummary: string;
+  signalSummary?: {
+    observed?: number;
+    candidates?: number;
+    fresh?: number;
+    official?: number;
+    community?: number;
+    status?: number;
+    market?: number;
+  };
   latestWindow: {
     title: string;
     summary: string;
     scope: string;
     openedAt?: string | null;
     closedAt?: string | null;
+    windowLength: string;
   };
+  recentHistory: Array<{
+    key: string;
+    title: string;
+    status: string;
+    date?: string | null;
+    signalAt?: string | null;
+    resetAt?: string | null;
+    scope: string;
+    windowLength: string;
+    source?: string | null;
+  }>;
 };
 
-export const SOURCE_SITE_URL = "https://codex-reset-radar.pages.dev/en/";
+export const SOURCE_SITE_URL = "https://codexradar.com/en/";
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -224,14 +274,14 @@ export function translateStatus(
   isWindowOpen: boolean | undefined,
 ) {
   if (isWindowOpen) {
-    return "リセットが実施中です";
+    return "公式リセット予告が出ています";
   }
 
   switch (status) {
     case "none":
       return "現在リセットは実施されていません";
     case "open":
-      return "リセットが実施中です";
+      return "公式リセット予告が出ています";
     case "closed":
       return "直近のリセットは終了しています";
     default:
@@ -258,16 +308,39 @@ export function translateSourceText(value: string | undefined) {
   }
 
   const dictionary: Record<string, string> = {
-    "Codex 可靠性事故补偿重置": "Codex障害に伴う補償リセット",
+    "500 万用户庆祝重置": "500万人達成記念リセット",
+    "5M users celebration reset": "500万人達成記念リセット",
+    "Codex 可靠性事故补偿重置": "Codex障害対応の利用上限リセット",
+    "Codex usage-limit reset": "Codex利用上限リセット",
     "所有付费计划": "全有料プラン",
+    "All paid plans": "全有料プラン",
+    "All plans": "全プラン",
+    "Codex users": "Codexユーザー",
     "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。":
-      "過去24時間にCodexの信頼性に影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
-    "暂无正式速蹬窗口": "現在リセットは実施されていません",
-    "当前没有开启的速蹬窗口": "現在リセットは実施されていません",
+      "過去24時間にCodexの信頼性へ影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
+    "Codex limits were reset after a usage-limit issue was resolved.":
+      "利用上限に関する問題への対応として、Codexの利用上限がリセットされました。",
+    "Tibo framed this reset as a celebration of Codex reaching 5M users; weekly and 5-hour limits for paid ChatGPT subscriptions were restored to 100%.":
+      "Codexの利用者500万人達成を記念し、有料ChatGPTプランの週次および5時間ごとの上限が100%に戻されました。",
+    "暂无正式速蹬窗口": "公式リセット予告はありません",
+    "当前没有开启的速蹬窗口": "公式リセット予告はありません",
     "未来 24-48 小时": "今後24〜48時間",
   };
 
   return dictionary[value] ?? value;
+}
+
+export function isSafeHttpUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function getRadarViewModel(data: RadarData | null): RadarViewModel {
@@ -294,6 +367,10 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
       source?.updated_at ??
       source?.prediction?.updated_at ??
       null,
+    activeWindow: getActiveWindow(source),
+    actionGuide: getActionGuide(source, probability24h),
+    reasoningSummary: getReasoningSummary(source, probability24h, probability48h),
+    signalSummary: getSignalSummary(source?.prediction?.signal_summary_24h),
     latestWindow: {
       title: translateSourceText(latestWindow?.title),
       summary: latestWindow?.summary
@@ -306,8 +383,233 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
         latestWindow?.completed_at ??
         latestWindow?.opened_at ??
         null,
+      windowLength: formatWindowLength(latestWindow?.window_minutes),
     },
+    recentHistory: getRecentHistory(source),
   };
+}
+
+function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"] {
+  const state = data?.current_window?.state ?? data?.status;
+  const active = Boolean(data?.window_open) || state === "open";
+  const openedAt = data?.current_window?.opened_at ?? null;
+  const source = data?.current_window?.source ?? null;
+
+  if (active) {
+    return {
+      active,
+      label: "予告あり",
+      summary:
+        "Codex Reset Radarが公式シグナルを検知しています。予告どおりリセットされる可能性が高いため、残り枠を使う判断を優先してください。",
+      openedAt,
+      source,
+    };
+  }
+
+  return {
+    active,
+    label: "予告なし",
+    summary:
+      "現時点で、Codex Reset Radar が検知している公式リセット予告はありません。",
+    openedAt,
+    source,
+  };
+}
+
+function getActionGuide(
+  data: RadarData | null,
+  probability24h: number | undefined,
+): RadarViewModel["actionGuide"] {
+  const activeWindow = getActiveWindow(data);
+
+  if (activeWindow.active) {
+    return {
+      title: "残り枠の消化を検討",
+      body: "公式リセット予告が出ています。リセット前に残り枠を使うか、重要な作業を前倒しする判断を優先してください。",
+      tone: "urgent",
+    };
+  }
+
+  const normalized =
+    typeof probability24h === "number" ? normalizeProbability(probability24h) : 0;
+
+  if (normalized >= 0.6) {
+    return {
+      title: "続報をこまめに確認",
+      body: "24時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。",
+      tone: "urgent",
+    };
+  }
+
+  if (normalized >= 0.3) {
+    return {
+      title: "残り枠の使いどころを意識",
+      body: "リセットの可能性はやや高めです。急ぎでない大きな作業は、残り枠と最新情報を見ながら進めるのがおすすめです。",
+      tone: "watch",
+    };
+  }
+
+  if (normalized >= 0.1) {
+    return {
+      title: "通常利用しつつ様子見",
+      body: "中程度の見立てです。公式予告はないため、必要な作業は進めながら、数時間おきに変化を確認してください。",
+      tone: "watch",
+    };
+  }
+
+  return {
+    title: "通常どおり利用",
+    body: "リセットの見込みは低めです。公式予告もないため、急いで残り枠を消化する必要性は高くありません。",
+    tone: "calm",
+  };
+}
+
+function getReasoningSummary(
+  data: RadarData | null,
+  probability24h: number | undefined,
+  probability48h: number | undefined,
+) {
+  const englishSummary = data?.prediction?.display_summary_en;
+  const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
+
+  if (englishSummary?.includes("no official reset window")) {
+    return "公式リセット予告や明確な補償示唆は確認されていません。直近のStatus障害はアカウント/契約まわりが中心で、Codex全体の障害とは読み切れません。一方で、コミュニティでは利用上限への圧力やリセット要望が続いているため、中程度の見立てです。";
+  }
+
+  if (signalSummary?.observed || signalSummary?.candidates) {
+    const observed = formatCount(signalSummary.observed);
+    const candidates = formatCount(signalSummary.candidates);
+    const fresh = formatCount(signalSummary.fresh);
+
+    return `直近24時間で公開シグナルを${observed}件観測し、そのうち${candidates}件を候補として読んでいます。新規候補は${fresh}件です。公式予告の有無とコミュニティの利用上限要望を合わせて判定しています。`;
+  }
+
+  const p24 = probabilityToPercent(probability24h);
+  const p48 = probabilityToPercent(probability48h);
+
+  return `現在の見立ては24時間以内が${p24}、48時間以内が${p48}です。詳しい根拠は取得できていないため、公式リセット予告の有無を優先して確認してください。`;
+}
+
+function getSignalSummary(summary: SignalSummaryLike | undefined) {
+  if (!summary) {
+    return undefined;
+  }
+
+  const counts = summary.observation_counts ?? summary.counts;
+
+  return {
+    observed: summary.observation_total ?? summary.total,
+    candidates: summary.candidate_total,
+    fresh: summary.new_total,
+    official: counts?.official_x,
+    community: counts?.community_x,
+    status: counts?.openai_status,
+    market: counts?.market_x,
+  };
+}
+
+function getRecentHistory(data: RadarData | null) {
+  if (!data) {
+    return [];
+  }
+
+  const items = [
+    ...(data.prediction?.probability_history?.events ?? []),
+    data.last_window,
+    data.latest_reset,
+    data.last_reset,
+    data.latest_window,
+  ].filter((item): item is WindowEventLike => Boolean(item?.title));
+
+  const seen = new Set<string>();
+
+  return items
+    .map((item) => {
+      const resetAt = item.closed_at ?? item.completed_at ?? item.opened_at ?? null;
+      const key = item.id ?? item.guid ?? `${item.title}-${resetAt ?? item.date ?? ""}`;
+      const source = getEventSource(item);
+
+      return {
+        key,
+        title: translateSourceText(item.title),
+        status: translateEventStatus(item.kind ?? item.status),
+        date: item.date ?? resetAt,
+        signalAt: item.opened_at ?? item.date ?? null,
+        resetAt,
+        scope: translateSourceText(item.scope),
+        windowLength: formatWindowLength(item.window_minutes),
+        source,
+      };
+    })
+    .filter((item) => {
+      if (seen.has(item.key)) {
+        return false;
+      }
+
+      seen.add(item.key);
+      return true;
+    })
+    .sort((a, b) => {
+      const aTime = a.resetAt ? new Date(a.resetAt).getTime() : 0;
+      const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+}
+
+function getEventSource(item: WindowLike) {
+  if (item.source) {
+    return item.source;
+  }
+
+  if (item.link) {
+    return item.link;
+  }
+
+  return item.sources?.find((source) => source.url)?.url ?? null;
+}
+
+function translateEventStatus(value: string | undefined) {
+  switch (value) {
+    case "reset_completed":
+      return "リセット実施";
+    case "window_opened":
+      return "予告検知";
+    case "window_closed":
+    case "closed":
+      return "終了";
+    case "open":
+      return "予告中";
+    default:
+      return value || "不明";
+  }
+}
+
+function formatWindowLength(value: number | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "不明";
+  }
+
+  if (value <= 0) {
+    return "即時リセット";
+  }
+
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours}時間${minutes}分`;
+  }
+
+  if (hours > 0) {
+    return `${hours}時間`;
+  }
+
+  return `${minutes}分`;
+}
+
+function formatCount(value: number | undefined) {
+  return typeof value === "number" && !Number.isNaN(value) ? String(value) : "不明";
 }
 
 function getProbability(
