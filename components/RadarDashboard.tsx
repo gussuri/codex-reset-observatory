@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Gauge,
   History,
-  Info,
   Radio,
   RotateCw,
   Sparkles,
@@ -189,9 +188,11 @@ export function RadarDashboard({
                 <h2 className="mt-1 text-2xl font-semibold leading-tight">
                   公式リセット予告：{viewModel.activeWindow.label}
                 </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
-                  {viewModel.activeWindow.summary}
-                </p>
+                {viewModel.activeWindow.active ? (
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
+                    {viewModel.activeWindow.summary}
+                  </p>
+                ) : null}
               </div>
             </div>
             <span
@@ -246,7 +247,10 @@ export function RadarDashboard({
 
             <dl className="mt-5 space-y-4">
               <InfoRow label="リセット状況" value={viewModel.status} />
-              <InfoRow label="おすすめの対応" value={viewModel.action} />
+              <RecommendationRow
+                action={viewModel.action}
+                reason={viewModel.reasoningSummary}
+              />
             </dl>
           </article>
 
@@ -282,23 +286,6 @@ export function RadarDashboard({
                 value={viewModel.latestWindow.windowLength}
               />
             </dl>
-          </article>
-        </section>
-
-        <section>
-          <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <Info className="mt-1 h-6 w-6 shrink-0 text-slate-700" />
-              <div>
-                <p className="text-sm font-medium text-slate-500">今回の見立て</p>
-                <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
-                  予測理由の要約
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-slate-700">
-                  {viewModel.reasoningSummary}
-                </p>
-              </div>
-            </div>
           </article>
         </section>
 
@@ -405,6 +392,24 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
       <dd className="text-sm font-semibold leading-6 text-slate-900 sm:max-w-xl">
         {value}
+      </dd>
+    </div>
+  );
+}
+
+function RecommendationRow({
+  action,
+  reason,
+}: {
+  action: string;
+  reason: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <dt className="text-sm font-medium text-slate-500">おすすめの対応</dt>
+      <dd className="space-y-2 text-sm leading-6 text-slate-900 sm:max-w-xl">
+        <p className="font-semibold">{action}</p>
+        <p className="text-slate-700">{reason}</p>
       </dd>
     </div>
   );
