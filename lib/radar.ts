@@ -441,11 +441,29 @@ function getReasoningSummary(
   }
 
   if (signalSummary?.observed || signalSummary?.candidates) {
-    const observed = formatCount(signalSummary.observed);
-    const candidates = formatCount(signalSummary.candidates);
-    const fresh = formatCount(signalSummary.fresh);
+    const hasOfficialSignal = Boolean(signalSummary.official);
+    const hasStatusSignal = Boolean(signalSummary.status);
+    const hasCommunitySignal = Boolean(
+      signalSummary.community || signalSummary.candidates,
+    );
 
-    return `直近24時間で公開シグナルを${observed}件観測し、そのうち${candidates}件を候補として読んでいます。新規候補は${fresh}件です。公式予告の有無とコミュニティの利用上限要望を合わせて判定しています。`;
+    if (hasOfficialSignal) {
+      return "公式に近いシグナルが出ているため、通常よりリセット期待度を高めに見ています。ただし、リセット時刻が明示された予告かどうかは、公式リセット予告欄を優先して確認してください。";
+    }
+
+    if (hasStatusSignal && hasCommunitySignal) {
+      return "Status上の問題や利用上限への不満は見られますが、Codex全体の補償リセットにつながるほど強い材料とはまだ言い切れません。公式予告はない一方で、コミュニティ側のリセット要望が続いているため、中程度の見立てです。";
+    }
+
+    if (hasStatusSignal) {
+      return "Status上の問題は確認されていますが、現時点ではCodexの利用枠リセットに直結する内容とは読み切れません。公式予告が出るまでは、強いリセット材料としては扱いにくい状態です。";
+    }
+
+    if (hasCommunitySignal) {
+      return "コミュニティでは利用上限への不満やリセット要望が見られます。ただし、公式側の予告や補償示唆は確認できていないため、期待度を押し上げる材料としては限定的です。";
+    }
+
+    return "公開シグナルは拾えていますが、公式予告や大きな障害に結びつく材料はまだ弱めです。現時点では、確定的なリセット予告というより様子見寄りの見立てです。";
   }
 
   const p24 = probabilityToPercent(probability24h);
@@ -570,10 +588,6 @@ function formatWindowLength(value: number | undefined) {
   }
 
   return `${minutes}分`;
-}
-
-function formatCount(value: number | undefined) {
-  return typeof value === "number" && !Number.isNaN(value) ? String(value) : "不明";
 }
 
 function getProbability(
