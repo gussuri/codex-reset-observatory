@@ -248,7 +248,6 @@ export function RadarDashboard({
             <dl className="mt-5 space-y-4">
               <InfoRow label="リセット状況" value={viewModel.status} />
               <RecommendationRow
-                action={viewModel.action}
                 reason={viewModel.reasoningSummary}
               />
             </dl>
@@ -398,18 +397,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function RecommendationRow({
-  action,
   reason,
 }: {
-  action: string;
   reason: string;
 }) {
   return (
     <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <dt className="text-sm font-medium text-slate-500">おすすめの対応</dt>
-      <dd className="space-y-2 text-sm leading-6 text-slate-900 sm:max-w-xl">
-        <p className="font-semibold">{action}</p>
-        <p className="text-slate-700">{reason}</p>
+      <dd className="text-sm font-semibold leading-6 text-slate-900 sm:max-w-xl">
+        {reason}
       </dd>
     </div>
   );
