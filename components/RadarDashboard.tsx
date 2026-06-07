@@ -467,9 +467,11 @@ function RecommendationRow({
   reason: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <dt className="text-sm font-medium text-slate-500">理由</dt>
-      <dd className="text-sm leading-6 text-slate-700 sm:max-w-xl">
+    <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:grid sm:grid-cols-[7rem_1fr] sm:items-start sm:gap-6">
+      <dt className="whitespace-nowrap text-sm font-medium text-slate-500">
+        理由
+      </dt>
+      <dd className="text-sm leading-6 text-slate-700">
         {reason}
       </dd>
     </div>
