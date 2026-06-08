@@ -132,9 +132,6 @@ export function RadarDashboard({
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                Codexの臨時・補償・記念などのリセット情報を観測しています。
-              </p>
             </div>
           </div>
         </header>
