@@ -182,15 +182,11 @@ export function RadarDashboard({
                 ) : null}
               </div>
             </div>
-            <span
-              className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${
-                viewModel.activeWindow.active
-                  ? "bg-amber-200 text-amber-950"
-                  : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {viewModel.activeWindow.active ? "要確認" : "通常監視"}
-            </span>
+            {viewModel.activeWindow.active ? (
+              <span className="inline-flex w-fit shrink-0 rounded-md bg-amber-200 px-3 py-1 text-sm font-semibold text-amber-950">
+                要確認
+              </span>
+            ) : null}
           </div>
 
           {viewModel.activeWindow.active ? (
