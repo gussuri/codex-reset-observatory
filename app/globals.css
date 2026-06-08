@@ -46,11 +46,4 @@ a {
     conic-gradient(from 240deg, rgba(20, 184, 166, 0.28), rgba(20, 184, 166, 0.02) 35%, transparent 36%),
     radial-gradient(circle, transparent 0 29%, rgba(15, 23, 42, 0.16) 30% 31%, transparent 32% 55%, rgba(15, 23, 42, 0.13) 56% 57%, transparent 58%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.62));
-  animation: sweep 9s linear infinite;
-}
-
-@keyframes sweep {
-  to {
-    transform: rotate(360deg);
-  }
 }
