@@ -608,7 +608,7 @@ function getResetType(item: WindowLike & { kind?: string }) {
     text.includes("障害") ||
     text.includes("補償")
   ) {
-    return "障害対応リセット";
+    return "詫びリセット";
   }
 
   if (

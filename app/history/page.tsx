@@ -34,7 +34,7 @@ export default async function HistoryPage() {
                 ランダムリセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                障害対応・ご祝儀・予告付き臨時リセットなど、通常の週次リセットとは別に観測された履歴を表示します。
+                詫び・ご祝儀・予告付き臨時リセットなど、通常の週次リセットとは別に観測された履歴を表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
