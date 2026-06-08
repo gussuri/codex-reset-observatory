@@ -5,26 +5,29 @@ import "./globals.css";
 const siteUrl = "https://codex-reset-observatory.vercel.app";
 const siteTitle = "Codexリセット観測所";
 const siteDescription =
-  "Codexのリセット予測、24時間・48時間以内の確率、最新リセット履歴を日本語で確認できる観測サイトです。";
+  "Codexのランダムリセット、臨時リセット、補償リセットの予告・期待度・履歴を日本語で確認できる非公式観測サイトです。";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: siteTitle,
   title: {
-    default: `${siteTitle} | Codexリセット予測・履歴・最新情報`,
+    default: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
     template: `%s | ${siteTitle}`,
   },
   description: siteDescription,
   keywords: [
     "Codex",
     "リセット",
+    "ランダムリセット",
+    "臨時リセット",
+    "補償リセット",
     "予測",
     "履歴",
     "最新情報",
     "Codex Reset Radar",
   ],
   openGraph: {
-    title: `${siteTitle} | Codexリセット予測・履歴・最新情報`,
+    title: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
     description: siteDescription,
     url: siteUrl,
     siteName: siteTitle,
@@ -41,7 +44,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${siteTitle} | Codexリセット予測・履歴・最新情報`,
+    title: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
     description: siteDescription,
     images: ["/og-image.png"],
   },

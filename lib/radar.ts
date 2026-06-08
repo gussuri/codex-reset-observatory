@@ -146,6 +146,7 @@ export type RadarViewModel = {
   recentHistory: Array<{
     key: string;
     title: string;
+    resetType: string;
     status: string;
     date?: string | null;
     signalAt?: string | null;
@@ -477,22 +478,20 @@ function getReasoningSummary(
   probability24h: number | undefined,
   probability48h: number | undefined,
 ) {
-  const apiSummary =
-    data?.prediction?.reasoning_summary ??
-    data?.prediction?.display_summary ??
-    data?.prediction?.summary ??
-    data?.prediction?.display_summary_en ??
-    data?.prediction?.summary_en;
   const englishSummary =
     data?.prediction?.display_summary_en ?? data?.prediction?.summary_en;
   const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
+  const normalizedEnglishSummary = englishSummary?.toLowerCase();
 
-  if (englishSummary?.includes("no official reset window")) {
+  if (normalizedEnglishSummary?.includes("no official reset window")) {
     return "公式リセット予告や明確な補償示唆は確認されていません。直近のStatus障害はアカウント/契約まわりが中心で、Codex全体の障害とは読み切れません。一方で、コミュニティでは利用上限への圧力やリセット要望が続いているため、中程度の見立てです。";
   }
 
-  if (apiSummary) {
-    return translateSourceText(apiSummary);
+  if (
+    normalizedEnglishSummary?.includes("targeted 10x reward") ||
+    normalizedEnglishSummary?.includes("not a broad compensation reset")
+  ) {
+    return "公式側の動きは一部ユーザー向けの10X利用量付与に近く、全体向けの補償リセットとは読みづらい状況です。利用上限への不満や一部の異常報告はありますが、長時間のStatus障害や明確な公式予告は確認できていないため、期待度は低めです。";
   }
 
   if (signalSummary?.observed || signalSummary?.candidates) {
@@ -571,6 +570,7 @@ function getRecentHistory(data: RadarData | null) {
       return {
         key,
         title: translateSourceText(item.title),
+        resetType: getResetType(item),
         status: translateEventStatus(item.kind ?? item.status),
         date: item.date ?? resetAt,
         signalAt: item.opened_at ?? item.date ?? null,
@@ -594,6 +594,43 @@ function getRecentHistory(data: RadarData | null) {
       return bTime - aTime;
     })
     .slice(0, 5);
+}
+
+function getResetType(item: WindowLike & { kind?: string }) {
+  const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();
+
+  if (
+    text.includes("可靠性") ||
+    text.includes("补偿") ||
+    text.includes("compensation") ||
+    text.includes("reliability") ||
+    text.includes("incident") ||
+    text.includes("障害") ||
+    text.includes("補償")
+  ) {
+    return "障害対応リセット";
+  }
+
+  if (
+    text.includes("庆祝") ||
+    text.includes("celebration") ||
+    text.includes("5m") ||
+    text.includes("500 万") ||
+    text.includes("500万") ||
+    text.includes("記念")
+  ) {
+    return "ご祝儀リセット";
+  }
+
+  if (item.kind === "window_opened" || item.status === "open") {
+    return "予告付き臨時リセット";
+  }
+
+  if (!item.closed_at && !item.completed_at && item.kind !== "reset_completed") {
+    return "コミュニティ予測";
+  }
+
+  return "その他";
 }
 
 function getEventSource(item: WindowLike) {

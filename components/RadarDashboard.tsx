@@ -11,6 +11,7 @@ import {
   Radio,
   Sparkles,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CachedRadarData,
@@ -126,11 +127,14 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-sm font-medium leading-6 text-teal-700">
-                Codexリセット予測・履歴・最新情報
+                Codexランダムリセット予告・履歴・期待度
               </p>
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
               </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                臨時・補償・記念などのランダムリセットを観測しています。通常の週次リセットは主な対象外です。
+              </p>
             </div>
           </div>
         </header>
@@ -217,7 +221,7 @@ export function RadarDashboard({
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  リセット期待度：{viewModel.expectation}
+                  ランダムリセット期待度：{viewModel.expectation}
                 </h2>
               </div>
               <Gauge className="h-7 w-7 text-teal-700" />
@@ -248,7 +252,7 @@ export function RadarDashboard({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">
-                  最新のリセット
+                  最新のランダムリセット
                 </p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   {viewModel.latestWindow.title}
@@ -283,10 +287,10 @@ export function RadarDashboard({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                リセット履歴
+                ランダムリセット履歴
               </p>
               <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                直近のリセット履歴
+                直近のランダムリセット履歴
               </h2>
             </div>
             <History className="h-7 w-7 text-slate-700" />
@@ -306,6 +310,9 @@ export function RadarDashboard({
                       </h3>
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                         {item.status}
+                      </span>
+                      <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                        {item.resetType}
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-600">
@@ -351,16 +358,34 @@ export function RadarDashboard({
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-          <p className="text-sm text-slate-300">出典:</p>
-          <a
-            className="mt-1 inline-flex items-center gap-2 text-base font-semibold underline-offset-4 hover:underline"
-            href={SOURCE_SITE_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Codex Reset Radar
-            <ExternalLink className="h-4 w-4" />
-          </a>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm text-slate-300">出典:</p>
+              <a
+                className="mt-1 inline-flex items-center gap-2 text-base font-semibold underline-offset-4 hover:underline"
+                href={SOURCE_SITE_URL}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Codex Reset Radar
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+            <nav
+              aria-label="サイト情報"
+              className="flex flex-wrap gap-3 text-sm text-slate-300"
+            >
+              <Link className="underline-offset-4 hover:underline" href="/about">
+                About
+              </Link>
+              <Link className="underline-offset-4 hover:underline" href="/faq">
+                FAQ
+              </Link>
+              <Link className="underline-offset-4 hover:underline" href="/history">
+                History
+              </Link>
+            </nav>
+          </div>
         </footer>
       </div>
     </main>
