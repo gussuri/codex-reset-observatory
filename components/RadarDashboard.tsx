@@ -127,7 +127,7 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-sm font-medium leading-6 text-teal-700">
-                Codexランダムリセット予告・履歴・期待度
+                Codexリセット予告・履歴・期待度
               </p>
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
@@ -214,7 +214,7 @@ export function RadarDashboard({
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  ランダムリセット期待度：{viewModel.expectation}
+                  リセット期待度：{viewModel.expectation}
                 </h2>
               </div>
               <Gauge className="h-7 w-7 text-teal-700" />
