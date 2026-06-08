@@ -133,7 +133,7 @@ export function RadarDashboard({
                 Codexリセット観測所
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                臨時・補償・記念などのランダムリセットを観測しています。通常の週次リセットは主な対象外です。
+                Codexの臨時・補償・記念などのリセット情報を観測しています。
               </p>
             </div>
           </div>
