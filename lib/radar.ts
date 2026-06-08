@@ -15,6 +15,12 @@ export type RadarData = {
   window_open?: boolean;
   message?: string;
   recommended_action?: string;
+  window?: WindowLike & {
+    open?: boolean;
+    action?: string;
+    message?: string;
+    source_url?: string | null;
+  };
   current_window?: {
     state?: string;
     message?: string;
@@ -25,6 +31,7 @@ export type RadarData = {
   latest_reset?: WindowLike;
   last_reset?: WindowLike;
   latest_window?: WindowLike;
+  recent_windows?: Array<WindowLike>;
   metrics?: {
     last_3_months_window_minutes?: number;
     last_3_months_window_human?: string;
@@ -38,6 +45,8 @@ export type RadarData = {
     probability48h?: number;
     probability_48_hours?: number;
     expected_window?: string;
+    summary?: string;
+    summary_en?: string;
     reasoning_summary?: string;
     display_summary?: string;
     display_summary_en?: string;
@@ -81,6 +90,7 @@ export type WindowLike = {
   scope?: string;
   summary?: string;
   source?: string | null;
+  source_url?: string | null;
   link?: string | null;
   sources?: Array<{
     type?: string;
@@ -298,12 +308,42 @@ export function translateSourceText(value: string | undefined) {
     "5M users celebration reset": "500万人達成記念リセット",
     "Codex 可靠性事故补偿重置": "Codex障害対応の利用上限リセット",
     "Codex usage-limit reset": "Codex利用上限リセット",
+    "长会话压缩耗额异常补偿重置": "長時間セッション圧縮の消費異常に対する補償リセット",
+    "Sam 点赞承诺速率限制重置": "Sam氏の投稿をきっかけにしたレート制限リセット",
+    "GPT-5.5 能力退化补偿重置": "GPT-5.5性能低下への補償リセット",
+    "周度庆祝付费计划重置": "週次の節目を祝う有料プランリセット",
+    "400 万活跃用户里程碑重置": "400万アクティブユーザー達成記念リセット",
+    "局部故障补偿重置": "一部障害への補償リセット",
+    "一周年纪念重置": "1周年記念リセット",
+    "300 万周活用户与新计划重置": "300万週間アクティブユーザーと新プランに伴うリセット",
     "所有付费计划": "全有料プラン",
+    "现有 $200 Pro 用户": "既存の$200 Proユーザー",
     "All paid plans": "全有料プラン",
     "All plans": "全プラン",
     "Codex users": "Codexユーザー",
+    "Codex 用户": "Codexユーザー",
     "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。":
       "過去24時間にCodexの信頼性へ影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
+    "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。":
+      "Codexの500万人達成を祝うリセットとして説明され、その後、有料ChatGPTプランの週次枠と5時間枠が100%に戻ったことが確認されました。",
+    "Tibo 表示 Codex 长会话压缩的 cache hit rate 受回滚优化影响，导致限制消耗更快；修复后已为所有账号重置使用限制。":
+      "長時間セッション圧縮のキャッシュヒット率が低下して利用上限の消費が速くなっていた問題について、修正後に全アカウントの利用制限がリセットされました。",
+    "Sam 发文称推文获 1 个赞后 Tibo 会重置 Codex 速率限制，随后社区在数分钟内反馈重置完成。":
+      "Sam氏の投稿をきっかけに、数分後にはコミュニティからリセット完了の反応が出ました。",
+    "Tibo 表示两个 GPT-5.5 能力退化问题已修复后，付费计划的使用限制完成重置。":
+      "GPT-5.5の性能低下に関する2件の問題が修正された後、有料プランの利用制限がリセットされました。",
+    "为庆祝顺利的一周，并让用户继续用 GPT-5.5 构建，所有付费计划的限制已重置。":
+      "順調な週を祝い、GPT-5.5での開発を継続できるよう、全有料プランの制限がリセットされました。",
+    "Codex 达到 400 万活跃用户后，Tibo 和 Sam 均预告当天会重置；几小时后出现多条用户反馈称额度已重置。":
+      "Codexが400万アクティブユーザーに達した後、Tibo氏とSam氏が当日のリセットを示唆し、数時間後に利用枠が戻ったという反応が複数出ました。",
+    "短暂的 Codex 局部故障后，Tibo 表示即将重置速率限制。评论区约 2 小时 43 分钟后出现“usage is back to 100%”等用户反馈。":
+      "短時間のCodex部分障害後、Tibo氏がレート制限のリセットを示唆し、約2時間43分後に利用枠が100%に戻ったという反応が出ました。",
+    "为纪念产品一周年，Codex 对所有计划的速率限制进行了重置。":
+      "製品1周年を記念して、Codexの全プランのレート制限がリセットされました。",
+    "Codex 达到 300 万周活用户后，Tibo 表示正在重置限制；随后 @OpenAI 在新计划发布时确认现有 $200 Pro 用户的 Codex 速率限制已再次重置。":
+      "Codexが週間アクティブユーザー300万人に達した後、制限のリセットが進められ、新プラン発表時に既存の$200 Proユーザー向けCodex制限も再度リセットされたことが確認されました。",
+    "没有新的事故补偿线索，官方最新动作是个人 10X 用量奖励而非全局重置。社区仍有额度压力和求 reset 声音，但更像被奖励计划带出的需求反馈。":
+      "新しい障害補償の手がかりはなく、公式の最新動きは全体リセットではなく個別の10倍利用量リワードです。コミュニティには利用枠への圧力やリセット要望が残っていますが、リワード施策に反応した需要フィードバック寄りに見えます。",
     "Codex limits were reset after a usage-limit issue was resolved.":
       "利用上限に関する問題への対応として、Codexの利用上限がリセットされました。",
     "Tibo framed this reset as a celebration of Codex reaching 5M users; weekly and 5-hour limits for paid ChatGPT subscriptions were restored to 100%.":
@@ -374,10 +414,14 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
 }
 
 function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"] {
-  const state = data?.current_window?.state ?? data?.status;
+  const state = data?.current_window?.state ?? data?.window?.status ?? data?.status;
   const active = Boolean(data?.window_open) || state === "open";
-  const openedAt = data?.current_window?.opened_at ?? null;
-  const source = data?.current_window?.source ?? null;
+  const openedAt = data?.current_window?.opened_at ?? data?.window?.opened_at ?? null;
+  const source =
+    data?.current_window?.source ??
+    data?.window?.source ??
+    data?.window?.source_url ??
+    null;
 
   if (active) {
     return {
@@ -433,11 +477,22 @@ function getReasoningSummary(
   probability24h: number | undefined,
   probability48h: number | undefined,
 ) {
-  const englishSummary = data?.prediction?.display_summary_en;
+  const apiSummary =
+    data?.prediction?.reasoning_summary ??
+    data?.prediction?.display_summary ??
+    data?.prediction?.summary ??
+    data?.prediction?.display_summary_en ??
+    data?.prediction?.summary_en;
+  const englishSummary =
+    data?.prediction?.display_summary_en ?? data?.prediction?.summary_en;
   const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
 
   if (englishSummary?.includes("no official reset window")) {
     return "公式リセット予告や明確な補償示唆は確認されていません。直近のStatus障害はアカウント/契約まわりが中心で、Codex全体の障害とは読み切れません。一方で、コミュニティでは利用上限への圧力やリセット要望が続いているため、中程度の見立てです。";
+  }
+
+  if (apiSummary) {
+    return translateSourceText(apiSummary);
   }
 
   if (signalSummary?.observed || signalSummary?.candidates) {
@@ -497,6 +552,8 @@ function getRecentHistory(data: RadarData | null) {
 
   const items = [
     ...(data.prediction?.probability_history?.events ?? []),
+    ...(data.recent_windows ?? []),
+    ...(data.recent_windows?.length ? [] : [data.window]),
     data.last_window,
     data.latest_reset,
     data.last_reset,
@@ -542,6 +599,10 @@ function getRecentHistory(data: RadarData | null) {
 function getEventSource(item: WindowLike) {
   if (item.source) {
     return item.source;
+  }
+
+  if (item.source_url) {
+    return item.source_url;
   }
 
   if (item.link) {
@@ -629,12 +690,15 @@ function getLatestWindow(data: RadarData | null): WindowLike | undefined {
     return undefined;
   }
 
-  const direct =
-    data.last_window ??
-    data.latest_reset ??
-    data.last_reset ??
-    data.latest_window ??
-    getObject<WindowLike>(data, ["latestReset", "lastReset", "lastWindow"]);
+  const direct = [
+    data.recent_windows?.[0],
+    data.window,
+    data.last_window,
+    data.latest_reset,
+    data.last_reset,
+    data.latest_window,
+    getObject<WindowLike>(data, ["latestReset", "lastReset", "lastWindow"]),
+  ].find((item) => item?.title);
 
   if (direct) {
     return direct;
