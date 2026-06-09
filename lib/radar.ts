@@ -147,7 +147,7 @@ export type RadarViewModel = {
     forecastTime?: string | null;
     remaining?: string;
   };
-  reasoningSummary: string;
+  reasoningSummary: string | null;
   latestWindow: {
     title: string;
     summary: string;
@@ -666,7 +666,7 @@ function getReasoningSummary(
   data: RadarData | null,
   probability24h: number | undefined,
   probability48h: number | undefined,
-) {
+): string | null {
   const englishSummary =
     data?.prediction?.display_summary_en ?? data?.prediction?.summary_en;
   const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
@@ -712,7 +712,7 @@ function getReasoningSummary(
   const p24 = probabilityToPercent(probability24h);
   const p48 = probabilityToPercent(probability48h);
 
-  return `現在の見立ては24時間以内が${p24}、48時間以内が${p48}です。詳しい根拠は取得できていないため、公式リセット予告の有無を優先して確認してください。`;
+  return null;
 }
 
 function getSignalSummary(summary: SignalSummaryLike | undefined) {
