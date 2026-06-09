@@ -184,7 +184,7 @@ export function RadarDashboard({
                 <h2 className="mt-1 text-2xl font-semibold leading-tight text-balance">
                   {viewModel.activeWindow.label}
                 </h2>
-                {viewModel.activeWindow.active ? (
+                {viewModel.activeWindow.active && viewModel.activeWindow.summary ? (
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
                     {viewModel.activeWindow.summary}
                   </p>
@@ -219,7 +219,7 @@ export function RadarDashboard({
           ) : viewModel.activeWindow.kind === "regular" ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
               <MiniInfo
-                label="予想日"
+                label="リセット日"
                 value={viewModel.activeWindow.forecastDate ?? "不明"}
               />
               <MiniInfo

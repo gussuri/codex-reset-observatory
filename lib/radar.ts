@@ -498,8 +498,7 @@ function getDisplayResetNotice(
       active: true,
       kind: "regular",
       label: "定期リセット予想",
-      summary:
-        "本家サイトの公式リセット予告はありません。最新履歴のリセット実施日から7日後を、1週間サイクルの定期リセット予想として表示しています。",
+      summary: "",
       openedAt: regularResetForecast.sourceResetAt,
       forecastDate: regularResetForecast.date,
       remaining: regularResetForecast.remaining,
