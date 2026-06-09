@@ -1,4 +1,5 @@
 import type { RadarData } from "@/lib/radar";
+import { translateRadarReasoningSummary } from "@/lib/radar";
 
 export const CURRENT_JSON_URL =
   "https://codexradar.com/current.json";
@@ -30,7 +31,9 @@ export async function fetchCurrentRadarData(
       return null;
     }
 
-    return (await response.json()) as RadarData;
+    const data = (await response.json()) as RadarData;
+
+    return (await translateRadarReasoningSummary(data)) ?? data;
   } catch {
     return null;
   } finally {
