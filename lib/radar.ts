@@ -47,11 +47,9 @@ export type RadarData = {
     expected_window?: string;
     summary?: string;
     summary_en?: string;
-    summary_ja?: string;
     reasoning_summary?: string;
     display_summary?: string;
     display_summary_en?: string;
-    display_summary_ja?: string;
     updated_at?: string;
     signal_summary_24h?: SignalSummaryLike;
     probability_history?: {
@@ -178,10 +176,6 @@ export const SOURCE_SITE_URL = "https://codexradar.com/en/";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
-const DEEPL_DEFAULT_BASE_URL = "https://api-free.deepl.com";
-
-const deeplTranslationCache = new Map<string, string>();
-const deeplTranslationInFlight = new Map<string, Promise<string | null>>();
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -288,31 +282,6 @@ export function formatDateTime(value: string | null | undefined) {
     timeZone: DISPLAY_TIME_ZONE,
     timeZoneName: "short",
   }).format(date);
-}
-
-export async function translateRadarReasoningSummary(
-  data: RadarData | null,
-): Promise<RadarData | null> {
-  if (!data) {
-    return null;
-  }
-
-  const targetKey = getTranslationTargetKey(data);
-
-  if (!targetKey) {
-    return data;
-  }
-
-  const translatedTarget = await translateReasoningTarget(data[targetKey]);
-
-  if (!translatedTarget || translatedTarget === data[targetKey]) {
-    return data;
-  }
-
-  return {
-    ...data,
-    [targetKey]: translatedTarget,
-  };
 }
 
 function formatDateTimeCompact(value: Date) {
@@ -698,13 +667,6 @@ function getReasoningSummary(
   probability24h: number | undefined,
   probability48h: number | undefined,
 ): string | null {
-  const translatedSummary =
-    data?.prediction?.display_summary_ja ?? data?.prediction?.summary_ja;
-
-  if (translatedSummary) {
-    return translatedSummary;
-  }
-
   const englishSummary =
     data?.prediction?.display_summary_en ?? data?.prediction?.summary_en;
   const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
@@ -990,126 +952,6 @@ function unwrapRadarData(data: RadarData | null): RadarData | null {
   }
 
   return data.data ?? data.result ?? data.current ?? data;
-}
-
-function getTranslationTargetKey(
-  data: RadarData,
-): "data" | "result" | "current" | null {
-  if (data.data) {
-    return "data";
-  }
-
-  if (data.result) {
-    return "result";
-  }
-
-  if (data.current) {
-    return "current";
-  }
-
-  return null;
-}
-
-async function translateReasoningTarget(
-  data: RadarData,
-): Promise<RadarData> {
-  const summary = data.prediction?.display_summary_en ?? data.prediction?.summary_en;
-
-  if (!summary) {
-    return data;
-  }
-
-  if (data.prediction?.display_summary_ja || data.prediction?.summary_ja) {
-    return data;
-  }
-
-  const translated = await translateToJapanese(summary);
-
-  if (!translated) {
-    return data;
-  }
-
-  return {
-    ...data,
-    prediction: {
-      ...data.prediction,
-      display_summary_ja: translated,
-      summary_ja: data.prediction?.summary_ja ?? translated,
-    },
-  };
-}
-
-async function translateToJapanese(text: string) {
-  const normalizedText = text.trim();
-
-  if (!normalizedText) {
-    return null;
-  }
-
-  const cached = deeplTranslationCache.get(normalizedText);
-
-  if (cached) {
-    return cached;
-  }
-
-  const inFlight = deeplTranslationInFlight.get(normalizedText);
-
-  if (inFlight) {
-    return inFlight;
-  }
-
-  const apiKey = process.env.DEEPL_API_KEY;
-
-  if (!apiKey) {
-    return null;
-  }
-
-  const baseUrl = (process.env.DEEPL_API_BASE_URL ?? DEEPL_DEFAULT_BASE_URL).replace(
-    /\/$/,
-    "",
-  );
-
-  const translateRequest = (async () => {
-    try {
-      const response = await fetch(`${baseUrl}/v2/translate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          auth_key: apiKey,
-          source_lang: "EN",
-          target_lang: "JA",
-          text: normalizedText,
-        }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const payload = (await response.json()) as {
-        translations?: Array<{ text?: string }>;
-      };
-      const translated = payload.translations?.[0]?.text?.trim();
-
-      if (!translated) {
-        return null;
-      }
-
-      deeplTranslationCache.set(normalizedText, translated);
-
-      return translated;
-    } catch {
-      return null;
-    } finally {
-      deeplTranslationInFlight.delete(normalizedText);
-    }
-  })();
-
-  deeplTranslationInFlight.set(normalizedText, translateRequest);
-
-  return translateRequest;
 }
 
 function normalizeProbability(value: number) {
