@@ -117,6 +117,25 @@ export function RadarDashboard({
     return () => window.clearInterval(timer);
   }, [fetchRadar, refreshMs]);
 
+  const resetNoticeTone =
+    viewModel.activeWindow.kind === "official"
+      ? {
+          card: "border-amber-300 bg-amber-50 text-amber-950",
+          icon: "text-amber-700",
+          badge: "bg-amber-200 text-amber-950",
+        }
+      : viewModel.activeWindow.kind === "regular"
+        ? {
+            card: "border-teal-200 bg-teal-50/90 text-teal-950",
+            icon: "text-teal-700",
+            badge: "bg-white/75 text-teal-700",
+          }
+        : {
+            card: "border-slate-200 bg-white/90 text-slate-950",
+            icon: "text-teal-700",
+            badge: "bg-slate-100 text-slate-600",
+          };
+
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
@@ -154,28 +173,16 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        <section
-          className={`rounded-lg border p-5 shadow-sm ${
-            viewModel.activeWindow.active
-              ? "border-amber-300 bg-amber-50 text-amber-950"
-              : "border-slate-200 bg-white/90 text-slate-950"
-          }`}
-        >
+        <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <Bell
-                className={`mt-0.5 h-6 w-6 shrink-0 ${
-                  viewModel.activeWindow.active
-                    ? "text-amber-700"
-                    : "text-teal-700"
-                }`}
-              />
-              <div>
+              <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-500">
                   公式リセット予告
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold leading-tight">
-                  公式リセット予告：{viewModel.activeWindow.label}
+                <h2 className="mt-1 text-2xl font-semibold leading-tight text-balance">
+                  {viewModel.activeWindow.label}
                 </h2>
                 {viewModel.activeWindow.active ? (
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
@@ -185,13 +192,15 @@ export function RadarDashboard({
               </div>
             </div>
             {viewModel.activeWindow.active ? (
-              <span className="inline-flex w-fit shrink-0 rounded-md bg-amber-200 px-3 py-1 text-sm font-semibold text-amber-950">
-                要確認
+              <span
+                className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
+              >
+                {viewModel.activeWindow.kind === "official" ? "要確認" : "予想"}
               </span>
             ) : null}
           </div>
 
-          {viewModel.activeWindow.active ? (
+          {viewModel.activeWindow.kind === "official" ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
               <MiniInfo
                 label="予告検知時刻"
@@ -207,34 +216,18 @@ export function RadarDashboard({
                 href={viewModel.activeWindow.source}
               />
             </dl>
+          ) : viewModel.activeWindow.kind === "regular" ? (
+            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+              <MiniInfo
+                label="予想日"
+                value={viewModel.activeWindow.forecastDate ?? "不明"}
+              />
+              <MiniInfo
+                label="残り"
+                value={viewModel.activeWindow.remaining ?? "残り不明"}
+              />
+            </dl>
           ) : null}
-        </section>
-
-        <section className="rounded-lg border border-teal-200 bg-teal-50/90 p-5 text-teal-950 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3">
-              <Clock className="mt-0.5 h-6 w-6 shrink-0 text-teal-700" />
-              <div>
-                <h2 className="text-base font-semibold">
-                  次回定期リセット予想
-                </h2>
-                <p className="mt-2 text-3xl font-semibold leading-tight">
-                  {viewModel.regularResetForecast.date}
-                </p>
-                <p className="mt-1 text-base font-semibold">
-                  {viewModel.regularResetForecast.remaining}
-                </p>
-                <p className="mt-2 text-sm font-medium text-teal-700">
-                  履歴からの推定
-                </p>
-              </div>
-            </div>
-            {viewModel.regularResetForecast.sourceResetAt ? (
-              <p className="text-sm leading-6 text-teal-800 sm:max-w-sm sm:text-right">
-                最新履歴のリセット実施日から7日後として見ています。
-              </p>
-            ) : null}
-          </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.12fr_0.88fr]">
@@ -243,7 +236,10 @@ export function RadarDashboard({
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  リセット期待度：{viewModel.expectation}
+                  <span className="block sm:inline">ランダムリセット期待度</span>
+                  <span className="block sm:inline sm:before:content-['：']">
+                    {viewModel.expectation}
+                  </span>
                 </h2>
               </div>
               <Gauge className="h-7 w-7 text-teal-700" />
@@ -309,10 +305,10 @@ export function RadarDashboard({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                ランダムリセット履歴
+                リセット履歴
               </p>
               <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                直近のランダムリセット履歴
+                直近のリセット履歴
               </h2>
             </div>
             <History className="h-7 w-7 text-slate-700" />
@@ -337,13 +333,21 @@ export function RadarDashboard({
                         {item.resetType}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      対象：{item.scope} / 予告から実施まで：{item.windowLength}
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      対象：{item.scope}
+                      <span className="mx-2 hidden sm:inline">/</span>
+                      <span className="block sm:inline">
+                        予告から実施まで：{item.windowLength}
+                      </span>
                     </p>
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
-                    <p>検知：{formatDateTime(item.signalAt)}</p>
-                    <p>実施：{formatDateTime(item.resetAt)}</p>
+                    <p>
+                      {item.signalLabel}：{formatDateTime(item.signalAt)}
+                    </p>
+                    <p>
+                      {item.resetLabel}：{formatDateTime(item.resetAt)}
+                    </p>
                     {isSafeHttpUrl(item.source) ? (
                       <a
                         className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"

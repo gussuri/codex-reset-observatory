@@ -131,13 +131,19 @@ export type RadarViewModel = {
     date: string;
     remaining: string;
     sourceResetAt?: string | null;
+    expectedAt?: string | null;
+    remainingDays?: number | null;
+    isNoticeWindow: boolean;
   };
   activeWindow: {
     active: boolean;
+    kind: "official" | "regular" | "none";
     label: string;
     summary: string;
     openedAt?: string | null;
     source?: string | null;
+    forecastDate?: string;
+    remaining?: string;
   };
   reasoningSummary: string;
   latestWindow: {
@@ -156,6 +162,8 @@ export type RadarViewModel = {
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;
+    signalLabel: string;
+    resetLabel: string;
     scope: string;
     windowLength: string;
     source?: string | null;
@@ -385,7 +393,18 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     source?.prediction?.level ??
     getString(source, ["prediction_level", "level", "expectation_level"]);
   const latestWindow = getLatestWindow(source);
-  const recentHistory = getRecentHistory(source);
+  const observedHistory = getRecentHistory(source);
+  const regularResetForecast = getRegularResetForecast(
+    observedHistory[0]?.resetAt ?? observedHistory[0]?.date ?? null,
+  );
+  const activeWindow = getDisplayResetNotice(
+    getActiveWindow(source),
+    regularResetForecast,
+  );
+  const recentHistory = addRegularResetForecastToHistory(
+    observedHistory,
+    regularResetForecast,
+  );
 
   return {
     status: translateStatus(
@@ -402,10 +421,8 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
       source?.updated_at ??
       source?.prediction?.updated_at ??
       null,
-    regularResetForecast: getRegularResetForecast(
-      recentHistory[0]?.resetAt ?? recentHistory[0]?.date ?? null,
-    ),
-    activeWindow: getActiveWindow(source),
+    regularResetForecast,
+    activeWindow,
     reasoningSummary: getReasoningSummary(source, probability24h, probability48h),
     latestWindow: {
       title: translateSourceText(latestWindow?.title),
@@ -431,6 +448,9 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
       date: "不明",
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
+      expectedAt: null,
+      remainingDays: null,
+      isNoticeWindow: false,
     };
   }
 
@@ -441,6 +461,9 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
       date: "不明",
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
+      expectedAt: null,
+      remainingDays: null,
+      isNoticeWindow: false,
     };
   }
 
@@ -456,7 +479,62 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
           ? "残り0日"
           : "予想日を過ぎています",
     sourceResetAt: latestResetAt,
+    expectedAt: nextRegularReset.toISOString(),
+    remainingDays,
+    isNoticeWindow: remainingDays >= 0 && remainingDays <= 3,
   };
+}
+
+function getDisplayResetNotice(
+  officialWindow: RadarViewModel["activeWindow"],
+  regularResetForecast: RadarViewModel["regularResetForecast"],
+): RadarViewModel["activeWindow"] {
+  if (officialWindow.active) {
+    return officialWindow;
+  }
+
+  if (regularResetForecast.isNoticeWindow) {
+    return {
+      active: true,
+      kind: "regular",
+      label: "定期リセット予想",
+      summary:
+        "本家サイトの公式リセット予告はありません。最新履歴のリセット実施日から7日後を、1週間サイクルの定期リセット予想として表示しています。",
+      openedAt: regularResetForecast.sourceResetAt,
+      forecastDate: regularResetForecast.date,
+      remaining: regularResetForecast.remaining,
+      source: null,
+    };
+  }
+
+  return officialWindow;
+}
+
+function addRegularResetForecastToHistory(
+  history: RadarViewModel["recentHistory"],
+  regularResetForecast: RadarViewModel["regularResetForecast"],
+) {
+  if (!regularResetForecast.expectedAt) {
+    return history;
+  }
+
+  return [
+    {
+      key: `regular-reset-forecast-${regularResetForecast.expectedAt}`,
+      title: "次回定期リセット予想",
+      resetType: "定期リセット",
+      status: "予想",
+      date: regularResetForecast.expectedAt,
+      signalAt: regularResetForecast.sourceResetAt ?? null,
+      resetAt: regularResetForecast.expectedAt,
+      signalLabel: "基準",
+      resetLabel: "予想",
+      scope: "1週間サイクル",
+      windowLength: "7日後",
+      source: null,
+    },
+    ...history,
+  ].slice(0, 5);
 }
 
 function formatDate(value: Date) {
@@ -506,6 +584,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
   if (active) {
     return {
       active,
+      kind: "official",
       label: "予告あり",
       summary:
         "Codex Reset Radarが公式シグナルを検知しています。予告どおりリセットされる可能性が高いため、残り枠を使う判断を優先してください。",
@@ -516,6 +595,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
 
   return {
     active,
+    kind: "none",
     label: "予告なし",
     summary:
       "現時点で、Codex Reset Radar が検知している公式リセット予告はありません。",
@@ -654,6 +734,8 @@ function getRecentHistory(data: RadarData | null) {
         date: item.date ?? resetAt,
         signalAt: item.opened_at ?? item.date ?? null,
         resetAt,
+        signalLabel: "検知",
+        resetLabel: "実施",
         scope: translateSourceText(item.scope),
         windowLength: formatWindowLength(item.window_minutes),
         source,

@@ -10,9 +10,9 @@ import {
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
 
 export const metadata: Metadata = {
-  title: "ランダムリセット履歴",
+  title: "リセット履歴",
   description:
-    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、コミュニティ予測の履歴を日本語で確認できます。",
+    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット予想を日本語で確認できます。",
 };
 
 export const revalidate = 300;
@@ -28,13 +28,13 @@ export default async function HistoryPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-teal-700">
-                Codexランダムリセット履歴
+                Codexリセット履歴
               </p>
               <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
-                ランダムリセット履歴
+                リセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                詫び・ご祝儀・予告付き臨時リセットなど、観測された履歴を表示します。
+                詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセット予想も表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -62,14 +62,21 @@ export default async function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      対象：{item.scope} / 予告から実施まで：
-                      {item.windowLength}
+                      対象：{item.scope}
+                      <span className="mx-2 hidden sm:inline">/</span>
+                      <span className="block sm:inline">
+                        予告から実施まで：{item.windowLength}
+                      </span>
                     </p>
                   </div>
 
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
-                    <p>検知：{formatDateTime(item.signalAt)}</p>
-                    <p>実施：{formatDateTime(item.resetAt)}</p>
+                    <p>
+                      {item.signalLabel}：{formatDateTime(item.signalAt)}
+                    </p>
+                    <p>
+                      {item.resetLabel}：{formatDateTime(item.resetAt)}
+                    </p>
                     {isSafeHttpUrl(item.source) ? (
                       <a
                         className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
