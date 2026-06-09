@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "このサイトについて",
   description:
-    "Codexリセット観測所は、Codexの臨時リセット、補償リセット、記念リセット、公式予告を整理する非公式サイトです。",
+    "Codexリセット観測所は、Codexの公式リセット予告、定期リセット、履歴、期待度を整理する非公式サイトです。",
 };
 
 export default function AboutPage() {
@@ -13,23 +13,23 @@ export default function AboutPage() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="rounded-lg border border-slate-200/80 bg-white/88 p-5 shadow-sm backdrop-blur">
           <p className="text-sm font-medium text-teal-700">
-            Codex臨時リセット観測
+            Codexリセット観測
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
             Codexリセット観測所について
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Codexの臨時リセット情報を観測・整理する非公式サイトです。
+            Codexの公式リセット予告と定期リセットを観測・整理する非公式サイトです。
           </p>
         </header>
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
           <div className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
-              Codexリセット観測所は、Codexの臨時リセット情報を観測・整理する非公式サイトです。
+              Codexリセット観測所は、Codexの公式リセット予告、定期リセット、履歴、期待度を観測・整理する非公式サイトです。
             </p>
             <p>
-              障害対応、補償、記念イベント、公式予告など、通常とは異なるリセット情報をまとめています。
+              障害対応や補償、記念イベントなどで発生する臨時リセットに加えて、定期リセットの予定もまとめています。
             </p>
             <p>
               リセット期待度は公式情報ではなく、公開情報やコミュニティの動きをもとに整理した参考指標です。
