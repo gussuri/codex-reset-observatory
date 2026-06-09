@@ -223,7 +223,7 @@ export function RadarDashboard({
                 <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
                   <span>{viewModel.activeWindow.forecastDate ?? "不明"}</span>
                   {viewModel.activeWindow.forecastTime ? (
-                    <span className="ml-2 text-sm font-medium text-slate-500">
+                    <span className="ml-2 font-medium text-slate-500">
                       {viewModel.activeWindow.forecastTime}
                     </span>
                   ) : null}
