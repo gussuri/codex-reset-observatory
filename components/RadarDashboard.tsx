@@ -36,12 +36,14 @@ type LoadState = {
 
 export function RadarDashboard({
   initialData,
+  initialFetchedAt,
 }: {
   initialData?: RadarData | null;
+  initialFetchedAt?: string | null;
 }) {
   const [state, setState] = useState<LoadState>({
     data: initialData ?? null,
-    fetchedAt: initialData ? new Date().toISOString() : null,
+    fetchedAt: initialFetchedAt ?? null,
     isFallback: false,
     error: null,
     loading: !initialData,
@@ -206,6 +208,33 @@ export function RadarDashboard({
               />
             </dl>
           ) : null}
+        </section>
+
+        <section className="rounded-lg border border-teal-200 bg-teal-50/90 p-5 text-teal-950 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Clock className="mt-0.5 h-6 w-6 shrink-0 text-teal-700" />
+              <div>
+                <h2 className="text-base font-semibold">
+                  次回定期リセット予想
+                </h2>
+                <p className="mt-2 text-3xl font-semibold leading-tight">
+                  {viewModel.regularResetForecast.date}
+                </p>
+                <p className="mt-1 text-base font-semibold">
+                  {viewModel.regularResetForecast.remaining}
+                </p>
+                <p className="mt-2 text-sm font-medium text-teal-700">
+                  履歴からの推定
+                </p>
+              </div>
+            </div>
+            {viewModel.regularResetForecast.sourceResetAt ? (
+              <p className="text-sm leading-6 text-teal-800 sm:max-w-sm sm:text-right">
+                最新履歴のリセット実施日から7日後として見ています。
+              </p>
+            ) : null}
+          </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.12fr_0.88fr]">

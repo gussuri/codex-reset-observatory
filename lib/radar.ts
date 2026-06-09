@@ -127,6 +127,11 @@ export type RadarViewModel = {
   probability48h?: number;
   action: string;
   lastUpdated?: string | null;
+  regularResetForecast: {
+    date: string;
+    remaining: string;
+    sourceResetAt?: string | null;
+  };
   activeWindow: {
     active: boolean;
     label: string;
@@ -158,6 +163,8 @@ export type RadarViewModel = {
 };
 
 export const SOURCE_SITE_URL = "https://codexradar.com/en/";
+const DISPLAY_TIME_ZONE = "Asia/Tokyo";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -261,7 +268,7 @@ export function formatDateTime(value: string | null | undefined) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Tokyo",
+    timeZone: DISPLAY_TIME_ZONE,
     timeZoneName: "short",
   }).format(date);
 }
@@ -378,6 +385,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     source?.prediction?.level ??
     getString(source, ["prediction_level", "level", "expectation_level"]);
   const latestWindow = getLatestWindow(source);
+  const recentHistory = getRecentHistory(source);
 
   return {
     status: translateStatus(
@@ -394,6 +402,9 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
       source?.updated_at ??
       source?.prediction?.updated_at ??
       null,
+    regularResetForecast: getRegularResetForecast(
+      recentHistory[0]?.resetAt ?? recentHistory[0]?.date ?? null,
+    ),
     activeWindow: getActiveWindow(source),
     reasoningSummary: getReasoningSummary(source, probability24h, probability48h),
     latestWindow: {
@@ -410,8 +421,76 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
         null,
       windowLength: formatWindowLength(latestWindow?.window_minutes),
     },
-    recentHistory: getRecentHistory(source),
+    recentHistory,
   };
+}
+
+function getRegularResetForecast(latestResetAt: string | null | undefined) {
+  if (!latestResetAt) {
+    return {
+      date: "不明",
+      remaining: "残り不明",
+      sourceResetAt: latestResetAt,
+    };
+  }
+
+  const latestResetDate = new Date(latestResetAt);
+
+  if (Number.isNaN(latestResetDate.getTime())) {
+    return {
+      date: "不明",
+      remaining: "残り不明",
+      sourceResetAt: latestResetAt,
+    };
+  }
+
+  const nextRegularReset = new Date(latestResetDate.getTime() + 7 * DAY_MS);
+  const remainingDays = getCalendarDayDelta(nextRegularReset, new Date());
+
+  return {
+    date: formatDate(nextRegularReset),
+    remaining:
+      remainingDays > 0
+        ? `残り${remainingDays}日`
+        : remainingDays === 0
+          ? "残り0日"
+          : "予想日を過ぎています",
+    sourceResetAt: latestResetAt,
+  };
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(value);
+}
+
+function getCalendarDayDelta(target: Date, current: Date) {
+  const targetDay = getTimeZoneDay(target);
+  const currentDay = getTimeZoneDay(current);
+
+  return Math.round((targetDay - currentDay) / DAY_MS);
+}
+
+function getTimeZoneDay(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).formatToParts(value);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  return Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+  );
 }
 
 function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"] {
