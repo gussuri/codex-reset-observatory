@@ -223,7 +223,7 @@ export function RadarDashboard({
                 <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
                   <span>{viewModel.activeWindow.forecastDate ?? "不明"}</span>
                   {viewModel.activeWindow.forecastTime ? (
-                    <span className="ml-2 font-medium text-slate-500">
+                    <span className="ml-2 font-medium text-slate-900">
                       {viewModel.activeWindow.forecastTime}
                     </span>
                   ) : null}
@@ -246,7 +246,7 @@ export function RadarDashboard({
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                    <span className="block">リセット</span>
+                  <span className="block">ランダムリセット</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
                     期待度：{viewModel.expectation}
                   </span>
