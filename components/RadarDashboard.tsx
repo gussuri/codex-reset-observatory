@@ -246,7 +246,7 @@ export function RadarDashboard({
               <div>
                 <p className="text-sm font-medium text-slate-500">現在の状況</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  <span className="block">ランダムリセット</span>
+                    <span className="block">リセット</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
                     期待度：{viewModel.expectation}
                   </span>
@@ -280,7 +280,7 @@ export function RadarDashboard({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">
-                  最新のランダムリセット
+                  最新のリセット
                 </p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   {viewModel.latestWindow.title}

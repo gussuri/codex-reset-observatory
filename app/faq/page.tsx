@@ -8,14 +8,14 @@ const faqs = [
       "Codexの公式リセット予告、定期リセット、履歴、期待度を観測しています。",
   },
   {
-    question: "ランダムリセットとは何ですか？",
+    question: "リセットとは何ですか？",
     answer:
-      "障害への補償、記念イベント、公式予告、臨時対応などをきっかけに発生するCodex利用枠のリセットです。このサイトでは、詫びリセット、ご祝儀リセット、予告付き臨時リセット、コミュニティ上で期待されているリセットをまとめてランダムリセットと呼んでいます。",
+      "障害への補償、記念イベント、公式予告、臨時対応などをきっかけに発生するCodex利用枠のリセットです。このサイトでは、詫びリセット、ご祝儀リセット、予告付き臨時リセット、コミュニティ上で期待されているリセットをまとめて扱っています。",
   },
   {
-    question: "ランダムリセットと通常リセットの違いは？",
+    question: "臨時リセットと通常リセットの違いは？",
     answer:
-      "通常リセットは決まったサイクルの利用枠更新です。ランダムリセットは、障害対応・補償・記念などをきっかけに発生する臨時のリセットです。",
+      "通常リセットは決まったサイクルの利用枠更新です。臨時リセットは、障害対応・補償・記念などをきっかけに発生する一時的なリセットです。",
   },
   {
     question: "詫びリセットとは何ですか？",
@@ -30,7 +30,7 @@ const faqs = [
   {
     question: "リセット期待度は何を表していますか？",
     answer:
-      "近いうちにランダムリセットが発生する可能性の目安です。公式予告、Status上の問題、コミュニティの利用上限への不満やリセット要望などをもとにしています。",
+      "近いうちにリセットが発生する可能性の目安です。公式予告、Status上の問題、コミュニティの利用上限への不満やリセット要望などをもとにしています。",
   },
   {
     question: "公式予告と定期リセットの違いは？",
@@ -42,7 +42,7 @@ const faqs = [
 export const metadata: Metadata = {
   title: "FAQ",
   description:
-    "Codexのランダムリセット、臨時リセット、補償リセット、公式予告、コミュニティ予測の違いを説明します。",
+    "Codexのリセット、臨時リセット、補償リセット、公式予告、定期リセットの違いを説明します。",
 };
 
 export default function FaqPage() {
@@ -51,13 +51,13 @@ export default function FaqPage() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="rounded-lg border border-slate-200/80 bg-white/88 p-5 shadow-sm backdrop-blur">
           <p className="text-sm font-medium text-teal-700">
-            CodexランダムリセットFAQ
+            CodexリセットFAQ
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
             よくある質問
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            ランダムリセットの見方を簡単に整理しています。
+            リセットの見方を簡単に整理しています。
           </p>
         </header>
 
