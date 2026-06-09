@@ -173,6 +173,7 @@ export type RadarViewModel = {
 export const SOURCE_SITE_URL = "https://codexradar.com/en/";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -279,6 +280,17 @@ export function formatDateTime(value: string | null | undefined) {
     timeZone: DISPLAY_TIME_ZONE,
     timeZoneName: "short",
   }).format(date);
+}
+
+function formatDateTimeCompact(value: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(value);
 }
 
 export function translateStatus(
@@ -443,7 +455,10 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
 }
 
 function getRegularResetForecast(latestResetAt: string | null | undefined) {
-  if (!latestResetAt) {
+  const manualNextRegularReset = new Date(MANUAL_NEXT_REGULAR_RESET_AT);
+  const hasManualNextRegularReset = !Number.isNaN(manualNextRegularReset.getTime());
+
+  if (!latestResetAt && !hasManualNextRegularReset) {
     return {
       date: "不明",
       remaining: "残り不明",
@@ -454,9 +469,9 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
     };
   }
 
-  const latestResetDate = new Date(latestResetAt);
+  const latestResetDate = latestResetAt ? new Date(latestResetAt) : null;
 
-  if (Number.isNaN(latestResetDate.getTime())) {
+  if (!hasManualNextRegularReset && (!latestResetDate || Number.isNaN(latestResetDate.getTime()))) {
     return {
       date: "不明",
       remaining: "残り不明",
@@ -467,11 +482,15 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
     };
   }
 
-  const nextRegularReset = new Date(latestResetDate.getTime() + 7 * DAY_MS);
+  const nextRegularReset = hasManualNextRegularReset
+    ? manualNextRegularReset
+    : new Date((latestResetDate as Date).getTime() + 7 * DAY_MS);
   const remainingDays = getCalendarDayDelta(nextRegularReset, new Date());
 
   return {
-    date: formatDate(nextRegularReset),
+    date: hasManualNextRegularReset
+      ? formatDate(nextRegularReset)
+      : formatDateTimeCompact(nextRegularReset),
     remaining:
       remainingDays > 0
         ? `残り${remainingDays}日`
@@ -520,14 +539,14 @@ function addRegularResetForecastToHistory(
   return [
     {
       key: `regular-reset-forecast-${regularResetForecast.expectedAt}`,
-      title: "次回定期リセット予想",
+      title: "次回定期リセット",
       resetType: "定期リセット",
-      status: "予想",
+      status: "予定",
       date: regularResetForecast.expectedAt,
       signalAt: regularResetForecast.sourceResetAt ?? null,
       resetAt: regularResetForecast.expectedAt,
       signalLabel: "基準",
-      resetLabel: "予想",
+      resetLabel: "予定",
       scope: "1週間サイクル",
       windowLength: "7日後",
       source: null,
