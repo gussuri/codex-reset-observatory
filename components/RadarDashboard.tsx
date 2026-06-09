@@ -221,7 +221,12 @@ export function RadarDashboard({
               <div className="rounded-md bg-white/70 p-3">
                 <dt className="text-xs font-semibold text-slate-500">リセット日</dt>
                 <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
-                  {viewModel.activeWindow.forecastDate ?? "不明"}
+                  <span>{viewModel.activeWindow.forecastDate ?? "不明"}</span>
+                  {viewModel.activeWindow.forecastTime ? (
+                    <span className="ml-2 text-sm font-medium text-slate-500">
+                      {viewModel.activeWindow.forecastTime}
+                    </span>
+                  ) : null}
                 </dd>
               </div>
 

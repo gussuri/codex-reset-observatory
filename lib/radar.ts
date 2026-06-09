@@ -129,6 +129,7 @@ export type RadarViewModel = {
   lastUpdated?: string | null;
   regularResetForecast: {
     date: string;
+    time?: string | null;
     remaining: string;
     sourceResetAt?: string | null;
     expectedAt?: string | null;
@@ -143,6 +144,7 @@ export type RadarViewModel = {
     openedAt?: string | null;
     source?: string | null;
     forecastDate?: string;
+    forecastTime?: string | null;
     remaining?: string;
   };
   reasoningSummary: string;
@@ -287,6 +289,14 @@ function formatDateTimeCompact(value: Date) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(value);
+}
+
+function formatTime(value: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
     hour: "numeric",
     minute: "2-digit",
     timeZone: DISPLAY_TIME_ZONE,
@@ -461,6 +471,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
   if (!latestResetAt && !hasManualNextRegularReset) {
     return {
       date: "不明",
+      time: null,
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
       expectedAt: null,
@@ -474,6 +485,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
   if (!hasManualNextRegularReset && (!latestResetDate || Number.isNaN(latestResetDate.getTime()))) {
     return {
       date: "不明",
+      time: null,
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
       expectedAt: null,
@@ -488,9 +500,8 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
   const remainingDays = getCalendarDayDelta(nextRegularReset, new Date());
 
   return {
-    date: hasManualNextRegularReset
-      ? formatDate(nextRegularReset)
-      : formatDateTimeCompact(nextRegularReset),
+    date: formatDate(nextRegularReset),
+    time: hasManualNextRegularReset ? formatTime(nextRegularReset) : null,
     remaining:
       remainingDays > 0
         ? `残り${remainingDays}日`
@@ -520,6 +531,7 @@ function getDisplayResetNotice(
       summary: "",
       openedAt: regularResetForecast.sourceResetAt,
       forecastDate: regularResetForecast.date,
+      forecastTime: regularResetForecast.time ?? null,
       remaining: regularResetForecast.remaining,
       source: null,
     };
