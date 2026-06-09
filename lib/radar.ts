@@ -497,7 +497,7 @@ function getDisplayResetNotice(
     return {
       active: true,
       kind: "regular",
-      label: "定期リセット予想",
+      label: "定期リセット",
       summary: "",
       openedAt: regularResetForecast.sourceResetAt,
       forecastDate: regularResetForecast.date,

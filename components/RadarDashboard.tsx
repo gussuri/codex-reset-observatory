@@ -191,11 +191,11 @@ export function RadarDashboard({
                 ) : null}
               </div>
             </div>
-            {viewModel.activeWindow.active ? (
+            {viewModel.activeWindow.active && viewModel.activeWindow.kind === "official" ? (
               <span
                 className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
               >
-                {viewModel.activeWindow.kind === "official" ? "要確認" : "予想"}
+                要確認
               </span>
             ) : null}
           </div>
@@ -218,14 +218,19 @@ export function RadarDashboard({
             </dl>
           ) : viewModel.activeWindow.kind === "regular" ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              <MiniInfo
-                label="リセット日"
-                value={viewModel.activeWindow.forecastDate ?? "不明"}
-              />
-              <MiniInfo
-                label="残り"
-                value={viewModel.activeWindow.remaining ?? "残り不明"}
-              />
+              <div className="rounded-md bg-white/70 p-3">
+                <dt className="text-xs font-semibold text-slate-500">リセット日</dt>
+                <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
+                  {viewModel.activeWindow.forecastDate ?? "不明"}
+                </dd>
+              </div>
+
+              <div className="rounded-md bg-white/70 p-3">
+                <dt className="text-xs font-semibold text-slate-500">残り</dt>
+                <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
+                  {viewModel.activeWindow.remaining ?? "残り不明"}
+                </dd>
+              </div>
             </dl>
           ) : null}
         </section>
