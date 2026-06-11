@@ -625,7 +625,7 @@ function addRegularResetForecastToHistory(
       key: `regular-reset-completed-${regularResetForecast.lastCompletedAt}`,
       title: "定期リセット",
       resetType: "定期リセット",
-      status: "実施済み",
+      status: "終了",
       date: regularResetForecast.lastCompletedAt,
       signalAt: null,
       resetAt: regularResetForecast.lastCompletedAt,
