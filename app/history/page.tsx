@@ -62,7 +62,7 @@ export default async function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      対象：{item.scope}
+                      対象プラン：{item.scope}
                       <span className="mx-2 hidden sm:inline">/</span>
                       <span className="block sm:inline">
                         予告から実施まで：{item.windowLength}

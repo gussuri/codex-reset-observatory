@@ -631,7 +631,7 @@ function addRegularResetForecastToHistory(
       resetAt: regularResetForecast.lastCompletedAt,
       signalLabel: "",
       resetLabel: "実施",
-      scope: "1週間サイクル",
+      scope: "全有料プラン",
       windowLength: "定期実施",
       source: null,
     });
@@ -670,7 +670,7 @@ function getLatestWindowWithRegularReset(
     completed_at: regularResetForecast.lastCompletedAt,
     window_minutes: 0,
     window_human: "定期実施",
-    scope: "1週間サイクル",
+    scope: "全有料プラン",
     summary:
       "1週間サイクルの定期リセットが実施されました。",
   };
