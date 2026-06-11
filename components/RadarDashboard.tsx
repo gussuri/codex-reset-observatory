@@ -224,6 +224,7 @@ export function RadarDashboard({
                   <span>{viewModel.activeWindow.forecastDate ?? "不明"}</span>
                   {viewModel.activeWindow.forecastTime ? (
                     <span className="ml-2">
+                      {" "}
                       {viewModel.activeWindow.forecastTime}
                     </span>
                   ) : null}

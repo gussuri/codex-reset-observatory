@@ -133,6 +133,7 @@ export type RadarViewModel = {
     remaining: string;
     sourceResetAt?: string | null;
     expectedAt?: string | null;
+    lastCompletedAt?: string | null;
     remainingDays?: number | null;
     isNoticeWindow: boolean;
   };
@@ -414,10 +415,14 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   const predictionLevel =
     source?.prediction?.level ??
     getString(source, ["prediction_level", "level", "expectation_level"]);
-  const latestWindow = getLatestWindow(source);
+  const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source);
   const regularResetForecast = getRegularResetForecast(
     observedHistory[0]?.resetAt ?? observedHistory[0]?.date ?? null,
+  );
+  const latestWindow = getLatestWindowWithRegularReset(
+    observedLatestWindow,
+    regularResetForecast,
   );
   const activeWindow = getDisplayResetNotice(
     getActiveWindow(source),
@@ -458,7 +463,9 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
         latestWindow?.completed_at ??
         latestWindow?.opened_at ??
         null,
-      windowLength: formatWindowLength(latestWindow?.window_minutes),
+      windowLength: latestWindow?.window_human
+        ? translateSourceText(latestWindow.window_human)
+        : formatWindowLength(latestWindow?.window_minutes),
     },
     recentHistory,
   };
@@ -467,6 +474,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
 function getRegularResetForecast(latestResetAt: string | null | undefined) {
   const manualNextRegularReset = new Date(MANUAL_NEXT_REGULAR_RESET_AT);
   const hasManualNextRegularReset = !Number.isNaN(manualNextRegularReset.getTime());
+  const current = new Date();
 
   if (!latestResetAt && !hasManualNextRegularReset) {
     return {
@@ -475,29 +483,46 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
       expectedAt: null,
+      lastCompletedAt: null,
       remainingDays: null,
       isNoticeWindow: false,
     };
   }
 
   const latestResetDate = latestResetAt ? new Date(latestResetAt) : null;
+  const hasLatestResetDate =
+    Boolean(latestResetDate) && !Number.isNaN((latestResetDate as Date).getTime());
 
-  if (!hasManualNextRegularReset && (!latestResetDate || Number.isNaN(latestResetDate.getTime()))) {
+  if (!hasManualNextRegularReset && !hasLatestResetDate) {
     return {
       date: "不明",
       time: null,
       remaining: "残り不明",
       sourceResetAt: latestResetAt,
       expectedAt: null,
+      lastCompletedAt: null,
       remainingDays: null,
       isNoticeWindow: false,
     };
   }
 
-  const nextRegularReset = hasManualNextRegularReset
-    ? manualNextRegularReset
-    : new Date((latestResetDate as Date).getTime() + 7 * DAY_MS);
-  const remainingDays = getCalendarDayDelta(nextRegularReset, new Date());
+  const rolledRegularReset = rollRegularResetForward(
+    hasManualNextRegularReset ? manualNextRegularReset : null,
+    current,
+  );
+  const lastCompletedAt = rolledRegularReset.lastCompletedAt?.toISOString() ?? null;
+  const scheduleAnchor = getLatestDate(
+    rolledRegularReset.lastCompletedAt,
+    hasLatestResetDate ? latestResetDate : null,
+  );
+  const nextRegularReset =
+    !rolledRegularReset.lastCompletedAt && rolledRegularReset.nextReset
+      ? rolledRegularReset.nextReset
+      : rollResetDateForward(
+          new Date((scheduleAnchor as Date).getTime() + 7 * DAY_MS),
+          current,
+        );
+  const remainingDays = getCalendarDayDelta(nextRegularReset, current);
 
   return {
     date: formatDate(nextRegularReset),
@@ -508,11 +533,54 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
         : remainingDays === 0
           ? "残り0日"
           : "予想日を過ぎています",
-    sourceResetAt: latestResetAt,
+    sourceResetAt: scheduleAnchor?.toISOString() ?? lastCompletedAt ?? latestResetAt,
     expectedAt: nextRegularReset.toISOString(),
+    lastCompletedAt,
     remainingDays,
-    isNoticeWindow: remainingDays >= 0 && remainingDays <= 3,
+    isNoticeWindow:
+      remainingDays >= 0 && (hasManualNextRegularReset || remainingDays <= 3),
   };
+}
+
+function getLatestDate(...values: Array<Date | null | undefined>) {
+  return values
+    .filter((value): value is Date => Boolean(value))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+}
+
+function rollRegularResetForward(
+  manualReset: Date | null,
+  current: Date,
+) {
+  if (!manualReset) {
+    return {
+      nextReset: null,
+      lastCompletedAt: null,
+    };
+  }
+
+  let nextReset = new Date(manualReset);
+  let lastCompletedAt: Date | null = null;
+
+  while (nextReset.getTime() <= current.getTime()) {
+    lastCompletedAt = nextReset;
+    nextReset = new Date(nextReset.getTime() + 7 * DAY_MS);
+  }
+
+  return {
+    nextReset,
+    lastCompletedAt,
+  };
+}
+
+function rollResetDateForward(reset: Date, current: Date) {
+  let nextReset = new Date(reset);
+
+  while (nextReset.getTime() <= current.getTime()) {
+    nextReset = new Date(nextReset.getTime() + 7 * DAY_MS);
+  }
+
+  return nextReset;
 }
 
 function getDisplayResetNotice(
@@ -548,23 +616,96 @@ function addRegularResetForecastToHistory(
     return history;
   }
 
-  return [
-    {
-      key: `regular-reset-forecast-${regularResetForecast.expectedAt}`,
-      title: "次回定期リセット",
+  const regularItems: RadarViewModel["recentHistory"] = [];
+
+  if (regularResetForecast.lastCompletedAt) {
+    regularItems.push({
+      key: `regular-reset-completed-${regularResetForecast.lastCompletedAt}`,
+      title: "定期リセット",
       resetType: "定期リセット",
-      status: "予定",
-      date: regularResetForecast.expectedAt,
-      signalAt: regularResetForecast.sourceResetAt ?? null,
-      resetAt: regularResetForecast.expectedAt,
-      signalLabel: "基準",
-      resetLabel: "予定",
+      status: "実施済み",
+      date: regularResetForecast.lastCompletedAt,
+      signalAt: regularResetForecast.lastCompletedAt,
+      resetAt: regularResetForecast.lastCompletedAt,
+      signalLabel: "予定",
+      resetLabel: "実施",
       scope: "1週間サイクル",
-      windowLength: "7日後",
+      windowLength: "定期実施",
       source: null,
-    },
-    ...history,
+    });
+  }
+
+  const forecastItem = {
+    key: `regular-reset-forecast-${regularResetForecast.expectedAt}`,
+    title: "次回定期リセット",
+    resetType: "定期リセット",
+    status: "予定",
+    date: regularResetForecast.expectedAt,
+    signalAt: regularResetForecast.sourceResetAt ?? null,
+    resetAt: regularResetForecast.expectedAt,
+    signalLabel: "基準",
+    resetLabel: "予定",
+    scope: "1週間サイクル",
+    windowLength: "7日後",
+    source: null,
+  };
+  const sortedHistory = [...regularItems, ...history].sort((a, b) => {
+    const aTime = a.resetAt ? new Date(a.resetAt).getTime() : 0;
+    const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  if (sortedHistory.length === 0) {
+    return [forecastItem];
+  }
+
+  return [
+    sortedHistory[0],
+    forecastItem,
+    ...sortedHistory.slice(1),
   ].slice(0, 5);
+}
+
+function getLatestWindowWithRegularReset(
+  latestWindow: WindowLike | undefined,
+  regularResetForecast: RadarViewModel["regularResetForecast"],
+): WindowLike | undefined {
+  if (!regularResetForecast.lastCompletedAt) {
+    return latestWindow;
+  }
+
+  const regularResetTime = new Date(regularResetForecast.lastCompletedAt).getTime();
+  const latestWindowTime = getWindowResetTime(latestWindow);
+
+  if (latestWindowTime > regularResetTime) {
+    return latestWindow;
+  }
+
+  return {
+    id: `regular-reset-${regularResetForecast.lastCompletedAt}`,
+    title: "定期リセット",
+    status: "closed",
+    opened_at: regularResetForecast.lastCompletedAt,
+    closed_at: regularResetForecast.lastCompletedAt,
+    completed_at: regularResetForecast.lastCompletedAt,
+    window_minutes: 0,
+    window_human: "定期実施",
+    scope: "1週間サイクル",
+    summary:
+      "手動入力された定期リセット時刻を過ぎたため、1週間サイクルの定期リセットが実施されたものとして表示しています。",
+  };
+}
+
+function getWindowResetTime(value: WindowLike | undefined) {
+  const resetAt =
+    value?.closed_at ?? value?.completed_at ?? value?.opened_at ?? null;
+
+  if (!resetAt) {
+    return 0;
+  }
+
+  const time = new Date(resetAt).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function formatDate(value: Date) {
