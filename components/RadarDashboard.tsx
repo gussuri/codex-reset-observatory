@@ -295,11 +295,13 @@ export function RadarDashboard({
             </p>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label="対象プラン" value={viewModel.latestWindow.scope} />
-              <InfoRow
-                label="リセット検知時刻"
-                value={formatDateTime(viewModel.latestWindow.openedAt)}
-              />
+              <InfoRow label="対象" value={viewModel.latestWindow.scope} />
+              {viewModel.latestWindow.kind === "observed" ? (
+                <InfoRow
+                  label="リセット検知時刻"
+                  value={formatDateTime(viewModel.latestWindow.openedAt)}
+                />
+              ) : null}
               <InfoRow
                 label="リセット実施時刻"
                 value={formatDateTime(viewModel.latestWindow.closedAt)}
@@ -353,9 +355,11 @@ export function RadarDashboard({
                     </p>
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
-                    <p>
-                      {item.signalLabel}：{formatDateTime(item.signalAt)}
-                    </p>
+                    {item.signalLabel ? (
+                      <p>
+                        {item.signalLabel}：{formatDateTime(item.signalAt)}
+                      </p>
+                    ) : null}
                     <p>
                       {item.resetLabel}：{formatDateTime(item.resetAt)}
                     </p>

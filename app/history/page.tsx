@@ -71,9 +71,11 @@ export default async function HistoryPage() {
                   </div>
 
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
-                    <p>
-                      {item.signalLabel}：{formatDateTime(item.signalAt)}
-                    </p>
+                    {item.signalLabel ? (
+                      <p>
+                        {item.signalLabel}：{formatDateTime(item.signalAt)}
+                      </p>
+                    ) : null}
                     <p>
                       {item.resetLabel}：{formatDateTime(item.resetAt)}
                     </p>

@@ -150,6 +150,7 @@ export type RadarViewModel = {
   };
   reasoningSummary: string | null;
   latestWindow: {
+    kind: "observed" | "regular";
     title: string;
     summary: string;
     scope: string;
@@ -452,6 +453,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     activeWindow,
     reasoningSummary: getReasoningSummary(source, probability24h, probability48h),
     latestWindow: {
+      kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       title: translateSourceText(latestWindow?.title),
       summary: latestWindow?.summary
         ? translateSourceText(latestWindow.summary)
@@ -625,9 +627,9 @@ function addRegularResetForecastToHistory(
       resetType: "定期リセット",
       status: "実施済み",
       date: regularResetForecast.lastCompletedAt,
-      signalAt: regularResetForecast.lastCompletedAt,
+      signalAt: null,
       resetAt: regularResetForecast.lastCompletedAt,
-      signalLabel: "予定",
+      signalLabel: "",
       resetLabel: "実施",
       scope: "1週間サイクル",
       windowLength: "定期実施",
@@ -635,35 +637,13 @@ function addRegularResetForecastToHistory(
     });
   }
 
-  const forecastItem = {
-    key: `regular-reset-forecast-${regularResetForecast.expectedAt}`,
-    title: "次回定期リセット",
-    resetType: "定期リセット",
-    status: "予定",
-    date: regularResetForecast.expectedAt,
-    signalAt: regularResetForecast.sourceResetAt ?? null,
-    resetAt: regularResetForecast.expectedAt,
-    signalLabel: "基準",
-    resetLabel: "予定",
-    scope: "1週間サイクル",
-    windowLength: "7日後",
-    source: null,
-  };
   const sortedHistory = [...regularItems, ...history].sort((a, b) => {
     const aTime = a.resetAt ? new Date(a.resetAt).getTime() : 0;
     const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
     return bTime - aTime;
   });
 
-  if (sortedHistory.length === 0) {
-    return [forecastItem];
-  }
-
-  return [
-    sortedHistory[0],
-    forecastItem,
-    ...sortedHistory.slice(1),
-  ].slice(0, 5);
+  return sortedHistory.slice(0, 5);
 }
 
 function getLatestWindowWithRegularReset(
@@ -692,7 +672,7 @@ function getLatestWindowWithRegularReset(
     window_human: "定期実施",
     scope: "1週間サイクル",
     summary:
-      "手動入力された定期リセット時刻を過ぎたため、1週間サイクルの定期リセットが実施されたものとして表示しています。",
+      "1週間サイクルの定期リセットが実施されました。",
   };
 }
 
@@ -706,6 +686,10 @@ function getWindowResetTime(value: WindowLike | undefined) {
 
   const time = new Date(resetAt).getTime();
   return Number.isNaN(time) ? 0 : time;
+}
+
+function isRegularResetWindow(value: WindowLike | undefined) {
+  return Boolean(value?.id?.startsWith("regular-reset-"));
 }
 
 function formatDate(value: Date) {
