@@ -21,7 +21,7 @@ function getChangeFrequency(route: string): MetadataRoute.Sitemap[number]["chang
     return "hourly";
   }
 
-  if (route === "/history") {
+  if (route === "/history" || route === "/en/history") {
     return "daily";
   }
 

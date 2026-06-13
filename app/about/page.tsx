@@ -7,6 +7,10 @@ export const metadata: Metadata = {
     "Codexリセット観測所は、Codexのリセット履歴、定期リセット、任意リセット、期待度をまとめる非公式サイトです。",
   alternates: {
     canonical: "/about",
+    languages: {
+      ja: "/about",
+      en: "/en/about",
+    },
   },
 };
 

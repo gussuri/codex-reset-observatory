@@ -294,6 +294,12 @@ export function EnglishRadarDashboard({
               <Link className="underline-offset-4 hover:underline" href="/en/faq">
                 FAQ
               </Link>
+              <Link className="underline-offset-4 hover:underline" href="/en/about">
+                About
+              </Link>
+              <Link className="underline-offset-4 hover:underline" href="/en/history">
+                History
+              </Link>
               <Link className="underline-offset-4 hover:underline" href="/">
                 Japanese
               </Link>
@@ -416,7 +422,7 @@ function getProbabilityBarWidth(probability: number | undefined) {
   return `${Math.min(100, Math.max(0, Math.round(probability * 100)))}%`;
 }
 
-function formatEnglishDateTime(value: string | null | undefined) {
+export function formatEnglishDateTime(value: string | null | undefined) {
   if (!value) {
     return "Unknown";
   }
@@ -450,7 +456,7 @@ function translateExpectation(value: string) {
   return dictionary[value] ?? value;
 }
 
-function translateHistoryText(value: string | undefined) {
+export function translateHistoryText(value: string | undefined) {
   if (!value) {
     return "Unknown";
   }

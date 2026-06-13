@@ -132,6 +132,12 @@ export default function EnglishFaqPage() {
           <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en">
             Back to English top
           </Link>
+          <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/about">
+            About
+          </Link>
+          <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/history">
+            History
+          </Link>
           <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/faq">
             Japanese FAQ
           </Link>
