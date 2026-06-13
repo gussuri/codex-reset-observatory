@@ -75,6 +75,21 @@ export type RadarData = {
     html?: string;
     rss?: string;
   };
+  codex_environment?: {
+    updated_at?: string;
+    status_incidents_24h?: number;
+    official_updates_24h?: number;
+    community_mentions_24h?: number;
+    issue_or_limit_anomalies_24h?: number;
+    complaint_pressure?: "low" | "medium" | "high" | string;
+    reset_card?: {
+      probability_24h?: number;
+      probability_48h?: number;
+      level?: ProbabilityLevel | string;
+      status?: string;
+      note?: string;
+    };
+  };
 };
 
 export type WindowLike = {
@@ -175,10 +190,12 @@ export type RadarViewModel = {
 };
 
 export const SOURCE_SITE_URL = "https://codexradar.com/en/";
+export const SOURCE_SITE_LABEL = "Codex Radar";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
 const HISTORY_LIMIT = 8;
+const LOCAL_PROBABILITY_MODEL = "local-v1";
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-reliability-compensation-2026-06-04",
@@ -486,9 +503,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   const source = unwrapRadarData(data);
   const probability24h = getProbability(source, "24h");
   const probability48h = getProbability(source, "48h");
-  const predictionLevel =
-    source?.prediction?.level ??
-    getString(source, ["prediction_level", "level", "expectation_level"]);
+  const predictionLevel = getLocalExpectationLevel(source);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source);
   const regularResetForecast = getRegularResetForecast(
@@ -815,7 +830,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
       kind: "official",
       label: "予告あり",
       summary:
-        "Codex Reset Radarが公式シグナルを検知しています。予告どおりリセットされる可能性が高いため、残り枠を使う判断を優先してください。",
+        "外部シグナルで公式リセット予告に近い動きが検知されています。予告どおりリセットされる可能性が高いため、残り枠を使う判断を優先してください。",
       openedAt,
       source,
     };
@@ -826,7 +841,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
     kind: "none",
     label: "予告なし",
     summary:
-      "現時点で、Codex Reset Radar が検知している公式リセット予告はありません。",
+      "現時点で、このサイトが参照している外部シグナル上の公式リセット予告はありません。",
     openedAt,
     source,
   };
@@ -865,70 +880,7 @@ function getReasoningSummary(
   probability24h: number | undefined,
   probability48h: number | undefined,
 ): string | null {
-  const englishSummary =
-    data?.prediction?.display_summary_en ?? data?.prediction?.summary_en;
-  const signalSummary = getSignalSummary(data?.prediction?.signal_summary_24h);
-  const normalizedEnglishSummary = englishSummary?.toLowerCase();
-
-  if (normalizedEnglishSummary?.includes("no official reset window")) {
-    return "公式リセット予告や明確な補償示唆は確認されていません。直近のStatus障害はアカウント/契約まわりが中心で、Codex全体の障害とは読み切れません。一方で、コミュニティでは利用上限への圧力やリセット要望が続いているため、中程度の見立てです。";
-  }
-
-  if (
-    normalizedEnglishSummary?.includes("targeted 10x reward") ||
-    normalizedEnglishSummary?.includes("not a broad compensation reset")
-  ) {
-    return "公式側の動きは一部ユーザー向けの10X利用量付与に近く、全体向けの補償リセットとは読みづらい状況です。利用上限への不満や一部の異常報告はありますが、長時間のStatus障害や明確な公式予告は確認できていないため、期待度は低めです。";
-  }
-
-  if (signalSummary?.observed || signalSummary?.candidates) {
-    const hasOfficialSignal = Boolean(signalSummary.official);
-    const hasStatusSignal = Boolean(signalSummary.status);
-    const hasCommunitySignal = Boolean(
-      signalSummary.community || signalSummary.candidates,
-    );
-
-    if (hasOfficialSignal) {
-      return "公式に近いシグナルが出ているため、通常よりリセット期待度を高めに見ています。ただし、リセット時刻が明示された予告かどうかは、公式リセット予告欄を優先して確認してください。";
-    }
-
-    if (hasStatusSignal && hasCommunitySignal) {
-      return "Status上の問題や利用上限への不満は見られますが、Codex全体の補償リセットにつながるほど強い材料とはまだ言い切れません。公式予告はない一方で、コミュニティ側のリセット要望が続いているため、中程度の見立てです。";
-    }
-
-    if (hasStatusSignal) {
-      return "Status上の問題は確認されていますが、現時点ではCodexの利用枠リセットに直結する内容とは読み切れません。公式予告が出るまでは、強いリセット材料としては扱いにくい状態です。";
-    }
-
-    if (hasCommunitySignal) {
-      return "コミュニティでは利用上限への不満やリセット要望が見られます。ただし、公式側の予告や補償示唆は確認できていないため、期待度を押し上げる材料としては限定的です。";
-    }
-
-    return "公開シグナルは拾えていますが、公式予告や大きな障害に結びつく材料はまだ弱めです。現時点では、確定的なリセット予告というより様子見寄りの見立てです。";
-  }
-
-  const p24 = probabilityToPercent(probability24h);
-  const p48 = probabilityToPercent(probability48h);
-
-  return null;
-}
-
-function getSignalSummary(summary: SignalSummaryLike | undefined) {
-  if (!summary) {
-    return undefined;
-  }
-
-  const counts = summary.observation_counts ?? summary.counts;
-
-  return {
-    observed: summary.observation_total ?? summary.total,
-    candidates: summary.candidate_total,
-    fresh: summary.new_total,
-    official: counts?.official_x,
-    community: counts?.community_x,
-    status: counts?.openai_status,
-    market: counts?.market_x,
-  };
+  return getLocalProbabilityReason(data, probability24h, probability48h);
 }
 
 function getRecentHistory(data: RadarData | null) {
@@ -1091,38 +1043,119 @@ function formatWindowLength(value: number | undefined) {
   return `${minutes}分`;
 }
 
+function getLocalExpectationLevel(data: RadarData | null) {
+  const probability24h = getLocalResetProbability(data, "24h");
+  return getExpectationLabel(probability24h);
+}
+
+function getLocalResetProbability(
+  data: RadarData | null,
+  period: "24h" | "48h",
+) {
+  const isOfficialWindow =
+    Boolean(data?.window_open) ||
+    data?.status === "open" ||
+    data?.window?.status === "open" ||
+    data?.current_window?.state === "open";
+
+  if (isOfficialWindow) {
+    return period === "24h" ? 0.9 : 0.96;
+  }
+
+  const environment = data?.codex_environment;
+  const resetCardStatus = environment?.reset_card?.status?.toLowerCase();
+
+  if (resetCardStatus && resetCardStatus !== "prediction_only") {
+    return period === "24h" ? 0.78 : 0.88;
+  }
+
+  const statusIncidents = clampCount(environment?.status_incidents_24h, 0, 5);
+  const officialUpdates = clampCount(environment?.official_updates_24h, 0, 8);
+  const communityMentions = clampCount(environment?.community_mentions_24h, 0, 80);
+  const issueAnomalies = clampCount(
+    environment?.issue_or_limit_anomalies_24h,
+    0,
+    30,
+  );
+  const complaintPressure = environment?.complaint_pressure;
+  const pressureBoost =
+    complaintPressure === "high"
+      ? 0.12
+      : complaintPressure === "medium"
+        ? 0.05
+        : 0;
+
+  const base = period === "24h" ? 0.025 : 0.06;
+  const score =
+    base +
+    statusIncidents * (period === "24h" ? 0.05 : 0.07) +
+    officialUpdates * (period === "24h" ? 0.004 : 0.007) +
+    communityMentions * (period === "24h" ? 0.0008 : 0.0015) +
+    issueAnomalies * (period === "24h" ? 0.004 : 0.007) +
+    pressureBoost;
+
+  return Math.min(period === "24h" ? 0.72 : 0.82, Math.max(0.02, score));
+}
+
+function getLocalProbabilityReason(
+  data: RadarData | null,
+  probability24h: number | undefined,
+  probability48h: number | undefined,
+) {
+  const environment = data?.codex_environment;
+  const isOfficialWindow =
+    Boolean(data?.window_open) ||
+    data?.status === "open" ||
+    data?.window?.status === "open" ||
+    data?.current_window?.state === "open";
+
+  if (isOfficialWindow) {
+    return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）では、公式予告に近いシグナルを検知しているため高めに見ています。`;
+  }
+
+  if (!environment) {
+    return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）で低めに見ています。外部環境データが取得できない場合も、履歴と定期リセットは独自管理データを優先します。`;
+  }
+
+  const p24 = probabilityToPercent(probability24h);
+  const p48 = probabilityToPercent(probability48h);
+  const statusIncidents = environment.status_incidents_24h ?? 0;
+  const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
+  const communityMentions = environment.community_mentions_24h ?? 0;
+  const officialUpdates = environment.official_updates_24h ?? 0;
+  const complaintPressure = translateComplaintPressure(
+    environment.complaint_pressure,
+  );
+
+  return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）で、24時間以内${p24}・48時間以内${p48}と見ています。Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を材料にしています。`;
+}
+
+function translateComplaintPressure(value: string | undefined) {
+  switch (value) {
+    case "high":
+      return "高";
+    case "medium":
+      return "中";
+    case "low":
+      return "低";
+    default:
+      return value ?? "不明";
+  }
+}
+
+function clampCount(value: number | undefined, min: number, max: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+
+  return Math.min(max, Math.max(min, value));
+}
+
 function getProbability(
   data: RadarData | null,
   period: "24h" | "48h",
 ): number | undefined {
-  const candidates =
-    period === "24h"
-      ? [
-          data?.prediction?.probability_24h,
-          data?.prediction?.probability24h,
-          data?.prediction?.probability_24_hours,
-          data?.probabilities?.probability_24h,
-          data?.probabilities?.probability24h,
-          data?.probabilities?.within_24h,
-          data?.probabilities?.["24h"],
-          getNumber(data, ["probability_24h", "probability24h", "within_24h"]),
-        ]
-      : [
-          data?.prediction?.probability_48h,
-          data?.prediction?.probability48h,
-          data?.prediction?.probability_48_hours,
-          data?.probabilities?.probability_48h,
-          data?.probabilities?.probability48h,
-          data?.probabilities?.within_48h,
-          data?.probabilities?.["48h"],
-          getNumber(data, ["probability_48h", "probability48h", "within_48h"]),
-        ];
-
-  const value = candidates.find(
-    (candidate) => typeof candidate === "number" && !Number.isNaN(candidate),
-  );
-
-  return typeof value === "number" ? normalizeProbability(value) : undefined;
+  return getLocalResetProbability(data, period);
 }
 
 function getLatestWindow(data: RadarData | null): WindowLike | undefined {
@@ -1180,14 +1213,6 @@ function getString(
 ) {
   const value = getValue(source, paths);
   return typeof value === "string" ? value : undefined;
-}
-
-function getNumber(
-  source: Record<string, unknown> | null | undefined,
-  paths: string[],
-) {
-  const value = getValue(source, paths);
-  return typeof value === "number" ? value : undefined;
 }
 
 function getObject<T>(

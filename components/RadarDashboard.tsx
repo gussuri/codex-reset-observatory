@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CachedRadarData,
   RadarData,
+  SOURCE_SITE_LABEL,
   SOURCE_SITE_URL,
   formatDateTime,
   getRadarViewModel,
@@ -415,14 +416,14 @@ export function RadarDashboard({
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm text-slate-300">出典:</p>
+              <p className="text-sm text-slate-300">参考シグナル:</p>
               <a
                 className="mt-1 inline-flex items-center gap-2 text-base font-semibold underline-offset-4 hover:underline"
                 href={SOURCE_SITE_URL}
                 rel="noreferrer"
                 target="_blank"
               >
-                Codex Reset Radar
+                {SOURCE_SITE_LABEL}
                 <ExternalLink className="h-4 w-4" />
               </a>
             </div>

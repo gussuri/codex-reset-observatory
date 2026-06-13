@@ -5,7 +5,7 @@ import "./globals.css";
 const siteUrl = "https://codex-reset-observatory.vercel.app";
 const siteTitle = "Codexリセット観測所";
 const siteDescription =
-  "Codexのランダムリセット、臨時リセット、補償リセットの予告・期待度・履歴を日本語で確認できる非公式観測サイトです。";
+  "Codexのランダムリセット期待度、臨時リセット履歴、定期リセット、任意リセットの扱いを独自管理中心で確認できる非公式観測サイトです。";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -24,7 +24,9 @@ export const metadata: Metadata = {
     "予測",
     "履歴",
     "最新情報",
-    "Codex Reset Radar",
+    "Codex Radar",
+    "定期リセット",
+    "任意リセット",
   ],
   openGraph: {
     title: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,

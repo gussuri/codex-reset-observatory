@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ExternalLink, History, Info } from "lucide-react";
 import {
   SOURCE_SITE_URL,
+  SOURCE_SITE_LABEL,
   formatDateTime,
   getRadarViewModel,
   isSafeHttpUrl,
@@ -34,7 +35,7 @@ export default async function HistoryPage() {
                 リセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットも表示します。
+                独自保存した詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットも表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -139,7 +140,7 @@ export default async function HistoryPage() {
             rel="noreferrer"
             target="_blank"
           >
-            Source: Codex Reset Radar
+            参考: {SOURCE_SITE_LABEL}
             <ExternalLink className="h-4 w-4" />
           </a>
         </footer>
