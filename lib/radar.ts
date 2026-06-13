@@ -195,6 +195,7 @@ const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
 const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
+const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
 const HISTORY_LIMIT = 8;
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
@@ -564,9 +565,17 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
 function getRegularResetForecast(latestResetAt: string | null | undefined) {
   const manualNextRegularReset = new Date(MANUAL_NEXT_REGULAR_RESET_AT);
   const hasManualNextRegularReset = !Number.isNaN(manualNextRegularReset.getTime());
+  const manualLastRegularReset = new Date(MANUAL_LAST_REGULAR_RESET_AT);
   const current = new Date();
+  const hasManualLastRegularReset =
+    !Number.isNaN(manualLastRegularReset.getTime()) &&
+    manualLastRegularReset.getTime() <= current.getTime();
 
-  if (!latestResetAt && !hasManualNextRegularReset) {
+  if (
+    !latestResetAt &&
+    !hasManualNextRegularReset &&
+    !hasManualLastRegularReset
+  ) {
     return {
       date: "不明",
       time: null,
@@ -583,7 +592,11 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
   const hasLatestResetDate =
     Boolean(latestResetDate) && !Number.isNaN((latestResetDate as Date).getTime());
 
-  if (!hasManualNextRegularReset && !hasLatestResetDate) {
+  if (
+    !hasManualNextRegularReset &&
+    !hasLatestResetDate &&
+    !hasManualLastRegularReset
+  ) {
     return {
       date: "不明",
       time: null,
@@ -600,18 +613,25 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
     hasManualNextRegularReset ? manualNextRegularReset : null,
     current,
   );
-  const lastCompletedAt = rolledRegularReset.lastCompletedAt?.toISOString() ?? null;
-  const scheduleAnchor = getLatestDate(
+  const lastCompletedDate = getLatestDate(
     rolledRegularReset.lastCompletedAt,
+    hasManualLastRegularReset ? manualLastRegularReset : null,
+  );
+  const lastCompletedAt = lastCompletedDate?.toISOString() ?? null;
+  const scheduleAnchor = getLatestDate(
+    lastCompletedDate,
     hasLatestResetDate ? latestResetDate : null,
   );
-  const nextRegularReset =
-    !rolledRegularReset.lastCompletedAt && rolledRegularReset.nextReset
-      ? rolledRegularReset.nextReset
-      : rollResetDateForward(
-          new Date((scheduleAnchor as Date).getTime() + 7 * DAY_MS),
-          current,
-        );
+  const nextRegularResetFromAnchor = scheduleAnchor
+    ? rollResetDateForward(
+        new Date(scheduleAnchor.getTime() + 7 * DAY_MS),
+        current,
+      )
+    : null;
+  const nextRegularReset = getLatestDate(
+    rolledRegularReset.nextReset,
+    nextRegularResetFromAnchor,
+  );
   const remainingDays = getCalendarDayDelta(nextRegularReset, current);
 
   return {
