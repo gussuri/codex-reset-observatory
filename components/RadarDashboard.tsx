@@ -125,17 +125,11 @@ export function RadarDashboard({
           icon: "text-amber-700",
           badge: "bg-amber-200 text-amber-950",
         }
-      : viewModel.activeWindow.kind === "regular"
-        ? {
-            card: "border-teal-200 bg-teal-50/90 text-teal-950",
-            icon: "text-teal-700",
-            badge: "bg-white/75 text-teal-700",
-          }
-        : {
-            card: "border-slate-200 bg-white/90 text-slate-950",
-            icon: "text-teal-700",
-            badge: "bg-slate-100 text-slate-600",
-          };
+      : {
+          card: "border-slate-200 bg-white/90 text-slate-950",
+          icon: "text-teal-700",
+          badge: "bg-slate-100 text-slate-600",
+        };
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
@@ -217,33 +211,6 @@ export function RadarDashboard({
                 href={viewModel.activeWindow.source}
               />
             </dl>
-          ) : viewModel.activeWindow.kind === "regular" ? (
-            <>
-              <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md bg-white/70 p-3">
-                  <dt className="text-xs font-semibold text-slate-500">リセット日</dt>
-                  <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
-                    <span>{viewModel.activeWindow.forecastDate ?? "不明"}</span>
-                    {viewModel.activeWindow.forecastTime ? (
-                      <span className="ml-2">
-                        {" "}
-                        {viewModel.activeWindow.forecastTime}
-                      </span>
-                    ) : null}
-                  </dd>
-                </div>
-
-                <div className="rounded-md bg-white/70 p-3">
-                  <dt className="text-xs font-semibold text-slate-500">残り</dt>
-                  <dd className="mt-1 text-lg sm:text-xl font-semibold text-slate-900">
-                    {viewModel.activeWindow.remaining ?? "残り不明"}
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-sm leading-6 text-teal-900">
-                任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
-              </p>
-            </>
           ) : null}
         </section>
 
@@ -387,6 +354,27 @@ export function RadarDashboard({
                 直近履歴は取得できていません。
               </p>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                1週間サイクルの参考日
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                {viewModel.regularResetForecast.date}
+                {viewModel.regularResetForecast.time ? (
+                  <span className="ml-2">
+                    {viewModel.regularResetForecast.time}
+                  </span>
+                ) : null}
+              </h2>
+            </div>
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right">
+              任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
+            </p>
           </div>
         </section>
 

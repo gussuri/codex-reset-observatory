@@ -534,10 +534,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     observedLatestWindow,
     regularResetForecast,
   );
-  const activeWindow = getDisplayResetNotice(
-    getActiveWindow(source),
-    regularResetForecast,
-  );
+  const activeWindow = getDisplayResetNotice(getActiveWindow(source));
   const recentHistory = addPersonalResetEventsToHistory(
     addRegularResetForecastToHistory(observedHistory, regularResetForecast),
   );
@@ -717,26 +714,7 @@ function rollResetDateForward(reset: Date, current: Date) {
 
 function getDisplayResetNotice(
   officialWindow: RadarViewModel["activeWindow"],
-  regularResetForecast: RadarViewModel["regularResetForecast"],
 ): RadarViewModel["activeWindow"] {
-  if (officialWindow.active) {
-    return officialWindow;
-  }
-
-  if (regularResetForecast.isNoticeWindow) {
-    return {
-      active: true,
-      kind: "regular",
-      label: "定期リセット",
-      summary: "",
-      openedAt: regularResetForecast.sourceResetAt,
-      forecastDate: regularResetForecast.date,
-      forecastTime: regularResetForecast.time ?? null,
-      remaining: regularResetForecast.remaining,
-      source: null,
-    };
-  }
-
   return officialWindow;
 }
 
