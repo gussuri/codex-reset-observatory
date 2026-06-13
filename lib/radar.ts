@@ -193,7 +193,7 @@ export const SOURCE_SITE_URL = "https://codexradar.com/en/";
 export const SOURCE_SITE_LABEL = "Codex Radar";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
+const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
 const HISTORY_LIMIT = 8;
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
