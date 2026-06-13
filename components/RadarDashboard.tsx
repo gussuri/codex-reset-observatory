@@ -361,7 +361,7 @@ export function RadarDashboard({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                1週間サイクルの参考日
+                1週間サイクルのリセット参考日
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
                 {viewModel.regularResetForecast.date}
