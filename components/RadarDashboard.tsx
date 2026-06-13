@@ -271,7 +271,6 @@ export function RadarDashboard({
             </div>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label="リセット状況" value={viewModel.status} />
               {viewModel.reasoningSummary ? (
                 <RecommendationRow reason={viewModel.reasoningSummary} />
               ) : null}

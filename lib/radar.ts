@@ -195,7 +195,6 @@ const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
 const HISTORY_LIMIT = 8;
-const LOCAL_PROBABILITY_MODEL = "local-v1";
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-reliability-compensation-2026-06-04",
@@ -1110,11 +1109,11 @@ function getLocalProbabilityReason(
     data?.current_window?.state === "open";
 
   if (isOfficialWindow) {
-    return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）では、公式予告に近いシグナルを検知しているため高めに見ています。`;
+    return "公式予告に近いシグナルが出ているため、通常より高めに見ています。リセット時刻が明示された予告かどうかは、公式リセット予告欄を優先して確認してください。";
   }
 
   if (!environment) {
-    return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）で低めに見ています。外部環境データが取得できない場合も、履歴と定期リセットは独自管理データを優先します。`;
+    return "外部環境データが取得できていないため、現在は低めの見立てです。履歴と定期リセットは独自管理データを優先して表示しています。";
   }
 
   const p24 = probabilityToPercent(probability24h);
@@ -1127,7 +1126,7 @@ function getLocalProbabilityReason(
     environment.complaint_pressure,
   );
 
-  return `独自予想モデル（${LOCAL_PROBABILITY_MODEL}）で、24時間以内${p24}・48時間以内${p48}と見ています。Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を材料にしています。`;
+  return `直近の公開シグナルから、24時間以内${p24}・48時間以内${p48}の見立てです。Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を参考にしています。`;
 }
 
 function translateComplaintPressure(value: string | undefined) {
