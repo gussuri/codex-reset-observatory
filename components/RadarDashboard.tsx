@@ -241,7 +241,7 @@ export function RadarDashboard({
                 </div>
               </dl>
               <p className="mt-3 text-sm leading-6 text-teal-900">
-                任意リセットを使ったアカウントでは、次回定期リセット日がリセット実行日基準にずれる場合があります。
+                任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
               </p>
             </>
           ) : null}
