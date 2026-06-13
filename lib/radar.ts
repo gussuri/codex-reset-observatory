@@ -194,6 +194,7 @@ export const SOURCE_SITE_LABEL = "Codex Radar";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
+const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 const HISTORY_LIMIT = 8;
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
@@ -615,7 +616,10 @@ function getRegularResetForecast(latestResetAt: string | null | undefined) {
 
   return {
     date: formatDate(nextRegularReset),
-    time: hasManualNextRegularReset ? formatTime(nextRegularReset) : null,
+    time:
+      hasManualNextRegularReset && MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED
+        ? formatTime(nextRegularReset)
+        : null,
     remaining:
       remainingDays > 0
         ? `残り${remainingDays}日`
