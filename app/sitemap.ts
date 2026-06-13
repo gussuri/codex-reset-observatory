@@ -17,7 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 }
 
 function getChangeFrequency(route: string): MetadataRoute.Sitemap[number]["changeFrequency"] {
-  if (route === "/") {
+  if (route === "/" || route === "/en") {
     return "hourly";
   }
 
@@ -31,6 +31,10 @@ function getChangeFrequency(route: string): MetadataRoute.Sitemap[number]["chang
 function getPriority(route: string) {
   if (route === "/") {
     return 1;
+  }
+
+  if (route === "/en") {
+    return 0.8;
   }
 
   if (route === "/history") {

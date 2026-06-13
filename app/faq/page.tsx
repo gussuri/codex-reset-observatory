@@ -60,6 +60,10 @@ export const metadata: Metadata = {
     "Codexのリセット、臨時リセット、補償リセット、公式予告、定期リセット、任意リセット、友達紹介リセットの違いを説明します。",
   alternates: {
     canonical: "/faq",
+    languages: {
+      ja: "/faq",
+      en: "/en/faq",
+    },
   },
 };
 
@@ -118,6 +122,9 @@ export default function FaqPage() {
           </Link>
           <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/history">
             履歴を見る
+          </Link>
+          <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/faq">
+            English FAQ
           </Link>
         </nav>
       </div>

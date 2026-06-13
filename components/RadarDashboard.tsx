@@ -418,6 +418,9 @@ export function RadarDashboard({
               <Link className="underline-offset-4 hover:underline" href="/history">
                 History
               </Link>
+              <Link className="underline-offset-4 hover:underline" href="/en">
+                English
+              </Link>
             </nav>
           </div>
         </footer>
