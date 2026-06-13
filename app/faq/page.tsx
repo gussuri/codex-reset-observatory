@@ -5,7 +5,12 @@ const faqs = [
   {
     question: "このサイトでは何を表示していますか？",
     answer:
-      "Codexの公式リセット予告、定期リセット、履歴、期待度を表示しています。確認済みの履歴や定期リセット情報はこのサイト側にも保存し、外部サイトの情報は判断材料のひとつとして参照します。",
+      "Codexの公式リセット予告、定期リセット、履歴、ランダムリセット期待度を表示しています。確認済みの履歴や定期リセット情報はこのサイト側にも保存し、外部サイトの情報は判断材料のひとつとして参照します。",
+  },
+  {
+    question: "任意リセットを使うとどうなりますか？",
+    answer:
+      "任意リセットを使うと、そのアカウントの次回定期リセット日がリセット実行日基準にずれることを確認しました。そのため、サイトに表示している全体向けの次回定期リセット日と、自分のアカウントに表示される日付が違う場合があります。配布された任意リセットは1回分で、期限は1か月以内です。",
   },
   {
     question: "リセットとは何ですか？",
@@ -43,9 +48,9 @@ const faqs = [
       "確認済みのリセット履歴は、このサイト側にも保存しています。外部データに新しい履歴がある場合は参考として取り込みます。",
   },
   {
-    question: "そのほかのリセットはありますか？",
+    question: "友達紹介リセットはどう扱いますか？",
     answer:
-      "アカウントごとに任意のタイミングで使える任意リセットや、紹介によって付与されるリセットがあります。これらを使うと、そのアカウントの定期リセット時刻がずれる可能性があります。個人別に付与・消費されるリセットなので、このサイトの最新リセット、リセット履歴、ランダムリセット期待度には含めていません。",
+      "友達紹介リセットも、アカウントごとに付与・消費される個人別リセットとして扱います。配布記録は履歴に残しますが、全体向けの最新リセットやランダムリセット期待度には含めていません。",
   },
 ];
 
@@ -53,11 +58,31 @@ export const metadata: Metadata = {
   title: "FAQ",
   description:
     "Codexのリセット、臨時リセット、補償リセット、公式予告、定期リセット、任意リセット、友達紹介リセットの違いを説明します。",
+  alternates: {
+    canonical: "/faq",
+  },
+};
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: faq.answer,
+    },
+  })),
 };
 
 export default function FaqPage() {
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="rounded-lg border border-slate-200/80 bg-white/88 p-5 shadow-sm backdrop-blur">
           <p className="text-sm font-medium text-teal-700">

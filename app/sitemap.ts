@@ -11,9 +11,33 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return getPublicRoutes().map((route) => ({
     url: `${BASE_URL}${route}`,
     lastModified: new Date(),
-    changeFrequency: "hourly",
-    priority: route === "/" ? 1 : 0.7,
+    changeFrequency: getChangeFrequency(route),
+    priority: getPriority(route),
   }));
+}
+
+function getChangeFrequency(route: string): MetadataRoute.Sitemap[number]["changeFrequency"] {
+  if (route === "/") {
+    return "hourly";
+  }
+
+  if (route === "/history") {
+    return "daily";
+  }
+
+  return "monthly";
+}
+
+function getPriority(route: string) {
+  if (route === "/") {
+    return 1;
+  }
+
+  if (route === "/history") {
+    return 0.8;
+  }
+
+  return 0.5;
 }
 
 function getPublicRoutes() {

@@ -13,7 +13,10 @@ import { fetchCurrentRadarData } from "@/lib/radarFetch";
 export const metadata: Metadata = {
   title: "リセット履歴",
   description:
-    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、個人別リセットの扱いを日本語で確認できます。",
+    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、任意リセット配布履歴を日本語で確認できます。",
+  alternates: {
+    canonical: "/history",
+  },
 };
 
 export const revalidate = 300;
@@ -35,7 +38,7 @@ export default async function HistoryPage() {
                 リセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                独自保存した詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットも表示します。
+                独自保存した詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットや任意リセット配布も表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -63,10 +66,10 @@ export default async function HistoryPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      対象プラン：{item.scope}
+                      {item.scopeLabel ?? "対象プラン"}：{item.scope}
                       <span className="mx-2 hidden sm:inline">/</span>
                       <span className="block sm:inline">
-                        予告から実施まで：{item.windowLength}
+                        {item.windowLabel ?? "予告から実施まで"}：{item.windowLength}
                       </span>
                     </p>
                   </div>
@@ -113,10 +116,10 @@ export default async function HistoryPage() {
                 任意リセット・友達紹介リセット
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-700">
-                アカウントごとに付与・消費される個人別のリセットです。利用すると、そのアカウントの定期リセット時刻がずれる可能性があります。
+                アカウントごとに付与・消費される個人別のリセットです。任意リセットを使うと、そのアカウントの次回定期リセット日がリセット実行日基準にずれることを確認しました。
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-700">
-                全体向けのリセットではないため、このページの直近履歴、最新リセット、ランダムリセット期待度の計算には含めていません。
+                配布された任意リセットには1か月以内の期限があります。配布記録は履歴に残しますが、全体向けのリセットではないため、最新リセットやランダムリセット期待度の計算には含めていません。
               </p>
             </div>
           </div>

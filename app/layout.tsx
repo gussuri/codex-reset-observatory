@@ -5,31 +5,46 @@ import "./globals.css";
 const siteUrl = "https://codex-reset-observatory.vercel.app";
 const siteTitle = "Codexリセット観測所";
 const siteDescription =
-  "Codexのランダムリセット期待度、臨時リセット履歴、定期リセット、任意リセットの扱いを独自管理中心で確認できる非公式観測サイトです。";
+  "Codexのリセット履歴、次回定期リセット、ランダムリセット期待度、任意リセットの扱いを日本語で確認できる非公式サイトです。";
+const siteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: siteTitle,
+  url: siteUrl,
+  description: siteDescription,
+  inLanguage: "ja-JP",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: siteTitle,
   title: {
-    default: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
+    default: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
     template: `%s | ${siteTitle}`,
   },
   description: siteDescription,
+  alternates: {
+    canonical: "/",
+  },
   keywords: [
     "Codex",
     "リセット",
+    "Codex リセット",
+    "Codex リセット いつ",
+    "Codex 使用量 リセット",
+    "Codex レート制限",
     "ランダムリセット",
     "臨時リセット",
     "補償リセット",
+    "定期リセット",
+    "任意リセット",
     "予測",
     "履歴",
     "最新情報",
     "Codex Radar",
-    "定期リセット",
-    "任意リセット",
   ],
   openGraph: {
-    title: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
+    title: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
     description: siteDescription,
     url: siteUrl,
     siteName: siteTitle,
@@ -46,7 +61,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${siteTitle} | Codexランダムリセット予告・履歴・期待度`,
+    title: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
     description: siteDescription,
     images: ["/og-image.png"],
   },
@@ -60,6 +75,10 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+        />
         {children}
         <Analytics />
       </body>

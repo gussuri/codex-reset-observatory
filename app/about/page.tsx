@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "このサイトについて",
   description:
     "Codexリセット観測所は、Codexのリセット履歴、定期リセット、任意リセット、期待度をまとめる非公式サイトです。",
+  alternates: {
+    canonical: "/about",
+  },
 };
 
 export default function AboutPage() {

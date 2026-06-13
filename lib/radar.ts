@@ -183,7 +183,9 @@ export type RadarViewModel = {
     resetAt?: string | null;
     signalLabel: string;
     resetLabel: string;
+    scopeLabel?: string;
     scope: string;
+    windowLabel?: string;
     windowLength: string;
     source?: string | null;
   }>;
@@ -196,7 +198,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
 const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
-const HISTORY_LIMIT = 8;
+const HISTORY_LIMIT = 10;
+const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
+  {
+    key: "personal-reset-credit-2026-06-11",
+    title: "任意リセット配布",
+    resetType: "個人別リセット",
+    status: "配布",
+    date: "2026-06-11T09:47:00+09:00",
+    signalAt: "2026-06-11T09:47:00+09:00",
+    resetAt: null,
+    signalLabel: "配布",
+    resetLabel: "",
+    scopeLabel: "対象",
+    scope: "対象アカウント",
+    windowLabel: "内容",
+    windowLength: "1回分・期限1か月以内",
+    source: null,
+  },
+];
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-reliability-compensation-2026-06-04",
@@ -518,9 +538,8 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
     getActiveWindow(source),
     regularResetForecast,
   );
-  const recentHistory = addRegularResetForecastToHistory(
-    observedHistory,
-    regularResetForecast,
+  const recentHistory = addPersonalResetEventsToHistory(
+    addRegularResetForecastToHistory(observedHistory, regularResetForecast),
   );
 
   return {
@@ -749,12 +768,23 @@ function addRegularResetForecastToHistory(
   }
 
   const sortedHistory = [...regularItems, ...history].sort((a, b) => {
-    const aTime = a.resetAt ? new Date(a.resetAt).getTime() : 0;
-    const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
+    const aTime = getHistorySortTime(a);
+    const bTime = getHistorySortTime(b);
     return bTime - aTime;
   });
 
   return sortedHistory.slice(0, HISTORY_LIMIT);
+}
+
+function addPersonalResetEventsToHistory(history: RadarViewModel["recentHistory"]) {
+  const seen = new Set(history.map((item) => item.key));
+  const personalItems = LOCAL_PERSONAL_RESET_HISTORY.filter(
+    (item) => !seen.has(item.key),
+  );
+
+  return [...personalItems, ...history]
+    .sort((a, b) => getHistorySortTime(b) - getHistorySortTime(a))
+    .slice(0, HISTORY_LIMIT);
 }
 
 function getLatestWindowWithRegularReset(
@@ -957,11 +987,24 @@ function getRecentHistory(data: RadarData | null) {
       return true;
     })
     .sort((a, b) => {
-      const aTime = a.resetAt ? new Date(a.resetAt).getTime() : 0;
-      const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
+      const aTime = getHistorySortTime(a);
+      const bTime = getHistorySortTime(b);
       return bTime - aTime;
     })
     .slice(0, HISTORY_LIMIT);
+}
+
+function getHistorySortTime(
+  item: Pick<RadarViewModel["recentHistory"][number], "date" | "resetAt" | "signalAt">,
+) {
+  const value = item.resetAt ?? item.date ?? item.signalAt ?? null;
+
+  if (!value) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
