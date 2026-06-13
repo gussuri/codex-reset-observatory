@@ -178,6 +178,74 @@ export const SOURCE_SITE_URL = "https://codexradar.com/en/";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
+const HISTORY_LIMIT = 8;
+const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-reliability-compensation-2026-06-04",
+    title: "Codex 可靠性事故补偿重置",
+    kind: "reset_completed",
+    opened_at: "2026-06-04T08:25:58+08:00",
+    closed_at: "2026-06-04T08:25:58+08:00",
+    window_minutes: 0,
+    window_human: "无窗",
+    scope: "所有付费计划",
+    summary:
+      "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。",
+    source_url: "https://x.com/thsottiaux/status/2062329981548802523",
+  },
+  {
+    id: "local-5m-users-celebration-2026-05-31",
+    title: "500 万用户庆祝重置",
+    kind: "window_closed",
+    opened_at: "2026-05-31T13:59:10+08:00",
+    closed_at: "2026-05-31T23:25:06+08:00",
+    window_minutes: 565,
+    window_human: "9小时25分",
+    scope: "所有付费计划",
+    summary:
+      "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。",
+    source_url: "https://x.com/thsottiaux/status/2061106703446450392",
+  },
+  {
+    id: "local-long-session-compression-compensation-2026-05-24",
+    title: "长会话压缩耗额异常补偿重置",
+    kind: "window_closed",
+    opened_at: "2026-05-23T08:21:33+08:00",
+    closed_at: "2026-05-24T04:14:35+08:00",
+    window_minutes: 1193,
+    window_human: "19小时53分",
+    scope: "Codex 用户",
+    summary:
+      "Tibo 表示 Codex 长会话压缩的 cache hit rate 受回滚优化影响，导致限制消耗更快；修复后已为所有账号重置使用限制。",
+    source_url: "https://x.com/thsottiaux/status/2058280452851638313",
+  },
+  {
+    id: "local-sam-like-promise-reset-2026-05-20",
+    title: "Sam 点赞承诺速率限制重置",
+    kind: "window_closed",
+    opened_at: "2026-05-20T02:31:00+08:00",
+    closed_at: "2026-05-20T02:39:18+08:00",
+    window_minutes: 8,
+    window_human: "8分钟",
+    scope: "Codex 用户",
+    summary:
+      "Sam 发文称推文获 1 个赞后 Tibo 会重置 Codex 速率限制，随后社区在数分钟内反馈重置完成。",
+    source_url: "https://x.com/bossnayamoss/status/2056806923391877438",
+  },
+  {
+    id: "local-gpt-55-degradation-compensation-2026-05-17",
+    title: "GPT-5.5 能力退化补偿重置",
+    kind: "window_closed",
+    opened_at: "2026-05-16T08:31:00+08:00",
+    closed_at: "2026-05-17T01:51:00+08:00",
+    window_minutes: 1040,
+    window_human: "17小时20分",
+    scope: "所有付费计划",
+    summary:
+      "Tibo 表示两个 GPT-5.5 能力退化问题已修复后，付费计划的使用限制完成重置。",
+    source_url: "https://x.com/thsottiaux/status/2055707616605835333",
+  },
+];
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -362,6 +430,11 @@ export function translateSourceText(value: string | undefined) {
     "All plans": "全プラン",
     "Codex users": "Codexユーザー",
     "Codex 用户": "Codexユーザー",
+    "无窗": "即時リセット",
+    "9小时25分": "9時間25分",
+    "19小时53分": "19時間53分",
+    "8分钟": "8分",
+    "17小时20分": "17時間20分",
     "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。":
       "過去24時間にCodexの信頼性へ影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
     "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。":
@@ -643,7 +716,7 @@ function addRegularResetForecastToHistory(
     return bTime - aTime;
   });
 
-  return sortedHistory.slice(0, 5);
+  return sortedHistory.slice(0, HISTORY_LIMIT);
 }
 
 function getLatestWindowWithRegularReset(
@@ -859,18 +932,20 @@ function getSignalSummary(summary: SignalSummaryLike | undefined) {
 }
 
 function getRecentHistory(data: RadarData | null) {
-  if (!data) {
-    return [];
-  }
-
+  const remoteItems = data
+    ? [
+        ...(data.prediction?.probability_history?.events ?? []),
+        ...(data.recent_windows ?? []),
+        ...(data.recent_windows?.length ? [] : [data.window]),
+        data.last_window,
+        data.latest_reset,
+        data.last_reset,
+        data.latest_window,
+      ]
+    : [];
   const items = [
-    ...(data.prediction?.probability_history?.events ?? []),
-    ...(data.recent_windows ?? []),
-    ...(data.recent_windows?.length ? [] : [data.window]),
-    data.last_window,
-    data.latest_reset,
-    data.last_reset,
-    data.latest_window,
+    ...remoteItems,
+    ...LOCAL_RESET_HISTORY,
   ].filter((item): item is WindowEventLike => Boolean(item?.title));
 
   const seen = new Set<string>();
@@ -897,11 +972,13 @@ function getRecentHistory(data: RadarData | null) {
       };
     })
     .filter((item) => {
-      if (seen.has(item.key)) {
+      const dedupeKey = getHistoryDedupeKey(item);
+
+      if (seen.has(dedupeKey)) {
         return false;
       }
 
-      seen.add(item.key);
+      seen.add(dedupeKey);
       return true;
     })
     .sort((a, b) => {
@@ -909,7 +986,17 @@ function getRecentHistory(data: RadarData | null) {
       const bTime = b.resetAt ? new Date(b.resetAt).getTime() : 0;
       return bTime - aTime;
     })
-    .slice(0, 5);
+    .slice(0, HISTORY_LIMIT);
+}
+
+function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
+  const resetAt = item.resetAt ? new Date(item.resetAt).getTime() : null;
+  const resetKey =
+    typeof resetAt === "number" && !Number.isNaN(resetAt)
+      ? String(resetAt)
+      : item.resetAt ?? item.date ?? "";
+
+  return `${item.title}-${resetKey}`;
 }
 
 function getResetType(item: WindowLike & { kind?: string }) {

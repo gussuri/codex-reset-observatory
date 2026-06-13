@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink, History } from "lucide-react";
+import { ExternalLink, History, Info } from "lucide-react";
 import {
   SOURCE_SITE_URL,
   formatDateTime,
@@ -12,7 +12,7 @@ import { fetchCurrentRadarData } from "@/lib/radarFetch";
 export const metadata: Metadata = {
   title: "リセット履歴",
   description:
-    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット予想を日本語で確認できます。",
+    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、個人別リセットの扱いを日本語で確認できます。",
 };
 
 export const revalidate = 300;
@@ -34,7 +34,7 @@ export default async function HistoryPage() {
                 リセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセット予想も表示します。
+                詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットも表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -98,6 +98,26 @@ export default async function HistoryPage() {
                 履歴データはまだ取得できていません。
               </p>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-sky-200 bg-sky-50/90 p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
+            <div>
+              <p className="text-sm font-medium text-sky-700">
+                そのほかのリセット
+              </p>
+              <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
+                任意リセット・友達紹介リセット
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                アカウントごとに付与・消費される個人別のリセットです。利用すると、そのアカウントの定期リセット時刻がずれる可能性があります。
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                全体向けのリセットではないため、このページの直近履歴、最新リセット、ランダムリセット期待度の計算には含めていません。
+              </p>
+            </div>
           </div>
         </section>
 
