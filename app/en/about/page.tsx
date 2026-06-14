@@ -67,10 +67,13 @@ export default function EnglishAboutPage() {
               current reset situation.
             </p>
             <p>
-              Confirmed reset history and weekly reset references are maintained
-              locally by this site. External sources may still be used as
-              supporting signals, but the site is not meant to mirror another
-              radar service blindly.
+              It brings together official reset notices, past reset history, and
+              a weekly-cycle reference date so you can compare what is happening
+              now with earlier reset patterns.
+            </p>
+            <p>
+              The weekly reset date is a shared reference, not a guarantee that
+              every account will refresh on exactly the same date.
             </p>
             <p>
               The random reset probability is a reference estimate based on

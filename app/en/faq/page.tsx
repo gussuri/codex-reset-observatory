@@ -5,12 +5,7 @@ const faqs = [
   {
     question: "What does this site track?",
     answer:
-      "It tracks Codex reset notices, reset history, weekly reset references, and random reset probability. Confirmed reset history and weekly reset references are stored locally by this site, while external signals are used as supporting context.",
-  },
-  {
-    question: "What happens if I use a manual reset?",
-    answer:
-      "If you use a manual reset, your account's next weekly reset date will differ from the reference date shown on this site. The manual reset credit is a one-time credit and expires within one month.",
+      "It tracks Codex reset notices, reset history, weekly-cycle reference dates, and random reset probability. It is an unofficial way to check the current situation and compare it with past reset patterns.",
   },
   {
     question: "Is this an official OpenAI site?",
@@ -23,14 +18,19 @@ const faqs = [
       "A weekly reset is the regular usage-cycle refresh. A random reset is a temporary reset that may happen because of incidents, compensation, milestones, or other short-term reasons.",
   },
   {
+    question: "What happens if I use a manual reset?",
+    answer:
+      "If you use a manual reset, your account's next weekly reset date will differ from the reference date shown on this site. The manual reset credit is a one-time credit and expires within one month.",
+  },
+  {
     question: "How are referral resets handled?",
     answer:
       "Referral resets are treated as account-specific personal resets. Distribution records may appear in history, but they are not counted as global resets or as random reset probability signals.",
   },
   {
-    question: "Where does the reset history come from?",
+    question: "How should I read the reset history?",
     answer:
-      "Confirmed reset history is stored by this site. When external data contains newer reset information, it may be used as a reference signal.",
+      "The history is organized so you can look back at resets and official notices that were previously confirmed. Account-specific resets, such as manual reset credits and referral resets, are kept separate from global latest-reset signals and random reset probability.",
   },
 ];
 
