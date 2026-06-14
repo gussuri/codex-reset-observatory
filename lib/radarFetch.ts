@@ -19,6 +19,7 @@ export async function fetchCurrentRadarData(
         accept: "application/json",
       },
       cache: options.cache,
+      redirect: "manual",
       next:
         typeof options.revalidate === "number"
           ? { revalidate: options.revalidate }
@@ -27,6 +28,11 @@ export async function fetchCurrentRadarData(
     });
 
     if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType?.includes("application/json")) {
       return null;
     }
 

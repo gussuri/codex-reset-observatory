@@ -2,7 +2,6 @@
 
 import {
   Activity,
-  AlertTriangle,
   Bell,
   Clock,
   ExternalLink,
@@ -30,9 +29,6 @@ const CACHE_KEY = "codex-reset-observatory:last-success";
 type LoadState = {
   data: RadarData | null;
   fetchedAt: string | null;
-  isFallback: boolean;
-  error: string | null;
-  loading: boolean;
 };
 
 export function RadarDashboard({
@@ -45,9 +41,6 @@ export function RadarDashboard({
   const [state, setState] = useState<LoadState>({
     data: initialData ?? null,
     fetchedAt: initialFetchedAt ?? null,
-    isFallback: false,
-    error: null,
-    loading: !initialData,
   });
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
@@ -60,13 +53,11 @@ export function RadarDashboard({
   }, []);
 
   const fetchRadar = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true }));
-
     try {
       const response = await fetch("/api/current", { cache: "no-store" });
 
       if (!response.ok) {
-        throw new Error("データ取得に失敗しました");
+        throw new Error("Failed to fetch current data");
       }
 
       const data = (await response.json()) as RadarData;
@@ -80,22 +71,13 @@ export function RadarDashboard({
       setState({
         data,
         fetchedAt,
-        isFallback: false,
-        error: null,
-        loading: false,
       });
-    } catch (error) {
+    } catch {
       const cached = loadCachedData();
-      const message =
-        error instanceof Error ? error.message : "データ取得に失敗しました";
-
-      setState({
-        data: cached?.data ?? null,
-        fetchedAt: cached?.fetchedAt ?? null,
-        isFallback: Boolean(cached),
-        error: message,
-        loading: false,
-      });
+      setState((current) => ({
+        data: cached?.data ?? current.data,
+        fetchedAt: cached?.fetchedAt ?? current.fetchedAt,
+      }));
     }
   }, [loadCachedData]);
 
@@ -151,22 +133,6 @@ export function RadarDashboard({
             </div>
           </div>
         </header>
-
-        {state.error ? (
-          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-              <div>
-                <h2 className="text-base font-semibold">データ取得失敗</h2>
-                <p className="mt-1 text-sm">
-                  {state.isFallback
-                    ? `前回取得日時：${formatDateTime(state.fetchedAt)}`
-                    : "前回成功データがまだありません。"}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : null}
 
         <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
