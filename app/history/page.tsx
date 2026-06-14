@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ExternalLink, History, Info } from "lucide-react";
 import {
-  SOURCE_SITE_URL,
-  SOURCE_SITE_LABEL,
   formatDateTime,
   getRadarViewModel,
   isSafeHttpUrl,
@@ -141,15 +139,9 @@ export default async function HistoryPage() {
               FAQ
             </Link>
           </nav>
-          <a
-            className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
-            href={SOURCE_SITE_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            参考: {SOURCE_SITE_LABEL}
-            <ExternalLink className="h-4 w-4" />
-          </a>
+          <p className="font-semibold text-slate-300">
+            このサイトで保存した履歴を表示しています。
+          </p>
         </footer>
       </div>
     </main>

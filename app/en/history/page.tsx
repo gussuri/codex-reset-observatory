@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ExternalLink, History, Info } from "lucide-react";
 import {
-  SOURCE_SITE_LABEL,
-  SOURCE_SITE_URL,
   getRadarViewModel,
   isSafeHttpUrl,
 } from "@/lib/radar";
@@ -186,15 +184,9 @@ export default async function EnglishHistoryPage() {
               Japanese history
             </Link>
           </nav>
-          <a
-            className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
-            href={SOURCE_SITE_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Reference: {SOURCE_SITE_LABEL}
-            <ExternalLink className="h-4 w-4" />
-          </a>
+          <p className="font-semibold text-slate-300">
+            Showing reset history stored by this site.
+          </p>
         </footer>
       </div>
     </main>

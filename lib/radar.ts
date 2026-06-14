@@ -130,6 +130,18 @@ export type SignalSummaryLike = {
   counts?: Record<string, number>;
 };
 
+type LocalObservationSignal = {
+  id: string;
+  observedAt: string;
+  type:
+    | "official_notice"
+    | "status_incident"
+    | "community_report"
+    | "limit_anomaly";
+  title: string;
+  source?: string | null;
+};
+
 export type CachedRadarData = {
   data: RadarData;
   fetchedAt: string;
@@ -191,10 +203,9 @@ export type RadarViewModel = {
   }>;
 };
 
-export const SOURCE_SITE_URL = "https://codexradar.com/en/";
-export const SOURCE_SITE_LABEL = "Codex Radar";
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const LOCAL_MODEL_UPDATED_AT = "2026-06-15T00:00:00+09:00";
 const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
 const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
@@ -217,6 +228,7 @@ const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     source: null,
   },
 ];
+const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [];
 const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-reliability-compensation-2026-06-04",
@@ -284,6 +296,23 @@ const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     source_url: "https://x.com/thsottiaux/status/2055707616605835333",
   },
 ];
+
+export function getLocalRadarData(): RadarData {
+  const updatedAt = getLocalModelUpdatedAt();
+
+  return {
+    schema_version: "local-v1",
+    service: "codex-reset-observatory",
+    purpose: "local-reset-observation",
+    timezone: DISPLAY_TIME_ZONE,
+    checked_at: updatedAt,
+    monitored_at: updatedAt,
+    updated_at: updatedAt,
+    status: "none",
+    window_open: false,
+    codex_environment: getLocalSignalEnvironment(),
+  };
+}
 
 export function probabilityToPercent(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -845,15 +874,11 @@ function getTimeZoneDay(value: Date) {
   );
 }
 
-function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"] {
-  const state = data?.current_window?.state ?? data?.window?.status ?? data?.status;
-  const active = Boolean(data?.window_open) || state === "open";
-  const openedAt = data?.current_window?.opened_at ?? data?.window?.opened_at ?? null;
-  const source =
-    data?.current_window?.source ??
-    data?.window?.source ??
-    data?.window?.source_url ??
-    null;
+function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"] {
+  const officialNotice = getLatestLocalSignal("official_notice");
+  const active = Boolean(officialNotice);
+  const openedAt = officialNotice?.observedAt ?? null;
+  const source = officialNotice?.source ?? null;
 
   if (active) {
     return {
@@ -861,7 +886,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
       kind: "official",
       label: "予告あり",
       summary:
-        "外部シグナルで公式リセット予告に近い動きが検知されています。予告どおりリセットされる可能性が高いため、残り枠を使う判断を優先してください。",
+        "このサイトで確認した公式リセット予告があります。予告内容を優先して最新状況を確認してください。",
       openedAt,
       source,
     };
@@ -872,7 +897,7 @@ function getActiveWindow(data: RadarData | null): RadarViewModel["activeWindow"]
     kind: "none",
     label: "予告なし",
     summary:
-      "現時点で、このサイトが参照している外部シグナル上の公式リセット予告はありません。",
+      "現時点で、このサイトで確認した公式リセット予告はありません。",
     openedAt,
     source,
   };
@@ -914,22 +939,10 @@ function getReasoningSummary(
   return getLocalProbabilityReason(data, probability24h, probability48h);
 }
 
-function getRecentHistory(data: RadarData | null) {
-  const remoteItems = data
-    ? [
-        ...(data.prediction?.probability_history?.events ?? []),
-        ...(data.recent_windows ?? []),
-        ...(data.recent_windows?.length ? [] : [data.window]),
-        data.last_window,
-        data.latest_reset,
-        data.last_reset,
-        data.latest_window,
-      ]
-    : [];
-  const items = [
-    ...remoteItems,
-    ...LOCAL_RESET_HISTORY,
-  ].filter((item): item is WindowEventLike => Boolean(item?.title));
+function getRecentHistory(_data: RadarData | null) {
+  const items = LOCAL_RESET_HISTORY.filter((item): item is WindowEventLike =>
+    Boolean(item?.title),
+  );
 
   const seen = new Set<string>();
 
@@ -1087,32 +1100,146 @@ function formatWindowLength(value: number | undefined) {
   return `${minutes}分`;
 }
 
+function getLocalModelUpdatedAt() {
+  const candidates = [
+    LOCAL_MODEL_UPDATED_AT,
+    ...LOCAL_OBSERVATION_SIGNALS.map((signal) => signal.observedAt),
+    ...LOCAL_RESET_HISTORY.flatMap((item) => [
+      item.closed_at,
+      item.completed_at,
+      item.opened_at,
+      item.date,
+    ]),
+  ];
+
+  return getLatestIsoDate(candidates) ?? LOCAL_MODEL_UPDATED_AT;
+}
+
+function getLocalSignalEnvironment(): NonNullable<RadarData["codex_environment"]> {
+  const recentSignals = LOCAL_OBSERVATION_SIGNALS.filter((signal) =>
+    isWithinHours(signal.observedAt, 24),
+  );
+  const statusIncidents = recentSignals.filter(
+    (signal) => signal.type === "status_incident",
+  ).length;
+  const officialUpdates = recentSignals.filter(
+    (signal) => signal.type === "official_notice",
+  ).length;
+  const communityMentions = recentSignals.filter(
+    (signal) => signal.type === "community_report",
+  ).length;
+  const issueAnomalies = recentSignals.filter(
+    (signal) => signal.type === "limit_anomaly",
+  ).length;
+
+  return {
+    updated_at: getLocalModelUpdatedAt(),
+    status_incidents_24h: statusIncidents,
+    official_updates_24h: officialUpdates,
+    community_mentions_24h: communityMentions,
+    issue_or_limit_anomalies_24h: issueAnomalies,
+    complaint_pressure:
+      statusIncidents > 0 || issueAnomalies >= 3
+        ? "medium"
+        : communityMentions >= 10
+          ? "medium"
+          : "low",
+    reset_card: {
+      status: "prediction_only",
+    },
+  };
+}
+
+function getLatestLocalSignal(type: LocalObservationSignal["type"]) {
+  return LOCAL_OBSERVATION_SIGNALS.filter((signal) => signal.type === type)
+    .sort((a, b) => getDateTime(b.observedAt) - getDateTime(a.observedAt))
+    .at(0);
+}
+
+function getLocalHistoryPressure(period: "24h" | "48h") {
+  const lastReset = getLastLocalRandomResetAt();
+  if (!lastReset) {
+    return 0;
+  }
+
+  const daysSinceLastReset = getCalendarDayDelta(new Date(), lastReset);
+
+  if (daysSinceLastReset <= 2) {
+    return period === "24h" ? -0.02 : -0.04;
+  }
+
+  if (daysSinceLastReset < 6) {
+    return 0;
+  }
+
+  if (daysSinceLastReset < 10) {
+    return period === "24h" ? 0.015 : 0.035;
+  }
+
+  if (daysSinceLastReset < 14) {
+    return period === "24h" ? 0.035 : 0.07;
+  }
+
+  return period === "24h" ? 0.05 : 0.09;
+}
+
+function getLastLocalRandomResetAt() {
+  const latest = getLatestIsoDate(
+    LOCAL_RESET_HISTORY.flatMap((item) => [
+      item.closed_at,
+      item.completed_at,
+      item.opened_at,
+      item.date,
+    ]),
+  );
+
+  return latest ? new Date(latest) : null;
+}
+
+function getLatestIsoDate(values: Array<string | null | undefined>) {
+  const latest = values
+    .map((value) => (value ? new Date(value) : null))
+    .filter((value): value is Date => Boolean(value && !Number.isNaN(value.getTime())))
+    .sort((a, b) => b.getTime() - a.getTime())
+    .at(0);
+
+  return latest?.toISOString() ?? null;
+}
+
+function getDateTime(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function isWithinHours(value: string, hours: number) {
+  const time = getDateTime(value);
+  if (!time) {
+    return false;
+  }
+
+  return Date.now() - time <= hours * 60 * 60 * 1000;
+}
+
 function getLocalExpectationLevel(data: RadarData | null) {
   const probability24h = getLocalResetProbability(data, "24h");
   return getExpectationLabel(probability24h);
 }
 
 function getLocalResetProbability(
-  data: RadarData | null,
+  _data: RadarData | null,
   period: "24h" | "48h",
 ) {
-  const isOfficialWindow =
-    Boolean(data?.window_open) ||
-    data?.status === "open" ||
-    data?.window?.status === "open" ||
-    data?.current_window?.state === "open";
+  const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
 
   if (isOfficialWindow) {
     return period === "24h" ? 0.9 : 0.96;
   }
 
-  const environment = data?.codex_environment;
-  const resetCardStatus = environment?.reset_card?.status?.toLowerCase();
-
-  if (resetCardStatus && resetCardStatus !== "prediction_only") {
-    return period === "24h" ? 0.78 : 0.88;
-  }
-
+  const environment = getLocalSignalEnvironment();
   const statusIncidents = clampCount(environment?.status_incidents_24h, 0, 5);
   const officialUpdates = clampCount(environment?.official_updates_24h, 0, 8);
   const communityMentions = clampCount(environment?.community_mentions_24h, 0, 80);
@@ -1132,6 +1259,7 @@ function getLocalResetProbability(
   const base = period === "24h" ? 0.025 : 0.06;
   const score =
     base +
+    getLocalHistoryPressure(period) +
     statusIncidents * (period === "24h" ? 0.05 : 0.07) +
     officialUpdates * (period === "24h" ? 0.004 : 0.007) +
     communityMentions * (period === "24h" ? 0.0008 : 0.0015) +
@@ -1142,23 +1270,15 @@ function getLocalResetProbability(
 }
 
 function getLocalProbabilityReason(
-  data: RadarData | null,
+  _data: RadarData | null,
   probability24h: number | undefined,
   probability48h: number | undefined,
 ) {
-  const environment = data?.codex_environment;
-  const isOfficialWindow =
-    Boolean(data?.window_open) ||
-    data?.status === "open" ||
-    data?.window?.status === "open" ||
-    data?.current_window?.state === "open";
+  const environment = getLocalSignalEnvironment();
+  const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
 
   if (isOfficialWindow) {
-    return "公式予告に近いシグナルが出ているため、通常より高めに見ています。リセット時刻が明示された予告かどうかは、公式リセット予告欄を優先して確認してください。";
-  }
-
-  if (!environment) {
-    return "外部環境データが取得できていないため、現在は低めの見立てです。履歴と定期リセットは独自管理データを優先して表示しています。";
+    return "このサイトで確認した公式リセット予告があるため、通常より高めに見ています。";
   }
 
   const p24 = probabilityToPercent(probability24h);
@@ -1170,8 +1290,12 @@ function getLocalProbabilityReason(
   const complaintPressure = translateComplaintPressure(
     environment.complaint_pressure,
   );
+  const lastReset = getLastLocalRandomResetAt();
+  const lastResetLabel = lastReset
+    ? `${getCalendarDayDelta(new Date(), lastReset)}日経過`
+    : "不明";
 
-  return `直近の公開シグナルから、24時間以内${p24}・48時間以内${p48}の見立てです。Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を参考にしています。`;
+  return `このサイトに保存した履歴と観測メモから、24時間以内${p24}・48時間以内${p48}の見立てです。直近の臨時リセットから${lastResetLabel}、Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を参考にしています。`;
 }
 
 function translateComplaintPressure(value: string | undefined) {

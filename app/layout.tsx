@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     "予測",
     "履歴",
     "最新情報",
-    "Codex Radar",
+    "OpenAI Status",
   ],
   openGraph: {
     title: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
