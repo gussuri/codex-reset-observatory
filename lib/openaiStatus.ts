@@ -5,6 +5,7 @@ const OPENAI_STATUS_INCIDENTS_URL =
 
 const FETCH_TIMEOUT_MS = 8000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const STATUS_INCIDENT_URL_BASE = "https://status.openai.com/incidents";
 
 type StatuspageComponent = {
   id?: string;
@@ -53,7 +54,78 @@ export type OpenAIStatusSignals = {
   recentCodexIncidents: number;
   affectedCodexComponents: number;
   latestCodexIncidentName: string | null;
+  history: Array<OpenAIStatusHistoryItem>;
 };
+
+export type OpenAIStatusHistoryItem = {
+  id: string;
+  title: string;
+  status: string;
+  impact: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  resolvedAt: string | null;
+  source: "openai_status";
+  url: string;
+};
+
+const LOCAL_OPENAI_STATUS_HISTORY: Array<OpenAIStatusHistoryItem> = [
+  {
+    id: "01KTW7QY5W9DDYT0ETXX6MPVSY",
+    title: "Elevated error rates for GPT 5.5 in Codex",
+    status: "resolved",
+    impact: "minor",
+    createdAt: "2026-06-11T20:59:52Z",
+    updatedAt: "2026-06-11T22:28:09Z",
+    resolvedAt: "2026-06-11T22:28:09Z",
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/01KTW7QY5W9DDYT0ETXX6MPVSY`,
+  },
+  {
+    id: "01KT890WC7YQYMX39GY5VG9QAB",
+    title: "Increased latency for Codex compaction for a subset of users",
+    status: "resolved",
+    impact: "minor",
+    createdAt: "2026-06-04T02:57:25Z",
+    updatedAt: "2026-06-04T04:37:16Z",
+    resolvedAt: "2026-06-04T04:37:16Z",
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/01KT890WC7YQYMX39GY5VG9QAB`,
+  },
+  {
+    id: "01KT5XJ5ATD6RMYP908WS69FVD",
+    title: "Elevated error rates on Codex, ChatGPT and Responses API",
+    status: "resolved",
+    impact: "major",
+    createdAt: "2026-06-03T04:58:40Z",
+    updatedAt: "2026-06-03T11:09:42Z",
+    resolvedAt: "2026-06-03T11:09:42Z",
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/01KT5XJ5ATD6RMYP908WS69FVD`,
+  },
+  {
+    id: "01KT5B2V94YX1T1M88BVQHB58J",
+    title: "codex-gpt-image-2-does-not-exist-errors",
+    status: "resolved",
+    impact: "minor",
+    createdAt: "2026-06-02T23:35:44Z",
+    updatedAt: "2026-06-03T00:13:15Z",
+    resolvedAt: "2026-06-03T00:13:15Z",
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/01KT5B2V94YX1T1M88BVQHB58J`,
+  },
+  {
+    id: "01KSN9ATSF1WCJ5ZTQSR1H9CC7",
+    title: "Codex Context Compaction Latency",
+    status: "resolved",
+    impact: "minor",
+    createdAt: "2026-05-27T17:57:17Z",
+    updatedAt: "2026-05-28T06:59:35Z",
+    resolvedAt: "2026-05-28T06:59:35Z",
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/01KSN9ATSF1WCJ5ZTQSR1H9CC7`,
+  },
+];
 
 type FetchOptions = {
   cache?: RequestCache;
@@ -77,7 +149,7 @@ export async function fetchOpenAIStatusSignals(
     incidentsResult.status === "fulfilled" ? incidentsResult.value : null;
 
   if (!summary && !incidents) {
-    return null;
+    return getStoredStatusSignals();
   }
 
   const affectedCodexComponents =
@@ -106,6 +178,9 @@ export async function fetchOpenAIStatusSignals(
   const latestCodexIncident = [...codexIncidents].sort(
     (a, b) => getIncidentTime(b) - getIncidentTime(a),
   )[0];
+  const history = mergeStatusHistory(
+    codexIncidents.map(normalizeStatusIncident),
+  );
   const updatedAt = getLatestIsoDate([
     summary?.page?.updated_at,
     incidents?.page?.updated_at,
@@ -121,6 +196,28 @@ export async function fetchOpenAIStatusSignals(
     recentCodexIncidents: recentCodexIncidents.length,
     affectedCodexComponents,
     latestCodexIncidentName: latestCodexIncident?.name ?? null,
+    history,
+  };
+}
+
+function getStoredStatusSignals(): OpenAIStatusSignals {
+  const latestStoredIncident = LOCAL_OPENAI_STATUS_HISTORY[0];
+
+  return {
+    updatedAt:
+      getLatestIsoDate(
+        LOCAL_OPENAI_STATUS_HISTORY.flatMap((item) => [
+          item.updatedAt,
+          item.resolvedAt,
+          item.createdAt,
+        ]),
+      ) ?? null,
+    statusIncidents24h: 0,
+    activeCodexIncidents: 0,
+    recentCodexIncidents: 0,
+    affectedCodexComponents: 0,
+    latestCodexIncidentName: latestStoredIncident?.title ?? null,
+    history: LOCAL_OPENAI_STATUS_HISTORY,
   };
 }
 
@@ -172,6 +269,42 @@ function isCodexIncident(incident: StatuspageIncident) {
     .join(" ");
 
   return isCodexText(text);
+}
+
+function normalizeStatusIncident(
+  incident: StatuspageIncident,
+): OpenAIStatusHistoryItem {
+  const id = incident.id ?? `openai-status-${incident.name ?? "unknown"}`;
+
+  return {
+    id,
+    title: incident.name ?? "OpenAI Status incident",
+    status: incident.status ?? "unknown",
+    impact: incident.impact ?? null,
+    createdAt: incident.created_at ?? null,
+    updatedAt: incident.updated_at ?? null,
+    resolvedAt: incident.resolved_at ?? null,
+    source: "openai_status",
+    url: `${STATUS_INCIDENT_URL_BASE}/${id}`,
+  };
+}
+
+function mergeStatusHistory(
+  fetchedHistory: Array<OpenAIStatusHistoryItem>,
+) {
+  const items = [...fetchedHistory, ...LOCAL_OPENAI_STATUS_HISTORY];
+  const seen = new Set<string>();
+
+  return items
+    .filter((item) => {
+      if (seen.has(item.id)) {
+        return false;
+      }
+
+      seen.add(item.id);
+      return true;
+    })
+    .sort((a, b) => getDateTime(b.createdAt) - getDateTime(a.createdAt));
 }
 
 function isCodexText(value: string | null | undefined) {

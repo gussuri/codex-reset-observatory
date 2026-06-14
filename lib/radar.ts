@@ -1,4 +1,7 @@
-import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
+import type {
+  OpenAIStatusHistoryItem,
+  OpenAIStatusSignals,
+} from "@/lib/openaiStatus";
 
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
@@ -77,6 +80,7 @@ export type RadarData = {
     html?: string;
     rss?: string;
   };
+  openai_status_history?: Array<OpenAIStatusHistoryItem>;
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;
@@ -322,6 +326,7 @@ export function getLocalRadarData({
     updated_at: updatedAt,
     status: "none",
     window_open: false,
+    openai_status_history: openAIStatus?.history ?? [],
     codex_environment: getLocalSignalEnvironment(openAIStatus),
   };
 }
