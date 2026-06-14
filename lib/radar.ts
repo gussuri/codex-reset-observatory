@@ -1157,7 +1157,7 @@ function getLatestLocalSignal(type: LocalObservationSignal["type"]) {
 }
 
 function getLocalHistoryPressure(period: "24h" | "48h") {
-  const lastReset = getLastLocalRandomResetAt();
+  const lastReset = getLastGlobalResetAt();
   if (!lastReset) {
     return 0;
   }
@@ -1183,14 +1183,17 @@ function getLocalHistoryPressure(period: "24h" | "48h") {
   return period === "24h" ? 0.05 : 0.09;
 }
 
-function getLastLocalRandomResetAt() {
+function getLastGlobalResetAt() {
   const latest = getLatestIsoDate(
-    LOCAL_RESET_HISTORY.flatMap((item) => [
-      item.closed_at,
-      item.completed_at,
-      item.opened_at,
-      item.date,
-    ]),
+    [
+      MANUAL_LAST_REGULAR_RESET_AT,
+      ...LOCAL_RESET_HISTORY.flatMap((item) => [
+        item.closed_at,
+        item.completed_at,
+        item.opened_at,
+        item.date,
+      ]),
+    ],
   );
 
   return latest ? new Date(latest) : null;
@@ -1287,7 +1290,7 @@ function getLocalProbabilityReason(
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
-  const lastReset = getLastLocalRandomResetAt();
+  const lastReset = getLastGlobalResetAt();
   const lastResetLabel = lastReset
     ? `${getCalendarDayDelta(new Date(), lastReset)}日経過`
     : "不明";
@@ -1314,7 +1317,7 @@ function getLocalProbabilityReason(
       ? `${signals.join("、")}が見られます。`
       : "目立った公式予告や障害情報は見られません。";
 
-  return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近の臨時リセットから${lastResetLabel}で、${signalSummary}`;
+  return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近のリセットから${lastResetLabel}で、${signalSummary}`;
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {
