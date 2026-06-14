@@ -1,3 +1,5 @@
+import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
+
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
 export type RadarData = {
@@ -82,6 +84,11 @@ export type RadarData = {
     community_mentions_24h?: number;
     issue_or_limit_anomalies_24h?: number;
     complaint_pressure?: "low" | "medium" | "high" | string;
+    openai_status_updated_at?: string | null;
+    openai_status_active_codex_incidents?: number;
+    openai_status_recent_codex_incidents?: number;
+    openai_status_affected_codex_components?: number;
+    openai_status_latest_codex_incident?: string | null;
     reset_card?: {
       probability_24h?: number;
       probability_48h?: number;
@@ -297,20 +304,25 @@ const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
 ];
 
-export function getLocalRadarData(): RadarData {
-  const updatedAt = getLocalModelUpdatedAt();
+export function getLocalRadarData({
+  openAIStatus,
+}: {
+  openAIStatus?: OpenAIStatusSignals | null;
+} = {}): RadarData {
+  const checkedAt = new Date().toISOString();
+  const updatedAt = getLocalModelUpdatedAt(openAIStatus);
 
   return {
     schema_version: "local-v1",
     service: "codex-reset-observatory",
     purpose: "local-reset-observation",
     timezone: DISPLAY_TIME_ZONE,
-    checked_at: updatedAt,
-    monitored_at: updatedAt,
+    checked_at: checkedAt,
+    monitored_at: checkedAt,
     updated_at: updatedAt,
     status: "none",
     window_open: false,
-    codex_environment: getLocalSignalEnvironment(),
+    codex_environment: getLocalSignalEnvironment(openAIStatus),
   };
 }
 
@@ -1100,9 +1112,10 @@ function formatWindowLength(value: number | undefined) {
   return `${minutes}分`;
 }
 
-function getLocalModelUpdatedAt() {
+function getLocalModelUpdatedAt(openAIStatus?: OpenAIStatusSignals | null) {
   const candidates = [
     LOCAL_MODEL_UPDATED_AT,
+    openAIStatus?.updatedAt,
     ...LOCAL_OBSERVATION_SIGNALS.map((signal) => signal.observedAt),
     ...LOCAL_RESET_HISTORY.flatMap((item) => [
       item.closed_at,
@@ -1115,11 +1128,13 @@ function getLocalModelUpdatedAt() {
   return getLatestIsoDate(candidates) ?? LOCAL_MODEL_UPDATED_AT;
 }
 
-function getLocalSignalEnvironment(): NonNullable<RadarData["codex_environment"]> {
+function getLocalSignalEnvironment(
+  openAIStatus?: OpenAIStatusSignals | null,
+): NonNullable<RadarData["codex_environment"]> {
   const recentSignals = LOCAL_OBSERVATION_SIGNALS.filter((signal) =>
     isWithinHours(signal.observedAt, 24),
   );
-  const statusIncidents = recentSignals.filter(
+  const localStatusIncidents = recentSignals.filter(
     (signal) => signal.type === "status_incident",
   ).length;
   const officialUpdates = recentSignals.filter(
@@ -1131,23 +1146,41 @@ function getLocalSignalEnvironment(): NonNullable<RadarData["codex_environment"]
   const issueAnomalies = recentSignals.filter(
     (signal) => signal.type === "limit_anomaly",
   ).length;
+  const statusIncidents =
+    localStatusIncidents + (openAIStatus?.statusIncidents24h ?? 0);
+  const activeCodexIncidents = openAIStatus?.activeCodexIncidents ?? 0;
+  const complaintPressure =
+    activeCodexIncidents > 0
+      ? "high"
+      : statusIncidents > 0 || issueAnomalies >= 3 || communityMentions >= 10
+        ? "medium"
+        : "low";
 
   return {
-    updated_at: getLocalModelUpdatedAt(),
+    updated_at: getLocalModelUpdatedAt(openAIStatus),
     status_incidents_24h: statusIncidents,
     official_updates_24h: officialUpdates,
     community_mentions_24h: communityMentions,
     issue_or_limit_anomalies_24h: issueAnomalies,
-    complaint_pressure:
-      statusIncidents > 0 || issueAnomalies >= 3
-        ? "medium"
-        : communityMentions >= 10
-          ? "medium"
-          : "low",
+    complaint_pressure: complaintPressure,
+    openai_status_updated_at: openAIStatus?.updatedAt ?? null,
+    openai_status_active_codex_incidents: activeCodexIncidents,
+    openai_status_recent_codex_incidents:
+      openAIStatus?.recentCodexIncidents ?? 0,
+    openai_status_affected_codex_components:
+      openAIStatus?.affectedCodexComponents ?? 0,
+    openai_status_latest_codex_incident:
+      openAIStatus?.latestCodexIncidentName ?? null,
     reset_card: {
       status: "prediction_only",
     },
   };
+}
+
+function getSignalEnvironment(
+  data: RadarData | null,
+): NonNullable<RadarData["codex_environment"]> {
+  return data?.codex_environment ?? getLocalSignalEnvironment();
 }
 
 function getLatestLocalSignal(type: LocalObservationSignal["type"]) {
@@ -1233,7 +1266,7 @@ function getLocalExpectationLevel(data: RadarData | null) {
 }
 
 function getLocalResetProbability(
-  _data: RadarData | null,
+  data: RadarData | null,
   period: "24h" | "48h",
 ) {
   const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
@@ -1242,7 +1275,7 @@ function getLocalResetProbability(
     return period === "24h" ? 0.9 : 0.96;
   }
 
-  const environment = getLocalSignalEnvironment();
+  const environment = getSignalEnvironment(data);
   const statusIncidents = clampCount(environment?.status_incidents_24h, 0, 5);
   const officialUpdates = clampCount(environment?.official_updates_24h, 0, 8);
   const communityMentions = clampCount(environment?.community_mentions_24h, 0, 80);
@@ -1273,11 +1306,11 @@ function getLocalResetProbability(
 }
 
 function getLocalProbabilityReason(
-  _data: RadarData | null,
+  data: RadarData | null,
   probability24h: number | undefined,
   probability48h: number | undefined,
 ) {
-  const environment = getLocalSignalEnvironment();
+  const environment = getSignalEnvironment(data);
   const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
 
   if (isOfficialWindow) {
@@ -1287,6 +1320,8 @@ function getLocalProbabilityReason(
   const p24 = probabilityToPercent(probability24h);
   const p48 = probabilityToPercent(probability48h);
   const statusIncidents = environment.status_incidents_24h ?? 0;
+  const activeStatusIncidents =
+    environment.openai_status_active_codex_incidents ?? 0;
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
@@ -1296,8 +1331,10 @@ function getLocalProbabilityReason(
     : "不明";
   const signals: Array<string> = [];
 
-  if (statusIncidents > 0) {
-    signals.push("Status上の障害情報");
+  if (activeStatusIncidents > 0) {
+    signals.push("Codex関連のStatus障害");
+  } else if (statusIncidents > 0) {
+    signals.push("直近のCodex関連Status情報");
   }
 
   if (issueAnomalies > 0) {
