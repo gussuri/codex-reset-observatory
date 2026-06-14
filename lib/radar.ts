@@ -1278,7 +1278,7 @@ function getLocalProbabilityReason(
   const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
 
   if (isOfficialWindow) {
-    return "このサイトで確認した公式リセット予告があるため、通常より高めに見ています。";
+    return "公式リセット予告があるため、通常より高めに見ています。";
   }
 
   const p24 = probabilityToPercent(probability24h);
@@ -1287,28 +1287,34 @@ function getLocalProbabilityReason(
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
-  const complaintPressure = translateComplaintPressure(
-    environment.complaint_pressure,
-  );
   const lastReset = getLastLocalRandomResetAt();
   const lastResetLabel = lastReset
     ? `${getCalendarDayDelta(new Date(), lastReset)}日経過`
     : "不明";
+  const signals: Array<string> = [];
 
-  return `このサイトに保存した履歴と観測メモから、24時間以内${p24}・48時間以内${p48}の見立てです。直近の臨時リセットから${lastResetLabel}、Status件数${statusIncidents}件、利用上限まわりの異常${issueAnomalies}件、コミュニティ言及${communityMentions}件、公式更新${officialUpdates}件、苦情圧力${complaintPressure}を参考にしています。`;
-}
-
-function translateComplaintPressure(value: string | undefined) {
-  switch (value) {
-    case "high":
-      return "高";
-    case "medium":
-      return "中";
-    case "low":
-      return "低";
-    default:
-      return value ?? "不明";
+  if (statusIncidents > 0) {
+    signals.push("Status上の障害情報");
   }
+
+  if (issueAnomalies > 0) {
+    signals.push("利用上限まわりの異常報告");
+  }
+
+  if (communityMentions > 0) {
+    signals.push("コミュニティ上のリセット関連報告");
+  }
+
+  if (officialUpdates > 0) {
+    signals.push("公式更新");
+  }
+
+  const signalSummary =
+    signals.length > 0
+      ? `${signals.join("、")}が見られます。`
+      : "目立った公式予告や障害情報は見られません。";
+
+  return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近の臨時リセットから${lastResetLabel}で、${signalSummary}`;
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {

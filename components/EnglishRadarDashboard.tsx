@@ -276,7 +276,7 @@ export function EnglishRadarDashboard({
             <div>
               <p className="text-sm text-slate-300">Observation inputs:</p>
               <p className="mt-1 text-base font-semibold">
-                Stored history, official information, and public community signals
+                Reset history, official information, and public community signals
               </p>
             </div>
             <nav

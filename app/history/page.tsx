@@ -40,7 +40,7 @@ export default async function HistoryPage() {
                 リセット履歴
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                独自保存した詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットや任意リセット配布も表示します。
+                詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットや任意リセット配布も表示します。
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -139,9 +139,7 @@ export default async function HistoryPage() {
               FAQ
             </Link>
           </nav>
-          <p className="font-semibold text-slate-300">
-            このサイトで保存した履歴を表示しています。
-          </p>
+          <p className="font-semibold text-slate-300">リセット履歴を表示しています。</p>
         </footer>
       </div>
     </main>

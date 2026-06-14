@@ -360,7 +360,7 @@ export function RadarDashboard({
             <div>
               <p className="text-sm text-slate-300">観測材料:</p>
               <p className="mt-1 text-base font-semibold">
-                保存済み履歴・公式情報・公開コミュニティ情報
+                リセット履歴・公式情報・公開コミュニティ情報
               </p>
             </div>
             <nav

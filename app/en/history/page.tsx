@@ -71,8 +71,8 @@ export default async function EnglishHistoryPage() {
                 Recent Reset Events
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                Confirmed reset history stored by this site, including weekly
-                reset events and manual reset credit distribution.
+                Confirmed reset history, weekly reset events, and manual reset
+                credit distribution.
               </p>
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
@@ -184,9 +184,7 @@ export default async function EnglishHistoryPage() {
               Japanese history
             </Link>
           </nav>
-          <p className="font-semibold text-slate-300">
-            Showing reset history stored by this site.
-          </p>
+          <p className="font-semibold text-slate-300">Showing reset history.</p>
         </footer>
       </div>
     </main>
