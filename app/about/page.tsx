@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "このサイトについて",
   description:
-    "Codexリセット観測所は、Codexのリセット履歴、定期リセット、任意リセット、期待度をまとめる非公式サイトです。",
+    "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
   alternates: {
     canonical: "/about",
     languages: {
@@ -26,26 +26,23 @@ export default function AboutPage() {
             Codexリセット観測所について
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Codexのリセット履歴、定期リセット、任意リセット、期待度をまとめる非公式サイトです。
+            Codexのリセット情報を観測・整理する非公式サイトです。
           </p>
         </header>
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
           <div className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
-              Codexリセット観測所は、Codexのリセット履歴や次回定期リセットの目安を日本語で確認できる非公式サイトです。
+              Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。
             </p>
             <p>
-              最近のリセット状況をすばやく確認できるように、公式リセット予告、過去のリセット履歴、1週間サイクルの参考日をまとめています。
+              リセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく確認できるようまとめています。
             </p>
             <p>
-              履歴は後から見返しやすいように整理し、定期リセットはすべてのアカウントで必ず同じになる日付ではなく、共有基準としての参考日として表示しています。
+              ランダムリセット期待度は公式情報ではなく、公開情報や過去の履歴を参考にした観測上の目安です。
             </p>
             <p>
-              ランダムリセット期待度は公式情報ではなく、公開情報やコミュニティの動きをもとにした参考用の見立てです。
-            </p>
-            <p>
-              実際のリセット実施有無や時期は、必ず公式情報もあわせてご確認ください。
+              実際のリセット実施有無や時期については、必ず公式情報をご確認ください。
             </p>
           </div>
         </section>
