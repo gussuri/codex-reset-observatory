@@ -1,3 +1,22 @@
+import {
+  LOCAL_OBSERVATION_SIGNALS,
+  type LocalObservationSignal,
+} from "@/data/observationSignals";
+import {
+  EXPECTATION_THRESHOLDS,
+  LOCAL_PROBABILITY_WEIGHTS,
+  RECOMMENDED_ACTION_THRESHOLDS,
+  REFRESH_INTERVAL_MS,
+} from "@/data/predictionWeights";
+import {
+  HISTORY_LIMIT,
+  LOCAL_MODEL_UPDATED_AT,
+  LOCAL_PERSONAL_RESET_HISTORY,
+  LOCAL_RESET_HISTORY,
+  MANUAL_LAST_REGULAR_RESET_AT,
+  MANUAL_NEXT_REGULAR_RESET_AT,
+  MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED,
+} from "@/data/resetHistory";
 import type {
   OpenAIStatusHistoryItem,
   OpenAIStatusSignals,
@@ -141,18 +160,6 @@ export type SignalSummaryLike = {
   counts?: Record<string, number>;
 };
 
-type LocalObservationSignal = {
-  id: string;
-  observedAt: string;
-  type:
-    | "official_notice"
-    | "status_incident"
-    | "community_report"
-    | "limit_anomaly";
-  title: string;
-  source?: string | null;
-};
-
 export type CachedRadarData = {
   data: RadarData;
   fetchedAt: string;
@@ -216,97 +223,6 @@ export type RadarViewModel = {
 
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LOCAL_MODEL_UPDATED_AT = "2026-06-15T00:00:00+09:00";
-const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
-const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
-const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
-const HISTORY_LIMIT = 10;
-const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
-  {
-    key: "personal-reset-credit-2026-06-11",
-    title: "任意リセット配布",
-    resetType: "個人別リセット",
-    status: "配布",
-    date: "2026-06-11T09:47:00+09:00",
-    signalAt: "2026-06-11T09:47:00+09:00",
-    resetAt: null,
-    signalLabel: "配布",
-    resetLabel: "",
-    scopeLabel: "対象",
-    scope: "対象アカウント",
-    windowLabel: "内容",
-    windowLength: "1回分・期限1か月以内",
-    source: null,
-  },
-];
-const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [];
-const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
-  {
-    id: "local-codex-reliability-compensation-2026-06-04",
-    title: "Codex 可靠性事故补偿重置",
-    kind: "reset_completed",
-    opened_at: "2026-06-04T08:25:58+08:00",
-    closed_at: "2026-06-04T08:25:58+08:00",
-    window_minutes: 0,
-    window_human: "无窗",
-    scope: "所有付费计划",
-    summary:
-      "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。",
-    source_url: "https://x.com/thsottiaux/status/2062329981548802523",
-  },
-  {
-    id: "local-5m-users-celebration-2026-05-31",
-    title: "500 万用户庆祝重置",
-    kind: "window_closed",
-    opened_at: "2026-05-31T13:59:10+08:00",
-    closed_at: "2026-05-31T23:25:06+08:00",
-    window_minutes: 565,
-    window_human: "9小时25分",
-    scope: "所有付费计划",
-    summary:
-      "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。",
-    source_url: "https://x.com/thsottiaux/status/2061106703446450392",
-  },
-  {
-    id: "local-long-session-compression-compensation-2026-05-24",
-    title: "长会话压缩耗额异常补偿重置",
-    kind: "window_closed",
-    opened_at: "2026-05-23T08:21:33+08:00",
-    closed_at: "2026-05-24T04:14:35+08:00",
-    window_minutes: 1193,
-    window_human: "19小时53分",
-    scope: "Codex 用户",
-    summary:
-      "Tibo 表示 Codex 长会话压缩的 cache hit rate 受回滚优化影响，导致限制消耗更快；修复后已为所有账号重置使用限制。",
-    source_url: "https://x.com/thsottiaux/status/2058280452851638313",
-  },
-  {
-    id: "local-sam-like-promise-reset-2026-05-20",
-    title: "Sam 点赞承诺速率限制重置",
-    kind: "window_closed",
-    opened_at: "2026-05-20T02:31:00+08:00",
-    closed_at: "2026-05-20T02:39:18+08:00",
-    window_minutes: 8,
-    window_human: "8分钟",
-    scope: "Codex 用户",
-    summary:
-      "Sam 发文称推文获 1 个赞后 Tibo 会重置 Codex 速率限制，随后社区在数分钟内反馈重置完成。",
-    source_url: "https://x.com/bossnayamoss/status/2056806923391877438",
-  },
-  {
-    id: "local-gpt-55-degradation-compensation-2026-05-17",
-    title: "GPT-5.5 能力退化补偿重置",
-    kind: "window_closed",
-    opened_at: "2026-05-16T08:31:00+08:00",
-    closed_at: "2026-05-17T01:51:00+08:00",
-    window_minutes: 1040,
-    window_human: "17小时20分",
-    scope: "所有付费计划",
-    summary:
-      "Tibo 表示两个 GPT-5.5 能力退化问题已修复后，付费计划的使用限制完成重置。",
-    source_url: "https://x.com/thsottiaux/status/2055707616605835333",
-  },
-];
 
 export function getLocalRadarData({
   openAIStatus,
@@ -369,15 +285,15 @@ export function getExpectationLabel(
 
   const normalized = normalizeProbability(value);
 
-  if (normalized < 0.1) {
+  if (normalized < EXPECTATION_THRESHOLDS.medium) {
     return "低";
   }
 
-  if (normalized < 0.3) {
+  if (normalized < EXPECTATION_THRESHOLDS.high) {
     return "中";
   }
 
-  if (normalized < 0.6) {
+  if (normalized < EXPECTATION_THRESHOLDS.veryHigh) {
     return "高";
   }
 
@@ -386,30 +302,30 @@ export function getExpectationLabel(
 
 export function getRefreshIntervalMs(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
-    return 3 * 60 * 60 * 1000;
+    return REFRESH_INTERVAL_MS.unknown;
   }
 
   const normalized = normalizeProbability(value);
 
-  if (normalized < 0.1) {
-    return 6 * 60 * 60 * 1000;
+  if (normalized < EXPECTATION_THRESHOLDS.medium) {
+    return REFRESH_INTERVAL_MS.low;
   }
 
-  if (normalized < 0.3) {
-    return 3 * 60 * 60 * 1000;
+  if (normalized < EXPECTATION_THRESHOLDS.high) {
+    return REFRESH_INTERVAL_MS.medium;
   }
 
-  if (normalized < 0.6) {
-    return 60 * 60 * 1000;
+  if (normalized < EXPECTATION_THRESHOLDS.veryHigh) {
+    return REFRESH_INTERVAL_MS.high;
   }
 
-  return 30 * 60 * 1000;
+  return REFRESH_INTERVAL_MS.veryHigh;
 }
 
 export function getRefreshIntervalLabel(value: number | undefined) {
   const intervalMs = getRefreshIntervalMs(value);
 
-  if (intervalMs === 30 * 60 * 1000) {
+  if (intervalMs === REFRESH_INTERVAL_MS.veryHigh) {
     return "30分";
   }
 
@@ -933,15 +849,15 @@ function getRecommendedAction(
   const normalized =
     typeof probability24h === "number" ? normalizeProbability(probability24h) : 0;
 
-  if (normalized >= 0.6) {
+  if (normalized >= RECOMMENDED_ACTION_THRESHOLDS.high) {
     return "24時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。";
   }
 
-  if (normalized >= 0.3) {
+  if (normalized >= RECOMMENDED_ACTION_THRESHOLDS.medium) {
     return "リセットの可能性はやや高めです。急ぎでない大きな作業は、残り枠と最新情報を見ながら進めるのがおすすめです。";
   }
 
-  if (normalized >= 0.1) {
+  if (normalized >= RECOMMENDED_ACTION_THRESHOLDS.watch) {
     return "中程度の見立てです。公式予告はないため、必要な作業は進めながら、数時間おきに変化を確認してください。";
   }
 
@@ -1194,6 +1110,10 @@ function getLatestLocalSignal(type: LocalObservationSignal["type"]) {
     .at(0);
 }
 
+function getPeriodWeightKey(period: "24h" | "48h") {
+  return period === "24h" ? "within24h" : "within48h";
+}
+
 function getLocalHistoryPressure(period: "24h" | "48h") {
   const lastReset = getLastGlobalResetAt();
   if (!lastReset) {
@@ -1201,24 +1121,12 @@ function getLocalHistoryPressure(period: "24h" | "48h") {
   }
 
   const daysSinceLastReset = getCalendarDayDelta(new Date(), lastReset);
+  const weightKey = getPeriodWeightKey(period);
+  const pressure = LOCAL_PROBABILITY_WEIGHTS.historyPressure.find(
+    (item) => daysSinceLastReset <= item.maxDaysSinceReset,
+  );
 
-  if (daysSinceLastReset <= 2) {
-    return period === "24h" ? -0.02 : -0.04;
-  }
-
-  if (daysSinceLastReset < 6) {
-    return 0;
-  }
-
-  if (daysSinceLastReset < 10) {
-    return period === "24h" ? 0.015 : 0.035;
-  }
-
-  if (daysSinceLastReset < 14) {
-    return period === "24h" ? 0.035 : 0.07;
-  }
-
-  return period === "24h" ? 0.05 : 0.09;
+  return pressure?.[weightKey] ?? 0;
 }
 
 function getLastGlobalResetAt() {
@@ -1275,39 +1183,59 @@ function getLocalResetProbability(
   period: "24h" | "48h",
 ) {
   const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
+  const weightKey = getPeriodWeightKey(period);
 
   if (isOfficialWindow) {
-    return period === "24h" ? 0.9 : 0.96;
+    return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
   const environment = getSignalEnvironment(data);
-  const statusIncidents = clampCount(environment?.status_incidents_24h, 0, 5);
-  const officialUpdates = clampCount(environment?.official_updates_24h, 0, 8);
-  const communityMentions = clampCount(environment?.community_mentions_24h, 0, 80);
+  const statusIncidents = clampCount(
+    environment?.status_incidents_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
+  );
+  const officialUpdates = clampCount(
+    environment?.official_updates_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialUpdates,
+  );
+  const communityMentions = clampCount(
+    environment?.community_mentions_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.communityMentions,
+  );
   const issueAnomalies = clampCount(
     environment?.issue_or_limit_anomalies_24h,
     0,
-    30,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.issueAnomalies,
   );
   const complaintPressure = environment?.complaint_pressure;
   const pressureBoost =
     complaintPressure === "high"
-      ? 0.12
+      ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.high
       : complaintPressure === "medium"
-        ? 0.05
-        : 0;
+        ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.medium
+        : LOCAL_PROBABILITY_WEIGHTS.pressureBoost.low;
 
-  const base = period === "24h" ? 0.025 : 0.06;
+  const base = LOCAL_PROBABILITY_WEIGHTS.base[weightKey];
   const score =
     base +
     getLocalHistoryPressure(period) +
-    statusIncidents * (period === "24h" ? 0.05 : 0.07) +
-    officialUpdates * (period === "24h" ? 0.004 : 0.007) +
-    communityMentions * (period === "24h" ? 0.0008 : 0.0015) +
-    issueAnomalies * (period === "24h" ? 0.004 : 0.007) +
+    statusIncidents *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
+    officialUpdates *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialUpdate[weightKey] +
+    communityMentions *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.communityMention[weightKey] +
+    issueAnomalies *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.issueAnomaly[weightKey] +
     pressureBoost;
 
-  return Math.min(period === "24h" ? 0.72 : 0.82, Math.max(0.02, score));
+  return Math.min(
+    LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
+    Math.max(LOCAL_PROBABILITY_WEIGHTS.min, score),
+  );
 }
 
 function getLocalProbabilityReason(

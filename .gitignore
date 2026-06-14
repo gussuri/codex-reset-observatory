@@ -3,6 +3,7 @@ node_modules
 .vercel
 .tools
 *.tgz
+*.tsbuildinfo
 pnpm.cjs
 dev-server*.log
 start-server*.log
