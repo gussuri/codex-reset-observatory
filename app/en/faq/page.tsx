@@ -13,9 +13,29 @@ const faqs = [
       "No. This is an unofficial reference site. Treat the information here as a guide and confirm important reset timing in Codex or official OpenAI channels.",
   },
   {
+    question: "When can I know the Codex reset timing?",
+    answer:
+      "If there is an official notice, that takes priority. If there is no notice, this site shows the current estimate based on recent history and OpenAI Status activity.",
+  },
+  {
+    question: "Are token, usage, limit, and rate resets the same thing?",
+    answer:
+      "People often use those terms loosely when searching. This site focuses on resets that restore or affect Codex usage limits.",
+  },
+  {
     question: "What is the difference between a random reset and a weekly reset?",
     answer:
       "A weekly reset is the regular usage-cycle refresh. A random reset is a temporary reset that may happen because of incidents, compensation, milestones, or other short-term reasons.",
+  },
+  {
+    question: "Is a context reset related to Codex usage resets?",
+    answer:
+      "Sometimes. Context compaction or long-session issues can lead to compensation resets, but a local context reset is different from a global usage-limit reset.",
+  },
+  {
+    question: "Does this site track Codex CLI resets?",
+    answer:
+      "It can be useful when a CLI issue affects Codex usage limits or OpenAI Status. Local CLI settings, cache, or environment resets are outside the scope of this site.",
   },
   {
     question: "What happens if I use a manual reset?",
@@ -37,12 +57,19 @@ const faqs = [
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
   title: {
-    absolute: "Codex Reset FAQ | Weekly resets and manual reset credits",
+    absolute: "Codex Reset FAQ | Timing, usage limits, and manual resets",
   },
   description:
-    "FAQ for Codex reset history, weekly reset references, manual reset credits, referral resets, and random reset probability.",
+    "FAQ for Codex reset timing, token and usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
   keywords: [
     "Codex reset FAQ",
+    "Codex reset timing",
+    "Codex token reset",
+    "Codex usage reset",
+    "Codex limit reset",
+    "Codex rate reset",
+    "Codex CLI reset",
+    "Codex context reset",
     "Codex manual reset",
     "Codex weekly reset",
     "Codex referral reset",
@@ -58,7 +85,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Reset FAQ",
     description:
-      "FAQ for Codex reset history, weekly reset references, manual reset credits, referral resets, and random reset probability.",
+      "FAQ for Codex reset timing, usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
     url: "/en/faq",
     siteName: "Codex Reset Observatory",
     type: "article",
@@ -77,7 +104,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Reset FAQ",
     description:
-      "FAQ for Codex reset history, weekly reset references, manual reset credits, referral resets, and random reset probability.",
+      "FAQ for Codex reset timing, usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
     images: ["/og-image.png"],
   },
 };
@@ -111,7 +138,7 @@ export default function EnglishFaqPage() {
             Frequently Asked Questions
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            A short guide to Codex reset timing, history, and manual reset credits.
+            A short guide to Codex reset timing, usage limits, and manual reset credits.
           </p>
         </header>
 
