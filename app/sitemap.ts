@@ -13,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: new Date(),
     changeFrequency: getChangeFrequency(route),
     priority: getPriority(route),
+    alternates: getAlternates(route),
   }));
 }
 
@@ -41,7 +42,43 @@ function getPriority(route: string) {
     return 0.8;
   }
 
+  if (route === "/en/history") {
+    return 0.8;
+  }
+
   return 0.5;
+}
+
+function getAlternates(route: string): MetadataRoute.Sitemap[number]["alternates"] {
+  const counterpart = getLanguageCounterpart(route);
+
+  if (!counterpart) {
+    return undefined;
+  }
+
+  return {
+    languages: {
+      ja: `${BASE_URL}${counterpart.ja}`,
+      en: `${BASE_URL}${counterpart.en}`,
+    },
+  };
+}
+
+function getLanguageCounterpart(route: string) {
+  if (route === "/") {
+    return { ja: "/", en: "/en" };
+  }
+
+  if (route === "/en") {
+    return { ja: "/", en: "/en" };
+  }
+
+  if (route.startsWith("/en/")) {
+    const jaRoute = route.replace(/^\/en/, "");
+    return { ja: jaRoute, en: route };
+  }
+
+  return { ja: route, en: `/en${route}` };
 }
 
 function getPublicRoutes() {
