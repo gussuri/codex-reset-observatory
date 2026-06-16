@@ -68,8 +68,7 @@ export function EnglishRadarDashboard({
                 </h2>
                 {viewModel.activeWindow.active ? (
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
-                    An external signal close to an official reset notice is
-                    active. Check the source before acting on it.
+                    {translateHistoryText(viewModel.activeWindow.summary)}
                   </p>
                 ) : null}
               </div>
@@ -462,6 +461,14 @@ export function translateHistoryText(value: string | undefined) {
       "Long-session compression usage anomaly compensation reset",
     "Sam氏の投稿をきっかけにしたレート制限リセット":
       "Rate-limit reset triggered by Sam's post",
+    "全プランCodexレート制限リセット予告":
+      "Codex rate-limit reset notice for all plans",
+    "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。":
+      "Tibo announced that Codex rate limits across all plans will be reset within 24 hours.",
+    "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。 予告内容を優先して最新状況を確認してください。":
+      "Tibo announced that Codex rate limits across all plans will be reset within 24 hours. Check the source and latest status before acting on it.",
+    "Tibo氏が、修正完了後に全プランのCodexレート制限を24時間以内にリセットすると発表しました。":
+      "Tibo said the issue was fixed and that Codex rate limits across all plans will be reset within 24 hours.",
     "全有料プラン": "All paid plans",
     "全プラン": "All plans",
     "Codexユーザー": "Codex users",
@@ -474,6 +481,7 @@ export function translateHistoryText(value: string | undefined) {
     "配布": "Distributed",
     "検知": "Detected",
     "実施": "Reset",
+    "実施予定": "Planned reset",
     "終了": "Closed",
     "リセット実施": "Reset completed",
     "予告検知": "Notice detected",
@@ -492,6 +500,8 @@ export function translateHistoryText(value: string | undefined) {
     "9時間25分": "9 hours 25 minutes",
     "17時間20分": "17 hours 20 minutes",
     "19時間53分": "19 hours 53 minutes",
+    "24時間以内の予定": "Planned within 24 hours",
+    "予告内容": "Notice",
     "概要は取得できていません。": "No summary is available.",
     "1週間サイクルの定期リセットが実施されました。":
       "A weekly-cycle reset was completed.",

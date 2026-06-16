@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-15T00:00:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-17T04:30:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-11T09:47:00+09:00";
@@ -26,6 +26,21 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-rate-limit-reset-notice-2026-06-17",
+    title: "全プランCodexレート制限リセット予告",
+    kind: "window_opened",
+    status: "open",
+    opened_at: "2026-06-17T04:30:00+09:00",
+    closed_at: null,
+    completed_at: null,
+    window_minutes: 1440,
+    window_human: "24時間以内の予定",
+    scope: "全プラン",
+    summary:
+      "Tibo氏が、修正完了後に全プランのCodexレート制限を24時間以内にリセットすると発表しました。",
+    source_url: "https://x.com/thsottiaux/status/2066956441173323943",
+  },
   {
     id: "local-codex-reliability-compensation-2026-06-04",
     title: "Codex 可靠性事故补偿重置",

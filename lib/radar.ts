@@ -489,8 +489,10 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   const predictionLevel = getLocalExpectationLevel(source);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source);
+  const latestObservedResetAt =
+    observedHistory.find((item) => item.resetAt)?.resetAt ?? null;
   const regularResetForecast = getRegularResetForecast(
-    observedHistory[0]?.resetAt ?? observedHistory[0]?.date ?? null,
+    latestObservedResetAt,
   );
   const latestWindow = getLatestWindowWithRegularReset(
     observedLatestWindow,
@@ -812,14 +814,16 @@ function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
   const source = officialNotice?.source ?? null;
+  const noticeTitle = officialNotice?.title ?? null;
 
   if (active) {
     return {
       active,
       kind: "official",
       label: "予告あり",
-      summary:
-        "このサイトで確認した公式リセット予告があります。予告内容を優先して最新状況を確認してください。",
+      summary: noticeTitle
+        ? `${noticeTitle} 予告内容を優先して最新状況を確認してください。`
+        : "このサイトで確認した公式リセット予告があります。予告内容を優先して最新状況を確認してください。",
       openedAt,
       source,
     };
@@ -881,7 +885,10 @@ function getRecentHistory(_data: RadarData | null) {
 
   return items
     .map((item) => {
-      const resetAt = item.closed_at ?? item.completed_at ?? item.opened_at ?? null;
+      const isPendingNotice = isPendingResetNotice(item);
+      const resetAt = isPendingNotice
+        ? null
+        : item.closed_at ?? item.completed_at ?? item.opened_at ?? null;
       const key = item.id ?? item.guid ?? `${item.title}-${resetAt ?? item.date ?? ""}`;
       const source = getEventSource(item);
 
@@ -890,13 +897,16 @@ function getRecentHistory(_data: RadarData | null) {
         title: translateSourceText(item.title),
         resetType: getResetType(item),
         status: translateEventStatus(item.kind ?? item.status),
-        date: item.date ?? resetAt,
+        date: item.date ?? resetAt ?? item.opened_at,
         signalAt: item.opened_at ?? item.date ?? null,
         resetAt,
         signalLabel: "検知",
-        resetLabel: "実施",
+        resetLabel: isPendingNotice ? "実施予定" : "実施",
         scope: translateSourceText(item.scope),
-        windowLength: formatWindowLength(item.window_minutes),
+        windowLabel: isPendingNotice ? "予告内容" : undefined,
+        windowLength: item.window_human
+          ? translateSourceText(item.window_human)
+          : formatWindowLength(item.window_minutes),
         source,
       };
     })
@@ -1031,6 +1041,14 @@ function formatWindowLength(value: number | undefined) {
   }
 
   return `${minutes}分`;
+}
+
+function isPendingResetNotice(item: WindowLike & { kind?: string }) {
+  return Boolean(
+    (item.kind === "window_opened" || item.status === "open") &&
+      !item.closed_at &&
+      !item.completed_at,
+  );
 }
 
 function getLocalModelUpdatedAt(openAIStatus?: OpenAIStatusSignals | null) {
