@@ -117,7 +117,7 @@ export default async function EnglishHistoryPage() {
                         {formatEnglishDateTime(item.signalAt)}
                       </p>
                     ) : null}
-                    {item.resetLabel ? (
+                    {item.resetAt || item.resetLabel ? (
                       <p>
                         {translateHistoryText(item.resetLabel)}:{" "}
                         {formatEnglishDateTime(item.resetAt)}

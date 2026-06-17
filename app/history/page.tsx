@@ -82,9 +82,11 @@ export default async function HistoryPage() {
                         {item.signalLabel}：{formatDateTime(item.signalAt)}
                       </p>
                     ) : null}
-                    <p>
-                      {item.resetLabel}：{formatDateTime(item.resetAt)}
-                    </p>
+                    {item.resetAt || item.resetLabel ? (
+                      <p>
+                        {item.resetLabel}：{formatDateTime(item.resetAt)}
+                      </p>
+                    ) : null}
                     {isSafeHttpUrl(item.source) ? (
                       <a
                         className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"

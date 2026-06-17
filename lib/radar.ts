@@ -495,10 +495,11 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   const regularResetForecast = getRegularResetForecast(
     latestObservedResetAt,
   );
-  const latestWindow = getLatestWindowWithRegularReset(
-    observedLatestWindow,
-    regularResetForecast,
-  );
+  const latestWindow =
+    getLatestWindowWithRegularReset(
+      observedLatestWindow,
+      regularResetForecast,
+    ) ?? getLatestCompletedLocalWindow();
   const activeWindow = getDisplayResetNotice(getActiveWindow(source));
   const recentHistory = addPersonalResetEventsToHistory(
     addRegularResetForecastToHistory(observedHistory, regularResetForecast),
@@ -758,6 +759,16 @@ function getLatestWindowWithRegularReset(
     summary:
       "1週間サイクルの定期リセットが実施されました。",
   };
+}
+
+function getLatestCompletedLocalWindow(): WindowLike | undefined {
+  return LOCAL_RESET_HISTORY.filter((item) => getCompletedResetAt(item))
+    .sort((a, b) => {
+      const aTime = getDateTime(getCompletedResetAt(a));
+      const bTime = getDateTime(getCompletedResetAt(b));
+      return bTime - aTime;
+    })
+    .at(0);
 }
 
 function getWindowResetTime(value: WindowLike | undefined) {

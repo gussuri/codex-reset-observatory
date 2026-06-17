@@ -212,7 +212,7 @@ export function EnglishRadarDashboard({
                       {formatEnglishDateTime(item.signalAt)}
                     </p>
                   ) : null}
-                  {item.resetLabel ? (
+                  {item.resetAt || item.resetLabel ? (
                     <p>
                       {translateHistoryText(item.resetLabel)}:{" "}
                       {formatEnglishDateTime(item.resetAt)}
@@ -505,7 +505,7 @@ export function translateHistoryText(value: string | undefined) {
     "17時間20分": "17 hours 20 minutes",
     "19時間53分": "19 hours 53 minutes",
     "24時間以内の予定": "Planned within 24 hours",
-    "6/18実施": "Completed on June 18",
+    "6/18 7:00実施": "Completed on June 18 at 7:00",
     "予告内容": "Notice",
     "概要は取得できていません。": "No summary is available.",
     "1週間サイクルの定期リセットが実施されました。":

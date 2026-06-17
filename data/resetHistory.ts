@@ -1,9 +1,9 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-18T12:04:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-18T07:00:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T12:04:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
-export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T12:04:00+09:00";
+export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T07:00:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
@@ -32,10 +32,10 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     kind: "window_closed",
     status: "closed",
     opened_at: "2026-06-17T04:30:00+09:00",
-    closed_at: "2026-06-18T12:04:00+09:00",
-    completed_at: "2026-06-18T12:04:00+09:00",
-    window_minutes: 1894,
-    window_human: "6/18実施",
+    closed_at: "2026-06-18T07:00:00+09:00",
+    completed_at: "2026-06-18T07:00:00+09:00",
+    window_minutes: 1590,
+    window_human: "6/18 7:00実施",
     scope: "全プラン",
     summary:
       "Tibo氏のリセット予告後、全プランのCodexレート制限リセットが実施されました。",
