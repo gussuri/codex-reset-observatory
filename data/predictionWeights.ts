@@ -34,6 +34,7 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
   },
   countLimits: {
     statusIncidents: 5,
+    officialIncidentHints: 3,
     officialUpdates: 8,
     communityMentions: 80,
     issueAnomalies: 30,
@@ -46,6 +47,10 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     officialUpdate: {
       within24h: 0.004,
       within48h: 0.007,
+    },
+    officialIncidentHint: {
+      within24h: 0.25,
+      within48h: 0.32,
     },
     communityMention: {
       within24h: 0.0008,

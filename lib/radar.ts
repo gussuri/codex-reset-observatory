@@ -103,6 +103,7 @@ export type RadarData = {
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;
+    official_incident_hints_24h?: number;
     official_updates_24h?: number;
     community_mentions_24h?: number;
     issue_or_limit_anomalies_24h?: number;
@@ -810,7 +811,7 @@ function getTimeZoneDay(value: Date) {
 }
 
 function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"] {
-  const officialNotice = getLatestLocalSignal("official_notice");
+  const officialNotice = getLatestActiveLocalSignal("official_notice");
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
   const source = officialNotice?.source ?? null;
@@ -1071,10 +1072,13 @@ function getLocalSignalEnvironment(
   openAIStatus?: OpenAIStatusSignals | null,
 ): NonNullable<RadarData["codex_environment"]> {
   const recentSignals = LOCAL_OBSERVATION_SIGNALS.filter((signal) =>
-    isWithinHours(signal.observedAt, 24),
+    isCurrentLocalSignal(signal) && isWithinHours(signal.observedAt, 24),
   );
   const localStatusIncidents = recentSignals.filter(
     (signal) => signal.type === "status_incident",
+  ).length;
+  const officialIncidentHints = recentSignals.filter(
+    (signal) => signal.type === "official_incident_hint",
   ).length;
   const officialUpdates = recentSignals.filter(
     (signal) => signal.type === "official_notice",
@@ -1091,13 +1095,17 @@ function getLocalSignalEnvironment(
   const complaintPressure =
     activeCodexIncidents > 0
       ? "high"
-      : statusIncidents > 0 || issueAnomalies >= 3 || communityMentions >= 10
+      : officialIncidentHints > 0 ||
+          statusIncidents > 0 ||
+          issueAnomalies >= 3 ||
+          communityMentions >= 10
         ? "medium"
         : "low";
 
   return {
     updated_at: getLocalModelUpdatedAt(openAIStatus),
     status_incidents_24h: statusIncidents,
+    official_incident_hints_24h: officialIncidentHints,
     official_updates_24h: officialUpdates,
     community_mentions_24h: communityMentions,
     issue_or_limit_anomalies_24h: issueAnomalies,
@@ -1128,6 +1136,36 @@ function getLatestLocalSignal(type: LocalObservationSignal["type"]) {
     .at(0);
 }
 
+function getLatestActiveLocalSignal(type: LocalObservationSignal["type"]) {
+  return LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) => signal.type === type && isCurrentLocalSignal(signal),
+  )
+    .sort((a, b) => getDateTime(b.observedAt) - getDateTime(a.observedAt))
+    .at(0);
+}
+
+function getEffectiveSignalStatus(signal: LocalObservationSignal) {
+  if (signal.resolvedAt) {
+    return "resolved";
+  }
+
+  if (
+    signal.status === "expired" ||
+    (signal.status !== "resolved" &&
+      signal.expiresAt &&
+      getDateTime(signal.expiresAt) > 0 &&
+      getDateTime(signal.expiresAt) <= Date.now())
+  ) {
+    return "expired";
+  }
+
+  return signal.status ?? "active";
+}
+
+function isCurrentLocalSignal(signal: LocalObservationSignal) {
+  return getEffectiveSignalStatus(signal) === "active";
+}
+
 function getPeriodWeightKey(period: "24h" | "48h") {
   return period === "24h" ? "within24h" : "within48h";
 }
@@ -1151,16 +1189,23 @@ function getLastGlobalResetAt() {
   const latest = getLatestIsoDate(
     [
       MANUAL_LAST_REGULAR_RESET_AT,
-      ...LOCAL_RESET_HISTORY.flatMap((item) => [
-        item.closed_at,
-        item.completed_at,
-        item.opened_at,
-        item.date,
-      ]),
+      ...LOCAL_RESET_HISTORY.map(getCompletedResetAt),
     ],
   );
 
   return latest ? new Date(latest) : null;
+}
+
+function getCompletedResetAt(item: WindowEventLike) {
+  if (isPendingResetNotice(item) || item.status === "active") {
+    return null;
+  }
+
+  if (item.closed_at || item.completed_at) {
+    return item.closed_at ?? item.completed_at ?? null;
+  }
+
+  return item.kind === "reset_completed" ? item.opened_at ?? item.date ?? null : null;
 }
 
 function getLatestIsoDate(values: Array<string | null | undefined>) {
@@ -1200,7 +1245,7 @@ function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
 ) {
-  const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
+  const isOfficialWindow = Boolean(getLatestActiveLocalSignal("official_notice"));
   const weightKey = getPeriodWeightKey(period);
 
   if (isOfficialWindow) {
@@ -1212,6 +1257,11 @@ function getLocalResetProbability(
     environment?.status_incidents_24h,
     0,
     LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
+  );
+  const officialIncidentHints = clampCount(
+    environment?.official_incident_hints_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialIncidentHints,
   );
   const officialUpdates = clampCount(
     environment?.official_updates_24h,
@@ -1242,6 +1292,8 @@ function getLocalResetProbability(
     getLocalHistoryPressure(period) +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
+    officialIncidentHints *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialIncidentHint[weightKey] +
     officialUpdates *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialUpdate[weightKey] +
     communityMentions *
@@ -1262,7 +1314,7 @@ function getLocalProbabilityReason(
   probability48h: number | undefined,
 ) {
   const environment = getSignalEnvironment(data);
-  const isOfficialWindow = Boolean(getLatestLocalSignal("official_notice"));
+  const isOfficialWindow = Boolean(getLatestActiveLocalSignal("official_notice"));
 
   if (isOfficialWindow) {
     return "公式リセット予告があるため、通常より高めに見ています。";
@@ -1275,6 +1327,7 @@ function getLocalProbabilityReason(
     environment.openai_status_active_codex_incidents ?? 0;
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
+  const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
   const lastReset = getLastGlobalResetAt();
   const lastResetLabel = lastReset
@@ -1286,6 +1339,10 @@ function getLocalProbabilityReason(
     signals.push("Codex関連のStatus障害");
   } else if (statusIncidents > 0) {
     signals.push("直近のCodex関連Status情報");
+  }
+
+  if (officialIncidentHints > 0) {
+    signals.push("公式寄りの障害・容量到達に関する投稿");
   }
 
   if (issueAnomalies > 0) {
@@ -1300,12 +1357,16 @@ function getLocalProbabilityReason(
     signals.push("公式更新");
   }
 
+  const hintSummary =
+    officialIncidentHints > 0
+      ? "公式寄りの障害・容量到達に関する投稿があり、詫びリセット要因が強まっています。"
+      : null;
   const signalSummary =
     signals.length > 0
       ? `${signals.join("、")}が見られます。`
       : "目立った公式予告や障害情報は見られません。";
 
-  return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近のリセットから${lastResetLabel}で、${signalSummary}`;
+  return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近のリセットから${lastResetLabel}で、${hintSummary ?? signalSummary}`;
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {
