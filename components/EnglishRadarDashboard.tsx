@@ -463,12 +463,16 @@ export function translateHistoryText(value: string | undefined) {
       "Rate-limit reset triggered by Sam's post",
     "全プランCodexレート制限リセット予告":
       "Codex rate-limit reset notice for all plans",
+    "全プランCodexレート制限リセット":
+      "Codex rate-limit reset for all plans",
     "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。":
       "Tibo announced that Codex rate limits across all plans will be reset within 24 hours.",
     "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。 予告内容を優先して最新状況を確認してください。":
       "Tibo announced that Codex rate limits across all plans will be reset within 24 hours. Check the source and latest status before acting on it.",
     "Tibo氏が、修正完了後に全プランのCodexレート制限を24時間以内にリセットすると発表しました。":
       "Tibo said the issue was fixed and that Codex rate limits across all plans will be reset within 24 hours.",
+    "Tibo氏のリセット予告後、全プランのCodexレート制限リセットが実施されました。":
+      "After Tibo's reset notice, Codex rate limits were reset across all plans.",
     "全有料プラン": "All paid plans",
     "全プラン": "All plans",
     "Codexユーザー": "Codex users",
@@ -501,6 +505,7 @@ export function translateHistoryText(value: string | undefined) {
     "17時間20分": "17 hours 20 minutes",
     "19時間53分": "19 hours 53 minutes",
     "24時間以内の予定": "Planned within 24 hours",
+    "6/18実施": "Completed on June 18",
     "予告内容": "Notice",
     "概要は取得できていません。": "No summary is available.",
     "1週間サイクルの定期リセットが実施されました。":

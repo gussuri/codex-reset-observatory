@@ -250,6 +250,27 @@ export function RadarDashboard({
           </article>
         </section>
 
+        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                1週間サイクルのリセット参考日
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                {viewModel.regularResetForecast.date}
+                {viewModel.regularResetForecast.time ? (
+                  <span className="ml-2">
+                    {viewModel.regularResetForecast.time}
+                  </span>
+                ) : null}
+              </h2>
+            </div>
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right">
+              任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
+            </p>
+          </div>
+        </section>
+
         <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -318,27 +339,6 @@ export function RadarDashboard({
                 直近履歴は取得できていません。
               </p>
             )}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                1週間サイクルのリセット参考日
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {viewModel.regularResetForecast.date}
-                {viewModel.regularResetForecast.time ? (
-                  <span className="ml-2">
-                    {viewModel.regularResetForecast.time}
-                  </span>
-                ) : null}
-              </h2>
-            </div>
-            <p className="text-sm leading-6 sm:max-w-md sm:text-right">
-              任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
-            </p>
           </div>
         </section>
 

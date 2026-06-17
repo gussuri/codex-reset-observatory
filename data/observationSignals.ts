@@ -20,9 +20,9 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-codex-rate-limit-reset-notice-2026-06-17",
     observedAt: "2026-06-17T04:30:00+09:00",
     type: "official_notice",
-    status: "active",
+    status: "resolved",
     expiresAt: "2026-06-18T04:30:00+09:00",
-    resolvedAt: null,
+    resolvedAt: "2026-06-18T12:04:00+09:00",
     title:
       "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。",
     keywords: ["rate limit", "利用上限", "レート制限"],
@@ -32,9 +32,9 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-codex-capacity-error-hint-2026-06-16",
     observedAt: "2026-06-16T22:30:00+09:00",
     type: "official_incident_hint",
-    status: "active",
+    status: "resolved",
     expiresAt: "2026-06-18T22:30:00+09:00",
-    resolvedAt: null,
+    resolvedAt: "2026-06-18T12:04:00+09:00",
     title:
       "Tibo氏が、Codexの一部ユーザーでモデル容量到達エラーが多発していると投稿しました。",
     keywords: [
