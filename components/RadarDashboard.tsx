@@ -299,9 +299,14 @@ export function RadarDashboard({
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                         {item.status}
                       </span>
-                      <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                        {item.resetType}
-                      </span>
+                      {(item.resetTypes ?? [item.resetType]).map((resetType) => (
+                        <span
+                          className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
+                          key={resetType}
+                        >
+                          {resetType}
+                        </span>
+                      ))}
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
                       {item.scopeLabel ?? "対象プラン"}：{item.scope}

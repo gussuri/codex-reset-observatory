@@ -60,9 +60,14 @@ export default async function HistoryPage() {
                       <h2 className="ui-heading text-lg font-semibold text-slate-950">
                         {item.title}
                       </h2>
-                      <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                        {item.resetType}
-                      </span>
+                      {(item.resetTypes ?? [item.resetType]).map((resetType) => (
+                        <span
+                          className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
+                          key={resetType}
+                        >
+                          {resetType}
+                        </span>
+                      ))}
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                         {item.status}
                       </span>

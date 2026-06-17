@@ -208,6 +208,7 @@ export type RadarViewModel = {
     key: string;
     title: string;
     resetType: string;
+    resetTypes?: Array<string>;
     status: string;
     date?: string | null;
     signalAt?: string | null;
@@ -703,6 +704,7 @@ function addRegularResetForecastToHistory(
       key: `regular-reset-completed-${regularResetForecast.lastCompletedAt}`,
       title: "定期リセット",
       resetType: "定期リセット",
+      resetTypes: ["定期リセット"],
       status: "終了",
       date: regularResetForecast.lastCompletedAt,
       signalAt: null,
@@ -920,7 +922,8 @@ function getRecentHistory(_data: RadarData | null) {
       return {
         key,
         title: translateSourceText(item.title),
-        resetType: getResetType(item),
+        resetType: getResetTypes(item)[0],
+        resetTypes: getResetTypes(item),
         status: translateEventStatus(item.kind ?? item.status),
         date: item.date ?? resetAt ?? item.opened_at,
         signalAt: item.opened_at ?? item.date ?? null,
@@ -976,11 +979,13 @@ function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
   return `${item.title}-${resetKey}`;
 }
 
-function getResetType(item: WindowLike & { kind?: string }) {
+function getResetTypes(item: WindowLike & { kind?: string }) {
   const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();
 
+  const types: Array<string> = [];
+
   if (text.includes("1週間サイクル") || text.includes("定期")) {
-    return "定期/臨時リセット";
+    types.push("定期リセット");
   }
 
   if (
@@ -990,9 +995,11 @@ function getResetType(item: WindowLike & { kind?: string }) {
     text.includes("reliability") ||
     text.includes("incident") ||
     text.includes("障害") ||
-    text.includes("補償")
+    text.includes("補償") ||
+    text.includes("rate limit") ||
+    text.includes("レート制限")
   ) {
-    return "詫びリセット";
+    types.push("詫びリセット");
   }
 
   if (
@@ -1003,18 +1010,18 @@ function getResetType(item: WindowLike & { kind?: string }) {
     text.includes("500万") ||
     text.includes("記念")
   ) {
-    return "ご祝儀リセット";
+    types.push("ご祝儀リセット");
   }
 
   if (item.kind === "window_opened" || item.status === "open") {
-    return "予告付き臨時リセット";
+    types.push("予告付き臨時リセット");
   }
 
   if (!item.closed_at && !item.completed_at && item.kind !== "reset_completed") {
-    return "コミュニティ予測";
+    types.push("コミュニティ予測");
   }
 
-  return "その他";
+  return types.length > 0 ? Array.from(new Set(types)) : ["その他"];
 }
 
 function getEventSource(item: WindowLike) {

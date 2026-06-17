@@ -191,9 +191,14 @@ export function EnglishRadarDashboard({
                     <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                       {translateHistoryText(item.status)}
                     </span>
-                    <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                      {translateHistoryText(item.resetType)}
-                    </span>
+                    {(item.resetTypes ?? [item.resetType]).map((resetType) => (
+                      <span
+                        className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
+                        key={resetType}
+                      >
+                        {translateHistoryText(resetType)}
+                      </span>
+                    ))}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     {translateHistoryText(item.scopeLabel ?? "Scope")}:{" "}
@@ -493,7 +498,6 @@ export function translateHistoryText(value: string | undefined) {
     "予告検知": "Notice detected",
     "予告中": "Notice active",
     "定期リセット": "Weekly reset",
-    "定期/臨時リセット": "Weekly / temporary reset",
     "定期実施": "Weekly cycle",
     "即時リセット": "Immediate reset",
     "詫びリセット": "Compensation reset",
