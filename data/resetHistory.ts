@@ -38,7 +38,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     window_human: "6/18 7:00実施",
     scope: "全プラン",
     summary:
-      "Tibo氏のリセット予告後、全プランのCodexレート制限リセットが実施されました。",
+      "通常の1週間サイクルのタイミングに重なって、Tibo氏の予告後に全プランのCodexレート制限リセットが実施されました。",
     source_url: "https://x.com/thsottiaux/status/2066956441173323943",
   },
   {

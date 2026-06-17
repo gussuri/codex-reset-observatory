@@ -490,6 +490,7 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   const predictionLevel = getLocalExpectationLevel(source);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source);
+  const latestCompletedLocalWindow = getLatestCompletedLocalWindow();
   const latestObservedResetAt =
     observedHistory.find((item) => item.resetAt)?.resetAt ?? null;
   const regularResetForecast = getRegularResetForecast(
@@ -497,9 +498,9 @@ export function getRadarViewModel(data: RadarData | null): RadarViewModel {
   );
   const latestWindow =
     getLatestWindowWithRegularReset(
-      observedLatestWindow,
+      observedLatestWindow ?? latestCompletedLocalWindow,
       regularResetForecast,
-    ) ?? getLatestCompletedLocalWindow();
+    ) ?? latestCompletedLocalWindow;
   const activeWindow = getDisplayResetNotice(getActiveWindow(source));
   const recentHistory = addPersonalResetEventsToHistory(
     addRegularResetForecastToHistory(observedHistory, regularResetForecast),
@@ -694,7 +695,10 @@ function addRegularResetForecastToHistory(
 
   const regularItems: RadarViewModel["recentHistory"] = [];
 
-  if (regularResetForecast.lastCompletedAt) {
+  if (
+    regularResetForecast.lastCompletedAt &&
+    !hasHistoryResetAt(history, regularResetForecast.lastCompletedAt)
+  ) {
     regularItems.push({
       key: `regular-reset-completed-${regularResetForecast.lastCompletedAt}`,
       title: "定期リセット",
@@ -742,7 +746,7 @@ function getLatestWindowWithRegularReset(
   const regularResetTime = new Date(regularResetForecast.lastCompletedAt).getTime();
   const latestWindowTime = getWindowResetTime(latestWindow);
 
-  if (latestWindowTime > regularResetTime) {
+  if (latestWindowTime >= regularResetTime) {
     return latestWindow;
   }
 
@@ -769,6 +773,15 @@ function getLatestCompletedLocalWindow(): WindowLike | undefined {
       return bTime - aTime;
     })
     .at(0);
+}
+
+function hasHistoryResetAt(
+  history: RadarViewModel["recentHistory"],
+  resetAt: string,
+) {
+  const resetTime = getDateTime(resetAt);
+
+  return history.some((item) => getDateTime(item.resetAt) === resetTime);
 }
 
 function getWindowResetTime(value: WindowLike | undefined) {
@@ -965,6 +978,10 @@ function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
 
 function getResetType(item: WindowLike & { kind?: string }) {
   const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();
+
+  if (text.includes("1週間サイクル") || text.includes("定期")) {
+    return "定期/臨時リセット";
+  }
 
   if (
     text.includes("可靠性") ||

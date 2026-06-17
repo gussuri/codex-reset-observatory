@@ -473,6 +473,8 @@ export function translateHistoryText(value: string | undefined) {
       "Tibo said the issue was fixed and that Codex rate limits across all plans will be reset within 24 hours.",
     "Tibo氏のリセット予告後、全プランのCodexレート制限リセットが実施されました。":
       "After Tibo's reset notice, Codex rate limits were reset across all plans.",
+    "通常の1週間サイクルのタイミングに重なって、Tibo氏の予告後に全プランのCodexレート制限リセットが実施されました。":
+      "This reset overlapped with the usual weekly-cycle timing and followed Tibo's notice that Codex rate limits would be reset across all plans.",
     "全有料プラン": "All paid plans",
     "全プラン": "All plans",
     "Codexユーザー": "Codex users",
@@ -491,6 +493,7 @@ export function translateHistoryText(value: string | undefined) {
     "予告検知": "Notice detected",
     "予告中": "Notice active",
     "定期リセット": "Weekly reset",
+    "定期/臨時リセット": "Weekly / temporary reset",
     "定期実施": "Weekly cycle",
     "即時リセット": "Immediate reset",
     "詫びリセット": "Compensation reset",
