@@ -5,7 +5,9 @@ import "./globals.css";
 const siteUrl = "https://codex-reset-observatory.vercel.app";
 const siteTitle = "Codexリセット観測所";
 const siteDescription =
-  "Codexのリセット履歴、次回定期リセット、ランダムリセット期待度、任意リセットの扱いを日本語で確認できる非公式サイトです。";
+  "Codexの利用上限リセット、制限解除、障害対応・補償リセットの予告と履歴を整理。次回参考日やランダムリセット期待度も確認できます。";
+const siteOgDescription =
+  "Codexの利用上限がいつ戻るかを確認する非公式サイト。公式予告、障害対応・補償リセット履歴、次回参考日、リセット期待度をまとめています。";
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
@@ -19,7 +21,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: siteTitle,
   title: {
-    default: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
+    default: "Codex利用上限リセット情報 | 制限解除・補償リセット履歴",
     template: `%s | ${siteTitle}`,
   },
   description: siteDescription,
@@ -34,13 +36,16 @@ export const metadata: Metadata = {
     "Codex リセット タイミング",
     "Codex トークン リセット",
     "Codex 使用量 リセット",
+    "Codex 利用上限 リセット",
     "Codex 制限 リセット",
+    "Codex 制限解除",
     "Codex レート制限",
     "Codex レート リセット",
     "Codex CLI リセット",
     "Codex コンテキスト リセット",
     "ランダムリセット",
     "臨時リセット",
+    "障害対応リセット",
     "補償リセット",
     "定期リセット",
     "任意リセット",
@@ -50,8 +55,8 @@ export const metadata: Metadata = {
     "OpenAI Status",
   ],
   openGraph: {
-    title: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
-    description: siteDescription,
+    title: "Codex利用上限リセット情報 | 制限解除・補償リセット履歴",
+    description: siteOgDescription,
     url: siteUrl,
     siteName: siteTitle,
     locale: "ja_JP",
@@ -67,8 +72,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${siteTitle} | Codexリセット履歴・定期リセット・期待度`,
-    description: siteDescription,
+    title: "Codex利用上限リセット情報 | 制限解除・補償リセット履歴",
+    description: siteOgDescription,
     images: ["/og-image.png"],
   },
 };

@@ -123,11 +123,14 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-sm font-medium leading-6 text-teal-700">
-                Codexリセット予告・履歴・期待度
+                Codex利用上限リセット情報
               </p>
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 Codexリセット観測所
               </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                制限解除、障害対応・補償リセット、定期リセットの動きをまとめて確認できます。
+              </p>
             </div>
           </div>
         </header>
