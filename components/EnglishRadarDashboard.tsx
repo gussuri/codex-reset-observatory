@@ -472,6 +472,8 @@ export function translateHistoryText(value: string | undefined) {
       "After Tibo's reset notice, Codex rate limits were reset across all plans.",
     "通常の1週間サイクルのタイミングに重なって、Tibo氏の予告後に全プランのCodexレート制限リセットが実施されました。":
       "This reset overlapped with the usual weekly-cycle timing and followed Tibo's notice that Codex rate limits would be reset across all plans.",
+    "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。":
+      "Codex usage limits were reset on the usual weekly-cycle timing.",
     "全有料プラン": "All paid plans",
     "全プラン": "All plans",
     "Codexユーザー": "Codex users",
@@ -479,6 +481,7 @@ export function translateHistoryText(value: string | undefined) {
     "対象アカウント": "Eligible accounts",
     "内容": "Details",
     "1回分・期限1か月以内": "1 credit; expires within 1 month",
+    "任意リセット1回分": "1 manual reset credit",
     "任意リセット配布": "Manual reset credit distributed",
     "個人別リセット": "Personal reset",
     "配布": "Distributed",

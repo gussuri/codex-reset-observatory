@@ -8,6 +8,23 @@ export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
   {
+    key: "personal-compensation-reset-credit-2026-06-18",
+    title: "任意リセット配布",
+    resetType: "詫びリセット",
+    resetTypes: ["詫びリセット", "個人別リセット"],
+    status: "配布",
+    date: "2026-06-18T07:00:00+09:00",
+    signalAt: "2026-06-18T07:00:00+09:00",
+    resetAt: null,
+    signalLabel: "配布",
+    resetLabel: "",
+    scopeLabel: "対象",
+    scope: "対象アカウント",
+    windowLabel: "内容",
+    windowLength: "任意リセット1回分",
+    source: "https://x.com/thsottiaux/status/2066956441173323943",
+  },
+  {
     key: "personal-reset-credit-2026-06-11",
     title: "任意リセット配布",
     resetType: "個人別リセット",
@@ -28,17 +45,17 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
-    title: "全プランCodexレート制限リセット",
+    title: "定期リセット",
     kind: "window_closed",
     status: "closed",
     opened_at: "2026-06-17T04:30:00+09:00",
     closed_at: "2026-06-18T07:00:00+09:00",
     completed_at: "2026-06-18T07:00:00+09:00",
     window_minutes: 1590,
-    window_human: "6/18 7:00実施",
-    scope: "全プラン",
+    window_human: "定期実施",
+    scope: "全有料プラン",
     summary:
-      "通常の1週間サイクルのタイミングに重なって、Tibo氏の予告後に全プランのCodexレート制限リセットが実施されました。",
+      "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
     source_url: "https://x.com/thsottiaux/status/2066956441173323943",
   },
   {
