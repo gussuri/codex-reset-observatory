@@ -276,31 +276,23 @@ export function EnglishRadarDashboard({
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm text-slate-300">Observation inputs:</p>
-              <p className="mt-1 text-base font-semibold">
-                Reset history, official information, and public community signals
-              </p>
-            </div>
-            <nav
-              aria-label="Site information"
-              className="flex flex-wrap gap-3 text-sm text-slate-300"
-            >
-              <Link className="underline-offset-4 hover:underline" href="/en/faq">
-                FAQ
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/en/about">
-                About
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/en/history">
-                History
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/">
-                Japanese
-              </Link>
-            </nav>
-          </div>
+          <nav
+            aria-label="Site information"
+            className="flex flex-wrap gap-3 text-sm text-slate-300"
+          >
+            <Link className="underline-offset-4 hover:underline" href="/en/faq">
+              FAQ
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/en/about">
+              About
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/en/history">
+              History
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/">
+              Japanese
+            </Link>
+          </nav>
         </footer>
       </div>
     </main>

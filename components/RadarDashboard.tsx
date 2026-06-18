@@ -366,31 +366,23 @@ export function RadarDashboard({
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm text-slate-300">観測材料:</p>
-              <p className="mt-1 text-base font-semibold">
-                リセット履歴・公式情報・公開コミュニティ情報
-              </p>
-            </div>
-            <nav
-              aria-label="サイト情報"
-              className="flex flex-wrap gap-3 text-sm text-slate-300"
-            >
-              <Link className="underline-offset-4 hover:underline" href="/about">
-                About
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/faq">
-                FAQ
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/history">
-                History
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/en">
-                English
-              </Link>
-            </nav>
-          </div>
+          <nav
+            aria-label="サイト情報"
+            className="flex flex-wrap gap-3 text-sm text-slate-300"
+          >
+            <Link className="underline-offset-4 hover:underline" href="/about">
+              About
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/faq">
+              FAQ
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/history">
+              History
+            </Link>
+            <Link className="underline-offset-4 hover:underline" href="/en">
+              English
+            </Link>
+          </nav>
         </footer>
       </div>
     </main>
