@@ -1206,18 +1206,35 @@ function getPeriodWeightKey(period: "24h" | "48h") {
 }
 
 function getLocalHistoryPressure(period: "24h" | "48h") {
-  const lastReset = getLastGlobalResetAt();
-  if (!lastReset) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset();
+  if (daysSinceLastReset === null) {
     return 0;
   }
 
-  const daysSinceLastReset = getCalendarDayDelta(new Date(), lastReset);
   const weightKey = getPeriodWeightKey(period);
   const pressure = LOCAL_PROBABILITY_WEIGHTS.historyPressure.find(
     (item) => daysSinceLastReset <= item.maxDaysSinceReset,
   );
 
   return pressure?.[weightKey] ?? 0;
+}
+
+function getElapsedDayBoost() {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset();
+  if (daysSinceLastReset === null) {
+    return 0;
+  }
+
+  return daysSinceLastReset * LOCAL_PROBABILITY_WEIGHTS.elapsedDayBoost.perDay;
+}
+
+function getDaysSinceLastGlobalReset() {
+  const lastReset = getLastGlobalResetAt();
+  if (!lastReset) {
+    return null;
+  }
+
+  return Math.max(0, getCalendarDayDelta(new Date(), lastReset));
 }
 
 function getLastGlobalResetAt() {
@@ -1325,6 +1342,7 @@ function getLocalResetProbability(
   const score =
     base +
     getLocalHistoryPressure(period) +
+    getElapsedDayBoost() +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
     officialIncidentHints *

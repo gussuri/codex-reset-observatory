@@ -66,6 +66,9 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     medium: 0.05,
     low: 0,
   },
+  elapsedDayBoost: {
+    perDay: 0.01,
+  },
   historyPressure: [
     {
       maxDaysSinceReset: 2,
