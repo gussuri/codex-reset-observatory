@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "observe:reddit": "node scripts/fetch-reddit-signals.mjs",
     "start": "next start",
     "lint": "eslint ."
   },
