@@ -10,6 +10,7 @@ export type LocalObservationSignal = {
   title: string;
   keywords?: Array<string>;
   source?: string | null;
+  expectedAt?: string | null;
   expiresAt?: string | null;
   resolvedAt?: string | null;
   status?: "active" | "resolved" | "expired";
@@ -21,6 +22,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-06-22T13:27:58+09:00",
     type: "official_notice",
     status: "active",
+    expectedAt: "2026-06-25T07:01:00+09:00",
     expiresAt: "2026-06-25T08:01:00+09:00",
     resolvedAt: null,
     title:

@@ -1288,6 +1288,19 @@ function isWithinHours(value: string, hours: number) {
   return Date.now() - time <= hours * 60 * 60 * 1000;
 }
 
+function getHoursUntil(value: string | null | undefined) {
+  const time = getDateTime(value);
+  if (!time) {
+    return null;
+  }
+
+  return (time - Date.now()) / (60 * 60 * 1000);
+}
+
+function isUpcomingWithinHours(hoursUntil: number | null, hours: number) {
+  return hoursUntil !== null && hoursUntil >= 0 && hoursUntil <= hours;
+}
+
 function getLocalExpectationLevel(data: RadarData | null) {
   const probability24h = getLocalResetProbability(data, "24h");
   return getExpectationLabel(probability24h);
@@ -1297,10 +1310,15 @@ function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
 ) {
-  const isOfficialWindow = Boolean(getLatestActiveLocalSignal("official_notice"));
+  const officialNotice = getLatestActiveLocalSignal("official_notice");
   const weightKey = getPeriodWeightKey(period);
+  const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
+  const periodHours = period === "24h" ? 24 : 48;
 
-  if (isOfficialWindow) {
+  if (
+    officialNotice &&
+    isUpcomingWithinHours(noticeHoursUntil, periodHours)
+  ) {
     return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
@@ -1367,10 +1385,15 @@ function getLocalProbabilityReason(
   probability48h: number | undefined,
 ) {
   const environment = getSignalEnvironment(data);
-  const isOfficialWindow = Boolean(getLatestActiveLocalSignal("official_notice"));
+  const officialNotice = getLatestActiveLocalSignal("official_notice");
+  const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
 
-  if (isOfficialWindow) {
+  if (officialNotice && isUpcomingWithinHours(noticeHoursUntil, 24)) {
     return "公式リセット予告があるため、通常より高めに見ています。";
+  }
+
+  if (officialNotice && isUpcomingWithinHours(noticeHoursUntil, 48)) {
+    return "公式リセット予告があり、48時間以内の見込みを高めに見ています。";
   }
 
   const p24 = probabilityToPercent(probability24h);
@@ -1418,6 +1441,10 @@ function getLocalProbabilityReason(
     signals.length > 0
       ? `${signals.join("、")}が見られます。`
       : "目立った公式予告や障害情報は見られません。";
+
+  if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。`;
+  }
 
   return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。直近のリセットから${lastResetLabel}で、${hintSummary ?? signalSummary}`;
 }
