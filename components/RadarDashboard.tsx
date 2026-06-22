@@ -164,17 +164,17 @@ export function RadarDashboard({
 
           {viewModel.activeWindow.kind === "official" ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              <MiniInfo
-                label="予告検知時刻"
-                value={formatDateTime(viewModel.activeWindow.openedAt)}
-              />
+              <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
+                <dt className="text-xs font-semibold text-slate-500">
+                  予告時間
+                </dt>
+                <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
+                  {formatDateTime(viewModel.activeWindow.expectedAt)}
+                </dd>
+              </div>
               <MiniInfo
                 label="ソース"
-                value={
-                  isSafeHttpUrl(viewModel.activeWindow.source)
-                    ? "リンクあり"
-                    : "不明"
-                }
+                value={viewModel.activeWindow.sourceLabel ?? "不明"}
                 href={viewModel.activeWindow.source}
               />
             </dl>

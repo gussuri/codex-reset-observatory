@@ -75,24 +75,26 @@ export function EnglishRadarDashboard({
             </div>
             {viewModel.activeWindow.active ? (
               <span className="inline-flex w-fit shrink-0 rounded-md bg-amber-200 px-3 py-1 text-sm font-semibold text-amber-950">
-                Check source
+                Check Codex
               </span>
             ) : null}
           </div>
 
           {viewModel.activeWindow.active ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              <MiniInfo
-                label="Detected"
-                value={formatEnglishDateTime(viewModel.activeWindow.openedAt)}
-              />
+              <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
+                <dt className="text-xs font-semibold text-slate-500">
+                  Scheduled reset time
+                </dt>
+                <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
+                  {formatEnglishDateTime(viewModel.activeWindow.expectedAt)}
+                </dd>
+              </div>
               <MiniInfo
                 label="Source"
-                value={
-                  isSafeHttpUrl(viewModel.activeWindow.source)
-                    ? "Available"
-                    : "Unknown"
-                }
+                value={translateHistoryText(
+                  viewModel.activeWindow.sourceLabel ?? "Unknown",
+                )}
                 href={viewModel.activeWindow.source}
               />
             </dl>
@@ -247,12 +249,7 @@ export function EnglishRadarDashboard({
                 Weekly reset reference
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {viewModel.regularResetForecast.date}
-                {viewModel.regularResetForecast.time ? (
-                  <span className="ml-2">
-                    {viewModel.regularResetForecast.time}
-                  </span>
-                ) : null}
+                {formatEnglishDateTime(viewModel.regularResetForecast.expectedAt)}
               </h2>
             </div>
             <p className="text-sm leading-6 sm:max-w-md sm:text-right">
@@ -421,15 +418,16 @@ export function formatEnglishDateTime(value: string | null | undefined) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  const formatted = new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZone: "Asia/Tokyo",
-    timeZoneName: "short",
   }).format(date);
+
+  return `${formatted} JST (UTC+9)`;
 }
 
 function translateExpectation(value: string) {
@@ -466,6 +464,10 @@ export function translateHistoryText(value: string | undefined) {
       "Tibo announced that Codex rate limits across all plans will be reset within 24 hours.",
     "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。 予告内容を優先して最新状況を確認してください。":
       "Tibo announced that Codex rate limits across all plans will be reset within 24 hours. Check the source and latest status before acting on it.",
+    "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。":
+      "A Codex usage-limit reset for all paid plans is scheduled for Jun 25, 2026 at 7:01 AM JST.",
+    "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。 予告内容を優先して最新状況を確認してください。":
+      "A Codex usage-limit reset for all paid plans is scheduled for Jun 25, 2026 at 7:01 AM JST. Check Codex for the latest notice.",
     "Tibo氏が、修正完了後に全プランのCodexレート制限を24時間以内にリセットすると発表しました。":
       "Tibo said the issue was fixed and that Codex rate limits across all plans will be reset within 24 hours.",
     "Tibo氏のリセット予告後、全プランのCodexレート制限リセットが実施されました。":
@@ -512,6 +514,7 @@ export function translateHistoryText(value: string | undefined) {
     "概要は取得できていません。": "No summary is available.",
     "1週間サイクルの定期リセットが実施されました。":
       "A weekly-cycle reset was completed.",
+    "Codexに表示あり": "Shown in Codex",
   };
 
   return dictionary[value] ?? value;

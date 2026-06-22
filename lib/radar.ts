@@ -189,7 +189,9 @@ export type RadarViewModel = {
     label: string;
     summary: string;
     openedAt?: string | null;
+    expectedAt?: string | null;
     source?: string | null;
+    sourceLabel?: string | null;
     forecastDate?: string;
     forecastTime?: string | null;
     remaining?: string;
@@ -840,6 +842,7 @@ function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
+  const expectedAt = officialNotice?.expectedAt ?? null;
   const source = officialNotice?.source ?? null;
   const noticeTitle = officialNotice?.title ?? null;
 
@@ -852,7 +855,9 @@ function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"
         ? `${noticeTitle} 予告内容を優先して最新状況を確認してください。`
         : "このサイトで確認した公式リセット予告があります。予告内容を優先して最新状況を確認してください。",
       openedAt,
+      expectedAt,
       source,
+      sourceLabel: "Codexに表示あり",
     };
   }
 
@@ -863,7 +868,9 @@ function getActiveWindow(_data: RadarData | null): RadarViewModel["activeWindow"
     summary:
       "現時点で、このサイトで確認した公式リセット予告はありません。",
     openedAt,
+    expectedAt,
     source,
+    sourceLabel: null,
   };
 }
 
