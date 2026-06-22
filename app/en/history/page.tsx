@@ -6,10 +6,8 @@ import {
   isSafeHttpUrl,
 } from "@/lib/radar";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
-import {
-  formatEnglishDateTime,
-  translateHistoryText,
-} from "@/components/EnglishRadarDashboard";
+import { translateHistoryText } from "@/components/EnglishRadarDashboard";
+import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
@@ -119,13 +117,13 @@ export default async function EnglishHistoryPage() {
                     {item.signalLabel ? (
                       <p>
                         {translateHistoryText(item.signalLabel)}:{" "}
-                        {formatEnglishDateTime(item.signalAt)}
+                        <LocalizedDateTime value={item.signalAt} />
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
                       <p>
                         {translateHistoryText(item.resetLabel)}:{" "}
-                        {formatEnglishDateTime(item.resetAt)}
+                        <LocalizedDateTime value={item.resetAt} />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (

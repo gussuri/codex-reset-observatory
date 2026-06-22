@@ -9,12 +9,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   RadarData,
   getRadarViewModel,
   isSafeHttpUrl,
   probabilityToPercent,
 } from "@/lib/radar";
+import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 
 export function EnglishRadarDashboard({
   data,
@@ -87,7 +89,7 @@ export function EnglishRadarDashboard({
                   Scheduled reset time
                 </dt>
                 <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                  {formatEnglishDateTime(viewModel.activeWindow.expectedAt)}
+                  <LocalizedDateTime value={viewModel.activeWindow.expectedAt} />
                 </dd>
               </div>
               <MiniInfo
@@ -158,7 +160,7 @@ export function EnglishRadarDashboard({
               />
               <InfoRow
                 label="Reset time"
-                value={formatEnglishDateTime(viewModel.latestWindow.closedAt)}
+                value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} />}
               />
               <InfoRow
                 label="Window length"
@@ -216,13 +218,13 @@ export function EnglishRadarDashboard({
                   {item.signalLabel ? (
                     <p>
                       {translateHistoryText(item.signalLabel)}:{" "}
-                      {formatEnglishDateTime(item.signalAt)}
+                      <LocalizedDateTime value={item.signalAt} />
                     </p>
                   ) : null}
                   {item.resetAt || item.resetLabel ? (
                     <p>
                       {translateHistoryText(item.resetLabel)}:{" "}
-                      {formatEnglishDateTime(item.resetAt)}
+                      <LocalizedDateTime value={item.resetAt} />
                     </p>
                   ) : null}
                   {isSafeHttpUrl(item.source) ? (
@@ -249,7 +251,7 @@ export function EnglishRadarDashboard({
                 Weekly reset reference
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {formatEnglishDateTime(viewModel.regularResetForecast.expectedAt)}
+                <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} />
               </h2>
             </div>
             <p className="text-sm leading-6 sm:max-w-md sm:text-right">
@@ -263,11 +265,16 @@ export function EnglishRadarDashboard({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Clock className="h-5 w-5 text-slate-500" />
-              <span>Last updated: {formatEnglishDateTime(viewModel.lastUpdated)}</span>
+              <span>
+                Last updated:{" "}
+                <LocalizedDateTime value={viewModel.lastUpdated} />
+              </span>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Activity className="h-5 w-5 text-slate-500" />
-              <span>Fetched: {formatEnglishDateTime(fetchedAt)}</span>
+              <span>
+                Fetched: <LocalizedDateTime value={fetchedAt} />
+              </span>
             </div>
           </div>
         </section>
@@ -352,7 +359,13 @@ function MiniInfo({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
@@ -405,29 +418,6 @@ function getProbabilityBarWidth(probability: number | undefined) {
   }
 
   return `${Math.min(100, Math.max(0, Math.round(probability * 100)))}%`;
-}
-
-export function formatEnglishDateTime(value: string | null | undefined) {
-  if (!value) {
-    return "Unknown";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  const formatted = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "Asia/Tokyo",
-  }).format(date);
-
-  return `${formatted} JST (UTC+9)`;
 }
 
 function translateExpectation(value: string) {
