@@ -17,6 +17,18 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-codex-regular-reset-notice-2026-06-25",
+    observedAt: "2026-06-22T13:27:58+09:00",
+    type: "official_notice",
+    status: "active",
+    expiresAt: "2026-06-25T08:01:00+09:00",
+    resolvedAt: null,
+    title:
+      "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。",
+    keywords: ["rate limit", "usage limit", "reset", "利用上限", "レート制限"],
+    source: null,
+  },
+  {
     id: "official-codex-rate-limit-reset-notice-2026-06-17",
     observedAt: "2026-06-17T04:30:00+09:00",
     type: "official_notice",

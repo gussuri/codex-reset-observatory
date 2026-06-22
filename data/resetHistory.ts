@@ -1,8 +1,8 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-18T07:00:00+09:00";
-export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T12:04:00+09:00";
-export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-22T13:27:58+09:00";
+export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
+export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T07:00:00+09:00";
 export const HISTORY_LIMIT = 10;
 
