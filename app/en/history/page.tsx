@@ -6,7 +6,6 @@ import {
   isSafeHttpUrl,
 } from "@/lib/radar";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
-import { translateHistoryText } from "@/components/EnglishRadarDashboard";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 
 export const metadata: Metadata = {
@@ -54,7 +53,7 @@ export const revalidate = 300;
 
 export default async function EnglishHistoryPage() {
   const data = await fetchCurrentRadarData({ revalidate });
-  const viewModel = getRadarViewModel(data);
+  const viewModel = getRadarViewModel(data, "en");
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8" lang="en">
@@ -88,27 +87,25 @@ export default async function EnglishHistoryPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="ui-heading text-lg font-semibold text-slate-950">
-                        {translateHistoryText(item.title)}
+                        {item.title}
                       </h2>
                       {(item.resetTypes ?? [item.resetType]).map((resetType) => (
                         <span
                           className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
                           key={resetType}
                         >
-                          {translateHistoryText(resetType)}
+                          {resetType}
                         </span>
                       ))}
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                        {translateHistoryText(item.status)}
+                        {item.status}
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {translateHistoryText(item.scopeLabel ?? "Scope")}:{" "}
-                      {translateHistoryText(item.scope)}
+                      {item.scopeLabel ?? "Scope"}: {item.scope}
                       <span className="mx-2 hidden sm:inline">/</span>
                       <span className="block sm:inline">
-                        {translateHistoryText(item.windowLabel ?? "Window")}:{" "}
-                        {translateHistoryText(item.windowLength)}
+                        {item.windowLabel ?? "Window"}: {item.windowLength}
                       </span>
                     </p>
                   </div>
@@ -116,14 +113,12 @@ export default async function EnglishHistoryPage() {
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
                       <p>
-                        {translateHistoryText(item.signalLabel)}:{" "}
-                        <LocalizedDateTime value={item.signalAt} />
+                        {item.signalLabel}: <LocalizedDateTime value={item.signalAt} locale="en" />
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
                       <p>
-                        {translateHistoryText(item.resetLabel)}:{" "}
-                        <LocalizedDateTime value={item.resetAt} />
+                        {item.resetLabel}: <LocalizedDateTime value={item.resetAt} locale="en" />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (

@@ -15,12 +15,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CachedRadarData,
   RadarData,
-  formatDateTime,
   getRadarViewModel,
   getRefreshIntervalMs,
   isSafeHttpUrl,
   probabilityToPercent,
 } from "@/lib/radar";
+import type { Locale } from "@/lib/radar/types";
+import { translateUI } from "@/lib/radar/i18n";
+import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
 
@@ -32,9 +34,11 @@ type LoadState = {
 export function RadarDashboard({
   initialData,
   initialFetchedAt,
+  locale = "ja",
 }: {
   initialData?: RadarData | null;
   initialFetchedAt?: string | null;
+  locale?: Locale;
 }) {
   const [state, setState] = useState<LoadState>({
     data: initialData ?? null,
@@ -83,7 +87,7 @@ export function RadarDashboard({
     void fetchRadar();
   }, [fetchRadar]);
 
-  const viewModel = useMemo(() => getRadarViewModel(state.data), [state.data]);
+  const viewModel = useMemo(() => getRadarViewModel(state.data, locale), [state.data, locale]);
   const probability24h = viewModel.probability24h;
   const refreshMs = useMemo(
     () => getRefreshIntervalMs(probability24h),
@@ -112,7 +116,7 @@ export function RadarDashboard({
         };
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8" lang={locale}>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
         <header className="flex flex-col gap-4 rounded-lg border border-slate-200/80 bg-white/82 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3 sm:gap-4">
@@ -123,15 +127,38 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-sm font-medium leading-6 text-teal-700">
-                Codex制限解除・使用量リセット情報
+                {translateUI("subTitle", locale)}
               </p>
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
-                Codexリセット観測所
+                {translateUI("title", locale)}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                利用上限リセット、制限解除タイミング、リセット履歴、期待度をまとめて確認できます。
-              </p>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {locale !== "ja" && (
+              <Link
+                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                href="/"
+              >
+                日本語
+              </Link>
+            )}
+            {locale !== "en" && (
+              <Link
+                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                href="/en"
+              >
+                English
+              </Link>
+            )}
+            {locale !== "zh" && (
+              <Link
+                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                href="/zh"
+              >
+                简体中文
+              </Link>
+            )}
           </div>
         </header>
 
@@ -141,10 +168,10 @@ export function RadarDashboard({
               <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-500">
-                  公式リセット予告
+                  {translateUI("officialNotice", locale)}
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold leading-tight text-balance">
-                  {viewModel.activeWindow.label}
+                  {viewModel.activeWindow.active ? translateUI("activeNoticeLabel", locale) : translateUI("noNotice", locale)}
                 </h2>
                 {viewModel.activeWindow.active && viewModel.activeWindow.summary ? (
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
@@ -157,7 +184,7 @@ export function RadarDashboard({
               <span
                 className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
               >
-                要確認
+                {translateUI("checkAction", locale)}
               </span>
             ) : null}
           </div>
@@ -166,15 +193,15 @@ export function RadarDashboard({
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
                 <dt className="text-xs font-semibold text-slate-500">
-                  予告時間
+                  {translateUI("scheduledResetTime", locale)}
                 </dt>
                 <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                  {formatDateTime(viewModel.activeWindow.expectedAt)}
+                  <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
                 </dd>
               </div>
               <MiniInfo
-                label="ソース"
-                value={viewModel.activeWindow.sourceLabel ?? "不明"}
+                label={translateUI("source", locale)}
+                value={viewModel.activeWindow.sourceLabel ?? "Unknown"}
                 href={viewModel.activeWindow.source}
               />
             </dl>
@@ -185,11 +212,11 @@ export function RadarDashboard({
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-slate-500">現在の状況</p>
+                <p className="text-sm font-medium text-slate-500">{translateUI("currentStatus", locale)}</p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  <span className="block">ランダムリセット</span>
+                  <span className="block">{translateUI("randomReset", locale)}</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
-                    期待度：{viewModel.expectation}
+                    {translateUI("expectationLabel", locale)}：{viewModel.expectation}
                   </span>
                 </h2>
               </div>
@@ -198,29 +225,32 @@ export function RadarDashboard({
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <Metric
-                label="24時間以内"
+                label={translateUI("within24h", locale)}
                 probability={probability24h}
-                value={probabilityToPercent(probability24h)}
+                value={probabilityToPercent(probability24h, locale)}
               />
               <Metric
-                label="48時間以内"
+                label={translateUI("within48h", locale)}
                 probability={viewModel.probability48h}
-                value={probabilityToPercent(viewModel.probability48h)}
+                value={probabilityToPercent(viewModel.probability48h, locale)}
               />
             </div>
 
             <dl className="mt-5 space-y-4">
               {viewModel.reasoningSummary ? (
-                <RecommendationRow reason={viewModel.reasoningSummary} />
+                <RecommendationRow reason={viewModel.reasoningSummary} locale={locale} />
               ) : null}
             </dl>
+            <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
+              {translateUI("disclaimer", locale)}
+            </p>
           </article>
 
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">
-                  最新のリセット
+                  {translateUI("latestReset", locale)}
                 </p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   {viewModel.latestWindow.title}
@@ -234,19 +264,19 @@ export function RadarDashboard({
             </p>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label="対象プラン" value={viewModel.latestWindow.scope} />
+              <InfoRow label={translateUI("scope", locale)} value={viewModel.latestWindow.scope} />
               {viewModel.latestWindow.kind === "observed" ? (
                 <InfoRow
-                  label="リセット検知時刻"
-                  value={formatDateTime(viewModel.latestWindow.openedAt)}
+                  label={translateUI("detectionTime", locale)}
+                  value={<LocalizedDateTime value={viewModel.latestWindow.openedAt} locale={locale} />}
                 />
               ) : null}
               <InfoRow
-                label="リセット実施時刻"
-                value={formatDateTime(viewModel.latestWindow.closedAt)}
+                label={translateUI("resetTime", locale)}
+                value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
               />
               <InfoRow
-                label="予告から実施まで"
+                label={translateUI("windowLength", locale)}
                 value={viewModel.latestWindow.windowLength}
               />
             </dl>
@@ -257,7 +287,7 @@ export function RadarDashboard({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                1週間サイクルのリセット参考日
+                {translateUI("weeklyResetRef", locale)}
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
                 {viewModel.regularResetForecast.date}
@@ -266,10 +296,13 @@ export function RadarDashboard({
                     {viewModel.regularResetForecast.time}
                   </span>
                 ) : null}
+                <span className="ml-3 text-sm font-medium text-slate-500">
+                  ({viewModel.regularResetForecast.remaining})
+                </span>
               </h2>
             </div>
-            <p className="text-sm leading-6 sm:max-w-md sm:text-right">
-              任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500">
+              {translateUI("weeklyResetNote", locale)}
             </p>
           </div>
         </section>
@@ -278,10 +311,10 @@ export function RadarDashboard({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                リセット履歴
+                {translateUI("resetHistory", locale)}
               </p>
               <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                直近のリセット履歴
+                {translateUI("recentResetEvents", locale)}
               </h2>
             </div>
             <History className="h-7 w-7 text-slate-700" />
@@ -312,22 +345,22 @@ export function RadarDashboard({
                       ))}
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {item.scopeLabel ?? "対象プラン"}：{item.scope}
+                      {item.scopeLabel ?? translateUI("scope", locale)}：{item.scope}
                       <span className="mx-2 hidden sm:inline">/</span>
                       <span className="block sm:inline">
-                        {item.windowLabel ?? "予告から実施まで"}：{item.windowLength}
+                        {item.windowLabel ?? translateUI("windowLength", locale)}：{item.windowLength}
                       </span>
                     </p>
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
                       <p>
-                        {item.signalLabel}：{formatDateTime(item.signalAt)}
+                        {item.signalLabel}：<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
                       <p>
-                        {item.resetLabel}：{formatDateTime(item.resetAt)}
+                        {item.resetLabel}：<LocalizedDateTime value={item.resetAt} locale={locale} />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (
@@ -337,7 +370,7 @@ export function RadarDashboard({
                         rel="noreferrer"
                         target="_blank"
                       >
-                        ソース
+                        {translateUI("source", locale)}
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     ) : null}
@@ -346,7 +379,7 @@ export function RadarDashboard({
               ))
             ) : (
               <p className="text-sm text-slate-600">
-                直近履歴は取得できていません。
+                {translateUI("noHistory", locale)}
               </p>
             )}
           </div>
@@ -356,32 +389,57 @@ export function RadarDashboard({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Clock className="h-5 w-5 text-slate-500" />
-              <span>最終更新時刻：{formatDateTime(viewModel.lastUpdated)}</span>
+              <span>{translateUI("lastUpdated", locale)}：<LocalizedDateTime value={viewModel.lastUpdated} locale={locale} /></span>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Activity className="h-5 w-5 text-slate-500" />
-              <span>データ取得時刻：{formatDateTime(state.fetchedAt)}</span>
+              <span>{translateUI("dataFetched", locale)}：<LocalizedDateTime value={state.fetchedAt} locale={locale} /></span>
             </div>
           </div>
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav
-            aria-label="サイト情報"
+            aria-label={translateUI("title", locale)}
             className="flex flex-wrap gap-3 text-sm text-slate-300"
           >
-            <Link className="underline-offset-4 hover:underline" href="/about">
-              About
+            <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/about" : `/${locale}/about`}>
+              {translateUI("about", locale)}
             </Link>
-            <Link className="underline-offset-4 hover:underline" href="/faq">
-              FAQ
+            <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/faq" : `/${locale}/faq`}>
+              {translateUI("faq", locale)}
             </Link>
-            <Link className="underline-offset-4 hover:underline" href="/history">
-              History
+            <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/history" : `/${locale}/history`}>
+              {translateUI("history", locale)}
             </Link>
-            <Link className="underline-offset-4 hover:underline" href="/en">
-              English
-            </Link>
+            {locale === "ja" ? (
+              <>
+                <Link className="underline-offset-4 hover:underline" href="/en">
+                  English
+                </Link>
+                <Link className="underline-offset-4 hover:underline" href="/zh">
+                  简体中文
+                </Link>
+              </>
+            ) : locale === "en" ? (
+              <>
+                <Link className="underline-offset-4 hover:underline" href="/">
+                  日本語
+                </Link>
+                <Link className="underline-offset-4 hover:underline" href="/zh">
+                  简体中文
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link className="underline-offset-4 hover:underline" href="/">
+                  日本語
+                </Link>
+                <Link className="underline-offset-4 hover:underline" href="/en">
+                  English
+                </Link>
+              </>
+            )}
           </nav>
         </footer>
       </div>
@@ -458,7 +516,7 @@ function getProbabilityBarWidth(probability: number | undefined) {
   return `${Math.min(100, Math.max(0, Math.round(probability * 100)))}%`;
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
@@ -471,13 +529,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function RecommendationRow({
   reason,
+  locale = "ja",
 }: {
   reason: string;
+  locale?: Locale;
 }) {
   return (
     <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:grid sm:grid-cols-[7rem_1fr] sm:items-start sm:gap-6">
       <dt className="whitespace-nowrap text-sm font-medium text-slate-500">
-        理由
+        {translateUI("reason", locale)}
       </dt>
       <dd className="text-sm leading-6 text-slate-700">
         {reason}

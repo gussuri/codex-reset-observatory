@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { Locale } from "@/lib/radar/types";
 
 type LocalizedDateTimeProps = {
   value: string | null | undefined;
+  locale?: Locale;
   className?: string;
 };
 
-export function LocalizedDateTime({ value, className }: LocalizedDateTimeProps) {
+export function LocalizedDateTime({ value, locale = "ja", className }: LocalizedDateTimeProps) {
   const [timeZone, setTimeZone] = useState<string | null>(null);
   const date = useMemo(() => parseDate(value), [value]);
 
@@ -16,21 +18,26 @@ export function LocalizedDateTime({ value, className }: LocalizedDateTimeProps) 
   }, []);
 
   if (!value) {
-    return <span className={className}>Unknown</span>;
+    const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
+    return <span className={className}>{unknownLabel}</span>;
   }
 
   if (!date) {
     return <span className={className}>{value}</span>;
   }
 
-  const utc = formatDateTimeInZone(date, "UTC");
-  const local = timeZone ? formatDateTimeInZone(date, timeZone) : null;
+  const formatLocale = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
+  const utc = formatDateTimeInZone(date, "UTC", formatLocale);
+  const local = timeZone ? formatDateTimeInZone(date, timeZone, formatLocale) : null;
+
+  const localLabel = locale === "en" ? "Local" : locale === "zh" ? "本地时间" : "現地時間";
+  const detectingLabel = locale === "en" ? "Detecting time zone..." : locale === "zh" ? "正在检测时区..." : "タイムゾーンを検出中...";
 
   return (
     <span className={className}>
       <span className="block">UTC: {utc}</span>
       <span className="block">
-        Local: {local ?? "Detecting time zone..."}
+        {localLabel}: {local ?? detectingLabel}
         {timeZone ? ` (${timeZone})` : ""}
       </span>
     </span>
@@ -46,8 +53,8 @@ function parseDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function formatDateTimeInZone(date: Date, timeZone: string) {
-  return new Intl.DateTimeFormat("en-US", {
+function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
+  return new Intl.DateTimeFormat(localeStr, {
     year: "numeric",
     month: "short",
     day: "numeric",

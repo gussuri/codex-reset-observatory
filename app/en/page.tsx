@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { EnglishRadarDashboard } from "@/components/EnglishRadarDashboard";
+import { RadarDashboard } from "@/components/RadarDashboard";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
 
 export const revalidate = 300;
@@ -57,9 +57,10 @@ export default async function EnglishHome() {
   const initialFetchedAt = initialData ? new Date().toISOString() : null;
 
   return (
-    <EnglishRadarDashboard
-      data={initialData}
-      fetchedAt={initialFetchedAt}
+    <RadarDashboard
+      initialData={initialData}
+      initialFetchedAt={initialFetchedAt}
+      locale="en"
     />
   );
 }

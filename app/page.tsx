@@ -10,6 +10,7 @@ export const metadata: Metadata = {
     languages: {
       ja: "/",
       en: "/en",
+      zh: "/zh",
     },
   },
 };
@@ -22,6 +23,7 @@ export default async function Home() {
     <RadarDashboard
       initialData={initialData}
       initialFetchedAt={initialFetchedAt}
+      locale="ja"
     />
   );
 }
