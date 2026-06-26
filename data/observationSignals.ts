@@ -18,13 +18,26 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-codex-compensation-reset-notice-2026-06-27",
+    observedAt: "2026-06-27T08:41:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-06-27T12:00:00+09:00",
+    expiresAt: "2026-06-28T09:00:00+09:00",
+    resolvedAt: null,
+    title:
+      "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。",
+    keywords: ["rate limit", "usage limit", "reset", "利用上限", "バグ", "補償"],
+    source: "https://x.com/thsottiaux",
+  },
+  {
     id: "official-codex-regular-reset-notice-2026-06-25",
     observedAt: "2026-06-22T13:27:58+09:00",
     type: "official_notice",
-    status: "active",
+    status: "resolved",
     expectedAt: "2026-06-25T07:01:00+09:00",
     expiresAt: "2026-06-25T08:01:00+09:00",
-    resolvedAt: null,
+    resolvedAt: "2026-06-25T07:01:00+09:00",
     title:
       "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。",
     keywords: ["rate limit", "usage limit", "reset", "利用上限", "レート制限"],

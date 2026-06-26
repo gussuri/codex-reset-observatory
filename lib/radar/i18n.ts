@@ -169,6 +169,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
 };
 
 export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
+  "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。": {
+    ja: "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。",
+    en: "Tibo announced that Codex usage limits across all plans will be reset within a few hours to compensate for an issue causing excessive usage consumption.",
+    zh: "Tibo 宣布将在数小时内重置所有计划的 Codex 使用限制，以补偿导致使用额度过度消耗的问题。",
+  },
   // Titles / Reset Types
   "500万人達成記念リセット": {
     ja: "500万人達成記念リセット",
