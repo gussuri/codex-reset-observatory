@@ -1,6 +1,6 @@
 import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "@/data/observationSignals";
 import { LOCAL_PROBABILITY_WEIGHTS } from "@/data/predictionWeights";
-import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
+import { LOCAL_RESET_HISTORY, LOCAL_PERSONAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
 import {
@@ -240,6 +240,12 @@ export function getLastGlobalResetAt() {
         return null;
       }
       return item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
+    }),
+    ...LOCAL_PERSONAL_RESET_HISTORY.map((item) => {
+      if (item.resetType === "詫びリセット" || item.resetTypes?.includes("詫びリセット")) {
+        return item.date ?? item.resetAt ?? null;
+      }
+      return null;
     }),
   ];
 
