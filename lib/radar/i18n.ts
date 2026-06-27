@@ -563,6 +563,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Eligible accounts",
     zh: "目标账号",
   },
+  "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。": {
+    ja: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
+    en: "One manual reset credit was distributed as compensation for model degradation and excessive limit consumption issues.",
+    zh: "因模型能力退化及额度过度消耗问题，已发放一次手动重置额度作为补偿。",
+  },
+  "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。": {
+    ja: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
+    en: "One manual reset credit was distributed as compensation for issues affecting Codex reliability.",
+    zh: "因影响 Codex 可靠性的故障，已发放一次手动重置额度作为补偿。",
+  },
+  "招待特典または個人の利用制限の更新として、任意リセットが配布されました。": {
+    ja: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
+    en: "A manual reset credit was distributed as referral rewards or individual quota refresh.",
+    zh: "已发放手动重置额度作为推荐奖励或个人额度更新。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {

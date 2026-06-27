@@ -202,5 +202,6 @@ export type RadarViewModel = {
     windowLabel?: string;
     windowLength: string;
     source?: string | null;
+    summary?: string | null;
   }>;
 };

@@ -385,6 +385,7 @@ function addPersonalResetEventsToHistory(
       scope: translateDynamic(item.scope, locale),
       windowLabel: item.windowLabel ? translateDynamic(item.windowLabel, locale) : undefined,
       windowLength: translateDynamic(item.windowLength, locale),
+      summary: item.summary ? translateDynamic(item.summary, locale) : null,
     };
   });
 
@@ -693,6 +694,7 @@ function getRecentHistory(_data: RadarData | null, locale: Locale = "ja") {
           ? translateDynamic(item.window_human, locale)
           : formatWindowLength(item.window_minutes, locale),
         source,
+        summary: item.summary ? translateDynamic(item.summary, locale) : null,
       };
     })
     .filter((item) => {
@@ -854,7 +856,7 @@ function getCompletedResetAt(item: WindowEventLike) {
 
 function getCombinedResetHistory(): Array<WindowEventLike> {
   const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
-    (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved"
+    (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved" && !sig.skipAutoHistoryMerge
   );
 
   const autoResolvedItems = autoResolvedSignals.map((sig): WindowEventLike => {

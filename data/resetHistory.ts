@@ -23,6 +23,7 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLabel: "内容",
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux",
+    summary: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
   },
   {
     key: "personal-compensation-reset-credit-2026-06-18",
@@ -40,6 +41,7 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLabel: "内容",
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux/status/2066956441173323943",
+    summary: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
   },
   {
     key: "personal-reset-credit-2026-06-11",
@@ -56,25 +58,11 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLabel: "内容",
     windowLength: "1回分・期限1か月以内",
     source: null,
+    summary: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
   },
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
-  {
-    id: "local-codex-compensation-reset-2026-06-27",
-    title: "詫びリセット",
-    kind: "reset_completed",
-    status: "closed",
-    opened_at: "2026-06-27T08:41:00+09:00",
-    closed_at: "2026-06-27T12:00:00+09:00",
-    completed_at: "2026-06-27T12:00:00+09:00",
-    window_minutes: 0,
-    window_human: "任意リセット配布",
-    scope: "全有料プラン",
-    summary:
-      "Tibo氏が過剰な利用制限消費問題の補償として、全有料プランに任意リセット（マニュアルリセット）1回分を配布しました。",
-    source_url: "https://x.com/thsottiaux",
-  },
   {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
     title: "定期リセット",
