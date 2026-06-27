@@ -425,7 +425,26 @@ function getLatestWindowWithRegularReset(
 }
 
 function getLatestCompletedLocalWindow(): WindowLike | undefined {
-  return getCombinedResetHistory().filter((item) => getCompletedResetAt(item))
+  const globalHistory = getCombinedResetHistory();
+
+  const personalEvents = LOCAL_PERSONAL_RESET_HISTORY.map((item): WindowLike => {
+    return {
+      id: item.key,
+      title: item.title,
+      status: "closed",
+      opened_at: item.signalAt ?? item.date ?? null,
+      closed_at: item.date ?? item.resetAt ?? null,
+      completed_at: item.date ?? item.resetAt ?? null,
+      window_minutes: 0,
+      window_human: item.windowLength,
+      scope: item.scope,
+      summary: item.summary ?? undefined,
+    };
+  });
+
+  const allEvents = [...globalHistory, ...personalEvents];
+
+  return allEvents.filter((item) => getCompletedResetAt(item))
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
@@ -861,7 +880,7 @@ function getCombinedResetHistory(): Array<WindowEventLike> {
 
   const autoResolvedItems = autoResolvedSignals.map((sig): WindowEventLike => {
     let title = "臨時リセット";
-    if (sig.title.includes("定期") || sig.keywords?.includes("weekly") || sig.keywords?.includes("定期")) {
+    if (sig.id.includes("regular") || sig.title.includes("定期") || sig.keywords?.includes("weekly") || sig.keywords?.includes("定期")) {
       title = "定期リセット";
     } else if (sig.title.includes("補償") || sig.title.includes("障害") || sig.title.includes("詫び") || sig.keywords?.includes("補償") || sig.keywords?.includes("詫び")) {
       title = "詫びリセット";
