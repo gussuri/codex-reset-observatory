@@ -10,6 +10,7 @@ export type LocalObservationSignal = {
   title: string;
   keywords?: Array<string>;
   source?: string | null;
+  sourceLabel?: string | null;
   expectedAt?: string | null;
   expiresAt?: string | null;
   resolvedAt?: string | null;
@@ -29,6 +30,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
       "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。",
     keywords: ["rate limit", "usage limit", "reset", "利用上限", "バグ", "補償"],
     source: "https://x.com/thsottiaux",
+    sourceLabel: "Tibo氏の公式Xで告知あり",
   },
   {
     id: "official-codex-regular-reset-notice-2026-06-25",

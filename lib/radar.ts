@@ -746,7 +746,7 @@ function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarV
       openedAt,
       expectedAt,
       source,
-      sourceLabel: translateDynamic("Codexに表示あり", locale),
+      sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
     };
   }
 
