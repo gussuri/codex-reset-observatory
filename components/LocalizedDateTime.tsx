@@ -34,11 +34,13 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
   const detectingLabel = locale === "en" ? "Detecting time zone..." : locale === "zh" ? "正在检测时区..." : "タイムゾーンを検出中...";
 
   return (
-    <span className={className}>
-      <span className="block">UTC: {utc}</span>
-      <span className="block">
-        {localLabel}: {local ?? detectingLabel}
+    <span className={`inline-flex flex-col gap-0.5 ${className}`}>
+      <span className="block font-bold text-slate-900 leading-tight">
+        {local ?? detectingLabel}
         {timeZone ? ` (${timeZone})` : ""}
+      </span>
+      <span className="block text-xs font-normal text-slate-400">
+        UTC: {utc}
       </span>
     </span>
   );
