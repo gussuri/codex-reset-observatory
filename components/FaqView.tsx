@@ -66,8 +66,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "過去のリセット履歴、公式発表、OpenAI Status、コミュニティ上の公開情報などを参考にしています。",
         },
         {
-          question: "任意リセット（マニュアルリセット）や紹介特典は影響しますか？",
-          answer: "任意リセット等を使用した場合、次回定期リセット日がこちらに表示している日付とずれます。配布された任意リセット枠には1か月以内の期限があります。",
+          question: "任意リセットを使うとどうなりますか？",
+          answer: "任意リセットを使用すると、5時間制限と1週間制限がリセットされ100％になります。さらに次回の定期リセットが1週間後に変更されます。任意リセットを使用すると、こちらのサイトに表示される定期リセットのタイミングとずれるので注意してください。",
         },
       ] as Array<FaqItem>,
     },
@@ -125,8 +125,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "It refers to confirmed past reset history, official developer notices, OpenAI Status API, and public community reports.",
         },
         {
-          question: "What happens if I use a manual reset or get referral credits?",
-          answer: "If you use a manual reset, your account's next weekly reset date will differ from the reference date shown here. Manual reset credits expire within one month.",
+          question: "What happens if I use a manual reset?",
+          answer: "Using a manual reset restores both your 5-hour and 1-week limits to 100%. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
         },
       ] as Array<FaqItem>,
     },
@@ -184,8 +184,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "我们参考了历史确立的重置记录、官方公告、OpenAI Status 以及社区内的公开反馈等信息。",
         },
         {
-          question: "手动重置（任意重置）或推荐奖励会产生影响吗？",
-          answer: "如果您使用了手动重置，您账号的下一次定期重置日期将与此处显示的共享参考日期有所不同。发放的手动重置限额在一个月内有效。",
+          question: "使用手动重置会怎么样？",
+          answer: "使用手动重置后，您的 5 小时限制和 1 周限制都将重置并恢复至 100%。此外，下一次定期重置的时间将变更为使用该重置起的一周后。请注意，这将导致您的重置时间与本站显示的共享定期重置参考日期产生偏差。",
         },
       ] as Array<FaqItem>,
     },
