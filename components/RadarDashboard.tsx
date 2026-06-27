@@ -351,6 +351,11 @@ export function RadarDashboard({
                         {item.windowLabel ?? translateUI("windowLength", locale)}：{item.windowLength}
                       </span>
                     </p>
+                    {item.summary && (
+                      <p className="mt-2 text-xs leading-5 text-slate-500 bg-slate-50 p-2.5 rounded border border-slate-100/60 max-w-2xl">
+                        {item.summary}
+                      </p>
+                    )}
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (

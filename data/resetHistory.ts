@@ -9,7 +9,7 @@ export const HISTORY_LIMIT = 10;
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
   {
     key: "personal-compensation-reset-credit-2026-06-27",
-    title: "任意リセット配布",
+    title: "能力退化・過剰消費補償任意リセット",
     resetType: "詫びリセット",
     resetTypes: ["詫びリセット", "個人別リセット"],
     status: "配布",
@@ -23,11 +23,11 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLabel: "内容",
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux",
-    summary: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
+    summary: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
   },
   {
     key: "personal-compensation-reset-credit-2026-06-18",
-    title: "任意リセット配布",
+    title: "Codex信頼性障害補償任意リセット",
     resetType: "詫びリセット",
     resetTypes: ["詫びリセット", "個人別リセット"],
     status: "配布",
@@ -41,7 +41,7 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLabel: "内容",
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux/status/2066956441173323943",
-    summary: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
+    summary: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
   },
   {
     key: "personal-reset-credit-2026-06-11",

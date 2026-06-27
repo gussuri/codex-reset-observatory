@@ -578,6 +578,26 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A manual reset credit was distributed as referral rewards or individual quota refresh.",
     zh: "已发放手动重置额度作为推荐奖励或个人额度更新。",
   },
+  "能力退化・過剰消費補償任意リセット": {
+    ja: "能力退化・過剰消費補償任意リセット",
+    en: "Model Degradation & Excessive Consumption Compensation Reset",
+    zh: "模型退化及额度过度消耗补偿手动重置",
+  },
+  "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。": {
+    ja: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
+    en: "One manual reset credit was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
+    zh: "因模型能力退化及额度过度消耗问题，已对所有付费计划发放一次手动重置额度作为补偿。",
+  },
+  "Codex信頼性障害補償任意リセット": {
+    ja: "Codex信頼性障害補償任意リセット",
+    en: "Codex Reliability Incident Compensation Reset",
+    zh: "Codex 可靠性故障补偿手动重置",
+  },
+  "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。": {
+    ja: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    en: "One manual reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
+    zh: "因影响 Codex 可靠性的故障，已对所有账号发放一次手动重置额度作为补偿。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
