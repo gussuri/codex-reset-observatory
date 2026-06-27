@@ -424,7 +424,7 @@ function getLatestWindowWithRegularReset(
 }
 
 function getLatestCompletedLocalWindow(): WindowLike | undefined {
-  return LOCAL_RESET_HISTORY.filter((item) => getCompletedResetAt(item))
+  return getCombinedResetHistory().filter((item) => getCompletedResetAt(item))
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
@@ -560,7 +560,7 @@ function getLocalModelUpdatedAt(openAIStatus?: OpenAIStatusSignals | null) {
     LOCAL_MODEL_UPDATED_AT,
     openAIStatus?.updatedAt,
     ...LOCAL_OBSERVATION_SIGNALS.map((signal) => signal.observedAt),
-    ...LOCAL_RESET_HISTORY.flatMap((item) => [
+    ...getCombinedResetHistory().flatMap((item) => [
       item.closed_at,
       item.completed_at,
       item.opened_at,
@@ -661,7 +661,7 @@ function getValue(
 }
 
 function getRecentHistory(_data: RadarData | null, locale: Locale = "ja") {
-  const items = LOCAL_RESET_HISTORY.filter((item): item is WindowEventLike =>
+  const items = getCombinedResetHistory().filter((item): item is WindowEventLike =>
     Boolean(item?.title),
   );
 
@@ -850,4 +850,36 @@ function getCompletedResetAt(item: WindowEventLike) {
   }
 
   return item.kind === "reset_completed" ? item.opened_at ?? item.date ?? null : null;
+}
+
+function getCombinedResetHistory(): Array<WindowEventLike> {
+  const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved"
+  );
+
+  const autoResolvedItems = autoResolvedSignals.map((sig): WindowEventLike => {
+    let title = "臨時リセット";
+    if (sig.title.includes("定期") || sig.keywords?.includes("weekly") || sig.keywords?.includes("定期")) {
+      title = "定期リセット";
+    } else if (sig.title.includes("補償") || sig.title.includes("障害") || sig.title.includes("詫び") || sig.keywords?.includes("補償") || sig.keywords?.includes("詫び")) {
+      title = "詫びリセット";
+    }
+
+    return {
+      id: sig.id,
+      title: title,
+      kind: "reset_completed",
+      status: "closed",
+      opened_at: sig.observedAt,
+      closed_at: sig.expectedAt ?? sig.observedAt,
+      completed_at: sig.expectedAt ?? sig.observedAt,
+      window_minutes: 0,
+      window_human: sig.title.includes("任意") || sig.title.includes("マニュアル") ? "任意リセット配布" : "リセット実施",
+      scope: "全有料プラン",
+      summary: sig.title,
+      source_url: sig.source ?? null,
+    };
+  });
+
+  return [...LOCAL_RESET_HISTORY, ...autoResolvedItems];
 }

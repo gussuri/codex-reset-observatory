@@ -175,6 +175,15 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
     return "resolved";
   }
 
+  // 自動完了ロジック: 予定時刻 (expectedAt) があり、現在時刻がそれを過ぎている場合は完了 (resolved) とする
+  if (
+    signal.expectedAt &&
+    getDateTime(signal.expectedAt) > 0 &&
+    getDateTime(signal.expectedAt) <= Date.now()
+  ) {
+    return "resolved";
+  }
+
   if (
     signal.status === "expired" ||
     (signal.status !== "resolved" &&

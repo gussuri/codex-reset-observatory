@@ -1,12 +1,29 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-22T13:27:58+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-27T12:00:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T07:00:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
+  {
+    key: "personal-compensation-reset-credit-2026-06-27",
+    title: "任意リセット配布",
+    resetType: "詫びリセット",
+    resetTypes: ["詫びリセット", "個人別リセット"],
+    status: "配布",
+    date: "2026-06-27T12:00:00+09:00",
+    signalAt: "2026-06-27T08:41:00+09:00",
+    resetAt: null,
+    signalLabel: "配布",
+    resetLabel: "",
+    scopeLabel: "対象",
+    scope: "対象アカウント",
+    windowLabel: "内容",
+    windowLength: "任意リセット1回分",
+    source: "https://x.com/thsottiaux",
+  },
   {
     key: "personal-compensation-reset-credit-2026-06-18",
     title: "任意リセット配布",
@@ -43,6 +60,21 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-compensation-reset-2026-06-27",
+    title: "詫びリセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-06-27T08:41:00+09:00",
+    closed_at: "2026-06-27T12:00:00+09:00",
+    completed_at: "2026-06-27T12:00:00+09:00",
+    window_minutes: 0,
+    window_human: "任意リセット配布",
+    scope: "全有料プラン",
+    summary:
+      "Tibo氏が過剰な利用制限消費問題の補償として、全有料プランに任意リセット（マニュアルリセット）1回分を配布しました。",
+    source_url: "https://x.com/thsottiaux",
+  },
   {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
     title: "定期リセット",
