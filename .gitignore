@@ -8,3 +8,5 @@ pnpm.cjs
 dev-server*.log
 start-server*.log
 .pnpm-debug.log
+# local env files
+.env*.local
