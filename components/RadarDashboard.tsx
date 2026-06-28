@@ -264,7 +264,7 @@ export function RadarDashboard({
             </p>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label={translateUI("scope", locale)} value={viewModel.latestWindow.scope} />
+              <InfoRow label={viewModel.latestWindow.scopeLabel ?? translateUI("scope", locale)} value={viewModel.latestWindow.scope} />
               {viewModel.latestWindow.kind === "observed" ? (
                 <InfoRow
                   label={translateUI("detectionTime", locale)}
@@ -276,7 +276,7 @@ export function RadarDashboard({
                 value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
               />
               <InfoRow
-                label={translateUI("windowLength", locale)}
+                label={viewModel.latestWindow.windowLabel ?? translateUI("windowLength", locale)}
                 value={viewModel.latestWindow.windowLength}
               />
             </dl>

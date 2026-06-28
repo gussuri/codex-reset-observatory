@@ -14,6 +14,7 @@ export type WindowLike = {
   completed_at?: string | null;
   window_minutes?: number;
   window_human?: string;
+  scopeLabel?: string;
   scope?: string;
   summary?: string;
   source?: string | null;
@@ -23,6 +24,7 @@ export type WindowLike = {
     type?: string;
     url?: string | null;
   }>;
+  windowLabel?: string;
 };
 
 export type WindowEventLike = WindowLike & {
@@ -181,9 +183,11 @@ export type RadarViewModel = {
     kind: "observed" | "regular";
     title: string;
     summary: string;
+    scopeLabel?: string;
     scope: string;
     openedAt?: string | null;
     closedAt?: string | null;
+    windowLabel?: string;
     windowLength: string;
   };
   recentHistory: Array<{

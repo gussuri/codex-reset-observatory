@@ -153,6 +153,7 @@ export function getRadarViewModel(data: RadarData | null, locale: Locale = "ja")
       summary: latestWindow?.summary
         ? translateDynamic(latestWindow.summary, locale)
         : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
+      scopeLabel: latestWindow?.scopeLabel ? translateDynamic(latestWindow.scopeLabel, locale) : undefined,
       scope: translateDynamic(latestWindow?.scope, locale),
       openedAt: latestWindow?.opened_at ?? null,
       closedAt:
@@ -160,6 +161,7 @@ export function getRadarViewModel(data: RadarData | null, locale: Locale = "ja")
         latestWindow?.completed_at ??
         latestWindow?.opened_at ??
         null,
+      windowLabel: latestWindow?.windowLabel ? translateDynamic(latestWindow.windowLabel, locale) : undefined,
       windowLength: latestWindow?.window_human
         ? translateDynamic(latestWindow.window_human, locale)
         : formatWindowLength(latestWindow?.window_minutes, locale),
@@ -437,8 +439,10 @@ function getLatestCompletedLocalWindow(): WindowLike | undefined {
       completed_at: item.date ?? item.resetAt ?? null,
       window_minutes: 0,
       window_human: item.windowLength,
+      scopeLabel: item.scopeLabel,
       scope: item.scope,
       summary: item.summary ?? undefined,
+      windowLabel: item.windowLabel,
     };
   });
 
