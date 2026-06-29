@@ -13,7 +13,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   description: {
     ja: "利用上限リセット、制限解除タイミング、リセット履歴、期待度をまとめて確認できます。",
-    en: "Track Codex reset history, official reset notices, weekly reset references, random reset probability, and manual reset behavior.",
+    en: "Track the latest OpenAI Codex usage limits reset probability, recent signals, and reset history. This site estimates whether a Codex usage limits reset is likely within the next 24 or 48 hours.",
     zh: "一站式确认使用限制重置、解除限制时机、重置历史以及重置期望度。",
   },
   officialNotice: {

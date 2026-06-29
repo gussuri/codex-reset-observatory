@@ -35,9 +35,9 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
       footerText: "リセット履歴を表示しています。",
     },
     en: {
-      category: "Codex reset history",
-      title: "Recent Reset Events",
-      description: "Confirmed reset history, weekly reset events, and manual reset credit distribution.",
+      category: "Codex usage limits reset history",
+      title: "Recent Codex Reset Events",
+      description: "Review recent Codex usage limits reset signals, weekly reset events, manual reset credits, and forecast changes over time.",
       empty: "No reset history is available yet.",
       cardTitle: "Manual and referral resets",
       cardHeader: "Account-specific reset credits",

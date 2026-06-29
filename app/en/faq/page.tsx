@@ -4,10 +4,10 @@ import { FaqView } from "@/components/FaqView";
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
   title: {
-    absolute: "Codex Reset FAQ | Timing, usage limits, and manual resets",
+    absolute: "Codex Reset FAQ | Usage Limits, Manual Reset, and Timing",
   },
   description:
-    "FAQ for Codex reset timing, token and usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
+    "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
   keywords: [
     "Codex reset FAQ",
     "Codex reset timing",
@@ -31,9 +31,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Codex Reset FAQ",
+    title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "FAQ for Codex reset timing, usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
+      "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
     url: "/en/faq",
     siteName: "Codex Reset Observatory",
     type: "article",
@@ -50,9 +50,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Codex Reset FAQ",
+    title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "FAQ for Codex reset timing, usage limit resets, weekly reset references, manual reset credits, and random reset probability.",
+      "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
     images: ["/og-image.png"],
   },
 };

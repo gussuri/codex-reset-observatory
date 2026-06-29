@@ -5,10 +5,10 @@ import { fetchCurrentRadarData } from "@/lib/radarFetch";
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
   title: {
-    absolute: "Codex Reset History | Recent reset events",
+    absolute: "Codex Reset History - Recent Usage Limits Reset Signals",
   },
   description:
-    "Review recent Codex reset history, compensation resets, celebration resets, weekly reset events, and manual reset credit distribution in English.",
+    "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
   alternates: {
     canonical: "/en/history",
     languages: {
@@ -18,9 +18,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Codex Reset History",
+    title: "Codex Reset History - Usage Limits Reset Signals",
     description:
-      "Recent Codex reset history, weekly reset events, and manual reset credit distribution in English.",
+      "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
     url: "/en/history",
     siteName: "Codex Reset Observatory",
     type: "article",
@@ -37,9 +37,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Codex Reset History",
+    title: "Codex Reset History - Usage Limits Reset Signals",
     description:
-      "Recent Codex reset history, weekly reset events, and manual reset credit distribution in English.",
+      "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
     images: ["/og-image.png"],
   },
 };

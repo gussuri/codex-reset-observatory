@@ -74,15 +74,39 @@ export function FaqView({ locale }: FaqViewProps) {
     en: {
       category: "Codex Reset FAQ",
       title: "Frequently Asked Questions",
-      subTitle: "A short guide to Codex reset timing, usage limits, and manual reset credits.",
+      subTitle: "A short guide to Codex usage limits resets, reset timing, manual reset credits, and forecast changes.",
       backTop: "Back to English top",
       about: "About",
       history: "History",
       otherLang: "Japanese FAQ",
       faqs: [
         {
+          question: "Did Codex reset today?",
+          answer: "Check the latest reset card and recent reset history on the top page. If a reset was confirmed today, it should appear as a recent reset event. If there is only a forecast, treat it as an estimate rather than a confirmed reset.",
+        },
+        {
+          question: "When is the next Codex usage limits reset?",
+          answer: "OpenAI does not always publish an exact reset time. This site shows a weekly-cycle reference date when available and estimates whether an extra usage-limits reset looks likely within the next 24 or 48 hours.",
+        },
+        {
+          question: "How does Codex reset work?",
+          answer: "A Codex reset usually restores or refreshes usage limits such as weekly limits or shorter usage windows. Some resets follow a regular cycle, while others may happen after incidents, capacity issues, or special events.",
+        },
+        {
+          question: "What is Codex manual reset?",
+          answer: "A manual reset is an account-specific reset credit. Using it can restore your 5-hour and 1-week limits to 100%, and your next weekly reset date may move to one week after the moment you use it.",
+        },
+        {
+          question: "What is Codex usage limits reset?",
+          answer: "It means the Codex usage allowance or rate-limit window is refreshed. People may search for it as a token reset, limit reset, usage reset, or rate reset; this site groups those searches around Codex usage-limit recovery.",
+        },
+        {
+          question: "Why does the reset forecast change?",
+          answer: "The forecast changes as official notices, OpenAI Status incidents, capacity or rate-limit signals, community reports, and elapsed time since the last reset change. The percentage is not guaranteed and may move up or down.",
+        },
+        {
           question: "What does this site track?",
-          answer: "It tracks Codex reset notices, reset history, weekly-cycle reference dates, and random reset probability based on community activity and OpenAI status updates.",
+          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and random reset probability based on public information, community activity, and OpenAI Status updates.",
         },
         {
           question: "What is the random reset probability?",

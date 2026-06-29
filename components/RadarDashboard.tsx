@@ -132,6 +132,9 @@ export function RadarDashboard({
               <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                 {translateUI("title", locale)}
               </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                {translateUI("description", locale)}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

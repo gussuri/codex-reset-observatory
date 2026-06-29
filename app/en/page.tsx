@@ -7,10 +7,10 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
   title: {
-    absolute: "Codex Reset Observatory | Codex reset history and manual resets",
+    absolute: "Codex Usage Limits Reset Forecast & History",
   },
   description:
-    "Track Codex reset history, official reset notices, weekly reset references, random reset probability, and manual reset behavior in English.",
+    "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
   keywords: [
     "Codex reset",
     "Codex usage limit reset",
@@ -23,12 +23,13 @@ export const metadata: Metadata = {
     languages: {
       ja: "/",
       en: "/en",
+      zh: "/zh",
     },
   },
   openGraph: {
-    title: "Codex Reset Observatory",
+    title: "Codex Usage Limits Reset Forecast & History",
     description:
-      "Track Codex reset history, weekly reset references, random reset probability, and manual reset behavior.",
+      "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
     url: "/en",
     siteName: "Codex Reset Observatory",
     type: "website",
@@ -45,9 +46,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Codex Reset Observatory",
+    title: "Codex Usage Limits Reset Forecast & History",
     description:
-      "Track Codex reset history, weekly reset references, random reset probability, and manual reset behavior.",
+      "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
     images: ["/og-image.png"],
   },
 };
