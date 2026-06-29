@@ -3,6 +3,7 @@ name: Log Reset Probability
 on:
   schedule:
     # 毎時34分に実行 (0分など混雑する時間帯を避けるための設定)
+    # ※GitHub Actionsのcronスケジュールは標準時 (UTC) 基準で設定されます。
     - cron: '34 * * * *'
   # GitHubの管理画面から手動で即時実行（テスト）することも可能にします
   workflow_dispatch:
@@ -11,8 +12,29 @@ jobs:
   log-probability:
     runs-on: ubuntu-latest
     steps:
-      - name: Call Log Probability API
+      - name: Call Log Probability API and Output Logs
         run: |
-          curl -s -f -X GET \
+          echo "========================================="
+          echo "GitHub Actions executed at: $(date -u)"
+          # APP_URLはGitHub Secretsに登録されているため、出力時は自動的に *** にマスキングされます
+          echo "Calling API Endpoint: ${{ secrets.APP_URL }}/api/log-probability"
+          echo "========================================="
+          
+          # 一時ファイルにレスポンスを保存し、ステータスコードを取得
+          RESPONSE_FILE=$(mktemp)
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ secrets.APP_URL }}/api/log-probability"
+            "${{ secrets.APP_URL }}/api/log-probability")
+          
+          echo "HTTP Status Code: $HTTP_STATUS"
+          echo "-----------------------------------------"
+          echo "Response Body:"
+          cat "$RESPONSE_FILE"
+          echo ""
+          echo "========================================="
+          
+          # 2xx 以外のステータスコードの場合はエラー終了（GitHub Actionsを失敗扱い）にします
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Error: API call failed with HTTP status $HTTP_STATUS"
+            exit 1
+          fi

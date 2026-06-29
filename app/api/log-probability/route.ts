@@ -66,7 +66,7 @@ async function handleLogRequest(request: NextRequest) {
 
     // 5. Supabase への保存 (logged_hour が衝突した場合は upsert で上書き)
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data: insertedRows, error } = await supabase
       .from("prediction_history")
       .upsert(
         {
@@ -87,16 +87,22 @@ async function handleLogRequest(request: NextRequest) {
         {
           onConflict: "logged_hour",
         }
-      );
+      )
+      .select();
 
     if (error) {
       console.error("Supabase upsert error:", error);
       return NextResponse.json({ error: "Database save failed", details: error.message }, { status: 500 });
     }
 
+    const savedRecord = insertedRows && insertedRows.length > 0 ? insertedRows[0] : null;
+    const recordedAt = savedRecord?.recorded_at || new Date().toISOString();
+
     return NextResponse.json({
-      success: true,
+      ok: true,
+      action: "upserted",
       logged_hour: loggedHour.toISOString(),
+      recorded_at: recordedAt,
       probability_24h: viewModel.probability24h,
       probability_48h: viewModel.probability48h,
       expectation: expectationKey,
