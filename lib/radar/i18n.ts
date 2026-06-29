@@ -598,6 +598,26 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "One manual reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
     zh: "因影响 Codex 可靠性的故障，已对所有账号发放一次手动重置额度作为补偿。",
   },
+  "過剰消費バグ調査・強制補償リセット": {
+    ja: "過剰消費バグ調査・強制補償リセット",
+    en: "Forced Compensation Reset (Excessive Consumption Investigation)",
+    zh: "过度消耗漏洞调查强制补偿重置",
+  },
+  "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。": {
+    ja: "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。",
+    en: "Due to an issue causing excessive usage limit consumption for some users, everyone's Codex limits were forcibly reset (cleared) during the investigation.",
+    zh: "因部分用户出现 Codex 使用额度过度消耗的问题，在调查期间已强制重置（清空）所有用户的限制额度。",
+  },
+  "Tibo氏が、Codexの過剰な利用制限消費問題の調査に伴い、全員の利用制限を強制リセットしたと発表しました。": {
+    ja: "Tibo氏が、Codexの過剰な利用制限消費問題の調査に伴い、全員の利用制限を強制リセットしたと発表しました。",
+    en: "Tibo announced that they forcibly reset everyone's Codex limits as they investigate an issue causing excessive usage consumption.",
+    zh: "Tibo 宣布由于正在调查导致使用量过度消耗的问题，已强制重置所有人的 Codex 额度限制。",
+  },
+  "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。": {
+    ja: "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。",
+    en: "Tibo announced that more manual resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
+    zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置额度。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {

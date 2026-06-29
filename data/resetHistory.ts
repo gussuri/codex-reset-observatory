@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-27T12:00:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-29T09:00:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T07:00:00+09:00";
@@ -61,6 +61,21 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-forced-comp-reset-2026-06-29",
+    title: "過剰消費バグ調査・強制補償リセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-06-29T09:00:00+09:00",
+    closed_at: "2026-06-29T09:00:00+09:00",
+    completed_at: "2026-06-29T09:00:00+09:00",
+    window_minutes: 0,
+    window_human: "強制実施 (即時)",
+    scope: "全有料プラン",
+    summary:
+      "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。",
+    source_url: "https://x.com/thsottiaux/status/2067711440019483321",
+  },
   {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
     title: "定期リセット",

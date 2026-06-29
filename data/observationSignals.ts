@@ -20,6 +20,34 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-excessive-consumption-forced-reset-notice-2026-06-29",
+    observedAt: "2026-06-29T09:00:00+09:00",
+    type: "official_notice",
+    status: "resolved",
+    expectedAt: "2026-06-29T09:00:00+09:00",
+    expiresAt: "2026-06-30T09:00:00+09:00",
+    resolvedAt: "2026-06-29T09:00:00+09:00",
+    skipAutoHistoryMerge: true,
+    title:
+      "Tibo氏が、Codexの過剰な利用制限消費問題の調査に伴い、全員の利用制限を強制リセットしたと発表しました。",
+    keywords: ["forced reset", "limit reset", "強制リセット", "利用制限", "バグ", "補償"],
+    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    sourceLabel: "Tibo氏の公式Xで報告あり",
+  },
+  {
+    id: "official-codex-additional-manual-reset-notice-2026-06-29",
+    observedAt: "2026-06-29T09:00:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: null,
+    expiresAt: "2026-06-30T15:00:00+09:00",
+    title:
+      "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。",
+    keywords: ["manual reset", "additional reset", "任意リセット", "手動リセット", "配布予定"],
+    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    sourceLabel: "Tibo氏の公式Xで告知あり",
+  },
+  {
     id: "official-codex-compensation-reset-notice-2026-06-27",
     observedAt: "2026-06-27T08:41:00+09:00",
     type: "official_notice",
