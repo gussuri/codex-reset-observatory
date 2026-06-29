@@ -2,8 +2,8 @@ name: Log Reset Probability
 
 on:
   schedule:
-    # 毎時0分に実行 (1時間おき)
-    - cron: '0 * * * *'
+    # 毎時34分に実行 (0分など混雑する時間帯を避けるための設定)
+    - cron: '34 * * * *'
   # GitHubの管理画面から手動で即時実行（テスト）することも可能にします
   workflow_dispatch:
 
