@@ -312,26 +312,30 @@ export function getLocalProbabilityReason(
   const signals: Array<string> = [];
   if (locale === "en") {
     if (activeStatusIncidents > 0) {
-      signals.push("Codex-related active Status incident");
+      signals.push("Codex incident listed on official status");
+    } else {
+      signals.push("No active incidents listed on official status");
     }
     if (officialIncidentHints > 0) {
-      signals.push("Official hints regarding capacity/errors");
+      signals.push("Official capacity hints");
     }
     if (issueAnomalies > 0) {
-      signals.push("Anomalies in usage limits");
+      signals.push("Usage limit anomalies");
     }
     if (communityMentions > 0) {
-      signals.push("Community reports on resets");
+      signals.push("Community reset reports");
     }
     if (officialUpdates > 0) {
-      signals.push("Official announcements / forecasts");
+      signals.push("Official announcement/forecast active");
     }
   } else if (locale === "zh") {
     if (activeStatusIncidents > 0) {
-      signals.push("Codex相关Active状态故障");
+      signals.push("官方状态页显示Codex相关故障");
+    } else {
+      signals.push("官方状态页未显示进行中的故障");
     }
     if (officialIncidentHints > 0) {
-      signals.push("官方关于容量/错误的提示");
+      signals.push("官方容量提示");
     }
     if (issueAnomalies > 0) {
       signals.push("使用限制异常报告");
@@ -340,23 +344,25 @@ export function getLocalProbabilityReason(
       signals.push("社区关于重置的讨论");
     }
     if (officialUpdates > 0) {
-      signals.push("官方公告与预告");
+      signals.push("存在官方公告与预告");
     }
   } else {
     if (activeStatusIncidents > 0) {
-      signals.push("Codex関連のStatus障害");
+      signals.push("公式ステータスにCodex関連の障害あり");
+    } else {
+      signals.push("公式ステータスに発生中の障害なし");
     }
     if (officialIncidentHints > 0) {
-      signals.push("公式寄りの障害・容量到達に関する投稿");
+      signals.push("容量到達に関する公式投稿あり");
     }
     if (issueAnomalies > 0) {
-      signals.push("利用上限まわりの異常報告");
+      signals.push("利用上限まわりの異常報告あり");
     }
     if (communityMentions > 0) {
-      signals.push("コミュニティ上のリセット関連報告");
+      signals.push("コミュニティ上のリセット報告あり");
     }
     if (officialUpdates > 0) {
-      signals.push("公式からのアナウンス・予告");
+      signals.push("公式アナウンス・予告あり");
     }
   }
 
@@ -374,11 +380,11 @@ export function getLocalProbabilityReason(
   let signalSummary = "";
   if (signals.length > 0) {
     if (locale === "en") {
-      signalSummary = `We observe: ${signals.join(", ")}.`;
+      signalSummary = `Signals: ${signals.join(", ")}.`;
     } else if (locale === "zh") {
-      signalSummary = `观测到：${signals.join("、")}。`;
+      signalSummary = `信号：${signals.join("、")}。`;
     } else {
-      signalSummary = `${signals.join("、")}が見られます。`;
+      signalSummary = `${signals.join("、")}。`;
     }
   } else {
     if (locale === "en") {
