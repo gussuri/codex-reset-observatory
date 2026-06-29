@@ -20,6 +20,32 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-codex-forced-reset-notice-2026-06-30",
+    observedAt: "2026-06-30T08:50:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-06-30T09:30:00+09:00",
+    expiresAt: "2026-06-30T12:00:00+09:00",
+    title:
+      "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。",
+    keywords: ["forced reset", "limit reset", "強制リセット", "利用制限"],
+    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    sourceLabel: "Tibo氏の公式Xで告知あり",
+  },
+  {
+    id: "official-codex-additional-credit-notice-2026-06-30",
+    observedAt: "2026-06-30T08:50:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-07-01T09:00:00+09:00",
+    expiresAt: "2026-07-01T15:00:00+09:00",
+    title:
+      "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
+    keywords: ["manual reset", "credit reset", "任意リセット", "追加配布"],
+    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    sourceLabel: "Tibo氏の公式Xで告知あり",
+  },
+  {
     id: "official-excessive-consumption-forced-reset-notice-2026-06-29",
     observedAt: "2026-06-29T09:00:00+09:00",
     type: "official_notice",

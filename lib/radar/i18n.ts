@@ -618,6 +618,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo announced that more manual resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
     zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置额度。",
   },
+  "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。": {
+    ja: "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。",
+    en: "Tibo announced that everyone's Codex limits will be fully reset again within the next hour.",
+    zh: "Tibo 宣布将在 1 小时内再次完全重置所有人的 Codex 额度限制。",
+  },
+  "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。": {
+    ja: "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
+    en: "Tibo announced that one additional manual reset credit will be distributed to all paid plans within the next 24 hours.",
+    zh: "Tibo 宣布将在未来 24 小时内向所有付费计划追加发放一次手动重置额度。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
