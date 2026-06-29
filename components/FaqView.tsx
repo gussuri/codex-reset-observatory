@@ -236,15 +236,42 @@ export function FaqView({ locale }: FaqViewProps) {
       />
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="rounded-lg border border-slate-200/80 bg-white/88 p-5 shadow-sm backdrop-blur">
-          <p className="text-sm font-medium text-teal-700">
-            {translations.category}
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
-            {translations.title}
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {translations.subTitle}
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-teal-700">
+                {translations.category}
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
+                {translations.title}
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {translations.subTitle}
+              </p>
+            </div>
+            <nav
+              aria-label="FAQ navigation"
+              className="flex shrink-0 flex-wrap gap-2 text-sm"
+            >
+              <Link
+                className="rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 font-semibold text-teal-700 underline-offset-4 hover:underline"
+                href={locale === "ja" ? "/" : locale === "en" ? "/en" : "/zh"}
+              >
+                {translations.backTop}
+              </Link>
+              <Link
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 underline-offset-4 hover:underline"
+                href={locale === "ja" ? "/about" : locale === "en" ? "/en/about" : "/zh/about"}
+              >
+                {translations.about}
+              </Link>
+              <Link
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 underline-offset-4 hover:underline"
+                href={locale === "ja" ? "/history" : locale === "en" ? "/en/history" : "/zh/history"}
+              >
+                {translations.history}
+              </Link>
+            </nav>
+          </div>
         </header>
 
         <section className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
