@@ -313,8 +313,6 @@ export function getLocalProbabilityReason(
   if (locale === "en") {
     if (activeStatusIncidents > 0) {
       signals.push("Codex-related active Status incident");
-    } else if (statusIncidents > 0) {
-      signals.push("Recent Codex-related Status updates");
     }
     if (officialIncidentHints > 0) {
       signals.push("Official hints regarding capacity/errors");
@@ -326,13 +324,11 @@ export function getLocalProbabilityReason(
       signals.push("Community reports on resets");
     }
     if (officialUpdates > 0) {
-      signals.push("Official updates");
+      signals.push("Official announcements / forecasts");
     }
   } else if (locale === "zh") {
     if (activeStatusIncidents > 0) {
       signals.push("Codex相关Active状态故障");
-    } else if (statusIncidents > 0) {
-      signals.push("最近的Codex状态信息");
     }
     if (officialIncidentHints > 0) {
       signals.push("官方关于容量/错误的提示");
@@ -344,13 +340,11 @@ export function getLocalProbabilityReason(
       signals.push("社区关于重置的讨论");
     }
     if (officialUpdates > 0) {
-      signals.push("官方更新");
+      signals.push("官方公告与预告");
     }
   } else {
     if (activeStatusIncidents > 0) {
       signals.push("Codex関連のStatus障害");
-    } else if (statusIncidents > 0) {
-      signals.push("直近のCodex関連Status情報");
     }
     if (officialIncidentHints > 0) {
       signals.push("公式寄りの障害・容量到達に関する投稿");
@@ -362,7 +356,7 @@ export function getLocalProbabilityReason(
       signals.push("コミュニティ上のリセット関連報告");
     }
     if (officialUpdates > 0) {
-      signals.push("公式更新");
+      signals.push("公式からのアナウンス・予告");
     }
   }
 
