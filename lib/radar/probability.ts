@@ -309,60 +309,84 @@ export function getLocalProbabilityReason(
     lastResetLabel = locale === "en" ? "unknown days since the last reset" : locale === "zh" ? "自上次重置以来的天数未知" : "直近のリセットから経過日数不明";
   }
 
-  const signals: Array<string> = [];
+  let signalSummary = "";
   if (locale === "en") {
-    if (activeStatusIncidents > 0) {
-      signals.push("Codex incident listed on official status");
-    } else {
-      signals.push("No active incidents listed on official status");
+    const statusText = activeStatusIncidents > 0
+      ? "a Codex-related incident is active on the official status page"
+      : "no active incidents are listed on the official status page";
+
+    const extraParts: Array<string> = [];
+    if (officialUpdates > 0) {
+      extraParts.push("official announcements/forecasts are active");
     }
     if (officialIncidentHints > 0) {
-      signals.push("Official capacity hints");
+      extraParts.push("official capacity warnings are posted");
     }
     if (issueAnomalies > 0) {
-      signals.push("Usage limit anomalies");
+      extraParts.push("usage limit anomalies are reported");
     }
     if (communityMentions > 0) {
-      signals.push("Community reset reports");
+      extraParts.push("community reports regarding resets are observed");
     }
-    if (officialUpdates > 0) {
-      signals.push("Official announcement/forecast active");
+
+    if (extraParts.length > 0) {
+      signalSummary = `While ${statusText}, ${extraParts.join(" and ")}.`;
+    } else {
+      signalSummary = activeStatusIncidents > 0
+        ? "A Codex-related incident is active on the official status page."
+        : "No active incidents are listed on the official status page.";
     }
   } else if (locale === "zh") {
-    if (activeStatusIncidents > 0) {
-      signals.push("官方状态页显示Codex相关故障");
-    } else {
-      signals.push("官方状态页未显示进行中的故障");
+    const statusText = activeStatusIncidents > 0
+      ? "官方状态页正显示Codex相关故障"
+      : "官方状态页目前未显示进行中的故障";
+
+    const extraParts: Array<string> = [];
+    if (officialUpdates > 0) {
+      extraParts.push("存在官方公告与预告");
     }
     if (officialIncidentHints > 0) {
-      signals.push("官方容量提示");
+      extraParts.push("并检测到关于容量的官方提示");
     }
     if (issueAnomalies > 0) {
-      signals.push("使用限制异常报告");
+      extraParts.push("且有使用限制异常的报告");
     }
     if (communityMentions > 0) {
-      signals.push("社区关于重置的讨论");
+      extraParts.push("以及社区关于重置的讨论");
     }
-    if (officialUpdates > 0) {
-      signals.push("存在官方公告与预告");
+
+    if (extraParts.length > 0) {
+      signalSummary = `${statusText}，${extraParts.join("，")}。`;
+    } else {
+      signalSummary = activeStatusIncidents > 0
+        ? "官方状态页正显示Codex相关故障。"
+        : "官方状态页目前未显示进行中的故障。";
     }
   } else {
-    if (activeStatusIncidents > 0) {
-      signals.push("公式ステータスにCodex関連の障害あり");
-    } else {
-      signals.push("公式ステータスに発生中の障害なし");
+    const statusText = activeStatusIncidents > 0
+      ? "公式ステータスにCodex関連の障害が発生しており"
+      : "公式ステータスに発生中の障害はなく";
+
+    const extraParts: Array<string> = [];
+    if (officialUpdates > 0) {
+      extraParts.push("公式からの予告・アナウンスがあります");
     }
     if (officialIncidentHints > 0) {
-      signals.push("容量到達に関する公式投稿あり");
+      extraParts.push("容量到達に関する公式投稿が確認されています");
     }
     if (issueAnomalies > 0) {
-      signals.push("利用上限まわりの異常報告あり");
+      extraParts.push("利用上限まわりの異常報告があります");
     }
     if (communityMentions > 0) {
-      signals.push("コミュニティ上のリセット報告あり");
+      extraParts.push("コミュニティ上でリセット報告があります");
     }
-    if (officialUpdates > 0) {
-      signals.push("公式アナウンス・予告あり");
+
+    if (extraParts.length > 0) {
+      signalSummary = `${statusText}、${extraParts.join("、")}。`;
+    } else {
+      signalSummary = activeStatusIncidents > 0
+        ? "公式ステータスにCodex関連の障害が発生しています。"
+        : "公式ステータスに発生中の障害はありません。";
     }
   }
 
@@ -374,25 +398,6 @@ export function getLocalProbabilityReason(
       hintSummary = "官方发布了关于容量问题的提示，补偿性重置的概率正在增加。";
     } else {
       hintSummary = "公式寄りの障害・容量到達に関する投稿があり、詫びリセット要因が強まっています。";
-    }
-  }
-
-  let signalSummary = "";
-  if (signals.length > 0) {
-    if (locale === "en") {
-      signalSummary = `Signals: ${signals.join(", ")}.`;
-    } else if (locale === "zh") {
-      signalSummary = `信号：${signals.join("、")}。`;
-    } else {
-      signalSummary = `${signals.join("、")}。`;
-    }
-  } else {
-    if (locale === "en") {
-      signalSummary = "No major official notices or incident signals are observed.";
-    } else if (locale === "zh") {
-      signalSummary = "未发现明显的官方预告或故障信号。";
-    } else {
-      signalSummary = "目立った公式予告や障害情報は見られません。";
     }
   }
 
