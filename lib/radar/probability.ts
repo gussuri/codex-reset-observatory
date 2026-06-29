@@ -31,8 +31,52 @@ export function getLocalResetProbability(
   }
 
   const environment = getSignalEnvironment(data);
+  
+  // OpenAI Status およびローカルシグナルの重大度 (impact) に応じた重み付き障害スコアの算出
+  let weightedStatusScore = 0;
+  const statusHistory = data?.openai_status_history ?? [];
+  const codexIncidents = statusHistory.filter(
+    (item) =>
+      item.source === "openai_status" &&
+      ((item.createdAt && isWithinHours(item.createdAt, 24)) ||
+        (item.updatedAt && isWithinHours(item.updatedAt, 24)) ||
+        item.status !== "resolved")
+  );
+
+  const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.type === "status_incident" &&
+      isCurrentLocalSignal(signal) &&
+      isWithinHours(signal.observedAt, 24)
+  );
+
+  const mergedIncidents = new Map<string, { impact: string | null }>();
+  for (const item of codexIncidents) {
+    mergedIncidents.set(item.id, { impact: item.impact });
+  }
+  for (const signal of localStatusSignals) {
+    if (!mergedIncidents.has(signal.id)) {
+      mergedIncidents.set(signal.id, { impact: "minor" });
+    }
+  }
+
+  for (const incident of Array.from(mergedIncidents.values())) {
+    const impact = incident.impact?.toLowerCase();
+    let multiplier = 1.0;
+    if (impact === "critical") {
+      multiplier = 3.0;
+    } else if (impact === "major") {
+      multiplier = 2.0;
+    }
+    weightedStatusScore += multiplier;
+  }
+
+  // 影響コンポーネント数も 1.0 倍として加算
+  const affectedComponents = environment?.openai_status_affected_codex_components ?? 0;
+  weightedStatusScore += affectedComponents;
+
   const statusIncidents = clampCount(
-    environment?.status_incidents_24h,
+    weightedStatusScore,
     0,
     LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
   );
