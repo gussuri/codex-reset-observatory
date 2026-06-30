@@ -196,6 +196,14 @@ export type RadarViewModel = {
     resetType: string;
     resetTypes?: Array<string>;
     status: string;
+    details?: {
+      cycleType: string;
+      reasonType: string;
+      resetMethod: string;
+      scope: string;
+      noticeToExecution: string;
+      note?: string | null;
+    };
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;

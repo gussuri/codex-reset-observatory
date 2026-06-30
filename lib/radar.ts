@@ -354,6 +354,14 @@ function addRegularResetForecastToHistory(
       scope: translateDynamic("全有料プラン", locale),
       windowLength: translateDynamic("定期実施", locale),
       source: null,
+      details: {
+        cycleType: translateDynamic("定期リセット", locale),
+        reasonType: translateDynamic("通常更新", locale),
+        resetMethod: translateDynamic("強制リセット", locale),
+        scope: translateDynamic("全有料プラン", locale),
+        noticeToExecution: translateDynamic("定期実施", locale),
+        note: translateDynamic("1週間サイクルの定期リセットが実施されました。", locale),
+      },
     });
   }
 
@@ -374,6 +382,13 @@ function addPersonalResetEventsToHistory(
   const personalItems = LOCAL_PERSONAL_RESET_HISTORY.filter(
     (item) => !seen.has(item.key),
   ).map((item) => {
+    const itemAsWindow: WindowLike = {
+      title: item.title,
+      scope: item.scope,
+      summary: item.summary ?? undefined,
+      window_human: item.windowLength,
+    };
+
     // 任意リセット履歴アイテムの多言語化
     return {
       ...item,
@@ -388,6 +403,7 @@ function addPersonalResetEventsToHistory(
       windowLabel: item.windowLabel ? translateDynamic(item.windowLabel, locale) : undefined,
       windowLength: translateDynamic(item.windowLength, locale),
       summary: item.summary ? translateDynamic(item.summary, locale) : null,
+      details: getHistoryDetails(itemAsWindow, locale),
     };
   });
 
@@ -487,6 +503,124 @@ function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
       : item.resetAt ?? item.date ?? "";
 
   return `${item.title}-${resetKey}`;
+}
+
+function getHistoryText(item: WindowLike & { kind?: string }) {
+  return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
+}
+
+function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Locale) {
+  const text = getHistoryText(item);
+
+  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
+    return translateDynamic("定期リセット", locale);
+  }
+
+  if (
+    text.includes("任意") ||
+    text.includes("manual reset") ||
+    text.includes("referral") ||
+    text.includes("招待")
+  ) {
+    return translateDynamic("個人別リセット", locale);
+  }
+
+  return translateDynamic("ランダムリセット", locale);
+}
+
+function getHistoryReasonType(item: WindowLike & { kind?: string }, locale: Locale) {
+  const text = getHistoryText(item);
+
+  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
+    return translateDynamic("通常更新", locale);
+  }
+
+  if (
+    text.includes("可靠性") ||
+    text.includes("补偿") ||
+    text.includes("compensation") ||
+    text.includes("reliability") ||
+    text.includes("incident") ||
+    text.includes("障害") ||
+    text.includes("補償") ||
+    text.includes("詫び") ||
+    text.includes("不具合") ||
+    text.includes("bug") ||
+    text.includes("rate limit") ||
+    text.includes("レート制限")
+  ) {
+    return translateDynamic("詫びリセット", locale);
+  }
+
+  if (
+    text.includes("庆祝") ||
+    text.includes("celebration") ||
+    text.includes("5m") ||
+    text.includes("500 万") ||
+    text.includes("500万") ||
+    text.includes("記念") ||
+    text.includes("milestone")
+  ) {
+    return translateDynamic("ご祝儀リセット", locale);
+  }
+
+  return translateDynamic("その他", locale);
+}
+
+function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Locale) {
+  const text = getHistoryText(item);
+
+  if (
+    text.includes("任意") ||
+    text.includes("manual reset") ||
+    text.includes("credit") ||
+    text.includes("配布")
+  ) {
+    return translateDynamic("任意リセット権1回配布", locale);
+  }
+
+  if (
+    item.kind === "reset_completed" ||
+    item.kind === "window_closed" ||
+    item.closed_at ||
+    item.completed_at ||
+    text.includes("強制") ||
+    text.includes("forced") ||
+    text.includes("フルリセット") ||
+    text.includes("reset")
+  ) {
+    return translateDynamic("強制リセット", locale);
+  }
+
+  return translateDynamic("不明", locale);
+}
+
+function getHistoryNoticeToExecution(item: WindowLike & { kind?: string }, locale: Locale) {
+  if (item.window_human) {
+    return translateDynamic(item.window_human, locale);
+  }
+
+  if (typeof item.window_minutes === "number") {
+    return formatWindowLength(item.window_minutes, locale);
+  }
+
+  return translateDynamic("不明", locale);
+}
+
+function getHistoryDetails(
+  item: WindowLike & { kind?: string },
+  locale: Locale,
+): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
+  const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
+
+  return {
+    cycleType: getHistoryCycleType(item, locale),
+    reasonType: getHistoryReasonType(item, locale),
+    resetMethod: getHistoryResetMethod(item, locale),
+    scope,
+    noticeToExecution: getHistoryNoticeToExecution(item, locale),
+    note: item.summary ? translateDynamic(item.summary, locale) : null,
+  };
 }
 
 function getResetTypes(item: WindowLike & { kind?: string }, locale: Locale = "ja") {
@@ -706,6 +840,7 @@ function getRecentHistory(_data: RadarData | null, locale: Locale = "ja") {
         resetType: getResetTypes(item, locale)[0],
         resetTypes: getResetTypes(item, locale),
         status: translateEventStatus(item.kind ?? item.status, locale),
+        details: getHistoryDetails(item, locale),
         date: item.date ?? resetAt ?? item.opened_at,
         signalAt: item.opened_at ?? item.date ?? null,
         resetAt,

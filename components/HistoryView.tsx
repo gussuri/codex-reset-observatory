@@ -6,6 +6,7 @@ import {
 } from "@/lib/radar";
 import type { Locale, RadarData } from "@/lib/radar/types";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
+import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { translateUI } from "@/lib/radar/i18n";
 
 type HistoryViewProps = {
@@ -115,18 +116,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
                         {item.status}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {item.scopeLabel ?? translateUI("scope", locale)}: {item.scope}
-                      <span className="mx-2 hidden sm:inline">/</span>
-                      <span className="block sm:inline">
-                        {item.windowLabel ?? translateUI("windowLength", locale)}: {item.windowLength}
-                      </span>
-                    </p>
-                    {item.summary && (
-                      <p className="mt-2 text-sm leading-6 text-slate-500 bg-slate-50 p-2.5 rounded border border-slate-100/60">
-                        {item.summary}
-                      </p>
-                    )}
+                    <ResetHistoryDetails item={item} locale={locale} />
                   </div>
 
                   <div className="text-sm leading-6 text-slate-700 md:text-right">

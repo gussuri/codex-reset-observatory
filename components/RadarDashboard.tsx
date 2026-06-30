@@ -23,6 +23,7 @@ import {
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
+import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
 
@@ -347,18 +348,7 @@ export function RadarDashboard({
                         </span>
                       ))}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {item.scopeLabel ?? translateUI("scope", locale)}：{item.scope}
-                      <span className="mx-2 hidden sm:inline">/</span>
-                      <span className="block sm:inline">
-                        {item.windowLabel ?? translateUI("windowLength", locale)}：{item.windowLength}
-                      </span>
-                    </p>
-                    {item.summary && (
-                      <p className="mt-2 text-xs leading-5 text-slate-500 bg-slate-50 p-2.5 rounded border border-slate-100/60 max-w-2xl">
-                        {item.summary}
-                      </p>
-                    )}
+                    <ResetHistoryDetails item={item} locale={locale} compact />
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (

@@ -106,6 +106,31 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Window length",
     zh: "预告至执行",
   },
+  historyCycleType: {
+    ja: "分類",
+    en: "Category",
+    zh: "分类",
+  },
+  historyReasonType: {
+    ja: "理由",
+    en: "Reason",
+    zh: "原因",
+  },
+  historyResetMethod: {
+    ja: "リセット方法",
+    en: "Reset method",
+    zh: "重置方式",
+  },
+  historyNoticeToExecution: {
+    ja: "告知から実施まで",
+    en: "Notice to execution",
+    zh: "预告至执行",
+  },
+  historyNote: {
+    ja: "補足",
+    en: "Note",
+    zh: "补充",
+  },
   weeklyResetRef: {
     ja: "1週間サイクルのリセット参考日",
     en: "Weekly reset reference",
@@ -470,6 +495,36 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "その他",
     en: "Other",
     zh: "其他",
+  },
+  "ランダムリセット": {
+    ja: "ランダムリセット",
+    en: "Random reset",
+    zh: "随机重置",
+  },
+  "個人別リセット": {
+    ja: "個人別リセット",
+    en: "Account-specific reset",
+    zh: "账号特定重置",
+  },
+  "通常更新": {
+    ja: "通常更新",
+    en: "Regular refresh",
+    zh: "常规更新",
+  },
+  "強制リセット": {
+    ja: "強制リセット",
+    en: "Forced reset",
+    zh: "强制重置",
+  },
+  "任意リセット権1回配布": {
+    ja: "任意リセット権1回配布",
+    en: "1 manual reset credit",
+    zh: "发放 1 次手动重置额度",
+  },
+  "不明": {
+    ja: "不明",
+    en: "Unknown",
+    zh: "未知",
   },
 
   // Summaries
