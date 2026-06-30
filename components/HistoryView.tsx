@@ -104,17 +104,6 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
                       <h2 className="ui-heading text-lg font-semibold text-slate-950">
                         {item.title}
                       </h2>
-                      {(item.resetTypes ?? [item.resetType]).map((resetType) => (
-                        <span
-                          className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
-                          key={resetType}
-                        >
-                          {resetType}
-                        </span>
-                      ))}
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                        {item.status}
-                      </span>
                     </div>
                     <ResetHistoryDetails item={item} locale={locale} />
                   </div>

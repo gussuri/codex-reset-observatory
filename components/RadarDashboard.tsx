@@ -336,17 +336,6 @@ export function RadarDashboard({
                       <h3 className="ui-heading text-base font-semibold text-slate-950">
                         {item.title}
                       </h3>
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                        {item.status}
-                      </span>
-                      {(item.resetTypes ?? [item.resetType]).map((resetType) => (
-                        <span
-                          className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
-                          key={resetType}
-                        >
-                          {resetType}
-                        </span>
-                      ))}
                     </div>
                     <ResetHistoryDetails item={item} locale={locale} compact />
                   </div>
