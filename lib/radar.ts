@@ -387,6 +387,7 @@ function addPersonalResetEventsToHistory(
       scope: item.scope,
       summary: item.summary ?? undefined,
       window_human: item.windowLength,
+      details: item.details,
     };
 
     // 任意リセット履歴アイテムの多言語化
@@ -615,6 +616,17 @@ function getHistoryDetails(
   item: WindowLike & { kind?: string },
   locale: Locale,
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
+  if (item.details) {
+    return {
+      cycleType: translateDynamic(item.details.cycleType, locale),
+      reasonType: translateDynamic(item.details.reasonType, locale),
+      resetMethod: translateDynamic(item.details.resetMethod, locale),
+      scope: translateDynamic(item.details.scope, locale),
+      noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
+      note: item.details.note ? translateDynamic(item.details.note, locale) : null,
+    };
+  }
+
   const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
 
   return {

@@ -511,6 +511,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Regular refresh",
     zh: "常规更新",
   },
+  "通常更新 / 詫びリセット": {
+    ja: "通常更新 / 詫びリセット",
+    en: "Regular refresh / Compensation reset",
+    zh: "常规更新 / 故障补偿重置",
+  },
   "強制リセット": {
     ja: "強制リセット",
     en: "Forced reset",
@@ -530,6 +535,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "不明",
     en: "Unknown",
     zh: "未知",
+  },
+  "即時実行": {
+    ja: "即時実行",
+    en: "Immediate execution",
+    zh: "即时执行",
+  },
+  "数時間以内": {
+    ja: "数時間以内",
+    en: "Within a few hours",
+    zh: "数小时内",
+  },
+  "40分": {
+    ja: "40分",
+    en: "40 minutes",
+    zh: "40分钟",
   },
 
   // Summaries

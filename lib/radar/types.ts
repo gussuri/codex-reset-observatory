@@ -4,6 +4,15 @@ export type Locale = "ja" | "en" | "zh";
 
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
+export type ResetHistoryDetails = {
+  cycleType: string;
+  reasonType: string;
+  resetMethod: string;
+  scope: string;
+  noticeToExecution: string;
+  note?: string | null;
+};
+
 export type WindowLike = {
   id?: string;
   guid?: string;
@@ -25,6 +34,7 @@ export type WindowLike = {
     url?: string | null;
   }>;
   windowLabel?: string;
+  details?: ResetHistoryDetails;
 };
 
 export type WindowEventLike = WindowLike & {
@@ -196,14 +206,7 @@ export type RadarViewModel = {
     resetType: string;
     resetTypes?: Array<string>;
     status: string;
-    details?: {
-      cycleType: string;
-      reasonType: string;
-      resetMethod: string;
-      scope: string;
-      noticeToExecution: string;
-      note?: string | null;
-    };
+    details?: ResetHistoryDetails;
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;

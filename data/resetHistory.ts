@@ -23,6 +23,14 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux",
     summary: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: "数時間以内",
+      note: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
+    },
   },
   {
     key: "personal-compensation-reset-credit-2026-06-18",
@@ -40,6 +48,14 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLength: "任意リセット1回分",
     source: "https://x.com/thsottiaux/status/2066956441173323943",
     summary: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: "即時実行",
+      note: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    },
   },
   {
     key: "personal-reset-credit-2026-06-11",
@@ -57,6 +73,14 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
     windowLength: "1回分・期限1か月以内",
     source: null,
     summary: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
+    details: {
+      cycleType: "個人別リセット",
+      reasonType: "その他",
+      resetMethod: "任意リセット権1回配布",
+      scope: "対象アカウント",
+      noticeToExecution: "不明",
+      note: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。期限は1か月以内です。",
+    },
   },
 ];
 
@@ -74,6 +98,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     summary:
       "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限が強制リセットされました。",
     source_url: "https://x.com/thsottiaux",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "40分",
+      note: "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限が強制リセットされました。",
+    },
   },
   {
     id: "local-codex-forced-comp-reset-2026-06-29",
@@ -89,6 +121,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     summary:
       "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。",
     source_url: "https://x.com/thsottiaux/status/2067711440019483321",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "即時実行",
+      note: "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。",
+    },
   },
   {
     id: "local-codex-regular-reset-2026-06-25",
@@ -104,6 +144,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     summary:
       "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
     source_url: null,
+    details: {
+      cycleType: "定期リセット",
+      reasonType: "通常更新",
+      resetMethod: "利用上限更新",
+      scope: "全有料プラン",
+      noticeToExecution: "定期実施",
+      note: "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
+    },
   },
   {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
@@ -119,6 +167,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     summary:
       "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
     source_url: "https://x.com/thsottiaux/status/2066956441173323943",
+    details: {
+      cycleType: "定期リセット",
+      reasonType: "通常更新 / 詫びリセット",
+      resetMethod: "利用上限更新",
+      scope: "全有料プラン",
+      noticeToExecution: "定期実施",
+      note: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
+    },
   },
   {
     id: "local-codex-reliability-compensation-2026-06-04",
