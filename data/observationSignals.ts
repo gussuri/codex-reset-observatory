@@ -29,7 +29,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     title:
       "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。",
     keywords: ["forced reset", "limit reset", "強制リセット", "利用制限"],
-    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    source: null,
     sourceLabel: "Tibo氏の公式Xで告知あり",
   },
   {
@@ -42,7 +42,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     title:
       "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
     keywords: ["manual reset", "credit reset", "任意リセット", "追加配布"],
-    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    source: null,
     sourceLabel: "Tibo氏の公式Xで告知あり",
   },
   {
@@ -57,7 +57,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     title:
       "Tibo氏が、Codexの過剰な利用制限消費問題の調査に伴い、全員の利用制限を強制リセットしたと発表しました。",
     keywords: ["forced reset", "limit reset", "強制リセット", "利用制限", "バグ", "補償"],
-    source: "https://x.com/thsottiaux/status/2067711440019483321",
+    source: null,
     sourceLabel: "Tibo氏の公式Xで報告あり",
   },
   {
@@ -72,7 +72,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     title:
       "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。",
     keywords: ["rate limit", "usage limit", "reset", "利用上限", "バグ", "補償"],
-    source: "https://x.com/thsottiaux",
+    source: null,
     sourceLabel: "Tibo氏の公式Xで告知あり",
   },
   {
@@ -98,7 +98,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     title:
       "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。",
     keywords: ["rate limit", "利用上限", "レート制限"],
-    source: "https://x.com/thsottiaux/status/2066956441173323943",
+    source: null,
   },
   {
     id: "official-codex-capacity-error-hint-2026-06-16",
