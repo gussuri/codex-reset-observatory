@@ -7,12 +7,14 @@ type ResetHistoryDetailsProps = {
   item: ResetHistoryItem;
   locale: Locale;
   compact?: boolean;
+  showScope?: boolean;
 };
 
 export function ResetHistoryDetails({
   item,
   locale,
   compact = false,
+  showScope = true,
 }: ResetHistoryDetailsProps) {
   const details = item.details ?? {
     cycleType: item.resetType,
@@ -23,13 +25,17 @@ export function ResetHistoryDetails({
     note: item.summary,
   };
 
-  const rows = [
+  const rows: Array<readonly [string, string]> = [
     [translateUI("historyCycleType", locale), details.cycleType],
     [translateUI("historyReasonType", locale), details.reasonType],
     [translateUI("historyResetMethod", locale), details.resetMethod],
-    [translateUI("scope", locale), details.scope],
-    [translateUI("historyNoticeToExecution", locale), details.noticeToExecution],
-  ] as const;
+  ];
+
+  if (showScope) {
+    rows.splice(3, 0, [translateUI("scope", locale), details.scope]);
+  }
+
+  rows.push([translateUI("historyNoticeToExecution", locale), details.noticeToExecution]);
 
   return (
     <div className={compact ? "mt-2 space-y-2" : "mt-3 space-y-3"}>

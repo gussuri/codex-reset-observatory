@@ -337,7 +337,7 @@ export function RadarDashboard({
                         {item.title}
                       </h3>
                     </div>
-                    <ResetHistoryDetails item={item} locale={locale} compact />
+                    <ResetHistoryDetails item={item} locale={locale} compact showScope={false} />
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
