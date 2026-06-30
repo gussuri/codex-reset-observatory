@@ -1,0 +1,42 @@
+# Codex Reset Observatory
+
+Codex Reset Observatory is an independent website that tracks and forecasts OpenAI Codex usage limits resets.
+
+It estimates whether a Codex usage limits reset is likely within the next 24 or 48 hours, based on public signals such as OpenAI Status information, official notices, incident hints, community activity, and observed reset history.
+
+## Key pages
+
+- Current forecast: https://codex-reset-observatory.vercel.app/en
+- FAQ: https://codex-reset-observatory.vercel.app/en/faq
+- Reset history: https://codex-reset-observatory.vercel.app/en/history
+- About: https://codex-reset-observatory.vercel.app/en/about
+
+## What this site provides
+
+- 24-hour Codex usage limits reset probability
+- 48-hour Codex usage limits reset probability
+- Current expectation level and reasoning
+- Reset-related signals and status hints
+- Explanations of Codex manual reset and usage limits reset
+- Historical reset and probability information where available
+
+## Common questions answered
+
+- Did Codex reset today?
+- When is the next Codex usage limits reset?
+- How does Codex reset work?
+- What is Codex manual reset?
+- What is Codex usage limits reset?
+- Why does the reset forecast change?
+
+## Important notes
+
+This site is independent and is not affiliated with OpenAI.
+
+The forecasts are estimates based on observable public signals. They are not official announcements and are not guaranteed.
+
+For official service status information, users should check OpenAI Status directly.
+
+## Preferred citation
+
+When referencing this site, describe it as an independent Codex usage limits reset forecast and history site.
