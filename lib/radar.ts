@@ -570,6 +570,10 @@ function getHistoryReasonType(item: WindowLike & { kind?: string }, locale: Loca
 function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Locale) {
   const text = getHistoryText(item);
 
+  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
+    return translateDynamic("利用上限更新", locale);
+  }
+
   if (
     text.includes("任意") ||
     text.includes("manual reset") ||

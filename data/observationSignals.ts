@@ -26,6 +26,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     status: "active",
     expectedAt: "2026-06-30T09:30:00+09:00",
     expiresAt: "2026-06-30T12:00:00+09:00",
+    skipAutoHistoryMerge: true,
     title:
       "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。",
     keywords: ["forced reset", "limit reset", "強制リセット", "利用制限"],
@@ -84,6 +85,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expectedAt: "2026-06-25T07:01:00+09:00",
     expiresAt: "2026-06-25T08:01:00+09:00",
     resolvedAt: "2026-06-25T07:01:00+09:00",
+    skipAutoHistoryMerge: true,
     title:
       "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。",
     keywords: ["rate limit", "usage limit", "reset", "利用上限", "レート制限"],

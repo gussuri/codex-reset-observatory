@@ -1,9 +1,9 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-29T09:00:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-06-30T09:30:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
-export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-18T07:00:00+09:00";
+export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
@@ -62,6 +62,20 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
+    id: "local-codex-forced-reset-2026-06-30",
+    title: "臨時リセット",
+    kind: "window_closed",
+    status: "closed",
+    opened_at: "2026-06-30T08:50:00+09:00",
+    closed_at: "2026-06-30T09:30:00+09:00",
+    completed_at: "2026-06-30T09:30:00+09:00",
+    window_minutes: 40,
+    scope: "全有料プラン",
+    summary:
+      "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限が強制リセットされました。",
+    source_url: "https://x.com/thsottiaux",
+  },
+  {
     id: "local-codex-forced-comp-reset-2026-06-29",
     title: "過剰消費バグ調査・強制補償リセット",
     kind: "reset_completed",
@@ -77,6 +91,21 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     source_url: "https://x.com/thsottiaux/status/2067711440019483321",
   },
   {
+    id: "local-codex-regular-reset-2026-06-25",
+    title: "定期リセット",
+    kind: "window_closed",
+    status: "closed",
+    opened_at: "2026-06-22T13:27:58+09:00",
+    closed_at: "2026-06-25T07:01:00+09:00",
+    completed_at: "2026-06-25T07:01:00+09:00",
+    window_minutes: 3933,
+    window_human: "定期実施",
+    scope: "全有料プラン",
+    summary:
+      "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
+    source_url: null,
+  },
+  {
     id: "local-codex-rate-limit-reset-notice-2026-06-17",
     title: "定期リセット",
     kind: "window_closed",
@@ -88,7 +117,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     window_human: "定期実施",
     scope: "全有料プラン",
     summary:
-      "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
+      "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
     source_url: "https://x.com/thsottiaux/status/2066956441173323943",
   },
   {

@@ -516,6 +516,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Forced reset",
     zh: "强制重置",
   },
+  "利用上限更新": {
+    ja: "利用上限更新",
+    en: "Usage-limit refresh",
+    zh: "使用限制更新",
+  },
   "任意リセット権1回配布": {
     ja: "任意リセット権1回配布",
     en: "1 manual reset credit",
