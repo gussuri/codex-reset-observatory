@@ -146,11 +146,11 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     source_url: null,
     details: {
       cycleType: "定期リセット",
-      reasonType: "通常更新",
+      reasonType: "",
       resetMethod: "利用上限更新",
       scope: "全有料プラン",
       noticeToExecution: "定期実施",
-      note: "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
+      note: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
     },
   },
   {
