@@ -147,7 +147,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     details: {
       cycleType: "定期リセット",
       reasonType: "",
-      resetMethod: "利用上限更新",
+      resetMethod: "強制リセット",
       scope: "全有料プラン",
       noticeToExecution: "定期実施",
       note: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
