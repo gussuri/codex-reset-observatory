@@ -89,6 +89,26 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
             </div>
             <History className="mt-1 h-7 w-7 shrink-0 text-slate-700" />
           </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-teal-200 hover:text-teal-800"
+              href={locale === "ja" ? "/" : locale === "en" ? "/en" : "/zh"}
+            >
+              {content.nav.top}
+            </Link>
+            <Link
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-teal-200 hover:text-teal-800"
+              href={locale === "ja" ? "/about" : locale === "en" ? "/en/about" : "/zh/about"}
+            >
+              {translateUI("about", locale)}
+            </Link>
+            <Link
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-teal-200 hover:text-teal-800"
+              href={locale === "ja" ? "/faq" : locale === "en" ? "/en/faq" : "/zh/faq"}
+            >
+              {translateUI("faq", locale)}
+            </Link>
+          </div>
         </header>
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
