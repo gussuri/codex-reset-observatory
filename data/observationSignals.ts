@@ -36,9 +36,10 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-codex-additional-credit-notice-2026-06-30",
     observedAt: "2026-06-30T08:50:00+09:00",
     type: "official_notice",
-    status: "active",
+    status: "expired",
     expectedAt: "2026-07-01T09:00:00+09:00",
     expiresAt: "2026-07-01T15:00:00+09:00",
+    skipAutoHistoryMerge: true,
     title:
       "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
     keywords: ["manual reset", "credit reset", "任意リセット", "追加配布"],
