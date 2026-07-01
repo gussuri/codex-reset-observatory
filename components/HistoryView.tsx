@@ -15,7 +15,7 @@ type HistoryViewProps = {
 };
 
 export function HistoryView({ data, locale }: HistoryViewProps) {
-  const viewModel = getRadarViewModel(data, locale, false);
+  const viewModel = getRadarViewModel(data, locale);
 
   const content = {
     ja: {
