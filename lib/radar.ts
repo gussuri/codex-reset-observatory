@@ -452,28 +452,11 @@ function getLatestWindowWithRegularReset(
 }
 
 function getLatestCompletedLocalWindow(): WindowLike | undefined {
+  // 任意リセット権配布（LOCAL_PERSONAL_RESET_HISTORY）は含めない。
+  // 定期リセット・強制リセット（getCombinedResetHistory）のみを対象とする。
   const globalHistory = getCombinedResetHistory();
 
-  const personalEvents = LOCAL_PERSONAL_RESET_HISTORY.map((item): WindowLike => {
-    return {
-      id: item.key,
-      title: item.title,
-      status: "closed",
-      opened_at: item.signalAt ?? item.date ?? null,
-      closed_at: item.date ?? item.resetAt ?? null,
-      completed_at: item.date ?? item.resetAt ?? null,
-      window_minutes: 0,
-      window_human: item.windowLength,
-      scopeLabel: item.scopeLabel,
-      scope: item.scope,
-      summary: item.summary ?? undefined,
-      windowLabel: item.windowLabel,
-    };
-  });
-
-  const allEvents = [...globalHistory, ...personalEvents];
-
-  return allEvents.filter((item) => getCompletedResetAt(item))
+  return globalHistory.filter((item) => getCompletedResetAt(item))
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
