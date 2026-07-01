@@ -229,10 +229,10 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
     hasManualNextRegularReset ? manualNextRegularReset : null,
     current,
   );
-  const lastCompletedDate = getLatestDate(
-    rolledRegularReset.lastCompletedAt,
-    hasManualLastRegularReset ? manualLastRegularReset : null,
-  );
+  // lastCompletedAt は実際に確認済みの最後の定期リセット日のみを使う。
+  // rollRegularResetForward の繰り上がり分は「次回予測」にしか使わず、
+  // 実際のリセット発生を仮定した履歴追加を防ぐ。
+  const lastCompletedDate = hasManualLastRegularReset ? manualLastRegularReset : null;
   const lastCompletedAt = lastCompletedDate?.toISOString() ?? null;
   const scheduleAnchor = getLatestDate(
     lastCompletedDate,
