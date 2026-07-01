@@ -753,6 +753,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Campaign",
     zh: "活动",
   },
+  "1時間": {
+    ja: "1時間",
+    en: "1 hour",
+    zh: "1小时",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
