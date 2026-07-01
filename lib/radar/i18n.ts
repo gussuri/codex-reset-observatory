@@ -738,6 +738,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "The regular reset has been changed from a forced reset to a distribution of one manual reset credit.",
     zh: "定期重置已从强制重置更改为发放一次手动重置额度。",
   },
+  "Codex reset button 配布 (AIE World's Fair 記念)": {
+    ja: "Codex reset button 配布 (AIE World's Fair 記念)",
+    en: "Codex Reset Button Credit (AIE World's Fair)",
+    zh: "Codex 重置按钮额度（AIE World's Fair 纪念）",
+  },
+  "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
+    ja: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    en: "During the AI Engineer World's Fair demo, the Codex reset button was pressed, distributing one manual reset credit to all paid users (Codex Codex Go/Plus/Pro).",
+    zh: "在 AI Engineer World's Fair 的演示中，Codex 重置按钮被按下，向所有付费用户（Codex Go/Plus/Pro）发放了一次手动重置额度。",
+  },
+  "キャンペーン": {
+    ja: "キャンペーン",
+    en: "Campaign",
+    zh: "活动",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {

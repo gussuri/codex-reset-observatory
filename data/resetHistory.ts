@@ -1,12 +1,37 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-06-30T09:30:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-02T05:50:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
+  {
+    key: "personal-codex-reset-button-aie-2026-07-02",
+    title: "Codex reset button 配布 (AIE World's Fair 記念)",
+    resetType: "キャンペーン",
+    resetTypes: ["キャンペーン", "個人別リセット"],
+    status: "配布",
+    date: "2026-07-02T05:50:00+09:00",
+    signalAt: "2026-07-02T05:00:00+09:00",
+    resetAt: null,
+    signalLabel: "配布",
+    resetLabel: "",
+    scope: "全有料プラン",
+    windowLabel: "内容",
+    windowLength: "任意リセット1回分",
+    source: "https://x.com/dkundel",
+    summary: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "キャンペーン",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: "即時実行",
+      note: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    },
+  },
   {
     key: "personal-compensation-reset-credit-2026-06-27",
     title: "能力退化・過剰消費補償任意リセット",

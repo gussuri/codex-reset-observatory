@@ -23,9 +23,10 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-codex-reset-button-demo-notice-2026-07-02",
     observedAt: "2026-07-02T05:30:00+09:00",
     type: "official_notice",
-    status: "active",
-    expectedAt: "2026-07-03T05:00:00+09:00",
-    expiresAt: "2026-07-03T10:00:00+09:00",
+    status: "resolved",
+    expectedAt: "2026-07-02T05:00:00+09:00",
+    expiresAt: "2026-07-02T10:00:00+09:00",
+    resolvedAt: "2026-07-02T05:50:00+09:00",
     title:
       "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。",
     keywords: [
