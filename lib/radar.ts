@@ -102,13 +102,17 @@ export function getLocalRadarData({
   };
 }
 
-export function getRadarViewModel(data: RadarData | null, locale: Locale = "ja"): RadarViewModel {
+export function getRadarViewModel(
+  data: RadarData | null,
+  locale: Locale = "ja",
+  limitHistory: boolean = true,
+): RadarViewModel {
   const source = unwrapRadarData(data);
   const probability24h = getProbability(source, "24h");
   const probability48h = getProbability(source, "48h");
   const predictionLevel = getLocalExpectationLevel(source, locale);
   const observedLatestWindow = getLatestWindow(source);
-  const observedHistory = getRecentHistory(source, locale);
+  const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow();
   const latestObservedResetAt =
     observedHistory.find((item) => item.resetAt)?.resetAt ?? null;
@@ -124,8 +128,9 @@ export function getRadarViewModel(data: RadarData | null, locale: Locale = "ja")
     ) ?? latestCompletedLocalWindow;
   const activeWindow = getDisplayResetNotice(getActiveWindow(source, locale));
   const recentHistory = addPersonalResetEventsToHistory(
-    addRegularResetForecastToHistory(observedHistory, regularResetForecast, locale),
-    locale
+    addRegularResetForecastToHistory(observedHistory, regularResetForecast, locale, limitHistory),
+    locale,
+    limitHistory
   );
 
   return {
@@ -329,6 +334,7 @@ function addRegularResetForecastToHistory(
   history: RadarViewModel["recentHistory"],
   regularResetForecast: RadarViewModel["regularResetForecast"],
   locale: Locale = "ja",
+  limit: boolean = true,
 ) {
   if (!regularResetForecast.expectedAt) {
     return history;
@@ -371,12 +377,13 @@ function addRegularResetForecastToHistory(
     return bTime - aTime;
   });
 
-  return sortedHistory.slice(0, HISTORY_LIMIT);
+  return limit ? sortedHistory.slice(0, HISTORY_LIMIT) : sortedHistory;
 }
 
 function addPersonalResetEventsToHistory(
   history: RadarViewModel["recentHistory"],
   locale: Locale = "ja",
+  limit: boolean = true,
 ) {
   const seen = new Set(history.map((item) => item.key));
   const personalItems = LOCAL_PERSONAL_RESET_HISTORY.filter(
@@ -408,9 +415,10 @@ function addPersonalResetEventsToHistory(
     };
   });
 
-  return [...personalItems, ...history]
-    .sort((a, b) => getHistorySortTime(b) - getHistorySortTime(a))
-    .slice(0, HISTORY_LIMIT);
+  const result = [...personalItems, ...history]
+    .sort((a, b) => getHistorySortTime(b) - getHistorySortTime(a));
+
+  return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
 function getLatestWindowWithRegularReset(
@@ -834,14 +842,14 @@ function getValue(
   return undefined;
 }
 
-function getRecentHistory(_data: RadarData | null, locale: Locale = "ja") {
+function getRecentHistory(_data: RadarData | null, locale: Locale = "ja", limit: boolean = true) {
   const items = getCombinedResetHistory().filter((item): item is WindowEventLike =>
     Boolean(item?.title),
   );
 
   const seen = new Set<string>();
 
-  return items
+  const result = items
     .map((item) => {
       const isPendingNotice = isPendingResetNotice(item);
       const resetAt = isPendingNotice
@@ -885,8 +893,9 @@ function getRecentHistory(_data: RadarData | null, locale: Locale = "ja") {
       const aTime = getHistorySortTime(a);
       const bTime = getHistorySortTime(b);
       return bTime - aTime;
-    })
-    .slice(0, HISTORY_LIMIT);
+    });
+
+  return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
 function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarViewModel["activeWindow"] {
