@@ -728,6 +728,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo announced a full reset within the next hour, and everyone's Codex limits have been forcibly reset as compensation for the excessive consumption issue.",
     zh: "Tibo 宣布将在 1 小时内再次完全重置，并且所有人的 Codex 额度限制已作为过度消耗问题的补偿被强制重置。",
   },
+  "任意リセット配布": {
+    ja: "任意リセット配布",
+    en: "Manual Reset Distributed",
+    zh: "手动重置已发放",
+  },
+  "定期リセットが強制リセットから任意リセット権1回配布に変更されました。": {
+    ja: "定期リセットが強制リセットから任意リセット権1回配布に変更されました。",
+    en: "The regular reset has been changed from a forced reset to a distribution of one manual reset credit.",
+    zh: "定期重置已从强制重置更改为发放一次手动重置额度。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
@@ -739,16 +749,22 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
     return "";
   }
 
-  const trimmed = value.trim();
-  const directMatch = DYNAMIC_TRANSLATIONS[trimmed]?.[locale];
+  const trimmed = value.trim().normalize("NFC");
+
+  // DYNAMIC_TRANSLATIONS のキーもNFC正規化した辞書を作成して検索する（NFD/NFC差異対策）
+  const normalizedDict: Record<string, Record<Locale, string>> = {};
+  for (const [key, mapping] of Object.entries(DYNAMIC_TRANSLATIONS)) {
+    normalizedDict[key.normalize("NFC")] = mapping;
+  }
+
+  const directMatch = normalizedDict[trimmed]?.[locale];
   if (directMatch) {
     return directMatch;
   }
 
   // Fallback for partial/contains matching or dynamic strings
-  // We can try to replace substrings if they are in the dictionary
   let result = trimmed;
-  const sortedEntries = Object.entries(DYNAMIC_TRANSLATIONS).sort(
+  const sortedEntries = Object.entries(normalizedDict).sort(
     (a, b) => b[0].length - a[0].length,
   );
   for (const [key, mapping] of sortedEntries) {
