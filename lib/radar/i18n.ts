@@ -713,6 +713,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "An OpenAI member hinted at a Codex reset button demo at the AI Engineer event, and Tibo also reacted with “It’s happening.”",
     zh: "OpenAI成员暗示将在AI Engineer活动中演示Codex重置按钮，Tibo也对此回应称 “It's happening”。",
   },
+  "Romain Huet氏 & Tibo氏の公式Xにて言及あり": {
+    ja: "Romain Huet氏 & Tibo氏の公式Xにて言及あり",
+    en: "Mentioned on Romain Huet's & Tibo's official X",
+    zh: "Romain Huet 与 Tibo 的官方 X 提及",
+  },
+  "臨時リセット": {
+    ja: "臨時リセット",
+    en: "Temporary Reset",
+    zh: "临时重置",
+  },
+  "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限がForced resetされました。": {
+    ja: "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限がForced resetされました。",
+    en: "Tibo announced a full reset within the next hour, and everyone's Codex limits have been forcibly reset as compensation for the excessive consumption issue.",
+    zh: "Tibo 宣布将在 1 小时内再次完全重置，并且所有人的 Codex 额度限制已作为过度消耗问题的补偿被强制重置。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {

@@ -21,7 +21,7 @@ import {
   probabilityToPercent,
 } from "@/lib/radar";
 import type { Locale } from "@/lib/radar/types";
-import { translateUI } from "@/lib/radar/i18n";
+import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
@@ -334,7 +334,7 @@ export function RadarDashboard({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="ui-heading text-base font-semibold text-slate-950">
-                        {item.title}
+                        {translateDynamic(item.title, locale)}
                       </h3>
                     </div>
                     <ResetHistoryDetails item={item} locale={locale} compact showScope={false} />
@@ -342,12 +342,12 @@ export function RadarDashboard({
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
                       <p>
-                        {item.signalLabel}：<LocalizedDateTime value={item.signalAt} locale={locale} />
+                        {translateDynamic(item.signalLabel, locale)}：<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
                       <p>
-                        {item.resetLabel}：<LocalizedDateTime value={item.resetAt} locale={locale} />
+                        {translateDynamic(item.resetLabel, locale)}：<LocalizedDateTime value={item.resetAt} locale={locale} />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (

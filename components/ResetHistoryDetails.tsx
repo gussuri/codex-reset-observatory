@@ -1,5 +1,5 @@
 import type { Locale, RadarViewModel } from "@/lib/radar/types";
-import { translateUI } from "@/lib/radar/i18n";
+import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 
 type ResetHistoryItem = RadarViewModel["recentHistory"][number];
 
@@ -43,7 +43,7 @@ export function ResetHistoryDetails({
         {rows.map(([label, value]) => (
           <div className="grid grid-cols-[7.5rem_1fr] gap-2" key={label}>
             <dt className="text-slate-500">{label}</dt>
-            <dd className="font-medium text-slate-800">{value}</dd>
+            <dd className="font-medium text-slate-800">{translateDynamic(value, locale)}</dd>
           </div>
         ))}
       </dl>
@@ -52,7 +52,7 @@ export function ResetHistoryDetails({
           <p className="font-medium text-slate-500">
             {translateUI("historyNote", locale)}
           </p>
-          <p className="mt-1">{details.note}</p>
+          <p className="mt-1">{translateDynamic(details.note, locale)}</p>
         </div>
       ) : null}
     </div>
