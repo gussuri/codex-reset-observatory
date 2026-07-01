@@ -20,6 +20,26 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-codex-reset-button-demo-notice-2026-07-02",
+    observedAt: "2026-07-02T05:30:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-07-03T05:00:00+09:00",
+    expiresAt: "2026-07-03T08:00:00+09:00",
+    title:
+      "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。",
+    keywords: [
+      "reset button",
+      "AI Engineer",
+      "demo",
+      "実演",
+      "Romain Huet",
+      "It's happening",
+    ],
+    source: null,
+    sourceLabel: "Romain Huet氏 & Tibo氏の公式Xにて言及あり",
+  },
+  {
     id: "official-codex-forced-reset-notice-2026-06-30",
     observedAt: "2026-06-30T08:50:00+09:00",
     type: "official_notice",

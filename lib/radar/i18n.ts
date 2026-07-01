@@ -708,6 +708,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo announced that one additional manual reset credit will be distributed to all paid plans within the next 24 hours.",
     zh: "Tibo 宣布将在未来 24 小时内向所有付费计划追加发放一次手动重置额度。",
   },
+  "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。": {
+    ja: "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。",
+    en: "An OpenAI member hinted at a Codex reset button demo at the AI Engineer event, and Tibo also reacted with “It’s happening.”",
+    zh: "OpenAI成员暗示将在AI Engineer活动中演示Codex重置按钮，Tibo也对此回应称 “It's happening”。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
