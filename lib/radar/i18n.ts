@@ -748,7 +748,10 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
   // Fallback for partial/contains matching or dynamic strings
   // We can try to replace substrings if they are in the dictionary
   let result = trimmed;
-  for (const [key, mapping] of Object.entries(DYNAMIC_TRANSLATIONS)) {
+  const sortedEntries = Object.entries(DYNAMIC_TRANSLATIONS).sort(
+    (a, b) => b[0].length - a[0].length,
+  );
+  for (const [key, mapping] of sortedEntries) {
     if (key.length > 3 && result.includes(key)) {
       result = result.replaceAll(key, mapping[locale]);
     }
