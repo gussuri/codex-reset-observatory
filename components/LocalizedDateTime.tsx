@@ -27,20 +27,14 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
   }
 
   const formatLocale = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
-  const utc = formatDateTimeInZone(date, "UTC", formatLocale);
   const local = timeZone ? formatDateTimeInZone(date, timeZone, formatLocale) : null;
 
-  const localLabel = locale === "en" ? "Local" : locale === "zh" ? "本地时间" : "現地時間";
   const detectingLabel = locale === "en" ? "Detecting time zone..." : locale === "zh" ? "正在检测时区..." : "タイムゾーンを検出中...";
 
   return (
-    <span className={`inline-flex flex-col gap-0.5 ${className}`}>
+    <span className={`inline-flex flex-col ${className}`}>
       <span className="block font-bold text-slate-900 leading-tight">
         {local ?? detectingLabel}
-        {timeZone ? ` (${timeZone})` : ""}
-      </span>
-      <span className="block text-xs font-normal text-slate-400">
-        UTC: {utc}
       </span>
     </span>
   );
