@@ -758,6 +758,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "1 hour",
     zh: "1小时",
   },
+  "定期リセットが強制リセットから任意リセット権1回配布に変更されたため、任意リセットが配布されました。": {
+    ja: "定期リセットが強制リセットから任意リセット権1回配布に変更されたため、任意リセットが配布されました。",
+    en: "A manual reset has been distributed because the regular reset was changed from a forced reset to a distribution of one manual reset credit.",
+    zh: "由于定期重置从强制重置更改为发放一次手动重置额度，手动重置额度已发放。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
