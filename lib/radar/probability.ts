@@ -219,15 +219,7 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
     return "resolved";
   }
 
-  // 自動完了ロジック: 予定時刻 (expectedAt) があり、現在時刻がそれを過ぎている場合は完了 (resolved) とする
-  if (
-    signal.expectedAt &&
-    getDateTime(signal.expectedAt) > 0 &&
-    getDateTime(signal.expectedAt) <= Date.now()
-  ) {
-    return "resolved";
-  }
-
+  // 1. 有効期限 (expiresAt) がすでに切れている場合は expired とする
   if (
     signal.status === "expired" ||
     (signal.status !== "resolved" &&
@@ -236,6 +228,20 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
       getDateTime(signal.expiresAt) <= Date.now())
   ) {
     return "expired";
+  }
+
+  // 2. 自動完了ロジック:
+  // 予定時刻 (expectedAt) を過ぎている場合、通常は完了 (resolved) とする。
+  // ただし、有効期限 (expiresAt) が未来である場合は、その期限までは active を維持する。
+  if (
+    signal.expectedAt &&
+    getDateTime(signal.expectedAt) > 0 &&
+    getDateTime(signal.expectedAt) <= Date.now()
+  ) {
+    if (signal.expiresAt && getDateTime(signal.expiresAt) > Date.now()) {
+      return signal.status ?? "active";
+    }
+    return "resolved";
   }
 
   return signal.status ?? "active";
