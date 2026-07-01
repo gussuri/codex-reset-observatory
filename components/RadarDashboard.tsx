@@ -257,18 +257,21 @@ export function RadarDashboard({
                   {translateUI("latestReset", locale)}
                 </p>
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
-                  {viewModel.latestWindow.title}
+                  {translateDynamic(viewModel.latestWindow.title, locale)}
                 </h2>
               </div>
               <Sparkles className="h-7 w-7 text-amber-600" />
             </div>
 
             <p className="mt-4 text-sm leading-6 text-slate-700">
-              {viewModel.latestWindow.summary}
+              {translateDynamic(viewModel.latestWindow.summary, locale)}
             </p>
 
             <dl className="mt-5 space-y-4">
-              <InfoRow label={viewModel.latestWindow.scopeLabel ?? translateUI("scope", locale)} value={viewModel.latestWindow.scope} />
+              <InfoRow
+                label={viewModel.latestWindow.scopeLabel ?? translateUI("scope", locale)}
+                value={translateDynamic(viewModel.latestWindow.scope, locale)}
+              />
               {viewModel.latestWindow.kind === "observed" ? (
                 <InfoRow
                   label={translateUI("detectionTime", locale)}
@@ -281,7 +284,7 @@ export function RadarDashboard({
               />
               <InfoRow
                 label={viewModel.latestWindow.windowLabel ?? translateUI("windowLength", locale)}
-                value={viewModel.latestWindow.windowLength}
+                value={translateDynamic(viewModel.latestWindow.windowLength, locale)}
               />
             </dl>
           </article>
