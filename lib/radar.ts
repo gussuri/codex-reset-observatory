@@ -177,7 +177,10 @@ export function getRadarViewModel(
 
 function getRegularResetForecast(latestResetAt: string | null | undefined, locale: Locale = "ja") {
   const manualNextRegularReset = new Date(MANUAL_NEXT_REGULAR_RESET_AT);
-  const hasManualNextRegularReset = !Number.isNaN(manualNextRegularReset.getTime());
+  const manualNextIsFutureConfirmed =
+    !Number.isNaN(manualNextRegularReset.getTime()) &&
+    manualNextRegularReset.getTime() > Date.now();
+
   const manualLastRegularReset = new Date(MANUAL_LAST_REGULAR_RESET_AT);
   const current = new Date();
   const hasManualLastRegularReset =
@@ -187,73 +190,55 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
 
-  if (
-    !latestResetAt &&
-    !hasManualNextRegularReset &&
-    !hasManualLastRegularReset
-  ) {
-    return {
-      date: unknownLabel,
-      time: null,
-      remaining: remainingUnknown,
-      sourceResetAt: latestResetAt,
-      expectedAt: null,
-      lastCompletedAt: null,
-      remainingDays: null,
-      isNoticeWindow: false,
-    };
-  }
-
   const latestResetDate = latestResetAt ? new Date(latestResetAt) : null;
   const hasLatestResetDate =
     Boolean(latestResetDate) && !Number.isNaN((latestResetDate as Date).getTime());
 
-  if (
-    !hasManualNextRegularReset &&
-    !hasLatestResetDate &&
-    !hasManualLastRegularReset
-  ) {
+  // 「最後に確認されたリセット日」= 履歴の最新リセット or MANUAL_LAST_REGULAR_RESET_AT の新しい方
+  const lastCompletedDate = hasManualLastRegularReset ? manualLastRegularReset : null;
+  const lastCompletedAt = lastCompletedDate?.toISOString() ?? null;
+
+  // scheduleAnchor: 任意リセット権配布を除く最新の実際リセット日
+  const scheduleAnchor = getLatestDate(
+    lastCompletedDate,
+    hasLatestResetDate ? latestResetDate : null,
+  );
+
+  if (!scheduleAnchor && !manualNextIsFutureConfirmed) {
     return {
       date: unknownLabel,
       time: null,
       remaining: remainingUnknown,
       sourceResetAt: latestResetAt,
       expectedAt: null,
-      lastCompletedAt: null,
+      lastCompletedAt,
       remainingDays: null,
       isNoticeWindow: false,
     };
   }
 
-  const rolledRegularReset = rollRegularResetForward(
-    hasManualNextRegularReset ? manualNextRegularReset : null,
-    current,
-  );
-  // lastCompletedAt は実際に確認済みの最後の定期リセット日のみを使う。
-  // rollRegularResetForward の繰り上がり分は「次回予測」にしか使わず、
-  // 実際のリセット発生を仮定した履歴追加を防ぐ。
-  const lastCompletedDate = hasManualLastRegularReset ? manualLastRegularReset : null;
-  const lastCompletedAt = lastCompletedDate?.toISOString() ?? null;
-  const scheduleAnchor = getLatestDate(
-    lastCompletedDate,
-    hasLatestResetDate ? latestResetDate : null,
-  );
-  const nextRegularResetFromAnchor = scheduleAnchor
-    ? rollResetDateForward(
-        new Date(scheduleAnchor.getTime() + 7 * DAY_MS),
-        current,
-      )
-    : null;
-  // scheduleAnchor（最後の実際リセット日）が MANUAL_NEXT_REGULAR_RESET_AT より新しい場合、
-  // 手動設定の7日ローリングより「実際のリセット + 7日」の予測を優先する。
-  // （例: 6/30の強制リセット後は 7/9 ではなく 7/7 を表示）
-  const useAnchorOnly = nextRegularResetFromAnchor !== null &&
-    scheduleAnchor !== undefined &&
-    hasManualNextRegularReset &&
-    scheduleAnchor.getTime() > manualNextRegularReset.getTime();
-  const nextRegularReset = useAnchorOnly
-    ? nextRegularResetFromAnchor
-    : getLatestDate(rolledRegularReset.nextReset, nextRegularResetFromAnchor);
+  // 次回リセット予想日:
+  // - MANUAL_NEXT_REGULAR_RESET_AT が未来日付として明示設定されていれば、それを優先（確定情報）
+  // - それ以外は「最後の実際リセット + 7日」をロールして算出
+  const nextRegularReset = manualNextIsFutureConfirmed
+    ? manualNextRegularReset
+    : scheduleAnchor
+      ? rollResetDateForward(new Date(scheduleAnchor.getTime() + 7 * DAY_MS), current)
+      : null;
+
+  if (!nextRegularReset) {
+    return {
+      date: unknownLabel,
+      time: null,
+      remaining: remainingUnknown,
+      sourceResetAt: latestResetAt,
+      expectedAt: null,
+      lastCompletedAt,
+      remainingDays: null,
+      isNoticeWindow: false,
+    };
+  }
+
   const remainingDays = getCalendarDayDelta(nextRegularReset, current);
 
   let remainingText = "";
@@ -276,7 +261,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
   return {
     date: formattedDate,
     time:
-      hasManualNextRegularReset && MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED
+      manualNextIsFutureConfirmed && MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED
         ? formatTime(nextRegularReset)
         : null,
     remaining: remainingText,
@@ -285,7 +270,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
     lastCompletedAt,
     remainingDays,
     isNoticeWindow:
-      remainingDays >= 0 && (hasManualNextRegularReset || remainingDays <= 3),
+      remainingDays >= 0 && (manualNextIsFutureConfirmed || remainingDays <= 3),
   };
 }
 
