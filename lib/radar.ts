@@ -244,10 +244,16 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
         current,
       )
     : null;
-  const nextRegularReset = getLatestDate(
-    rolledRegularReset.nextReset,
-    nextRegularResetFromAnchor,
-  );
+  // scheduleAnchor（最後の実際リセット日）が MANUAL_NEXT_REGULAR_RESET_AT より新しい場合、
+  // 手動設定の7日ローリングより「実際のリセット + 7日」の予測を優先する。
+  // （例: 6/30の強制リセット後は 7/9 ではなく 7/7 を表示）
+  const useAnchorOnly = nextRegularResetFromAnchor !== null &&
+    scheduleAnchor !== undefined &&
+    hasManualNextRegularReset &&
+    scheduleAnchor.getTime() > manualNextRegularReset.getTime();
+  const nextRegularReset = useAnchorOnly
+    ? nextRegularResetFromAnchor
+    : getLatestDate(rolledRegularReset.nextReset, nextRegularResetFromAnchor);
   const remainingDays = getCalendarDayDelta(nextRegularReset, current);
 
   let remainingText = "";
