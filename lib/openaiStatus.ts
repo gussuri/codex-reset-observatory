@@ -96,13 +96,19 @@ export async function fetchOpenAIStatusSignals(
     return getStoredStatusSignals();
   }
 
-  const affectedCodexComponents =
-    summary?.components?.filter(
-      (component) =>
-        isCodexText(component.name) &&
-        component.status &&
-        component.status !== "operational",
-    ).length ?? 0;
+  const codexComponents =
+    summary?.components?.filter((component) => isCodexText(component.name)) ??
+    [];
+  const hasCodexComponentData = codexComponents.length > 0;
+  const affectedCodexComponents = codexComponents.filter(
+    (component) =>
+      component.status && component.status !== "operational",
+  ).length;
+  // Codex コンポーネント（Codex Web / Codex API 等）がすべて operational の場合は
+  // インシデント文言による誤検知を防ぐためインシデント警告を抑制する
+  const allCodexComponentsOperational =
+    hasCodexComponentData && affectedCodexComponents === 0;
+
   const codexIncidents =
     incidents?.incidents?.filter((incident) => isCodexIncident(incident)) ?? [];
   const activeCodexIncidents = codexIncidents.filter(
@@ -135,8 +141,13 @@ export async function fetchOpenAIStatusSignals(
 
   return {
     updatedAt,
-    statusIncidents24h: incidentIds.size + affectedCodexComponents,
-    activeCodexIncidents: activeCodexIncidents.length,
+    // コンポーネントが全部正常なら incidents は 0 扱い（誤検知防止）
+    statusIncidents24h: allCodexComponentsOperational
+      ? 0
+      : incidentIds.size + affectedCodexComponents,
+    activeCodexIncidents: allCodexComponentsOperational
+      ? 0
+      : activeCodexIncidents.length,
     recentCodexIncidents: recentCodexIncidents.length,
     affectedCodexComponents,
     latestCodexIncidentName: latestCodexIncident?.name ?? null,
