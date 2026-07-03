@@ -443,11 +443,27 @@ function getLatestWindowWithRegularReset(
 }
 
 function getLatestCompletedLocalWindow(): WindowLike | undefined {
-  // 任意リセット権配布（LOCAL_PERSONAL_RESET_HISTORY）は含めない。
-  // 定期リセット・強制リセット（getCombinedResetHistory）のみを対象とする。
   const globalHistory = getCombinedResetHistory();
 
-  return globalHistory.filter((item) => getCompletedResetAt(item))
+  // 個人リセットイベント（任意リセット権配布等）も「最新カード」表示に含める。
+  // ※ 7日サイクル計算は latestObservedResetAt（getCombinedResetHistory のみ）で行うため影響なし。
+  const personalEvents = LOCAL_PERSONAL_RESET_HISTORY.map((item): WindowLike => ({
+    id: item.key,
+    title: item.title,
+    status: "closed",
+    opened_at: item.signalAt ?? item.date ?? null,
+    closed_at: item.resetAt ?? item.date ?? null,
+    completed_at: item.resetAt ?? item.date ?? null,
+    window_minutes: 0,
+    window_human: item.windowLength,
+    scopeLabel: item.scopeLabel,
+    scope: item.scope,
+    summary: item.summary ?? undefined,
+    windowLabel: item.windowLabel,
+  }));
+
+  return [...globalHistory, ...personalEvents]
+    .filter((item) => getCompletedResetAt(item))
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
