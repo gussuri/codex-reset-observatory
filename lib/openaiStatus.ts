@@ -212,7 +212,16 @@ function isCodexIncident(incident: StatuspageIncident) {
     .filter(Boolean)
     .join(" ");
 
-  return isCodexText(text);
+  if (!isCodexText(text)) return false;
+
+  // FedRAMP ワークスペース限定の障害は一般ユーザー向け Codex に影響しないため除外する
+  const isFedRAMPOnly = /\bFedRAMP\b/i.test(text) && (
+    /\bin FedRAMP workspaces?\b/i.test(text) ||
+    /\bFedRAMP (environment|workspace|tenant)/i.test(text)
+  );
+  if (isFedRAMPOnly) return false;
+
+  return true;
 }
 
 function normalizeStatusIncident(
