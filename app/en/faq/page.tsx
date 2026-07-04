@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     absolute: "Codex Reset FAQ | Usage Limits, Manual Reset, and Timing",
   },
   description:
-    "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
+    "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
   keywords: [
     "Codex reset FAQ",
     "Codex reset timing",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
+      "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
     url: "/en/faq",
     siteName: "Codex Reset Observatory",
     type: "article",
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Answers about Codex usage limits reset timing, manual reset credits, reset history, and why the reset forecast can change.",
+      "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
     images: ["/og-image.png"],
   },
 };
