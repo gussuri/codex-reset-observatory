@@ -1,9 +1,9 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-02T05:50:00+09:00";
-export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
-export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = true;
-export const MANUAL_LAST_REGULAR_RESET_AT = "2026-06-25T07:01:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-07T13:55:00+09:00";
+export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-14T09:30:00+09:00";
+export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
+export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-07T09:30:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
@@ -110,6 +110,29 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-regular-reset-2026-07-07",
+    title: "定期リセット",
+    kind: "window_closed",
+    status: "closed",
+    opened_at: "2026-07-07T09:30:00+09:00",
+    closed_at: "2026-07-07T09:30:00+09:00",
+    completed_at: "2026-07-07T09:30:00+09:00",
+    window_minutes: 0,
+    window_human: "定期実施",
+    scope: "任意リセットを使っていないアカウント",
+    summary:
+      "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
+    source_url: null,
+    details: {
+      cycleType: "定期リセット",
+      reasonType: "",
+      resetMethod: "強制リセット",
+      scope: "任意リセットを使っていないアカウント",
+      noticeToExecution: "定期実施",
+      note: "任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
+    },
+  },
   {
     id: "local-codex-forced-reset-2026-06-30",
     title: "臨時リセット",
