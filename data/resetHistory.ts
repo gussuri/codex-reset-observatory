@@ -130,7 +130,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       resetMethod: "強制リセット",
       scope: "任意リセットを使っていないアカウント",
       noticeToExecution: "定期実施",
-      note: "任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
+      note: "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
     },
   },
   {

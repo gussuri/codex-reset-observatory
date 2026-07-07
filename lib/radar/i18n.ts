@@ -773,10 +773,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Accounts that haven't used manual reset",
     zh: "未使用手动重置的账号",
   },
-  "任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。": {
-    ja: "任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
-    en: "Accounts that have used a manual reset are excluded from this reset, and will instead reset one week after the time they used it.",
-    zh: "使用过手动重置的账号不在此次重置范围内，将在使用手动重置时间的一周后分别重置。",
+  "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。": {
+    ja: "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
+    en: "Accounts that have used a manual reset between the last reset and this timing are excluded from this reset, and will instead reset one week after the time they used it.",
+    zh: "从上次重置到此时使用过手动重置的账号不在此次重置范围内，将在使用手动重置时间的一周后分别重置。",
   },
   "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。": {
     ja: "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
