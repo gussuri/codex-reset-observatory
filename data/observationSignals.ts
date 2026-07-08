@@ -20,6 +20,20 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-gpt-5.6-release-notice-2026-07-08",
+    observedAt: "2026-07-08T13:36:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-07-09T04:00:00+09:00",
+    expiresAt: "2026-07-09T10:00:00+09:00",
+    skipAutoHistoryMerge: true,
+    title:
+      "OpenAIがGPT-5.6（Sol/Terra/Luna）の太平洋時間7月8日12:00（日本時間7月9日4:00）リリースを発表。リリース記念としてCodex利用制限の全体リセットが実施される可能性があります。",
+    keywords: ["GPT-5.6", "Sol", "Terra", "Luna", "release", "celebration", "リリース", "記念", "全体リセット"],
+    source: "https://x.com/OpenAI",
+    sourceLabel: "OpenAI公式Xで告知あり",
+  },
+  {
     id: "official-codex-reset-button-demo-notice-2026-07-02",
     observedAt: "2026-07-02T05:30:00+09:00",
     type: "official_notice",

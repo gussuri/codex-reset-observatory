@@ -628,6 +628,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "No summary is available.",
     zh: "未能获取概要信息。",
   },
+  "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。": {
+    ja: "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
+    en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
+    zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
+  },
+  "OpenAIがGPT-5.6（Sol/Terra/Luna）の太平洋時間7月8日12:00（日本時間7月9日4:00）リリースを発表。リリース記念としてCodex利用制限の全体リセットが実施される可能性があります。": {
+    ja: "OpenAIがGPT-5.6（Sol/Terra/Luna）の太平洋時間7月8日12:00（日本時間7月9日4:00）リリースを発表。リリース記念としてCodex利用制限の全体リセットが実施される可能性があります。",
+    en: "OpenAI announced the release of GPT-5.6 (Sol/Terra/Luna) on July 8 at 12:00 PM PT (July 9 at 4:00 AM JST). A global Codex usage limit reset may be executed to celebrate the release.",
+    zh: "OpenAI宣布将于太平洋时间7月8日12:00（北京时间7月9日03:00）发布GPT-5.6（Sol/Terra/Luna）。可能会执行全员Codex使用限制重置以示庆祝。",
+  },
+  "OpenAI公式Xで告知あり": {
+    ja: "OpenAI公式Xで告知あり",
+    en: "Announced on OpenAI's official X",
+    zh: "在 OpenAI 官方 X 上发布预告",
+  },
   "任意リセット1回分": {
     ja: "任意リセット1回分",
     en: "1 manual reset credit",
@@ -777,11 +792,6 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
     en: "Accounts that have used a manual reset between the last reset and this timing are excluded from this reset, and will instead reset one week after the time they used it.",
     zh: "从上次重置到此时使用过手动重置的账号不在此次重置范围内，将在使用手动重置时间的一周后分别重置。",
-  },
-  "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。": {
-    ja: "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
-    en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
-    zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
 };
 
