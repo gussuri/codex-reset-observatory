@@ -23,9 +23,10 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-tibo-reset-today-afternoon-2026-07-10",
     observedAt: "2026-07-10T04:09:00+09:00",
     type: "official_notice",
-    status: "active",
+    status: "resolved",
     expectedAt: "2026-07-10T07:00:00+09:00",
     expiresAt: "2026-07-10T12:00:00+09:00",
+    resolvedAt: "2026-07-10T07:00:00+09:00",
     skipAutoHistoryMerge: true,
     title:
       "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言。日本時間7月10日午前4時〜10時ごろにリセットが実施される可能性があります。",

@@ -111,6 +111,28 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
+    id: "local-codex-gpt-5-6-release-reset-2026-07-10",
+    title: "GPT-5.6リリース記念リセット",
+    kind: "window_closed",
+    status: "closed",
+    opened_at: "2026-07-10T04:09:00+09:00",
+    closed_at: "2026-07-10T07:00:00+09:00",
+    completed_at: "2026-07-10T07:00:00+09:00",
+    window_minutes: 171,
+    scope: "全有料プラン",
+    summary:
+      "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。",
+    source_url: "https://x.com/thsottiaux",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "約3時間",
+      note: "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。",
+    },
+  },
+  {
     id: "local-codex-regular-reset-2026-07-07",
     title: "定期リセット",
     kind: "window_closed",
