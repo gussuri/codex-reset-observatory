@@ -633,6 +633,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
     zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
+  "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言。日本時間7月10日午前4時〜10時ごろにリセットが実施される可能性があります。": {
+    ja: "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言。日本時間7月10日午前4時〜10時ごろにリセットが実施される可能性があります。",
+    en: "Tibo, an OpenAI Codex developer, stated that 'reset is coming this afternoon (US Pacific time).' A Codex usage limit reset may occur around 4:00–10:00 AM JST on July 10.",
+    zh: "OpenAI Codex开发者Tibo表示「今天下午（美国太平洋时间）会有重置」。日本时间7月10日凌晨4点至上午10点前后可能实施Codex使用限制重置。",
+  },
+  "Tibo氏（OpenAI Codex開発者）のXポストより": {
+    ja: "Tibo氏（OpenAI Codex開発者）のXポストより",
+    en: "From Tibo's X post (OpenAI Codex developer)",
+    zh: "来自 Tibo（OpenAI Codex 开发者）的 X 帖子",
+  },
   "任意リセット1回分": {
     ja: "任意リセット1回分",
     en: "1 manual reset credit",
