@@ -20,13 +20,9 @@ export function getLocalResetProbability(
 ): number {
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const weightKey = period === "24h" ? "within24h" : "within48h";
-  const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
   const periodHours = period === "24h" ? 24 : 48;
 
-  if (
-    officialNotice &&
-    isUpcomingWithinHours(noticeHoursUntil, periodHours)
-  ) {
+  if (hasOfficialNoticeWithinHours(officialNotice, periodHours)) {
     return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
@@ -308,6 +304,22 @@ export function getLocalExpectationLevel(data: RadarData | null, locale: Locale 
   return getExpectationLabel(probability24h, locale);
 }
 
+function hasOfficialNoticeWithinHours(
+  notice: ReturnType<typeof getLatestActiveLocalSignal>,
+  periodHours: number,
+) {
+  const scheduledHoursUntil = getHoursUntil(notice?.expectedAt);
+  if (isUpcomingWithinHours(scheduledHoursUntil, periodHours)) {
+    return true;
+  }
+
+  if (notice?.expectedAt) {
+    return false;
+  }
+
+  return isUpcomingWithinHours(getHoursUntil(notice?.expiresAt), periodHours);
+}
+
 export function getLocalProbabilityReason(
   data: RadarData | null,
   probability24h: number | undefined,
@@ -318,7 +330,7 @@ export function getLocalProbabilityReason(
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
 
-  if (officialNotice && isUpcomingWithinHours(noticeHoursUntil, 24)) {
+  if (hasOfficialNoticeWithinHours(officialNotice, 24)) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a very high probability within 24 hours."
       : locale === "zh"
@@ -326,7 +338,7 @@ export function getLocalProbabilityReason(
         : "公式リセット予告があるため、通常より高めに見ています。";
   }
 
-  if (officialNotice && isUpcomingWithinHours(noticeHoursUntil, 48)) {
+  if (hasOfficialNoticeWithinHours(officialNotice, 48)) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a high probability within 48 hours."
       : locale === "zh"

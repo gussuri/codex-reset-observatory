@@ -21,6 +21,7 @@ export type WindowLike = {
   opened_at?: string | null;
   closed_at?: string | null;
   completed_at?: string | null;
+  date?: string | null;
   window_minutes?: number;
   window_human?: string;
   scopeLabel?: string;
@@ -39,7 +40,7 @@ export type WindowLike = {
 
 export type WindowEventLike = WindowLike & {
   kind?: string;
-  date?: string;
+  date?: string | null;
   label?: string;
 };
 

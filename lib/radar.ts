@@ -16,6 +16,7 @@ import {
   MANUAL_LAST_REGULAR_RESET_AT,
   MANUAL_NEXT_REGULAR_RESET_AT,
   MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED,
+  MANUAL_SCHEDULE_ANCHOR_AT,
 } from "@/data/resetHistory";
 import type {
   OpenAIStatusHistoryItem,
@@ -186,6 +187,10 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
   const hasManualLastRegularReset =
     !Number.isNaN(manualLastRegularReset.getTime()) &&
     manualLastRegularReset.getTime() <= current.getTime();
+  const manualScheduleAnchor = new Date(MANUAL_SCHEDULE_ANCHOR_AT);
+  const hasManualScheduleAnchor =
+    !Number.isNaN(manualScheduleAnchor.getTime()) &&
+    manualScheduleAnchor.getTime() <= current.getTime();
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
@@ -201,6 +206,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
   // scheduleAnchor: 任意リセット権配布を除く最新の実際リセット日
   const scheduleAnchor = getLatestDate(
     lastCompletedDate,
+    hasManualScheduleAnchor ? manualScheduleAnchor : null,
     hasLatestResetDate ? latestResetDate : null,
   );
 
@@ -856,7 +862,7 @@ function getRecentHistory(_data: RadarData | null, locale: Locale = "ja", limit:
         status: translateEventStatus(item.kind ?? item.status, locale),
         details: getHistoryDetails(item, locale),
         date: item.date ?? resetAt ?? item.opened_at,
-        signalAt: item.opened_at ?? item.date ?? null,
+        signalAt: item.opened_at ?? null,
         resetAt,
         signalLabel: translateDynamic("検知", locale),
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
@@ -1005,7 +1011,7 @@ function isRegularResetWindow(value: WindowLike | undefined) {
 
 function getWindowResetTime(value: WindowLike | undefined) {
   const resetAt =
-    value?.closed_at ?? value?.completed_at ?? value?.opened_at ?? null;
+    value?.closed_at ?? value?.completed_at ?? value?.opened_at ?? value?.date ?? null;
 
   if (!resetAt) {
     return 0;
