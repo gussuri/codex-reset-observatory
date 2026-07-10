@@ -26,6 +26,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     status: "resolved",
     expectedAt: "2026-07-11T14:30:00+09:00",
     expiresAt: "2026-07-11T14:30:00+09:00",
+    resolvedAt: "2026-07-11T03:26:00+09:00",
     skipAutoHistoryMerge: true,
     title:
       "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。",
@@ -38,10 +39,11 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-07-11T00:00:00+09:00",
     type: "official_notice",
     status: "active",
+    expectedAt: "2026-07-11T16:00:00+09:00",
     expiresAt: "2026-07-12T00:00:00+09:00",
     skipAutoHistoryMerge: true,
     title:
-      "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。実施時刻は不明です。",
+      "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。予告時間は目安として日本時間16:00を表示しています。",
     keywords: ["GPT-5.6", "Sol", "3rd reset", "3回目", "later today", "Codex", "Tibo", "thsottiaux"],
     source: "https://x.com/thsottiaux",
     sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより",

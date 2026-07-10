@@ -1,10 +1,10 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
 export const LOCAL_MODEL_UPDATED_AT = "2026-07-08T16:36:00+09:00";
-export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-18T00:00:00+09:00";
+export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-18T03:26:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-07T09:30:00+09:00";
-export const MANUAL_SCHEDULE_ANCHOR_AT = "2026-07-11T00:00:00+09:00";
+export const MANUAL_SCHEDULE_ANCHOR_AT = "2026-07-11T03:26:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
@@ -116,19 +116,21 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     title: "GPT-5.6 Solリリース記念リセット（2回目）",
     kind: "reset_completed",
     status: "closed",
-    date: "2026-07-11T00:00:00+09:00",
-    window_human: "不明",
+    opened_at: "2026-07-10T14:30:00+09:00",
+    closed_at: "2026-07-11T03:26:00+09:00",
+    completed_at: "2026-07-11T03:26:00+09:00",
+    window_minutes: 776,
     scope: "全有料プラン",
     summary:
-      "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。実施時刻は不明です。",
+      "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。",
     source_url: "https://x.com/thsottiaux",
     details: {
       cycleType: "ランダムリセット",
       reasonType: "ご祝儀リセット",
       resetMethod: "強制リセット",
       scope: "全有料プラン",
-      noticeToExecution: "不明",
-      note: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。実施時刻は不明です。",
+      noticeToExecution: "12時間56分",
+      note: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。",
     },
   },
   {
