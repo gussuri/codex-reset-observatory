@@ -648,6 +648,41 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo (OpenAI Codex developer) announced a 2nd rate limit reset across ChatGPT Work and Codex within 24 hours to celebrate the GPT-5.6 Sol launch.",
     zh: "Tibo（OpenAI Codex开发者）宣布为庆祝GPT-5.6 Sol发布，将在24小时内对ChatGPT Work和Codex全体执行第2次速率限制重置。",
   },
+  "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。予告時間は目安として日本時間16:00を表示しています。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。予告時間は目安として日本時間16:00を表示しています。",
+    en: "Tibo (OpenAI Codex developer) announced a third rate limit reset later today to celebrate the GPT-5.6 Sol launch. The displayed 4:00 PM JST time is an estimate.",
+    zh: "Tibo（OpenAI Codex开发者）宣布将于今天晚些时候执行第3次速率限制重置，以庆祝GPT-5.6 Sol发布。页面显示的日本时间16:00为估计时间。",
+  },
+  "GPT-5.6 Solリリース記念リセット（2回目）": {
+    ja: "GPT-5.6 Solリリース記念リセット（2回目）",
+    en: "GPT-5.6 Sol Launch Celebration Reset (Second)",
+    zh: "GPT-5.6 Sol 发布庆祝重置（第2次）",
+  },
+  "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。": {
+    ja: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。",
+    en: "Usage limits across ChatGPT Work and Codex were forcibly reset for a second time to celebrate the GPT-5.6 Sol launch.",
+    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work和Codex整体的使用限制已第2次被强制重置。",
+  },
+  "12時間56分": {
+    ja: "12時間56分",
+    en: "12 hours 56 minutes",
+    zh: "12小时56分钟",
+  },
+  "GPT-5.6リリース記念リセット": {
+    ja: "GPT-5.6リリース記念リセット",
+    en: "GPT-5.6 Launch Celebration Reset",
+    zh: "GPT-5.6 发布庆祝重置",
+  },
+  "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。": {
+    ja: "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。",
+    en: "Codex usage limits for all paid plans were forcibly reset to celebrate the GPT-5.6 launch.",
+    zh: "为庆祝GPT-5.6发布，所有付费计划的Codex使用限制已被强制重置。",
+  },
+  "約3時間": {
+    ja: "約3時間",
+    en: "About 3 hours",
+    zh: "约3小时",
+  },
   "任意リセット1回分": {
     ja: "任意リセット1回分",
     en: "1 manual reset credit",
