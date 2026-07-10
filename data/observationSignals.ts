@@ -20,6 +20,20 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-tibo-gpt56-sol-2nd-reset-2026-07-10",
+    observedAt: "2026-07-10T14:30:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-07-11T02:30:00+09:00",
+    expiresAt: "2026-07-11T14:30:00+09:00",
+    skipAutoHistoryMerge: true,
+    title:
+      "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。",
+    keywords: ["GPT-5.6", "Sol", "2nd reset", "2回目", "ChatGPT Work", "Codex", "Tibo", "thsottiaux"],
+    source: "https://x.com/thsottiaux",
+    sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより",
+  },
+  {
     id: "official-tibo-reset-today-afternoon-2026-07-10",
     observedAt: "2026-07-10T04:09:00+09:00",
     type: "official_notice",
@@ -44,7 +58,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     resolvedAt: "2026-07-02T05:50:00+09:00",
     skipAutoHistoryMerge: true,
     title:
-      "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。",
+      "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も \"It's happening\" と反応しています。",
     keywords: [
       "reset button",
       "AI Engineer",

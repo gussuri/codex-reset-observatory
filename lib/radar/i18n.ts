@@ -643,6 +643,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "From Tibo's X post (OpenAI Codex developer)",
     zh: "来自 Tibo（OpenAI Codex 开发者）的 X 帖子",
   },
+  "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。": {
+    ja: "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。",
+    en: "Tibo (OpenAI Codex developer) announced a 2nd rate limit reset across ChatGPT Work and Codex within 24 hours to celebrate the GPT-5.6 Sol launch.",
+    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝GPT-5.6 Sol发布，将在24小时内对ChatGPT Work和Codex全体执行第2次速率限制重置。",
+  },
   "任意リセット1回分": {
     ja: "任意リセット1回分",
     en: "1 manual reset credit",
