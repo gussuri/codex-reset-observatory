@@ -653,6 +653,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo (OpenAI Codex developer) announced a third rate limit reset later today (US Pacific time) to celebrate the GPT-5.6 Sol launch.",
     zh: "Tibo（OpenAI Codex开发者）宣布将于今天晚些时候（美国太平洋时间）执行第3次速率限制重置，以庆祝GPT-5.6 Sol发布。",
   },
+  "GPT-5.6 Solリリース記念リセット（3回目）": {
+    ja: "GPT-5.6 Solリリース記念リセット（3回目）",
+    en: "GPT-5.6 Sol Launch Celebration Reset (Third)",
+    zh: "GPT-5.6 Sol 发布庆祝重置（第3次）",
+  },
+  "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が3回目に強制リセットされました。": {
+    ja: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が3回目に強制リセットされました。",
+    en: "Usage limits across ChatGPT Work and Codex were forcibly reset for a third time to celebrate the GPT-5.6 Sol launch.",
+    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work和Codex整体的使用限制已第3次被强制重置。",
+  },
+  "15時間": {
+    ja: "15時間",
+    en: "15 hours",
+    zh: "15小时",
+  },
   "GPT-5.6 Solリリース記念リセット（2回目）": {
     ja: "GPT-5.6 Solリリース記念リセット（2回目）",
     en: "GPT-5.6 Sol Launch Celebration Reset (Second)",

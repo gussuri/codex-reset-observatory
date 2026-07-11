@@ -38,9 +38,10 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-tibo-gpt56-sol-3rd-reset-2026-07-11",
     observedAt: "2026-07-11T00:00:00+09:00",
     type: "official_notice",
-    status: "active",
+    status: "resolved",
     expectedAt: "2026-07-11T16:00:00+09:00",
     expiresAt: "2026-07-12T00:00:00+09:00",
+    resolvedAt: "2026-07-11T15:00:00+09:00",
     skipAutoHistoryMerge: true,
     title:
       "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。",
