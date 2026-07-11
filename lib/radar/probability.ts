@@ -486,13 +486,15 @@ export function getLocalProbabilityReason(
 
   let boostText = "";
   if (activeBoostSignals.length > 0) {
-    const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join(" / ");
     if (locale === "en") {
-      boostText = ` (probability adjusted: ${boostTitles})`;
+      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join(", ");
+      boostText = ` (The probability is temporarily adjusted higher due to special event context: ${boostTitles})`;
     } else if (locale === "zh") {
-      boostText = `（已进行概率调整：${boostTitles}）`;
+      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join("、");
+      boostText = `（受特殊活动影响，概率已被临时上调：${boostTitles}）`;
     } else {
-      boostText = `（確率調整：${boostTitles}）`;
+      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join("、");
+      boostText = `（特別イベント「${boostTitles}」の影響により、確率は一時的に高く調整されています）`;
     }
   }
 
