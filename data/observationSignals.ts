@@ -6,7 +6,8 @@ export type LocalObservationSignal = {
     | "official_incident_hint"
     | "status_incident"
     | "community_report"
-    | "limit_anomaly";
+    | "limit_anomaly"
+    | "probability_boost";
   title: string;
   keywords?: Array<string>;
   source?: string | null;
@@ -16,9 +17,21 @@ export type LocalObservationSignal = {
   resolvedAt?: string | null;
   status?: "active" | "resolved" | "expired";
   skipAutoHistoryMerge?: boolean;
+  boostValue?: number;
 };
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
+  {
+    id: "boost-gpt-5.6-release-2026-07-10",
+    observedAt: "2026-07-10T14:30:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-20T15:00:00+09:00",
+    title: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
+    boostValue: 0.20,
+    source: null,
+    sourceLabel: "システムによる確率調整",
+  },
   {
     id: "official-tibo-gpt56-sol-2nd-reset-2026-07-10",
     observedAt: "2026-07-10T14:30:00+09:00",

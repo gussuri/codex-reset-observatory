@@ -633,6 +633,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
     zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
+  "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)": {
+    ja: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
+    en: "GPT-5.6 Launch Celebration Boost (+20% probability boost during random reset alert period)",
+    zh: "GPT-5.6 发布庆祝随机重置警戒期概率提升 (+20%)",
+  },
+  "システムによる確率調整": {
+    ja: "システムによる確率調整",
+    en: "System probability adjustment",
+    zh: "系统概率调整",
+  },
   "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言しました。": {
     ja: "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言しました。",
     en: "Tibo, an OpenAI Codex developer, stated that 'reset is coming this afternoon (US Pacific time).'",

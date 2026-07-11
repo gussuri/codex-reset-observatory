@@ -105,6 +105,19 @@ export function getLocalResetProbability(
         : LOCAL_PROBABILITY_WEIGHTS.pressureBoost.low;
 
   const base = LOCAL_PROBABILITY_WEIGHTS.base[weightKey];
+
+  // 期間限定のイベントブースト（確率底上げ）を収集して加算
+  const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.type === "probability_boost" &&
+      isCurrentLocalSignal(signal) &&
+      signal.boostValue !== undefined
+  );
+  const eventBoost = activeBoostSignals.reduce(
+    (sum, sig) => sum + (sig.boostValue ?? 0),
+    0
+  );
+
   const score =
     base +
     getLocalHistoryPressure(period) +
@@ -119,7 +132,8 @@ export function getLocalResetProbability(
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.communityMention[weightKey] +
     issueAnomalies *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.issueAnomaly[weightKey] +
-    pressureBoost;
+    pressureBoost +
+    eventBoost;
 
   return Math.min(
     LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
