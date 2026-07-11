@@ -633,10 +633,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
     zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
-  "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言。日本時間7月10日午前4時〜10時ごろにリセットが実施される可能性があります。": {
-    ja: "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言。日本時間7月10日午前4時〜10時ごろにリセットが実施される可能性があります。",
-    en: "Tibo, an OpenAI Codex developer, stated that 'reset is coming this afternoon (US Pacific time).' A Codex usage limit reset may occur around 4:00–10:00 AM JST (7:00 PM July 9 – 1:00 AM July 10 UTC) on July 10.",
-    zh: "OpenAI Codex开发者Tibo表示「今天下午（美国太平洋时间）会有重置」。日本时间7月10日凌晨4点至上午10点前后（UTC 时间 7月9日 19:00 - 7月10日 01:00）可能实施Codex使用限制重置。",
+  "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言しました。": {
+    ja: "OpenAI Codex開発者のTibo氏が「リセットは今日の午後（米国太平洋時間）に来る」と発言しました。",
+    en: "Tibo, an OpenAI Codex developer, stated that 'reset is coming this afternoon (US Pacific time).'",
+    zh: "OpenAI Codex开发者Tibo表示「今天下午（美国太平洋时间）会有重置」。",
   },
   "Tibo氏（OpenAI Codex開発者）のXポストより": {
     ja: "Tibo氏（OpenAI Codex開発者）のXポストより",
@@ -648,10 +648,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo (OpenAI Codex developer) announced a 2nd rate limit reset across ChatGPT Work and Codex within 24 hours to celebrate the GPT-5.6 Sol launch.",
     zh: "Tibo（OpenAI Codex开发者）宣布为庆祝GPT-5.6 Sol发布，将在24小时内对ChatGPT Work和Codex全体执行第2次速率限制重置。",
   },
-  "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。予告時間は目安として日本時間16:00を表示しています。": {
-    ja: "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。予告時間は目安として日本時間16:00を表示しています。",
-    en: "Tibo (OpenAI Codex developer) announced a third rate limit reset later today to celebrate the GPT-5.6 Sol launch. The displayed 4:00 PM JST time is an estimate.",
-    zh: "Tibo（OpenAI Codex开发者）宣布将于今天晚些时候执行第3次速率限制重置，以庆祝GPT-5.6 Sol发布。页面显示的日本时间16:00为估计时间。",
+  "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。",
+    en: "Tibo (OpenAI Codex developer) announced a third rate limit reset later today (US Pacific time) to celebrate the GPT-5.6 Sol launch.",
+    zh: "Tibo（OpenAI Codex开发者）宣布将于今天晚些时候（美国太平洋时间）执行第3次速率限制重置，以庆祝GPT-5.6 Sol发布。",
   },
   "GPT-5.6 Solリリース記念リセット（2回目）": {
     ja: "GPT-5.6 Solリリース記念リセット（2回目）",
