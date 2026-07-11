@@ -18,6 +18,7 @@ export type LocalObservationSignal = {
   status?: "active" | "resolved" | "expired";
   skipAutoHistoryMerge?: boolean;
   boostValue?: number;
+  boostReason?: string;
 };
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
@@ -29,6 +30,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-07-13T15:18:00+09:00",
     title: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
     boostValue: 0.20,
+    boostReason: "GPT-5.6リリース記念",
     source: null,
     sourceLabel: "システムによる確率調整",
   },

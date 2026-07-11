@@ -633,6 +633,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
     zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
+  "GPT-5.6リリース記念": {
+    ja: "GPT-5.6リリース記念",
+    en: "GPT-5.6 release celebration",
+    zh: "GPT-5.6 发布庆祝",
+  },
   "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)": {
     ja: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
     en: "GPT-5.6 Launch Celebration Boost (+20% probability boost during random reset alert period)",

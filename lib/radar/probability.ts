@@ -487,14 +487,14 @@ export function getLocalProbabilityReason(
   let boostText = "";
   if (activeBoostSignals.length > 0) {
     if (locale === "en") {
-      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join(", ");
-      boostText = ` (The probability is temporarily adjusted higher due to special event context: ${boostTitles})`;
+      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join(" & ");
+      boostText = ` Predicting a higher probability than usual due to ${reasons}.`;
     } else if (locale === "zh") {
-      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join("、");
-      boostText = `（受特殊活动影响，概率已被临时上调：${boostTitles}）`;
+      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join("和");
+      boostText = ` 由于${reasons}，我们预测的概率高于往常。`;
     } else {
-      const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join("、");
-      boostText = `（特別イベント「${boostTitles}」の影響により、確率は一時的に高く調整されています）`;
+      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join("および");
+      boostText = ` ${reasons}のため、通常より確率を高く予測しています。`;
     }
   }
 
