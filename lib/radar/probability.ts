@@ -3,6 +3,7 @@ import { LOCAL_PROBABILITY_WEIGHTS } from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY, LOCAL_PERSONAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
+import { translateUI } from "./i18n";
 import {
   getCalendarDayDelta,
   getHoursUntil,
@@ -477,22 +478,40 @@ export function getLocalProbabilityReason(
     }
   }
 
+  const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.type === "probability_boost" &&
+      isCurrentLocalSignal(signal)
+  );
+
+  let boostText = "";
+  if (activeBoostSignals.length > 0) {
+    const boostTitles = activeBoostSignals.map(sig => translateUI(sig.title, locale)).join(" / ");
+    if (locale === "en") {
+      boostText = ` (probability adjusted: ${boostTitles})`;
+    } else if (locale === "zh") {
+      boostText = `（已进行概率调整：${boostTitles}）`;
+    } else {
+      boostText = `（確率調整：${boostTitles}）`;
+    }
+  }
+
   if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
     if (locale === "en") {
-      return `Current forecast is ${p24} within 24h and ${p48} within 48h. There is an official notice, but scheduled more than 48 hours away.`;
+      return `Current forecast is ${p24} within 24h and ${p48} within 48h. There is an official notice, but scheduled more than 48 hours away.${boostText}`;
     } else if (locale === "zh") {
-      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。`;
+      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${boostText}`;
     } else {
-      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。`;
+      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${boostText}`;
     }
   }
 
   if (locale === "en") {
-    return `Current forecast is ${p24} within 24h and ${p48} within 48h. It has been ${lastResetLabel}, and ${hintSummary ?? signalSummary}`;
+    return `Current forecast is ${p24} within 24h and ${p48} within 48h. It has been ${lastResetLabel}, and ${hintSummary ?? signalSummary}${boostText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${hintSummary ?? signalSummary}`;
+    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${hintSummary ?? signalSummary}${boostText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${hintSummary ?? signalSummary}`;
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${hintSummary ?? signalSummary}${boostText}`;
   }
 }
 
