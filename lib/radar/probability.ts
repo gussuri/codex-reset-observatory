@@ -3,7 +3,7 @@ import { LOCAL_PROBABILITY_WEIGHTS } from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY, LOCAL_PERSONAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
-import { translateUI } from "./i18n";
+import { translateDynamic } from "./i18n";
 import {
   getCalendarDayDelta,
   getHoursUntil,
@@ -487,13 +487,13 @@ export function getLocalProbabilityReason(
   let boostText = "";
   if (activeBoostSignals.length > 0) {
     if (locale === "en") {
-      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join(" & ");
+      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" & ");
       boostText = ` Predicting a higher probability than usual due to ${reasons}.`;
     } else if (locale === "zh") {
-      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join("和");
+      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("和");
       boostText = ` 由于${reasons}，我们预测的概率高于往常。`;
     } else {
-      const reasons = activeBoostSignals.map(sig => translateUI(sig.boostReason ?? sig.title, locale)).join("および");
+      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("および");
       boostText = ` ${reasons}のため、通常より確率を高く予測しています。`;
     }
   }
