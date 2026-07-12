@@ -340,7 +340,7 @@ export function RadarDashboard({
                         {translateDynamic(item.title, locale)}
                       </h3>
                     </div>
-                    <ResetHistoryDetails item={item} locale={locale} compact showScope={false} />
+                    <ResetHistoryDetails item={item} locale={locale} compact showScope={true} />
                   </div>
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
