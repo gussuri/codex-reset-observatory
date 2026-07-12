@@ -563,6 +563,31 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A weekly-cycle reset was completed.",
     zh: "已执行 1 周循环的定期重置。",
   },
+  "600万人アクティブユーザー記念リセット": {
+    ja: "600万人アクティブユーザー記念リセット",
+    en: "6 Million Active Users Celebration Reset",
+    zh: "600万活跃用户庆祝重置",
+  },
+  "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
+    ja: "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+    en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 6 million active users.",
+    zh: "为庆祝活跃用户数达到600万，ChatGPT Work和Codex整体的使用限制已强制重置。",
+  },
+  "600万人アクティブユーザー記念": {
+    ja: "600万人アクティブユーザー記念",
+    en: "6 Million Active Users Celebration",
+    zh: "600万活跃用户庆祝",
+  },
+  "30分": {
+    ja: "30分",
+    en: "30 minutes",
+    zh: "30分钟",
+  },
+  "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数600万人突破を記念して1時間以内にCodex利用上限をリセットすると発表しました。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数600万人突破を記念して1時間以内にCodex利用上限をリセットすると発表しました。",
+    en: "Tibo (OpenAI Codex developer) announced that Codex usage limits would be reset within an hour to celebrate reaching 6 million active users.",
+    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝活跃用户数突破600万，将在1小时内重置Codex使用限制。",
+  },
   "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。": {
     ja: "過去24時間にCodexの信頼性へ影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
     en: "Tibo announced that Codex usage limits across all paid plans have been reset due to three minor incidents affecting reliability over the past 24 hours.",
