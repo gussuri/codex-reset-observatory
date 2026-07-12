@@ -29,7 +29,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-07-13T07:00:00+09:00",
     type: "official_notice",
     status: "active",
-    expectedAt: "2026-07-14T09:00:00+09:00",
+    expectedAt: "2026-07-14T07:00:00+09:00",
     expiresAt: "2026-07-14T23:59:00+09:00",
     skipAutoHistoryMerge: true,
     title:
