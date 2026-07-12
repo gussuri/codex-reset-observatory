@@ -81,6 +81,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "This is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official notice.",
     zh: "※此预测是基于社区和故障状况等信息的参考基准，可能与官方发布的内容有所不同。",
   },
+  viewAllHistoryLink: {
+    ja: "さらにリセット履歴を見る →",
+    en: "View all reset history →",
+    zh: "查看更多重置历史记录 →",
+  },
   timeRangeSeparator: {
     ja: " 〜 ",
     en: " to ",

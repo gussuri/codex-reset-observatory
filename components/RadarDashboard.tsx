@@ -383,6 +383,17 @@ export function RadarDashboard({
               </p>
             )}
           </div>
+
+          {viewModel.recentHistory.length > 0 ? (
+            <div className="mt-5 flex justify-center border-t border-slate-100 pt-4">
+              <Link
+                className="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 underline-offset-4 hover:underline hover:text-teal-800 transition"
+                href={locale === "ja" ? "/history" : `/${locale}/history`}
+              >
+                {translateUI("viewAllHistoryLink", locale)}
+              </Link>
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/88 p-5 shadow-sm">
