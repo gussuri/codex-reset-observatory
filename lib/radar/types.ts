@@ -183,6 +183,7 @@ export type RadarViewModel = {
     summary: string;
     openedAt?: string | null;
     expectedAt?: string | null;
+    expectedEndAt?: string | null;
     source?: string | null;
     sourceLabel?: string | null;
     forecastDate?: string;

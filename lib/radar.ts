@@ -899,6 +899,7 @@ function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarV
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
   const expectedAt = officialNotice?.expectedAt ?? null;
+  const expectedEndAt = officialNotice?.expectedEndAt ?? null;
   const source = officialNotice?.source ?? null;
   const noticeTitle = officialNotice?.title ?? null;
 
@@ -926,6 +927,7 @@ function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarV
       summary,
       openedAt,
       expectedAt,
+      expectedEndAt,
       source,
       sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
     };
@@ -942,6 +944,7 @@ function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarV
         : "現時点で、このサイトで確認した公式リセット予告はありません。",
     openedAt,
     expectedAt,
+    expectedEndAt,
     source,
     sourceLabel: null,
   };

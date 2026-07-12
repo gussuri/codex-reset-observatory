@@ -200,7 +200,17 @@ export function RadarDashboard({
                   {translateUI("scheduledResetTime", locale)}
                 </dt>
                 <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                  <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
+                  <div className="flex flex-wrap items-center gap-y-1">
+                    <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
+                    {viewModel.activeWindow.expectedEndAt ? (
+                      <>
+                        <span className="mx-1.5 text-slate-500 font-normal text-xl">
+                          {translateUI("timeRangeSeparator", locale)}
+                        </span>
+                        <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
+                      </>
+                    ) : null}
+                  </div>
                 </dd>
               </div>
               <MiniInfo
