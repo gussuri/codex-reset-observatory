@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-13T08:04:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-13T08:10:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-20T03:30:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-13T03:30:00+09:00";
@@ -8,6 +8,31 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = "2026-07-13T03:30:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
+  {
+    key: "personal-tibo-500k-compensation-reset-2026-07-13",
+    title: "Web/モバイル機能不具合補償任意リセット",
+    resetType: "詫びリセット",
+    resetTypes: ["詫びリセット", "個人別リセット"],
+    status: "配布",
+    date: "2026-07-13T07:00:00+09:00",
+    signalAt: "2026-07-13T07:00:00+09:00",
+    resetAt: "2026-07-13T07:00:00+09:00",
+    signalLabel: "検知",
+    resetLabel: "配布",
+    scope: "不具合対象ユーザー（約50万人）",
+    windowLabel: "内容",
+    windowLength: "任意リセット1回分",
+    source: "https://x.com/thsottiaux",
+    summary: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "不具合対象ユーザー（約50万人）",
+      noticeToExecution: "即時",
+      note: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
+    },
+  },
   {
     key: "personal-codex-reset-button-aie-2026-07-02",
     title: "Codex reset button 配布 (AIE World's Fair 記念)",

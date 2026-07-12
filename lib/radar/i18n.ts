@@ -563,6 +563,31 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A weekly-cycle reset was completed.",
     zh: "已执行 1 周循环的定期重置。",
   },
+  "Web/モバイル機能不具合補償任意リセット": {
+    ja: "Web/モバイル機能不具合補償任意リセット",
+    en: "Web/Mobile Feature Bug Compensation Manual Reset",
+    zh: "网页/移动端功能异常补偿手动重置",
+  },
+  "不具合対象ユーザー（約50万人）": {
+    ja: "不具合対象ユーザー（約50万人）",
+    en: "Affected users (approx. 500k)",
+    zh: "异常受影响用户（约 50 万人）",
+  },
+  "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。": {
+    ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
+    en: "A manual reset (banked reset) credit was distributed as compensation to users (approx. 500k) who pressed the reset button during the release of the web/mobile manual reset feature but had it fail to apply.",
+    zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向这部分受影响用户补偿发放了 1 次手动重置次数。",
+  },
+  "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
+    en: "Tibo (OpenAI Codex developer) announced that a manual reset (banked reset) credit would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
+    zh: "Tibo（OpenAI Codex开发者）宣布，明天将为庆祝活跃用户数突破700万，向所有付费用户发放1次手动重置次数（banked reset）。",
+  },
+  "即時": {
+    ja: "即時",
+    en: "Immediate",
+    zh: "立即",
+  },
   "600万人アクティブユーザー記念リセット": {
     ja: "600万人アクティブユーザー記念リセット",
     en: "6 Million Active Users Celebration Reset",
