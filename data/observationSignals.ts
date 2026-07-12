@@ -18,6 +18,8 @@ export type LocalObservationSignal = {
   status?: "active" | "resolved" | "expired";
   skipAutoHistoryMerge?: boolean;
   boostValue?: number;
+  boostValue24h?: number;
+  boostValue48h?: number;
   boostReason?: string;
 };
 
@@ -27,9 +29,10 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-07-10T14:30:00+09:00",
     type: "probability_boost",
     status: "active",
-    expiresAt: "2026-07-13T15:18:00+09:00",
-    title: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
-    boostValue: 0.20,
+    expiresAt: "2026-07-15T01:14:00+09:00",
+    title: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト",
+    boostValue24h: 0.20,
+    boostValue48h: 0.28,
     boostReason: "GPT-5.6リリース記念",
     source: null,
     sourceLabel: "システムによる確率調整",

@@ -111,13 +111,14 @@ export function getLocalResetProbability(
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
       signal.type === "probability_boost" &&
-      isCurrentLocalSignal(signal) &&
-      signal.boostValue !== undefined
+      isCurrentLocalSignal(signal)
   );
-  const eventBoost = activeBoostSignals.reduce(
-    (sum, sig) => sum + (sig.boostValue ?? 0),
-    0
-  );
+  const eventBoost = activeBoostSignals.reduce((sum, sig) => {
+    const boost = period === "24h"
+      ? (sig.boostValue24h ?? sig.boostValue ?? 0)
+      : (sig.boostValue48h ?? sig.boostValue ?? 0);
+    return sum + boost;
+  }, 0);
 
   const score =
     base +
