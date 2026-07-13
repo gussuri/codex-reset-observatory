@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-13T08:10:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-14T08:40:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-20T03:30:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-13T03:30:00+09:00";
@@ -8,6 +8,31 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = "2026-07-13T03:30:00+09:00";
 export const HISTORY_LIMIT = 10;
 
 export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
+  {
+    key: "personal-tibo-7m-users-banked-reset-2026-07-14",
+    title: "700万人アクティブユーザー記念任意リセット配布",
+    resetType: "ご祝儀リセット",
+    resetTypes: ["ご祝儀リセット", "個人別リセット"],
+    status: "配布",
+    date: "2026-07-14T03:40:00+09:00",
+    signalAt: "2026-07-13T07:00:00+09:00",
+    resetAt: "2026-07-14T03:40:00+09:00",
+    signalLabel: "予告",
+    resetLabel: "配布",
+    scope: "全有料プラン",
+    windowLabel: "内容",
+    windowLength: "任意リセット1回分",
+    source: "https://x.com/thsottiaux",
+    summary: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: "20時間40分",
+      note: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    },
+  },
   {
     key: "personal-tibo-500k-compensation-reset-2026-07-13",
     title: "Web/モバイル機能不具合補償任意リセット",

@@ -573,6 +573,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A weekly-cycle reset was completed.",
     zh: "已执行 1 周循环的定期重置。",
   },
+  "700万人アクティブユーザー記念任意リセット配布": {
+    ja: "700万人アクティブユーザー記念任意リセット配布",
+    en: "7 Million Active Users Celebration Manual Reset Distribution",
+    zh: "700万活跃用户庆祝手动重置发放",
+  },
+  "20時間40分": {
+    ja: "20時間40分",
+    en: "20 hours 40 minutes",
+    zh: "20小时40分钟",
+  },
+  "700万人アクティブユーザー記念": {
+    ja: "700万人アクティブユーザー記念",
+    en: "7 Million Active Users Celebration",
+    zh: "700万活跃用户庆祝",
+  },
   "Web/モバイル機能不具合補償任意リセット": {
     ja: "Web/モバイル機能不具合補償任意リセット",
     en: "Web/Mobile Feature Bug Compensation Manual Reset",
@@ -582,6 +597,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "不具合対象ユーザー（約50万人）",
     en: "Affected users (approx. 500k)",
     zh: "异常受影响用户（约 50 万人）",
+  },
+  "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
+    ja: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
+    en: "A manual reset (banked reset) credit was distributed to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
+    zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了1次手动重置次数（banked reset）。",
   },
   "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。": {
     ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",

@@ -29,10 +29,11 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     id: "official-tibo-7m-users-banked-reset-notice-2026-07-14",
     observedAt: "2026-07-13T07:00:00+09:00",
     type: "official_notice",
-    status: "active",
+    status: "resolved",
     expectedAt: "2026-07-14T07:00:00+09:00",
     expectedEndAt: "2026-07-14T23:59:00+09:00",
     expiresAt: "2026-07-14T23:59:00+09:00",
+    resolvedAt: "2026-07-14T03:40:00+09:00",
     skipAutoHistoryMerge: true,
     title:
       "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
