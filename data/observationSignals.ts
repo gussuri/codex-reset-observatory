@@ -26,6 +26,18 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "boost-gpt-5.6-release-8m-followup-2026-07-15",
+    observedAt: "2026-07-15T04:34:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-18T00:00:00+09:00",
+    boostValue24h: 20,
+    boostValue48h: 20,
+    boostReason: "GPT-5.6リリース記念",
+    title: "GPT-5.6リリース記念",
+    source: "https://x.com/thsottiaux",
+  },
+  {
     id: "official-tibo-8m-users-notice-2026-07-15",
     observedAt: "2026-07-15T04:34:00+09:00",
     type: "official_notice",
