@@ -556,6 +556,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Within a few hours",
     zh: "数小时内",
   },
+  "26分": {
+    ja: "26分",
+    en: "26 minutes",
+    zh: "26分钟",
+  },
   "40分": {
     ja: "40分",
     en: "40 minutes",
@@ -572,6 +577,26 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "1週間サイクルの定期リセットが実施されました。",
     en: "A weekly-cycle reset was completed.",
     zh: "已执行 1 周循环的定期重置。",
+  },
+  "800万人アクティブユーザー記念リセット": {
+    ja: "800万人アクティブユーザー記念リセット",
+    en: "8 Million Active Users Celebration Reset",
+    zh: "800万活跃用户庆祝重置",
+  },
+  "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
+    ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+    en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 8 million active users.",
+    zh: "为庆祝活跃用户数达到800万，ChatGPT Work and Codex整体的使用限制已强制重置。",
+  },
+  "800万人アクティブユーザー記念": {
+    ja: "800万人アクティブユーザー記念",
+    en: "8 Million Active Users Celebration",
+    zh: "800万活跃用户庆祝",
+  },
+  "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限を再びリセットしたと発表しました。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限を再びリセットしたと発表しました。",
+    en: "Tibo (OpenAI Codex developer) announced that Codex usage limits were reset again to celebrate reaching 8 million active users.",
+    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝活跃用户数突破800万，已再次重置Codex使用限制。",
   },
   "800万人アクティブユーザー記念の可能性": {
     ja: "800万人アクティブユーザー記念の可能性",

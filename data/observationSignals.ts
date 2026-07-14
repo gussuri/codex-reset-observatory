@@ -26,11 +26,26 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-tibo-8m-users-notice-2026-07-15",
+    observedAt: "2026-07-15T04:34:00+09:00",
+    type: "official_notice",
+    status: "resolved",
+    expectedAt: "2026-07-15T05:00:00+09:00",
+    expiresAt: "2026-07-15T09:00:00+09:00",
+    resolvedAt: "2026-07-15T05:00:00+09:00",
+    skipAutoHistoryMerge: true,
+    title:
+      "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限を再びリセットしたと発表しました。",
+    keywords: ["8m users", "800万人", "celebration", "記念", "Tibo", "thsottiaux"],
+    source: "https://x.com/thsottiaux",
+    sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより",
+  },
+  {
     id: "boost-8m-celebration-hint-2026-07-14",
     observedAt: "2026-07-14T15:00:00+09:00",
     type: "probability_boost",
-    status: "active",
-    expiresAt: "2026-07-15T23:59:00+09:00",
+    status: "resolved",
+    expiresAt: "2026-07-15T04:34:00+09:00",
     boostValue24h: 30,
     boostValue48h: 30,
     boostReason: "800万人アクティブユーザー記念の可能性",
