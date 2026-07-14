@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-15T04:42:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-15T04:46:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-22T05:00:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-15T05:00:00+09:00";
@@ -172,7 +172,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     window_minutes: 26,
     scope: "全有料プラン",
     summary:
-      "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+      "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
     source_url: "https://x.com/thsottiaux",
     details: {
       cycleType: "ランダムリセット",
@@ -180,7 +180,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       resetMethod: "強制リセット",
       scope: "全有料プラン",
       noticeToExecution: "26分",
-      note: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+      note: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リresetされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
     },
   },
   {
