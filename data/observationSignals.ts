@@ -42,9 +42,9 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-07-15T04:34:00+09:00",
     type: "official_notice",
     status: "resolved",
-    expectedAt: "2026-07-15T05:00:00+09:00",
+    expectedAt: "2026-07-15T04:34:00+09:00",
     expiresAt: "2026-07-15T09:00:00+09:00",
-    resolvedAt: "2026-07-15T05:00:00+09:00",
+    resolvedAt: "2026-07-15T04:34:00+09:00",
     skipAutoHistoryMerge: true,
     title:
       "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限を再びリセットしたと発表しました。",
