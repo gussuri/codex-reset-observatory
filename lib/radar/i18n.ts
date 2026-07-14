@@ -573,6 +573,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A weekly-cycle reset was completed.",
     zh: "已执行 1 周循环的定期重置。",
   },
+  "800万人アクティブユーザー記念の可能性": {
+    ja: "800万人アクティブユーザー記念の可能性",
+    en: "potential 8M active users celebration",
+    zh: "可能庆祝800万活跃用户",
+  },
   "700万人アクティブユーザー記念任意リセット配布": {
     ja: "700万人アクティブユーザー記念任意リセット配布",
     en: "7 Million Active Users Celebration Manual Reset Distribution",

@@ -26,6 +26,18 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "boost-8m-celebration-hint-2026-07-14",
+    observedAt: "2026-07-14T15:00:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-15T23:59:00+09:00",
+    boostValue24h: 30,
+    boostValue48h: 30,
+    boostReason: "800万人アクティブユーザー記念の可能性",
+    title: "800万人アクティブユーザー記念の可能性",
+    source: "https://x.com/thsottiaux",
+  },
+  {
     id: "official-tibo-7m-users-banked-reset-notice-2026-07-14",
     observedAt: "2026-07-13T07:00:00+09:00",
     type: "official_notice",
