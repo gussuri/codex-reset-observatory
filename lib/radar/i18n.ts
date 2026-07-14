@@ -583,6 +583,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
     zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时的延迟。",
   },
+  "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされる予定です。06:00 JST 頃の実施が見込まれています。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。": {
+    ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされる予定です。06:00 JST 頃の実施が見込まれています。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
+    en: "Usage limits across ChatGPT Work and Codex are scheduled to be forcibly reset to celebrate reaching 8 million active users, around 06:00 JST. *Because the reset is applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
+    zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制预计将于JST 06:00左右强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时的延迟。",
+  },
+  "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が06:00 JST頃に強制リセットされる予定です。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。": {
+    ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が06:00 JST頃に強制リセットされる予定です。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
+    en: "Usage limits across ChatGPT Work and Codex are scheduled to be forcibly reset around 06:00 JST to celebrate reaching 8 million active users. *Because the reset is applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
+    zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制预计将于JST 06:00左右强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时的延迟。",
+  },
   "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リresetされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。": {
     ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
@@ -607,6 +617,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限を再びリセットしたと発表しました。",
     en: "Tibo (OpenAI Codex developer) announced that Codex usage limits were reset again to celebrate reaching 8 million active users.",
     zh: "Tibo（OpenAI Codex开发者）宣布为庆祝活跃用户数突破800万，已再次重置Codex使用限制。",
+  },
+  "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限をリセットすると発表しました。06:00 JST頃の実施が見込まれます。": {
+    ja: "Tibo氏（OpenAI Codex開発者）が、アクティブユーザー数800万人突破を記念してCodex利用上限をリセットすると発表しました。06:00 JST頃の実施が見込まれます。",
+    en: "Tibo (OpenAI Codex developer) announced that Codex usage limits will be reset to celebrate reaching 8 million active users, expected around 06:00 JST.",
+    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝活跃用户数突破800万，将重置Codex使用限制，预计JST 06:00左右实施。",
   },
   "800万人アクティブユーザー記念の可能性": {
     ja: "800万人アクティブユーザー記念の可能性",
