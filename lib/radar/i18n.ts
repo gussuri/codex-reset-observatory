@@ -209,6 +209,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Announced on Tibo's official X",
     zh: "在 Tibo 官方 X 上发布预告",
   },
+  "1時間11分": {
+    ja: "1時間11分",
+    en: "1 hour 11 minutes",
+    zh: "1 小时 11 分钟",
+  },
   "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。": {
     ja: "Tibo氏が、過剰な利用制限消費問題の補償として、全プランのCodex利用制限を数時間以内にリセットすると発表しました。",
     en: "Tibo announced that Codex usage limits across all plans will be reset within a few hours to compensate for an issue causing excessive usage consumption.",
