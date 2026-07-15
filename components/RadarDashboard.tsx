@@ -305,25 +305,6 @@ export function RadarDashboard({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">
-                {translateUI("siteStatus", locale)}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950 select-none">
-                {MANUAL_REVIEW_STATUS.status === "available"
-                  ? translateUI("manualReviewAvailable", locale)
-                  : translateUI("manualReviewDelayed", locale)}
-              </h2>
-            </div>
-            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 select-none flex sm:justify-end items-center">
-              <span>{translateUI("lastCheckedLabel", locale)}：</span>
-              <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="inline-block text-slate-700" />
-            </p>
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
                 {translateUI("weeklyResetRef", locale)}
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
@@ -340,6 +321,25 @@ export function RadarDashboard({
             </div>
             <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500">
               {translateUI("weeklyResetNote", locale)}
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                {translateUI("siteStatus", locale)}
+              </p>
+              <h2 className="mt-1 text-sm font-medium text-slate-800">
+                {MANUAL_REVIEW_STATUS.status === "available"
+                  ? translateUI("manualReviewAvailable", locale)
+                  : translateUI("manualReviewDelayed", locale)}
+              </h2>
+            </div>
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 flex sm:justify-end items-center">
+              <span>{translateUI("lastCheckedLabel", locale)}：</span>
+              <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="inline-block text-slate-700" />
             </p>
           </div>
         </section>
