@@ -491,8 +491,14 @@ export function getLocalProbabilityReason(
       const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" & ");
       boostText = ` Predicting a higher probability than usual due to ${reasons}.`;
     } else if (locale === "zh") {
-      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("和");
-      boostText = ` 由于${reasons}，我们预测的概率高于往常。`;
+      const has9m = activeBoostSignals.some(sig => sig.id.includes("9m"));
+      const hasGpt56 = activeBoostSignals.some(sig => (sig.boostReason ?? sig.title).includes("5.6"));
+      if (has9m && hasGpt56) {
+        boostText = " 考虑到可能为庆祝活跃用户达到 900 万而进行重置，以及 GPT-5.6 发布相关的庆祝活动，本次预测概率高于平时。";
+      } else {
+        const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("和");
+        boostText = ` 由于${reasons}，本次预测概率高于平时。`;
+      }
     } else {
       const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("および");
       boostText = ` ${reasons}のため、通常より確率を高く予測しています。`;

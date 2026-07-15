@@ -4,42 +4,42 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   title: {
     ja: "Codexリセット観測所",
     en: "Codex Reset Observatory",
-    zh: "Codex 重置观测所",
+    zh: "Codex 重置观测站",
   },
   siteStatus: {
     ja: "サイトの状態",
     en: "Site Status",
-    zh: "网站状态",
+    zh: "更新状态",
   },
   manualReviewAvailable: {
     ja: "🟢 手動確認対応中",
     en: "🟢 Manual check active",
-    zh: "🟢 手动确认对应中",
+    zh: "🟢 人工确认进行中",
   },
   manualReviewDelayed: {
     ja: "🌙 手動確認が遅れる場合があります",
     en: "🌙 Manual check may be delayed",
-    zh: "🌙 手动确认可能会有所延迟",
+    zh: "🌙 人工确认可能会延迟",
   },
   lastCheckedLabel: {
     ja: "最終手動確認",
     en: "Last manual check",
-    zh: "最终手动确认",
+    zh: "上次人工确认",
   },
   subTitle: {
     ja: "Codex制限解除・使用量リセット情報",
     en: "Codex reset notices, history, and probability",
-    zh: "Codex 限制解除・使用重置信息",
+    zh: "Codex 使用限制重置信息",
   },
   description: {
     ja: "利用上限リセット、制限解除タイミング、リセット履歴、期待度をまとめて確認できます。",
     en: "Track the latest OpenAI Codex usage limits reset probability, recent signals, and reset history. This site estimates whether a Codex usage limits reset is likely within the next 24 or 48 hours.",
-    zh: "一站式确认使用限制重置、解除限制时机、重置历史以及重置期望度。",
+    zh: "一站式查看 Codex 使用限制的重置状态、预计时间、历史记录和重置可能性。",
   },
   officialNotice: {
     ja: "公式リセット予告",
     en: "Official reset notice",
-    zh: "官方重置预告",
+    zh: "重置相关预告",
   },
   noNotice: {
     ja: "公式リセット予告はありません",
@@ -49,7 +49,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   activeNoticeLabel: {
     ja: "予告あり",
     en: "Notice detected",
-    zh: "有预告",
+    zh: "已有预告",
   },
   noNoticeLabel: {
     ja: "予告なし",
@@ -59,7 +59,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   checkAction: {
     ja: "要確認",
     en: "Check Codex",
-    zh: "需确认",
+    zh: "尚待确认",
   },
   scheduledResetTime: {
     ja: "予告時間",
@@ -79,12 +79,12 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   randomReset: {
     ja: "ランダムリセット",
     en: "Random reset probability",
-    zh: "随机重置",
+    zh: "不定期重置",
   },
   expectationLabel: {
     ja: "期待度",
     en: "Expectation",
-    zh: "期望度",
+    zh: "重置可能性",
   },
   within24h: {
     ja: "24時間以内",
@@ -99,12 +99,12 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   disclaimer: {
     ja: "※この予測はコミュニティや障害状況などを基にした目安であり、公式の発表とは異なる場合があります。",
     en: "This is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official notice.",
-    zh: "※此预测是基于社区和故障状况等信息的参考基准，可能与官方发布的内容有所不同。",
+    zh: "※本预测仅供参考，依据社区动态、故障状态等信息计算，可能与官方实际安排不同。",
   },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",
     en: "View all reset history →",
-    zh: "查看更多重置历史记录 →",
+    zh: "查看更多重置历史 →",
   },
   timeRangeSeparator: {
     ja: " 〜 ",
@@ -119,7 +119,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   scope: {
     ja: "対象プラン",
     en: "Scope",
-    zh: "目标计划",
+    zh: "适用套餐",
   },
   detectionTime: {
     ja: "リセット検知時刻",
@@ -134,7 +134,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   windowLength: {
     ja: "予告から実施まで",
     en: "Window length",
-    zh: "预告至执行",
+    zh: "从预告到执行",
   },
   historyCycleType: {
     ja: "分類",
@@ -154,7 +154,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   historyNoticeToExecution: {
     ja: "告知から実施まで",
     en: "Notice to execution",
-    zh: "预告至执行",
+    zh: "从预告到执行",
   },
   historyNote: {
     ja: "補足",
@@ -164,7 +164,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   weeklyResetRef: {
     ja: "1週間サイクルのリセット参考日",
     en: "Weekly reset reference",
-    zh: "每周循环重置参考日",
+    zh: "每周重置参考日期",
   },
   weeklyResetNote: {
     ja: "任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。",
@@ -237,17 +237,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。": {
     ja: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。",
     en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users.",
-    zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。",
+    zh: "Tibo 暗示，为庆祝活跃用户达到 900 万，Codex 的使用限制可能会再次重置或放宽。",
   },
   "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。7月16日朝〜17日朝にかけての実施が予想されます。": {
     ja: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。7月16日朝〜17日朝にかけての実施が予想されます。",
     en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users. Expected execution is between the morning of July 16 and the morning of July 17 JST.",
-    zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。预计在 7 月 16 日早上至 17 日早上执行。",
+    zh: "Tibo 暗示，为庆祝活跃用户达到 900 万，Codex 的使用限制可能会再次重置或放宽。预计将于 7 月 16 日早上至 17 日早上执行。",
   },
   "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。正確な実施時刻は未告知のため、広めの予想レンジを設定しています。": {
     ja: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。正確な実施時刻は未告知のため、広めの予想レンジを設定しています。",
     en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users. Since the exact execution time is unannounced, a wide expected range has been set.",
-    zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。由于未公布具体执行时间，因此设置了较宽的预计范围。",
+    zh: "Tibo 暗示，为庆祝活跃用户达到 900 万，Codex 的使用限制可能会再次重置或放宽。由于尚未公布具体执行时间，因此本页面设置了较宽的预计时间范围。请优先查看原帖中的详细信息。",
   },
   "1時間11分": {
     ja: "1時間11分",
@@ -348,7 +348,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "周度庆祝付费计划重置": {
     ja: "週次の節目を祝う有料プランリセット",
     en: "Weekly celebration paid plan reset",
-    zh: "周度庆祝付费计划重置",
+    zh: "周度庆祝付费套餐重置",
   },
   "400 万活跃用户里程碑重置": {
     ja: "400万アクティブユーザー達成記念リセット",
@@ -375,7 +375,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "全有料プラン": {
     ja: "全有料プラン",
     en: "All paid plans",
-    zh: "所有付费计划",
+    zh: "所有付费套餐",
   },
   "全プラン": {
     ja: "全プラン",
@@ -385,12 +385,12 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "所有付费计划": {
     ja: "全有料プラン",
     en: "All paid plans",
-    zh: "所有付费计划",
+    zh: "所有付费套餐",
   },
   "All paid plans": {
     ja: "全有料プラン",
     en: "All paid plans",
-    zh: "所有付费计划",
+    zh: "所有付费套餐",
   },
   "All plans": {
     ja: "全プラン",
@@ -584,7 +584,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "任意リセット権1回配布": {
     ja: "任意リセット権1回配布",
     en: "1 manual reset credit",
-    zh: "发放 1 次手动重置额度",
+    zh: "发放 1 次手动重置机会",
   },
   "不明": {
     ja: "不明",
@@ -651,7 +651,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 8 million active users.",
-    zh: "为庆祝活跃用户数达到800万，ChatGPT Work and Codex整体的使用限制已强制重置。",
+    zh: "为庆祝活跃用户数达到800万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
   },
   "800万人アクティブユーザー記念": {
     ja: "800万人アクティブユーザー記念",
@@ -701,17 +701,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
     en: "A manual reset (banked reset) credit was distributed to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
-    zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了1次手动重置次数（banked reset）。",
+    zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置机会（banked reset）。",
   },
   "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。": {
     ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
     en: "A manual reset (banked reset) credit was distributed as compensation to users (approx. 500k) who pressed the reset button during the release of the web/mobile manual reset feature but had it fail to apply.",
-    zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向这部分受影响用户补偿发放了 1 次手动重置次数。",
+    zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向所有受影响的付费用户补发 1 次手动重置机会。",
   },
   "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
     en: "Tibo (OpenAI Codex developer) announced that a manual reset (banked reset) credit would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
-    zh: "Tibo（OpenAI Codex开发者）宣布，明天将为庆祝活跃用户数突破700万，向所有付费用户发放1次手动重置次数（banked reset）。",
+    zh: "Tibo（OpenAI Codex开发者）宣布，明天将为庆祝活跃用户数突破700万，向所有付费用户发放 1 次手动重置机会（banked reset）。",
   },
   "即時": {
     ja: "即時",
@@ -726,7 +726,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset to celebrate reaching 6 million active users.",
-    zh: "为庆祝活跃用户数达到600万，ChatGPT Work和Codex整体的使用限制已强制重置。",
+    zh: "为庆祝活跃用户数达到600万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
   },
   "600万人アクティブユーザー記念": {
     ja: "600万人アクティブユーザー記念",
@@ -746,7 +746,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。": {
     ja: "過去24時間にCodexの信頼性へ影響する小規模な障害が3件発生したとして、Tibo氏が全有料プランのCodex利用上限をリセットしたと発表しました。",
     en: "Tibo announced that Codex usage limits across all paid plans have been reset due to three minor incidents affecting reliability over the past 24 hours.",
-    zh: "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。",
+    zh: "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费套餐重置 Codex 使用限制。",
   },
   "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。": {
     ja: "Codexの500万人達成を祝うリセットとして説明され、その後、有料ChatGPTプランの週次枠と5時間枠が100%に戻ったことが確認されました。",
@@ -771,7 +771,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。": {
     ja: "2026/06/25 07:01 JST に、全有料プランのCodex利用上限リセットが予定されています。",
     en: "A Codex usage-limit reset for all paid plans is scheduled for Jun 25, 2026 at 7:01 AM JST.",
-    zh: "预计于 2026/06/25 07:01 JST 对所有付费计划重置 Codex 使用限制。",
+    zh: "预计于 2026/06/25 07:01 JST 对所有付费套餐重置 Codex 使用限制。",
   },
   "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。": {
     ja: "Tibo氏が、全プランのCodexレート制限を24時間以内にリセットすると発表しました。",
@@ -811,12 +811,12 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。": {
     ja: "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
     en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
-    zh: "作为常规的1周循环，付费计划的Codex使用限制已重置。但使用过手动重置的账号除外。",
+    zh: "作为常规的1周循环，付费套餐的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
   "GPT-5.6リリース記念": {
     ja: "GPT-5.6リリース記念",
     en: "GPT-5.6 release celebration",
-    zh: "GPT-5.6 发布庆祝",
+    zh: "GPT-5.6 发布庆祝活动",
   },
   "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)": {
     ja: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
@@ -836,12 +836,12 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Tibo氏（OpenAI Codex開発者）のXポストより": {
     ja: "Tibo氏（OpenAI Codex開発者）のXポストより",
     en: "From Tibo's X post (OpenAI Codex developer)",
-    zh: "来自 Tibo（OpenAI Codex 开发者）的 X 帖子",
+    zh: "Tibo（OpenAI Codex 开发者）发布的 X 帖子",
   },
   "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。": {
     ja: "Tibo氏（OpenAI Codex開発者）がGPT-5.6 Solローンチを記念し、ChatGPT WorkとCodex全体で2回目のレート制限リセットを24時間以内に実施すると発表。",
     en: "Tibo (OpenAI Codex developer) announced a 2nd rate limit reset across ChatGPT Work and Codex within 24 hours to celebrate the GPT-5.6 Sol launch.",
-    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝GPT-5.6 Sol发布，将在24小时内对ChatGPT Work和Codex全体执行第2次速率限制重置。",
+    zh: "Tibo（OpenAI Codex开发者）宣布为庆祝GPT-5.6 Sol发布，将在24小时内对ChatGPT Work 和 Codex 全体执行第2次速率限制重置。",
   },
   "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、GPT-5.6 Solローンチ記念の3回目のレート制限リセットを本日後半に実施すると発表しました。",
@@ -856,7 +856,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が3回目に強制リセットされました。": {
     ja: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が3回目に強制リセットされました。",
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset for a third time to celebrate the GPT-5.6 Sol launch.",
-    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work和Codex整体的使用限制已第3次被强制重置。",
+    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work 和 Codex 的使用限制已第3次被强制重置。",
   },
   "15時間": {
     ja: "15時間",
@@ -871,7 +871,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。": {
     ja: "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。",
     en: "Usage limits across ChatGPT Work and Codex were forcibly reset for a second time to celebrate the GPT-5.6 Sol launch.",
-    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work和Codex整体的使用限制已第2次被强制重置。",
+    zh: "为庆祝GPT-5.6 Sol发布，ChatGPT Work 和 Codex 的使用限制已第2次被强制重置。",
   },
   "12時間56分": {
     ja: "12時間56分",
@@ -886,7 +886,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。": {
     ja: "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。",
     en: "Codex usage limits for all paid plans were forcibly reset to celebrate the GPT-5.6 launch.",
-    zh: "为庆祝GPT-5.6发布，所有付费计划的Codex使用限制已被强制重置。",
+    zh: "为庆祝GPT-5.6发布，所有付费套餐的Codex使用限制已被强制重置。",
   },
   "約3時間": {
     ja: "約3時間",
@@ -911,17 +911,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。": {
     ja: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
     en: "One manual reset credit was distributed as compensation for model degradation and excessive limit consumption issues.",
-    zh: "因模型能力退化及额度过度消耗问题，已发放一次手动重置额度作为补偿。",
+    zh: "因模型能力退化及额度过度消耗问题，已发放 1 次手动重置机会作为补偿。",
   },
   "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
     en: "One manual reset credit was distributed as compensation for issues affecting Codex reliability.",
-    zh: "因影响 Codex 可靠性的故障，已发放一次手动重置额度作为补偿。",
+    zh: "因影响 Codex 可靠性的故障，已发放 1 次手动重置机会作为补偿。",
   },
   "招待特典または個人の利用制限の更新として、任意リセットが配布されました。": {
     ja: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
     en: "A manual reset credit was distributed as referral rewards or individual quota refresh.",
-    zh: "已发放手动重置额度作为推荐奖励或个人额度更新。",
+    zh: "已发放手动重置机会作为推荐奖励或个人额度更新。",
   },
   "能力退化・過剰消費補償任意リセット": {
     ja: "能力退化・過剰消費補償任意リセット",
@@ -931,7 +931,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
     en: "One manual reset credit was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
-    zh: "因模型能力退化及额度过度消耗问题，已对所有付费计划发放一次手动重置额度作为补偿。",
+    zh: "因模型能力退化及额度过度消耗问题，已对所有付费套餐发放 1 次手动重置机会作为补偿。",
   },
   "Codex信頼性障害補償任意リセット": {
     ja: "Codex信頼性障害補償任意リセット",
@@ -941,7 +941,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
     en: "One manual reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
-    zh: "因影响 Codex 可靠性的故障，已对所有账号发放一次手动重置额度作为补偿。",
+    zh: "因影响 Codex 可靠性的故障，已对所有账号发放 1 次手动重置机会作为补偿。",
   },
   "過剰消費バグ調査・強制補償リセット": {
     ja: "過剰消費バグ調査・強制補償リセット",
@@ -961,7 +961,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。": {
     ja: "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。",
     en: "Tibo announced that more manual resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
-    zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置额度。",
+    zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置机会。",
   },
   "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。": {
     ja: "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。",
@@ -971,7 +971,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。": {
     ja: "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
     en: "Tibo announced that one additional manual reset credit will be distributed to all paid plans within the next 24 hours.",
-    zh: "Tibo 宣布将在未来 24 小时内向所有付费计划追加发放一次手动重置额度。",
+    zh: "Tibo 宣布将在未来 24 小时内向所有付费套餐追加发放 1 次手动重置机会。",
   },
   "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。": {
     ja: "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。",
@@ -1001,7 +1001,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "定期リセットが強制リセットから任意リセット権1回配布に変更されました。": {
     ja: "定期リセットが強制リセットから任意リセット権1回配布に変更されました。",
     en: "The regular reset has been changed from a forced reset to a distribution of one manual reset credit.",
-    zh: "定期重置已从强制重置更改为发放一次手动重置额度。",
+    zh: "定期重置已从强制重置更改为发放 1 次手动重置机会。",
   },
   "Codex reset button 配布 (AIE World's Fair 記念)": {
     ja: "Codex reset button 配布 (AIE World's Fair 記念)",
@@ -1011,7 +1011,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
     en: "During the AI Engineer World's Fair demo, the Codex reset button was pressed, distributing one manual reset credit to all paid users (Codex Codex Go/Plus/Pro).",
-    zh: "在 AI Engineer World's Fair 的演示中，Codex 重置按钮被按下，向所有付费用户（Codex Go/Plus/Pro）发放了一次手动重置额度。",
+    zh: "在 AI Engineer World's Fair 的演示中，Codex 重置按钮被按下，向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置机会。",
   },
   "キャンペーン": {
     ja: "キャンペーン",
@@ -1086,7 +1086,7 @@ export function translateExpectation(value: string, locale: Locale): string {
     低: { ja: "低", en: "Low", zh: "低" },
     中: { ja: "中", en: "Medium", zh: "中" },
     高: { ja: "高", en: "High", zh: "高" },
-    超高: { ja: "超高", en: "Very High", zh: "超高" },
+    超高: { ja: "超高", en: "Very High", zh: "极高" },
     不明: { ja: "不明", en: "Unknown", zh: "未知" },
   };
 
