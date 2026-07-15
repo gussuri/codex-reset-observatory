@@ -302,15 +302,20 @@ export function RadarDashboard({
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium text-slate-500">
-              {translateUI("siteStatus", locale)}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                {translateUI("siteStatus", locale)}
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950 select-none">
+                {MANUAL_REVIEW_STATUS.status === "available"
+                  ? translateUI("manualReviewAvailable", locale)
+                  : translateUI("manualReviewDelayed", locale)}
+              </h2>
+            </div>
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 select-none">
+              {translateUI("lastCheckedLabel", locale)}：{MANUAL_REVIEW_STATUS.lastCheckedAt}
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950 select-none">
-              {MANUAL_REVIEW_STATUS === "available"
-                ? translateUI("manualReviewAvailable", locale)
-                : translateUI("manualReviewDelayed", locale)}
-            </h2>
           </div>
         </section>
 

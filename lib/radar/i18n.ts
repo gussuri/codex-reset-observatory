@@ -21,6 +21,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "🌙 Manual check may be delayed",
     zh: "🌙 手动确认可能会有所延迟",
   },
+  lastCheckedLabel: {
+    ja: "最終手動確認",
+    en: "Last manual check",
+    zh: "最终手动确认",
+  },
   subTitle: {
     ja: "Codex制限解除・使用量リセット情報",
     en: "Codex reset notices, history, and probability",
