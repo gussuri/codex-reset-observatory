@@ -209,6 +209,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Announced on Tibo's official X",
     zh: "在 Tibo 官方 X 上发布预告",
   },
+  "900万人アクティブユーザー記念の可能性": {
+    ja: "900万人アクティブユーザー記念の可能性",
+    en: "Possibility of 9M active users celebration reset",
+    zh: "可能庆祝达到 900 万活跃用户而重置",
+  },
+  "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。": {
+    ja: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。",
+    en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users.",
+    zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。",
+  },
   "1時間11分": {
     ja: "1時間11分",
     en: "1 hour 11 minutes",

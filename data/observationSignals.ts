@@ -26,6 +26,18 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-tibo-9m-users-hint-2026-07-15",
+    observedAt: "2026-07-15T15:00:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-16T15:00:00+09:00",
+    boostValue24h: 0.30,
+    boostValue48h: 0.20,
+    boostReason: "900万人アクティブユーザー記念の可能性",
+    title: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。",
+    source: "https://x.com/thsottiaux",
+  },
+  {
     id: "boost-gpt-5.6-release-8m-followup-2026-07-15",
     observedAt: "2026-07-15T04:34:00+09:00",
     type: "probability_boost",
