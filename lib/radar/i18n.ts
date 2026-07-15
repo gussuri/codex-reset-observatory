@@ -224,6 +224,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users. Expected execution is between the morning of July 16 and the morning of July 17 JST.",
     zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。预计在 7 月 16 日早上至 17 日早上执行。",
   },
+  "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。正確な実施時刻は未告知のため、広めの予想レンジを設定しています。": {
+    ja: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。正確な実施時刻は未告知のため、広めの予想レンジを設定しています。",
+    en: "Tibo suggested an additional reset (or limit relaxation) of usage limits to celebrate reaching 9M active users. Since the exact execution time is unannounced, a wide expected range has been set.",
+    zh: "Tibo 暗示为庆祝活跃用户达到 900 万，可能会再次重置或放宽使用限制。由于未公布具体执行时间，因此设置了较宽的预计范围。",
+  },
   "1時間11分": {
     ja: "1時間11分",
     en: "1 hour 11 minutes",
