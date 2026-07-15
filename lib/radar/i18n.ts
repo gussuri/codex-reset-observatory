@@ -6,6 +6,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Codex Reset Observatory",
     zh: "Codex 重置观测所",
   },
+  siteStatus: {
+    ja: "サイトの状態",
+    en: "Site Status",
+    zh: "网站状态",
+  },
+  manualReviewAvailable: {
+    ja: "🟢 手動確認対応中",
+    en: "🟢 Manual check active",
+    zh: "🟢 手动确认对应中",
+  },
+  manualReviewDelayed: {
+    ja: "🌙 手動確認が遅れる場合があります",
+    en: "🌙 Manual check may be delayed",
+    zh: "🌙 手动确认可能会有所延迟",
+  },
   subTitle: {
     ja: "Codex制限解除・使用量リセット情報",
     en: "Codex reset notices, history, and probability",

@@ -24,6 +24,7 @@ import type { Locale } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
+import { MANUAL_REVIEW_STATUS } from "@/data/manualReviewStatus";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
 
@@ -299,6 +300,15 @@ export function RadarDashboard({
             </dl>
           </article>
         </section>
+
+        <div className="text-sm text-slate-700 font-medium px-1 flex items-center gap-1 select-none">
+          <span>{translateUI("siteStatus", locale)}：</span>
+          <span className="font-semibold text-slate-900">
+            {MANUAL_REVIEW_STATUS === "available"
+              ? translateUI("manualReviewAvailable", locale)
+              : translateUI("manualReviewDelayed", locale)}
+          </span>
+        </div>
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
