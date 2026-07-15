@@ -301,14 +301,18 @@ export function RadarDashboard({
           </article>
         </section>
 
-        <div className="text-sm text-slate-700 font-medium px-1 flex items-center gap-1 select-none">
-          <span>{translateUI("siteStatus", locale)}：</span>
-          <span className="font-semibold text-slate-900">
-            {MANUAL_REVIEW_STATUS === "available"
-              ? translateUI("manualReviewAvailable", locale)
-              : translateUI("manualReviewDelayed", locale)}
-          </span>
-        </div>
+        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-slate-500">
+              {translateUI("siteStatus", locale)}
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950 select-none">
+              {MANUAL_REVIEW_STATUS === "available"
+                ? translateUI("manualReviewAvailable", locale)
+                : translateUI("manualReviewDelayed", locale)}
+            </h2>
+          </div>
+        </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
