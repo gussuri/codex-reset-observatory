@@ -23,7 +23,7 @@ export function getLocalResetProbability(
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const periodHours = period === "24h" ? 24 : 48;
 
-  if (hasOfficialNoticeWithinHours(officialNotice, periodHours) && officialNotice?.id !== "official-tibo-9m-users-notice-2026-07-15") {
+  if (hasOfficialNoticeWithinHours(officialNotice, periodHours)) {
     return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
@@ -346,7 +346,7 @@ export function getLocalProbabilityReason(
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
 
-  if (hasOfficialNoticeWithinHours(officialNotice, 24) && officialNotice?.id !== "official-tibo-9m-users-notice-2026-07-15") {
+  if (hasOfficialNoticeWithinHours(officialNotice, 24)) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a very high probability within 24 hours."
       : locale === "zh"
@@ -354,7 +354,7 @@ export function getLocalProbabilityReason(
         : "公式リセット予告があるため、通常より高めに見ています。";
   }
 
-  if (hasOfficialNoticeWithinHours(officialNotice, 48) && officialNotice?.id !== "official-tibo-9m-users-notice-2026-07-15") {
+  if (hasOfficialNoticeWithinHours(officialNotice, 48)) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a high probability within 48 hours."
       : locale === "zh"
