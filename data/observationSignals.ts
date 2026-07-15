@@ -26,15 +26,29 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
-    id: "official-tibo-9m-users-hint-2026-07-15",
+    id: "official-tibo-9m-users-notice-2026-07-15",
+    observedAt: "2026-07-15T15:00:00+09:00",
+    type: "official_notice",
+    status: "active",
+    expectedAt: "2026-07-16T05:00:00+09:00",
+    expectedEndAt: "2026-07-17T05:00:00+09:00",
+    expiresAt: "2026-07-17T05:00:00+09:00",
+    skipAutoHistoryMerge: true,
+    title: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。7月16日朝〜17日朝にかけての実施が予想されます。",
+    keywords: ["9m users", "900万人", "milestone", "Tibo", "thsottiaux"],
+    source: "https://x.com/thsottiaux",
+    sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより",
+  },
+  {
+    id: "boost-gpt-5.6-release-9m-followup-2026-07-15",
     observedAt: "2026-07-15T15:00:00+09:00",
     type: "probability_boost",
     status: "active",
-    expiresAt: "2026-07-16T15:00:00+09:00",
+    expiresAt: "2026-07-17T05:00:00+09:00",
     boostValue24h: 0.30,
     boostValue48h: 0.20,
     boostReason: "900万人アクティブユーザー記念の可能性",
-    title: "Tibo氏が900万人アクティブユーザー到達に伴う利用制限の追加リセット（または制限緩和）を示唆しました。",
+    title: "900万人アクティブユーザー記念の可能性による確率調整",
     source: "https://x.com/thsottiaux",
   },
   {
