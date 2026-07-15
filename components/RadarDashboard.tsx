@@ -313,8 +313,9 @@ export function RadarDashboard({
                   : translateUI("manualReviewDelayed", locale)}
               </h2>
             </div>
-            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 select-none">
-              {translateUI("lastCheckedLabel", locale)}：{MANUAL_REVIEW_STATUS.lastCheckedAt}
+            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 select-none flex sm:justify-end items-center">
+              <span>{translateUI("lastCheckedLabel", locale)}：</span>
+              <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="inline-block text-slate-700" />
             </p>
           </div>
         </section>

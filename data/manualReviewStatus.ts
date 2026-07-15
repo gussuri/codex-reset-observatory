@@ -7,5 +7,5 @@ export interface ManualReviewStatus {
 
 export const MANUAL_REVIEW_STATUS: ManualReviewStatus = {
   status: "delayed",
-  lastCheckedAt: "03:00 JST",
+  lastCheckedAt: "2026-07-16T03:00:00+09:00",
 };
