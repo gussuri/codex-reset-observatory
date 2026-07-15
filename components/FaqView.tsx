@@ -106,10 +106,10 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What does this site track?",
-          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and unscheduled reset probability based on public information, community activity, and OpenAI Status updates.",
+          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and random reset probability based on public information, community activity, and OpenAI Status updates.",
         },
         {
-          question: "What is the unscheduled reset probability?",
+          question: "What is the random reset probability?",
           answer: "It is a reference estimate of how likely a reset will happen soon, based on official notices, Status incident logs, community reports, and history patterns. It is not an official probability.",
         },
         {
@@ -129,20 +129,20 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "A special reset executed to celebrate milestones like user count achievements or product anniversaries.",
         },
         {
-          question: "What is the difference between an unscheduled reset and a weekly reset?",
-          answer: "A weekly reset is the regular usage-cycle refresh. An unscheduled reset is an extra refresh triggered by incidents or celebration events.",
+          question: "What is the difference between a temporary (random) reset and a weekly reset?",
+          answer: "A weekly reset is the regular usage-cycle refresh. A temporary reset is an extra refresh triggered by incidents or celebration events.",
         },
         {
           question: "What is the difference between official notices and community signals?",
-          answer: "Official notices are announcements by Anysphere/OpenAI or their team members. Community signals are gathered from user reports and circumstantial evidence.",
+          answer: "Official notices are announcements by OpenAI or members of the Codex team. Community signals are gathered from user reports and circumstantial evidence.",
         },
         {
           question: "Is a context reset related to Codex usage resets?",
-          answer: "Sometimes. Issues with context compaction or long sessions can lead to compensation resets, but a local context reset is different from a global usage-limit reset.",
+          answer: "They are generally different concepts. While a local context reset affects session state, a usage-limit reset restores the usage allowance. However, they may occasionally overlap if context-related updates trigger a compensation reset.",
         },
         {
           question: "Does this site track Codex CLI resets?",
-          answer: "While CLI issues affecting Codex usage limits or Status are relevant, local CLI settings initialization or local environment resets are outside the scope of this site.",
+          answer: "While CLI issues affecting Codex usage limits or status updates are relevant, local CLI settings initialization or environment resets are outside the scope of this site.",
         },
         {
           question: "Where does this site get its information?",
