@@ -106,10 +106,10 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What does this site track?",
-          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and random reset probability based on public information, community activity, and OpenAI Status updates.",
+          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and unscheduled reset probability based on public information, community activity, and OpenAI Status updates.",
         },
         {
-          question: "What is the random reset probability?",
+          question: "What is the unscheduled reset probability?",
           answer: "It is a reference estimate of how likely a reset will happen soon, based on official notices, Status incident logs, community reports, and history patterns. It is not an official probability.",
         },
         {
@@ -129,8 +129,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "A special reset executed to celebrate milestones like user count achievements or product anniversaries.",
         },
         {
-          question: "What is the difference between a temporary (random) reset and a weekly reset?",
-          answer: "A weekly reset is the regular usage-cycle refresh. A temporary reset is an extra refresh triggered by incidents or celebration events.",
+          question: "What is the difference between an unscheduled reset and a weekly reset?",
+          answer: "A weekly reset is the regular usage-cycle refresh. An unscheduled reset is an extra refresh triggered by incidents or celebration events.",
         },
         {
           question: "What is the difference between official notices and community signals?",

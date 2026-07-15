@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About Codex Reset Observatory",
     description:
-      "A short explanation of the reset history, weekly reset reference, manual reset, and random reset probability shown on this unofficial Codex reset site.",
+      "A short explanation of the reset history, weekly reset reference, manual reset, and unscheduled reset probability shown on this unofficial Codex reset site.",
     url: "/en/about",
     siteName: "Codex Reset Observatory",
     type: "article",

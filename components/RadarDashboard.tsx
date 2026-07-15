@@ -231,7 +231,7 @@ export function RadarDashboard({
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   <span className="block">{translateUI("randomReset", locale)}</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
-                    {translateUI("expectationLabel", locale)}：{viewModel.expectation}
+                    {translateUI("expectationLabel", locale)}{locale === "en" ? ": " : "："}{viewModel.expectation}
                   </span>
                 </h2>
               </div>
@@ -314,7 +314,8 @@ export function RadarDashboard({
                     {viewModel.regularResetForecast.time}
                   </span>
                 ) : null}
-                <span className="ml-3 text-sm font-medium text-slate-500">
+                {" "}
+                <span className="text-sm font-medium text-slate-500">
                   ({viewModel.regularResetForecast.remaining})
                 </span>
               </h2>
@@ -338,7 +339,7 @@ export function RadarDashboard({
               </h2>
             </div>
             <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500 flex sm:justify-end items-center">
-              <span>{translateUI("lastCheckedLabel", locale)}：</span>
+              <span>{translateUI("lastCheckedLabel", locale)}{locale === "en" ? ": " : "："}</span>
               <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="inline-block text-slate-700" />
             </p>
           </div>
@@ -375,12 +376,12 @@ export function RadarDashboard({
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {item.signalLabel ? (
                       <p>
-                        {translateDynamic(item.signalLabel, locale)}：<LocalizedDateTime value={item.signalAt} locale={locale} />
+                        {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
                       <p>
-                        {translateDynamic(item.resetLabel, locale)}：<LocalizedDateTime value={item.resetAt} locale={locale} />
+                        {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (
@@ -420,11 +421,11 @@ export function RadarDashboard({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Clock className="h-5 w-5 text-slate-500" />
-              <span>{translateUI("lastUpdated", locale)}：<LocalizedDateTime value={viewModel.lastUpdated} locale={locale} /></span>
+              <span>{translateUI("lastUpdated", locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={viewModel.lastUpdated} locale={locale} /></span>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-700">
               <Activity className="h-5 w-5 text-slate-500" />
-              <span>{translateUI("dataFetched", locale)}：<LocalizedDateTime value={state.fetchedAt} locale={locale} /></span>
+              <span>{translateUI("dataFetched", locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={state.fetchedAt} locale={locale} /></span>
             </div>
           </div>
         </section>

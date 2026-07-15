@@ -377,25 +377,29 @@ export function getLocalProbabilityReason(
   if (lastReset) {
     const days = getCalendarDayDelta(new Date(), lastReset);
     if (locale === "en") {
-      lastResetLabel = `${days} day${days !== 1 ? "s" : ""} elapsed since the last reset`;
+      if (days === 1) {
+        lastResetLabel = "One day has passed since the last reset";
+      } else {
+        lastResetLabel = `${days} days have passed since the last reset`;
+      }
     } else if (locale === "zh") {
       lastResetLabel = `自上次重置以来已过去 ${days} 天`;
     } else {
       lastResetLabel = `直近のリセットから${days}日経過`;
     }
   } else {
-    lastResetLabel = locale === "en" ? "unknown days since the last reset" : locale === "zh" ? "自上次重置以来的天数未知" : "直近のリセットから経過日数不明";
+    lastResetLabel = locale === "en" ? "unknown days have passed since the last reset" : locale === "zh" ? "自上次重置以来的天数未知" : "直近のリセットから経過日数不明";
   }
 
   let signalSummary = "";
   if (locale === "en") {
     const statusText = activeStatusIncidents > 0
       ? "a Codex-related incident is active on the official status page"
-      : "no active incidents are listed on the official status page";
+      : "no active incidents are currently listed on the official status page";
 
     const extraParts: Array<string> = [];
     if (officialUpdates > 0) {
-      extraParts.push("official announcements/forecasts are active");
+      extraParts.push("a reset-related developer signal is active");
     }
     if (officialIncidentHints > 0) {
       extraParts.push("official capacity warnings are posted");
@@ -408,11 +412,12 @@ export function getLocalProbabilityReason(
     }
 
     if (extraParts.length > 0) {
-      signalSummary = `While ${statusText}, ${extraParts.join(" and ")}.`;
+      const formattedStatusText = statusText.charAt(0).toUpperCase() + statusText.slice(1);
+      signalSummary = `${formattedStatusText}, but ${extraParts.join(" and ")}.`;
     } else {
       signalSummary = activeStatusIncidents > 0
         ? "A Codex-related incident is active on the official status page."
-        : "No active incidents are listed on the official status page.";
+        : "No active incidents are currently listed on the official status page.";
     }
   } else if (locale === "zh") {
     const statusText = activeStatusIncidents > 0
@@ -488,8 +493,8 @@ export function getLocalProbabilityReason(
   let boostText = "";
   if (activeBoostSignals.length > 0) {
     if (locale === "en") {
-      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" & ");
-      boostText = ` Predicting a higher probability than usual due to ${reasons}.`;
+      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" and ");
+      boostText = ` The probability is higher than usual because of ${reasons}.`;
     } else if (locale === "zh") {
       const has9m = activeBoostSignals.some(sig => sig.id.includes("9m"));
       const hasGpt56 = activeBoostSignals.some(sig => (sig.boostReason ?? sig.title).includes("5.6"));
@@ -507,7 +512,7 @@ export function getLocalProbabilityReason(
 
   if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
     if (locale === "en") {
-      return `Current forecast is ${p24} within 24h and ${p48} within 48h. There is an official notice, but scheduled more than 48 hours away.${boostText}`;
+      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away.${boostText}`;
     } else if (locale === "zh") {
       return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${boostText}`;
     } else {
@@ -516,7 +521,7 @@ export function getLocalProbabilityReason(
   }
 
   if (locale === "en") {
-    return `Current forecast is ${p24} within 24h and ${p48} within 48h. It has been ${lastResetLabel}, and ${hintSummary ?? signalSummary}${boostText}`;
+    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${hintSummary ?? signalSummary}${boostText}`;
   } else if (locale === "zh") {
     return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${hintSummary ?? signalSummary}${boostText}`;
   } else {

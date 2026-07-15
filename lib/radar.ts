@@ -249,9 +249,9 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
 
   let remainingText = "";
   if (remainingDays > 0) {
-    remainingText = locale === "en" ? `${remainingDays} day${remainingDays !== 1 ? "s" : ""} left` : locale === "zh" ? `剩余 ${remainingDays} 天` : `残り${remainingDays}日`;
+    remainingText = locale === "en" ? `${remainingDays} day${remainingDays !== 1 ? "s" : ""} remaining` : locale === "zh" ? `剩余 ${remainingDays} 天` : `残り${remainingDays}日`;
   } else if (remainingDays === 0) {
-    remainingText = locale === "en" ? "0 days left" : locale === "zh" ? "剩余 0 天" : "残り0日";
+    remainingText = locale === "en" ? "0 days remaining" : locale === "zh" ? "剩余 0 天" : "残り0日";
   } else {
     remainingText = locale === "en" ? "Past expected date" : locale === "zh" ? "已超过预计日期" : "予想日を過ぎています";
   }
@@ -259,8 +259,8 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
   const bcp47 = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
   const formattedDate = new Intl.DateTimeFormat(bcp47, {
     year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    month: locale === "en" ? "short" : "2-digit",
+    day: locale === "en" ? "numeric" : "2-digit",
     timeZone: DISPLAY_TIME_ZONE,
   }).format(nextRegularReset);
 

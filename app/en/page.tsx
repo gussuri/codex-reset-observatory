@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     absolute: "Codex Usage Limits Reset Forecast & History",
   },
   description:
-    "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
+    "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
   keywords: [
     "Codex reset",
     "Codex usage limit reset",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Usage Limits Reset Forecast & History",
     description:
-      "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
+      "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
     url: "/en",
     siteName: "Codex Reset Observatory",
     type: "website",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Usage Limits Reset Forecast & History",
     description:
-      "Track and forecast OpenAI Codex usage limits resets. See the latest reset probability, recent signals, and reset history.",
+      "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
     images: ["/og-image.png"],
   },
 };
