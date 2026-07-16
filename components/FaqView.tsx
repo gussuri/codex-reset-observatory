@@ -180,7 +180,7 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "用户在搜索时经常混用这些说法。本站主要关注能够恢复或影响 Codex 使用额度上限的重置事件。",
         },
         {
-          question: "什么是补偿重置（Apology reset）？",
+          question: "什么是补偿重置（Compensation reset）？",
           answer: "补偿重置是指 OpenAI 为补偿服务故障或异常问题而进行的重置。具体形式可能包括恢复使用额度，或向受影响用户发放额外的手动重置机会。",
         },
         {
