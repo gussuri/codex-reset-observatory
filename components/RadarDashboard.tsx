@@ -305,14 +305,8 @@ export function RadarDashboard({
               <p className="text-sm font-medium text-slate-500">
                 {translateUI("weeklyResetRef", locale)}
               </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {viewModel.regularResetForecast.date}
-                {viewModel.regularResetForecast.time ? (
-                  <span className="ml-2">
-                    {viewModel.regularResetForecast.time}
-                  </span>
-                ) : null}
-                {" "}
+              <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
+                <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
                 <span className="text-sm font-medium text-slate-500">
                   ({viewModel.regularResetForecast.remaining})
                 </span>
