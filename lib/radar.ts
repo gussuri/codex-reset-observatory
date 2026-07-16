@@ -176,61 +176,67 @@ export function getRadarViewModel(
   };
 }
 
-function getRegularResetForecast(latestResetAt: string | null | undefined, locale: Locale = "ja") {
-  const manualNextRegularReset = new Date(MANUAL_NEXT_REGULAR_RESET_AT);
-  const manualNextIsFutureConfirmed =
-    !Number.isNaN(manualNextRegularReset.getTime()) &&
-    manualNextRegularReset.getTime() > Date.now();
+function getLatestRegularOrForcedResetAt(): string | null {
+  let latestTime = 0;
+  let latestDateStr: string | null = null;
 
-  const manualLastRegularReset = new Date(MANUAL_LAST_REGULAR_RESET_AT);
-  const current = new Date();
-  const hasManualLastRegularReset =
-    !Number.isNaN(manualLastRegularReset.getTime()) &&
-    manualLastRegularReset.getTime() <= current.getTime();
-  const manualScheduleAnchor = new Date(MANUAL_SCHEDULE_ANCHOR_AT);
-  const hasManualScheduleAnchor =
-    !Number.isNaN(manualScheduleAnchor.getTime()) &&
-    manualScheduleAnchor.getTime() <= current.getTime();
+  // 1. 全体履歴を走査 (getCombinedResetHistory)
+  const combinedHistory = getCombinedResetHistory();
+  for (const item of combinedHistory) {
+    const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
+    const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
+    const isForced = resetMethod === "強制リセット";
+    const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
+
+    if (isForced || isRegular) {
+      const dateStr = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
+      if (dateStr) {
+        const time = new Date(dateStr).getTime();
+        if (!Number.isNaN(time) && time > latestTime) {
+          latestTime = time;
+          latestDateStr = dateStr;
+        }
+      }
+    }
+  }
+
+  // 2. 個人別履歴を走査 (LOCAL_PERSONAL_RESET_HISTORY)
+  for (const item of LOCAL_PERSONAL_RESET_HISTORY) {
+    const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
+    const cycleType = item.details?.cycleType || (item as any).cycleType || item.resetType;
+    const isForced = resetMethod === "強制リセット";
+    const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
+
+    if (isForced || isRegular) {
+      const dateStr = item.resetAt ?? item.date ?? null;
+      if (dateStr) {
+        const time = new Date(dateStr).getTime();
+        if (!Number.isNaN(time) && time > latestTime) {
+          latestTime = time;
+          latestDateStr = dateStr;
+        }
+      }
+    }
+  }
+
+  return latestDateStr;
+}
+
+function getRegularResetForecast(latestResetAt: string | null | undefined, locale: Locale = "ja") {
+  // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
+  const autoLatestResetAt = getLatestRegularOrForcedResetAt();
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
 
-  const latestResetDate = latestResetAt ? new Date(latestResetAt) : null;
-  const hasLatestResetDate =
-    Boolean(latestResetDate) && !Number.isNaN((latestResetDate as Date).getTime());
+  // 「最後に完了した定期リセット日」= 自動検出された最新の基準リセット時刻
+  const lastCompletedAt = autoLatestResetAt;
+  const current = new Date();
 
-  // 「最後に確認されたリセット日」= 履歴の最新リセット or MANUAL_LAST_REGULAR_RESET_AT の新しい方
-  const lastCompletedDate = hasManualLastRegularReset ? manualLastRegularReset : null;
-  const lastCompletedAt = lastCompletedDate?.toISOString() ?? null;
-
-  // scheduleAnchor: 任意リセット権配布を除く最新の実際リセット日
-  const scheduleAnchor = getLatestDate(
-    lastCompletedDate,
-    hasManualScheduleAnchor ? manualScheduleAnchor : null,
-    hasLatestResetDate ? latestResetDate : null,
-  );
-
-  if (!scheduleAnchor && !manualNextIsFutureConfirmed) {
-    return {
-      date: unknownLabel,
-      time: null,
-      remaining: remainingUnknown,
-      sourceResetAt: latestResetAt,
-      expectedAt: null,
-      lastCompletedAt,
-      remainingDays: null,
-      isNoticeWindow: false,
-    };
-  }
-
-  // 次回リセット予想日:
-  // - MANUAL_NEXT_REGULAR_RESET_AT が未来日付として明示設定されていれば、それを優先（確定情報）
-  // - それ以外は「最後の実際リセット + 7日」をロールして算出
-  const nextRegularReset = manualNextIsFutureConfirmed
-    ? manualNextRegularReset
-    : scheduleAnchor
-      ? rollResetDateForward(new Date(scheduleAnchor.getTime() + 7 * DAY_MS), current)
-      : null;
+  // 2. 次回定期リセット予想日: 検出された基準リセット時刻からちょうど7日後
+  const nextRegularReset = autoLatestResetAt
+    ? new Date(new Date(autoLatestResetAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+    : null;
 
   if (!nextRegularReset) {
     return {
@@ -239,7 +245,7 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
       remaining: remainingUnknown,
       sourceResetAt: latestResetAt,
       expectedAt: null,
-      lastCompletedAt,
+      lastCompletedAt: null,
       remainingDays: null,
       isNoticeWindow: false,
     };
@@ -266,17 +272,13 @@ function getRegularResetForecast(latestResetAt: string | null | undefined, local
 
   return {
     date: formattedDate,
-    time:
-      manualNextIsFutureConfirmed && MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED
-        ? formatTime(nextRegularReset)
-        : null,
+    time: formatTime(nextRegularReset),
     remaining: remainingText,
-    sourceResetAt: scheduleAnchor?.toISOString() ?? lastCompletedAt ?? latestResetAt,
+    sourceResetAt: autoLatestResetAt,
     expectedAt: nextRegularReset.toISOString(),
     lastCompletedAt,
     remainingDays,
-    isNoticeWindow:
-      remainingDays >= 0 && (manualNextIsFutureConfirmed || remainingDays <= 3),
+    isNoticeWindow: remainingDays >= 0 && remainingDays <= 3,
   };
 }
 
