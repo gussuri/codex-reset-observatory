@@ -36,6 +36,9 @@ const securityHeaders = [
 
 const nextConfig = {
   poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
   async headers() {
     return [
       {

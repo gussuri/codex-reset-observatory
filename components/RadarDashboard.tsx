@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  Activity,
   Bell,
-  Clock,
   ExternalLink,
   Gauge,
   History,
@@ -415,19 +413,6 @@ export function RadarDashboard({
               </Link>
             </div>
           ) : null}
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white/88 p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <Clock className="h-5 w-5 text-slate-500" />
-              <span>{translateUI("lastUpdated", locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={viewModel.lastUpdated} locale={locale} /></span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <Activity className="h-5 w-5 text-slate-500" />
-              <span>{translateUI("dataFetched", locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={state.fetchedAt} locale={locale} /></span>
-            </div>
-          </div>
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
