@@ -187,8 +187,9 @@ function getLatestRegularOrForcedResetAt(): string | null {
     const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
     const isForced = resetMethod === "強制リセット";
     const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
+    const isAllPaidScope = item.scope === "全有料プラン";
 
-    if (isForced || isRegular) {
+    if ((isForced || isRegular) && isAllPaidScope) {
       const dateStr = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
       if (dateStr) {
         const time = new Date(dateStr).getTime();
@@ -206,8 +207,9 @@ function getLatestRegularOrForcedResetAt(): string | null {
     const cycleType = item.details?.cycleType || (item as any).cycleType || item.resetType;
     const isForced = resetMethod === "強制リセット";
     const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
+    const isAllPaidScope = item.scope === "全有料プラン";
 
-    if (isForced || isRegular) {
+    if ((isForced || isRegular) && isAllPaidScope) {
       const dateStr = item.resetAt ?? item.date ?? null;
       if (dateStr) {
         const time = new Date(dateStr).getTime();
