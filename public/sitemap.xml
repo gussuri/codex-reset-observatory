@@ -2,6 +2,50 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://codex-reset-observatory.vercel.app/</loc>
-    <lastmod>2026-06-19</lastmod>
+    <lastmod>2026-07-17</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/about</loc>
+    <lastmod>2026-06-27</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/faq</loc>
+    <lastmod>2026-06-27</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/history</loc>
+    <lastmod>2026-07-17</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/en</loc>
+    <lastmod>2026-07-17</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/en/about</loc>
+    <lastmod>2026-07-16</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/en/faq</loc>
+    <lastmod>2026-07-05</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/en/history</loc>
+    <lastmod>2026-07-17</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/zh</loc>
+    <lastmod>2026-07-17</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/zh/about</loc>
+    <lastmod>2026-06-27</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/zh/faq</loc>
+    <lastmod>2026-06-27</lastmod>
+  </url>
+  <url>
+    <loc>https://codex-reset-observatory.vercel.app/zh/history</loc>
+    <lastmod>2026-07-17</lastmod>
   </url>
 </urlset>
