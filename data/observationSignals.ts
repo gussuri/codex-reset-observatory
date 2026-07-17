@@ -58,7 +58,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     observedAt: "2026-07-15T04:34:00+09:00",
     type: "probability_boost",
     status: "active",
-    expiresAt: "2026-07-18T00:00:00+09:00",
+    expiresAt: "2026-07-20T00:00:00+09:00",
     boostValue24h: 0.235,
     boostValue48h: 0.37,
     boostReason: "GPT-5.6リリース記念",
