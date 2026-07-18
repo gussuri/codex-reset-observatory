@@ -366,7 +366,7 @@ export function RadarDashboard({
                 >
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="ui-heading text-base font-semibold text-slate-950">
+                      <h3 className="ui-heading text-lg font-bold text-slate-950 sm:text-base sm:font-semibold">
                         {translateDynamic(item.title, locale)}
                       </h3>
                     </div>
@@ -388,8 +388,15 @@ export function RadarDashboard({
                       </p>
                     ) : null}
                     {item.resetAt || item.resetLabel ? (
-                      <p>
-                        {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} />
+                      <p className="font-normal sm:font-normal">
+                        <span className="text-slate-600">
+                          {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}
+                        </span>
+                        <LocalizedDateTime
+                          value={item.resetAt}
+                          locale={locale}
+                          className="font-bold text-slate-900 sm:font-normal sm:text-slate-700"
+                        />
                       </p>
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (
