@@ -22,9 +22,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "🌙 人工确认可能会延迟",
   },
   lastCheckedLabel: {
-    ja: "最終手動確認",
-    en: "Last manual review",
-    zh: "上次人工确认",
+    ja: "最終更新時刻",
+    en: "Last updated",
+    zh: "上次更新",
   },
   subTitle: {
     ja: "Codex制限解除・使用量リセット情報",
