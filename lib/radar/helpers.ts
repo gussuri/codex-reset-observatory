@@ -289,13 +289,23 @@ export function getDateTime(value: string | null | undefined) {
   return Number.isNaN(time) ? 0 : time;
 }
 
-export function isWithinHours(value: string, hours: number) {
+export function isWithinHours(
+  value: string,
+  hours: number,
+  now: Date | number = Date.now(),
+) {
   const time = getDateTime(value);
   if (!time) {
     return false;
   }
 
-  return Date.now() - time <= hours * 60 * 60 * 1000;
+  const nowTime = now instanceof Date ? now.getTime() : now;
+  if (!Number.isFinite(nowTime)) {
+    return false;
+  }
+
+  const elapsed = nowTime - time;
+  return elapsed >= 0 && elapsed <= hours * 60 * 60 * 1000;
 }
 
 export function getHoursUntil(value: string | null | undefined) {

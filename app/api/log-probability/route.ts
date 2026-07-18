@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
 import { getRadarViewModel } from "@/lib/radar";
-import { getSignalEnvironment, getLatestActiveLocalSignal } from "@/lib/radar/probability";
+import {
+  getLatestActiveLocalSignal,
+  getLocalSignalEvaluation,
+} from "@/lib/radar/probability";
 
 export const dynamic = "force-dynamic";
 
@@ -39,16 +42,18 @@ async function handleLogRequest(request: NextRequest) {
     // 1. 最新の観測データをフェッチ
     const rawData = await fetchCurrentRadarData({ cache: "no-store" });
     
-    // 2. ViewModel を構築して確率等を計算
-    const viewModel = getRadarViewModel(rawData, "ja");
+    const signalEvaluation = getLocalSignalEvaluation(rawData);
+    // 2. 同じシグナル判定を使ってViewModelと保存情報を構築
+    const viewModel = getRadarViewModel(rawData, "ja", true, signalEvaluation);
 
     // 3. パラメータや各種フラグの抽出
-    const environment = getSignalEnvironment(rawData);
+    const environment = signalEvaluation.environment;
     const officialNotice = getLatestActiveLocalSignal("official_notice");
     
     const hasOfficialNotice = !!officialNotice;
     const incidentHintCount = environment.official_incident_hints_24h ?? 0;
-    const statusIncidentCount = environment.status_incidents_24h ?? 0;
+    const statusIncidentCount =
+      signalEvaluation.statusIncidents.includedIncidentCount;
 
     // 期待度（日本語）を英語キーに変換
     const expectationMap: Record<string, string> = {
@@ -80,8 +85,29 @@ async function handleLogRequest(request: NextRequest) {
           status_incidents: statusIncidentCount,
           debug_info: {
             logged_at: new Date().toISOString(),
-            complaint_pressure: environment.complaint_pressure,
-            openai_status_active_codex_incidents: environment.openai_status_active_codex_incidents,
+            latest_reset_at:
+              signalEvaluation.latestResetAt?.toISOString() ?? null,
+            observed_status_incident_count:
+              signalEvaluation.statusIncidents.observedIncidentCount,
+            active_status_incident_count:
+              signalEvaluation.statusIncidents.activeStatusIncidentCount,
+            recent_resolved_incident_count:
+              signalEvaluation.statusIncidents.recentResolvedIncidentCount,
+            included_status_incident_count:
+              signalEvaluation.statusIncidents.includedIncidentCount,
+            excluded_pre_reset_incident_count:
+              signalEvaluation.statusIncidents.excludedPreResetIncidentCount,
+            excluded_stale_or_invalid_incident_count:
+              signalEvaluation.statusIncidents.excludedStaleOrInvalidIncidentCount,
+            suppressed_status_incident_count:
+              signalEvaluation.statusIncidents.suppressedIncidentCount,
+            affected_codex_component_count:
+              signalEvaluation.statusIncidents.affectedCodexComponentCount,
+            weighted_status_score:
+              signalEvaluation.statusIncidents.weightedStatusScore,
+            complaint_pressure: signalEvaluation.complaintPressure.level,
+            complaint_pressure_sources:
+              signalEvaluation.complaintPressure.sources,
           },
         },
         {

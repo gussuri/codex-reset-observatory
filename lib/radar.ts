@@ -57,6 +57,7 @@ import {
 import {
   getLocalResetProbability,
   getLocalSignalEnvironment,
+  getLocalSignalEvaluation,
   getSignalEnvironment,
   getLatestActiveLocalSignal,
   getEffectiveSignalStatus,
@@ -67,6 +68,7 @@ import {
   getLastGlobalResetAt,
   getLocalExpectationLevel,
   getLocalProbabilityReason,
+  type LocalSignalEvaluation,
 } from "./radar/probability";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
@@ -107,11 +109,14 @@ export function getRadarViewModel(
   data: RadarData | null,
   locale: Locale = "ja",
   limitHistory: boolean = true,
+  signalEvaluationOverride?: LocalSignalEvaluation,
 ): RadarViewModel {
   const source = unwrapRadarData(data);
-  const probability24h = getProbability(source, "24h");
-  const probability48h = getProbability(source, "48h");
-  const predictionLevel = getLocalExpectationLevel(source, locale);
+  const signalEvaluation =
+    signalEvaluationOverride ?? getLocalSignalEvaluation(source);
+  const probability24h = getProbability(source, "24h", signalEvaluation);
+  const probability48h = getProbability(source, "48h", signalEvaluation);
+  const predictionLevel = getLocalExpectationLevel(source, locale, signalEvaluation);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow();
@@ -152,7 +157,13 @@ export function getRadarViewModel(
       null,
     regularResetForecast,
     activeWindow,
-    reasoningSummary: getReasoningSummary(source, probability24h, probability48h, locale),
+    reasoningSummary: getReasoningSummary(
+      source,
+      probability24h,
+      probability48h,
+      locale,
+      signalEvaluation,
+    ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       title: translateDynamic(latestWindow?.title, locale),
@@ -756,8 +767,9 @@ function getLocalModelUpdatedAt(openAIStatus?: OpenAIStatusSignals | null) {
 function getProbability(
   data: RadarData | null,
   period: "24h" | "48h",
+  signalEvaluation: LocalSignalEvaluation,
 ): number | undefined {
-  return getLocalResetProbability(data, period);
+  return getLocalResetProbability(data, period, signalEvaluation);
 }
 
 function getLatestWindow(data: RadarData | null): WindowLike | undefined {
@@ -1007,9 +1019,16 @@ function getReasoningSummary(
   data: RadarData | null,
   probability24h: number | undefined,
   probability48h: number | undefined,
-  locale: Locale = "ja",
+  locale: Locale,
+  signalEvaluation: LocalSignalEvaluation,
 ): string | null {
-  return getLocalProbabilityReason(data, probability24h, probability48h, locale);
+  return getLocalProbabilityReason(
+    data,
+    probability24h,
+    probability48h,
+    locale,
+    signalEvaluation,
+  );
 }
 
 function isRegularResetWindow(value: WindowLike | undefined) {

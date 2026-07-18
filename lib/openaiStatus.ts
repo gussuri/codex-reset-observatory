@@ -55,6 +55,7 @@ export type OpenAIStatusSignals = {
   activeCodexIncidents: number;
   recentCodexIncidents: number;
   affectedCodexComponents: number;
+  suppressCodexIncidents: boolean;
   latestCodexIncidentName: string | null;
   history: Array<OpenAIStatusHistoryItem>;
 };
@@ -150,6 +151,7 @@ export async function fetchOpenAIStatusSignals(
       : activeCodexIncidents.length,
     recentCodexIncidents: recentCodexIncidents.length,
     affectedCodexComponents,
+    suppressCodexIncidents: allCodexComponentsOperational,
     latestCodexIncidentName: latestCodexIncident?.name ?? null,
     history,
   };
@@ -171,6 +173,7 @@ function getStoredStatusSignals(): OpenAIStatusSignals {
     activeCodexIncidents: 0,
     recentCodexIncidents: 0,
     affectedCodexComponents: 0,
+    suppressCodexIncidents: false,
     latestCodexIncidentName: latestStoredIncident?.title ?? null,
     history: LOCAL_OPENAI_STATUS_HISTORY,
   };
@@ -280,7 +283,8 @@ function isResolvedIncident(incident: StatuspageIncident) {
 }
 
 function isRecentIncident(incident: StatuspageIncident) {
-  return Date.now() - getIncidentTime(incident) <= DAY_MS;
+  const elapsed = Date.now() - getIncidentTime(incident);
+  return elapsed >= 0 && elapsed <= DAY_MS;
 }
 
 function getIncidentTime(incident: StatuspageIncident) {

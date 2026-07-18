@@ -5,6 +5,12 @@ import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
 import { translateDynamic } from "./i18n";
 import {
+  deriveComplaintPressure,
+  evaluateStatusIncidents,
+  formatStatusIncidentReason,
+  type StatusIncidentEvaluation,
+} from "./signalEvaluation";
+import {
   getCalendarDayDelta,
   getHoursUntil,
   getLatestIsoDate,
@@ -15,9 +21,17 @@ import {
   getExpectationLabel,
 } from "./helpers";
 
+export type LocalSignalEvaluation = {
+  environment: NonNullable<RadarData["codex_environment"]>;
+  statusIncidents: StatusIncidentEvaluation;
+  complaintPressure: ReturnType<typeof deriveComplaintPressure>;
+  latestResetAt: Date | null;
+};
+
 export function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
+  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
 ): number {
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const weightKey = period === "24h" ? "within24h" : "within48h";
@@ -27,56 +41,8 @@ export function getLocalResetProbability(
     return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
-  const environment = getSignalEnvironment(data);
-  
-  // OpenAI Status およびローカルシグナルの重大度 (impact) に応じた重み付き障害スコアの算出
-  let weightedStatusScore = 0;
-  const statusHistory = data?.openai_status_history ?? [];
-  const codexIncidents = statusHistory.filter(
-    (item) =>
-      item.source === "openai_status" &&
-      ((item.createdAt && isWithinHours(item.createdAt, 24)) ||
-        (item.updatedAt && isWithinHours(item.updatedAt, 24)) ||
-        item.status !== "resolved")
-  );
-
-  const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
-    (signal) =>
-      signal.type === "status_incident" &&
-      isCurrentLocalSignal(signal) &&
-      isWithinHours(signal.observedAt, 24)
-  );
-
-  const mergedIncidents = new Map<string, { impact: string | null }>();
-  for (const item of codexIncidents) {
-    mergedIncidents.set(item.id, { impact: item.impact });
-  }
-  for (const signal of localStatusSignals) {
-    if (!mergedIncidents.has(signal.id)) {
-      mergedIncidents.set(signal.id, { impact: "minor" });
-    }
-  }
-
-  for (const incident of Array.from(mergedIncidents.values())) {
-    const impact = incident.impact?.toLowerCase();
-    let multiplier = 1.0;
-    if (impact === "critical") {
-      multiplier = 3.0;
-    } else if (impact === "major") {
-      multiplier = 2.0;
-    }
-    weightedStatusScore += multiplier;
-  }
-
-  // 影響コンポーネント数も 1.0 倍として加算
-  const affectedComponents = environment?.openai_status_affected_codex_components ?? 0;
-  weightedStatusScore += affectedComponents;
-
-  const statusIncidents = clampCount(
-    weightedStatusScore,
-    0,
-    LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
-  );
+  const environment = signalEvaluation.environment;
+  const statusIncidents = signalEvaluation.statusIncidents.weightedStatusScore;
   const officialIncidentHints = clampCount(
     environment?.official_incident_hints_24h,
     0,
@@ -97,7 +63,7 @@ export function getLocalResetProbability(
     0,
     LOCAL_PROBABILITY_WEIGHTS.countLimits.issueAnomalies,
   );
-  const complaintPressure = environment?.complaint_pressure;
+  const complaintPressure = signalEvaluation.complaintPressure.level;
   const pressureBoost =
     complaintPressure === "high"
       ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.high
@@ -167,15 +133,13 @@ export function getLocalSignalEnvironment(
   const statusIncidents =
     localStatusIncidents + (openAIStatus?.statusIncidents24h ?? 0);
   const activeCodexIncidents = openAIStatus?.activeCodexIncidents ?? 0;
-  const complaintPressure =
-    activeCodexIncidents > 0
-      ? "high"
-      : officialIncidentHints > 0 ||
-          statusIncidents > 0 ||
-          issueAnomalies >= 3 ||
-          communityMentions >= 10
-        ? "medium"
-        : "low";
+  const complaintPressure = deriveComplaintPressure({
+    communityMentions,
+    issueAnomalies,
+    activeStatusIncidents: activeCodexIncidents,
+    statusIncidents,
+    officialIncidentHints,
+  });
 
   // ここで getLocalModelUpdatedAt が必要だが循環参照を防ぐためにローカルで計算する
   const updatedCandidates = [
@@ -197,13 +161,16 @@ export function getLocalSignalEnvironment(
     official_updates_24h: officialUpdates,
     community_mentions_24h: communityMentions,
     issue_or_limit_anomalies_24h: issueAnomalies,
-    complaint_pressure: complaintPressure,
+    complaint_pressure: complaintPressure.level,
+    complaint_pressure_sources: complaintPressure.sources,
     openai_status_updated_at: openAIStatus?.updatedAt ?? null,
     openai_status_active_codex_incidents: activeCodexIncidents,
     openai_status_recent_codex_incidents:
       openAIStatus?.recentCodexIncidents ?? 0,
     openai_status_affected_codex_components:
       openAIStatus?.affectedCodexComponents ?? 0,
+    openai_status_incidents_suppressed:
+      openAIStatus?.suppressCodexIncidents ?? false,
     openai_status_latest_codex_incident:
       openAIStatus?.latestCodexIncidentName ?? null,
     reset_card: {
@@ -216,6 +183,51 @@ export function getSignalEnvironment(
   data: RadarData | null,
 ): NonNullable<RadarData["codex_environment"]> {
   return data?.codex_environment ?? getLocalSignalEnvironment();
+}
+
+export function getLocalSignalEvaluation(
+  data: RadarData | null,
+  now: Date = new Date(),
+): LocalSignalEvaluation {
+  const environment = getSignalEnvironment(data);
+  const latestResetAt = getLastGlobalResetAt();
+  const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.type === "status_incident" &&
+      isCurrentLocalSignal(signal) &&
+      isWithinHours(signal.observedAt, 24, now),
+  );
+  const statusIncidents = evaluateStatusIncidents({
+    incidents: (data?.openai_status_history ?? []).filter(
+      (item) => item.source === "openai_status",
+    ),
+    latestResetAt,
+    now,
+    suppressOpenAIIncidents:
+      environment.openai_status_incidents_suppressed ?? false,
+    affectedCodexComponents:
+      environment.openai_status_affected_codex_components ?? 0,
+    maxWeightedScore:
+      LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
+    localIncidents: localStatusSignals.map((signal) => ({
+      id: signal.id,
+      impact: "minor",
+    })),
+  });
+  const complaintPressure = deriveComplaintPressure({
+    communityMentions: environment.community_mentions_24h ?? 0,
+    issueAnomalies: environment.issue_or_limit_anomalies_24h ?? 0,
+    activeStatusIncidents: statusIncidents.activeStatusIncidentCount,
+    statusIncidents: statusIncidents.includedIncidentCount,
+    officialIncidentHints: environment.official_incident_hints_24h ?? 0,
+  });
+
+  return {
+    environment,
+    statusIncidents,
+    complaintPressure,
+    latestResetAt,
+  };
 }
 
 export function getLatestActiveLocalSignal(type: LocalObservationSignal["type"]) {
@@ -315,8 +327,12 @@ export function getLastGlobalResetAt() {
   return latest ? new Date(latest) : null;
 }
 
-export function getLocalExpectationLevel(data: RadarData | null, locale: Locale = "ja") {
-  const probability24h = getLocalResetProbability(data, "24h");
+export function getLocalExpectationLevel(
+  data: RadarData | null,
+  locale: Locale = "ja",
+  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
+) {
+  const probability24h = getLocalResetProbability(data, "24h", signalEvaluation);
   return getExpectationLabel(probability24h, locale);
 }
 
@@ -341,8 +357,9 @@ export function getLocalProbabilityReason(
   probability24h: number | undefined,
   probability48h: number | undefined,
   locale: Locale = "ja",
+  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
 ): string | null {
-  const environment = getSignalEnvironment(data);
+  const environment = signalEvaluation.environment;
   const officialNotice = getLatestActiveLocalSignal("official_notice");
   const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
 
@@ -364,14 +381,11 @@ export function getLocalProbabilityReason(
 
   const p24 = probabilityToPercent(probability24h, locale);
   const p48 = probabilityToPercent(probability48h, locale);
-  const statusIncidents = environment.status_incidents_24h ?? 0;
-  const activeStatusIncidents =
-    environment.openai_status_active_codex_incidents ?? 0;
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
-  const lastReset = getLastGlobalResetAt();
+  const lastReset = signalEvaluation.latestResetAt;
   
   let lastResetLabel = "";
   if (lastReset) {
@@ -391,18 +405,15 @@ export function getLocalProbabilityReason(
     lastResetLabel = locale === "en" ? "unknown days have passed since the last reset" : locale === "zh" ? "自上次重置以来的天数未知" : "直近のリセットから経過日数不明";
   }
 
-  let signalSummary = "";
+  const statusSummary = formatStatusIncidentReason(
+    signalEvaluation.statusIncidents,
+    locale,
+  );
+  let signalSummary = statusSummary;
   if (locale === "en") {
-    const statusText = activeStatusIncidents > 0
-      ? "a Codex-related incident is active on the official status page"
-      : "no active incidents are currently listed on the official status page";
-
     const extraParts: Array<string> = [];
     if (officialUpdates > 0) {
       extraParts.push("a reset-related developer signal is active");
-    }
-    if (officialIncidentHints > 0) {
-      extraParts.push("official capacity warnings are posted");
     }
     if (issueAnomalies > 0) {
       extraParts.push("usage limit anomalies are reported");
@@ -412,50 +423,27 @@ export function getLocalProbabilityReason(
     }
 
     if (extraParts.length > 0) {
-      const formattedStatusText = statusText.charAt(0).toUpperCase() + statusText.slice(1);
-      signalSummary = `${formattedStatusText}, but ${extraParts.join(" and ")}.`;
-    } else {
-      signalSummary = activeStatusIncidents > 0
-        ? "A Codex-related incident is active on the official status page."
-        : "No active incidents are currently listed on the official status page.";
+      signalSummary = `${statusSummary} Additional signals indicate ${extraParts.join(" and ")}.`;
     }
   } else if (locale === "zh") {
-    const statusText = activeStatusIncidents > 0
-      ? "官方状态页正显示Codex相关故障"
-      : "官方状态页目前未显示进行中的故障";
-
     const extraParts: Array<string> = [];
     if (officialUpdates > 0) {
       extraParts.push("存在官方公告与预告");
     }
-    if (officialIncidentHints > 0) {
-      extraParts.push("并检测到关于容量的官方提示");
-    }
     if (issueAnomalies > 0) {
-      extraParts.push("且有使用限制异常的报告");
+      extraParts.push("有使用限制异常的报告");
     }
     if (communityMentions > 0) {
-      extraParts.push("以及社区关于重置的讨论");
+      extraParts.push("有社区关于重置的讨论");
     }
 
     if (extraParts.length > 0) {
-      signalSummary = `${statusText}，${extraParts.join("，")}。`;
-    } else {
-      signalSummary = activeStatusIncidents > 0
-        ? "官方状态页正显示Codex相关故障。"
-        : "官方状态页目前未显示进行中的故障。";
+      signalSummary = `${statusSummary} 此外，${extraParts.join("，")}。`;
     }
   } else {
-    const statusText = activeStatusIncidents > 0
-      ? "公式ステータスにCodex関連の障害が発生しており"
-      : "公式ステータスに発生中の障害はなく";
-
     const extraParts: Array<string> = [];
     if (officialUpdates > 0) {
       extraParts.push("公式からの予告・アナウンスがあります");
-    }
-    if (officialIncidentHints > 0) {
-      extraParts.push("容量到達に関する公式投稿が確認されています");
     }
     if (issueAnomalies > 0) {
       extraParts.push("利用上限まわりの異常報告があります");
@@ -465,11 +453,7 @@ export function getLocalProbabilityReason(
     }
 
     if (extraParts.length > 0) {
-      signalSummary = `${statusText}、${extraParts.join("、")}。`;
-    } else {
-      signalSummary = activeStatusIncidents > 0
-        ? "公式ステータスにCodex関連の障害が発生しています。"
-        : "公式ステータスに発生中の障害はありません。";
+      signalSummary = `${statusSummary} また、${extraParts.join("、")}。`;
     }
   }
 
@@ -483,6 +467,9 @@ export function getLocalProbabilityReason(
       hintSummary = "公式寄りの障害・容量到達に関する投稿があり、詫びリセット要因が強まっています。";
     }
   }
+  const combinedSignalSummary = hintSummary
+    ? `${signalSummary} ${hintSummary}`
+    : signalSummary;
 
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
@@ -512,20 +499,20 @@ export function getLocalProbabilityReason(
 
   if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
     if (locale === "en") {
-      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away.${boostText}`;
+      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away. ${combinedSignalSummary}${boostText}`;
     } else if (locale === "zh") {
-      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${boostText}`;
+      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${combinedSignalSummary}${boostText}`;
     } else {
-      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${boostText}`;
+      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${combinedSignalSummary}${boostText}`;
     }
   }
 
   if (locale === "en") {
-    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${hintSummary ?? signalSummary}${boostText}`;
+    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${hintSummary ?? signalSummary}${boostText}`;
+    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${hintSummary ?? signalSummary}${boostText}`;
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}`;
   }
 }
 

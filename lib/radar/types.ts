@@ -139,10 +139,12 @@ export type RadarData = {
     community_mentions_24h?: number;
     issue_or_limit_anomalies_24h?: number;
     complaint_pressure?: "low" | "medium" | "high" | string;
+    complaint_pressure_sources?: Array<string>;
     openai_status_updated_at?: string | null;
     openai_status_active_codex_incidents?: number;
     openai_status_recent_codex_incidents?: number;
     openai_status_affected_codex_components?: number;
+    openai_status_incidents_suppressed?: boolean;
     openai_status_latest_codex_incident?: string | null;
     reset_card?: {
       probability_24h?: number;
