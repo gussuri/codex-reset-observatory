@@ -140,7 +140,7 @@ export function RadarDashboard({
           <div className="flex flex-wrap gap-2">
             {locale !== "ja" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
+                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/"
               >
                 日本語
@@ -148,7 +148,7 @@ export function RadarDashboard({
             )}
             {locale !== "en" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
+                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/en"
               >
                 English
@@ -156,7 +156,7 @@ export function RadarDashboard({
             )}
             {locale !== "zh" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
+                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/zh"
               >
                 简体中文

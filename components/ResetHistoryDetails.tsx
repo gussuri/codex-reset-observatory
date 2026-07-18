@@ -50,7 +50,7 @@ export function ResetHistoryDetails({
       <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div
-            className={`grid grid-cols-[7.5rem_1fr] gap-2 sm:grid-cols-[5.5rem_1fr] sm:gap-1 ${
+            className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
               (hideScopeOnMobile && label === translateUI("scope", locale)) ||
               (hideReasonOnMobile && label === translateUI("historyReasonType", locale)) ||
               (hideNoticeToExecutionOnMobile &&
