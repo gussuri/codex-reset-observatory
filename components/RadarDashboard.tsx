@@ -374,13 +374,15 @@ export function RadarDashboard({
                       item={item}
                       locale={locale}
                       compact
-                      hideScopeOnMobile
-                      showScope={true}
+                      hideScopeOnMobile={item.scope === "全有料プラン"}
+                      hideNoticeToExecutionOnMobile
+                      hideNoteOnMobile
+                      showScope
                     />
                   </div>
                   <div className="border-t border-slate-200/80 pt-3 text-sm leading-6 text-slate-700 sm:border-t-0 sm:pt-0 md:text-right">
                     {item.signalLabel ? (
-                      <p>
+                      <p className="sm:block hidden">
                         {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
                     ) : null}
@@ -391,7 +393,7 @@ export function RadarDashboard({
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (
                       <a
-                        className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
+                        className="hidden items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline sm:inline-flex"
                         href={item.source ?? undefined}
                         rel="noreferrer"
                         target="_blank"

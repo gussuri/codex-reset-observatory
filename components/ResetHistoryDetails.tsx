@@ -9,6 +9,8 @@ type ResetHistoryDetailsProps = {
   compact?: boolean;
   showScope?: boolean;
   hideScopeOnMobile?: boolean;
+  hideNoticeToExecutionOnMobile?: boolean;
+  hideNoteOnMobile?: boolean;
 };
 
 export function ResetHistoryDetails({
@@ -17,6 +19,8 @@ export function ResetHistoryDetails({
   compact = false,
   showScope = true,
   hideScopeOnMobile = false,
+  hideNoticeToExecutionOnMobile = false,
+  hideNoteOnMobile = false,
 }: ResetHistoryDetailsProps) {
   const details = item.details ?? {
     cycleType: item.resetType,
@@ -45,7 +49,9 @@ export function ResetHistoryDetails({
         {rows.map(([label, value]) => (
           <div
             className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
-              hideScopeOnMobile && label === translateUI("scope", locale)
+              (hideScopeOnMobile && label === translateUI("scope", locale)) ||
+              (hideNoticeToExecutionOnMobile &&
+                label === translateUI("historyNoticeToExecution", locale))
                 ? "hidden sm:grid"
                 : ""
             }`}
@@ -57,7 +63,11 @@ export function ResetHistoryDetails({
         ))}
       </dl>
       {details.note ? (
-        <div className="rounded border border-slate-100/70 bg-slate-50 p-2.5 text-sm leading-6 text-slate-600">
+        <div
+          className={`rounded border border-slate-100/70 bg-slate-50 p-2.5 text-sm leading-6 text-slate-600 ${
+            hideNoteOnMobile ? "hidden sm:block" : ""
+          }`}
+        >
           <p className="font-medium text-slate-500">
             {translateUI("historyNote", locale)}
           </p>
