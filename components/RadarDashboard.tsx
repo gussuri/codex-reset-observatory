@@ -425,11 +425,11 @@ export function RadarDashboard({
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-500">
-              {translateUI("lastCheckedLabel", locale)}
+          <div className="flex flex-wrap items-center gap-x-2 text-sm">
+            <p className="font-medium text-slate-500">
+              {translateUI("lastCheckedLabel", locale)}{locale === "en" ? ": " : "："}
             </p>
-            <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="text-sm font-medium text-slate-700" />
+            <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="font-medium text-slate-700" />
           </div>
         </section>
 
