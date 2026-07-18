@@ -344,15 +344,6 @@ export function RadarDashboard({
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-500">
-              {translateUI("lastCheckedLabel", locale)}
-            </p>
-            <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="text-sm font-medium text-slate-700" />
-          </div>
-        </section>
-
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -429,6 +420,15 @@ export function RadarDashboard({
               </Link>
             </div>
           ) : null}
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-500">
+              {translateUI("lastCheckedLabel", locale)}
+            </p>
+            <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="text-sm font-medium text-slate-700" />
+          </div>
         </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
