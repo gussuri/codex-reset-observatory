@@ -116,23 +116,23 @@ export function RadarDashboard({
         };
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8" lang={locale}>
+    <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-5 lg:px-8" lang={locale}>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-        <header className="flex flex-col gap-4 rounded-lg border border-slate-200/80 bg-white/82 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="radar-grid relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 sm:h-16 sm:w-16">
+        <header className="flex flex-col gap-3 rounded-lg border border-slate-200/80 bg-white/82 p-3 shadow-sm backdrop-blur sm:gap-4 sm:p-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="radar-grid relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 sm:h-16 sm:w-16">
               <div className="absolute inset-2 rounded-full border border-slate-300" />
               <div className="radar-sweep absolute inset-2 rounded-full" />
               <Radio className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-teal-700" />
             </div>
             <div>
-              <p className="text-sm font-medium leading-6 text-teal-700">
+              <p className="text-xs font-medium leading-5 text-teal-700 sm:text-sm sm:leading-6">
                 {translateUI("subTitle", locale)}
               </p>
-              <h1 className="mt-1 whitespace-nowrap text-[1.35rem] font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl">
+              <h1 className="mt-0.5 whitespace-nowrap text-[1.15rem] font-semibold leading-tight tracking-normal text-slate-950 sm:mt-1 sm:text-4xl">
                 {translateUI("title", locale)}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              <p className="mt-2 max-h-10 max-w-2xl overflow-hidden text-xs leading-5 text-slate-600 sm:mt-3 sm:max-h-none sm:text-sm sm:leading-6">
                 {translateUI("description", locale)}
               </p>
             </div>
@@ -140,7 +140,7 @@ export function RadarDashboard({
           <div className="flex flex-wrap gap-2">
             {locale !== "ja" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
                 href="/"
               >
                 日本語
@@ -148,7 +148,7 @@ export function RadarDashboard({
             )}
             {locale !== "en" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
                 href="/en"
               >
                 English
@@ -156,7 +156,7 @@ export function RadarDashboard({
             )}
             {locale !== "zh" && (
               <Link
-                className="w-fit rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline"
+                className="w-fit rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 underline-offset-4 hover:underline sm:px-3 sm:py-1.5"
                 href="/zh"
               >
                 简体中文
@@ -166,7 +166,33 @@ export function RadarDashboard({
         </header>
 
         <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="sm:hidden">
+            <div className="flex items-center gap-3">
+              <Bell className={`h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
+              <p className="text-sm font-medium text-slate-500">
+                {translateUI("officialNotice", locale)}
+              </p>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h2 className="whitespace-nowrap text-lg font-semibold leading-tight">
+                {viewModel.activeWindow.active ? translateUI("activeNoticeLabel", locale) : translateUI("noNotice", locale)}
+              </h2>
+              {viewModel.activeWindow.active && viewModel.activeWindow.kind === "official" ? (
+                <span
+                  className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
+                >
+                  {translateUI("checkAction", locale)}
+                </span>
+              ) : null}
+            </div>
+            {viewModel.activeWindow.active && viewModel.activeWindow.summary ? (
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
+                {viewModel.activeWindow.summary}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="hidden items-start gap-3 sm:flex sm:flex-row sm:justify-between">
             <div className="flex items-start gap-3">
               <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
               <div className="min-w-0">
@@ -337,24 +363,24 @@ export function RadarDashboard({
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-500">
                 {translateUI("resetHistory", locale)}
               </p>
-              <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+              <h2 className="mt-1 text-xl font-semibold text-slate-950 sm:text-2xl">
                 {translateUI("recentResetEvents", locale)}
               </h2>
             </div>
-            <History className="h-7 w-7 text-slate-700" />
+            <History className="h-6 w-6 text-slate-700 sm:h-7 sm:w-7" />
           </div>
 
-          <div className="mt-5 divide-y divide-slate-100">
+          <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-0 sm:divide-y sm:divide-slate-100">
             {viewModel.recentHistory.length > 0 ? (
-              viewModel.recentHistory.map((item) => (
+              viewModel.recentHistory.map((item, index) => (
                 <div
-                  className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto]"
+                  className={`${index >= 7 ? "hidden sm:grid" : "grid"} gap-3 rounded-md border border-l-4 border-slate-200/90 border-l-teal-500 bg-slate-50/60 p-3 shadow-sm sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-4 sm:shadow-none sm:first:pt-0 sm:last:pb-0 md:grid-cols-[1fr_auto]`}
                   key={item.key}
                 >
                   <div>
@@ -363,9 +389,15 @@ export function RadarDashboard({
                         {translateDynamic(item.title, locale)}
                       </h3>
                     </div>
-                    <ResetHistoryDetails item={item} locale={locale} compact showScope={true} />
+                    <ResetHistoryDetails
+                      item={item}
+                      locale={locale}
+                      compact
+                      hideScopeOnMobile
+                      showScope={true}
+                    />
                   </div>
-                  <div className="text-sm leading-6 text-slate-700 md:text-right">
+                  <div className="border-t border-slate-200/80 pt-3 text-sm leading-6 text-slate-700 sm:border-t-0 sm:pt-0 md:text-right">
                     {item.signalLabel ? (
                       <p>
                         {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
