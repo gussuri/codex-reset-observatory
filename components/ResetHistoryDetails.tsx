@@ -9,6 +9,7 @@ type ResetHistoryDetailsProps = {
   compact?: boolean;
   showScope?: boolean;
   hideScopeOnMobile?: boolean;
+  hideReasonOnMobile?: boolean;
   hideNoticeToExecutionOnMobile?: boolean;
   hideNoteOnMobile?: boolean;
 };
@@ -19,6 +20,7 @@ export function ResetHistoryDetails({
   compact = false,
   showScope = true,
   hideScopeOnMobile = false,
+  hideReasonOnMobile = false,
   hideNoticeToExecutionOnMobile = false,
   hideNoteOnMobile = false,
 }: ResetHistoryDetailsProps) {
@@ -50,6 +52,7 @@ export function ResetHistoryDetails({
           <div
             className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
               (hideScopeOnMobile && label === translateUI("scope", locale)) ||
+              (hideReasonOnMobile && label === translateUI("historyReasonType", locale)) ||
               (hideNoticeToExecutionOnMobile &&
                 label === translateUI("historyNoticeToExecution", locale))
                 ? "hidden sm:grid"

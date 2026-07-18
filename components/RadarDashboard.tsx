@@ -375,6 +375,7 @@ export function RadarDashboard({
                       locale={locale}
                       compact
                       hideScopeOnMobile={item.scope === "全有料プラン"}
+                      hideReasonOnMobile
                       hideNoticeToExecutionOnMobile
                       hideNoteOnMobile
                       showScope
