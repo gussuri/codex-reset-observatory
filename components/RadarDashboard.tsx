@@ -137,7 +137,7 @@ export function RadarDashboard({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-end gap-2 sm:justify-start">
             {locale !== "ja" && (
               <Link
                 className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
