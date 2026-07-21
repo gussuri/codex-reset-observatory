@@ -643,6 +643,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
     zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时の延迟。",
   },
+  "1000万人アクティブユーザー記念リセット": {
+    ja: "1000万人アクティブユーザー記念リセット",
+    en: "10M Active Users Celebration Reset",
+    zh: "1000万活跃用户庆祝重置",
+  },
+  "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
+    ja: "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+    en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 10 million active users.",
+    zh: "为庆祝活跃用户数达到 1000 万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
+  },
+  "16分": {
+    ja: "16分",
+    en: "16 minutes",
+    zh: "16 分钟",
+  },
   "900万人アクティブユーザー記念リセット": {
     ja: "900万人アクティブユーザー記念リセット",
     en: "9 million active users celebration reset",
