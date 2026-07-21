@@ -333,7 +333,8 @@ export function getLocalExpectationLevel(
   signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
 ) {
   const probability24h = getLocalResetProbability(data, "24h", signalEvaluation);
-  return getExpectationLabel(probability24h, locale);
+  const probability48h = getLocalResetProbability(data, "48h", signalEvaluation);
+  return getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale);
 }
 
 function hasOfficialNoticeWithinHours(

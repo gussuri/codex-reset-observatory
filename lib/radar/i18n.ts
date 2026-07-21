@@ -1136,7 +1136,8 @@ export function translateExpectation(value: string, locale: Locale): string {
     低: { ja: "低", en: "Low", zh: "低" },
     中: { ja: "中", en: "Medium", zh: "中" },
     高: { ja: "高", en: "High", zh: "高" },
-    超高: { ja: "超高", en: "Very High", zh: "极高" },
+    超高: { ja: "極めて高", en: "Very High", zh: "极高" },
+    極めて高: { ja: "極めて高", en: "Very High", zh: "极高" },
     不明: { ja: "不明", en: "Unknown", zh: "未知" },
   };
 

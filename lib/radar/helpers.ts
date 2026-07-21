@@ -21,8 +21,15 @@ export function normalizeProbability(value: number) {
   return value;
 }
 
+export type ExpectationInput =
+  | number
+  | string
+  | null
+  | undefined
+  | { p24h?: number | null; p48h?: number | null };
+
 export function getExpectationLabel(
-  value: number | string | null | undefined,
+  value: ExpectationInput,
   locale: Locale = "ja",
 ) {
   if (typeof value === "string") {
@@ -42,7 +49,7 @@ export function getExpectationLabel(
       case "very_high":
       case "very-high":
       case "critical":
-        label = "超高";
+        label = "極めて高";
         break;
       default:
         break;
@@ -51,25 +58,40 @@ export function getExpectationLabel(
     return translateExpectation(label, locale);
   }
 
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (value === null || value === undefined) {
     return translateExpectation("不明", locale);
   }
 
-  const normalized = normalizeProbability(value);
+  let p24h: number | undefined;
+  let p48h: number | undefined;
 
-  if (normalized < EXPECTATION_THRESHOLDS.medium) {
-    return translateExpectation("低", locale);
+  if (typeof value === "object") {
+    p24h = typeof value.p24h === "number" && !Number.isNaN(value.p24h) ? normalizeProbability(value.p24h) : undefined;
+    p48h = typeof value.p48h === "number" && !Number.isNaN(value.p48h) ? normalizeProbability(value.p48h) : undefined;
+  } else if (typeof value === "number" && !Number.isNaN(value)) {
+    p24h = normalizeProbability(value);
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.high) {
-    return translateExpectation("中", locale);
+  if (p24h === undefined && p48h === undefined) {
+    return translateExpectation("不明", locale);
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.veryHigh) {
+  const p24 = p24h ?? 0;
+  const p48 = p48h ?? 0;
+
+  if (p24 >= EXPECTATION_THRESHOLDS.veryHigh.p24h || p48 >= EXPECTATION_THRESHOLDS.veryHigh.p48h) {
+    return translateExpectation("極めて高", locale);
+  }
+
+  if (p24 >= EXPECTATION_THRESHOLDS.high.p24h || p48 >= EXPECTATION_THRESHOLDS.high.p48h) {
     return translateExpectation("高", locale);
   }
 
-  return translateExpectation("超高", locale);
+  if (p24 >= EXPECTATION_THRESHOLDS.medium.p24h || p48 >= EXPECTATION_THRESHOLDS.medium.p48h) {
+    return translateExpectation("中", locale);
+  }
+
+  return translateExpectation("低", locale);
 }
 
 export function getRefreshIntervalMs(value: number | undefined) {
@@ -79,15 +101,15 @@ export function getRefreshIntervalMs(value: number | undefined) {
 
   const normalized = normalizeProbability(value);
 
-  if (normalized < EXPECTATION_THRESHOLDS.medium) {
+  if (normalized < EXPECTATION_THRESHOLDS.medium.p24h) {
     return REFRESH_INTERVAL_MS.low;
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.high) {
+  if (normalized < EXPECTATION_THRESHOLDS.high.p24h) {
     return REFRESH_INTERVAL_MS.medium;
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.veryHigh) {
+  if (normalized < EXPECTATION_THRESHOLDS.veryHigh.p24h) {
     return REFRESH_INTERVAL_MS.high;
   }
 

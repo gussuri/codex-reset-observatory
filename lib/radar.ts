@@ -145,7 +145,7 @@ export function getRadarViewModel(
       source?.window_open,
       locale
     ),
-    expectation: predictionLevel ?? getExpectationLabel(probability24h, locale),
+    expectation: predictionLevel ?? getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale),
     probability24h,
     probability48h,
     action: getRecommendedAction(source, probability24h, locale),

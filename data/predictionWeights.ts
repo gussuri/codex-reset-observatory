@@ -1,7 +1,7 @@
 export const EXPECTATION_THRESHOLDS = {
-  medium: 0.1,
-  high: 0.3,
-  veryHigh: 0.6,
+  medium: { p24h: 0.1, p48h: 0.3 },
+  high: { p24h: 0.3, p48h: 0.6 },
+  veryHigh: { p24h: 0.6, p48h: 0.8 },
 } as const;
 
 export const RECOMMENDED_ACTION_THRESHOLDS = {
