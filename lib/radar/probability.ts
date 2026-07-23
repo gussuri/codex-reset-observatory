@@ -461,14 +461,20 @@ export function getLocalProbabilityReason(
     }
   }
 
+  const activeHintSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.type === "official_incident_hint" &&
+      isCurrentLocalSignal(signal)
+  );
+
   let hintSummary: string | null = null;
-  if (officialIncidentHints > 0) {
+  if (activeHintSignals.length > 0) {
     if (locale === "en") {
-      hintSummary = "Official posts about capacity issues increase the chance of a compensation reset.";
+      hintSummary = "Official developer signals hinting at updates or resets have been observed.";
     } else if (locale === "zh") {
-      hintSummary = "官方发布了关于容量问题的提示，补偿性重置的概率正在增加。";
+      hintSummary = "检测到来自官方开发者关于更新或重置的预告提示。";
     } else {
-      hintSummary = "公式寄りの障害・容量到達に関する投稿があり、詫びリセット要因が強まっています。";
+      hintSummary = "公式開発者から更新やリセットを示唆する投稿・シグナルが確認されています。";
     }
   }
   const combinedSignalSummary = hintSummary
@@ -477,7 +483,10 @@ export function getLocalProbabilityReason(
 
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
-      signal.type === "probability_boost" &&
+      (signal.type === "probability_boost" ||
+        typeof signal.boostValue24h === "number" ||
+        typeof signal.boostValue48h === "number" ||
+        typeof signal.boostValue === "number") &&
       isCurrentLocalSignal(signal)
   );
 
