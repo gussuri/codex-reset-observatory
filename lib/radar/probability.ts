@@ -76,7 +76,10 @@ export function getLocalResetProbability(
   // 期間限定のイベントブースト（確率底上げ）を収集して加算
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
-      signal.type === "probability_boost" &&
+      (signal.type === "probability_boost" ||
+        typeof signal.boostValue24h === "number" ||
+        typeof signal.boostValue48h === "number" ||
+        typeof signal.boostValue === "number") &&
       isCurrentLocalSignal(signal)
   );
   const eventBoost = activeBoostSignals.reduce((sum, sig) => {
