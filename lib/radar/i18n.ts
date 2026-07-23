@@ -643,6 +643,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
     zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时の延迟。",
   },
+  "Tibo氏が「Tomorrow is feeling codexy」と投稿（Codex関連の更新・リセットを示唆）": {
+    ja: "Tibo氏が「Tomorrow is feeling codexy」と投稿（Codex関連の更新・リセットを示唆）",
+    en: "Tibo posted 'Tomorrow is feeling codexy' (hinting at upcoming Codex updates/reset)",
+    zh: "Tibo 发帖称“Tomorrow is feeling codexy”（暗示即将来临的 Codex 更新/重置）",
+  },
+  "Tibo氏の「Tomorrow is feeling codexy」匂わせ投稿": {
+    ja: "Tibo氏の「Tomorrow is feeling codexy」匂わせ投稿",
+    en: "Tibo's 'Tomorrow is feeling codexy' teaser post",
+    zh: "Tibo 的“Tomorrow is feeling codexy”预告贴",
+  },
   "1000万人アクティブユーザー記念リセット": {
     ja: "1000万人アクティブユーザー記念リセット",
     en: "10M Active Users Celebration Reset",
