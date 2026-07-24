@@ -26,6 +26,16 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "boost-general-adjustment-2026-07-24",
+    observedAt: "2026-07-24T12:12:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-28T00:00:00+09:00",
+    boostValue24h: 0.175,
+    boostValue48h: 0.26,
+    title: "手動確率調整",
+  },
+  {
     id: "official-tibo-9m-users-notice-2026-07-15",
     observedAt: "2026-07-15T15:00:00+09:00",
     type: "official_notice",

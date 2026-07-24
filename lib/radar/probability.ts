@@ -490,22 +490,24 @@ export function getLocalProbabilityReason(
       isCurrentLocalSignal(signal)
   );
 
+  const activeBoostSignalsWithReason = activeBoostSignals.filter(sig => !!sig.boostReason);
+
   let boostText = "";
-  if (activeBoostSignals.length > 0) {
+  if (activeBoostSignalsWithReason.length > 0) {
     if (locale === "en") {
-      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" and ");
+      const reasons = activeBoostSignalsWithReason.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join(" and ");
       boostText = ` The probability is higher than usual because of ${reasons}.`;
     } else if (locale === "zh") {
-      const has9m = activeBoostSignals.some(sig => sig.id.includes("9m"));
-      const hasGpt56 = activeBoostSignals.some(sig => (sig.boostReason ?? sig.title).includes("5.6"));
+      const has9m = activeBoostSignalsWithReason.some(sig => sig.id.includes("9m"));
+      const hasGpt56 = activeBoostSignalsWithReason.some(sig => (sig.boostReason ?? sig.title).includes("5.6"));
       if (has9m && hasGpt56) {
         boostText = " 考虑到可能为庆祝活跃用户达到 900 万而进行重置，以及 GPT-5.6 发布相关的庆祝活动，本次预测概率高于平时。";
       } else {
-        const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("和");
+        const reasons = activeBoostSignalsWithReason.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("和");
         boostText = ` 由于${reasons}，本次预测概率高于平时。`;
       }
     } else {
-      const reasons = activeBoostSignals.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("および");
+      const reasons = activeBoostSignalsWithReason.map(sig => translateDynamic(sig.boostReason ?? sig.title, locale)).join("および");
       boostText = ` ${reasons}のため、通常より確率を高く予測しています。`;
     }
   }
