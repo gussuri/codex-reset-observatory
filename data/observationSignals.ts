@@ -31,8 +31,8 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     type: "probability_boost",
     status: "active",
     expiresAt: "2026-07-28T00:00:00+09:00",
-    boostValue24h: 0.175,
-    boostValue48h: 0.26,
+    boostValue24h: 0.275,
+    boostValue48h: 0.31,
     title: "手動確率調整",
   },
   {
