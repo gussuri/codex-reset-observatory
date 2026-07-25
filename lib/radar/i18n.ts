@@ -643,6 +643,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
     zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时の延迟。",
   },
+  "大規模障害に伴う詫びリセット": {
+    ja: "大規模障害に伴う詫びリセット",
+    en: "Outage Compensation Reset",
+    zh: "大规模故障补偿重置",
+  },
+  "深夜帯に発生した大規模なシステム障害（大規模アウトージ）の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
+    ja: "深夜帯に発生した大規模なシステム障害（大規模アウトージ）の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+    en: "Usage limits for ChatGPT Work and Codex were forcibly reset following full recovery from a major system outage overnight.",
+    zh: "为弥补夜间发生的重大系统故障，ChatGPT Work 和 Codex 的使用限制已在服务恢复后强制重置。",
+  },
   "Tibo氏が「Tomorrow is feeling codexy」と投稿（Codex関連の更新・リセットを示唆）": {
     ja: "Tibo氏が「Tomorrow is feeling codexy」と投稿（Codex関連の更新・リセットを示唆）",
     en: "Tibo posted 'Tomorrow is feeling codexy' (hinting at upcoming Codex updates/reset)",
