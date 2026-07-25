@@ -26,6 +26,16 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "boost-post-reset-adjustment-2026-07-26",
+    observedAt: "2026-07-26T04:24:00+09:00",
+    type: "probability_boost",
+    status: "active",
+    expiresAt: "2026-07-30T00:00:00+09:00",
+    boostValue24h: 0.0,
+    boostValue48h: 0.18,
+    title: "手動確率調整",
+  },
+  {
     id: "boost-general-adjustment-2026-07-24",
     observedAt: "2026-07-24T12:12:00+09:00",
     type: "probability_boost",
