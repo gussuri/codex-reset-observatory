@@ -1,5 +1,5 @@
 export const EXPECTATION_THRESHOLDS = {
-  medium: { p24h: 0.15, p48h: 0.3 },
+  medium: { p24h: 0.25, p48h: 0.35 },
   high: { p24h: 0.4, p48h: 0.65 },
   veryHigh: { p24h: 0.6, p48h: 0.8 },
 } as const;
