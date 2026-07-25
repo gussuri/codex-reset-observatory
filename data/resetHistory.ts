@@ -172,7 +172,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     window_minutes: 0,
     scope: "全有料プラン",
     summary:
-      "深夜帯に発生した大規模なシステム障害（大規模アウトージ）の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+      "世界規模で発生したシステム障害の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     source_url: "https://x.com/thsottiaux",
     details: {
       cycleType: "ランダムリセット",
@@ -180,7 +180,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       resetMethod: "強制リセット",
       scope: "全有料プラン",
       noticeToExecution: "即時",
-      note: "深夜帯に発生した大規模なシステム障害（大規模アウトージ）の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+      note: "世界規模で発生したシステム障害の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     },
   },
   {
