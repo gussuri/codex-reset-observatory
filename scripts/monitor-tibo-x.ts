@@ -6,11 +6,15 @@ const TARGET_HANDLE = "thsottiaux";
 const SYNDICATION_URL = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${TARGET_HANDLE}`;
 const PROCESSED_STATE_FILE = path.join(process.cwd(), "data", "processedTweets.json");
 const SIGNALS_FILE = path.join(process.cwd(), "data", "observationSignals.ts");
+const HISTORY_FILE = path.join(process.cwd(), "data", "resetHistory.ts");
 
 type ClassificationResult = {
-  category: "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
+  category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
   confidence: number;
   reason_ja: string;
+  reset_title_ja?: string;
+  reset_type_ja?: "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット";
+  notice_to_execution?: string;
   key_phrase?: string;
   parsed_notice_time?: string | null;
 };
@@ -97,17 +101,20 @@ You are an AI classifier for an automated Codex Reset Observatory system.
 You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex team.
 
 Classify each tweet into EXACTLY ONE of the following categories:
-1. "OFFICIAL_NOTICE": Explicit statement that usage/rate limits ARE ALREADY reset or ARE SCHEDULING a limit reset.
-2. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting a rate limit reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
-3. "IRRELEVANT": Regular chatter, general feature updates without limit resets, surveys, outage investigation without resets, or explicit statements denying a reset today.
+1. "RESET_COMPLETED": Statement confirming that a rate limit reset HAS ALREADY BEEN COMPLETED or IS NOW EFFECTIVE (e.g., "we have reset the rate limits", "limits are reset", "outage resolved and limits reset").
+2. "OFFICIAL_NOTICE": Statement that rate limits ARE SCHEDULED to be reset at a specific future time/window.
+3. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
+4. "IRRELEVANT": Regular chatter, general feature updates without limit resets, surveys, outage investigation without resets, or explicit statements denying a reset.
 
 Respond ONLY with valid JSON in this exact structure:
 {
-  "category": "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT",
+  "category": "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT",
   "confidence": number,
   "reason_ja": "判別理由（日本語で分かりやすく説明）",
-  "key_phrase": "判定の決め手となったキーワードまたはフレーズ",
-  "parsed_notice_time": "告知された日時または表現 (なしの場合は null)"
+  "reset_title_ja": "リセット完了時のタイトル（日本語、例: 800万人達成記念リセット, 大規模障害復旧リセット など。COMPLETED時のみ必須、それ以外はnull）",
+  "reset_type_ja": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット",
+  "notice_to_execution": "告知から実施までの時間表現 (例: 0分, 2時間42分, 16分, 定期 など)",
+  "key_phrase": "判定の決め手となったキーワードまたはフレーズ"
 }
 `;
 
@@ -165,10 +172,82 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
 }
 
 /**
- * 検出されたシグナルを data/observationSignals.ts に完全自動で追加書き込みする関数
- * 【スマート制御強化】
- * 1. 過去の古いアクティブな「匂わせ/ブーストシグナル」は重複加算を防ぐため自動で status: "resolved" に変更
- * 2. 有効期限 (48時間) を設定し、結局リセットが来なかった場合も自然失効させる
+ * リセット完了(RESET_COMPLETED)判定時に、data/resetHistory.ts に新しい履歴イベントを自動書き込みし、
+ * data/observationSignals.ts のアクティブな旧シグナルをすべてクリア(resolved)する関数
+ */
+function autoRecordCompletedResetHistory(tweet: TweetItem, classification: ClassificationResult) {
+  try {
+    const dateObj = new Date(tweet.createdAt);
+    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
+    const dateSlug = dateIso.split("T")[0];
+    const historyId = `local-codex-auto-reset-${dateSlug}-${tweet.id.slice(-4)}`;
+
+    // 1. data/resetHistory.ts の更新
+    let historyContent = fs.readFileSync(HISTORY_FILE, "utf-8");
+
+    if (historyContent.includes(tweet.url) || historyContent.includes(`id: "${historyId}"`)) {
+      console.log(`Reset history for tweet ${tweet.id} already exists in resetHistory.ts. Skipping history append.`);
+    } else {
+      // LOCAL_MODEL_UPDATED_AT を更新
+      historyContent = historyContent.replace(
+        /export const LOCAL_MODEL_UPDATED_AT = "[^"]+";/,
+        `export const LOCAL_MODEL_UPDATED_AT = "${dateIso}";`
+      );
+
+      const title = classification.reset_title_ja || "Codex利用上限強制リセット";
+      const reasonType = classification.reset_type_ja || "ご祝儀リセット";
+      const noticeToExec = classification.notice_to_execution || "0分";
+
+      const newHistoryEvent = {
+        id: historyId,
+        title: title,
+        kind: "reset_completed",
+        status: "closed",
+        opened_at: dateIso,
+        closed_at: dateIso,
+        completed_at: dateIso,
+        window_minutes: 0,
+        scope: "全有料プラン",
+        summary: classification.reason_ja,
+        source_url: tweet.url,
+        details: {
+          cycleType: "ランダムリセット",
+          reasonType: reasonType,
+          resetMethod: "強制リセット",
+          scope: "全有料プラン",
+          noticeToExecution: noticeToExec,
+          note: classification.reason_ja,
+        },
+      };
+
+      const historyMarker = "export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [";
+      const formattedHistoryString = `  ${JSON.stringify(newHistoryEvent, null, 4).replace(/"([^"]+)":/g, "$1:")},`;
+
+      historyContent = historyContent.replace(
+        historyMarker,
+        `${historyMarker}\n${formattedHistoryString}`
+      );
+
+      fs.writeFileSync(HISTORY_FILE, historyContent, "utf-8");
+      console.log(`🎉 Automatically recorded new completed reset event [${historyId}] to data/resetHistory.ts!`);
+    }
+
+    // 2. data/observationSignals.ts 内のアクティブな全シグナルを resolved に一括クリーンアップ
+    let signalsContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    signalsContent = signalsContent.replace(
+      /(status:\s*)"active"/g,
+      `$1"resolved",\n    resolvedAt: "${dateIso}"`
+    );
+    fs.writeFileSync(SIGNALS_FILE, signalsContent, "utf-8");
+    console.log(`🧹 Cleared all active signals in observationSignals.ts to resolved state.`);
+
+  } catch (err: any) {
+    console.error(`❌ Failed to record completed reset history: ${err.message}`);
+  }
+}
+
+/**
+ * 検出された匂わせ/予告シグナルを data/observationSignals.ts に完全自動で追加書き込みする関数
  */
 function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
   try {
@@ -179,13 +258,12 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
     const dateSlug = dateIso.split("T")[0];
     const signalId = `official-tibo-auto-${isTeaser ? "hint" : "notice"}-${dateSlug}-${tweet.id.slice(-4)}`;
 
-    // すでに同じIDまたは同じURLが存在する場合はスキップ
     if (fileContent.includes(`id: "${signalId}"`) || fileContent.includes(tweet.url)) {
       console.log(`Signal for tweet ${tweet.id} already exists in observationSignals.ts. Skipping append.`);
       return;
     }
 
-    // 古いアクティブな匂わせ・手動ブーストシグナルを自動解決 (status: "resolved") に置換して二重加算を防止
+    // 古いアクティブな匂わせ・手動ブーストシグナルを自動解決
     fileContent = fileContent.replace(
       /(id:\s*"(?:official-tibo-|boost-)[^"]+",[\s\S]*?status:\s*)"active"/g,
       `$1"resolved",\n    resolvedAt: "${dateIso}"`
@@ -212,7 +290,6 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
       sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより（自動判定）",
     };
 
-    // LOCAL_OBSERVATION_SIGNALS 配列の先頭に挿入
     const targetMarker = "export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [";
     const formattedSignalString = `  ${JSON.stringify(newSignalObject, null, 4).replace(/"([^"]+)":/g, "$1:")},`;
 
@@ -222,7 +299,7 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
     );
 
     fs.writeFileSync(SIGNALS_FILE, updatedContent, "utf-8");
-    console.log(`🎉 Automatically added new signal [${signalId}] and resolved older active signals in observationSignals.ts!`);
+    console.log(`🎉 Automatically added new signal [${signalId}] to observationSignals.ts!`);
   } catch (err: any) {
     console.error(`❌ Failed to auto-apply signal to observationSignals.ts: ${err.message}`);
   }
@@ -284,13 +361,14 @@ async function main() {
     const classification = await classifyWithGemini(tweet.text, apiKey);
     console.log(` -> AI Category: ${classification.category} (${classification.reason_ja})`);
 
-    if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
-      console.log(` 🚨 Signal Detected! Category: ${classification.category}`);
-
-      // 【完全全自動】サイトの観測シグナルデータ (observationSignals.ts) を自動更新
+    if (classification.category === "RESET_COMPLETED") {
+      console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
+      autoRecordCompletedResetHistory(tweet, classification);
+    } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
+      console.log(` 🚨 Notice/Hint Signal Detected! Category: ${classification.category}`);
       autoApplySignalToObservatory(tweet, classification);
     } else {
-      console.log(` ℹ️ Category is IRRELEVANT. Skipping signal creation.`);
+      console.log(` ℹ️ Category is IRRELEVANT. Skipping.`);
     }
 
     // 状態を更新
