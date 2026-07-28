@@ -1167,37 +1167,39 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
     return directMatch;
   }
 
-  // 時間・分パターンの自動解析・翻訳（例: "2時間42分", "5時間", "12分" などを辞書登録なしで自動変換）
-  const durationMatch = trimmed.match(/^(?:(\d+)時間)?(?:(\d+)分)?$/);
-  if (durationMatch && (durationMatch[1] !== undefined || durationMatch[2] !== undefined)) {
-    const hours = durationMatch[1] ? parseInt(durationMatch[1], 10) : 0;
-    const minutes = durationMatch[2] ? parseInt(durationMatch[2], 10) : 0;
+  // 日・時間・分パターンの自動解析・翻訳（例: "35時間20分", "1日5時間", "2日" などを辞書登録なしで全自動変換）
+  const durationMatch = trimmed.match(/^(?:(\d+)日)?(?:(\d+)時間)?(?:(\d+)分)?$/);
+  if (
+    durationMatch &&
+    (durationMatch[1] !== undefined ||
+      durationMatch[2] !== undefined ||
+      durationMatch[3] !== undefined)
+  ) {
+    const days = durationMatch[1] ? parseInt(durationMatch[1], 10) : 0;
+    const hours = durationMatch[2] ? parseInt(durationMatch[2], 10) : 0;
+    const minutes = durationMatch[3] ? parseInt(durationMatch[3], 10) : 0;
 
-    if (locale === "en") {
-      if (hours > 0 && minutes > 0) {
-        return `${hours} ${hours === 1 ? "hour" : "hours"} ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+    if (days > 0 || hours > 0 || minutes > 0) {
+      if (locale === "en") {
+        const parts: Array<string> = [];
+        if (days > 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+        if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+        if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
+        return parts.join(" ");
       }
-      if (hours > 0) {
-        return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+      if (locale === "zh") {
+        const parts: Array<string> = [];
+        if (days > 0) parts.push(`${days} 天`);
+        if (hours > 0) parts.push(`${hours} 小时`);
+        if (minutes > 0) parts.push(`${minutes} 分钟`);
+        return parts.join(" ");
       }
-      return `${minutes} min`;
+      const parts: Array<string> = [];
+      if (days > 0) parts.push(`${days}日`);
+      if (hours > 0) parts.push(`${hours}時間`);
+      if (minutes > 0) parts.push(`${minutes}分`);
+      return parts.join("");
     }
-    if (locale === "zh") {
-      if (hours > 0 && minutes > 0) {
-        return `${hours} 小时 ${minutes} 分钟`;
-      }
-      if (hours > 0) {
-        return `${hours} 小时`;
-      }
-      return `${minutes} 分`;
-    }
-    if (hours > 0 && minutes > 0) {
-      return `${hours}時間${minutes}分`;
-    }
-    if (hours > 0) {
-      return `${hours}時間`;
-    }
-    return `${minutes}分`;
   }
 
   // Fallback for partial/contains matching or dynamic strings
