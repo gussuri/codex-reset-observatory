@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
-import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "../data/observationSignals";
 
 const TARGET_HANDLE = "thsottiaux";
 const SYNDICATION_URL = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${TARGET_HANDLE}`;
@@ -167,21 +166,30 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
 
 /**
  * 検出されたシグナルを data/observationSignals.ts に完全自動で追加書き込みする関数
+ * 【スマート制御強化】
+ * 1. 過去の古いアクティブな「匂わせ/ブーストシグナル」は重複加算を防ぐため自動で status: "resolved" に変更
+ * 2. 有効期限 (48時間) を設定し、結局リセットが来なかった場合も自然失効させる
  */
 function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
   try {
-    const fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
     const isTeaser = classification.category === "TEASER_HINT";
     const dateObj = new Date(tweet.createdAt);
     const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
     const dateSlug = dateIso.split("T")[0];
     const signalId = `official-tibo-auto-${isTeaser ? "hint" : "notice"}-${dateSlug}-${tweet.id.slice(-4)}`;
 
-    // すでに同じIDが存在する場合はスキップ
+    // すでに同じIDまたは同じURLが存在する場合はスキップ
     if (fileContent.includes(`id: "${signalId}"`) || fileContent.includes(tweet.url)) {
       console.log(`Signal for tweet ${tweet.id} already exists in observationSignals.ts. Skipping append.`);
       return;
     }
+
+    // 古いアクティブな匂わせ・手動ブーストシグナルを自動解決 (status: "resolved") に置換して二重加算を防止
+    fileContent = fileContent.replace(
+      /(id:\s*"(?:official-tibo-|boost-)[^"]+",[\s\S]*?status:\s*)"active"/g,
+      `$1"resolved",\n    resolvedAt: "${dateIso}"`
+    );
 
     const expiresAtObj = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const expiresAtIso = expiresAtObj.toISOString();
@@ -214,92 +222,16 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
     );
 
     fs.writeFileSync(SIGNALS_FILE, updatedContent, "utf-8");
-    console.log(`🎉 Automatically added new signal [${signalId}] to data/observationSignals.ts!`);
+    console.log(`🎉 Automatically added new signal [${signalId}] and resolved older active signals in observationSignals.ts!`);
   } catch (err: any) {
     console.error(`❌ Failed to auto-apply signal to observationSignals.ts: ${err.message}`);
   }
-}
-
-async function sendDiscordNotification(
-  webhookUrl: string,
-  tweet: TweetItem,
-  classification: ClassificationResult
-) {
-  const isOfficial = classification.category === "OFFICIAL_NOTICE";
-  const title = isOfficial
-    ? "📢 【自動反映完了】Tibo氏が正式告知を投稿しました！"
-    : "👀 【自動反映完了】Tibo氏が匂わせ投稿を投稿しました！";
-
-  const color = isOfficial ? 0xff4500 : 0xf1c40f;
-
-  const payload = {
-    embeds: [
-      {
-        title: title,
-        url: tweet.url,
-        color: color,
-        fields: [
-          {
-            name: "ツイート本文",
-            value: `> ${tweet.text.replace(/\n/g, "\n> ")}`,
-          },
-          {
-            name: "AI判定理由 (Gemini)",
-            value: classification.reason_ja,
-            inline: false,
-          },
-          {
-            name: "AI分類",
-            value: `\`${classification.category}\` (信頼度: ${Math.round(classification.confidence * 100)}%)`,
-            inline: true,
-          },
-          {
-            name: "サイト反映状況",
-            value: "✅ `data/observationSignals.ts` に自動反映・Vercel自動デプロイ開始",
-            inline: false,
-          },
-        ],
-        footer: {
-          text: "Codex Reset Observatory • Automated X System",
-        },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-
-  return new Promise((resolve, reject) => {
-    const u = new URL(webhookUrl);
-    const bodyStr = JSON.stringify(payload);
-    const req = https.request(
-      u,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(bodyStr),
-        },
-      },
-      (res) => {
-        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(true);
-        } else {
-          let errBody = "";
-          res.on("data", (c) => (errBody += c));
-          res.on("end", () => reject(new Error(`Discord Webhook error (${res.statusCode}): ${errBody}`)));
-        }
-      }
-    );
-    req.on("error", reject);
-    req.write(bodyStr);
-    req.end();
-  });
 }
 
 async function main() {
   console.log(`[${new Date().toISOString()}] Starting X Full-Auto Monitoring for @${TARGET_HANDLE}...`);
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
 
   if (!apiKey) {
     console.error("❌ Error: GEMINI_API_KEY environment variable is required.");
@@ -320,7 +252,7 @@ async function main() {
   // 初回起動時は最新ツイートのIDをベースラインとして設定
   if (!state.lastProcessedTweetId && state.processedTweetIds.length === 0) {
     const newestTweet = tweets[0];
-    console.log(`Initial run detected. Setting baseline lastProcessedTweetId to ${newestTweet.id} without sending notifications.`);
+    console.log(`Initial run detected. Setting baseline lastProcessedTweetId to ${newestTweet.id} without processing.`);
     state.lastProcessedTweetId = newestTweet.id;
     state.processedTweetIds = [newestTweet.id];
     saveState(state);
@@ -357,15 +289,6 @@ async function main() {
 
       // 【完全全自動】サイトの観測シグナルデータ (observationSignals.ts) を自動更新
       autoApplySignalToObservatory(tweet, classification);
-
-      if (discordWebhookUrl) {
-        try {
-          await sendDiscordNotification(discordWebhookUrl, tweet, classification);
-          console.log(` ✅ Discord notification sent successfully!`);
-        } catch (err: any) {
-          console.error(` ❌ Failed to send Discord notification: ${err.message}`);
-        }
-      }
     } else {
       console.log(` ℹ️ Category is IRRELEVANT. Skipping signal creation.`);
     }
