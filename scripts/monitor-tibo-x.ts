@@ -294,17 +294,14 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
 function autoAdjustTeaserToMildState(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
-    const featureSummary = classification.resolved_feature_summary_ja || classification.reason_ja;
-    const mildReason = `Tibo氏が新発表（${featureSummary}）を投稿。本命リセットに向けマイルド警戒モードを継続中`;
 
     if (fileContent.includes('status: "active"')) {
-      // 既存のアクティブシグナルのブースト値をマイルド値(24h: 15%相当, 48h: 30%相当)に補正
+      // 既存のアクティブシグナルのブースト値のみをマイルド値(24h: 15%相当, 48h: 30%相当)に補正
       fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.145");
       fileContent = fileContent.replace(/boostValue48h:\s*[\d.]+/g, "boostValue48h: 0.28");
-      fileContent = fileContent.replace(/boostReason:\s*"[^"]+"/g, `boostReason: "${mildReason}"`);
 
       fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
-      console.log(`✨ Automatically adjusted active teaser signals in observationSignals.ts to Mild Alert State (24h: 15% / 48h: 30%) for feature release [${featureSummary}]!`);
+      console.log(`✨ Automatically adjusted active teaser signals in observationSignals.ts to mild boost values (24h: 15% / 48h: 30%).`);
     } else {
       console.log(`No active teaser signals found to adjust to mild state.`);
     }
