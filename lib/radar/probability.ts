@@ -380,7 +380,7 @@ export function getLocalProbabilityReason(
     return locale === "en"
       ? "An official reset notice has been detected, indicating a high probability within 48 hours."
       : locale === "zh"
-        ? "有官方重置预告，预计 48 小时内执行の概率较高。"
+        ? "有官方重置预告，预计 48 小时内执行的概率较高。"
         : "公式リセット予告があり、48時間以内の見込みを高めに見ています。";
   }
 
@@ -491,7 +491,12 @@ export function getLocalProbabilityReason(
       isCurrentLocalSignal(signal)
   );
 
-  const activeBoostSignalsWithReason = activeBoostSignals.filter(sig => !!sig.boostReason);
+  const activeBoostSignalsWithReason = activeBoostSignals.filter(
+    (sig) =>
+      !!sig.boostReason &&
+      ((sig.boostValue24h ?? sig.boostValue ?? 0) > 0 ||
+        (sig.boostValue48h ?? sig.boostValue ?? 0) > 0)
+  );
 
   let boostText = "";
   if (activeBoostSignalsWithReason.length > 0) {
