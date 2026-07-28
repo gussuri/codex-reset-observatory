@@ -40,7 +40,6 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-07-29T21:00:00+09:00",
     boostValue24h: -0.20,
     boostValue48h: -0.05,
-    boostReason: "7/28 12:09 JST リセット直後（18時間経過）のため間隔理論に基づく確率抑制（マイルド補正）",
     title: "前回リセット直後（間隔理論による確率抑制）",
     source: "https://x.com/thsottiaux",
     sourceLabel: "Codex リセット観測データ (間隔理論)",
