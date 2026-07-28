@@ -1,4 +1,4 @@
-name: Tibo X Monitoring & AI Signal Detector
+name: Tibo X Full-Auto Monitor & Signal Detector
 
 on:
   schedule:
@@ -26,15 +26,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Tibo X Monitor Script
+      - name: Run Tibo X Full-Auto Monitor Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: npx tsx scripts/monitor-tibo-x.ts
 
-      - name: Commit and push updated processed state
+      - name: Commit and push updated signals & processed state to trigger Vercel deploy
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          git add data/processedTweets.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(auto): update processed tweets state [skip ci]" && git push)
+          git add data/observationSignals.ts data/processedTweets.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "feat(auto): auto-apply Tibo X signal via Gemini AI" && git push)

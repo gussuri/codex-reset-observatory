@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
+import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "../data/observationSignals";
 
 const TARGET_HANDLE = "thsottiaux";
 const SYNDICATION_URL = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${TARGET_HANDLE}`;
 const PROCESSED_STATE_FILE = path.join(process.cwd(), "data", "processedTweets.json");
+const SIGNALS_FILE = path.join(process.cwd(), "data", "observationSignals.ts");
 
 type ClassificationResult = {
   category: "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
@@ -163,6 +165,61 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
   });
 }
 
+/**
+ * 検出されたシグナルを data/observationSignals.ts に完全自動で追加書き込みする関数
+ */
+function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
+  try {
+    const fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    const isTeaser = classification.category === "TEASER_HINT";
+    const dateObj = new Date(tweet.createdAt);
+    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
+    const dateSlug = dateIso.split("T")[0];
+    const signalId = `official-tibo-auto-${isTeaser ? "hint" : "notice"}-${dateSlug}-${tweet.id.slice(-4)}`;
+
+    // すでに同じIDが存在する場合はスキップ
+    if (fileContent.includes(`id: "${signalId}"`) || fileContent.includes(tweet.url)) {
+      console.log(`Signal for tweet ${tweet.id} already exists in observationSignals.ts. Skipping append.`);
+      return;
+    }
+
+    const expiresAtObj = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const expiresAtIso = expiresAtObj.toISOString();
+
+    const titleText = isTeaser
+      ? `Tibo氏がXにて投稿（${classification.reason_ja}）`
+      : `Tibo氏がリセット/制限緩和を正式発表`;
+
+    const newSignalObject = {
+      id: signalId,
+      observedAt: dateIso,
+      type: isTeaser ? "probability_boost" : "official_notice",
+      status: "active",
+      expiresAt: expiresAtIso,
+      boostValue24h: isTeaser ? 0.195 : undefined,
+      boostValue48h: isTeaser ? 0.58 : undefined,
+      boostReason: `Tibo氏のX投稿（AI自動判定: ${classification.reason_ja}）`,
+      title: titleText,
+      source: tweet.url,
+      sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより（自動判定）",
+    };
+
+    // LOCAL_OBSERVATION_SIGNALS 配列の先頭に挿入
+    const targetMarker = "export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [";
+    const formattedSignalString = `  ${JSON.stringify(newSignalObject, null, 4).replace(/"([^"]+)":/g, "$1:")},`;
+
+    const updatedContent = fileContent.replace(
+      targetMarker,
+      `${targetMarker}\n${formattedSignalString}`
+    );
+
+    fs.writeFileSync(SIGNALS_FILE, updatedContent, "utf-8");
+    console.log(`🎉 Automatically added new signal [${signalId}] to data/observationSignals.ts!`);
+  } catch (err: any) {
+    console.error(`❌ Failed to auto-apply signal to observationSignals.ts: ${err.message}`);
+  }
+}
+
 async function sendDiscordNotification(
   webhookUrl: string,
   tweet: TweetItem,
@@ -170,10 +227,10 @@ async function sendDiscordNotification(
 ) {
   const isOfficial = classification.category === "OFFICIAL_NOTICE";
   const title = isOfficial
-    ? "📢 Tibo氏が【正式告知】を投稿しました！"
-    : "👀 Tibo氏が【匂わせ投稿】を投稿しました！";
+    ? "📢 【自動反映完了】Tibo氏が正式告知を投稿しました！"
+    : "👀 【自動反映完了】Tibo氏が匂わせ投稿を投稿しました！";
 
-  const color = isOfficial ? 0xff4500 : 0xf1c40f; // Red-Orange vs Gold
+  const color = isOfficial ? 0xff4500 : 0xf1c40f;
 
   const payload = {
     embeds: [
@@ -197,13 +254,13 @@ async function sendDiscordNotification(
             inline: true,
           },
           {
-            name: "投稿日時",
-            value: tweet.createdAt,
-            inline: true,
+            name: "サイト反映状況",
+            value: "✅ `data/observationSignals.ts` に自動反映・Vercel自動デプロイ開始",
+            inline: false,
           },
         ],
         footer: {
-          text: "Codex Reset Observatory • Automated X Monitoring System",
+          text: "Codex Reset Observatory • Automated X System",
         },
         timestamp: new Date().toISOString(),
       },
@@ -239,7 +296,7 @@ async function sendDiscordNotification(
 }
 
 async function main() {
-  console.log(`[${new Date().toISOString()}] Starting X Monitoring for @${TARGET_HANDLE}...`);
+  console.log(`[${new Date().toISOString()}] Starting X Full-Auto Monitoring for @${TARGET_HANDLE}...`);
 
   const apiKey = process.env.GEMINI_API_KEY;
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -260,7 +317,7 @@ async function main() {
 
   console.log(`Fetched ${tweets.length} tweets from Twitter Syndication API.`);
 
-  // 初回起動時（processedTweetIds が空の場合）は、過去全件のスパム通知を防ぐため最新ツイートのIDのみを登録して終了
+  // 初回起動時は最新ツイートのIDをベースラインとして設定
   if (!state.lastProcessedTweetId && state.processedTweetIds.length === 0) {
     const newestTweet = tweets[0];
     console.log(`Initial run detected. Setting baseline lastProcessedTweetId to ${newestTweet.id} without sending notifications.`);
@@ -270,7 +327,7 @@ async function main() {
     return;
   }
 
-  // 新規ツイート（未処理のツイート）を抽出（古 $\rightarrow$ 新の順で処理）
+  // 新規ツイート（未処理のツイート）を抽出
   const newTweets: TweetItem[] = [];
   for (const tweet of tweets) {
     if (tweet.id === state.lastProcessedTweetId || state.processedTweetIds.includes(tweet.id)) {
@@ -297,6 +354,10 @@ async function main() {
 
     if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
       console.log(` 🚨 Signal Detected! Category: ${classification.category}`);
+
+      // 【完全全自動】サイトの観測シグナルデータ (observationSignals.ts) を自動更新
+      autoApplySignalToObservatory(tweet, classification);
+
       if (discordWebhookUrl) {
         try {
           await sendDiscordNotification(discordWebhookUrl, tweet, classification);
@@ -304,11 +365,9 @@ async function main() {
         } catch (err: any) {
           console.error(` ❌ Failed to send Discord notification: ${err.message}`);
         }
-      } else {
-        console.log(` ℹ️ DISCORD_WEBHOOK_URL is not set. Skipping Discord notification.`);
       }
     } else {
-      console.log(` ℹ️ Category is IRRELEVANT. Skipping notification.`);
+      console.log(` ℹ️ Category is IRRELEVANT. Skipping signal creation.`);
     }
 
     // 状態を更新
@@ -322,7 +381,7 @@ async function main() {
     saveState(state);
   }
 
-  console.log("Monitoring process completed successfully.");
+  console.log("Full-Auto Monitoring process completed successfully.");
 }
 
 main().catch((err) => {
