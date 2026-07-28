@@ -116,7 +116,7 @@ You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex
 Classify each tweet into EXACTLY ONE of the following 5 categories:
 1. "RESET_COMPLETED": Statement confirming that a rate limit reset HAS ALREADY BEEN COMPLETED or IS NOW EFFECTIVE (e.g., "we have reset the rate limits", "limits are reset", "outage resolved and limits reset").
 2. "OFFICIAL_NOTICE": Statement that rate limits ARE SCHEDULED to be reset at a specific future time/window.
-3. "TEASER_RESOLVED_BY_FEATURE": A statement announcing a major new feature, UI update, model release, or survey (e.g. "Voice is live", "Canvas is now available", "Model updated to gpt-4o-mini", "IDE survey") that accounts for or explains a previous teaser/fun statement WITHOUT resetting usage rate limits yet.
+3. "TEASER_RESOLVED_BY_FEATURE": A statement announcing a major new feature, UI update, model release, or survey (e.g. "Voice is live", "Canvas is now available", "Model updated to gpt-4o-mini", "IDE survey") that follows or relates to a previous teaser/fun statement WITHOUT resetting usage rate limits yet.
 4. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
 5. "IRRELEVANT": Regular chatter, general small updates without limit resets, surveys without previous teasers, outage investigation without resets, or explicit statements denying a reset.
 
@@ -289,33 +289,25 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
 }
 
 /**
- * 【パターンB実装】新機能発表時: 匂わせシグナル分のみをピンポイント解除(resolved化)し、
- * 元々存在していた他のブースト（障害・コミュニティ等）はアクティブに維持する関数
+ * 新機能発表・フェイント投稿時: 匂わせシグナルは解除せず active で維持！
+ * ただし重複して超高確率(85%/98%)になっていた場合は、匂わせ基本高確率(35%/50%)へちょっとだけ引き下げてキープする関数
  */
-function autoResolveTeaserOnlyByFeature(tweet: TweetItem, classification: ClassificationResult) {
+function autoAdjustTeaserOnFeatureRelease(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
-    const dateObj = new Date(tweet.createdAt);
-    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
 
     if (fileContent.includes('status: "active"')) {
-      // 匂わせシグナル (hint / probability_boost) のみをピンポイントで resolved に変更
-      fileContent = fileContent.replace(
-        /(id:\s*"official-tibo-auto-hint-[^"]+",[\s\S]*?status:\s*)"active"/g,
-        `$1"resolved",\n    resolvedAt: "${dateIso}"`
-      );
-      fileContent = fileContent.replace(
-        /(id:\s*"official-tibo-recharge-tomorrow-hint-[^"]+",[\s\S]*?status:\s*)"active"/g,
-        `$1"resolved",\n    resolvedAt: "${dateIso}"`
-      );
+      // 超高確率の重複ブーストがあった場合でも、匂わせ単体ターゲット(24h: 35.0%, 48h: 50.0%)へ補正し active のままキープ！
+      fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.345");
+      fileContent = fileContent.replace(/boostValue48h:\s*[\d.]+/g, "boostValue48h: 0.48");
 
       fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
-      console.log(`✨ Automatically resolved teaser signal only in observationSignals.ts via feature release (Pattern B)!`);
+      console.log(`✨ Automatically maintained active teaser signals in observationSignals.ts at target boost values (24h: 35.0% / 48h: 50.0%) on feature release!`);
     } else {
-      console.log(`No active teaser signals found to resolve.`);
+      console.log(`No active teaser signals found to maintain on feature release.`);
     }
   } catch (err: any) {
-    console.error(`❌ Failed to auto-resolve teaser only by feature: ${err.message}`);
+    console.error(`❌ Failed to auto-adjust teaser on feature release: ${err.message}`);
   }
 }
 
@@ -435,8 +427,8 @@ async function main() {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
     } else if (classification.category === "TEASER_RESOLVED_BY_FEATURE") {
-      console.log(` 💡 Feature Release Detected! Resolving teaser signal only (Pattern B)...`);
-      autoResolveTeaserOnlyByFeature(tweet, classification);
+      console.log(` 💡 Feature Release Detected! Maintaining active teaser at target boost values (35%/50%)...`);
+      autoAdjustTeaserOnFeatureRelease(tweet, classification);
     } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
       console.log(` 🚨 Notice/Hint Signal Detected! Category: ${classification.category}`);
       autoApplySignalToObservatory(tweet, classification);
