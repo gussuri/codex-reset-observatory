@@ -8,6 +8,7 @@
     "observe:reddit": "node scripts/fetch-reddit-signals.mjs",
     "start": "next start",
     "lint": "eslint .",
+    "monitor:x": "tsx scripts/monitor-tibo-x.ts",
     "test": "tsx --test tests/statusIncidentEvaluation.test.ts"
   },
   "dependencies": {

@@ -1,0 +1,40 @@
+name: Tibo X Monitoring & AI Signal Detector
+
+on:
+  schedule:
+    # 15分おきに自動チェック
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    # GitHub Actions画面からいつでも手動実行可能
+
+jobs:
+  monitor-x:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Tibo X Monitor Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: npx tsx scripts/monitor-tibo-x.ts
+
+      - name: Commit and push updated processed state
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add data/processedTweets.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(auto): update processed tweets state [skip ci]" && git push)
