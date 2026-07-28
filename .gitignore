@@ -10,6 +10,9 @@ start-server*.log
 .pnpm-debug.log
 *.log
 
+# Scratch / Temporary test files
+scratch/
+
 # Environment variables (security protection)
 .env
 .env*.local

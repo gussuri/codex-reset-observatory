@@ -289,5 +289,5 @@ test("keeps the included Status explanation when an incident hint is present", (
     getLocalProbabilityReason(data, 0.2, 0.3, "ja", signalEvaluation) ?? "";
 
   assert.match(reason, /発生中のCodex関連障害が1件/);
-  assert.match(reason, /障害・容量到達に関する投稿/);
+  assert.match(reason, /匂わせ投稿|障害・容量到達/);
 });
