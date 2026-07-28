@@ -26,11 +26,26 @@ export type LocalObservationSignal = {
 
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
+    id: "official-tibo-recharge-tomorrow-hint-2026-07-28",
+    observedAt: "2026-07-28T15:15:00+09:00",
+    type: "official_incident_hint",
+    status: "active",
+    expiresAt: "2026-07-30T15:00:00+09:00",
+    boostValue24h: 0.195,
+    boostValue48h: 0.58,
+    boostReason: "Tibo氏の「明日またChatGPTとCodexの楽しい出来事で会いましょう」匂わせ投稿",
+    title: "Tibo氏が「See you back tomorrow for more ChatGPT and Codex fun」と投稿（明日以降の追加発表・リセットを示唆）",
+    keywords: ["See you back tomorrow", "fun week", "recharge", "Tibo", "thsottiaux"],
+    source: "https://x.com/thsottiaux",
+    sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより",
+  },
+  {
     id: "boost-post-reset-adjustment-2026-07-28",
     observedAt: "2026-07-28T13:09:00+09:00",
     type: "probability_boost",
-    status: "active",
-    expiresAt: "2026-08-01T00:00:00+09:00",
+    status: "resolved",
+    resolvedAt: "2026-07-28T16:15:00+09:00",
+    expiresAt: "2026-07-28T16:15:00+09:00",
     boostValue24h: 0.0,
     boostValue48h: 0.08,
     title: "手動確率調整",
