@@ -8,5 +8,16 @@ pnpm.cjs
 dev-server*.log
 start-server*.log
 .pnpm-debug.log
-# local env files
+*.log
+
+# Environment variables (security protection)
+.env
 .env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.swp
