@@ -8,11 +8,11 @@ const PROCESSED_STATE_FILE = path.join(process.cwd(), "data", "processedTweets.j
 const SIGNALS_FILE = path.join(process.cwd(), "data", "observationSignals.ts");
 const HISTORY_FILE = path.join(process.cwd(), "data", "resetHistory.ts");
 
-// 極端に低い異常スコア (0.60未満) の場合のみ安全策としてスキップ
+// 極端に低い異常スコア (0.60未満) の場合のみ安全ガードとしてスキップ
 const SAFETY_MIN_CONFIDENCE = 0.60;
 
 type ClassificationResult = {
-  category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
+  category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "TEASER_RESOLVED_BY_FEATURE" | "IRRELEVANT";
   confidence: number;
   reason_ja: string;
   reset_title_ja?: string;
@@ -20,6 +20,7 @@ type ClassificationResult = {
   notice_to_execution?: string;
   key_phrase?: string;
   parsed_notice_time?: string | null;
+  resolved_feature_summary_ja?: string;
 };
 
 type TweetItem = {
@@ -112,29 +113,31 @@ const SYSTEM_PROMPT = `
 You are an AI classifier for an automated Codex Reset Observatory system.
 You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex team.
 
-Classify each tweet into EXACTLY ONE of the following categories:
+Classify each tweet into EXACTLY ONE of the following 5 categories:
 1. "RESET_COMPLETED": Statement confirming that a rate limit reset HAS ALREADY BEEN COMPLETED or IS NOW EFFECTIVE (e.g., "we have reset the rate limits", "limits are reset", "outage resolved and limits reset").
 2. "OFFICIAL_NOTICE": Statement that rate limits ARE SCHEDULED to be reset at a specific future time/window.
-3. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
-4. "IRRELEVANT": Regular chatter, general feature updates without limit resets, surveys, outage investigation without resets, or explicit statements denying a reset.
+3. "TEASER_RESOLVED_BY_FEATURE": A statement announcing a major new feature, UI update, model release, or survey (e.g. "Voice is live", "Canvas is now available", "Model updated to gpt-4o-mini", "IDE survey") that accounts for or explains a previous teaser/fun statement WITHOUT resetting usage rate limits.
+4. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
+5. "IRRELEVANT": Regular chatter, general small updates without limit resets, surveys without previous teasers, outage investigation without resets, or explicit statements denying a reset.
 
 Respond ONLY with valid JSON in this exact structure:
 {
-  "category": "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT",
+  "category": "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_RESOLVED_BY_FEATURE" | "TEASER_HINT" | "IRRELEVANT",
   "confidence": number,
   "reason_ja": "判別理由（日本語で分かりやすく説明）",
-  "reset_title_ja": "リセット完了時のタイトル（日本語、例: 800万人達成記念リセット, 大規模障害復旧リセット など。COMPLETED時のみ必須、それ以外はnull）",
+  "reset_title_ja": "リセット完了時のタイトル（COMPLETED時のみ必須、それ以外はnull）",
   "reset_type_ja": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット",
-  "notice_to_execution": "告知から実施までの時間表現 (例: 0分, 2時間42分, 16分, 定期 など)",
-  "key_phrase": "判定の決め手となったキーワードまたはフレーズ"
+  "notice_to_execution": "告知から実施までの時間表現",
+  "key_phrase": "判定の決め手となったキーワードまたはフレーズ",
+  "resolved_feature_summary_ja": "どのような新機能・アプデ発表が匂わせの正体であったか（TEASER_RESOLVED_BY_FEATURE時のみ記述、それ以外はnull）"
 }
 `;
 
 const CANDIDATE_MODELS = [
-  "gemini-flash-latest",
   "gemini-2.0-flash",
+  "gemini-flash-latest",
   "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
+  "gemini-1.5-flash-latest",
   "gemini-pro-latest",
 ];
 
@@ -285,6 +288,34 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
   }
 }
 
+/**
+ * 新機能発表・モデルアプデ等により、アクティブな匂わせシグナルの正体が解明された場合の自動解除関数
+ */
+function autoResolveTeaserByFeature(tweet: TweetItem, classification: ClassificationResult) {
+  try {
+    let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    const dateObj = new Date(tweet.createdAt);
+    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
+
+    // アクティブな匂わせシグナルを「解明・解決済み(resolved)」に安全に切り替え
+    const featureSummary = classification.resolved_feature_summary_ja || classification.reason_ja;
+    const resolvedNote = `Tibo氏の新機能発表（${featureSummary}）により匂わせの正体が解明されたため確率補正完了`;
+
+    if (fileContent.includes('status: "active"')) {
+      fileContent = fileContent.replace(
+        /(status:\s*)"active"/g,
+        `$1"resolved",\n    resolvedAt: "${dateIso}",\n    boostReason: "${resolvedNote}"`
+      );
+      fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
+      console.log(`✨ Automatically resolved active teaser signals in observationSignals.ts via feature release (${featureSummary})!`);
+    } else {
+      console.log(`No active teaser signals found to resolve.`);
+    }
+  } catch (err: any) {
+    console.error(`❌ Failed to auto-resolve teaser by feature: ${err.message}`);
+  }
+}
+
 function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
@@ -394,12 +425,15 @@ async function main() {
     const classification = await classifyWithGemini(tweet.text, apiKey);
     console.log(` -> AI Category: ${classification.category} (Confidence: ${classification.confidence}, Reason: ${classification.reason_ja})`);
 
-    // 異常に低い信頼度(0.60未満)の場合のみ安全ガードとして弾く
+    // 異常に低い信頼度(0.60未満)の場合のみ安全ガードとしてスキップ
     if (classification.confidence < SAFETY_MIN_CONFIDENCE) {
       console.warn(` ⚠️ Skipping signal creation due to extremely low AI confidence score (${classification.confidence} < ${SAFETY_MIN_CONFIDENCE}).`);
     } else if (classification.category === "RESET_COMPLETED") {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
+    } else if (classification.category === "TEASER_RESOLVED_BY_FEATURE") {
+      console.log(` 💡 Teaser Resolved by Feature Release Detected! Automatically resolving active teaser signals...`);
+      autoResolveTeaserByFeature(tweet, classification);
     } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
       console.log(` 🚨 Notice/Hint Signal Detected! Category: ${classification.category}`);
       autoApplySignalToObservatory(tweet, classification);
