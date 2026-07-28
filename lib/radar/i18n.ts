@@ -643,6 +643,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
     zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时の延迟。",
   },
+  "前回リセット直後（間隔理論による確率抑制）": {
+    ja: "前回リセット直後（間隔理論による確率抑制）",
+    en: "Post-reset suppression (interval theory)",
+    zh: "重置后概率抑制（间隔理论）",
+  },
   "Tibo氏の「明日またChatGPTとCodexの楽しい出来事で会いましょう」匂わせ投稿": {
     ja: "Tibo氏の「明日またChatGPTとCodexの楽しい出来事で会いましょう」匂わせ投稿",
     en: "Tibo's post hinting 'See you back tomorrow for more ChatGPT and Codex fun'",
