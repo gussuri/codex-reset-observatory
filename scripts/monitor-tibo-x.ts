@@ -8,6 +8,9 @@ const PROCESSED_STATE_FILE = path.join(process.cwd(), "data", "processedTweets.j
 const SIGNALS_FILE = path.join(process.cwd(), "data", "observationSignals.ts");
 const HISTORY_FILE = path.join(process.cwd(), "data", "resetHistory.ts");
 
+// AI信頼度の最低閾値 (これ未満の低い確信度の判定は誤反応防止のため自動反映をスキップ)
+const MIN_CONFIDENCE_THRESHOLD = 0.80;
+
 type ClassificationResult = {
   category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
   confidence: number;
@@ -51,6 +54,9 @@ function saveState(state: ProcessedState) {
   }
 }
 
+/**
+ * タイムアウト(10秒) ＆ HTTPステータスコード厳密チェック付きの HTML取得関数
+ */
 function fetchSyndicationHtml(): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(
@@ -60,13 +66,22 @@ function fetchSyndicationHtml(): Promise<string> {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
+        timeout: 10000, // 10秒タイムアウト
       },
       (res) => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`Twitter Syndication returned HTTP ${res.statusCode}`));
+          return;
+        }
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => resolve(data));
       }
     );
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Twitter Syndication request timed out (10s)"));
+    });
     req.on("error", reject);
   });
 }
@@ -154,6 +169,7 @@ async function callSingleModel(modelName: string, tweetText: string, apiKey: str
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(payload),
         },
+        timeout: 15000,
       },
       (res) => {
         let body = "";
@@ -177,6 +193,10 @@ async function callSingleModel(modelName: string, tweetText: string, apiKey: str
         });
       }
     );
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error(`Gemini API request timed out for model ${modelName}`));
+    });
     req.on("error", reject);
     req.write(payload);
     req.end();
@@ -200,10 +220,6 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
   throw new Error(`All candidate Gemini models failed or rate-limited. Last error: ${lastError?.message}`);
 }
 
-/**
- * リセット完了(RESET_COMPLETED)判定時に、data/resetHistory.ts に新しい履歴イベントを自動書き込みし、
- * data/observationSignals.ts のアクティブな旧シグナルをすべてクリア(resolved)する関数
- */
 function autoRecordCompletedResetHistory(tweet: TweetItem, classification: ClassificationResult) {
   try {
     const dateObj = new Date(tweet.createdAt);
@@ -211,13 +227,11 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
     const dateSlug = dateIso.split("T")[0];
     const historyId = `local-codex-auto-reset-${dateSlug}-${tweet.id.slice(-4)}`;
 
-    // 1. data/resetHistory.ts の更新
     let historyContent = fs.readFileSync(HISTORY_FILE, "utf-8");
 
     if (historyContent.includes(tweet.url) || historyContent.includes(`id: "${historyId}"`)) {
       console.log(`Reset history for tweet ${tweet.id} already exists in resetHistory.ts. Skipping history append.`);
     } else {
-      // LOCAL_MODEL_UPDATED_AT を更新
       historyContent = historyContent.replace(
         /export const LOCAL_MODEL_UPDATED_AT = "[^"]+";/,
         `export const LOCAL_MODEL_UPDATED_AT = "${dateIso}";`
@@ -261,7 +275,6 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
       console.log(`🎉 Automatically recorded new completed reset event [${historyId}] to data/resetHistory.ts!`);
     }
 
-    // 2. data/observationSignals.ts 内のアクティブな全シグナルを resolved に一括クリーンアップ
     let signalsContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
     signalsContent = signalsContent.replace(
       /(status:\s*)"active"/g,
@@ -275,9 +288,6 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
   }
 }
 
-/**
- * 検出された匂わせ/予告シグナルを data/observationSignals.ts に完全自動で追加書き込みする関数
- */
 function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
@@ -292,7 +302,6 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
       return;
     }
 
-    // 古いアクティブな匂わせ・手動ブーストシグナルを自動解決
     fileContent = fileContent.replace(
       /(id:\s*"(?:official-tibo-|boost-)[^"]+",[\s\S]*?status:\s*)"active"/g,
       `$1"resolved",\n    resolvedAt: "${dateIso}"`
@@ -355,7 +364,6 @@ async function main() {
 
   console.log(`Fetched ${tweets.length} tweets from Twitter Syndication API.`);
 
-  // 初回起動時は最新ツイートのIDをベースラインとして設定
   if (!state.lastProcessedTweetId && state.processedTweetIds.length === 0) {
     const newestTweet = tweets[0];
     console.log(`Initial run detected. Setting baseline lastProcessedTweetId to ${newestTweet.id} without processing.`);
@@ -365,7 +373,6 @@ async function main() {
     return;
   }
 
-  // 新規ツイート（未処理のツイート）を抽出
   const newTweets: TweetItem[] = [];
   for (const tweet of tweets) {
     if (tweet.id === state.lastProcessedTweetId || state.processedTweetIds.includes(tweet.id)) {
@@ -374,7 +381,7 @@ async function main() {
     newTweets.push(tweet);
   }
 
-  newTweets.reverse(); // 古い順にソート
+  newTweets.reverse();
 
   if (newTweets.length === 0) {
     console.log("No new tweets since last check.");
@@ -388,9 +395,12 @@ async function main() {
     console.log(`Text: "${tweet.text}"`);
 
     const classification = await classifyWithGemini(tweet.text, apiKey);
-    console.log(` -> AI Category: ${classification.category} (${classification.reason_ja})`);
+    console.log(` -> AI Category: ${classification.category} (Confidence: ${classification.confidence}, Reason: ${classification.reason_ja})`);
 
-    if (classification.category === "RESET_COMPLETED") {
+    // 【安全性ガード】 信頼度 (confidence) が閾値未満の場合は誤判定防止のためスキップ
+    if (classification.confidence < MIN_CONFIDENCE_THRESHOLD) {
+      console.warn(` ⚠️ Skipping signal creation due to low AI confidence score (${classification.confidence} < ${MIN_CONFIDENCE_THRESHOLD}).`);
+    } else if (classification.category === "RESET_COMPLETED") {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
     } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
@@ -400,7 +410,6 @@ async function main() {
       console.log(` ℹ️ Category is IRRELEVANT. Skipping.`);
     }
 
-    // 状態を更新
     state.lastProcessedTweetId = tweet.id;
     if (!state.processedTweetIds.includes(tweet.id)) {
       state.processedTweetIds.unshift(tweet.id);

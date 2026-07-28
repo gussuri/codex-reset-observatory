@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
     # Cloudflare Workers の 5分おき Cron Trigger から即時呼び出される受取口
 
+# 同時二重起動・ビルド衝突(レースコンディション)防止の排他制御
+concurrency:
+  group: monitor-x-job
+  cancel-in-progress: true
+
 jobs:
   monitor-x:
     runs-on: ubuntu-latest
