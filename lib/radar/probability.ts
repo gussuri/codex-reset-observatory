@@ -83,20 +83,9 @@ export function getLocalResetProbability(
       isCurrentLocalSignal(signal)
   );
   const eventBoost = activeBoostSignals.reduce((sum, sig) => {
-    let boost = period === "24h"
+    const boost = period === "24h"
       ? (sig.boostValue24h ?? sig.boostValue ?? 0)
       : (sig.boostValue48h ?? sig.boostValue ?? 0);
-
-    // Tibo匂わせ投稿の場合、24時間経過後（Day 2本命ゾーン）に自動で 24h: 45% / 48h: 55% へスライド昇格
-    if (sig.id.includes("hint") || sig.id.includes("tibo")) {
-      const observedTime = new Date(sig.observedAt).getTime();
-      const nowTime = Date.now();
-      const elapsedHours = (nowTime - observedTime) / (1000 * 60 * 60);
-
-      if (elapsedHours >= 24) {
-        boost = period === "24h" ? 0.445 : 0.53; // 24h: 45.0% / 48h: 55.0%
-      }
-    }
 
     return sum + boost;
   }, 0);
