@@ -179,7 +179,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       reasonType: "ご祝儀リセット",
       resetMethod: "強制リセット",
       scope: "全有料プラン",
-      noticeToExecution: "約2時間40分前",
+      noticeToExecution: "2時間40分前",
       note: "ChatGPT Workの急速な普及とチームの努力を祝し、CodexとChatGPT Work全体の利用上限が強制リセットされました。",
     },
   },
