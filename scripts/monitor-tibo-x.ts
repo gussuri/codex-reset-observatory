@@ -116,7 +116,7 @@ You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex
 Classify each tweet into EXACTLY ONE of the following 5 categories:
 1. "RESET_COMPLETED": Statement confirming that a rate limit reset HAS ALREADY BEEN COMPLETED or IS NOW EFFECTIVE (e.g., "we have reset the rate limits", "limits are reset", "outage resolved and limits reset").
 2. "OFFICIAL_NOTICE": Statement that rate limits ARE SCHEDULED to be reset at a specific future time/window.
-3. "TEASER_RESOLVED_BY_FEATURE": A statement announcing a major new feature, UI update, model release, or survey (e.g. "Voice is live", "Canvas is now available", "Model updated to gpt-4o-mini", "IDE survey") that accounts for or explains a previous teaser/fun statement WITHOUT resetting usage rate limits.
+3. "TEASER_RESOLVED_BY_FEATURE": A statement announcing a major new feature, UI update, model release, or survey (e.g. "Voice is live", "Canvas is now available", "Model updated to gpt-4o-mini", "IDE survey") that follows or relates to a previous teaser/fun statement WITHOUT resetting usage rate limits yet.
 4. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
 5. "IRRELEVANT": Regular chatter, general small updates without limit resets, surveys without previous teasers, outage investigation without resets, or explicit statements denying a reset.
 
@@ -129,7 +129,7 @@ Respond ONLY with valid JSON in this exact structure:
   "reset_type_ja": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット",
   "notice_to_execution": "告知から実施までの時間表現",
   "key_phrase": "判定の決め手となったキーワードまたはフレーズ",
-  "resolved_feature_summary_ja": "どのような新機能・アプデ発表が匂わせの正体であったか（TEASER_RESOLVED_BY_FEATURE時のみ記述、それ以外はnull）"
+  "resolved_feature_summary_ja": "どのような新機能・アプデ発表であったか（TEASER_RESOLVED_BY_FEATURE時のみ記述、それ以外はnull）"
 }
 `;
 
@@ -289,30 +289,27 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
 }
 
 /**
- * 新機能発表・モデルアプデ等により、アクティブな匂わせシグナルの正体が解明された場合の自動解除関数
+ * 新機能発表・モデルアプデ時: 匂わせシグナルを消去せず、マイルド警戒態勢(24h: 15% / 48h: 30%)に補正・維持する関数
  */
-function autoResolveTeaserByFeature(tweet: TweetItem, classification: ClassificationResult) {
+function autoAdjustTeaserToMildState(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
-    const dateObj = new Date(tweet.createdAt);
-    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
-
-    // アクティブな匂わせシグナルを「解明・解決済み(resolved)」に安全に切り替え
     const featureSummary = classification.resolved_feature_summary_ja || classification.reason_ja;
-    const resolvedNote = `Tibo氏の新機能発表（${featureSummary}）により匂わせの正体が解明されたため確率補正完了`;
+    const mildReason = `Tibo氏が新発表（${featureSummary}）を投稿。本命リセットに向けマイルド警戒モードを継続中`;
 
     if (fileContent.includes('status: "active"')) {
-      fileContent = fileContent.replace(
-        /(status:\s*)"active"/g,
-        `$1"resolved",\n    resolvedAt: "${dateIso}",\n    boostReason: "${resolvedNote}"`
-      );
+      // 既存のアクティブシグナルのブースト値をマイルド値(24h: 15%相当, 48h: 30%相当)に補正
+      fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.145");
+      fileContent = fileContent.replace(/boostValue48h:\s*[\d.]+/g, "boostValue48h: 0.28");
+      fileContent = fileContent.replace(/boostReason:\s*"[^"]+"/g, `boostReason: "${mildReason}"`);
+
       fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
-      console.log(`✨ Automatically resolved active teaser signals in observationSignals.ts via feature release (${featureSummary})!`);
+      console.log(`✨ Automatically adjusted active teaser signals in observationSignals.ts to Mild Alert State (24h: 15% / 48h: 30%) for feature release [${featureSummary}]!`);
     } else {
-      console.log(`No active teaser signals found to resolve.`);
+      console.log(`No active teaser signals found to adjust to mild state.`);
     }
   } catch (err: any) {
-    console.error(`❌ Failed to auto-resolve teaser by feature: ${err.message}`);
+    console.error(`❌ Failed to auto-adjust teaser to mild state: ${err.message}`);
   }
 }
 
@@ -432,8 +429,8 @@ async function main() {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
     } else if (classification.category === "TEASER_RESOLVED_BY_FEATURE") {
-      console.log(` 💡 Teaser Resolved by Feature Release Detected! Automatically resolving active teaser signals...`);
-      autoResolveTeaserByFeature(tweet, classification);
+      console.log(` 💡 Feature Release Detected! Adjusting active teaser to Mild Alert State (15%/30%)...`);
+      autoAdjustTeaserToMildState(tweet, classification);
     } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
       console.log(` 🚨 Notice/Hint Signal Detected! Category: ${classification.category}`);
       autoApplySignalToObservatory(tweet, classification);
