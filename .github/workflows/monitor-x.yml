@@ -1,11 +1,8 @@
 name: Tibo X Full-Auto Monitor & Signal Detector
 
 on:
-  schedule:
-    # 10分おきに自動チェック
-    - cron: '*/10 * * * *'
   workflow_dispatch:
-    # GitHub Actions画面からいつでも手動実行可能
+    # Cloudflare Workers の 5分おき Cron Trigger から即時呼び出される受取口
 
 jobs:
   monitor-x:
