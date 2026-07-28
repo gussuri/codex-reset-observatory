@@ -118,8 +118,16 @@ Respond ONLY with valid JSON in this exact structure:
 }
 `;
 
-async function classifyWithGemini(tweetText: string, apiKey: string): Promise<ClassificationResult> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+const CANDIDATE_MODELS = [
+  "gemini-flash-latest",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash-lite",
+  "gemini-pro-latest",
+];
+
+async function callSingleModel(modelName: string, tweetText: string, apiKey: string): Promise<ClassificationResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
   const payload = JSON.stringify({
     contents: [
       {
@@ -151,16 +159,20 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
         let body = "";
         res.on("data", (chunk) => (body += chunk));
         res.on("end", () => {
-          try {
-            const data = JSON.parse(body);
-            const rawJsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!rawJsonText) {
-              reject(new Error(`API Error: ${body}`));
-              return;
+          if (res.statusCode === 200) {
+            try {
+              const data = JSON.parse(body);
+              const rawJsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (!rawJsonText) {
+                reject(new Error(`Empty JSON response from model ${modelName}`));
+                return;
+              }
+              resolve(JSON.parse(rawJsonText));
+            } catch (e) {
+              reject(new Error(`Failed to parse response from model ${modelName}: ${body}`));
             }
-            resolve(JSON.parse(rawJsonText));
-          } catch (e) {
-            reject(new Error(`Failed to parse Gemini response: ${body}`));
+          } else {
+            reject(new Error(`Model ${modelName} returned HTTP ${res.statusCode}: ${body.slice(0, 150)}`));
           }
         });
       }
@@ -169,6 +181,23 @@ async function classifyWithGemini(tweetText: string, apiKey: string): Promise<Cl
     req.write(payload);
     req.end();
   });
+}
+
+async function classifyWithGemini(tweetText: string, apiKey: string): Promise<ClassificationResult> {
+  let lastError: Error | null = null;
+
+  for (const modelName of CANDIDATE_MODELS) {
+    try {
+      const result = await callSingleModel(modelName, tweetText, apiKey);
+      console.log(` ✅ Gemini classification succeeded using model [${modelName}]!`);
+      return result;
+    } catch (err: any) {
+      console.warn(` ⚠️ Model [${modelName}] failed or rate-limited: ${err.message}. Trying next fallback model...`);
+      lastError = err;
+    }
+  }
+
+  throw new Error(`All candidate Gemini models failed or rate-limited. Last error: ${lastError?.message}`);
 }
 
 /**
