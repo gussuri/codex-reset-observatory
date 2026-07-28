@@ -21,7 +21,7 @@ export type LocalObservationSignal = {
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
     id: "official-tibo-recharge-tomorrow-hint-2026-07-28",
-    observedAt: "2026-07-28T04:00:00.000Z",
+    observedAt: "2026-07-27T19:00:00.000Z",
     type: "probability_boost",
     status: "active",
     expiresAt: "2026-07-30T04:00:00.000Z",
