@@ -708,6 +708,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 9 million active users.",
     zh: "为庆祝活跃用户数达到 900 万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
   },
+  "2時間42分": {
+    ja: "2時間42分",
+    en: "2 hours 42 minutes",
+    zh: "2 小时 42 分钟",
+  },
+  "2時間40分": {
+    ja: "2時間40分",
+    en: "2 hours 40 minutes",
+    zh: "2 小时 40 分钟",
+  },
   "22時間15分": {
     ja: "22時間15分",
     en: "22 hours 15 minutes",
