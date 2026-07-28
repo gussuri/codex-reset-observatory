@@ -297,14 +297,14 @@ function autoAdjustTeaserOnFeatureRelease(tweet: TweetItem, classification: Clas
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
 
     if (fileContent.includes('status: "active"')) {
-      // 超高確率の重複ブーストがあった場合でも、匂わせ単体ターゲット(24h: 35.0%, 48h: 50.0%)へ補正し active のままキープ！
-      fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.345");
+      // 24時間以内のブーストのみを 1/3 カット (0.345 -> 0.230, 24h確率を約30%へ微減)、48hブースト(0.48)は本命用にキープ！
+      fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.230");
       fileContent = fileContent.replace(/boostValue48h:\s*[\d.]+/g, "boostValue48h: 0.48");
 
       fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
-      console.log(`✨ Automatically maintained active teaser signals in observationSignals.ts at target boost values (24h: 35.0% / 48h: 50.0%) on feature release!`);
+      console.log(`✨ Automatically reduced 24h teaser boost by 1/3 in observationSignals.ts on feature release (24h ~30%, 48h ~55%).`);
     } else {
-      console.log(`No active teaser signals found to maintain on feature release.`);
+      console.log(`No active teaser signals found to adjust on feature release.`);
     }
   } catch (err: any) {
     console.error(`❌ Failed to auto-adjust teaser on feature release: ${err.message}`);
