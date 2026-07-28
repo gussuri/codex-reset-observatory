@@ -8,8 +8,8 @@ const PROCESSED_STATE_FILE = path.join(process.cwd(), "data", "processedTweets.j
 const SIGNALS_FILE = path.join(process.cwd(), "data", "observationSignals.ts");
 const HISTORY_FILE = path.join(process.cwd(), "data", "resetHistory.ts");
 
-// AI信頼度の最低閾値 (これ未満の低い確信度の判定は誤反応防止のため自動反映をスキップ)
-const MIN_CONFIDENCE_THRESHOLD = 0.80;
+// 極端に低い異常スコア (0.60未満) の場合のみ安全策としてスキップ
+const SAFETY_MIN_CONFIDENCE = 0.60;
 
 type ClassificationResult = {
   category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "IRRELEVANT";
@@ -54,9 +54,6 @@ function saveState(state: ProcessedState) {
   }
 }
 
-/**
- * タイムアウト(10秒) ＆ HTTPステータスコード厳密チェック付きの HTML取得関数
- */
 function fetchSyndicationHtml(): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(
@@ -66,7 +63,7 @@ function fetchSyndicationHtml(): Promise<string> {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
-        timeout: 10000, // 10秒タイムアウト
+        timeout: 10000,
       },
       (res) => {
         if (res.statusCode !== 200) {
@@ -397,9 +394,9 @@ async function main() {
     const classification = await classifyWithGemini(tweet.text, apiKey);
     console.log(` -> AI Category: ${classification.category} (Confidence: ${classification.confidence}, Reason: ${classification.reason_ja})`);
 
-    // 【安全性ガード】 信頼度 (confidence) が閾値未満の場合は誤判定防止のためスキップ
-    if (classification.confidence < MIN_CONFIDENCE_THRESHOLD) {
-      console.warn(` ⚠️ Skipping signal creation due to low AI confidence score (${classification.confidence} < ${MIN_CONFIDENCE_THRESHOLD}).`);
+    // 異常に低い信頼度(0.60未満)の場合のみ安全ガードとして弾く
+    if (classification.confidence < SAFETY_MIN_CONFIDENCE) {
+      console.warn(` ⚠️ Skipping signal creation due to extremely low AI confidence score (${classification.confidence} < ${SAFETY_MIN_CONFIDENCE}).`);
     } else if (classification.category === "RESET_COMPLETED") {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
