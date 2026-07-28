@@ -32,7 +32,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     status: "active",
     expiresAt: "2026-08-01T00:00:00+09:00",
     boostValue24h: 0.0,
-    boostValue48h: 0.03,
+    boostValue48h: 0.08,
     title: "手動確率調整",
   },
   {
