@@ -317,7 +317,7 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
       type: isTeaser ? "probability_boost" : "official_notice",
       status: "active",
       expiresAt: expiresAtIso,
-      boostValue24h: isTeaser ? 0.195 : undefined,
+      boostValue24h: isTeaser ? 0.445 : undefined,
       boostValue48h: isTeaser ? 0.58 : undefined,
       boostReason: `Tibo氏のX投稿（AI自動判定: ${classification.reason_ja}）`,
       title: titleText,
