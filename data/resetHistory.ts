@@ -1,6 +1,6 @@
 import type { RadarViewModel, WindowEventLike } from "@/lib/radar";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-26T04:18:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-07-28T13:02:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_AT = "2026-07-22T05:45:00+09:00";
 export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_LAST_REGULAR_RESET_AT = "2026-07-15T05:45:00+09:00";
@@ -161,6 +161,28 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 ];
 
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    id: "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+    title: "ChatGPT Work急速採用記念リセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-07-28T09:27:00+09:00",
+    closed_at: "2026-07-28T12:09:00+09:00",
+    completed_at: "2026-07-28T12:09:00+09:00",
+    window_minutes: 162,
+    scope: "全有料プラン",
+    summary:
+      "ChatGPT Workの急速な普及とチームの努力を祝し、CodexとChatGPT Work全体の利用上限が強制リセットされました。",
+    source_url: "https://x.com/thsottiaux",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "約2時間40分前",
+      note: "ChatGPT Workの急速な普及とチームの努力を祝し、CodexとChatGPT Work全体の利用上限が強制リセットされました。",
+    },
+  },
   {
     id: "local-codex-outage-compensation-reset-2026-07-26",
     title: "大規模障害に伴う詫びリセット",
