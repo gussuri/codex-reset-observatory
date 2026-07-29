@@ -27,7 +27,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-07-30T04:00:00.000Z",
     boostValue24h: 0.230,
     boostValue48h: 0.55,
-    boostReason: "Tibo氏のX匂わせ投稿（新機能発表: openai/codex-security CLI & SDKのオープンソース公開に伴い直近1/3カット調整、48h警戒を維持）",
+    boostReason: "Tibo氏の「明日また会いましょう」匂わせ投稿",
     title: "Tibo氏の「明日また会いましょう」匂わせ投稿",
     source: "https://x.com/thsottiaux/status/1987541298716945904",
     sourceLabel: "Tibo氏（OpenAI Codex開発責任者）のXポストより",
