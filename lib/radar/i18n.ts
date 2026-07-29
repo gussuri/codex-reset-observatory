@@ -121,7 +121,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Scope",
     zh: "适用套餐",
   },
-  detectionTime: {
+    detectionTime: {
     ja: "リセット検知時刻",
     en: "Reset detection time",
     zh: "重置检测时间",
@@ -156,6 +156,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Time from notice to reset",
     zh: "从预告到执行",
   },
+  historyNoticeType: {
+    ja: "リセット告知",
+    en: "Reset Notice",
+    zh: "重置预告",
+  },
   historyNote: {
     ja: "補足",
     en: "Note",
@@ -170,11 +175,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。",
     en: "If you used a manual reset, your next weekly reset date will differ from the reference date shown here.",
     zh: "使用过手动重置的账号，下次定期重置日期可能与此处显示的日期有所偏差。",
-  },
-  resetHistory: {
-    ja: "リセット履歴",
-    en: "Reset history",
-    zh: "重置历史",
   },
   recentResetEvents: {
     ja: "直近のリセット履歴",
