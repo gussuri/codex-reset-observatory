@@ -90,9 +90,11 @@ export function getLocalResetProbability(
     return sum + boost;
   }, 0);
 
+  const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0;
+
   const score =
     base +
-    getLocalHistoryPressure(period) +
+    (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period) : 0) +
     getElapsedDayBoost() +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
