@@ -8,11 +8,18 @@ const siteDescription =
   "Codexの制限解除タイミング、使用量・利用上限リセットの履歴と期待度を整理。公式予告、補償リセット、次回参考日を確認できます。";
 const siteOgDescription =
   "Codexの使用量リセット、利用上限リセット、制限解除タイミングを追うサイト。リセット履歴、公式予告、補償リセット、期待度をまとめています。";
+const structuredSiteName = "Codex Reset Observatory";
+const structuredAlternateNames = [
+  "Codex\u30ea\u30bb\u30c3\u30c8\u89b3\u6e2c\u6240",
+  "codex-reset-observatory.vercel.app",
+];
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: siteTitle,
-  url: siteUrl,
+  "@id": `${siteUrl}/#website`,
+  name: structuredSiteName,
+  alternateName: structuredAlternateNames,
+  url: `${siteUrl}/`,
   description: siteDescription,
   inLanguage: "ja-JP",
 };
@@ -61,7 +68,7 @@ export const metadata: Metadata = {
     title: "Codex制限解除・使用量リセット情報 | 利用上限リセット履歴",
     description: siteOgDescription,
     url: siteUrl,
-    siteName: siteTitle,
+    siteName: structuredSiteName,
     locale: "ja_JP",
     type: "website",
     images: [
