@@ -74,7 +74,7 @@ export function FaqView({ locale }: FaqViewProps) {
     en: {
       category: "Codex Reset FAQ",
       title: "Frequently Asked Questions",
-      subTitle: "A short guide to Codex usage limits resets, reset timing, manual reset credits, and forecast changes.",
+      subTitle: "A short guide to Codex usage limits resets, reset timing, Banked Reset credits, and forecast changes.",
       backTop: "Back to English top",
       about: "About",
       history: "History",

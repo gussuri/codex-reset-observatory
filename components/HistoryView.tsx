@@ -38,12 +38,12 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     en: {
       category: "Codex usage limits reset history",
       title: "Recent Codex Reset Events",
-      description: "Review recent Codex usage limits reset signals, weekly reset events, manual reset credits, and forecast changes over time.",
+      description: "Review recent Codex usage limits reset signals, weekly reset events, Banked Reset credits, and forecast changes over time.",
       empty: "No reset history is available yet.",
       cardTitle: "Manual and referral resets",
       cardHeader: "Account-specific reset credits",
-      cardParagraph1: "Manual reset credits and referral resets are account-specific. They may appear in history as distribution records, but they are not counted as global reset events.",
-      cardParagraph2: "A manual reset credit expires within one month. If you use one, your next weekly reset date will differ from the shared reference date shown on this site.",
+      cardParagraph1: "Banked Reset credits (manual resets) and referral resets are account-specific. They may appear in history as distribution records, but they are not counted as global reset events.",
+      cardParagraph2: "A Banked Reset credit expires within one month. If you use one, your next weekly reset date will differ from the shared reference date shown on this site.",
       nav: {
         top: "Back to English top",
         about: "About",

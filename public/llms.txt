@@ -17,7 +17,7 @@ It estimates whether a Codex usage limits reset is likely within the next 24 or 
 - 48-hour Codex usage limits reset probability
 - Current expectation level and reasoning
 - Reset-related signals and status hints
-- Explanations of Codex manual reset and usage limits reset
+- Explanations of Codex Banked Reset (manual reset) and usage limits reset
 - Historical reset and probability information where available
 
 ## Common questions answered
@@ -25,7 +25,7 @@ It estimates whether a Codex usage limits reset is likely within the next 24 or 
 - Did Codex reset today?
 - When is the next Codex usage limits reset?
 - How does Codex reset work?
-- What is Codex manual reset?
+- What is Codex Banked Reset (manual reset)?
 - What is Codex usage limits reset?
 - Why does the reset forecast change?
 

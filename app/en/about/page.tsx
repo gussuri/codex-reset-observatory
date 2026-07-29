@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     absolute: "About Codex Reset Observatory",
   },
   description:
-    "Learn what Codex Reset Observatory tracks, how reset history is handled, and why weekly reset references may differ after manual resets.",
+    "Learn what Codex Reset Observatory tracks, how reset history is handled, and why weekly reset references may differ after Banked Resets (Banked Resets).",
   alternates: {
     canonical: "/en/about",
     languages: {
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About Codex Reset Observatory",
     description:
-      "A short explanation of the reset history, weekly reset reference, manual reset, and unscheduled reset probability shown on this unofficial Codex reset site.",
+      "A short explanation of the reset history, weekly reset reference, Banked Reset, and unscheduled reset probability shown on this unofficial Codex reset site.",
     url: "/en/about",
     siteName: "Codex Reset Observatory",
     type: "article",

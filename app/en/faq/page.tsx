@@ -4,10 +4,10 @@ import { FaqView } from "@/components/FaqView";
 export const metadata: Metadata = {
   applicationName: "Codex Reset Observatory",
   title: {
-    absolute: "Codex Reset FAQ | Usage Limits, Manual Reset, and Timing",
+    absolute: "Codex Reset FAQ | Usage Limits, Banked Reset, and Timing",
   },
   description:
-    "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
+    "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
   keywords: [
     "Codex reset FAQ",
     "Codex reset timing",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     "Codex rate reset",
     "Codex CLI reset",
     "Codex context reset",
-    "Codex manual reset",
+    "Codex Banked Reset",
     "Codex weekly reset",
     "Codex referral reset",
     "Codex reset history",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
+      "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
     url: "/en/faq",
     siteName: "Codex Reset Observatory",
     type: "article",
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Did Codex reset today? Find answers about usage limits reset timing, manual reset credits, reset history, and why the forecast changes.",
+      "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
     images: ["/og-image.png"],
   },
 };

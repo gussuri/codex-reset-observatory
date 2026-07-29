@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   keywords: [
     "Codex reset",
     "Codex usage limit reset",
-    "Codex manual reset",
+    "Codex Banked Reset",
     "Codex reset history",
     "OpenAI Codex reset",
   ],

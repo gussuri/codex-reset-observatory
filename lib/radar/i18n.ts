@@ -173,7 +173,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   weeklyResetNote: {
     ja: "任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。",
-    en: "If you used a manual reset, your next weekly reset date will differ from the reference date shown here.",
+    en: "If you used a Banked Reset, your next weekly reset date will differ from the reference date shown here.",
     zh: "使用过手动重置的账号，下次定期重置日期可能与此处显示的日期有所偏差。",
   },
   recentResetEvents: {
@@ -573,7 +573,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "強制リセット": {
     ja: "強制リセット",
-    en: "Forced reset",
+    en: "Hard Reset",
     zh: "强制重置",
   },
   "利用上限更新": {
@@ -755,7 +755,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "700万人アクティブユーザー記念任意リセット配布": {
     ja: "700万人アクティブユーザー記念任意リセット配布",
-    en: "7 Million Active Users Celebration Manual Reset Distribution",
+    en: "7 Million Active Users Celebration Banked Reset Distribution",
     zh: "700万活跃用户庆祝手动重置发放",
   },
   "20時間40分": {
@@ -770,7 +770,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Web/モバイル機能不具合補償任意リセット": {
     ja: "Web/モバイル機能不具合補償任意リセット",
-    en: "Web/Mobile Feature Bug Compensation Manual Reset",
+    en: "Web/Mobile Feature Bug Compensation Banked Reset",
     zh: "网页/移动端功能异常补偿手动重置",
   },
   "不具合対象ユーザー（約50万人）": {
@@ -780,17 +780,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One banked manual reset was granted to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
+    en: "One banked Banked Reset was granted to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
     zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置机会（banked reset）。",
   },
   "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。": {
     ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
-    en: "One banked manual reset was granted as compensation to approximately 500,000 affected users whose reset did not apply after they pressed the button during the web/mobile feature rollout.",
+    en: "One banked Banked Reset was granted as compensation to approximately 500,000 affected users whose reset did not apply after they pressed the button during the web/mobile feature rollout.",
     zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向所有受影响的付费用户补发 1 次手动重置机会。",
   },
   "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
-    en: "Tibo (OpenAI Codex developer) announced that a manual reset (banked reset) credit would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
+    en: "Tibo (OpenAI Codex developer) announced that a Banked Reset (banked reset) credit would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
     zh: "Tibo（OpenAI Codex开发者）宣布，明天将为庆祝活跃用户数突破700万，向所有付费用户发放 1 次手动重置机会（banked reset）。",
   },
   "即時": {
@@ -890,7 +890,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。": {
     ja: "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
-    en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a manual reset are excluded.",
+    en: "A regular Codex usage limit reset was executed as part of the weekly cycle. However, accounts that have used a Banked Reset are excluded.",
     zh: "作为常规的1周循环，付费套餐的Codex使用限制已重置。但使用过手动重置的账号除外。",
   },
   "GPT-5.6リリース記念": {
@@ -1000,17 +1000,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。": {
     ja: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
-    en: "One manual reset credit was distributed as compensation for model degradation and excessive limit consumption issues.",
+    en: "One Banked Reset credit was distributed as compensation for model degradation and excessive limit consumption issues.",
     zh: "因模型能力退化及额度过度消耗问题，已发放 1 次手动重置机会作为补偿。",
   },
   "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
-    en: "One manual reset credit was distributed as compensation for issues affecting Codex reliability.",
+    en: "One Banked Reset credit was distributed as compensation for issues affecting Codex reliability.",
     zh: "因影响 Codex 可靠性的故障，已发放 1 次手动重置机会作为补偿。",
   },
   "招待特典または個人の利用制限の更新として、任意リセットが配布されました。": {
     ja: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
-    en: "A manual reset credit was distributed as referral rewards or individual quota refresh.",
+    en: "A Banked Reset credit was distributed as referral rewards or individual quota refresh.",
     zh: "已发放手动重置机会作为推荐奖励或个人额度更新。",
   },
   "能力退化・過剰消費補償任意リセット": {
@@ -1020,7 +1020,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One manual reset credit was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
+    en: "One Banked Reset credit was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
     zh: "因模型能力退化及额度过度消耗问题，已对所有付费套餐发放 1 次手动重置机会作为补偿。",
   },
   "Codex信頼性障害補償任意リセット": {
@@ -1030,7 +1030,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One manual reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
+    en: "One Banked Reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
     zh: "因影响 Codex 可靠性的故障，已对所有账号发放 1 次手动重置机会作为补偿。",
   },
   "過剰消費バグ調査・強制補償リセット": {
@@ -1050,7 +1050,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。": {
     ja: "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。",
-    en: "Tibo announced that more manual resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
+    en: "Tibo announced that more Banked Resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
     zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置机会。",
   },
   "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。": {
@@ -1060,7 +1060,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。": {
     ja: "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
-    en: "Tibo announced that one additional manual reset credit will be distributed to all paid plans within the next 24 hours.",
+    en: "Tibo announced that one additional Banked Reset credit will be distributed to all paid plans within the next 24 hours.",
     zh: "Tibo 宣布将在未来 24 小时内向所有付费套餐追加发放 1 次手动重置机会。",
   },
   "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。": {
@@ -1085,12 +1085,12 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "任意リセット配布": {
     ja: "任意リセット配布",
-    en: "Manual Reset Distributed",
+    en: "Banked Reset Distributed",
     zh: "手动重置已发放",
   },
   "定期リセットが強制リセットから任意リセット権1回配布に変更されました。": {
     ja: "定期リセットが強制リセットから任意リセット権1回配布に変更されました。",
-    en: "The regular reset has been changed from a forced reset to a distribution of one manual reset credit.",
+    en: "The regular reset has been changed from a Hard Reset to a distribution of one Banked Reset credit.",
     zh: "定期重置已从强制重置更改为发放 1 次手动重置机会。",
   },
   "Codex reset button 配布 (AIE World's Fair 記念)": {
@@ -1100,7 +1100,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "During the AI Engineer World's Fair demo, the Codex reset button was pressed, granting one manual reset to all paid users (Codex Go/Plus/Pro).",
+    en: "During the AI Engineer World's Fair demo, the Codex reset button was pressed, granting one Banked Reset to all paid users (Codex Go/Plus/Pro).",
     zh: "在 AI Engineer World's Fair 的演示中，Codex 重置按钮被按下，向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置机会。",
   },
   "キャンペーン": {
@@ -1125,12 +1125,12 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "任意リセットを使っていないアカウント": {
     ja: "任意リセットを使っていないアカウント",
-    en: "Accounts that have not used a manual reset",
+    en: "Accounts that have not used a Banked Reset",
     zh: "未使用手动重置的账号",
   },
   "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。": {
     ja: "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
-    en: "Accounts that used a manual reset after the previous weekly reset are excluded from this reset. Their next weekly reset will occur one week after the manual reset was used.",
+    en: "Accounts that used a Banked Reset after the previous weekly reset are excluded from this reset. Their next weekly reset will occur one week after the Banked Reset was used.",
     zh: "从上次重置到此时使用过手动重置的账号不在此次重置范围内，将在使用手动重置时间的一周后分别重置。",
   },
   "予告": {
