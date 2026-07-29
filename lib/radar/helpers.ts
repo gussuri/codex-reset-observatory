@@ -1,5 +1,5 @@
 import { EXPECTATION_THRESHOLDS, REFRESH_INTERVAL_MS } from "@/data/predictionWeights";
-import type { Locale } from "./types";
+import type { Locale, ProbabilityLevel } from "./types";
 import { translateUI, translateDynamic, translateExpectation } from "./i18n";
 
 export const DISPLAY_TIME_ZONE = "Asia/Tokyo";
@@ -27,6 +27,62 @@ export type ExpectationInput =
   | null
   | undefined
   | { p24h?: number | null; p48h?: number | null };
+
+export type ExpectationKey = ProbabilityLevel | "unknown";
+
+export function getExpectationKey(
+  value: Exclude<ExpectationInput, string>,
+): ExpectationKey {
+  if (value === null || value === undefined) {
+    return "unknown";
+  }
+
+  let p24h: number | undefined;
+  let p48h: number | undefined;
+
+  if (typeof value === "object") {
+    p24h =
+      typeof value.p24h === "number" && !Number.isNaN(value.p24h)
+        ? normalizeProbability(value.p24h)
+        : undefined;
+    p48h =
+      typeof value.p48h === "number" && !Number.isNaN(value.p48h)
+        ? normalizeProbability(value.p48h)
+        : undefined;
+  } else if (typeof value === "number" && !Number.isNaN(value)) {
+    p24h = normalizeProbability(value);
+  }
+
+  if (p24h === undefined && p48h === undefined) {
+    return "unknown";
+  }
+
+  const p24 = p24h ?? 0;
+  const p48 = p48h ?? 0;
+
+  if (
+    p24 >= EXPECTATION_THRESHOLDS.veryHigh.p24h ||
+    p48 >= EXPECTATION_THRESHOLDS.veryHigh.p48h
+  ) {
+    return "very_high";
+  }
+
+  if (
+    p24 >= EXPECTATION_THRESHOLDS.high.p24h ||
+    p48 >= EXPECTATION_THRESHOLDS.high.p48h
+  ) {
+    return "high";
+  }
+
+  if (
+    p24 >= EXPECTATION_THRESHOLDS.medium.p24h ||
+    p48 >= EXPECTATION_THRESHOLDS.medium.p48h
+  ) {
+    return "medium";
+  }
+
+  return "low";
+}
 
 export function getExpectationLabel(
   value: ExpectationInput,
@@ -58,40 +114,15 @@ export function getExpectationLabel(
     return translateExpectation(label, locale);
   }
 
-  if (value === null || value === undefined) {
-    return translateExpectation("不明", locale);
-  }
+  const labelByKey: Record<ExpectationKey, string> = {
+    low: "低",
+    medium: "中",
+    high: "高",
+    very_high: "極めて高",
+    unknown: "不明",
+  };
 
-  let p24h: number | undefined;
-  let p48h: number | undefined;
-
-  if (typeof value === "object") {
-    p24h = typeof value.p24h === "number" && !Number.isNaN(value.p24h) ? normalizeProbability(value.p24h) : undefined;
-    p48h = typeof value.p48h === "number" && !Number.isNaN(value.p48h) ? normalizeProbability(value.p48h) : undefined;
-  } else if (typeof value === "number" && !Number.isNaN(value)) {
-    p24h = normalizeProbability(value);
-  }
-
-  if (p24h === undefined && p48h === undefined) {
-    return translateExpectation("不明", locale);
-  }
-
-  const p24 = p24h ?? 0;
-  const p48 = p48h ?? 0;
-
-  if (p24 >= EXPECTATION_THRESHOLDS.veryHigh.p24h || p48 >= EXPECTATION_THRESHOLDS.veryHigh.p48h) {
-    return translateExpectation("極めて高", locale);
-  }
-
-  if (p24 >= EXPECTATION_THRESHOLDS.high.p24h || p48 >= EXPECTATION_THRESHOLDS.high.p48h) {
-    return translateExpectation("高", locale);
-  }
-
-  if (p24 >= EXPECTATION_THRESHOLDS.medium.p24h || p48 >= EXPECTATION_THRESHOLDS.medium.p48h) {
-    return translateExpectation("中", locale);
-  }
-
-  return translateExpectation("低", locale);
+  return translateExpectation(labelByKey[getExpectationKey(value)], locale);
 }
 
 export function getRefreshIntervalMs(value: number | undefined) {

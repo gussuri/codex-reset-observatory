@@ -6,7 +6,10 @@ import {
   evaluateStatusIncidents,
   formatStatusIncidentReason,
 } from "../lib/radar/signalEvaluation";
-import { isWithinHours } from "../lib/radar/helpers";
+import {
+  getExpectationKey,
+  isWithinHours,
+} from "../lib/radar/helpers";
 import {
   getLocalProbabilityReason,
   getLocalResetProbability,
@@ -79,6 +82,10 @@ test("prefers resolvedAt over a newer updatedAt", () => {
 
   assert.equal(result.includedIncidentCount, 0);
   assert.equal(result.excludedPreResetIncidentCount, 1);
+});
+
+test("derives a stable very_high key without depending on the Japanese label", () => {
+  assert.equal(getExpectationKey({ p24h: 0.9, p48h: 0.95 }), "very_high");
 });
 
 test("falls back from resolvedAt to updatedAt and then createdAt", () => {

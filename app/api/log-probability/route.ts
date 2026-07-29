@@ -6,6 +6,7 @@ import {
   getLatestActiveLocalSignal,
   getLocalSignalEvaluation,
 } from "@/lib/radar/probability";
+import { getExpectationKey } from "@/lib/radar/helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -55,14 +56,10 @@ async function handleLogRequest(request: NextRequest) {
     const statusIncidentCount =
       signalEvaluation.statusIncidents.includedIncidentCount;
 
-    // 期待度（日本語）を英語キーに変換
-    const expectationMap: Record<string, string> = {
-      "低": "low",
-      "中": "medium",
-      "高": "high",
-      "超高": "very_high",
-    };
-    const expectationKey = expectationMap[viewModel.expectation] ?? "unknown";
+    const expectationKey = getExpectationKey({
+      p24h: viewModel.probability24h,
+      p48h: viewModel.probability48h,
+    });
 
     // 4. 重複排除用の logged_hour の計算 (時分秒を 00:00:00 に丸める)
     const loggedHour = new Date();
