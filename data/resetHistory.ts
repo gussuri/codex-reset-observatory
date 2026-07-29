@@ -314,10 +314,11 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "source_url": null,
     "details": {
       "cycleType": "定期リセット",
-      "reasonType": "",
+      "reasonType": "定期更新",
       "resetMethod": "強制リセット",
       "scope": "任意リセットを使っていないアカウント",
-      "noticeToExecution": "定期",
+      "noticeToExecution": "0分（定期）",
+      "noticeType": "なし",
       "note": "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。"
     }
   },
@@ -415,20 +416,21 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "定期リセット",
     "kind": "window_closed",
     "status": "closed",
-    "opened_at": "2026-06-22T13:27:58+09:00",
+    "opened_at": "2026-06-25T07:01:00+09:00",
     "closed_at": "2026-06-25T07:01:00+09:00",
     "completed_at": "2026-06-25T07:01:00+09:00",
-    "window_minutes": 3933,
+    "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
     "summary": "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
     "source_url": null,
     "details": {
       "cycleType": "定期リセット",
-      "reasonType": "",
+      "reasonType": "定期更新",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "定期",
+      "noticeToExecution": "0分（定期）",
+      "noticeType": "なし",
       "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
     }
   },
@@ -437,20 +439,21 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "定期リセット",
     "kind": "window_closed",
     "status": "closed",
-    "opened_at": "2026-06-17T04:30:00+09:00",
+    "opened_at": "2026-06-18T07:00:00+09:00",
     "closed_at": "2026-06-18T07:00:00+09:00",
     "completed_at": "2026-06-18T07:00:00+09:00",
-    "window_minutes": 1590,
+    "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
     "summary": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
     "source_url": "https://x.com/thsottiaux/status/2066956441173323943",
     "details": {
       "cycleType": "定期リセット",
-      "reasonType": "",
+      "reasonType": "定期更新",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "定期",
+      "noticeToExecution": "0分（定期）",
+      "noticeType": "なし",
       "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
     }
   },
@@ -490,7 +493,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "source_url": "https://x.com/thsottiaux",
     "details": {
       "cycleType": "定期リセット",
-      "reasonType": "",
+      "reasonType": "定期更新",
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
@@ -500,15 +503,26 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-reliability-compensation-2026-06-04",
-    "title": "Codex 可靠性事故补偿重置",
+    "title": "Codex信頼性障害補償リセット",
     "kind": "reset_completed",
-    "opened_at": "2026-06-04T08:25:58+08:00",
-    "closed_at": "2026-06-04T08:25:58+08:00",
+    "status": "closed",
+    "opened_at": "2026-06-04T09:25:58+09:00",
+    "closed_at": "2026-06-04T09:25:58+09:00",
+    "completed_at": "2026-06-04T09:25:58+09:00",
     "window_minutes": 0,
-    "window_human": "无窗",
-    "scope": "所有付费计划",
-    "summary": "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费计划重置 Codex 使用限制。",
-    "source_url": "https://x.com/thsottiaux/status/2062329981548802523"
+    "window_human": "即時",
+    "scope": "全有料プラン",
+    "summary": "過去24時間以内に発生したCodexの信頼性に影響する3件の障害への補償として、全有料プランの利用制限がリセットされました。",
+    "source_url": "https://x.com/thsottiaux/status/2062329981548802523",
+    "details": {
+      "cycleType": "ランダムリセット",
+      "reasonType": "詫びリセット",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "noticeToExecution": "0分",
+      "noticeType": "告知投稿あり",
+      "note": "過去24時間以内に発生したCodexの信頼性に影響する3件の障害への補償として、全有料プランの利用制限がリセットされました。"
+    }
   },
   {
     "id": "local-5m-users-celebration-2026-05-31",
