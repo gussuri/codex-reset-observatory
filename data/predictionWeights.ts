@@ -83,8 +83,8 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
   historyPressure: [
     {
       maxDaysSinceReset: 1,
-      within24h: -0.32,
-      within48h: -0.21,
+      within24h: -0.08,
+      within48h: -0.14,
     },
     {
       maxDaysSinceReset: 2,

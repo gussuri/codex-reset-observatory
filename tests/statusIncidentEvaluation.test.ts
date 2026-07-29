@@ -313,8 +313,8 @@ test("keeps first-day cooldown in history pressure without a second negative sig
       within48h: firstDayPressure.within48h,
     },
     {
-      within24h: -0.32,
-      within48h: -0.21,
+      within24h: -0.08,
+      within48h: -0.14,
     },
   );
   assert.equal(activeNegativeBoosts.length, 0);
