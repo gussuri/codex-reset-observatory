@@ -527,6 +527,7 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
   if (
     text.includes("任意") ||
     text.includes("manual reset") ||
+    text.includes("banked reset") ||
     text.includes("credit") ||
     text.includes("配布")
   ) {
@@ -540,6 +541,7 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
     item.completed_at ||
     text.includes("強制") ||
     text.includes("forced") ||
+    text.includes("hard reset") ||
     text.includes("フルリセット") ||
     text.includes("reset")
   ) {

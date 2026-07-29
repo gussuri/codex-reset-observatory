@@ -93,8 +93,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "A Codex reset usually restores or refreshes usage limits such as weekly limits or shorter usage windows. Some resets follow a regular cycle, while others may happen after incidents, capacity issues, or special events.",
         },
         {
-          question: "What is Codex manual reset?",
-          answer: "A manual reset is an account-specific reset credit. Using it can restore your 5-hour and 1-week limits to 100%, and your next weekly reset date may move to one week after the moment you use it.",
+          question: "What is a Codex Banked Reset (Manual Reset)?",
+          answer: "A Banked Reset is an account-specific reset credit saved in your account. Triggering a manual reset restores both your 5-hour and 1-week limits to 100%, and your next weekly reset date will move to exactly one week from the moment of use.",
         },
         {
           question: "What is Codex usage limits reset?",
@@ -122,19 +122,19 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is a compensation reset (Wabi-reset)?",
-          answer: "A reset executed as compensation for incidents or issues. It may restore usage limits or grant extra credits to affected plans.",
+          answer: "A reset executed as compensation for incidents or issues. It may restore usage limits or grant Banked Reset credits to affected plans.",
         },
         {
           question: "What is a celebration reset?",
           answer: "A special reset executed to celebrate milestones like user count achievements or product anniversaries.",
         },
         {
-          question: "What is the difference between a temporary (random) reset and a weekly reset?",
-          answer: "A weekly reset is the regular usage-cycle refresh. A temporary reset is an extra refresh triggered by incidents or celebration events.",
+          question: "What is the difference between a Hard Reset and a Banked Reset?",
+          answer: "A Hard Reset (Forced Reset) is a global, administrative reset executed by OpenAI for all users simultaneously. A Banked Reset (Manual Reset) is a personal credit saved in your account that you can manually trigger whenever you choose.",
         },
         {
           question: "What is the difference between official notices and community signals?",
-          answer: "Official notices are announcements by OpenAI or members of the Codex team. Community signals are gathered from user reports and circumstantial evidence.",
+          answer: "Official notices are announcements by OpenAI or members of the Codex team (such as Tibo). Community signals are gathered from user reports and circumstantial evidence.",
         },
         {
           question: "Is a context reset related to Codex usage resets?",
@@ -149,8 +149,8 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "It refers to confirmed past reset history, official developer notices, OpenAI Status API, and public community reports.",
         },
         {
-          question: "What happens if I use a manual reset?",
-          answer: "Using a manual reset restores both your 5-hour and 1-week limits to 100%. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
+          question: "What happens if I use a Banked Reset?",
+          answer: "Using a Banked Reset (manual reset) restores both your 5-hour and 1-week limits to 100%. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
         },
       ] as Array<FaqItem>,
     },

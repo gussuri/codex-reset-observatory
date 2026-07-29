@@ -28,13 +28,13 @@ export function AboutView({ locale }: AboutViewProps) {
     en: {
       category: "Codex reset reference",
       title: "About Codex Reset Observatory",
-      subTitle: "An unofficial reference site for Codex reset history, weekly reset references, manual reset credits, and unscheduled reset signals.",
+      subTitle: "An unofficial reference site for Codex reset history, weekly reset references, Banked Reset credits, and unscheduled reset signals.",
       paragraphs: [
         "Codex Reset Observatory collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices, past reset history, and a weekly-cycle reference date so you can compare what is happening now with earlier reset patterns.",
         "The weekly reset date is a shared reference, not a guarantee that every account will refresh on exactly the same date.",
         "The unscheduled reset probability is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official OpenAI notice.",
-        "Manual reset credits are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here. The manual reset credit is a one-time credit and expires within one month.",
+        "Banked Reset credits (manual resets) are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here. The Banked Reset credit is a one-time credit and expires within one month.",
       ],
       nav: {
         top: "Back to English top",

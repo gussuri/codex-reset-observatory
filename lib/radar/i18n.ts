@@ -583,7 +583,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "任意リセット権1回配布": {
     ja: "任意リセット権1回配布",
-    en: "1 manual reset credit",
+    en: "1 Banked Reset granted",
     zh: "发放 1 次手动重置机会",
   },
   "不明": {
@@ -985,7 +985,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "任意リセット1回分": {
     ja: "任意リセット1回分",
-    en: "1 manual reset credit",
+    en: "1 Banked Reset granted",
     zh: "手动重置 1 次",
   },
   "1回分・期限1か月以内": {
