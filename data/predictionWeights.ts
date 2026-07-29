@@ -39,8 +39,8 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     within48h: 0.82,
   },
   momentumBoost: {
-    level1: { within24h: 0.03, within48h: 0.10 },
-    level2: { within24h: 0.06, within48h: 0.18 },
+    level1: { within24h: 0.08, within48h: 0.22 },
+    level2: { within24h: 0.15, within48h: 0.35 },
   },
   officialNotice: {
     within24h: 0.9,
