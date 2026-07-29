@@ -53,7 +53,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "2時間42分",
-      "noticeType": "告知投稿あり",
+      "noticeType": "匂わせ投稿あり",
       "note": "ChatGPT Workの急速な普及とチームの努力を祝し、CodexとChatGPT Work全体の利用上限が強制リセットされました。"
     }
   },
@@ -84,10 +84,10 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "1000万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
-    "opened_at": "2026-07-22T01:49:00+09:00",
+    "opened_at": "2026-07-22T02:05:00+09:00",
     "closed_at": "2026-07-22T02:05:00+09:00",
     "completed_at": "2026-07-22T02:05:00+09:00",
-    "window_minutes": 16,
+    "window_minutes": 0,
     "scope": "全有料プラン",
     "summary": "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     "source_url": "https://x.com/thsottiaux",
@@ -96,8 +96,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "16分",
-      "noticeType": "告知投稿あり",
+      "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -141,7 +141,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "22時間15分",
-      "noticeType": "告知投稿あり",
+      "noticeType": "匂わせ投稿あり",
       "note": "アクティブユーザー数900万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -150,10 +150,10 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "800万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
-    "opened_at": "2026-07-15T04:34:00+09:00",
+    "opened_at": "2026-07-14T14:52:00+09:00",
     "closed_at": "2026-07-15T05:45:00+09:00",
     "completed_at": "2026-07-15T05:45:00+09:00",
-    "window_minutes": 71,
+    "window_minutes": 893,
     "scope": "全有料プラン",
     "summary": "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     "source_url": "https://x.com/thsottiaux",
@@ -162,8 +162,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "1時間11分",
-      "noticeType": "告知投稿あり",
+      "noticeToExecution": "14時間53分",
+      "noticeType": "匂わせ投稿あり",
       "note": "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -172,7 +172,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "700万人アクティブユーザー記念任意リセット配布",
     "kind": "reset_completed",
     "status": "closed",
-    "opened_at": "2026-07-13T07:00:00+09:00",
+    "opened_at": "2026-07-14T03:40:00+09:00",
     "closed_at": "2026-07-14T03:40:00+09:00",
     "completed_at": "2026-07-14T03:40:00+09:00",
     "window_minutes": 0,
@@ -184,8 +184,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "ご祝儀リセット",
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
-      "noticeToExecution": "20時間40分",
-      "noticeType": "告知投稿あり",
+      "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
