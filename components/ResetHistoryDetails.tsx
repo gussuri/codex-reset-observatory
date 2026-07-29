@@ -33,10 +33,13 @@ export function ResetHistoryDetails({
     note: item.summary,
   };
 
+  const noticeTypeValue = details.noticeType ? translateDynamic(details.noticeType, locale) : translateDynamic("なし", locale);
+
   const rows: Array<readonly [string, string]> = [
     [translateUI("historyCycleType", locale), details.cycleType],
     [translateUI("historyReasonType", locale), details.reasonType],
     [translateUI("historyResetMethod", locale), details.resetMethod],
+    [translateUI("historyNoticeType", locale), noticeTypeValue],
   ];
 
   if (showScope) {
@@ -53,6 +56,7 @@ export function ResetHistoryDetails({
             className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
               (hideScopeOnMobile && label === translateUI("scope", locale)) ||
               (hideReasonOnMobile && label === translateUI("historyReasonType", locale)) ||
+              label === translateUI("historyNoticeType", locale) ||
               (hideNoticeToExecutionOnMobile &&
                 label === translateUI("historyNoticeToExecution", locale))
                 ? "hidden sm:grid"

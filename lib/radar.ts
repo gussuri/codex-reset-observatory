@@ -572,6 +572,7 @@ function getHistoryDetails(
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
+      noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
       note: item.details.note ? translateDynamic(item.details.note, locale) : null,
     };
   }
@@ -584,6 +585,7 @@ function getHistoryDetails(
     resetMethod: getHistoryResetMethod(item, locale),
     scope,
     noticeToExecution: getHistoryNoticeToExecution(item, locale),
+    noticeType: translateDynamic("なし", locale),
     note: item.summary ? translateDynamic(item.summary, locale) : null,
   };
 }

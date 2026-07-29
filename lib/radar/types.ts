@@ -10,6 +10,7 @@ export type ResetHistoryDetails = {
   resetMethod: string;
   scope: string;
   noticeToExecution: string;
+  noticeType?: string;
   note?: string | null;
 };
 

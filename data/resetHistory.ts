@@ -18,10 +18,10 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "GPT-5.6 Sol利用効率改善リセット",
     "kind": "reset_completed",
     "status": "closed",
-    "opened_at": "2026-07-29T13:09:00+09:00",
+    "opened_at": "2026-07-28T14:00:00+09:00",
     "closed_at": "2026-07-29T13:09:00+09:00",
     "completed_at": "2026-07-29T13:09:00+09:00",
-    "window_minutes": 0,
+    "window_minutes": 1389,
     "scope": "全有料プラン",
     "summary": "Tibo氏よりGPT-5.6 Solモデルの消費効率改善（利用持続力約18%向上）の発表とともに、全ChatGPT WorkおよびCodexユーザーの利用上限が即時強制リセットされました。",
     "source_url": "https://x.com/thsottiaux",
@@ -30,7 +30,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "詫びリセット",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "0分",
+      "noticeToExecution": "23時間9分",
+      "noticeType": "匂わせ投稿あり",
       "note": "Tibo氏よりGPT-5.6 Solモデルの消費効率改善（利用持続力約18%向上）の発表とともに、全ChatGPT WorkおよびCodexユーザーの利用上限が即時強制リセットされました。"
     }
   },
@@ -52,6 +53,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "2時間42分",
+      "noticeType": "告知投稿あり",
       "note": "ChatGPT Workの急速な普及とチームの努力を祝し、CodexとChatGPT Work全体の利用上限が強制リセットされました。"
     }
   },
@@ -73,6 +75,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "世界規模で発生したシステム障害の復旧に伴い、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -94,6 +97,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "16分",
+      "noticeType": "告知投稿あり",
       "note": "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -115,6 +119,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "GPT-5.6 Solの追加調査・改善に伴い、ChatGPT WorkとCodex全体の利用上限が4回目に強制リセットされました。"
     }
   },
@@ -136,6 +141,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "22時間15分",
+      "noticeType": "告知投稿あり",
       "note": "アクティブユーザー数900万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -157,6 +163,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "1時間11分",
+      "noticeType": "告知投稿あり",
       "note": "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -178,6 +185,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "20時間40分",
+      "noticeType": "告知投稿あり",
       "note": "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
@@ -199,6 +207,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "任意リセット権1回配布",
       "scope": "不具合対象ユーザー（約50万人）",
       "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。"
     }
   },
@@ -220,6 +229,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "30分",
+      "noticeType": "告知投稿あり",
       "note": "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。"
     }
   },
@@ -241,6 +251,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "15時間",
+      "noticeType": "告知投稿あり",
       "note": "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が3回目に強制リセットされました。"
     }
   },
@@ -262,6 +273,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "12時間56分",
+      "noticeType": "告知投稿あり",
       "note": "GPT-5.6 Solのリリース記念として、ChatGPT WorkとCodex全体の利用上限が2回目に強制リセットされました。"
     }
   },
@@ -283,6 +295,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "3時間",
+      "noticeType": "告知投稿あり",
       "note": "GPT-5.6のリリース記念として、全有料プランのCodex利用上限が強制的にリセットされました。"
     }
   },
@@ -326,6 +339,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "1時間",
+      "noticeType": "告知投稿あり",
       "note": "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
@@ -347,6 +361,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "40分",
+      "noticeType": "告知投稿あり",
       "note": "Tibo氏が1時間以内の再フルリセットを告知し、利用制限の過剰消費問題への補償対応として全有料プランのCodex利用制限が強制リセットされました。"
     }
   },
@@ -369,6 +384,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "一部のユーザーでCodexの使用制限が過剰に消費される不具合が発生したため、その調査に伴い全ユーザーの利用制限が強制的にリセット（クリア）されました。"
     }
   },
@@ -390,6 +406,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "不明",
+      "noticeType": "なし",
       "note": "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
@@ -455,6 +472,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
+      "noticeType": "なし",
       "note": "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
