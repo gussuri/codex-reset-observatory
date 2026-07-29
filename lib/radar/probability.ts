@@ -1,6 +1,6 @@
 import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "@/data/observationSignals";
 import { LOCAL_PROBABILITY_WEIGHTS } from "@/data/predictionWeights";
-import { LOCAL_RESET_HISTORY, LOCAL_PERSONAL_RESET_HISTORY } from "@/data/resetHistory";
+import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
 import { translateDynamic } from "./i18n";
@@ -319,20 +319,16 @@ export function getDaysSinceLastGlobalReset() {
 }
 
 export function getLastGlobalResetAt() {
-  const candidates = [
-    ...LOCAL_RESET_HISTORY.map((item) => {
-      if ((item.kind === "window_opened" || item.status === "open") && !item.closed_at && !item.completed_at) {
-        return null;
-      }
-      return item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
-    }),
-    ...LOCAL_PERSONAL_RESET_HISTORY.map((item) => {
-      if (item.resetType === "詫びリセット" || item.resetTypes?.includes("詫びリセット")) {
-        return item.date ?? item.resetAt ?? null;
-      }
+  const candidates = LOCAL_RESET_HISTORY.map((item) => {
+    if ((item.kind === "window_opened" || item.status === "open") && !item.closed_at && !item.completed_at) {
       return null;
-    }),
-  ];
+    }
+    const resetMethod = item.details?.resetMethod;
+    if (resetMethod === "任意リセット権1回配布") {
+      return null;
+    }
+    return item.closed_at ?? item.completed_at ?? item.opened_at ?? (item as any).date ?? null;
+  });
 
   const latest = getLatestIsoDate(candidates);
   return latest ? new Date(latest) : null;

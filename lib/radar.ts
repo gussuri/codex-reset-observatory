@@ -11,7 +11,6 @@ import {
 import {
   HISTORY_LIMIT,
   LOCAL_MODEL_UPDATED_AT,
-  LOCAL_PERSONAL_RESET_HISTORY,
   LOCAL_RESET_HISTORY,
   MANUAL_LAST_REGULAR_RESET_AT,
   MANUAL_NEXT_REGULAR_RESET_AT,
@@ -212,26 +211,6 @@ function getLatestRegularOrForcedResetAt(): string | null {
     }
   }
 
-  // 2. 個人別履歴を走査 (LOCAL_PERSONAL_RESET_HISTORY)
-  for (const item of LOCAL_PERSONAL_RESET_HISTORY) {
-    const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
-    const cycleType = item.details?.cycleType || (item as any).cycleType || item.resetType;
-    const isForced = resetMethod === "強制リセット";
-    const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
-    const isAllPaidScope = item.scope === "全有料プラン";
-
-    if ((isForced || isRegular) && isAllPaidScope) {
-      const dateStr = item.resetAt ?? item.date ?? null;
-      if (dateStr) {
-        const time = new Date(dateStr).getTime();
-        if (!Number.isNaN(time) && time > latestTime) {
-          latestTime = time;
-          latestDateStr = dateStr;
-        }
-      }
-    }
-  }
-
   return latestDateStr;
 }
 
@@ -394,42 +373,10 @@ function addRegularResetForecastToHistory(
 
 function addPersonalResetEventsToHistory(
   history: RadarViewModel["recentHistory"],
-  locale: Locale = "ja",
+  _locale: Locale = "ja",
   limit: boolean = true,
 ) {
-  const seen = new Set(history.map((item) => item.key));
-  const personalItems = LOCAL_PERSONAL_RESET_HISTORY.filter(
-    (item) => !seen.has(item.key),
-  ).map((item) => {
-    const itemAsWindow: WindowLike = {
-      title: item.title,
-      scope: item.scope,
-      summary: item.summary ?? undefined,
-      window_human: item.windowLength,
-      details: item.details,
-    };
-
-    // 任意リセット履歴アイテムの多言語化
-    return {
-      ...item,
-      title: translateDynamic(item.title, locale),
-      resetType: translateDynamic(item.resetType, locale),
-      resetTypes: item.resetTypes?.map(t => translateDynamic(t, locale)) ?? [translateDynamic(item.resetType, locale)],
-      status: translateDynamic(item.status, locale),
-      signalLabel: item.signalLabel ? translateDynamic(item.signalLabel, locale) : "",
-      resetLabel: item.resetLabel ? translateDynamic(item.resetLabel, locale) : "",
-      scopeLabel: item.scopeLabel ? translateDynamic(item.scopeLabel, locale) : undefined,
-      scope: translateDynamic(item.scope, locale),
-      windowLabel: item.windowLabel ? translateDynamic(item.windowLabel, locale) : undefined,
-      windowLength: translateDynamic(item.windowLength, locale),
-      summary: item.summary ? translateDynamic(item.summary, locale) : null,
-      details: getHistoryDetails(itemAsWindow, locale),
-    };
-  });
-
-  const result = [...personalItems, ...history]
-    .sort((a, b) => getHistorySortTime(b) - getHistorySortTime(a));
-
+  const result = [...history].sort((a, b) => getHistorySortTime(b) - getHistorySortTime(a));
   return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
@@ -466,24 +413,7 @@ function getLatestWindowWithRegularReset(
 function getLatestCompletedLocalWindow(): WindowLike | undefined {
   const globalHistory = getCombinedResetHistory();
 
-  // 個人リセットイベント（任意リセット権配布等）も「最新カード」表示に含める。
-  // ※ 7日サイクル計算は latestObservedResetAt（getCombinedResetHistory のみ）で行うため影響なし。
-  const personalEvents = LOCAL_PERSONAL_RESET_HISTORY.map((item): WindowLike => ({
-    id: item.key,
-    title: item.title,
-    status: "closed",
-    opened_at: item.signalAt ?? item.date ?? null,
-    closed_at: item.resetAt ?? item.date ?? null,
-    completed_at: item.resetAt ?? item.date ?? null,
-    window_minutes: 0,
-    window_human: item.windowLength,
-    scopeLabel: item.scopeLabel,
-    scope: item.scope,
-    summary: item.summary ?? undefined,
-    windowLabel: item.windowLabel,
-  }));
-
-  return [...globalHistory, ...personalEvents]
+  return globalHistory
     .filter((item) => getCompletedResetAt(item))
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
