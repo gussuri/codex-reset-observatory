@@ -1,6 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
+import {
+  adjustActiveTiboTeaserBoosts,
+  buildAutomatedTiboSignal,
+  getNewTweets,
+  getNewestTweet,
+  type TiboClassificationResult,
+  type TiboProcessedState,
+  type TiboTweetItem,
+} from "./tibo-monitor-helpers";
 
 const TARGET_HANDLE = "thsottiaux";
 const SYNDICATION_URL = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${TARGET_HANDLE}`;
@@ -11,29 +20,10 @@ const HISTORY_FILE = path.join(process.cwd(), "data", "resetHistory.ts");
 // 極端に低い異常スコア (0.60未満) の場合のみ安全ガードとしてスキップ
 const SAFETY_MIN_CONFIDENCE = 0.60;
 
-type ClassificationResult = {
-  category: "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_HINT" | "TEASER_RESOLVED_BY_FEATURE" | "IRRELEVANT";
-  confidence: number;
-  reason_ja: string;
-  reset_title_ja?: string;
-  reset_type_ja?: "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット";
-  notice_to_execution?: string;
-  key_phrase?: string;
-  parsed_notice_time?: string | null;
-  resolved_feature_summary_ja?: string;
-};
+type ClassificationResult = TiboClassificationResult;
+type TweetItem = TiboTweetItem;
 
-type TweetItem = {
-  id: string;
-  createdAt: string;
-  text: string;
-  url: string;
-};
-
-type ProcessedState = {
-  lastProcessedTweetId: string;
-  processedTweetIds: string[];
-};
+type ProcessedState = TiboProcessedState;
 
 function readState(): ProcessedState {
   try {
@@ -289,20 +279,17 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
 }
 
 /**
- * 新機能発表・フェイント投稿時: 匂わせシグナルは解除せず active で維持！
- * ただし重複して超高確率(85%/98%)になっていた場合は、匂わせ基本高確率(35%/50%)へちょっとだけ引き下げてキープする関数
+ * 新機能発表・フェイント投稿時は、アクティブなTiboティザーだけを
+ * 共通設定の機能公開後ウェイトへ調整する。
  */
-function autoAdjustTeaserOnFeatureRelease(tweet: TweetItem, classification: ClassificationResult) {
+function autoAdjustTeaserOnFeatureRelease() {
   try {
-    let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    const fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
+    const updatedContent = adjustActiveTiboTeaserBoosts(fileContent);
 
-    if (fileContent.includes('status: "active"')) {
-      // 24時間以内のブーストのみを 1/3 カット (0.345 -> 0.230, 24h確率を約30%へ微減)、48hブースト(0.48)は本命用にキープ！
-      fileContent = fileContent.replace(/boostValue24h:\s*[\d.]+/g, "boostValue24h: 0.230");
-      fileContent = fileContent.replace(/boostValue48h:\s*[\d.]+/g, "boostValue48h: 0.48");
-
-      fs.writeFileSync(SIGNALS_FILE, fileContent, "utf-8");
-      console.log(`✨ Automatically reduced 24h teaser boost by 1/3 in observationSignals.ts on feature release (24h ~30%, 48h ~55%).`);
+    if (updatedContent !== fileContent) {
+      fs.writeFileSync(SIGNALS_FILE, updatedContent, "utf-8");
+      console.log("✨ Adjusted the active Tibo teaser using the shared post-feature weights.");
     } else {
       console.log(`No active teaser signals found to adjust on feature release.`);
     }
@@ -314,11 +301,9 @@ function autoAdjustTeaserOnFeatureRelease(tweet: TweetItem, classification: Clas
 function autoApplySignalToObservatory(tweet: TweetItem, classification: ClassificationResult) {
   try {
     let fileContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
-    const isTeaser = classification.category === "TEASER_HINT";
-    const dateObj = new Date(tweet.createdAt);
-    const dateIso = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
-    const dateSlug = dateIso.split("T")[0];
-    const signalId = `official-tibo-auto-${isTeaser ? "hint" : "notice"}-${dateSlug}-${tweet.id.slice(-4)}`;
+    const newSignalObject = buildAutomatedTiboSignal(tweet, classification);
+    const dateIso = newSignalObject.observedAt;
+    const signalId = newSignalObject.id;
 
     if (fileContent.includes(`id: "${signalId}"`) || fileContent.includes(tweet.url)) {
       console.log(`Signal for tweet ${tweet.id} already exists in observationSignals.ts. Skipping append.`);
@@ -330,29 +315,13 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
       `$1"resolved",\n    resolvedAt: "${dateIso}"`
     );
 
-    const expiresAtObj = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const expiresAtIso = expiresAtObj.toISOString();
-
-    const titleText = isTeaser
-      ? `Tibo氏がXにて投稿（${classification.reason_ja}）`
-      : `Tibo氏がリセット/制限緩和を正式発表`;
-
-    const newSignalObject = {
-      id: signalId,
-      observedAt: dateIso,
-      type: isTeaser ? "probability_boost" : "official_notice",
-      status: "active",
-      expiresAt: expiresAtIso,
-      boostValue24h: isTeaser ? 0.345 : undefined,
-      boostValue48h: isTeaser ? 0.48 : undefined,
-      boostReason: `Tibo氏のX投稿（AI自動判定: ${classification.reason_ja}）`,
-      title: titleText,
-      source: tweet.url,
-      sourceLabel: "Tibo氏（OpenAI Codex開発者）のXポストより（自動判定）",
-    };
-
     const targetMarker = "export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [";
-    const formattedSignalString = `  ${JSON.stringify(newSignalObject, null, 4).replace(/"([^"]+)":/g, "$1:")},`;
+    const formattedSignalString = JSON.stringify(newSignalObject, null, 2)
+      .replace(/"([^"]+)":/g, "$1:")
+      .split("\n")
+      .map((line) => `  ${line}`)
+      .join("\n")
+      .concat(",");
 
     const updatedContent = fileContent.replace(
       targetMarker,
@@ -388,23 +357,20 @@ async function main() {
   console.log(`Fetched ${tweets.length} tweets from Twitter Syndication API.`);
 
   if (!state.lastProcessedTweetId && state.processedTweetIds.length === 0) {
-    const newestTweet = tweets[0];
+    const newestTweet = getNewestTweet(tweets);
+    if (!newestTweet) {
+      console.log("No valid tweet found for the initial baseline.");
+      return;
+    }
     console.log(`Initial run detected. Setting baseline lastProcessedTweetId to ${newestTweet.id} without processing.`);
     state.lastProcessedTweetId = newestTweet.id;
+    state.lastProcessedTweetCreatedAt = newestTweet.createdAt;
     state.processedTweetIds = [newestTweet.id];
     saveState(state);
     return;
   }
 
-  const newTweets: TweetItem[] = [];
-  for (const tweet of tweets) {
-    if (tweet.id === state.lastProcessedTweetId || state.processedTweetIds.includes(tweet.id)) {
-      break;
-    }
-    newTweets.push(tweet);
-  }
-
-  newTweets.reverse();
+  const newTweets = getNewTweets(tweets, state);
 
   if (newTweets.length === 0) {
     console.log("No new tweets since last check.");
@@ -427,8 +393,8 @@ async function main() {
       console.log(` 🏆 RESET COMPLETED Detected! Automatically updating history & clearing old signals...`);
       autoRecordCompletedResetHistory(tweet, classification);
     } else if (classification.category === "TEASER_RESOLVED_BY_FEATURE") {
-      console.log(` 💡 Feature Release Detected! Maintaining active teaser at target boost values (35%/50%)...`);
-      autoAdjustTeaserOnFeatureRelease(tweet, classification);
+      console.log(` 💡 Feature Release Detected! Adjusting the active teaser...`);
+      autoAdjustTeaserOnFeatureRelease();
     } else if (classification.category === "OFFICIAL_NOTICE" || classification.category === "TEASER_HINT") {
       console.log(` 🚨 Notice/Hint Signal Detected! Category: ${classification.category}`);
       autoApplySignalToObservatory(tweet, classification);
@@ -437,6 +403,7 @@ async function main() {
     }
 
     state.lastProcessedTweetId = tweet.id;
+    state.lastProcessedTweetCreatedAt = tweet.createdAt;
     if (!state.processedTweetIds.includes(tweet.id)) {
       state.processedTweetIds.unshift(tweet.id);
       if (state.processedTweetIds.length > 50) {

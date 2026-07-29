@@ -13,8 +13,16 @@ import {
   getLocalSignalEvaluation,
   getLocalSignalEnvironment,
 } from "../lib/radar/probability";
+import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
+import { LOCAL_PROBABILITY_WEIGHTS } from "../data/predictionWeights";
 import type { OpenAIStatusHistoryItem } from "../lib/openaiStatus";
 import type { RadarData } from "../lib/radar/types";
+import {
+  getNewTweets,
+  getNewestTweet,
+  type TiboProcessedState,
+  type TiboTweetItem,
+} from "../scripts/tibo-monitor-helpers";
 
 const NOW = new Date("2026-07-18T15:00:00.000Z");
 const LAST_RESET = new Date("2026-07-18T12:00:00.000Z");
@@ -290,4 +298,183 @@ test("keeps the included Status explanation when an incident hint is present", (
 
   assert.match(reason, /発生中のCodex関連障害が1件/);
   assert.match(reason, /匂わせ投稿|障害・容量到達/);
+});
+
+test("keeps first-day cooldown in history pressure without a second negative signal", () => {
+  const firstDayPressure = LOCAL_PROBABILITY_WEIGHTS.historyPressure[0];
+  const activeNegativeBoosts = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      signal.status === "active" &&
+      ((signal.boostValue24h ?? 0) < 0 || (signal.boostValue48h ?? 0) < 0),
+  );
+
+  assert.deepEqual(
+    {
+      within24h: firstDayPressure.within24h,
+      within48h: firstDayPressure.within48h,
+    },
+    {
+      within24h: -0.32,
+      within48h: -0.21,
+    },
+  );
+  assert.equal(activeNegativeBoosts.length, 0);
+});
+
+test("builds automated teaser signals with the shared tuned weights", async () => {
+  let helpers: typeof import("../scripts/tibo-monitor-helpers");
+  try {
+    helpers = await import("../scripts/tibo-monitor-helpers");
+  } catch {
+    assert.fail("Tibo monitor helpers are required");
+  }
+
+  const signal = helpers.buildAutomatedTiboSignal(
+    {
+      id: "1234567890",
+      createdAt: "2026-07-29T00:00:00.000Z",
+      text: "See you tomorrow for more Codex fun",
+      url: "https://x.com/thsottiaux/status/1234567890",
+    },
+    {
+      category: "TEASER_HINT",
+      confidence: 0.9,
+      reason_ja: "翌日の追加発表を示唆",
+    },
+    new Date("2026-07-29T01:00:00.000Z"),
+  );
+
+  assert.equal(signal.type, "probability_boost");
+  assert.equal(signal.boostValue24h, 0.4);
+  assert.equal(signal.boostValue48h, 0.55);
+  assert.equal(signal.expiresAt, "2026-07-31T01:00:00.000Z");
+});
+
+test("feature release adjustment changes only an active Tibo teaser", async () => {
+  let helpers: typeof import("../scripts/tibo-monitor-helpers");
+  try {
+    helpers = await import("../scripts/tibo-monitor-helpers");
+  } catch {
+    assert.fail("Tibo monitor helpers are required");
+  }
+
+  const source = `export const SIGNALS = [
+  {
+    id: "official-tibo-auto-hint-2026-07-29-7890",
+    type: "probability_boost",
+    status: "active",
+    boostValue24h: 0.4,
+    boostValue48h: 0.55,
+  },
+  {
+    id: "boost-community-event",
+    type: "probability_boost",
+    status: "active",
+    boostValue24h: 0.2,
+    boostValue48h: 0.3,
+  },
+  {
+    id: "official-tibo-old-hint",
+    type: "probability_boost",
+    status: "resolved",
+    boostValue24h: 0.4,
+    boostValue48h: 0.55,
+  },
+];`;
+
+  const updated = helpers.adjustActiveTiboTeaserBoosts(source);
+
+  assert.match(
+    updated,
+    /official-tibo-auto-hint[\s\S]*?boostValue24h: 0\.23,[\s\S]*?boostValue48h: 0\.48/,
+  );
+  assert.match(
+    updated,
+    /boost-community-event[\s\S]*?boostValue24h: 0\.2,[\s\S]*?boostValue48h: 0\.3/,
+  );
+  assert.match(
+    updated,
+    /official-tibo-old-hint[\s\S]*?status: "resolved"[\s\S]*?boostValue24h: 0\.4,[\s\S]*?boostValue48h: 0\.55/,
+  );
+});
+
+test("finds newer tweets after a processed id even when the feed is unsorted", () => {
+  const baseline: TiboTweetItem = {
+    id: "baseline",
+    createdAt: "2026-07-28T00:00:00.000Z",
+    text: "baseline",
+    url: "https://x.com/thsottiaux/status/baseline",
+  };
+  const newest: TiboTweetItem = {
+    id: "newest",
+    createdAt: "2026-07-29T03:00:00.000Z",
+    text: "newest",
+    url: "https://x.com/thsottiaux/status/newest",
+  };
+  const middle: TiboTweetItem = {
+    id: "middle",
+    createdAt: "2026-07-29T01:00:00.000Z",
+    text: "middle",
+    url: "https://x.com/thsottiaux/status/middle",
+  };
+  const state: TiboProcessedState = {
+    lastProcessedTweetId: baseline.id,
+    processedTweetIds: [baseline.id],
+  };
+
+  assert.deepEqual(
+    getNewTweets([baseline, newest, middle], state).map((tweet) => tweet.id),
+    [middle.id, newest.id],
+  );
+});
+
+test("selects the newest tweet by timestamp for an initial baseline", () => {
+  const tweets: TiboTweetItem[] = [
+    {
+      id: "older",
+      createdAt: "2026-07-29T01:00:00.000Z",
+      text: "older",
+      url: "https://x.com/thsottiaux/status/older",
+    },
+    {
+      id: "newer",
+      createdAt: "2026-07-29T03:00:00.000Z",
+      text: "newer",
+      url: "https://x.com/thsottiaux/status/newer",
+    },
+  ];
+
+  assert.equal(getNewestTweet(tweets)?.id, "newer");
+});
+
+test("ignores stale tweets mixed into a fresh timeline response", () => {
+  const state: TiboProcessedState = {
+    lastProcessedTweetId: "baseline",
+    processedTweetIds: ["baseline"],
+  };
+  const stale: TiboTweetItem = {
+    id: "stale",
+    createdAt: "2025-11-19T00:00:00.000Z",
+    text: "old timeline item",
+    url: "https://x.com/thsottiaux/status/stale",
+  };
+  const recent: TiboTweetItem = {
+    id: "recent",
+    createdAt: "2026-07-29T03:00:00.000Z",
+    text: "recent timeline item",
+    url: "https://x.com/thsottiaux/status/recent",
+  };
+
+  assert.deepEqual(
+    getNewTweets(
+      [
+        { ...stale, id: "baseline", createdAt: "2025-09-15T17:31:16.000Z" },
+        stale,
+        recent,
+      ],
+      state,
+      new Date("2026-07-29T04:00:00.000Z"),
+    ).map((tweet) => tweet.id),
+    [recent.id],
+  );
 });

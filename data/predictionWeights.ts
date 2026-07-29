@@ -18,6 +18,17 @@ export const REFRESH_INTERVAL_MS = {
   veryHigh: 30 * 60 * 1000,
 } as const;
 
+export const AUTOMATED_TIBO_SIGNAL_WEIGHTS = {
+  teaser: {
+    within24h: 0.4,
+    within48h: 0.55,
+  },
+  afterFeatureRelease: {
+    within24h: 0.23,
+    within48h: 0.48,
+  },
+} as const;
+
 export const LOCAL_PROBABILITY_WEIGHTS = {
   min: 0.02,
   max: {
@@ -72,8 +83,8 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
   historyPressure: [
     {
       maxDaysSinceReset: 1,
-      within24h: -0.12,
-      within48h: -0.16,
+      within24h: -0.32,
+      within48h: -0.21,
     },
     {
       maxDaysSinceReset: 2,

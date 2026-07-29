@@ -33,10 +33,10 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: npx tsx scripts/monitor-tibo-x.ts
 
-      - name: Commit and push ONLY when actual site signals or history changes
+      - name: Persist monitor state and site changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          # observationSignals.ts または resetHistory.ts に実際のサイト変化（シグナル追加/履歴追加）があった場合のみコミット＆プッシュ
-          git add data/observationSignals.ts data/resetHistory.ts
-          git diff --staged --quiet || (git add data/processedTweets.json && git commit -m "feat(auto): auto-apply Tibo X signal/history via Gemini AI" && git push)
+          # 通常投稿も一度だけ処理するため、処理済みIDをサイト変更の有無にかかわらず保存する
+          git add data/processedTweets.json data/observationSignals.ts data/resetHistory.ts
+          git diff --staged --quiet || (git commit -m "chore(auto): persist Tibo monitor results" && git push)

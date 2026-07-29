@@ -84,7 +84,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   expectationLabel: {
     ja: "期待度",
     en: "Likelihood",
-    zh: "重置可能性",
+    zh: "可能性",
   },
   within24h: {
     ja: "24時間以内",
@@ -641,12 +641,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リresetされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。": {
     ja: "アクティブユーザー数800万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。※発表から順次適用されているため、アカウントへの反映に数十分から数時間程度の遅延が発生する場合があります。",
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 8 million active users. *Because the reset is being applied sequentially, there may be a delay of several minutes to hours before it takes effect on your account.",
-    zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时の延迟。",
-  },
-  "前回リセット直後（間隔理論による確率抑制）": {
-    ja: "前回リセット直後（間隔理論による確率抑制）",
-    en: "Post-reset suppression (interval theory)",
-    zh: "重置后概率抑制（间隔理论）",
+    zh: "为庆祝活跃用户数达到800万，ChatGPT Work和Codex整体的使用限制已强制重置。※由于重置是顺序应用的，您的账号可能会出现几十分钟到数小时的延迟。",
   },
   "Tibo氏の「明日またChatGPTとCodexの楽しい出来事で会いましょう」匂わせ投稿": {
     ja: "Tibo氏の「明日またChatGPTとCodexの楽しい出来事で会いましょう」匂わせ投稿",

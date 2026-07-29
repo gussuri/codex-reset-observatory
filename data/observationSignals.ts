@@ -32,16 +32,4 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     source: "https://x.com/thsottiaux",
     sourceLabel: "Tibo氏（OpenAI Codex開発責任者）のXポストより",
   },
-  {
-    id: "boost-post-reset-adjustment-2026-07-28",
-    observedAt: "2026-07-28T03:09:00.000Z",
-    type: "probability_boost",
-    status: "active",
-    expiresAt: "2026-07-29T21:00:00+09:00",
-    boostValue24h: -0.20,
-    boostValue48h: -0.05,
-    title: "前回リセット直後（間隔理論による確率抑制）",
-    source: "https://x.com/thsottiaux",
-    sourceLabel: "Codex リセット観測データ (間隔理論)",
-  },
 ];
