@@ -107,9 +107,14 @@ export function getLocalResetProbability(
     pressureBoost +
     eventBoost;
 
+  const minLimit =
+    typeof LOCAL_PROBABILITY_WEIGHTS.min === "object"
+      ? LOCAL_PROBABILITY_WEIGHTS.min[weightKey]
+      : LOCAL_PROBABILITY_WEIGHTS.min;
+
   return Math.min(
     LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
-    Math.max(LOCAL_PROBABILITY_WEIGHTS.min, score),
+    Math.max(minLimit, score),
   );
 }
 

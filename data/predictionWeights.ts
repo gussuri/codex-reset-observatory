@@ -30,7 +30,10 @@ export const AUTOMATED_TIBO_SIGNAL_WEIGHTS = {
 } as const;
 
 export const LOCAL_PROBABILITY_WEIGHTS = {
-  min: 0.02,
+  min: {
+    within24h: 0.02,
+    within48h: 0.04,
+  },
   max: {
     within24h: 0.72,
     within48h: 0.82,
