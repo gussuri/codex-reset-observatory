@@ -24,8 +24,8 @@ export const AUTOMATED_TIBO_SIGNAL_WEIGHTS = {
     within48h: 0.55,
   },
   afterFeatureRelease: {
-    within24h: 0.23,
-    within48h: 0.48,
+    within24h: 0.4,
+    within48h: 0.55,
   },
 } as const;
 

@@ -385,7 +385,7 @@ test("feature release adjustment changes only an active Tibo teaser", async () =
 
   assert.match(
     updated,
-    /official-tibo-auto-hint[\s\S]*?boostValue24h: 0\.23,[\s\S]*?boostValue48h: 0\.48/,
+    /official-tibo-auto-hint[\s\S]*?boostValue24h: 0\.4,[\s\S]*?boostValue48h: 0\.55/,
   );
   assert.match(
     updated,
