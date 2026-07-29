@@ -1143,6 +1143,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Notice details",
     zh: "预告详情",
   },
+  "GPT-5.6 Sol利用効率改善リセット": {
+    ja: "GPT-5.6 Sol利用効率改善リセット",
+    en: "GPT-5.6 Sol Efficiency Improvement Reset",
+    zh: "GPT-5.6 Sol 效率提升重置",
+  },
+  "Tibo氏よりGPT-5.6 Solモデルの消費効率改善（利用持続力約18%向上）の発表とともに、全ChatGPT WorkおよびCodexユーザーの利用上限が即時強制リセットされました。": {
+    ja: "Tibo氏よりGPT-5.6 Solモデルの消費効率改善（利用持続力約18%向上）の発表とともに、全ChatGPT WorkおよびCodexユーザーの利用上限が即時強制リセットされました。",
+    en: "Following the announcement by Tibo regarding efficiency improvements for the GPT-5.6 Sol model (~18% longer usage duration), rate limits for all ChatGPT Work and Codex users were forcibly reset immediately.",
+    zh: "随着 Tibo 宣布 GPT-5.6 Sol 模型的消耗效率提升（使用时长延长约 18%），所有 ChatGPT Work 和 Codex 用户的用量上限已立即被强制重置。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
