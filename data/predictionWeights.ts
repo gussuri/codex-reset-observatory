@@ -82,34 +82,22 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
   },
   historyPressure: [
     {
+      // リセットから24時間以内 (0日経過)
       maxDaysSinceReset: 1,
       within24h: -0.08,
       within48h: -0.14,
     },
     {
+      // リセットから48時間以内 (1日経過)
       maxDaysSinceReset: 2,
       within24h: -0.06,
       within48h: -0.08,
     },
     {
-      maxDaysSinceReset: 5,
+      // 48時間 (2日) 超過以降はマイナスなし (0%)
+      maxDaysSinceReset: Number.POSITIVE_INFINITY,
       within24h: 0,
       within48h: 0,
-    },
-    {
-      maxDaysSinceReset: 9,
-      within24h: 0.015,
-      within48h: 0.035,
-    },
-    {
-      maxDaysSinceReset: 13,
-      within24h: 0.035,
-      within48h: 0.07,
-    },
-    {
-      maxDaysSinceReset: Number.POSITIVE_INFINITY,
-      within24h: 0.05,
-      within48h: 0.09,
     },
   ],
 } as const;
