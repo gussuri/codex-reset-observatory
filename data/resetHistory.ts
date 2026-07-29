@@ -176,7 +176,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     source_url: "https://x.com/thsottiaux",
     details: {
       cycleType: "ランダムリセット",
-      reasonType: "ご祝儀リセット",
+      reasonType: "詫びリセット",
       resetMethod: "強制リセット",
       scope: "全有料プラン",
       noticeToExecution: "0分",
