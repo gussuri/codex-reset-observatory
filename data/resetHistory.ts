@@ -163,7 +163,7 @@ export const LOCAL_PERSONAL_RESET_HISTORY: RadarViewModel["recentHistory"] = [
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     id: "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
-    title: "GPT-5.6 Sol利用効率改善＆全ユーザー利用上限強制リセット",
+    title: "GPT-5.6 Sol利用効率改善リセット",
     kind: "reset_completed",
     status: "closed",
     opened_at: "2026-07-29T13:09:00+09:00",
