@@ -148,6 +148,7 @@ export function adjustActiveTiboTeaserBoosts(source: string) {
       .replace(
         /boostValue48h:\s*-?[\d.]+/,
         `boostValue48h: ${AUTOMATED_TIBO_SIGNAL_WEIGHTS.afterFeatureRelease.within48h}`,
-      );
+      )
+      .replace(/\s*boostReason:\s*"[^"]*",?/g, "");
   });
 }
