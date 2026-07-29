@@ -94,6 +94,7 @@ export function getLocalResetProbability(
 
   const score =
     base +
+    getMomentumBoost(period) +
     (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period) : 0) +
     getElapsedDayBoost() +
     statusIncidents *
@@ -284,6 +285,35 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
 
 export function isCurrentLocalSignal(signal: LocalObservationSignal) {
   return getEffectiveSignalStatus(signal) === "active";
+}
+
+export function getRecent7DayResetCount(): number {
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  return LOCAL_RESET_HISTORY.filter((item) => {
+    const resetMethod = item.details?.resetMethod;
+    if (resetMethod === "任意リセット権1回配布") {
+      return false;
+    }
+    const dateStr = item.completed_at ?? item.closed_at ?? item.opened_at ?? (item as any).date;
+    if (!dateStr) return false;
+    const time = new Date(dateStr).getTime();
+    return !Number.isNaN(time) && time >= sevenDaysAgo && time <= now;
+  }).length;
+}
+
+export function getMomentumBoost(period: "24h" | "48h"): number {
+  const count = getRecent7DayResetCount();
+  const weightKey = period === "24h" ? "within24h" : "within48h";
+
+  if (count >= 4) {
+    return LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level2[weightKey];
+  }
+  if (count === 3) {
+    return LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level1[weightKey];
+  }
+  return 0;
 }
 
 export function getLocalHistoryPressure(period: "24h" | "48h") {
@@ -521,22 +551,32 @@ export function getLocalProbabilityReason(
     }
   }
 
+  const resetCount7d = getRecent7DayResetCount();
+  let momentumText = "";
+  if (resetCount7d >= 4) {
+    const text = "直近7日間でリセットが4回以上発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。";
+    momentumText = ` ${translateDynamic(text, locale)}`;
+  } else if (resetCount7d === 3) {
+    const text = "直近7日間でリセットが3回発生しており、リセット頻度が高まっているため予測確率を上昇補正しています。";
+    momentumText = ` ${translateDynamic(text, locale)}`;
+  }
+
   if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
     if (locale === "en") {
-      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away. ${combinedSignalSummary}${boostText}`;
+      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away. ${combinedSignalSummary}${boostText}${momentumText}`;
     } else if (locale === "zh") {
-      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${combinedSignalSummary}${boostText}`;
+      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${combinedSignalSummary}${boostText}${momentumText}`;
     } else {
-      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${combinedSignalSummary}${boostText}`;
+      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${combinedSignalSummary}${boostText}${momentumText}`;
     }
   }
 
   if (locale === "en") {
-    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}`;
+    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}`;
+    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}`;
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
 }
 

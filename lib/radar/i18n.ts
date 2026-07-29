@@ -1153,6 +1153,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Following the announcement by Tibo regarding efficiency improvements for the GPT-5.6 Sol model (~18% longer usage duration), rate limits for all ChatGPT Work and Codex users were forcibly reset immediately.",
     zh: "随着 Tibo 宣布 GPT-5.6 Sol 模型的消耗效率提升（使用时长延长约 18%），所有 ChatGPT Work 和 Codex 用户的用量上限已立即被强制重置。",
   },
+  "直近7日間でリセットが3回発生しており、リセット頻度が高まっているため予測確率を上昇補正しています。": {
+    ja: "直近7日間でリセットが3回発生しており、リセット頻度が高まっているため予測確率を上昇補正しています。",
+    en: "Reset probability has been upwardly adjusted due to an increased frequency of 3 resets in the past 7 days.",
+    zh: "由于过去 7 天内已发生 3 次重置且重置频率上升，预测概率已向上调整。",
+  },
+  "直近7日間でリセットが4回以上発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。": {
+    ja: "直近7日間でリセットが4回発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。",
+    en: "Reset probability has been significantly boosted due to a high-density reset wave (4+ resets in the past 7 days).",
+    zh: "由于过去 7 天内已发生 4 次以上重置进入高频重置波（密集期），预测概率已大幅向上调整。",
+  },
 };
 
 export function translateUI(key: string, locale: Locale): string {
