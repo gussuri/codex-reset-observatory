@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { classifyTiboTweet } from "@/lib/radar/classification";
+import { classifyWithGemini } from "@/lib/radar/geminiClassification";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -44,7 +45,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid text" }, { status: 400 });
     }
 
-    // Ensure status URL belongs to @thsottiaux profile path
     if (
       !tweetUrl ||
       typeof tweetUrl !== "string" ||
@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Require tweetCreatedAt
     if (!tweetCreatedAt || typeof tweetCreatedAt !== "string") {
       return NextResponse.json({ error: "tweetCreatedAt is required" }, { status: 400 });
     }
@@ -68,7 +67,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid tweetCreatedAt date format" }, { status: 400 });
     }
 
-    // Reject timestamps more than 5 minutes in the future
     if (createdDate.getTime() > nowTime + 5 * 60 * 1000) {
       return NextResponse.json(
         { error: "Invalid tweetCreatedAt: Timestamp is more than 5 minutes in the future" },
@@ -76,39 +74,72 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Classification Engine
-    const classification = classifyTiboTweet(text, tweetUrl);
+    // 3. Existing Rule Classification
+    const ruleResult = classifyTiboTweet(text, tweetUrl);
 
-    // 4. Calculate Expiration based on tweet_created_at
+    // 4. Gemini Shadow Classification (Optional based on GEMINI_CLASSIFICATION_MODE)
+    const mode = (process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
+    const isShadow = mode === "shadow" || mode === "hybrid";
+
+    let aiResult = null;
+    if (isShadow) {
+      try {
+        aiResult = await classifyWithGemini({ text, tweetCreatedAt });
+      } catch (err) {
+        console.warn("[Webhook Warning] Gemini API shadow call threw exception:", err);
+      }
+    }
+
+    // 5. Expiration Calculation based on tweet_created_at
     const expiresAt = new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
 
+    // Determine classification source
+    const classificationSource = isShadow && aiResult?.status === "success" ? "shadow" : "rule";
+
+    // 6. Build Supabase Payload
+    // CRITICAL: signal_type and confidence ALWAYS retain the rule-based result in Shadow Mode
     const payload = {
       tweet_id: tweetId,
-      signal_type: classification.signalType,
+      signal_type: ruleResult.signalType,
+      confidence: ruleResult.confidence,
       text: text.trim(),
       tweet_url: tweetUrl,
       tweet_created_at: createdDate.toISOString(),
       detected_at: new Date().toISOString(),
       expires_at: expiresAt.toISOString(),
       verification_status: "auto_unverified",
-      confidence: classification.confidence,
-      classification_reason: classification.reason,
-      is_reply: classification.isReply,
-      is_quote: classification.isQuote,
+      classification_reason: ruleResult.reason,
+      is_reply: ruleResult.isReply,
+      is_quote: ruleResult.isQuote,
+
+      // Audit columns
+      rule_signal_type: ruleResult.signalType,
+      rule_confidence: ruleResult.confidence,
+      ai_signal_type: aiResult?.signalType || null,
+      ai_confidence: aiResult?.confidence || null,
+      ai_temporal_direction: aiResult?.temporalDirection || null,
+      ai_evidence_quote: aiResult?.evidenceQuote || null,
+      ai_reason_ja: aiResult?.reasonJa || null,
+      ai_reset_type_ja: aiResult?.resetTypeJa || null,
+      ai_notice_to_execution: aiResult?.noticeToExecution || null,
+      ai_model: aiResult?.model || null,
+      ai_classification_status: aiResult?.status || "skipped",
+      ai_classified_at: aiResult?.classifiedAt || null,
+      classification_source: classificationSource,
     };
 
-    // 5. Supabase Upsert with ignoreDuplicates
+    // 7. Supabase Upsert
     const supabase = getSupabaseServiceClient();
     const { error } = await supabase
       .from("tibo_signals")
-      .upsert(payload, { onConflict: "tweet_id", ignoreDuplicates: true });
+      .upsert(payload, { onConflict: "tweet_id" });
 
     if (error) {
       console.error("[Webhook Error] Supabase upsert failed:", error);
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
-    // 6. Purge Next.js SSR Cache
+    // 8. Purge Next.js Cache
     try {
       revalidateTag("radar-data");
     } catch (e) {
@@ -117,8 +148,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      signalType: classification.signalType,
-      confidence: classification.confidence,
+      signalType: ruleResult.signalType,
+      confidence: ruleResult.confidence,
+      aiStatus: aiResult?.status || "skipped",
     });
   } catch (err: any) {
     console.error("[Webhook Error]", err);

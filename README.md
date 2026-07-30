@@ -11,16 +11,56 @@ OpenAI Codex および ChatGPT Work の利用上限（レートリミット）�
 ## 🌟 主な特徴
 
 - 📊 **確率予測レーダー**: 直近のリセット履歴・経過日数・障害件数・コミュニティの報告量を統合解析し、24時間以内／48時間以内のリセット確率を統計モデルでリアルタイム試算。
-- 📝 **公式寄りシグナルの整理**: Tibo氏の投稿や公式情報は、取得状況を確認したうえで観測材料として手動整理。
+- 📝 **公式シグナルのリアルタイム監視**: Chrome拡張機能 / Webhook 経由で Tibo氏（@thsottiaux）の投稿を自動収集。ルールベース分類エンジン＋Gemini AI シャドー分類器で監査・蓄積。
 - 🌐 **完全多言語対応**: 日本語 (`ja`)・英語 (`en`)・中国語 (`zh`) に完全対応。時間の自動解釈パーサーを搭載。
+
+---
+
+## 🔍 Supabase AI シャドー分類 比較監査用 SQL
+
+Gemini AI 分類器（シャドーモード）と既存ルール分類の比較・評価を行うための SQL クエリです。
+
+### 1. 全シグナルのルール分類 vs AI分類の比較
+```sql
+SELECT
+  tweet_created_at,
+  LEFT(text, 120) AS text,
+  rule_signal_type,
+  rule_confidence,
+  ai_signal_type,
+  ai_confidence,
+  ai_temporal_direction,
+  ai_evidence_quote,
+  ai_reason_ja,
+  ai_model,
+  ai_classification_status
+FROM public.tibo_signals
+ORDER BY tweet_created_at DESC;
+```
+
+### 2. ルール分類とAI分類の不一致ケース抽出
+```sql
+SELECT
+  tweet_created_at,
+  LEFT(text, 120) AS text,
+  rule_signal_type,
+  ai_signal_type,
+  rule_confidence,
+  ai_confidence,
+  ai_reason_ja
+FROM public.tibo_signals
+WHERE ai_classification_status = 'success'
+  AND rule_signal_type IS DISTINCT FROM ai_signal_type
+ORDER BY tweet_created_at DESC;
+```
+
+---
 
 ## 🛠️ 技術スタック
 
 - **Framework**: Next.js 15 (App Router), React 18, TypeScript
-- **Styling**: Tailwind CSS, Lucide Icons
+- **Database**: Supabase (PostgreSQL / RLS)
 - **Deployment**: Vercel
-
-Tibo氏のX投稿自動監視は、取得元の安定性を確認できなかったため現在停止しています。監視用スクリプトと過去の検証資料は、将来の再検討に備えてリポジトリ内に保管しています。
 
 ---
 
