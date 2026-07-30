@@ -60,18 +60,21 @@ export function getExpectationKey(
   const p24 = p24h ?? 0;
   const p48 = p48h ?? 0;
 
-  if (
-    p24 >= EXPECTATION_THRESHOLDS.veryHigh.p24h ||
-    p48 >= EXPECTATION_THRESHOLDS.veryHigh.p48h
-  ) {
-    return "very_high";
-  }
+  // 24時間確率が60%未満（0.60未満）の場合は「高」「極めて高」にはせず、「中」以下にする
+  if (p24 >= 0.60) {
+    if (
+      p24 >= EXPECTATION_THRESHOLDS.veryHigh.p24h ||
+      p48 >= EXPECTATION_THRESHOLDS.veryHigh.p48h
+    ) {
+      return "very_high";
+    }
 
-  if (
-    p24 >= EXPECTATION_THRESHOLDS.high.p24h ||
-    p48 >= EXPECTATION_THRESHOLDS.high.p48h
-  ) {
-    return "high";
+    if (
+      p24 >= EXPECTATION_THRESHOLDS.high.p24h ||
+      p48 >= EXPECTATION_THRESHOLDS.high.p48h
+    ) {
+      return "high";
+    }
   }
 
   if (
