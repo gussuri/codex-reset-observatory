@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Codex Reset Observatory - Tibo Real-Time Monitor",
+  "version": "1.0.0",
+  "description": "Monitors Tibo (@thsottiaux) tweets on X in real-time and forwards signals to Codex Reset Observatory.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://codex-reset-observatory.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/thsottiaux*",
+        "https://x.com/notifications*",
+        "https://twitter.com/thsottiaux*",
+        "https://twitter.com/notifications*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}

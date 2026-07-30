@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Codex Reset Observatory - Tibo Monitor Settings</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #161c2d;
+      --border: #232d42;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    p.desc {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .field {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #d1d5db;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      background: #0f1422;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 28px;
+    }
+    button {
+      flex: 1;
+      padding: 11px 16px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    button.btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    button.btn-primary:hover {
+      background: var(--primary-hover);
+    }
+    button.btn-secondary {
+      background: #263147;
+      color: #e5e7eb;
+      border: 1px solid var(--border);
+    }
+    button.btn-secondary:hover {
+      background: #323f5b;
+    }
+    #statusMessage {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: none;
+    }
+    #statusMessage.success {
+      display: block;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+    #statusMessage.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📡 Tibo Monitor Settings</h1>
+    <p class="desc">Vercel Webhook Secretおよび観測所ドメインを設定してください。秘密鍵はブラウザローカルストレージ（chrome.storage.local）にのみ安全に保管されます。</p>
+
+    <div class="field">
+      <label for="webhookSecret">TIBO_WEBHOOK_SECRET</label>
+      <input type="password" id="webhookSecret" placeholder="Vercel環境変数で設定した秘密鍵を入力">
+    </div>
+
+    <div class="field">
+      <label for="observatoryDomain">Observatory Domain</label>
+      <input type="text" id="observatoryDomain" value="https://codex-reset-observatory.vercel.app">
+    </div>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn-primary">保存</button>
+      <button id="testBtn" class="btn-secondary">接続テスト</button>
+    </div>
+
+    <div id="statusMessage"></div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
