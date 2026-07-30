@@ -1,17 +1,17 @@
 /**
  * Content Script for Tibo Monitor Chrome Extension
- * Strictly handles DOM Inspection & Leader Lock. Contains ZERO secrets.
+ * DOM Inspection & Leader Lock.
+ * Deduplication responsibility is centralized in service-worker.js.
  */
 
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.3-extension";
-  const QUEUE_KEY = "tibo_processed_tweet_ids";
+  const SELECTOR_VERSION = "v1.4-extension";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
-  // In-flight tracking to prevent concurrent requests for the same tweetId
+  // In-flight tracking within this tab for immediate UI-level throttling
   const inFlightTweetIds = new Set();
 
   // Persistent Session ID across page reloads in single tab
@@ -25,37 +25,13 @@
   let lastSeenTweetId = null;
   let lastScanError = null;
 
-  // Helper: Get recent 100 tweet IDs queue from chrome.storage.local
-  async function getProcessedIds() {
-    try {
-      const data = await chrome.storage.local.get([QUEUE_KEY]);
-      return data[QUEUE_KEY] || [];
-    } catch {
-      return [];
-    }
-  }
-
-  // Helper: Add ID to 100-item sliding window AFTER HTTP 2xx success
-  async function markIdProcessed(tweetId) {
-    const list = await getProcessedIds();
-    if (!list.includes(tweetId)) {
-      list.push(tweetId);
-      if (list.length > 100) {
-        list.shift(); // Keep latest 100 items
-      }
-      await chrome.storage.local.set({ [QUEUE_KEY]: list });
-    }
-  }
-
-  // Helper: Check if tweet article is currently showing machine-translated text
+  // Check if tweet article is currently showing machine-translated text
   function isTranslatedTweet(article) {
-    // X DOM indicators for translation UI (English to Japanese or auto-translation)
     const translationContainer = article.querySelector(
       '[data-testid="translation-container"], [data-testid="translation"], [aria-label*="Translated"], [aria-label*="翻訳"]'
     );
     if (translationContainer) return true;
 
-    // Check inner text of article for translation disclaimer strings
     const fullText = article.innerText || "";
     if (
       fullText.includes("Translated from English") ||
@@ -122,7 +98,6 @@
   async function scanTweets() {
     try {
       const tweetArticles = document.querySelectorAll('article[data-testid="tweet"]');
-      const processedIds = await getProcessedIds();
 
       for (const article of tweetArticles) {
         const timeEl = article.querySelector("time");
@@ -145,10 +120,10 @@
 
         const tweetId = match[1];
 
-        // 1. Skip if translated text is detected to prevent sending Japanese text to English classifier
+        // 1. Skip if translated text is detected
         if (isTranslatedTweet(article)) {
           lastScanError = "translated_text_detected";
-          console.warn(`[Tibo Extension] Translated text detected for ${tweetId}. Skipping to preserve English classification.`);
+          console.warn(`[Tibo Extension] Translated text detected for ${tweetId}. Skipping.`);
           continue;
         }
 
@@ -160,12 +135,12 @@
         lastSeenTweetId = tweetId;
         lastScanError = null;
 
-        // 2. Skip if already processed in chrome.storage.local or currently in-flight
-        if (processedIds.includes(tweetId) || inFlightTweetIds.has(tweetId)) continue;
+        // 2. Short-term in-flight check within current tab
+        if (inFlightTweetIds.has(tweetId)) continue;
 
         console.log(`[Tibo Extension] New Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
 
-        // Add to inFlight Set BEFORE calling sendWebhook
+        // Add to inFlight Set and delegate deduplication to Service Worker
         inFlightTweetIds.add(tweetId);
         sendWebhook(tweetId, text, tweetUrl, createdAt);
       }
@@ -178,24 +153,23 @@
   function sendWebhook(tweetId, text, tweetUrl, tweetCreatedAt) {
     const payload = { tweetId, text, tweetUrl, tweetCreatedAt };
 
-    chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, async (response) => {
+    chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
+      // Clear tab-level inFlight flag when background Service Worker responds
+      inFlightTweetIds.delete(tweetId);
+
       if (chrome.runtime.lastError) {
         console.warn(`[Tibo Extension] Webhook error for ${tweetId}:`, chrome.runtime.lastError.message);
-        // Delete inFlight on network/extension error to allow retry
-        inFlightTweetIds.delete(tweetId);
         return;
       }
 
       if (response && response.success) {
-        console.log(`[Tibo Extension] Webhook Success for ${tweetId}. Saving to storage queue FIRST.`);
-        // FIRST save to chrome.storage.local queue completely
-        await markIdProcessed(tweetId);
-        // LAST delete from inFlightTweetIds AFTER storage is updated
-        inFlightTweetIds.delete(tweetId);
+        if (response.skipped) {
+          console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
+        } else {
+          console.log(`[Tibo Extension] Webhook Success for ${tweetId}.`);
+        }
       } else {
         console.warn(`[Tibo Extension] Webhook rejected for ${tweetId}:`, response?.error);
-        // Delete inFlight on server rejection to allow retry
-        inFlightTweetIds.delete(tweetId);
       }
     });
   }
@@ -212,5 +186,5 @@
   // 60-second fallback polling interval
   setInterval(scanTweets, 60 * 1000);
 
-  console.log("[Tibo Extension] Content script initialized with Translation Guard & Strict Storage-First InFlight Removal.");
+  console.log("[Tibo Extension] Content script initialized with Service Worker Deduplication Delegation.");
 })();

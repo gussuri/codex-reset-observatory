@@ -1,98 +1,132 @@
 import test from "node:test";
 import assert from "node:assert";
+import { TweetDeduplicator, StorageAdapter, FetchAdapter } from "../lib/extension/deduplicator";
 
 /**
- * Simulates Chrome extension queue deduplication and storage-first inFlight removal
+ * In-memory Storage Adapter simulating chrome.storage.local for tests
  */
-class ExtensionQueueSimulator {
-  private inFlightTweetIds = new Set<string>();
+class InMemoryStorageAdapter implements StorageAdapter {
   private processedIds: string[] = [];
 
-  public getInFlightCount(): number {
-    return this.inFlightTweetIds.size;
-  }
-
-  public getProcessedIds(): string[] {
+  public async getProcessedIds(): Promise<string[]> {
+    // Simulate slight async read delay
+    await new Promise((r) => setTimeout(r, 5));
     return [...this.processedIds];
   }
 
-  public async scanTweet(tweetId: string, apiResponseSuccess: boolean): Promise<boolean> {
-    // 1. Skip if already processed in storage OR currently in-flight
-    if (this.processedIds.includes(tweetId) || this.inFlightTweetIds.has(tweetId)) {
-      return false; // Skipped (Deduplicated)
-    }
-
-    // 2. Add to inFlight Set BEFORE initiating network request
-    this.inFlightTweetIds.add(tweetId);
-
-    // Simulate async network Webhook call
-    await new Promise((r) => setTimeout(r, 10));
-
-    if (apiResponseSuccess) {
-      // FIRST: Save to storage completely
-      await this.saveToStorage(tweetId);
-      // LAST: Remove from inFlight Set AFTER storage is updated
-      this.inFlightTweetIds.delete(tweetId);
-      return true; // Sent & Processed successfully
-    } else {
-      // On failure: Remove from inFlight to allow retry on next scan
-      this.inFlightTweetIds.delete(tweetId);
-      return false;
-    }
-  }
-
-  private async saveToStorage(tweetId: string): Promise<void> {
-    await new Promise((r) => setTimeout(r, 10));
-    if (!this.processedIds.includes(tweetId)) {
-      this.processedIds.push(tweetId);
-      if (this.processedIds.length > 100) {
-        this.processedIds.shift();
-      }
-    }
+  public async saveProcessedIds(ids: string[]): Promise<void> {
+    // Simulate async write delay
+    await new Promise((r) => setTimeout(r, 5));
+    this.processedIds = [...ids];
   }
 }
 
-test("ExtensionQueueSimulator prevents concurrent duplicate sends while in-flight", async () => {
-  const sim = new ExtensionQueueSimulator();
-  const tweetId = "998877665544";
+test("TweetDeduplicator handles concurrent identical tweetId requests from multiple tabs without duplicate fetch", async () => {
+  const storage = new InMemoryStorageAdapter();
+  let fetchCallCount = 0;
 
-  // Trigger two concurrent scans for the same tweet ID
-  const p1 = sim.scanTweet(tweetId, true);
-  const p2 = sim.scanTweet(tweetId, true);
+  const mockFetcher: FetchAdapter = async (payload) => {
+    fetchCallCount++;
+    await new Promise((r) => setTimeout(r, 10)); // Network delay
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "OK",
+      json: async () => ({ success: true }),
+    };
+  };
 
-  const [res1, res2] = await Promise.all([p1, p2]);
+  const deduplicator = new TweetDeduplicator(storage, mockFetcher);
+  const sameTweetId = "998877665544";
 
-  // One scan must succeed and one must be skipped due to inFlight guard
-  assert.strictEqual(res1 || res2, true);
-  assert.strictEqual(res1 && res2, false, "Concurrent scan for same tweetId must be deduplicated");
-  assert.deepStrictEqual(sim.getProcessedIds(), [tweetId]);
-  assert.strictEqual(sim.getInFlightCount(), 0);
+  // Simulate 5 concurrent requests from different tabs for the exact same tweetId
+  const reqs = Array.from({ length: 5 }).map(() =>
+    deduplicator.processTweet({ tweetId: sameTweetId, text: "Sample tweet" })
+  );
+
+  const results = await Promise.all(reqs);
+
+  // Exactly 1 request must execute fetch, others must be skipped
+  assert.strictEqual(fetchCallCount, 1, "Webhook fetch must be called exactly once");
+
+  const skippedCount = results.filter((r) => r.skipped === true).length;
+  assert.strictEqual(skippedCount, 4, "4 duplicate requests must return skipped: true");
+
+  const storedIds = await storage.getProcessedIds();
+  assert.deepStrictEqual(storedIds, [sameTweetId], "Storage must contain exactly 1 processed tweet ID");
 });
 
-test("ExtensionQueueSimulator prevents re-sending immediately after success", async () => {
-  const sim = new ExtensionQueueSimulator();
-  const tweetId = "112233445566";
+test("TweetDeduplicator safely preserves all IDs when multiple distinct tweetIds complete concurrently", async () => {
+  const storage = new InMemoryStorageAdapter();
+  let fetchCallCount = 0;
 
-  // First scan succeeds
-  const firstResult = await sim.scanTweet(tweetId, true);
-  assert.strictEqual(firstResult, true);
+  const mockFetcher: FetchAdapter = async (payload) => {
+    fetchCallCount++;
+    await new Promise((r) => setTimeout(r, 5));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "OK",
+      json: async () => ({ success: true }),
+    };
+  };
 
-  // Subsequent scan immediately after success
-  const secondResult = await sim.scanTweet(tweetId, true);
-  assert.strictEqual(secondResult, false, "Subsequent scan after storage save must be skipped");
+  const deduplicator = new TweetDeduplicator(storage, mockFetcher);
+  const distinctTweetIds = ["tweet_101", "tweet_102", "tweet_103", "tweet_104", "tweet_105"];
+
+  // Simulate 5 concurrent requests for 5 DIFFERENT tweet IDs at the exact same time
+  const reqs = distinctTweetIds.map((id) =>
+    deduplicator.processTweet({ tweetId: id, text: `Tweet content ${id}` })
+  );
+
+  const results = await Promise.all(reqs);
+
+  assert.strictEqual(fetchCallCount, 5, "All 5 distinct tweets must trigger fetch");
+  assert.ok(results.every((r) => r.success && !r.skipped), "All 5 distinct tweets must succeed");
+
+  const storedIds = await storage.getProcessedIds();
+  assert.strictEqual(storedIds.length, 5, "Storage must preserve all 5 processed tweet IDs without race conditions");
+  assert.deepStrictEqual(storedIds, distinctTweetIds, "All distinct IDs must be present in storage");
 });
 
-test("ExtensionQueueSimulator allows retry on API failure", async () => {
-  const sim = new ExtensionQueueSimulator();
-  const tweetId = "555555555555";
+test("TweetDeduplicator allows retry when fetch fails", async () => {
+  const storage = new InMemoryStorageAdapter();
+  let attempt = 0;
 
-  // First scan fails on API
-  const failResult = await sim.scanTweet(tweetId, false);
-  assert.strictEqual(failResult, false);
-  assert.strictEqual(sim.getInFlightCount(), 0);
+  const mockFetcher: FetchAdapter = async () => {
+    attempt++;
+    if (attempt === 1) {
+      return {
+        ok: false,
+        status: 500,
+        text: async () => "Internal Server Error",
+        json: async () => ({ error: "Internal Error" }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "OK",
+      json: async () => ({ success: true }),
+    };
+  };
 
-  // Next scan retries and succeeds
-  const retryResult = await sim.scanTweet(tweetId, true);
-  assert.strictEqual(retryResult, true);
-  assert.deepStrictEqual(sim.getProcessedIds(), [tweetId]);
+  const deduplicator = new TweetDeduplicator(storage, mockFetcher);
+  const tweetId = "failed_then_retry_id";
+
+  // First call fails
+  await assert.rejects(
+    deduplicator.processTweet({ tweetId, text: "Failing tweet" }),
+    /HTTP 500/
+  );
+
+  const storedAfterFail = await storage.getProcessedIds();
+  assert.strictEqual(storedAfterFail.length, 0, "Failed tweet must not be saved to storage");
+
+  // Retry succeeds
+  const retryResult = await deduplicator.processTweet({ tweetId, text: "Failing tweet" });
+  assert.strictEqual(retryResult.success, true);
+
+  const storedAfterRetry = await storage.getProcessedIds();
+  assert.deepStrictEqual(storedAfterRetry, [tweetId], "Retried tweet must be saved to storage");
 });
