@@ -16,6 +16,26 @@ OpenAI Codex および ChatGPT Work の利用上限（レートリミット）�
 
 ---
 
+## 🤖 Gemini AI シャドー分類器（設定・環境変数）
+
+Tibo氏のX投稿分類の精度検証のため、Gemini API による **シャドー分類モード** をサポートしています。
+
+### 環境変数設定例
+```bash
+# シャドー分類の動作モード (off: 無効 [デフォルト], shadow: AI結果をDB保存するが公開確率へは非反映)
+GEMINI_CLASSIFICATION_MODE=off
+
+# 推奨モデル (gemini-3.5-flash-lite)
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+# Google AI Studio API キー
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+> **Note**: レート制限遵守のため、1投稿あたり Gemini API 呼び出しは最大1回とし、モデルの自動フォールバックは行いません。API障害やレート超過時は自動的に既存のルール分類へフォールバックします。
+
+---
+
 ## 🔍 Supabase AI シャドー分類 比較監査用 SQL
 
 Gemini AI 分類器（シャドーモード）と既存ルール分類の比較・評価を行うための SQL クエリです。

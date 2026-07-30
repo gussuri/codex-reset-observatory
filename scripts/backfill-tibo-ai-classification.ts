@@ -3,12 +3,13 @@ import { classifyWithGemini } from "../lib/radar/geminiClassification";
 
 /**
  * Backfill script for Gemini AI Shadow Classification on existing tibo_signals rows
+ * Rate Limit Compliance: RPD 500, RPM 15 (Sequential execution with 5s delay)
  *
  * Usage:
  *   npx tsx scripts/backfill-tibo-ai-classification.ts [options]
  *
  * Options:
- *   --limit N       Process up to N unclassified rows
+ *   --limit N       Process up to N unclassified rows (default: 100)
  *   --dry-run       Perform classification without writing to Supabase
  *   --tweet-id ID   Process only a specific tweet_id
  */
@@ -18,7 +19,7 @@ async function runBackfill() {
   const isDryRun = args.includes("--dry-run");
 
   const limitIndex = args.indexOf("--limit");
-  const limit = limitIndex !== -1 ? parseInt(args[limitIndex + 1], 10) : 50;
+  const limit = limitIndex !== -1 ? parseInt(args[limitIndex + 1], 10) : 100;
 
   const tweetIdIndex = args.indexOf("--tweet-id");
   const specificTweetId = tweetIdIndex !== -1 ? args[tweetIdIndex + 1] : null;
@@ -31,11 +32,11 @@ async function runBackfill() {
     process.exit(1);
   }
 
-  const model = process.env.GEMINI_MODEL;
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
   const apiKey = process.env.GEMINI_API_KEY;
 
-  if (!model || !apiKey) {
-    console.error("Error: GEMINI_MODEL and GEMINI_API_KEY must be set to run the backfill script.");
+  if (!apiKey) {
+    console.error("Error: GEMINI_API_KEY must be set to run the backfill script.");
     process.exit(1);
   }
 
@@ -43,7 +44,7 @@ async function runBackfill() {
     auth: { persistSession: false },
   });
 
-  console.log(`[AI Backfill] Initializing... (limit=${limit}, dryRun=${isDryRun}, model=${model})`);
+  console.log(`[AI Backfill] Initializing... (limit=${limit}, dryRun=${isDryRun}, model=${model}, delay=5000ms)`);
 
   // Fetch target rows
   let query = supabase
@@ -86,7 +87,7 @@ async function runBackfill() {
       continue;
     }
 
-    // Single Gemini API call per row
+    // Single Gemini API call per row (no model auto-fallback)
     const aiResult = await classifyWithGemini(
       { text: row.text, tweetCreatedAt: row.tweet_created_at },
       { apiKey, model, mode: "shadow" }
@@ -135,8 +136,8 @@ async function runBackfill() {
     }
 
     processedCount++;
-    // Polite delay between sequential requests to respect rate limits
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Mandatory 5-second delay between sequential requests (RPM 15 compliance: max 12 requests/min)
+    await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
   console.log(`\n==================================================`);
