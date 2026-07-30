@@ -15,12 +15,10 @@ test("classifyTiboTweet correctly classifies reset_executed (immediate resets)",
 });
 
 test("classifyTiboTweet correctly classifies real past Tibo reset execution tweets", () => {
-  // Real tweet fixture 1: GPT-5.6 Sol / 10m users reset
   const t1 = classifyTiboTweet("We just reset all paid users limits for Codex!", "https://x.com/thsottiaux/status/2061106703446450392");
   assert.strictEqual(t1.signalType, "reset_executed");
   assert.ok(t1.confidence >= 0.95);
 
-  // Real tweet fixture 2: Rate limits reset
   const t2 = classifyTiboTweet("Codex rate limits are reset for all Pro and Plus users.", "https://x.com/thsottiaux/status/2058280452851638313");
   assert.strictEqual(t2.signalType, "reset_executed");
   assert.ok(t2.confidence >= 0.95);
@@ -32,7 +30,17 @@ test("classifyTiboTweet correctly classifies real past Tibo teaser tweets", () =
   assert.ok(result.confidence >= 0.80);
 });
 
-test("classifyTiboTweet defaults past reset chatter and general discussion to irrelevant", () => {
-  const result = classifyTiboTweet("Last week's reset was great, working on GPT-5.6 model optimizations now.", "https://x.com/thsottiaux/status/12348");
-  assert.strictEqual(result.signalType, "irrelevant");
+test("classifyTiboTweet defaults negative and past phrases to irrelevant", () => {
+  const cases = [
+    "I already reset everyone yesterday.",
+    "The reset was completed last week.",
+    "No reset tonight.",
+    "We are not going to reset tonight.",
+    "I don't think we should reset.",
+  ];
+
+  for (const text of cases) {
+    const res = classifyTiboTweet(text, "https://x.com/thsottiaux/status/99999");
+    assert.strictEqual(res.signalType, "irrelevant", `Failed on text: "${text}"`);
+  }
 });

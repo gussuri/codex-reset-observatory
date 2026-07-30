@@ -35,22 +35,40 @@ export function getLocalResetProbability(
 ): number {
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const periodHours = period === "24h" ? 24 : 48;
-
   const tiboSignals = (data as any)?.active_tibo_signals as Array<any> | undefined;
-  const hasExecuted = tiboSignals?.some(
-    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
+
+  // 1. Sort active Tibo signals by tweet_created_at ascending for time-ordered evaluation
+  const sortedSignals = (tiboSignals ?? [])
+    .slice()
+    .sort((a, b) => new Date(a.tweet_created_at).getTime() - new Date(b.tweet_created_at).getTime());
+
+  // 2. Find latest valid reset_executed signal (confidence >= 0.95)
+  const latestExecution = sortedSignals
+    .filter((s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95)
+    .at(-1);
+
+  const executionTime = latestExecution ? new Date(latestExecution.tweet_created_at).getTime() : 0;
+
+  // 3. Only notices and teasers posted AFTER the latest reset_executed are valid
+  const hasValidNotice = sortedSignals.some(
+    (s) =>
+      s.signal_type === "official_notice" &&
+      (s.confidence ?? 0) >= 0.95 &&
+      new Date(s.tweet_created_at).getTime() > executionTime
   );
-  const hasValidNotice = tiboSignals?.some(
-    (s) => s.signal_type === "official_notice" && (s.confidence ?? 0) >= 0.95
+
+  const validTeaser = sortedSignals.find(
+    (s) =>
+      s.signal_type === "teaser" &&
+      (s.confidence ?? 0) >= 0.80 &&
+      new Date(s.tweet_created_at).getTime() > executionTime
   );
 
   const officialNotice = getLatestActiveLocalSignal("official_notice");
 
-  // reset_executed cancels active notice mode. If valid notice exists and no execution, trigger Notice Mode (24h: 90%, 48h: 96%)
-  if (!hasExecuted) {
-    if (hasValidNotice || hasOfficialNoticeWithinHours(officialNotice, periodHours)) {
-      return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
-    }
+  // If a valid notice exists AFTER the latest execution, trigger Notice Mode (24h: 90%, 48h: 96%)
+  if (hasValidNotice || (!latestExecution && hasOfficialNoticeWithinHours(officialNotice, periodHours))) {
+    return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
   const environment = signalEvaluation.environment;
@@ -103,22 +121,19 @@ export function getLocalResetProbability(
     return sum + boost;
   }, 0);
 
-  // If valid Supabase teaser exists (confidence >= 0.80) and no local teaser boost signal is already applied, add automated teaser boost
-  const validSupabaseTeaser = tiboSignals?.find(
-    (s) => s.signal_type === "teaser" && (s.confidence ?? 0) >= 0.80
-  );
-  if (validSupabaseTeaser && activeBoostSignals.length === 0) {
+  // If valid time-ordered teaser exists (confidence >= 0.80) and no local teaser boost signal is already applied, add automated teaser boost
+  if (validTeaser && activeBoostSignals.length === 0) {
     const teaserBoost = period === "24h" ? 0.40 : 0.55;
     eventBoost += teaserBoost;
   }
 
-  const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0;
+  const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0 || Boolean(validTeaser);
 
   const score =
     base +
     getMomentumBoost(period) +
-    (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period) : 0) +
-    getElapsedDayBoost() +
+    (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period, data) : 0) +
+    getElapsedDayBoost(data) +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
     officialIncidentHints *
@@ -224,7 +239,7 @@ export function getLocalSignalEvaluation(
   now: Date = new Date(),
 ): LocalSignalEvaluation {
   const environment = getSignalEnvironment(data);
-  const latestResetAt = getLastGlobalResetAt();
+  const latestResetAt = getLastGlobalResetAt(data);
   const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
       signal.type === "status_incident" &&
@@ -338,8 +353,8 @@ export function getMomentumBoost(period: "24h" | "48h"): number {
   return 0;
 }
 
-export function getLocalHistoryPressure(period: "24h" | "48h") {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset();
+export function getLocalHistoryPressure(period: "24h" | "48h", data?: RadarData | null) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -352,8 +367,8 @@ export function getLocalHistoryPressure(period: "24h" | "48h") {
   return pressure?.[weightKey] ?? 0;
 }
 
-export function getElapsedDayBoost() {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset();
+export function getElapsedDayBoost(data?: RadarData | null) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -361,8 +376,8 @@ export function getElapsedDayBoost() {
   return daysSinceLastReset * LOCAL_PROBABILITY_WEIGHTS.elapsedDayBoost.perDay;
 }
 
-export function getDaysSinceLastGlobalReset() {
-  const lastReset = getLastGlobalResetAt();
+export function getDaysSinceLastGlobalReset(data?: RadarData | null) {
+  const lastReset = getLastGlobalResetAt(data);
   if (!lastReset) {
     return null;
   }
@@ -370,7 +385,7 @@ export function getDaysSinceLastGlobalReset() {
   return Math.max(0, getCalendarDayDelta(new Date(), lastReset));
 }
 
-export function getLastGlobalResetAt() {
+export function getLastGlobalResetAt(data?: RadarData | null) {
   const candidates = LOCAL_RESET_HISTORY.map((item) => {
     if ((item.kind === "window_opened" || item.status === "open") && !item.closed_at && !item.completed_at) {
       return null;
@@ -382,8 +397,23 @@ export function getLastGlobalResetAt() {
     return item.closed_at ?? item.completed_at ?? item.opened_at ?? (item as any).date ?? null;
   });
 
-  const latest = getLatestIsoDate(candidates);
-  return latest ? new Date(latest) : null;
+  const latestOfficialStr = getLatestIsoDate(candidates);
+  let latestOfficialDate = latestOfficialStr ? new Date(latestOfficialStr) : null;
+
+  // Evaluate provisional reset candidate from active_tibo_signals (reset_executed & confidence >= 0.95)
+  const tiboSignals = (data as any)?.active_tibo_signals as Array<any> | undefined;
+  const validExecutedSignal = tiboSignals?.find(
+    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
+  );
+
+  if (validExecutedSignal?.tweet_created_at) {
+    const provisionalDate = new Date(validExecutedSignal.tweet_created_at);
+    if (!latestOfficialDate || provisionalDate.getTime() > latestOfficialDate.getTime()) {
+      latestOfficialDate = provisionalDate;
+    }
+  }
+
+  return latestOfficialDate;
 }
 
 export function getLocalExpectationLevel(

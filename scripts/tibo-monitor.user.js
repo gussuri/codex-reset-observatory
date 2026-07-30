@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Reset Observatory - Tibo Real-Time Monitor
 // @namespace    https://codex-reset-observatory.vercel.app/
-// @version      1.1.0
+// @version      1.2.0
 // @description  Monitors Tibo (@thsottiaux) tweets on X in real-time and posts signals to Codex Reset Observatory Webhook.
 // @author       Antigravity AI / Codex Reset Observatory
 // @match        https://x.com/thsottiaux*
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.1";
+  const SELECTOR_VERSION = "v1.2";
 
   // 1. GM_registerMenuCommand for safe Webhook Secret configuration
   GM_registerMenuCommand("⚙️ Set Webhook Secret", function () {
@@ -42,15 +42,18 @@
 
   // Local Configuration
   const OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex-reset-observatory.vercel.app");
-  const WEBHOOK_SECRET = GM_getValue("webhook_secret", "");
   const QUEUE_KEY = "tibo_processed_tweet_ids";
   const SESSION_KEY = "tibo_session_id";
+  const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
-  if (!WEBHOOK_SECRET) {
+  // In-flight tracking to prevent concurrent requests for the same tweetId
+  const inFlightTweetIds = new Set();
+
+  if (!GM_getValue("webhook_secret", "")) {
     console.warn("[Tibo Monitor] WARNING: 'webhook_secret' is not configured! Use Tampermonkey Menu > Set Webhook Secret.");
   }
 
-  // Generate or retrieve persistent Session ID (resets only when browser restarts or script starts)
+  // Persistent Session ID across page reloads in single tab
   let sessionId = sessionStorage.getItem(SESSION_KEY);
   if (!sessionId) {
     sessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8);
@@ -82,8 +85,27 @@
     }
   }
 
-  // 2. Heartbeat Sender (Every 5 minutes)
+  // 2. Leader Lock Mechanism for Heartbeat (Prevents multi-tab session resets)
+  function tryAcquireLeaderLock() {
+    const now = Date.now();
+    const leaderTab = GM_getValue("tibo_leader_tab_id", "");
+    const leaderTimestamp = GM_getValue("tibo_leader_timestamp", 0);
+
+    // If current tab is leader, or leader expired (no heartbeat for 30s), acquire lock
+    if (leaderTab === TAB_ID || !leaderTab || now - leaderTimestamp > 30 * 1000) {
+      GM_setValue("tibo_leader_tab_id", TAB_ID);
+      GM_setValue("tibo_leader_timestamp", now);
+      return true;
+    }
+    return false;
+  }
+
   function sendHeartbeat() {
+    // Only the leader tab sends heartbeats
+    if (!tryAcquireLeaderLock()) {
+      return;
+    }
+
     const secret = GM_getValue("webhook_secret", "");
     if (!secret) return;
 
@@ -105,7 +127,7 @@
       data: JSON.stringify(payload),
       onload: function (response) {
         if (response.status >= 200 && response.status < 300) {
-          console.log("[Tibo Monitor] Heartbeat sent successfully.");
+          console.log("[Tibo Monitor] Heartbeat sent successfully by leader tab.");
         }
       },
       onerror: function (err) {
@@ -118,7 +140,14 @@
   sendHeartbeat();
   setInterval(sendHeartbeat, 5 * 60 * 1000);
 
-  // 3. Tweet DOM Inspector
+  // Maintain leader lock timestamp every 10s
+  setInterval(() => {
+    if (GM_getValue("tibo_leader_tab_id", "") === TAB_ID) {
+      GM_setValue("tibo_leader_timestamp", Date.now());
+    }
+  }, 10 * 1000);
+
+  // 3. Tweet DOM Inspector (Strict canonical permalink matching & inFlight guard)
   function scanTweets() {
     try {
       const tweetArticles = document.querySelectorAll('article[data-testid="tweet"]');
@@ -126,16 +155,16 @@
 
       tweetArticles.forEach((article) => {
         const timeEl = article.querySelector("time");
-        const linkEl = article.querySelector('a[href*="/status/"]');
+        if (!timeEl) return;
+
+        // Canonical permalink: Must be closest status link anchored to timeEl
+        const linkEl = timeEl.closest('a[href*="/status/"]');
         const textEl = article.querySelector('div[data-testid="tweetText"]');
 
         if (!linkEl || !textEl) return;
 
-        // Skip tweets without a valid time element or datetime attribute
-        const datetime = timeEl ? timeEl.getAttribute("datetime") : null;
-        if (!timeEl || !datetime) {
-          return;
-        }
+        const datetime = timeEl.getAttribute("datetime");
+        if (!datetime) return;
 
         const href = linkEl.getAttribute("href") || "";
         const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
@@ -152,12 +181,13 @@
         lastSeenTweetId = tweetId;
         lastScanError = null;
 
-        // Skip if already processed in 100-item sliding window
-        if (processedIds.includes(tweetId)) return;
+        // Skip if already processed in sliding window or currently in-flight
+        if (processedIds.includes(tweetId) || inFlightTweetIds.has(tweetId)) return;
 
-        console.log(`[Tibo Monitor] New Valid Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
+        console.log(`[Tibo Monitor] New Canonical Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
 
-        // Post to Webhook API
+        // Add to inFlight Set and send Webhook
+        inFlightTweetIds.add(tweetId);
         sendWebhook(tweetId, text, tweetUrl, createdAt);
       });
     } catch (err) {
@@ -170,6 +200,7 @@
     const secret = GM_getValue("webhook_secret", "");
     if (!secret) {
       console.warn("[Tibo Monitor] Cannot send Webhook: Missing secret.");
+      inFlightTweetIds.delete(tweetId);
       return;
     }
 
@@ -184,15 +215,16 @@
       },
       data: JSON.stringify(payload),
       onload: function (response) {
+        inFlightTweetIds.delete(tweetId); // Always clear inFlight flag on response
         if (response.status >= 200 && response.status < 300) {
           console.log(`[Tibo Monitor] Webhook Success for ${tweetId}. Saving to processed queue.`);
-          // Save to GM_setValue queue ONLY on 2xx success
           markIdProcessed(tweetId);
         } else {
           console.warn(`[Tibo Monitor] Webhook rejected with HTTP ${response.status}. Will retry on next scan.`);
         }
       },
       onerror: function (err) {
+        inFlightTweetIds.delete(tweetId); // Always clear inFlight flag on network error
         console.error("[Tibo Monitor] Webhook request error:", err);
       },
     });
@@ -201,7 +233,6 @@
   // 4. Initial Scan & MutationObserver Integration
   scanTweets();
 
-  // Run DOM scan on DOM changes
   const observer = new MutationObserver(() => {
     scanTweets();
   });
@@ -211,5 +242,5 @@
   // 60-second fallback polling interval
   setInterval(scanTweets, 60 * 1000);
 
-  console.log("[Tibo Monitor] Script initialized with GM_registerMenuCommand support.");
+  console.log("[Tibo Monitor] Script initialized with Leader Lock & Canonical Permalink Matching.");
 })();

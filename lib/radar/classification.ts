@@ -14,6 +14,7 @@ export type ClassificationResult = {
 
 /**
  * Tibo氏のポストテキストを分類・解析し、シグナル種別・信頼度スコアを算出する
+ * (否定表現・過去表現を positive pattern より先に評価)
  */
 export function classifyTiboTweet(
   text: string,
@@ -26,7 +27,32 @@ export function classifyTiboTweet(
     (text.startsWith("@") || normalized.includes("reply"));
   const isQuote = normalized.includes("quote") || false;
 
-  // 1. 即時実施・完了報告 (reset_executed)
+  // 1. 否定・過去パターンの先頭評価 (Negative / Past Exclusion Patterns -> irrelevant)
+  const negativeOrPastPatterns = [
+    "already reset everyone yesterday",
+    "reset was completed last week",
+    "no reset tonight",
+    "not going to reset",
+    "don't think we should reset",
+    "dont think we should reset",
+    "no reset scheduled",
+    "won't be a reset",
+    "wont be a reset",
+  ];
+
+  for (const pattern of negativeOrPastPatterns) {
+    if (normalized.includes(pattern)) {
+      return {
+        signalType: "irrelevant",
+        confidence: 0.1,
+        reason: `Matched negative or past exclusion pattern: "${pattern}"`,
+        isReply,
+        isQuote,
+      };
+    }
+  }
+
+  // 2. 即時実施・完了報告 (reset_executed)
   const executedPatterns = [
     "just reset",
     "reset is complete",
@@ -53,7 +79,7 @@ export function classifyTiboTweet(
     }
   }
 
-  // 2. 今後の実施予告 (official_notice)
+  // 3. 今後の実施予告 (official_notice)
   const noticePatterns = [
     "reset in ",
     "reset tonight",
@@ -69,21 +95,6 @@ export function classifyTiboTweet(
 
   for (const pattern of noticePatterns) {
     if (normalized.includes(pattern)) {
-      // 過去表現の除外チェック
-      if (
-        normalized.includes("yesterday") ||
-        normalized.includes("last week") ||
-        normalized.includes("was reset")
-      ) {
-        return {
-          signalType: "irrelevant",
-          confidence: 0.3,
-          reason: `Contains past reset reference with notice keyword: "${pattern}"`,
-          isReply,
-          isQuote,
-        };
-      }
-
       return {
         signalType: "official_notice",
         confidence: 0.96,
@@ -94,7 +105,7 @@ export function classifyTiboTweet(
     }
   }
 
-  // 3. 将来の可能性の示唆 (teaser)
+  // 4. 将来の可能性の示唆 (teaser)
   const teaserPatterns = [
     "should we reset",
     "reset button",
@@ -117,7 +128,7 @@ export function classifyTiboTweet(
     }
   }
 
-  // 4. デフォルト (irrelevant)
+  // 5. デフォルト (irrelevant)
   return {
     signalType: "irrelevant",
     confidence: 0.2,
