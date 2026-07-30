@@ -14,7 +14,7 @@ export type ClassificationResult = {
 
 /**
  * Tibo氏のポストテキストを分類・解析し、シグナル種別・信頼度スコアを算出する
- * (否定表現・過去表現を positive pattern より先に評価)
+ * Supabase実データ分析に基づく高精度ルールエンジン
  */
 export function classifyTiboTweet(
   text: string,
@@ -27,7 +27,7 @@ export function classifyTiboTweet(
     (text.startsWith("@") || normalized.includes("reply"));
   const isQuote = normalized.includes("quote") || false;
 
-  // 1. 否定・過去パターンの先頭評価 (Negative / Past Exclusion Patterns -> irrelevant)
+  // 1. 否定・過去・昔話回想パターンの先頭評価 (Negative / Past / Retrospective Exclusion -> irrelevant)
   const negativeOrPastPatterns = [
     "already reset everyone yesterday",
     "reset was completed last week",
@@ -38,6 +38,11 @@ export function classifyTiboTweet(
     "no reset scheduled",
     "won't be a reset",
     "wont be a reset",
+    "one day we created the reset button",
+    "created the reset button a long time ago",
+    "remember when we built the reset button",
+    "remember when we created the reset button",
+    "rest is history",
   ];
 
   for (const pattern of negativeOrPastPatterns) {
@@ -45,7 +50,7 @@ export function classifyTiboTweet(
       return {
         signalType: "irrelevant",
         confidence: 0.1,
-        reason: `Matched negative or past exclusion pattern: "${pattern}"`,
+        reason: `Matched negative, past, or retrospective pattern: "${pattern}"`,
         isReply,
         isQuote,
       };
@@ -54,6 +59,11 @@ export function classifyTiboTweet(
 
   // 2. 即時実施・完了報告 (reset_executed)
   const executedPatterns = [
+    "i've reset usage limits",
+    "i have reset usage limits",
+    "i've reset the usage limits",
+    "i reset usage limits for all paid users",
+    "reset usage limits",
     "just reset",
     "reset is complete",
     "reset completed",
@@ -105,9 +115,8 @@ export function classifyTiboTweet(
     }
   }
 
-  // 4. 将来の可能性の示唆 (teaser)
-  const teaserPatterns = [
-    "should we reset",
+  // 4. 将来の可能性の示唆 (teaser) - 未来志向表現の同居を必須化
+  const teaserBaseKeywords = [
     "reset button",
     "capacity boost",
     "working on reset",
@@ -116,12 +125,29 @@ export function classifyTiboTweet(
     "sol model caps",
   ];
 
-  for (const pattern of teaserPatterns) {
-    if (normalized.includes(pattern)) {
+  const futureIndicators = [
+    "incoming",
+    "soon",
+    "should we",
+    "tonight",
+    "tomorrow",
+    "cooking something",
+    "working on",
+    "next",
+    "later",
+  ];
+
+  const matchedBase = teaserBaseKeywords.find((kw) => normalized.includes(kw));
+
+  if (matchedBase) {
+    // Check if future-oriented indicator co-occurs
+    const hasFutureIndicator = futureIndicators.some((ind) => normalized.includes(ind));
+
+    if (hasFutureIndicator) {
       return {
         signalType: "teaser",
         confidence: 0.85,
-        reason: `Matched teaser pattern: "${pattern}"`,
+        reason: `Matched teaser keyword "${matchedBase}" with future indicator`,
         isReply,
         isQuote,
       };
