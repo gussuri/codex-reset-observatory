@@ -16,9 +16,16 @@ function getSupabaseServiceClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authorization: Bearer <TIBO_WEBHOOK_SECRET>
+    // 1. Fail closed if TIBO_WEBHOOK_SECRET is not configured
+    const expectedSecret = process.env.TIBO_WEBHOOK_SECRET;
+    if (!expectedSecret) {
+      return NextResponse.json(
+        { error: "Server Configuration Error: TIBO_WEBHOOK_SECRET is not configured." },
+        { status: 503 }
+      );
+    }
+
     const authHeader = req.headers.get("authorization");
-    const expectedSecret = process.env.TIBO_WEBHOOK_SECRET || "default-secret-change-me";
     const token = authHeader?.replace(/^Bearer\s+/i, "");
 
     if (!token || token !== expectedSecret) {
@@ -49,16 +56,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const createdDate = tweetCreatedAt ? new Date(tweetCreatedAt) : new Date();
+    // Require tweetCreatedAt
+    if (!tweetCreatedAt || typeof tweetCreatedAt !== "string") {
+      return NextResponse.json({ error: "tweetCreatedAt is required" }, { status: 400 });
+    }
+
+    const createdDate = new Date(tweetCreatedAt);
+    const nowTime = Date.now();
+
     if (isNaN(createdDate.getTime())) {
-      return NextResponse.json({ error: "Invalid tweetCreatedAt" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid tweetCreatedAt date format" }, { status: 400 });
+    }
+
+    // Reject timestamps more than 5 minutes in the future
+    if (createdDate.getTime() > nowTime + 5 * 60 * 1000) {
+      return NextResponse.json(
+        { error: "Invalid tweetCreatedAt: Timestamp is more than 5 minutes in the future" },
+        { status: 400 }
+      );
     }
 
     // 3. Classification Engine
     const classification = classifyTiboTweet(text, tweetUrl);
 
-    // 4. Calculate Expiration (tweet_created_at + duration)
-    // official_notice: 24h, reset_executed: 24h, teaser: 24h
+    // 4. Calculate Expiration based on tweet_created_at
     const expiresAt = new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
 
     const payload = {

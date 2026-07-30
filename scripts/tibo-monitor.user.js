@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Reset Observatory - Tibo Real-Time Monitor
 // @namespace    https://codex-reset-observatory.vercel.app/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Monitors Tibo (@thsottiaux) tweets on X in real-time and posts signals to Codex Reset Observatory Webhook.
 // @author       Antigravity AI / Codex Reset Observatory
 // @match        https://x.com/thsottiaux*
@@ -11,6 +11,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @connect      codex-reset-observatory.vercel.app
 // @connect      localhost
 // ==UserScript==
@@ -18,16 +19,35 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1";
+  const SELECTOR_VERSION = "v1.1";
 
-  // 1. Local Configuration (Secrets & Endpoints)
+  // 1. GM_registerMenuCommand for safe Webhook Secret configuration
+  GM_registerMenuCommand("⚙️ Set Webhook Secret", function () {
+    const current = GM_getValue("webhook_secret", "");
+    const input = prompt("Enter your Observatory TIBO_WEBHOOK_SECRET:", current);
+    if (input !== null) {
+      GM_setValue("webhook_secret", input.trim());
+      alert("Webhook Secret saved successfully!");
+    }
+  });
+
+  GM_registerMenuCommand("🌐 Set Observatory Domain", function () {
+    const current = GM_getValue("observatory_domain", "https://codex-reset-observatory.vercel.app");
+    const input = prompt("Enter your Observatory domain URL:", current);
+    if (input !== null) {
+      GM_setValue("observatory_domain", input.trim());
+      alert("Observatory Domain saved successfully!");
+    }
+  });
+
+  // Local Configuration
   const OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex-reset-observatory.vercel.app");
   const WEBHOOK_SECRET = GM_getValue("webhook_secret", "");
   const QUEUE_KEY = "tibo_processed_tweet_ids";
   const SESSION_KEY = "tibo_session_id";
 
   if (!WEBHOOK_SECRET) {
-    console.warn("[Tibo Monitor] WARNING: 'webhook_secret' is not configured! Set it via GM_setValue('webhook_secret', 'your_secret')");
+    console.warn("[Tibo Monitor] WARNING: 'webhook_secret' is not configured! Use Tampermonkey Menu > Set Webhook Secret.");
   }
 
   // Generate or retrieve persistent Session ID (resets only when browser restarts or script starts)
@@ -64,7 +84,8 @@
 
   // 2. Heartbeat Sender (Every 5 minutes)
   function sendHeartbeat() {
-    if (!WEBHOOK_SECRET) return;
+    const secret = GM_getValue("webhook_secret", "");
+    if (!secret) return;
 
     const payload = {
       sessionId,
@@ -79,7 +100,7 @@
       url: `${OBSERVATORY_DOMAIN}/api/webhook/tibo/heartbeat`,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${WEBHOOK_SECRET}`,
+        "Authorization": `Bearer ${secret}`,
       },
       data: JSON.stringify(payload),
       onload: function (response) {
@@ -110,6 +131,12 @@
 
         if (!linkEl || !textEl) return;
 
+        // Skip tweets without a valid time element or datetime attribute
+        const datetime = timeEl ? timeEl.getAttribute("datetime") : null;
+        if (!timeEl || !datetime) {
+          return;
+        }
+
         const href = linkEl.getAttribute("href") || "";
         const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
 
@@ -119,7 +146,7 @@
         const tweetId = match[1];
         const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
         const text = textEl.innerText || "";
-        const createdAt = timeEl ? timeEl.getAttribute("datetime") : new Date().toISOString();
+        const createdAt = new Date(datetime).toISOString();
 
         lastSuccessfulParseAt = new Date().toISOString();
         lastSeenTweetId = tweetId;
@@ -128,7 +155,7 @@
         // Skip if already processed in 100-item sliding window
         if (processedIds.includes(tweetId)) return;
 
-        console.log(`[Tibo Monitor] New Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
+        console.log(`[Tibo Monitor] New Valid Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
 
         // Post to Webhook API
         sendWebhook(tweetId, text, tweetUrl, createdAt);
@@ -140,7 +167,8 @@
   }
 
   function sendWebhook(tweetId, text, tweetUrl, tweetCreatedAt) {
-    if (!WEBHOOK_SECRET) {
+    const secret = GM_getValue("webhook_secret", "");
+    if (!secret) {
       console.warn("[Tibo Monitor] Cannot send Webhook: Missing secret.");
       return;
     }
@@ -152,7 +180,7 @@
       url: `${OBSERVATORY_DOMAIN}/api/webhook/tibo`,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${WEBHOOK_SECRET}`,
+        "Authorization": `Bearer ${secret}`,
       },
       data: JSON.stringify(payload),
       onload: function (response) {
@@ -183,5 +211,5 @@
   // 60-second fallback polling interval
   setInterval(scanTweets, 60 * 1000);
 
-  console.log("[Tibo Monitor] Script initialized. Listening on MutationObserver & 60s fallback.");
+  console.log("[Tibo Monitor] Script initialized with GM_registerMenuCommand support.");
 })();

@@ -94,13 +94,23 @@ export function getLocalResetProbability(
         typeof signal.boostValue === "number") &&
       isCurrentLocalSignal(signal)
   );
-  const eventBoost = activeBoostSignals.reduce((sum, sig) => {
+
+  let eventBoost = activeBoostSignals.reduce((sum, sig) => {
     const boost = period === "24h"
       ? (sig.boostValue24h ?? sig.boostValue ?? 0)
       : (sig.boostValue48h ?? sig.boostValue ?? 0);
 
     return sum + boost;
   }, 0);
+
+  // If valid Supabase teaser exists (confidence >= 0.80) and no local teaser boost signal is already applied, add automated teaser boost
+  const validSupabaseTeaser = tiboSignals?.find(
+    (s) => s.signal_type === "teaser" && (s.confidence ?? 0) >= 0.80
+  );
+  if (validSupabaseTeaser && activeBoostSignals.length === 0) {
+    const teaserBoost = period === "24h" ? 0.40 : 0.55;
+    eventBoost += teaserBoost;
+  }
 
   const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0;
 

@@ -124,8 +124,23 @@ export function getRadarViewModel(
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow();
   const latestObservedResetAt =
     observedHistory.find((item) => item.resetAt)?.resetAt ?? null;
+
+  // Check for valid reset_executed signal (confidence >= 0.95) to act as provisional reset candidate
+  const activeTiboSignals = (source as any)?.active_tibo_signals as Array<any> | undefined;
+  const validExecutedSignal = activeTiboSignals?.find(
+    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
+  );
+
+  let effectiveLatestResetAt = latestObservedResetAt;
+  if (validExecutedSignal?.tweet_created_at) {
+    const provisionalDate = new Date(validExecutedSignal.tweet_created_at).toISOString();
+    if (!latestObservedResetAt || provisionalDate > latestObservedResetAt) {
+      effectiveLatestResetAt = provisionalDate;
+    }
+  }
+
   const regularResetForecast = getRegularResetForecast(
-    latestObservedResetAt,
+    effectiveLatestResetAt,
     locale
   );
   const latestWindow =

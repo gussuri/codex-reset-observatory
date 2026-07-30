@@ -8,7 +8,7 @@ export async function GET() {
 
   return NextResponse.json(data, {
     headers: {
-      "Cache-Control": API_CACHE_CONTROL,
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     },
   });
 }

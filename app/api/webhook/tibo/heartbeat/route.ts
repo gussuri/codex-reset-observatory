@@ -14,8 +14,16 @@ function getSupabaseServiceClient() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Fail closed if TIBO_WEBHOOK_SECRET is not configured
+    const expectedSecret = process.env.TIBO_WEBHOOK_SECRET;
+    if (!expectedSecret) {
+      return NextResponse.json(
+        { error: "Server Configuration Error: TIBO_WEBHOOK_SECRET is not configured." },
+        { status: 503 }
+      );
+    }
+
     const authHeader = req.headers.get("authorization");
-    const expectedSecret = process.env.TIBO_WEBHOOK_SECRET || "default-secret-change-me";
     const token = authHeader?.replace(/^Bearer\s+/i, "");
 
     if (!token || token !== expectedSecret) {

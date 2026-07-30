@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "monitor:x": "tsx scripts/monitor-tibo-x.ts",
-    "test": "tsx --test tests/statusIncidentEvaluation.test.ts"
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
