@@ -5,6 +5,14 @@ X (旧Twitter) 上で Tibo 氏（`@thsottiaux`）の投稿をリアルタイム�
 
 ---
 
+## ⚠️ 重要：X（旧Twitter）の翻訳設定について
+
+* 本システムの分類エンジン（`lib/radar/classification.ts`）は**英語テキスト前提**で高精度な判定を行います。
+* Xのブラウザ自動翻訳が有効化され、日本語訳が表示されている投稿は誤判定を防ぐため**自動的に送信がスキップ**され、監査ログ `last_scan_error` に `translated_text_detected` が記録されます。
+* 夜間監視を行うブラウザタブでは、必ず **「原文を表示（View original text）」** の状態にして監視を行ってください。
+
+---
+
 ## 🔒 セキュリティアーキテクチャ
 
 * **完全分離構成**: DOMを解析する `content.js` は秘密鍵を持ちません。
@@ -37,5 +45,5 @@ X (旧Twitter) 上で Tibo 氏（`@thsottiaux`）の投稿をリアルタイム�
 
 1. X（旧Twitter）で `@thsottiaux` のプロフィールページ（`https://x.com/thsottiaux`）または通知ページ（`https://x.com/notifications`）を開きます。
 2. F12 キーを押して Chrome デベロッパー ツール（コンソール）を開きます。
-3. `[Tibo Extension] Content script initialized with Leader Lock & Background Service Worker.` というログが表示されていることを確認します。
+3. `[Tibo Extension] Content script initialized with Translation Guard & Strict Storage-First InFlight Removal.` というログが表示されていることを確認します。
 4. 5分ごとに `[Tibo Extension] Heartbeat sent successfully by leader tab.` が出力され、新しい投稿が検知されると自動的に Webhook 送信が行われます。
