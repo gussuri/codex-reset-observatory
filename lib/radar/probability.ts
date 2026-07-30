@@ -33,12 +33,24 @@ export function getLocalResetProbability(
   period: "24h" | "48h",
   signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
 ): number {
-  const officialNotice = getLatestActiveLocalSignal("official_notice");
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const periodHours = period === "24h" ? 24 : 48;
 
-  if (hasOfficialNoticeWithinHours(officialNotice, periodHours)) {
-    return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
+  const tiboSignals = (data as any)?.active_tibo_signals as Array<any> | undefined;
+  const hasExecuted = tiboSignals?.some(
+    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
+  );
+  const hasValidNotice = tiboSignals?.some(
+    (s) => s.signal_type === "official_notice" && (s.confidence ?? 0) >= 0.95
+  );
+
+  const officialNotice = getLatestActiveLocalSignal("official_notice");
+
+  // reset_executed cancels active notice mode. If valid notice exists and no execution, trigger Notice Mode (24h: 90%, 48h: 96%)
+  if (!hasExecuted) {
+    if (hasValidNotice || hasOfficialNoticeWithinHours(officialNotice, periodHours)) {
+      return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
+    }
   }
 
   const environment = signalEvaluation.environment;

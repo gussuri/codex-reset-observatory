@@ -83,9 +83,11 @@ export {
 
 export function getLocalRadarData({
   openAIStatus,
+  activeTiboSignals = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
-} = {}): RadarData {
+  activeTiboSignals?: Array<any>;
+} = {}): RadarData & { active_tibo_signals?: Array<any> } {
   const checkedAt = new Date().toISOString();
   const updatedAt = getLocalModelUpdatedAt(openAIStatus);
 
@@ -101,6 +103,7 @@ export function getLocalRadarData({
     window_open: false,
     openai_status_history: openAIStatus?.history ?? [],
     codex_environment: getLocalSignalEnvironment(openAIStatus),
+    active_tibo_signals: activeTiboSignals,
   };
 }
 
