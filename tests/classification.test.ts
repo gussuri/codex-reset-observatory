@@ -42,6 +42,13 @@ test("classifyTiboTweet correctly classifies teaser tweets with future indicator
   const result2 = classifyTiboTweet("Reset button incoming soon! Cooking something nice.", "https://x.com/thsottiaux/status/2056806923391877439");
   assert.strictEqual(result2.signalType, "teaser");
   assert.ok(result2.confidence >= 0.80);
+
+  const todayRealTweet = classifyTiboTweet(
+    "The day we develop really good models. There will be signs.\n\nReliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.\n\nThese kinds of things.",
+    "https://x.com/thsottiaux/status/206987654321"
+  );
+  assert.strictEqual(todayRealTweet.signalType, "teaser");
+  assert.ok(todayRealTweet.confidence >= 0.80);
 });
 
 test("classifyTiboTweet classifies standalone reset button and retrospective past mentions as irrelevant", () => {

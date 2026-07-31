@@ -123,6 +123,7 @@ export function classifyTiboTweet(
     "thinking about a reset",
     "cooking something",
     "sol model caps",
+    "resets",
   ];
 
   const futureIndicators = [
@@ -135,6 +136,8 @@ export function classifyTiboTweet(
     "working on",
     "next",
     "later",
+    "there will be",
+    "getting faster",
   ];
 
   const matchedBase = teaserBaseKeywords.find((kw) => normalized.includes(kw));
