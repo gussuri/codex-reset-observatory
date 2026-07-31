@@ -69,12 +69,15 @@
     const isLeader = await tryAcquireLeaderLock();
     if (!isLeader) return;
 
+    const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+
     const payload = {
       sessionId: sessionId || "session_default",
       lastSuccessfulParseAt,
       lastSeenTweetId,
       lastScanError,
       selectorVersion: SELECTOR_VERSION,
+      last_page_reload_at: storageData.tibo_last_page_reload_at || null,
     };
 
     chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {

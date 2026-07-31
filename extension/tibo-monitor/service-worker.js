@@ -4,9 +4,89 @@
  */
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
+const ALARM_NAME = "tibo_page_reload_alarm";
+const RELOAD_INTERVAL_MINUTES = 10;
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
+
+// Setup alarms on Service Worker initialization
+function setupReloadAlarm() {
+  if (typeof chrome !== "undefined" && chrome.alarms) {
+    chrome.alarms.get(ALARM_NAME, (existingAlarm) => {
+      if (!existingAlarm) {
+        chrome.alarms.create(ALARM_NAME, { periodInMinutes: RELOAD_INTERVAL_MINUTES });
+        console.log(`[Service Worker] Scheduled page reload alarm every ${RELOAD_INTERVAL_MINUTES} minutes.`);
+      }
+    });
+  }
+}
+
+setupReloadAlarm();
+
+if (typeof chrome !== "undefined" && chrome.runtime) {
+  if (chrome.runtime.onInstalled) {
+    chrome.runtime.onInstalled.addListener(() => setupReloadAlarm());
+  }
+  if (chrome.runtime.onStartup) {
+    chrome.runtime.onStartup.addListener(() => setupReloadAlarm());
+  }
+}
+
+if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm && alarm.name === ALARM_NAME) {
+      return handleReloadAlarm();
+    }
+  });
+}
+
+async function handleReloadAlarm() {
+  const now = new Date().toISOString();
+  try {
+    if (typeof chrome === "undefined" || !chrome.tabs) {
+      return { success: false, error: "chrome.tabs is unavailable" };
+    }
+
+    // Query for tabs monitoring Tibo's profile on X / Twitter
+    const tabs = await chrome.tabs.query({
+      url: [
+        "https://x.com/thsottiaux*",
+        "https://twitter.com/thsottiaux*",
+      ],
+    });
+
+    if (!tabs || tabs.length === 0) {
+      console.log("[Service Worker] Monitored tab missing for page reload. Saving status monitored_tab_missing.");
+      await chrome.storage.local.set({
+        tibo_last_page_reload_at: now,
+        tibo_last_page_reload_status: "monitored_tab_missing",
+      });
+      return { success: true, status: "monitored_tab_missing" };
+    }
+
+    // Select exactly 1 tab if multiple exist
+    const targetTab = tabs[0];
+    await chrome.tabs.reload(targetTab.id);
+
+    console.log(`[Service Worker] Reloaded monitored tab ${targetTab.id} at ${now}.`);
+    await chrome.storage.local.set({
+      tibo_last_page_reload_at: now,
+      tibo_last_page_reload_status: "success",
+      tibo_reloaded_tab_id: targetTab.id,
+    });
+
+    return { success: true, status: "success", tabId: targetTab.id, reloadedAt: now };
+  } catch (err) {
+    console.error("[Service Worker] Page reload error:", err);
+    await chrome.storage.local.set({
+      tibo_last_page_reload_at: now,
+      tibo_last_page_reload_status: "error",
+      tibo_last_page_reload_error: err.message || String(err),
+    });
+    return { success: false, error: err.message || String(err) };
+  }
+}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "POST_TWEET") {
@@ -27,6 +107,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "TEST_CONNECTION") {
     handleTestConnection()
       .then((res) => sendResponse({ success: true, data: res }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "TRIGGER_RELOAD_ALARM") {
+    handleReloadAlarm()
+      .then((res) => sendResponse(res))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
@@ -110,13 +197,26 @@ async function handlePostHeartbeat(payload) {
     throw new Error("Webhook secret is not configured in extension options.");
   }
 
+  // Retrieve last_page_reload_at from chrome.storage.local if not supplied directly
+  const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+  const lastPageReloadAt =
+    payload.last_page_reload_at ||
+    payload.lastPageReloadAt ||
+    storageData.tibo_last_page_reload_at ||
+    null;
+
+  const enrichedPayload = {
+    ...payload,
+    last_page_reload_at: lastPageReloadAt,
+  };
+
   const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${secret}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(enrichedPayload),
   });
 
   if (!response.ok) {
@@ -133,6 +233,8 @@ async function handleTestConnection() {
     throw new Error("Webhook secret is not configured.");
   }
 
+  const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+
   const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
     method: "POST",
     headers: {
@@ -145,6 +247,7 @@ async function handleTestConnection() {
       lastSuccessfulParseAt: new Date().toISOString(),
       lastSeenTweetId: "test-connection",
       lastScanError: null,
+      last_page_reload_at: storageData.tibo_last_page_reload_at || null,
     }),
   });
 
