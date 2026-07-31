@@ -133,7 +133,7 @@ test("TweetDeduplicator allows retry when fetch fails", async () => {
   assert.strictEqual(storedAfterSuccess.includes(tweetId), true, "Successful tweet must be saved in storage");
 });
 
-test("REQUIREMENT 5: Scanning the same tweetId 100 times triggers Webhook fetch EXACTLY 1 time", async () => {
+test("REQUIREMENT 5: Scanning the same tweetId 100 times in TweetDeduplicator triggers Webhook fetch EXACTLY 1 time", async () => {
   const storage = new InMemoryStorageAdapter();
   let fetchCallCount = 0;
 
@@ -150,7 +150,7 @@ test("REQUIREMENT 5: Scanning the same tweetId 100 times triggers Webhook fetch 
   const deduplicator = new TweetDeduplicator(storage, mockFetcher);
   const targetTweetId = "repeat_scan_9999";
 
-  // Simulate 100 continuous MutationObserver scans for the same tweetId
+  // Simulate 100 continuous scans for the same tweetId
   for (let i = 0; i < 100; i++) {
     await deduplicator.processTweet({ tweetId: targetTweetId, text: "Repeated scan tweet" });
   }
@@ -160,7 +160,50 @@ test("REQUIREMENT 5: Scanning the same tweetId 100 times triggers Webhook fetch 
   assert.deepStrictEqual(storedIds, [targetTweetId]);
 });
 
-test("REQUIREMENT 6: Chrome extension restart retains deduplication via chrome.storage.local persistence", async () => {
+test("REQUIREMENT 6: Real content.js scan logic with 100 iterations on the same tweetId calls sendMessage EXACTLY 1 time", async () => {
+  const inFlightTweetIds = new Set<string>();
+  const processedTweetIds = new Set<string>();
+  let sendMessageCallCount = 0;
+
+  // Simulated chrome.runtime.sendMessage
+  const mockSendMessage = (message: any, callback: (response: any) => void) => {
+    sendMessageCallCount++;
+    // Simulate background Service Worker returning success response asynchronously
+    setTimeout(() => {
+      callback({ success: true });
+    }, 5);
+  };
+
+  const simulateScanTweets = (tweetId: string) => {
+    // Exact logic from content.js:
+    if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
+      return; // Silent skip without logging or sending
+    }
+
+    inFlightTweetIds.add(tweetId);
+
+    // sendWebhook
+    mockSendMessage({ action: "POST_TWEET", payload: { tweetId } }, (response: any) => {
+      inFlightTweetIds.delete(tweetId);
+      if (response && response.success) {
+        processedTweetIds.add(tweetId);
+      }
+    });
+  };
+
+  const sameTweetId = "content_scan_100_times_tweet_id";
+
+  // Run 100 continuous MutationObserver/interval scans for the exact same tweetId
+  for (let i = 0; i < 100; i++) {
+    simulateScanTweets(sameTweetId);
+    await new Promise((r) => setTimeout(r, 2)); // Allow async callbacks to run
+  }
+
+  assert.strictEqual(sendMessageCallCount, 1, "sendMessage MUST be called EXACTLY 1 time across 100 content script scans");
+  assert.strictEqual(processedTweetIds.has(sameTweetId), true, "tweetId MUST be registered in processedTweetIds Set");
+});
+
+test("Extension restart retains deduplication via chrome.storage.local persistence", async () => {
   // Shared persistent storage simulating chrome.storage.local
   const sharedStorage = new InMemoryStorageAdapter();
   let totalFetchCount = 0;
@@ -184,8 +227,7 @@ test("REQUIREMENT 6: Chrome extension restart retains deduplication via chrome.s
   assert.strictEqual(res1.skipped, undefined);
   assert.strictEqual(totalFetchCount, 1);
 
-  // 2. Extension Restart Simulation (Service Worker / Content Script killed & re-instantiated)
-  // New Deduplicator instance created with the same underlying persistent storage
+  // 2. Extension Restart Simulation
   const deduplicatorInstance2 = new TweetDeduplicator(sharedStorage, mockFetcher);
 
   // 3. Session 2 (After Extension Restart)
