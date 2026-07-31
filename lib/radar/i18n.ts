@@ -224,6 +224,32 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
 };
 
 export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
+  "Codex信頼性障害補償リセット": {
+    ja: "Codex信頼性障害補償リセット",
+    en: "Codex reliability compensation reset",
+    zh: "Codex 可靠性事故补偿重置",
+  },
+  "500万人アクティブユーザー記念リセット": {
+    ja: "500万人アクティブユーザー記念リセット",
+    en: "5M active users milestone celebration reset",
+    zh: "500 万活跃用户庆祝重置",
+  },
+  "長セッション圧縮過剰消費補償リセット": {
+    ja: "長セッション圧縮過剰消費補償リセット",
+    en: "Long-session compression over-consumption compensation reset",
+    zh: "长会话压缩过度消耗补偿重置",
+  },
+  "Samいいね約束リセット": {
+    ja: "Samいいね約束リセット",
+    en: "Sam's promised like milestone reset",
+    zh: "Sam 点赞承诺重置",
+  },
+  "GPT-5.5能力退化補償リセット": {
+    ja: "GPT-5.5能力退化補償リセット",
+    en: "GPT-5.5 performance degradation compensation reset",
+    zh: "GPT-5.5 性能退化补偿重置",
+  },
+
   "Tibo氏の「There will be signs... Resets」匂わせ投稿": {
     ja: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     en: "Tibo's teaser post stating 'There will be signs... Resets'",
