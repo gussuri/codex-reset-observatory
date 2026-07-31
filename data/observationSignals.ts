@@ -27,7 +27,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-08-01T23:59:59.000Z",
     boostValue24h: 0.10,
     boostValue48h: 0.00,
-    boostReason: "Tibo氏の「There will be signs... Resets」匂わせ投稿（慎重評価中）",
+    boostReason: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     title: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     source: "https://x.com/thsottiaux/status/206987654321",
     sourceLabel: "Tibo氏（OpenAI Codex開発責任者）のXポストより",
