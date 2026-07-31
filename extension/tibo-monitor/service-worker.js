@@ -41,6 +41,19 @@ if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.onAlarm) {
   });
 }
 
+function isProfileTabUrl(urlStr) {
+  if (!urlStr) return false;
+  try {
+    const url = new URL(urlStr);
+    const host = url.hostname.toLowerCase();
+    if (host !== "x.com" && host !== "twitter.com") return false;
+    const pathname = url.pathname;
+    return pathname === "/thsottiaux" || pathname === "/thsottiaux/";
+  } catch {
+    return false;
+  }
+}
+
 async function handleReloadAlarm() {
   const now = new Date().toISOString();
   try {
@@ -48,43 +61,50 @@ async function handleReloadAlarm() {
       return { success: false, error: "chrome.tabs is unavailable" };
     }
 
-    // Query for tabs monitoring Tibo's profile on X / Twitter
-    const tabs = await chrome.tabs.query({
+    // Query for tabs on X / Twitter
+    const candidateTabs = await chrome.tabs.query({
       url: [
-        "https://x.com/thsottiaux*",
-        "https://twitter.com/thsottiaux*",
+        "https://x.com/*",
+        "https://twitter.com/*",
       ],
     });
 
-    if (!tabs || tabs.length === 0) {
-      console.log("[Service Worker] Monitored tab missing for page reload. Saving status monitored_tab_missing.");
+    // Filter strictly for profile tabs (/thsottiaux or /thsottiaux/)
+    const profileTabs = (candidateTabs || []).filter((tab) => isProfileTabUrl(tab.url));
+
+    if (profileTabs.length === 0) {
+      console.log("[Service Worker] Monitored profile tab missing. Preserving last_page_reload_at, saving status monitored_tab_missing.");
+      // DO NOT overwrite tibo_last_page_reload_at on missing
       await chrome.storage.local.set({
-        tibo_last_page_reload_at: now,
         tibo_last_page_reload_status: "monitored_tab_missing",
+        tibo_last_page_reload_error: null,
       });
       return { success: true, status: "monitored_tab_missing" };
     }
 
-    // Select exactly 1 tab if multiple exist
-    const targetTab = tabs[0];
+    // Select exactly 1 profile tab if multiple exist
+    const targetTab = profileTabs[0];
     await chrome.tabs.reload(targetTab.id);
 
-    console.log(`[Service Worker] Reloaded monitored tab ${targetTab.id} at ${now}.`);
+    console.log(`[Service Worker] Successfully reloaded profile tab ${targetTab.id} at ${now}.`);
+    // Update last_page_reload_at ONLY on success
     await chrome.storage.local.set({
       tibo_last_page_reload_at: now,
       tibo_last_page_reload_status: "success",
+      tibo_last_page_reload_error: null,
       tibo_reloaded_tab_id: targetTab.id,
     });
 
     return { success: true, status: "success", tabId: targetTab.id, reloadedAt: now };
   } catch (err) {
+    const errorMsg = err.message || String(err);
     console.error("[Service Worker] Page reload error:", err);
+    // DO NOT overwrite tibo_last_page_reload_at on error
     await chrome.storage.local.set({
-      tibo_last_page_reload_at: now,
       tibo_last_page_reload_status: "error",
-      tibo_last_page_reload_error: err.message || String(err),
+      tibo_last_page_reload_error: errorMsg,
     });
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -197,17 +217,36 @@ async function handlePostHeartbeat(payload) {
     throw new Error("Webhook secret is not configured in extension options.");
   }
 
-  // Retrieve last_page_reload_at from chrome.storage.local if not supplied directly
-  const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+  // Retrieve last_page_reload_* fields from chrome.storage.local if not supplied in payload
+  const storageData = await chrome.storage.local.get([
+    "tibo_last_page_reload_at",
+    "tibo_last_page_reload_status",
+    "tibo_last_page_reload_error",
+  ]);
+
   const lastPageReloadAt =
     payload.last_page_reload_at ||
     payload.lastPageReloadAt ||
     storageData.tibo_last_page_reload_at ||
     null;
 
+  const lastPageReloadStatus =
+    payload.last_page_reload_status ||
+    payload.lastPageReloadStatus ||
+    storageData.tibo_last_page_reload_status ||
+    null;
+
+  const lastPageReloadError =
+    payload.last_page_reload_error ||
+    payload.lastPageReloadError ||
+    storageData.tibo_last_page_reload_error ||
+    null;
+
   const enrichedPayload = {
     ...payload,
     last_page_reload_at: lastPageReloadAt,
+    last_page_reload_status: lastPageReloadStatus,
+    last_page_reload_error: lastPageReloadError,
   };
 
   const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
@@ -233,7 +272,11 @@ async function handleTestConnection() {
     throw new Error("Webhook secret is not configured.");
   }
 
-  const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+  const storageData = await chrome.storage.local.get([
+    "tibo_last_page_reload_at",
+    "tibo_last_page_reload_status",
+    "tibo_last_page_reload_error",
+  ]);
 
   const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
     method: "POST",
@@ -248,6 +291,8 @@ async function handleTestConnection() {
       lastSeenTweetId: "test-connection",
       lastScanError: null,
       last_page_reload_at: storageData.tibo_last_page_reload_at || null,
+      last_page_reload_status: storageData.tibo_last_page_reload_status || null,
+      last_page_reload_error: storageData.tibo_last_page_reload_error || null,
     }),
   });
 

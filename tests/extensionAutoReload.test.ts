@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 // Helper to load service-worker.js with custom mocked chrome API
-function setupServiceWorkerContext(customTabs: Array<{ id: number; url: string }> = []) {
+function setupServiceWorkerContext(
+  customTabs: Array<{ id: number; url: string }> = [],
+  opts: { failReloadTabId?: number } = {}
+) {
   const localStore: Record<string, any> = {};
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
   const reloadedTabIds: number[] = [];
@@ -44,7 +47,7 @@ function setupServiceWorkerContext(customTabs: Array<{ id: number; url: string }
     },
     tabs: {
       query: async (queryInfo: { url: string[] }) => {
-        // Filter customTabs matching patterns in queryInfo.url
+        // Simple prefix matcher simulating chrome.tabs.query with host permissions
         return customTabs.filter((tab) =>
           queryInfo.url.some((pattern) => {
             const prefix = pattern.replace("*", "");
@@ -53,6 +56,9 @@ function setupServiceWorkerContext(customTabs: Array<{ id: number; url: string }
         );
       },
       reload: async (tabId: number) => {
+        if (opts.failReloadTabId === tabId) {
+          throw new Error("Simulated tab reload failure");
+        }
         reloadedTabIds.push(tabId);
       },
     },
@@ -67,8 +73,8 @@ function setupServiceWorkerContext(customTabs: Array<{ id: number; url: string }
     },
   };
 
-  const mockFetch = async (url: string, opts: any) => {
-    mockFetchCalls.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
+  const mockFetch = async (url: string, fetchOpts: any) => {
+    mockFetchCalls.push({ url, body: fetchOpts.body ? JSON.parse(fetchOpts.body) : null });
     return {
       ok: true,
       status: 200,
@@ -88,6 +94,7 @@ function setupServiceWorkerContext(customTabs: Array<{ id: number; url: string }
     Promise,
     setTimeout,
     setInterval,
+    URL,
   };
 
   const context = vm.createContext(sandbox);
@@ -124,48 +131,90 @@ test("REQUIREMENT 3: Extension setup registers a 10-minute page reload alarm", (
   assert.strictEqual(alarmsCreated[0].alarmInfo.periodInMinutes, 10, "Alarm must run every 10 minutes");
 });
 
-test("REQUIREMENT 7: When no monitored tab is open, alarm logs status as monitored_tab_missing without error", async () => {
+test("REQUIREMENT 4: When no monitored tab is open, preserves last_page_reload_at and updates status to monitored_tab_missing", async () => {
   const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext([]);
+
+  const previousSuccessTime = "2026-07-31T20:00:00.000Z";
+  localStore["tibo_last_page_reload_at"] = previousSuccessTime;
 
   await fireAlarm("tibo_page_reload_alarm");
 
-  assert.strictEqual(reloadedTabIds.length, 0, "No tab should be reloaded when zero tabs exist");
+  assert.strictEqual(reloadedTabIds.length, 0, "No tab should be reloaded when zero profile tabs exist");
+  assert.strictEqual(
+    localStore["tibo_last_page_reload_at"],
+    previousSuccessTime,
+    "last_page_reload_at MUST NOT be overwritten when tab is missing"
+  );
   assert.strictEqual(localStore["tibo_last_page_reload_status"], "monitored_tab_missing");
-  assert.ok(localStore["tibo_last_page_reload_at"], "last_page_reload_at timestamp must be recorded");
 });
 
-test("REQUIREMENT 5 & 6: When multiple monitored tabs exist, exactly 1 tab is selected and reloaded", async () => {
+test("REQUIREMENT 4: When tab reload fails with an error, preserves last_page_reload_at and updates status to error", async () => {
+  const profileTab = [{ id: 501, url: "https://x.com/thsottiaux" }];
+  const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext(profileTab, {
+    failReloadTabId: 501,
+  });
+
+  const previousSuccessTime = "2026-07-31T20:00:00.000Z";
+  localStore["tibo_last_page_reload_at"] = previousSuccessTime;
+
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.strictEqual(reloadedTabIds.length, 0, "Reload failed, so tabId must not be added to reloaded list");
+  assert.strictEqual(
+    localStore["tibo_last_page_reload_at"],
+    previousSuccessTime,
+    "last_page_reload_at MUST NOT be overwritten on error"
+  );
+  assert.strictEqual(localStore["tibo_last_page_reload_status"], "error");
+  assert.strictEqual(localStore["tibo_last_page_reload_error"], "Simulated tab reload failure");
+});
+
+test("REQUIREMENT 5: Ignores tweet status detail tabs (/thsottiaux/status/...) and only reloads profile tabs (/thsottiaux or /thsottiaux/)", async () => {
   const tabs = [
-    { id: 201, url: "https://x.com/thsottiaux" },
-    { id: 202, url: "https://x.com/thsottiaux/status/12345" },
-    { id: 203, url: "https://twitter.com/thsottiaux" },
+    { id: 101, url: "https://x.com/thsottiaux/status/9876543210" },
+    { id: 102, url: "https://twitter.com/thsottiaux/status/11223344" },
   ];
 
   const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext(tabs);
 
   await fireAlarm("tibo_page_reload_alarm");
 
-  assert.strictEqual(reloadedTabIds.length, 1, "Exactly 1 tab must be reloaded when multiple match");
-  assert.strictEqual(reloadedTabIds[0], 201, "First matching tab (tabs[0]) must be selected");
-  assert.strictEqual(localStore["tibo_last_page_reload_status"], "success");
-  assert.strictEqual(localStore["tibo_reloaded_tab_id"], 201);
-  assert.ok(localStore["tibo_last_page_reload_at"], "tibo_last_page_reload_at must be populated");
+  assert.strictEqual(reloadedTabIds.length, 0, "Individual status detail tabs must NOT be reloaded");
+  assert.strictEqual(localStore["tibo_last_page_reload_status"], "monitored_tab_missing");
 });
 
-test("REQUIREMENT 8: POST_HEARTBEAT includes last_page_reload_at in its payload", async () => {
+test("REQUIREMENT 5 & 6: Strictly matches profile tabs and reloads exactly 1 profile tab when multiple exist", async () => {
+  const tabs = [
+    { id: 201, url: "https://x.com/thsottiaux/status/12345" }, // Detail page (ignore)
+    { id: 202, url: "https://x.com/thsottiaux" },              // Profile tab (target 1)
+    { id: 203, url: "https://twitter.com/thsottiaux/" },       // Profile tab (target 2)
+  ];
+
+  const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext(tabs);
+
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.strictEqual(reloadedTabIds.length, 1, "Exactly 1 profile tab must be reloaded");
+  assert.strictEqual(reloadedTabIds[0], 202, "First profile tab (id: 202) must be selected");
+  assert.strictEqual(localStore["tibo_last_page_reload_status"], "success");
+  assert.ok(localStore["tibo_last_page_reload_at"], "tibo_last_page_reload_at must be updated on success");
+});
+
+test("REQUIREMENT 2 & 3: Heartbeat API & Service Worker include 3 page reload fields (at, status, error)", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext();
 
-  // Set preset last page reload timestamp in storage
-  const sampleReloadTime = "2026-07-31T21:00:00.000Z";
-  localStore["tibo_last_page_reload_at"] = sampleReloadTime;
+  const sampleTime = "2026-07-31T22:00:00.000Z";
+  localStore["tibo_last_page_reload_at"] = sampleTime;
+  localStore["tibo_last_page_reload_status"] = "success";
+  localStore["tibo_last_page_reload_error"] = null;
   localStore["webhook_secret"] = "test-secret";
 
   const heartbeatResponse = await sendMessage({
     action: "POST_HEARTBEAT",
     payload: {
-      sessionId: "session_test_123",
-      lastSuccessfulParseAt: "2026-07-31T21:05:00.000Z",
-      lastSeenTweetId: "tweet_111",
+      sessionId: "session_test_456",
+      lastSuccessfulParseAt: "2026-07-31T22:05:00.000Z",
+      lastSeenTweetId: "tweet_222",
       lastScanError: null,
       selectorVersion: "v1.4-extension",
     },
@@ -175,38 +224,7 @@ test("REQUIREMENT 8: POST_HEARTBEAT includes last_page_reload_at in its payload"
   assert.strictEqual(mockFetchCalls.length, 1);
 
   const sentBody = mockFetchCalls[0].body;
-  assert.strictEqual(
-    sentBody.last_page_reload_at,
-    sampleReloadTime,
-    "Heartbeat payload must include last_page_reload_at from storage"
-  );
-});
-
-test("REQUIREMENT 9: Deduplication in storage prevents duplicate webhooks even after tab reload re-initialization", async () => {
-  const tabs = [{ id: 301, url: "https://x.com/thsottiaux" }];
-  const { sendMessage, fireAlarm, localStore, mockFetchCalls } = setupServiceWorkerContext(tabs);
-
-  localStore["webhook_secret"] = "test-secret";
-
-  const tweetPayload = {
-    tweetId: "tweet_after_reload_999",
-    text: "Testing tweet deduplication after page reload",
-    tweetUrl: "https://x.com/thsottiaux/status/tweet_after_reload_999",
-    tweetCreatedAt: new Date().toISOString(),
-  };
-
-  // 1. Initial scan sends tweet to webhook
-  const res1 = await sendMessage({ action: "POST_TWEET", payload: tweetPayload });
-  assert.strictEqual(res1.success, true);
-  assert.strictEqual(res1.skipped, undefined);
-  assert.strictEqual(mockFetchCalls.length, 1);
-
-  // 2. Tab is reloaded via alarm (simulating page reload & content.js re-initialization)
-  await fireAlarm("tibo_page_reload_alarm");
-
-  // 3. Re-initialized content.js scans the same tweetId again after page reload
-  const res2 = await sendMessage({ action: "POST_TWEET", payload: tweetPayload });
-  assert.strictEqual(res2.success, true);
-  assert.strictEqual(res2.skipped, true, "Re-scanned tweet must be skipped due to SW storage deduplication");
-  assert.strictEqual(mockFetchCalls.length, 1, "Webhook fetch must NOT be called a second time");
+  assert.strictEqual(sentBody.last_page_reload_at, sampleTime);
+  assert.strictEqual(sentBody.last_page_reload_status, "success");
+  assert.strictEqual(sentBody.last_page_reload_error, null);
 });

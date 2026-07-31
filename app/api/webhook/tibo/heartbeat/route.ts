@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
       lastSeenTweetId,
       lastScanError,
       selectorVersion,
+      last_page_reload_at,
+      last_page_reload_status,
+      last_page_reload_error,
+      lastPageReloadAt,
+      lastPageReloadStatus,
+      lastPageReloadError,
     } = body;
 
     const supabase = getSupabaseServiceClient();
@@ -78,6 +84,9 @@ export async function POST(req: NextRequest) {
       last_seen_tweet_id: lastSeenTweetId || null,
       last_scan_error: lastScanError || null,
       selector_version: selectorVersion || "v1",
+      last_page_reload_at: last_page_reload_at || lastPageReloadAt || null,
+      last_page_reload_status: last_page_reload_status || lastPageReloadStatus || null,
+      last_page_reload_error: last_page_reload_error || lastPageReloadError || null,
       heartbeat_count: heartbeatCount,
       max_gap_seconds: maxGapSeconds,
       last_gap_seconds: lastGapSeconds,

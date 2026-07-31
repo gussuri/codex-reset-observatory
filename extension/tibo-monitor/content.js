@@ -69,7 +69,11 @@
     const isLeader = await tryAcquireLeaderLock();
     if (!isLeader) return;
 
-    const storageData = await chrome.storage.local.get(["tibo_last_page_reload_at"]);
+    const storageData = await chrome.storage.local.get([
+      "tibo_last_page_reload_at",
+      "tibo_last_page_reload_status",
+      "tibo_last_page_reload_error",
+    ]);
 
     const payload = {
       sessionId: sessionId || "session_default",
@@ -78,6 +82,8 @@
       lastScanError,
       selectorVersion: SELECTOR_VERSION,
       last_page_reload_at: storageData.tibo_last_page_reload_at || null,
+      last_page_reload_status: storageData.tibo_last_page_reload_status || null,
+      last_page_reload_error: storageData.tibo_last_page_reload_error || null,
     };
 
     chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
