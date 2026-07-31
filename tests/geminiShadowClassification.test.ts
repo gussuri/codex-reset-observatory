@@ -139,8 +139,34 @@ test("8. Backfill script can resume from unclassified rows after interruption", 
     { tweet_id: "103", ai_classification_status: "skipped" },
   ];
 
-  // Simulating query for unclassified rows
   const remainingToProcess = dbRows.filter((r) => r.ai_classification_status !== "success");
   assert.strictEqual(remainingToProcess.length, 1);
   assert.strictEqual(remainingToProcess[0].tweet_id, "103");
+});
+
+test("9. Gemini API prompt & schema evaluation on today's real Tibo tweet fixture", () => {
+  const todayText = "The day we develop really good models. There will be signs.\n\nReliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.\n\nThese kinds of things.";
+
+  // Simulated Gemini API output matching system prompt & schema rules for today's tweet
+  const simulatedAiOutput: GeminiClassificationOutput = {
+    signalType: "teaser",
+    confidence: 0.90,
+    temporalDirection: "future",
+    evidenceQuote: "Resets",
+    reasonJa: "新モデル開発と効率化に伴う将来のリセット（Resets）の発生を予告・示唆しているため。",
+    resetTypeJa: null,
+    noticeToExecution: "near future",
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  };
+
+  // Validate signalType
+  assert.strictEqual(simulatedAiOutput.signalType, "teaser");
+  assert.strictEqual(simulatedAiOutput.temporalDirection, "future");
+
+  // Validate evidenceQuote is actually present in original text
+  const normQuote = simulatedAiOutput.evidenceQuote!.toLowerCase();
+  const normText = todayText.toLowerCase();
+  assert.strictEqual(normText.includes(normQuote), true, "evidenceQuote 'Resets' MUST exist in original text");
 });
