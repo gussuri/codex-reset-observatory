@@ -86,6 +86,17 @@ test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", 
   assert.strictEqual(p48, 0.96, "New notice after execution must trigger 48h 96% Notice Mode");
 });
 
+import { getRadarViewModel } from "../lib/radar";
+
+test("getLocalResetProbabilityReason formats English summary without un-translated Japanese text for Tibo Teaser", () => {
+  const viewModel = getRadarViewModel(getLocalRadarData(), "en");
+  const englishReason = viewModel.reasoningSummary;
+
+  assert.strictEqual(typeof englishReason, "string");
+  assert.ok(englishReason.includes("Tibo's teaser post stating 'There will be signs... Resets'"), `Expected English translation, but got: "${englishReason}"`);
+  assert.strictEqual(englishReason.includes("匂わせ投稿"), false, "English summary MUST NOT contain Japanese text '匂わせ投稿'");
+});
+
 test("old reset_executed does not cancel newer official_notice", () => {
   const now = Date.now();
   const oldExecutionTime = new Date(now - 5 * 3600 * 1000).toISOString(); // 5 hours ago

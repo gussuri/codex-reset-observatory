@@ -224,6 +224,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
 };
 
 export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
+  "Tibo氏の「There will be signs... Resets」匂わせ投稿": {
+    ja: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
+    en: "Tibo's teaser post stating 'There will be signs... Resets'",
+    zh: "Tibo 关于‘There will be signs... Resets’的暗示动态",
+  },
+  "Tibo氏の「明日また会いましょう」匂わせ投稿": {
+    ja: "Tibo氏の「明日また会いましょう」匂わせ投稿",
+    en: "Tibo's teaser post stating 'See you tomorrow'",
+    zh: "Tibo 关于‘明天见’的暗示动态",
+  },
   "Tibo氏の公式Xで告知あり": {
     ja: "Tibo氏の公式Xで告知あり",
     en: "Announced on Tibo's official X",
