@@ -1,101 +1,45 @@
 /**
  * Content Script for Tibo Monitor Chrome Extension
- * DOM Inspection & Leader Lock.
- * Deduplication responsibility is centralized in service-worker.js.
+ * Executes on https://x.com/thsottiaux* and https://x.com/notifications*
  */
 
-(function () {
-  'use strict';
-
-  const SELECTOR_VERSION = "v1.4-extension";
-  const SESSION_KEY = "tibo_session_id";
-  const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
-
-  // In-flight tracking within this tab for immediate UI-level throttling
+(() => {
+  // Short-term in-flight set for current tab throttling
   const inFlightTweetIds = new Set();
-
-  // Persistent Session ID across page reloads in single tab
-  let sessionId = sessionStorage.getItem(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8);
-    sessionStorage.setItem(SESSION_KEY, sessionId);
-  }
+  // Persistent in-memory set of processed tweet IDs for the active tab session
+  const processedTweetIds = new Set();
 
   let lastSuccessfulParseAt = null;
   let lastSeenTweetId = null;
   let lastScanError = null;
 
-  // Check if tweet article is currently showing machine-translated text
-  function isTranslatedTweet(article) {
-    const translationContainer = article.querySelector(
-      '[data-testid="translation-container"], [data-testid="translation"], [aria-label*="Translated"], [aria-label*="翻訳"]'
-    );
-    if (translationContainer) return true;
+  let currentTabId = null;
+  let isLeaderTab = false;
 
-    const fullText = article.innerText || "";
-    if (
-      fullText.includes("Translated from English") ||
-      fullText.includes("Google による翻訳") ||
-      fullText.includes("原文を表示")
-    ) {
+  // Assign a unique session tab ID
+  currentTabId = Date.now() + Math.floor(Math.random() * 1000);
+
+  function isTranslatedTweet(articleElement) {
+    const text = articleElement.innerText || "";
+
+    // 1. Check for standard X machine translation UI indicators
+    if (text.includes("Translated from English") || text.includes("Google による翻訳") || text.includes("DeepL による翻訳")) {
       return true;
     }
 
-    return false;
-  }
-
-  // Leader Lock Mechanism for Heartbeat
-  async function tryAcquireLeaderLock() {
-    const now = Date.now();
-    const data = await chrome.storage.local.get(["tibo_leader_tab_id", "tibo_leader_timestamp"]);
-    const leaderTab = data.tibo_leader_tab_id || "";
-    const leaderTimestamp = data.tibo_leader_timestamp || 0;
-
-    if (leaderTab === TAB_ID || !leaderTab || now - leaderTimestamp > 30 * 1000) {
-      await chrome.storage.local.set({
-        tibo_leader_tab_id: TAB_ID,
-        tibo_leader_timestamp: now,
-      });
-      return true;
-    }
-    return false;
-  }
-
-  async function sendHeartbeat() {
-    const isLeader = await tryAcquireLeaderLock();
-    if (!isLeader) return;
-
-    const payload = {
-      sessionId,
-      lastSuccessfulParseAt,
-      lastSeenTweetId,
-      lastScanError,
-      selectorVersion: SELECTOR_VERSION,
-    };
-
-    chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn("[Tibo Extension] Heartbeat error:", chrome.runtime.lastError.message);
-      } else if (response && response.success) {
-        console.log("[Tibo Extension] Heartbeat sent successfully by leader tab.");
+    // 2. Check for "Show original" button present when translated
+    const buttons = articleElement.querySelectorAll("button, span, div[role='button']");
+    for (const btn of buttons) {
+      const btnText = (btn.innerText || "").trim();
+      if (btnText === "原文を表示" || btnText === "Show original") {
+        return true;
       }
-    });
+    }
+
+    return false;
   }
 
-  // Send initial heartbeat and schedule 5-min timer
-  sendHeartbeat();
-  setInterval(sendHeartbeat, 5 * 60 * 1000);
-
-  // Maintain leader lock timestamp every 10s
-  setInterval(async () => {
-    const data = await chrome.storage.local.get(["tibo_leader_tab_id"]);
-    if (data.tibo_leader_tab_id === TAB_ID) {
-      await chrome.storage.local.set({ tibo_leader_timestamp: Date.now() });
-    }
-  }, 10 * 1000);
-
-  // Tweet DOM Inspector
-  async function scanTweets() {
+  function scanTweets() {
     try {
       const tweetArticles = document.querySelectorAll('article[data-testid="tweet"]');
 
@@ -120,7 +64,12 @@
 
         const tweetId = match[1];
 
-        // 1. Skip if translated text is detected
+        // REQUIREMENT 4: Skip without logging "New Tweet Found" if already processed or in-flight
+        if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
+          continue;
+        }
+
+        // Skip if translated text is detected
         if (isTranslatedTweet(article)) {
           lastScanError = "translated_text_detected";
           console.warn(`[Tibo Extension] Translated text detected for ${tweetId}. Skipping.`);
@@ -135,12 +84,9 @@
         lastSeenTweetId = tweetId;
         lastScanError = null;
 
-        // 2. Short-term in-flight check within current tab
-        if (inFlightTweetIds.has(tweetId)) continue;
-
         console.log(`[Tibo Extension] New Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
 
-        // Add to inFlight Set and delegate deduplication to Service Worker
+        // Add to in-flight set and delegate deduplication to Service Worker
         inFlightTweetIds.add(tweetId);
         sendWebhook(tweetId, text, tweetUrl, createdAt);
       }
@@ -154,7 +100,6 @@
     const payload = { tweetId, text, tweetUrl, tweetCreatedAt };
 
     chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
-      // Clear tab-level inFlight flag when background Service Worker responds
       inFlightTweetIds.delete(tweetId);
 
       if (chrome.runtime.lastError) {
@@ -163,28 +108,82 @@
       }
 
       if (response && response.success) {
+        // REQUIREMENT 3: Mark as processed in session Set so it will never be scanned/re-sent again
+        processedTweetIds.add(tweetId);
         if (response.skipped) {
-          console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
+          console.log(`[Tibo Extension] Webhook skipped (already processed in Service Worker): ${tweetId}`);
         } else {
-          console.log(`[Tibo Extension] Webhook Success for ${tweetId}.`);
+          console.log(`[Tibo Extension] Webhook sent successfully: ${tweetId}`);
         }
       } else {
-        console.warn(`[Tibo Extension] Webhook rejected for ${tweetId}:`, response?.error);
+        console.warn(`[Tibo Extension] Webhook failed for ${tweetId}:`, response?.error);
       }
     });
   }
 
-  // Initial Scan & MutationObserver Integration
+  // --- Leader Lock for Heartbeat ---
+  async function acquireLeaderLock() {
+    const lockKey = "tibo_leader_tab_id";
+    const now = Date.now();
+    const result = await chrome.storage.local.get([lockKey, "tibo_leader_last_heartbeat"]);
+
+    const currentLeader = result[lockKey];
+    const lastHeartbeat = result.tibo_leader_last_heartbeat || 0;
+
+    // Claim lock if unowned or leader is dead (> 30s)
+    if (!currentLeader || now - lastHeartbeat > 30000 || currentLeader === currentTabId) {
+      await chrome.storage.local.set({
+        [lockKey]: currentTabId,
+        tibo_leader_last_heartbeat: now,
+      });
+      isLeaderTab = true;
+    } else {
+      isLeaderTab = false;
+    }
+  }
+
+  function sendHeartbeat() {
+    if (!isLeaderTab) return;
+
+    const payload = {
+      leaderTabId: currentTabId,
+      isLeader: true,
+      lastSuccessfulParseAt,
+      lastSeenTweetId,
+      lastScanError,
+    };
+
+    chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("[Tibo Extension] Heartbeat error:", chrome.runtime.lastError.message);
+      }
+    });
+  }
+
+  // --- Initialization & Observers ---
+
+  // 1. Initial scan & MutationObserver
   scanTweets();
 
   const observer = new MutationObserver(() => {
     scanTweets();
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 
-  // 60-second fallback polling interval
-  setInterval(scanTweets, 60 * 1000);
+  // 2. 60-second fallback scan interval
+  setInterval(() => {
+    scanTweets();
+  }, 60000);
 
-  console.log("[Tibo Extension] Content script initialized with Service Worker Deduplication Delegation.");
+  // 3. Heartbeat & leader lock check every 5 minutes
+  acquireLeaderLock();
+  setInterval(() => {
+    acquireLeaderLock().then(() => {
+      if (isLeaderTab) sendHeartbeat();
+    });
+  }, 300000);
 })();

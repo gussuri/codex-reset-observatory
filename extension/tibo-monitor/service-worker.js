@@ -83,7 +83,7 @@ async function executePostTweet(payload) {
 
   const json = await response.json();
 
-  // 4. Save to chrome.storage.local on 2xx success
+  // 4. Save to chrome.storage.local on 2xx success and verify write persistence
   const updatedIds = [...processedIds];
   if (!updatedIds.includes(tweetId)) {
     updatedIds.push(tweetId);
@@ -91,6 +91,14 @@ async function executePostTweet(payload) {
       updatedIds.shift();
     }
     await chrome.storage.local.set({ [QUEUE_KEY]: updatedIds });
+
+    // Verify storage write persistence
+    const reVerifiedData = await chrome.storage.local.get([QUEUE_KEY]);
+    const reVerifiedIds = reVerifiedData[QUEUE_KEY] || [];
+
+    if (!reVerifiedIds.includes(tweetId)) {
+      throw new Error(`Storage write verification failed for tweetId ${tweetId}. Value was not persisted.`);
+    }
   }
 
   return { success: true, data: json };
@@ -122,16 +130,8 @@ async function handlePostHeartbeat(payload) {
 async function handleTestConnection() {
   const { secret, domain } = await getConfig();
   if (!secret) {
-    throw new Error("Webhook Secret is empty. Please save a valid secret first.");
+    throw new Error("Webhook secret is not configured.");
   }
-
-  const testPayload = {
-    sessionId: "connection_test_" + Date.now(),
-    lastSuccessfulParseAt: new Date().toISOString(),
-    lastSeenTweetId: "0000000000000000000",
-    lastScanError: null,
-    selectorVersion: "v1.3-extension-test",
-  };
 
   const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
     method: "POST",
@@ -139,12 +139,18 @@ async function handleTestConnection() {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${secret}`,
     },
-    body: JSON.stringify(testPayload),
+    body: JSON.stringify({
+      leaderTabId: 9999,
+      isLeader: true,
+      lastSuccessfulParseAt: new Date().toISOString(),
+      lastSeenTweetId: "test-connection",
+      lastScanError: null,
+    }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Connection Test Failed (HTTP ${response.status}): ${errorText}`);
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
   }
 
   return await response.json();

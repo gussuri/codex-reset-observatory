@@ -52,6 +52,12 @@ export class TweetDeduplicator {
         updatedIds.shift();
       }
       await this.storage.saveProcessedIds(updatedIds);
+
+      // Re-verify storage persistence after write
+      const reVerifiedIds = await this.storage.getProcessedIds();
+      if (!reVerifiedIds.includes(tweetId)) {
+        throw new Error(`Storage verification failed: tweetId ${tweetId} was not persisted.`);
+      }
     }
 
     const json = await res.json();

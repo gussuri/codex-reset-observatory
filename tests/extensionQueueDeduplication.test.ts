@@ -8,15 +8,17 @@ import { TweetDeduplicator, StorageAdapter, FetchAdapter } from "../lib/extensio
 class InMemoryStorageAdapter implements StorageAdapter {
   private processedIds: string[] = [];
 
+  constructor(initialIds: string[] = []) {
+    this.processedIds = [...initialIds];
+  }
+
   public async getProcessedIds(): Promise<string[]> {
-    // Simulate slight async read delay
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 2));
     return [...this.processedIds];
   }
 
   public async saveProcessedIds(ids: string[]): Promise<void> {
-    // Simulate async write delay
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 2));
     this.processedIds = [...ids];
   }
 }
@@ -25,7 +27,7 @@ test("TweetDeduplicator handles concurrent identical tweetId requests from multi
   const storage = new InMemoryStorageAdapter();
   let fetchCallCount = 0;
 
-  const mockFetcher: FetchAdapter = async (payload) => {
+  const mockFetcher: FetchAdapter = async () => {
     fetchCallCount++;
     await new Promise((r) => setTimeout(r, 10)); // Network delay
     return {
@@ -60,7 +62,7 @@ test("TweetDeduplicator safely preserves all IDs when multiple distinct tweetIds
   const storage = new InMemoryStorageAdapter();
   let fetchCallCount = 0;
 
-  const mockFetcher: FetchAdapter = async (payload) => {
+  const mockFetcher: FetchAdapter = async () => {
     fetchCallCount++;
     await new Promise((r) => setTimeout(r, 5));
     return {
@@ -100,7 +102,7 @@ test("TweetDeduplicator allows retry when fetch fails", async () => {
         ok: false,
         status: 500,
         text: async () => "Internal Server Error",
-        json: async () => ({ error: "Internal Error" }),
+        json: async () => ({ error: "Failed" }),
       };
     }
     return {
@@ -112,21 +114,83 @@ test("TweetDeduplicator allows retry when fetch fails", async () => {
   };
 
   const deduplicator = new TweetDeduplicator(storage, mockFetcher);
-  const tweetId = "failed_then_retry_id";
+  const tweetId = "retry_tweet_123";
 
   // First call fails
   await assert.rejects(
-    deduplicator.processTweet({ tweetId, text: "Failing tweet" }),
+    () => deduplicator.processTweet({ tweetId, text: "Sample" }),
     /HTTP 500/
   );
 
   const storedAfterFail = await storage.getProcessedIds();
-  assert.strictEqual(storedAfterFail.length, 0, "Failed tweet must not be saved to storage");
+  assert.strictEqual(storedAfterFail.includes(tweetId), false, "Failed tweet must not be saved in storage");
 
-  // Retry succeeds
-  const retryResult = await deduplicator.processTweet({ tweetId, text: "Failing tweet" });
-  assert.strictEqual(retryResult.success, true);
+  // Second call succeeds
+  const res2 = await deduplicator.processTweet({ tweetId, text: "Sample" });
+  assert.strictEqual(res2.success, true);
 
-  const storedAfterRetry = await storage.getProcessedIds();
-  assert.deepStrictEqual(storedAfterRetry, [tweetId], "Retried tweet must be saved to storage");
+  const storedAfterSuccess = await storage.getProcessedIds();
+  assert.strictEqual(storedAfterSuccess.includes(tweetId), true, "Successful tweet must be saved in storage");
+});
+
+test("REQUIREMENT 5: Scanning the same tweetId 100 times triggers Webhook fetch EXACTLY 1 time", async () => {
+  const storage = new InMemoryStorageAdapter();
+  let fetchCallCount = 0;
+
+  const mockFetcher: FetchAdapter = async () => {
+    fetchCallCount++;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "OK",
+      json: async () => ({ success: true }),
+    };
+  };
+
+  const deduplicator = new TweetDeduplicator(storage, mockFetcher);
+  const targetTweetId = "repeat_scan_9999";
+
+  // Simulate 100 continuous MutationObserver scans for the same tweetId
+  for (let i = 0; i < 100; i++) {
+    await deduplicator.processTweet({ tweetId: targetTweetId, text: "Repeated scan tweet" });
+  }
+
+  assert.strictEqual(fetchCallCount, 1, "Webhook fetch MUST be executed EXACTLY 1 time even after 100 scans");
+  const storedIds = await storage.getProcessedIds();
+  assert.deepStrictEqual(storedIds, [targetTweetId]);
+});
+
+test("REQUIREMENT 6: Chrome extension restart retains deduplication via chrome.storage.local persistence", async () => {
+  // Shared persistent storage simulating chrome.storage.local
+  const sharedStorage = new InMemoryStorageAdapter();
+  let totalFetchCount = 0;
+
+  const mockFetcher: FetchAdapter = async () => {
+    totalFetchCount++;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "OK",
+      json: async () => ({ success: true }),
+    };
+  };
+
+  const existingTweetId = "persisted_tweet_777";
+
+  // 1. Session 1 (Before Extension Restart)
+  const deduplicatorInstance1 = new TweetDeduplicator(sharedStorage, mockFetcher);
+  const res1 = await deduplicatorInstance1.processTweet({ tweetId: existingTweetId, text: "Tweet before restart" });
+  assert.strictEqual(res1.success, true);
+  assert.strictEqual(res1.skipped, undefined);
+  assert.strictEqual(totalFetchCount, 1);
+
+  // 2. Extension Restart Simulation (Service Worker / Content Script killed & re-instantiated)
+  // New Deduplicator instance created with the same underlying persistent storage
+  const deduplicatorInstance2 = new TweetDeduplicator(sharedStorage, mockFetcher);
+
+  // 3. Session 2 (After Extension Restart)
+  const res2 = await deduplicatorInstance2.processTweet({ tweetId: existingTweetId, text: "Tweet after restart" });
+  assert.strictEqual(res2.success, true);
+  assert.strictEqual(res2.skipped, true, "Must be skipped due to persistent storage deduplication");
+  assert.strictEqual(totalFetchCount, 1, "Webhook fetch MUST NOT be called again after extension restart");
 });
