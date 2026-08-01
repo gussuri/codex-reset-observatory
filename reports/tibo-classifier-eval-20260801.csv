@@ -1,0 +1,62 @@
+tweet_id,text,gold_signal_type,is_ambiguous,rule_prediction,rule_confidence,rule_reason,rule_correct,gemini_prediction,gemini_confidence,gemini_temporal_direction,gemini_evidence_quote,gemini_reason_ja,gemini_reset_type_ja,gemini_notice_to_execution,gemini_status,gemini_latency_ms,gemini_attempt_count,gemini_model,gemini_correct,fallback_prediction,fallback_correct
+2083048892405604681,What should we improve on Codex to improve the everyday experience? Nothing too small,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,1,1,,false,irrelevant,true
+2082883808194707792,Changes both affect API prices and usage in paid subscriptions. Something for everyone.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082883636177916306,"We kept ourselves busy with GPT-5.6 Sol. It's pretty good at things.
+
+Rolling out
+- 80% lower prices on Luna
+- 20% lower prices on Terra
+- faster speeds on GPT-5.6 Sol in /fast mode
+- ~ 10X cheaper auto-approve mode (""review for me"" in the app), which now uses Luna to prevent",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2083395449814229287,"To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.
+
+Enjoy.",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i have reset usage limits""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
+2082326593532473523,One day we created the reset button and the rest is history.,irrelevant,false,irrelevant,0.1,"Matched negative, past, or retrospective pattern: ""one day we created the reset button""",true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082317452755751098,"Hello people of Sol! I've reset usage limits for all ChatGPT Work and Codex users. Together with that, a quick update on GPT-5.6 Sol usage limits.
+
+Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i've reset usage limits""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
+2081839118531834176,Spotted Codex making friends at the OpenAI office,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2081979033261412537,Update. I have decided to take a break from x to recharge a bit. See you back tomorrow for more ChatGPT and Codex fun. It's going to be a fun week.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2083053369351090254,"The day we develop really good models. There will be signs.
+
+Reliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.
+
+These kinds of things.",irrelevant,true,teaser,0.85,"Matched teaser keyword ""resets"" with future indicator",false,,,,,,,,model_not_configured,0,1,,false,teaser,false
+2082895472184987985,承認します,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2081860991210631476,"Turns out GPT-5.6 Sol and friends are absolutely amazing at performance and efficiency improvements. Good time to brush up on using OpenAI models if you haven’t switched already. 
+
+Excited to be able to share more soon. Pretty wild.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2083373529081291076,"I don't come often to GMail (OpenAI is a Slack company), but I swear, every time I do open it, there is a new button somewhere around the top right corner.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""limits have been reset""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
+2082981910209540352,Benefits all,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082578335167807775,"効率！
+
+2つのステップで
+a) 素晴らしいモデルを訓練する
+b) 素晴らしいモデルを使ってすべてを改善する。その中には、自身のインフラ、推論スタック、カーネルなどなど
+
+https://openai.com/index/gpt-5-6-frontier-intelligence-efficiency/…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,1,1,,false,irrelevant,true
+2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
+
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",teaser,false,irrelevant,0.2,No reset notice or execution patterns matched.,false,,,,,,,,model_not_configured,0,1,,false,irrelevant,false
+2083387677945036995,ChatGPT Work counted,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082574687020966126,やった！科学！,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082637967852806207,"Terrific work by 
+@ilanbigio
+ and 
+@sandersted
+ on the investigation and post. Seems like it was a lot of fun.
+
+Take care of your harnesses out there, your model will thank you.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082609662231502932,"Turns out GPT-5.6 Sol is actually SoTA on ARC-AGI-3. 
+
+Just took two setting changes. You just have to allow it to reason and work over multiple context windows with the help of our canonical compaction implementation.
+
+
+https://
+openai.com/index/how-two-
+settings-tripled-our-arc-agi-3-scores/
+…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2083378916203343920,"And yet, I don't see a reset button there.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
