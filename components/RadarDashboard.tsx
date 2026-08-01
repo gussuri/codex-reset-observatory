@@ -9,14 +9,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CachedRadarData,
   RadarData,
   getRadarViewModel,
   getRefreshIntervalMs,
   isSafeHttpUrl,
-  probabilityToPercent,
 } from "@/lib/radar";
 import {
   applyRefreshFailure,
@@ -27,6 +26,7 @@ import {
 import type { Locale } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
+import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
@@ -243,24 +243,35 @@ export function RadarDashboard({
 
           {viewModel.activeWindow.kind === "official" ? (
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
-                <dt className="text-xs font-semibold text-slate-500">
-                  {translateUI("scheduledResetTime", locale)}
-                </dt>
-                <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                  <div className="flex flex-wrap items-center gap-y-1">
-                    <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
-                    {viewModel.activeWindow.expectedEndAt ? (
-                      <>
-                        <span className="mx-1.5 text-slate-500 font-normal text-xl">
-                          {translateUI("timeRangeSeparator", locale)}
-                        </span>
-                        <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
-                      </>
-                    ) : null}
-                  </div>
-                </dd>
-              </div>
+              {viewModel.activeWindow.expectedAt ? (
+                <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
+                  <dt className="text-xs font-semibold text-slate-500">
+                    {translateUI("scheduledResetTime", locale)}
+                  </dt>
+                  <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
+                    <div className="flex flex-wrap items-center gap-y-1">
+                      <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
+                      {viewModel.activeWindow.expectedEndAt ? (
+                        <>
+                          <span className="mx-1.5 text-slate-500 font-normal text-xl">
+                            {translateUI("timeRangeSeparator", locale)}
+                          </span>
+                          <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
+                        </>
+                      ) : null}
+                    </div>
+                  </dd>
+                </div>
+              ) : (
+                <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
+                  <dt className="text-xs font-semibold text-slate-500">
+                    {translateUI("noticePostedAt", locale)}
+                  </dt>
+                  <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
+                    <LocalizedDateTime value={viewModel.activeWindow.openedAt} locale={locale} />
+                  </dd>
+                </div>
+              )}
               <MiniInfo
                 label={translateUI("source", locale)}
                 value={viewModel.activeWindow.sourceLabel ?? "Unknown"}
@@ -275,7 +286,7 @@ export function RadarDashboard({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">{translateUI("currentStatus", locale)}</p>
-                <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
+                <h2 className="mt-1 text-2xl font-semibold text-slate-950 leading-tight break-words text-balance">
                   <span className="block">{translateUI("randomReset", locale)}</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
                     {translateUI("expectationLabel", locale)}{locale === "en" ? ": " : "："}{isDataUnavailable ? translateUI("unknownProbability", locale) : viewModel.expectation}
@@ -285,18 +296,11 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Metric
-                label={translateUI("within24h", locale)}
-                probability={probability24h}
-                value={probabilityToPercent(probability24h, locale)}
-              />
-              <Metric
-                label={translateUI("within48h", locale)}
-                probability={probability48h}
-                value={probabilityToPercent(probability48h, locale)}
-              />
-            </div>
+            <ProbabilityMetrics
+              locale={locale}
+              probability24h={probability24h}
+              probability48h={probability48h}
+            />
 
             <dl className="mt-5 space-y-4">
               {!isDataUnavailable && viewModel.reasoningSummary ? (
@@ -314,7 +318,7 @@ export function RadarDashboard({
                 <p className="text-sm font-medium text-slate-500">
                   {translateUI("latestReset", locale)}
                 </p>
-                <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
+                <h2 className="mt-1 text-2xl font-semibold text-slate-950 leading-tight break-words text-balance pb-0.5">
                   {translateDynamic(viewModel.latestWindow.title, locale)}
                 </h2>
               </div>
@@ -512,75 +516,6 @@ export function RadarDashboard({
       </div>
     </main>
   );
-}
-
-function Metric({
-  label,
-  probability,
-  value,
-}: {
-  label: string;
-  probability: number | undefined;
-  value: string;
-}) {
-  const tone = getProbabilityTone(probability);
-
-  return (
-    <div className={`rounded-lg border p-4 ${tone.card}`}>
-      <dt className={`text-sm font-medium ${tone.label}`}>{label}</dt>
-      <dd className={`mt-2 text-3xl font-semibold ${tone.value}`}>{value}</dd>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/75">
-        <div
-          className={`h-full rounded-full ${tone.bar}`}
-          style={{ width: getProbabilityBarWidth(probability) }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function getProbabilityTone(probability: number | undefined) {
-  if (typeof probability !== "number" || Number.isNaN(probability)) {
-    return {
-      bar: "bg-slate-400",
-      card: "border-slate-200 bg-slate-50",
-      label: "text-slate-500",
-      value: "text-slate-950",
-    };
-  }
-
-  if (probability <= 0.33) {
-    return {
-      bar: "bg-sky-500",
-      card: "border-sky-200 bg-sky-50",
-      label: "text-sky-700",
-      value: "text-sky-950",
-    };
-  }
-
-  if (probability <= 0.66) {
-    return {
-      bar: "bg-orange-500",
-      card: "border-orange-200 bg-orange-50",
-      label: "text-orange-700",
-      value: "text-orange-950",
-    };
-  }
-
-  return {
-    bar: "bg-rose-500",
-    card: "border-rose-200 bg-rose-50",
-    label: "text-rose-700",
-    value: "text-rose-950",
-  };
-}
-
-function getProbabilityBarWidth(probability: number | undefined) {
-  if (typeof probability !== "number" || Number.isNaN(probability)) {
-    return "0%";
-  }
-
-  return `${Math.min(100, Math.max(0, Math.round(probability * 100)))}%`;
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
