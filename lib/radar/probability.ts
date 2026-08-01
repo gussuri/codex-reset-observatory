@@ -50,6 +50,7 @@ export function getLocalResetProbability(
   signalEvaluation?: LocalSignalEvaluation,
   activeOfficialNotice?: ActiveOfficialNotice | null,
   now: Date = new Date(),
+  regularResetExpectedAt?: string | null,
 ): number {
   const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
@@ -61,6 +62,7 @@ export function getLocalResetProbability(
     resolvedSignalEvaluation,
     resolvedOfficialNotice,
     now,
+    regularResetExpectedAt,
   );
 
   if (period === "48h") {
@@ -70,6 +72,7 @@ export function getLocalResetProbability(
       resolvedSignalEvaluation,
       resolvedOfficialNotice,
       now,
+      regularResetExpectedAt,
     );
     return Math.max(probability24h, probability);
   }
@@ -83,6 +86,7 @@ function calculateLocalResetProbability(
   signalEvaluation: LocalSignalEvaluation,
   activeOfficialNotice: ActiveOfficialNotice | null,
   now: Date,
+  regularResetExpectedAt?: string | null,
 ): number {
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const tiboSignals = [
@@ -177,6 +181,7 @@ function calculateLocalResetProbability(
     getMomentumBoost(period, data) +
     (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period, data) : 0) +
     getElapsedDayBoost(data) +
+    getRegularResetProximityBoost(period, regularResetExpectedAt, now) +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
     officialIncidentHints *
@@ -227,6 +232,33 @@ export function getTeaserBoost(
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const baseBoost = AUTOMATED_TIBO_SIGNAL_WEIGHTS.teaser[weightKey];
   return baseBoost * getTeaserDecayFactor(observedAt, now);
+}
+
+export function getRegularResetProximityBoost(
+  period: "24h" | "48h",
+  expectedAt: string | null | undefined,
+  now: Date = new Date(),
+) {
+  const expectedTime = getDateTime(expectedAt);
+  if (!expectedTime || !Number.isFinite(now.getTime())) {
+    return 0;
+  }
+
+  const hoursUntil = (expectedTime - now.getTime()) / (60 * 60 * 1000);
+  if (hoursUntil < 0 || hoursUntil > 48) {
+    return 0;
+  }
+
+  if (period === "24h" && hoursUntil > 24) {
+    return 0;
+  }
+
+  const weight = LOCAL_PROBABILITY_WEIGHTS.regularResetProximity[
+    period === "24h" ? "within24h" : "within48h"
+  ];
+  const horizonHours = period === "24h" ? 24 : 48;
+  const progress = 1 - hoursUntil / horizonHours;
+  return weight.entry + (weight.max - weight.entry) * progress;
 }
 
 export function getLocalSignalEnvironment(
@@ -611,9 +643,25 @@ export function getLocalExpectationLevel(
     data,
     signalEvaluation.latestResetAt,
   ),
+  regularResetExpectedAt?: string | null,
+  now: Date = new Date(),
 ) {
-  const probability24h = getLocalResetProbability(data, "24h", signalEvaluation, activeOfficialNotice);
-  const probability48h = getLocalResetProbability(data, "48h", signalEvaluation, activeOfficialNotice);
+  const probability24h = getLocalResetProbability(
+    data,
+    "24h",
+    signalEvaluation,
+    activeOfficialNotice,
+    now,
+    regularResetExpectedAt,
+  );
+  const probability48h = getLocalResetProbability(
+    data,
+    "48h",
+    signalEvaluation,
+    activeOfficialNotice,
+    now,
+    regularResetExpectedAt,
+  );
   return getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale);
 }
 

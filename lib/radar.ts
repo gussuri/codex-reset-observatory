@@ -135,9 +135,6 @@ export function getRadarViewModel(
     source,
     signalEvaluation.latestResetAt,
   );
-  const probability24h = getProbability(source, "24h", signalEvaluation, activeOfficialNotice);
-  const probability48h = getProbability(source, "48h", signalEvaluation, activeOfficialNotice);
-  const predictionLevel = getLocalExpectationLevel(source, locale, signalEvaluation, activeOfficialNotice);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
@@ -149,6 +146,27 @@ export function getRadarViewModel(
     effectiveLatestResetAt,
     locale,
     source,
+  );
+  const probability24h = getProbability(
+    source,
+    "24h",
+    signalEvaluation,
+    activeOfficialNotice,
+    regularResetForecast.expectedAt,
+  );
+  const probability48h = getProbability(
+    source,
+    "48h",
+    signalEvaluation,
+    activeOfficialNotice,
+    regularResetForecast.expectedAt,
+  );
+  const predictionLevel = getLocalExpectationLevel(
+    source,
+    locale,
+    signalEvaluation,
+    activeOfficialNotice,
+    regularResetForecast.expectedAt,
   );
   const latestWindow =
     getLatestWindowWithRegularReset(
@@ -736,8 +754,16 @@ function getProbability(
   period: "24h" | "48h",
   signalEvaluation: LocalSignalEvaluation,
   activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
+  regularResetExpectedAt?: string | null,
 ): number | undefined {
-  return getLocalResetProbability(data, period, signalEvaluation, activeOfficialNotice);
+  return getLocalResetProbability(
+    data,
+    period,
+    signalEvaluation,
+    activeOfficialNotice,
+    undefined,
+    regularResetExpectedAt,
+  );
 }
 
 function getLatestWindow(data: RadarData | null): WindowLike | undefined {

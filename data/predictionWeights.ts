@@ -89,6 +89,16 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
   elapsedDayBoost: {
     perDay: 0.01,
   },
+  regularResetProximity: {
+    within24h: {
+      entry: 0.01,
+      max: 0.02,
+    },
+    within48h: {
+      entry: 0.02,
+      max: 0.03,
+    },
+  },
   historyPressure: [
     {
       // リセットから24時間以内 (0日経過)

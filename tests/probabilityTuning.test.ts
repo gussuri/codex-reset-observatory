@@ -5,6 +5,7 @@ import { LOCAL_PROBABILITY_WEIGHTS } from "../data/predictionWeights";
 import { getLocalRadarData } from "../lib/radar";
 import {
   getLocalResetProbability,
+  getRegularResetProximityBoost,
   getTeaserBoost,
 } from "../lib/radar/probability";
 
@@ -58,6 +59,31 @@ test("an older Tibo teaser contributes less than a fresh teaser", () => {
   );
 
   assert.ok(fresh > older, `expected fresh=${fresh} to exceed older=${older}`);
+});
+
+test("regular reset proximity increases toward the expected time", () => {
+  const now = new Date("2026-08-02T08:00:00.000Z");
+  const at47Hours = "2026-08-04T07:00:00.000Z";
+  const at24Hours = "2026-08-03T08:00:00.000Z";
+  const at12Hours = "2026-08-02T20:00:00.000Z";
+
+  assert.equal(getRegularResetProximityBoost("24h", at47Hours, now), 0);
+  assert.ok(
+    getRegularResetProximityBoost("48h", at24Hours, now) >
+      getRegularResetProximityBoost("48h", at47Hours, now),
+  );
+  assert.ok(
+    getRegularResetProximityBoost("24h", at12Hours, now) >
+      getRegularResetProximityBoost("24h", at24Hours, now),
+  );
+  assert.equal(
+    getRegularResetProximityBoost("48h", "2026-08-04T09:00:00.000Z", now),
+    0,
+  );
+  assert.equal(
+    getRegularResetProximityBoost("48h", "2026-08-01T08:00:00.000Z", now),
+    0,
+  );
 });
 
 test("48-hour probability is never lower than 24-hour probability", () => {
