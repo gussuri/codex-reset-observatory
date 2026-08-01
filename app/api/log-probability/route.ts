@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
 import { getRadarViewModel } from "@/lib/radar";
-import {
-  getLatestActiveLocalSignal,
-  getLocalSignalEvaluation,
-} from "@/lib/radar/probability";
+import { getLocalSignalEvaluation } from "@/lib/radar/probability";
 import { getExpectationKey } from "@/lib/radar/helpers";
+import { hasOfficialNoticeForLog } from "@/lib/logProbability";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +47,7 @@ async function handleLogRequest(request: NextRequest) {
 
     // 3. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;
-    const officialNotice = getLatestActiveLocalSignal("official_notice");
-    
-    const hasOfficialNotice = !!officialNotice;
+    const hasOfficialNotice = hasOfficialNoticeForLog(viewModel);
     const incidentHintCount = environment.official_incident_hints_24h ?? 0;
     const statusIncidentCount =
       signalEvaluation.statusIncidents.includedIncidentCount;

@@ -286,7 +286,8 @@ function isStatusSummaryResponse(value: unknown): value is StatusSummaryResponse
     isRecord(value) &&
     isRecord(value.page) &&
     (value.status === undefined || isRecord(value.status)) &&
-    Array.isArray(value.components)
+    Array.isArray(value.components) &&
+    value.components.every(isRecord)
   );
 }
 
@@ -294,7 +295,17 @@ function isStatusIncidentsResponse(value: unknown): value is StatusIncidentsResp
   return (
     isRecord(value) &&
     isRecord(value.page) &&
-    Array.isArray(value.incidents)
+    Array.isArray(value.incidents) &&
+    value.incidents.every(isStatusIncident)
+  );
+}
+
+function isStatusIncident(value: unknown): value is StatuspageIncident {
+  return (
+    isRecord(value) &&
+    (value.incident_updates === undefined ||
+      (Array.isArray(value.incident_updates) &&
+        value.incident_updates.every(isRecord)))
   );
 }
 

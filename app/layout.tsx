@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Analytics } from "@vercel/analytics/next";
+import { DocumentLocale } from "@/components/DocumentLocale";
 import { getDocumentLocale } from "@/lib/locale";
 import "./globals.css";
 
@@ -101,6 +102,7 @@ export default async function RootLayout({
   return (
     <html lang={locale}>
       <body>
+        <DocumentLocale />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}

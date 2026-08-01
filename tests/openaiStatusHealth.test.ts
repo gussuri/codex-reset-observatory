@@ -63,6 +63,32 @@ test("classifies valid JSON objects with missing status payload fields as invali
   });
 });
 
+test("classifies non-record status entries as invalid", async () => {
+  const result = await fetchOpenAIStatusSignals({}, async (url) => {
+    if (String(url).includes("summary.json")) {
+      return jsonResponse({
+        page: { updated_at: "2026-08-01T00:00:00.000Z" },
+        components: [null],
+      });
+    }
+
+    return jsonResponse({
+      page: { updated_at: "2026-08-01T00:00:00.000Z" },
+      incidents: [
+        {
+          name: "Codex incident",
+          incident_updates: [null],
+        },
+      ],
+    });
+  });
+
+  assert.deepStrictEqual(result.health, {
+    state: "degraded",
+    detail: "invalid_response",
+  });
+});
+
 test("marks one usable status response as partial", async () => {
   let request = 0;
   const result = await fetchOpenAIStatusSignals({}, async () => {
