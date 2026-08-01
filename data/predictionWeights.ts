@@ -90,13 +90,15 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     perDay: 0.01,
   },
   regularResetProximity: {
-    within24h: {
-      entry: 0.01,
-      max: 0.02,
-    },
-    within48h: {
+    forecast24h: {
+      leadInHours: 24,
       entry: 0.02,
-      max: 0.03,
+      max: 0.05,
+    },
+    forecast48h: {
+      leadInHours: 7 * 24,
+      entry: 0,
+      max: 0.07,
     },
   },
   historyPressure: [

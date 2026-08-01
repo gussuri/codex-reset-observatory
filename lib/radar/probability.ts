@@ -245,19 +245,18 @@ export function getRegularResetProximityBoost(
   }
 
   const hoursUntil = (expectedTime - now.getTime()) / (60 * 60 * 1000);
-  if (hoursUntil < 0 || hoursUntil > 48) {
-    return 0;
-  }
-
-  if (period === "24h" && hoursUntil > 24) {
+  if (hoursUntil < 0) {
     return 0;
   }
 
   const weight = LOCAL_PROBABILITY_WEIGHTS.regularResetProximity[
-    period === "24h" ? "within24h" : "within48h"
+    period === "24h" ? "forecast24h" : "forecast48h"
   ];
-  const horizonHours = period === "24h" ? 24 : 48;
-  const progress = 1 - hoursUntil / horizonHours;
+  if (hoursUntil > weight.leadInHours) {
+    return 0;
+  }
+
+  const progress = 1 - hoursUntil / weight.leadInHours;
   return weight.entry + (weight.max - weight.entry) * progress;
 }
 

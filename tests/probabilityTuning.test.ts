@@ -63,23 +63,26 @@ test("an older Tibo teaser contributes less than a fresh teaser", () => {
 
 test("regular reset proximity increases toward the expected time", () => {
   const now = new Date("2026-08-02T08:00:00.000Z");
-  const at47Hours = "2026-08-04T07:00:00.000Z";
+  const at6Days = "2026-08-08T08:00:00.000Z";
+  const at5Days = "2026-08-07T08:00:00.000Z";
+  const at2Days = "2026-08-04T08:00:00.000Z";
   const at24Hours = "2026-08-03T08:00:00.000Z";
   const at12Hours = "2026-08-02T20:00:00.000Z";
+  const assertClose = (actual: number, expected: number) =>
+    assert.ok(Math.abs(actual - expected) < 1e-9, `expected ${actual} to be close to ${expected}`);
 
-  assert.equal(getRegularResetProximityBoost("24h", at47Hours, now), 0);
-  assert.ok(
-    getRegularResetProximityBoost("48h", at24Hours, now) >
-      getRegularResetProximityBoost("48h", at47Hours, now),
-  );
+  assert.equal(getRegularResetProximityBoost("48h", "2026-08-09T08:00:00.000Z", now), 0);
+  assertClose(getRegularResetProximityBoost("48h", at6Days, now), 0.01);
+  assertClose(getRegularResetProximityBoost("48h", at5Days, now), 0.02);
+  assertClose(getRegularResetProximityBoost("48h", at2Days, now), 0.05);
+  assertClose(getRegularResetProximityBoost("48h", at24Hours, now), 0.06);
+  assertClose(getRegularResetProximityBoost("48h", now.toISOString(), now), 0.07);
   assert.ok(
     getRegularResetProximityBoost("24h", at12Hours, now) >
       getRegularResetProximityBoost("24h", at24Hours, now),
   );
-  assert.equal(
-    getRegularResetProximityBoost("48h", "2026-08-04T09:00:00.000Z", now),
-    0,
-  );
+  assertClose(getRegularResetProximityBoost("24h", at24Hours, now), 0.02);
+  assertClose(getRegularResetProximityBoost("24h", now.toISOString(), now), 0.05);
   assert.equal(
     getRegularResetProximityBoost("48h", "2026-08-01T08:00:00.000Z", now),
     0,
