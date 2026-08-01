@@ -25,6 +25,20 @@ test("CI workflow enforces the ordered quality gate contract", () => {
   assert.match(workflow, /^permissions:\n  contents: read\n/m);
   assert.match(workflow, /^          node-version: 22\.13\.0\s*$/m);
 
+  const compatibleCorepackStep = [
+    "      - name: Install compatible Corepack",
+    "        run: npm install --global corepack@0.35.0",
+  ].join("\n");
+
+  assert.ok(
+    workflow.includes(compatibleCorepackStep),
+    "CI must install the Corepack release compatible with the pinned pnpm version",
+  );
+  assert.ok(
+    workflow.indexOf(compatibleCorepackStep) < workflow.indexOf("          corepack enable"),
+    "CI must install compatible Corepack before enabling it",
+  );
+
   assert.ok(
     workflow.includes(
       [
