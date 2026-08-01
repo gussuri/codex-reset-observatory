@@ -839,6 +839,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "6 million active users celebration reset",
     zh: "600万活跃用户庆祝重置",
   },
+  "木・金曜日にCodexの障害がなく予告もないため、米国時間の土日は予測確率を低めに設定しています。": {
+    ja: "木・金曜日にCodexの障害がなく予告もないため、米国時間の土日は予測確率を低めに設定しています。",
+    en: "As no Codex incidents occurred during Thursday/Friday and no notice was issued, probability is kept low for the US weekend.",
+    zh: "由于周四和周五没有发生 Codex 故障且无重置预告，美国周末期间预测概率保持较低水平。",
+  },
   "Luna 10万スレッド到達・効率改善記念リセット": {
     ja: "Luna 10万スレッド到達・効率改善記念リセット",
     en: "Luna 100k Threads & Efficiency Milestone Reset",
