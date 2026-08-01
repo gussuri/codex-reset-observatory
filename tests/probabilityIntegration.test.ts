@@ -124,7 +124,7 @@ test("getLocalResetProbabilityReason formats English summary without un-translat
     );
     const englishReason = viewModel.reasoningSummary;
 
-    assert.strictEqual(typeof englishReason, "string");
+    assert.ok(englishReason);
     assert.ok(englishReason.includes("Tibo's teaser post stating 'There will be signs... Resets'"), `Expected English translation, but got: "${englishReason}"`);
     assert.strictEqual(englishReason.includes("匂わせ投稿"), false, "English summary MUST NOT contain Japanese text '匂わせ投稿'");
   } finally {

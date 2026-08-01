@@ -35,20 +35,25 @@ test("i18n Automated Check: All LOCAL_OBSERVATION_SIGNALS have full English & Ch
 
 test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & Chinese translations", () => {
   for (const history of LOCAL_RESET_HISTORY) {
+    const historyIdentifier = history.id ?? history.title;
+    const historyDate = history.completed_at ?? history.closed_at ?? history.opened_at;
+    const historyLabel = historyIdentifier ?? historyDate;
+
     if (history.title) {
       const enTitle = translateDynamic(history.title, "en");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enTitle),
         false,
-        `History '${history.resetAt ?? history.title}' title lacks English translation. Got: "${enTitle}"`
+        `History '${historyLabel}' title lacks English translation. Got: "${enTitle}"`
       );
     }
-    if (history.note) {
-      const enNote = translateDynamic(history.note, "en");
+    const historyNote = history.details?.note;
+    if (historyNote) {
+      const enNote = translateDynamic(historyNote, "en");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enNote),
         false,
-        `History '${history.resetAt ?? history.title}' note lacks English translation. Got: "${enNote}"`
+        `History '${historyLabel}' note lacks English translation. Got: "${enNote}"`
       );
     }
   }
@@ -59,7 +64,7 @@ test("i18n Automated Check: RadarViewModel reasoningSummary contains zero Japane
   const enViewModel = getRadarViewModel(radarData, "en");
 
   const enSummary = enViewModel.reasoningSummary;
-  assert.strictEqual(typeof enSummary, "string");
+  assert.ok(enSummary);
   assert.strictEqual(
     JAPANESE_CHAR_REGEX.test(enSummary),
     false,
