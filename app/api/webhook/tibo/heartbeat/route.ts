@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { buildHeartbeatRecord } from "../../../../../lib/radar/heartbeat";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -31,19 +32,6 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const {
-      sessionId,
-      lastSuccessfulParseAt,
-      lastSeenTweetId,
-      lastScanError,
-      selectorVersion,
-      last_page_reload_at,
-      last_page_reload_status,
-      last_page_reload_error,
-      lastPageReloadAt,
-      lastPageReloadStatus,
-      lastPageReloadError,
-    } = body;
 
     const supabase = getSupabaseServiceClient();
     const now = new Date();
@@ -55,43 +43,7 @@ export async function POST(req: NextRequest) {
       .eq("id", "main")
       .single();
 
-    let sessionStartedAt = existing?.session_started_at || now.toISOString();
-    let heartbeatCount = (existing?.heartbeat_count || 0) + 1;
-    let maxGapSeconds = existing?.max_gap_seconds || 0;
-    let lastGapSeconds = 0;
-
-    // 2. New session reset logic (only when sessionId changes)
-    const isNewSession = existing?.session_id !== sessionId;
-    if (isNewSession) {
-      sessionStartedAt = now.toISOString();
-      heartbeatCount = 1;
-      maxGapSeconds = 0;
-      lastGapSeconds = 0;
-    } else if (existing?.last_heartbeat_at) {
-      const prevTime = new Date(existing.last_heartbeat_at).getTime();
-      lastGapSeconds = Math.max(0, Math.floor((now.getTime() - prevTime) / 1000));
-      if (lastGapSeconds > maxGapSeconds) {
-        maxGapSeconds = lastGapSeconds;
-      }
-    }
-
-    const payload = {
-      id: "main",
-      session_id: sessionId || "default_session",
-      session_started_at: sessionStartedAt,
-      last_heartbeat_at: now.toISOString(),
-      last_successful_parse_at: lastSuccessfulParseAt || null,
-      last_seen_tweet_id: lastSeenTweetId || null,
-      last_scan_error: lastScanError || null,
-      selector_version: selectorVersion || "v1",
-      last_page_reload_at: last_page_reload_at || lastPageReloadAt || null,
-      last_page_reload_status: last_page_reload_status || lastPageReloadStatus || null,
-      last_page_reload_error: last_page_reload_error || lastPageReloadError || null,
-      heartbeat_count: heartbeatCount,
-      max_gap_seconds: maxGapSeconds,
-      last_gap_seconds: lastGapSeconds,
-      updated_at: now.toISOString(),
-    };
+    const payload = buildHeartbeatRecord(body, existing, now);
 
     const { error } = await supabase
       .from("tibo_heartbeat")
@@ -104,9 +56,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      heartbeatCount,
-      maxGapSeconds,
-      lastGapSeconds,
+      heartbeatCount: payload.heartbeat_count,
+      maxGapSeconds: payload.max_gap_seconds,
+      lastGapSeconds: payload.last_gap_seconds,
     });
   } catch (err: any) {
     console.error("[Heartbeat Error]", err);
