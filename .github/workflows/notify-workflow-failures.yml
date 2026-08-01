@@ -1,0 +1,81 @@
+name: Notify workflow failures
+
+on:
+  workflow_run:
+    workflows: ["CI", "Tibo monitor health"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    if: github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or close the workflow alert issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowRun = context.payload.workflow_run;
+            const workflowName = workflowRun.name;
+            const conclusion = workflowRun.conclusion;
+            const branch = workflowRun.head_branch;
+            const commit = workflowRun.head_sha;
+            const runUrl = workflowRun.html_url;
+            const issueTitle = "[Workflow alert] " + workflowName;
+            const marker = "<!-- workflow-alert:" + workflowName + " -->";
+            const details = [
+              marker,
+              "Workflow: " + workflowName,
+              "Conclusion: " + conclusion,
+              "Branch: " + branch,
+              "Commit: " + commit,
+              "Run: " + runUrl,
+            ].join("\n");
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existingIssue = issues.find((issue) => issue.title === issueTitle);
+
+            if (conclusion === "success") {
+              if (!existingIssue) {
+                return;
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: "Recovered\n\n" + details,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                state: "closed",
+              });
+              return;
+            }
+
+            if (conclusion !== "failure" && conclusion !== "cancelled") {
+              return;
+            }
+
+            if (existingIssue) {
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: details,
+            });

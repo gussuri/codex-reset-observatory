@@ -77,7 +77,17 @@ LIMIT 1;
 
 監視の稼働状態は `public.tibo_heartbeat` の `id='main'` を確認します。`last_heartbeat_at`、`last_successful_parse_at`、`last_seen_tweet_id`、`last_scan_error`、`last_page_reload_at`、`last_page_reload_status`、`last_page_reload_error` が手掛かりになります。
 
-## 5. 正常時とfallback時の期待値
+## 5. 監視ヘルスチェックとアラート
+
+本番の監視ヘルスエンドポイントは `GET https://codex-reset-observatory.vercel.app/api/monitor/health` です。呼び出しには `Authorization: Bearer <CRON_SECRET>` が必要です。秘密値そのものをIssue、ログ、手順書、チャットへ貼り付けないでください。
+
+正常と判定されるには、`last_heartbeat_at` と `last_successful_parse_at` の両方が現在から15分以内であり、`last_scan_error` がnull、かつ `last_page_reload_status` が `success` またはnullである必要があります。タイムスタンプの欠落・形式不正、15分超過、スキャンエラー、またはそれ以外のページ再読み込みステータスは異常です。正常時だけHTTP 200になり、異常・設定不足・データベース読み取り失敗時はHTTP 503になります。応答には安全な状態と理由だけが含まれ、生のエラー本文は含まれません。
+
+`.github/workflows/tibo-monitor-health.yml` は10分ごとと手動実行時に本番エンドポイントを確認します。GitHub Actionsの `CRON_SECRET` は本番環境の `CRON_SECRET` と一致させます。HTTP 200以外はワークフロー失敗として扱います。
+
+`.github/workflows/notify-workflow-failures.yml` はmain上の `CI` と `Tibo monitor health` の完了を監視します。失敗またはキャンセル時は、ワークフロー名ごとに開いているIssueがなければ1件だけ作成します。同じ障害が続く間は追加Issueや重複通知を作りません。後続の成功時は既存Issueへ復旧コメントを追加して閉じます。Issueにはワークフロー名、結論、ブランチ、コミット、実行URLだけを記録します。
+
+## 6. 正常時とfallback時の期待値
 
 本番の推奨設定は `GEMINI_CLASSIFICATION_MODE=primary` です。
 
@@ -90,7 +100,7 @@ LIMIT 1;
 
 Geminiの失敗で投稿全体を `irrelevant` にすることはありません。`primary` では必ずルール分類を保存します。`reset_executed` が正式履歴に採用されるかは、最終分類のconfidence、verification_status、classification_sourceの組み合わせで決まります。
 
-## 6. 誤判定の修正方法
+## 7. 誤判定の修正方法
 
 SupabaseのSQL Editorなど、管理権限のある場所で対象行の `verification_status` を更新します。行自体は削除しません。
 
@@ -114,7 +124,7 @@ WHERE tweet_id = '投稿ID';
 
 `confirmed` は明示的な採用意思を記録します。ただし、正式履歴にするには対象行が `reset_executed` でconfidence 0.95以上である必要があります。
 
-## 7. 手動Webhook送信
+## 8. 手動Webhook送信
 
 自動監視が間に合わなかった投稿は、次のPowerShell例でWebhookへ送信できます。実際の秘密値やAPIキーはコマンド・リポジトリ・手順書へ書きません。
 
@@ -141,13 +151,13 @@ Invoke-RestMethod `
 
 `tweetId` は数字の投稿ID、`tweetUrl` はTibo氏のstatus URL、`tweetCreatedAt` はISO 8601形式で指定します。Webhookは投稿時刻が現在より5分を超えて未来の場合、URLがTibo氏のstatus URLでない場合、本文が2000文字を超える場合などを拒否します。送信後はHTTP 2xxとSupabaseの行を確認してください。
 
-## 8. `data/resetHistory.ts`への手動追記
+## 9. `data/resetHistory.ts`への手動追記
 
 Webhookが使えない緊急時には、`data/resetHistory.ts` へ静的なリセット履歴を手動追記する手段も残っています。ただし通常はWebhook経由を優先します。
 
 手動追記では、既存の履歴イベント形式、実施時刻、分類、対象範囲、ソースURLをそろえ、`npm test` と `npm run build` を実行します。静的履歴とSupabase由来の動的履歴が同じリセットを表す場合は、tweet_id・URL、または強制リセットの実施時刻5分以内という条件で統合されます。二重表示を避けるため、同じイベントを両方へ無計画に追加しないでください。
 
-## 9. トラブルシューティング
+## 10. トラブルシューティング
 
 ### `monitored_tab_missing`
 
