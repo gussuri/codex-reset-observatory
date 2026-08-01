@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Analytics } from "@vercel/analytics/next";
+import { getDocumentLocale } from "@/lib/locale";
 import "./globals.css";
 
 const siteUrl = "https://codex-reset-observatory.vercel.app";
@@ -88,13 +90,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestHeaders = await headers();
+  const locale = getDocumentLocale(requestHeaders.get("x-codex-pathname") ?? "/");
+
   return (
-    <html lang="ja">
+    <html lang={locale}>
       <body>
         <script
           type="application/ld+json"
