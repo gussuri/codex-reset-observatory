@@ -1,4 +1,8 @@
 import type { OpenAIStatusHistoryItem } from "@/lib/openaiStatus";
+import type {
+  FormalTiboResetSignal,
+  RejectedTiboResetSignal,
+} from "./tiboHistory";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -132,6 +136,8 @@ export type RadarData = {
     rss?: string;
   };
   openai_status_history?: Array<OpenAIStatusHistoryItem>;
+  formal_tibo_resets?: Array<FormalTiboResetSignal>;
+  rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;

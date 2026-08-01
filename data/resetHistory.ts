@@ -24,7 +24,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 1362,
     "scope": "全有料プラン",
     "summary": "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
-    "source_url": "https://x.com/thsottiaux/status/2083053369351090254",
+    "source_url": "https://x.com/thsottiaux/status/2083395449814229287",
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",

@@ -20,6 +20,7 @@ import {
   probabilityToPercent,
   getExpectationLabel,
 } from "./helpers";
+import { combineResetHistory } from "./tiboHistory";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -35,7 +36,10 @@ export function getLocalResetProbability(
 ): number {
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const periodHours = period === "24h" ? 24 : 48;
-  const tiboSignals = (data as any)?.active_tibo_signals as Array<any> | undefined;
+  const tiboSignals = [
+    ...(((data as any)?.active_tibo_signals as Array<any> | undefined) ?? []),
+    ...(((data as any)?.formal_tibo_resets as Array<any> | undefined) ?? []),
+  ];
 
   // 1. Sort active Tibo signals by tweet_created_at ascending for time-ordered evaluation
   const sortedSignals = (tiboSignals ?? [])
@@ -328,11 +332,16 @@ export function isCurrentLocalSignal(signal: LocalObservationSignal) {
   return getEffectiveSignalStatus(signal) === "active";
 }
 
-export function getRecent7DayResetCount(): number {
+export function getRecent7DayResetCount(data?: RadarData | null): number {
   const now = Date.now();
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const combinedHistory = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+  );
 
-  return LOCAL_RESET_HISTORY.filter((item) => {
+  return combinedHistory.filter((item) => {
     const resetMethod = item.details?.resetMethod;
     if (resetMethod === "任意リセット権1回配布") {
       return false;
@@ -345,7 +354,7 @@ export function getRecent7DayResetCount(): number {
 }
 
 export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null): number {
-  const count = getRecent7DayResetCount();
+  const count = getRecent7DayResetCount(data);
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const daysSince = getDaysSinceLastGlobalReset(data);
 
@@ -433,7 +442,12 @@ export function getDaysSinceLastGlobalReset(data?: RadarData | null) {
 }
 
 export function getLastGlobalResetAt(data?: RadarData | null) {
-  const candidates = LOCAL_RESET_HISTORY.map((item) => {
+  const combinedHistory = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+  );
+  const candidates = combinedHistory.map((item) => {
     if ((item.kind === "window_opened" || item.status === "open") && !item.closed_at && !item.completed_at) {
       return null;
     }
@@ -445,22 +459,7 @@ export function getLastGlobalResetAt(data?: RadarData | null) {
   });
 
   const latestOfficialStr = getLatestIsoDate(candidates);
-  let latestOfficialDate = latestOfficialStr ? new Date(latestOfficialStr) : null;
-
-  // Evaluate provisional reset candidate from active_tibo_signals (reset_executed & confidence >= 0.95)
-  const tiboSignals = (data as any)?.active_tibo_signals as Array<any> | undefined;
-  const validExecutedSignal = tiboSignals?.find(
-    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
-  );
-
-  if (validExecutedSignal?.tweet_created_at) {
-    const provisionalDate = new Date(validExecutedSignal.tweet_created_at);
-    if (!latestOfficialDate || provisionalDate.getTime() > latestOfficialDate.getTime()) {
-      latestOfficialDate = provisionalDate;
-    }
-  }
-
-  return latestOfficialDate;
+  return latestOfficialStr ? new Date(latestOfficialStr) : null;
 }
 
 export function getLocalExpectationLevel(

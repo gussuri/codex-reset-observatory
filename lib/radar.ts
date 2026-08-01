@@ -24,6 +24,7 @@ import type {
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
 import type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
+import { combineResetHistory } from "./radar/tiboHistory";
 import {
   translateUI,
   translateDynamic,
@@ -84,12 +85,19 @@ export {
 export function getLocalRadarData({
   openAIStatus,
   activeTiboSignals = [],
+  formalTiboResets = [],
+  rejectedTiboResets = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   activeTiboSignals?: Array<any>;
+  formalTiboResets?: RadarData["formal_tibo_resets"];
+  rejectedTiboResets?: RadarData["rejected_tibo_resets"];
 } = {}): RadarData & { active_tibo_signals?: Array<any> } {
   const checkedAt = new Date().toISOString();
-  const updatedAt = getLocalModelUpdatedAt(openAIStatus);
+  const updatedAt = getLocalModelUpdatedAt(openAIStatus, {
+    formal_tibo_resets: formalTiboResets,
+    rejected_tibo_resets: rejectedTiboResets,
+  });
 
   return {
     schema_version: "local-v1",
@@ -104,6 +112,8 @@ export function getLocalRadarData({
     openai_status_history: openAIStatus?.history ?? [],
     codex_environment: getLocalSignalEnvironment(openAIStatus),
     active_tibo_signals: activeTiboSignals,
+    formal_tibo_resets: formalTiboResets,
+    rejected_tibo_resets: rejectedTiboResets,
   };
 }
 
@@ -121,27 +131,15 @@ export function getRadarViewModel(
   const predictionLevel = getLocalExpectationLevel(source, locale, signalEvaluation);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
-  const latestCompletedLocalWindow = getLatestCompletedLocalWindow();
-  const latestObservedResetAt =
-    observedHistory.find((item) => item.resetAt)?.resetAt ?? null;
-
-  // Check for valid reset_executed signal (confidence >= 0.95) to act as provisional reset candidate
-  const activeTiboSignals = (source as any)?.active_tibo_signals as Array<any> | undefined;
-  const validExecutedSignal = activeTiboSignals?.find(
-    (s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95
-  );
-
-  let effectiveLatestResetAt = latestObservedResetAt;
-  if (validExecutedSignal?.tweet_created_at) {
-    const provisionalDate = new Date(validExecutedSignal.tweet_created_at).toISOString();
-    if (!latestObservedResetAt || provisionalDate > latestObservedResetAt) {
-      effectiveLatestResetAt = provisionalDate;
-    }
-  }
+  const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
+  const effectiveLatestResetAt = getLastGlobalResetAt(source)?.toISOString() ??
+    observedHistory.find((item) => item.resetAt)?.resetAt ??
+    null;
 
   const regularResetForecast = getRegularResetForecast(
     effectiveLatestResetAt,
-    locale
+    locale,
+    source,
   );
   const latestWindow =
     getLatestWindowWithRegularReset(
@@ -204,20 +202,20 @@ export function getRadarViewModel(
   };
 }
 
-function getLatestRegularOrForcedResetAt(): string | null {
+function getLatestRegularOrForcedResetAt(data?: RadarData | null): string | null {
   let latestTime = 0;
   let latestDateStr: string | null = null;
 
   // 1. 全体履歴を走査 (getCombinedResetHistory)
-  const combinedHistory = getCombinedResetHistory();
+  const combinedHistory = getCombinedResetHistory(data);
   for (const item of combinedHistory) {
     const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
     const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
     const isForced = resetMethod === "強制リセット";
     const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
-    const isAllPaidScope = item.scope === "全有料プラン";
+    const isGlobalScope = item.scope === "全有料プラン" || item.scope === "Codex / ChatGPT Work";
 
-    if ((isForced || isRegular) && isAllPaidScope) {
+    if ((isForced || isRegular) && isGlobalScope) {
       const dateStr = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
       if (dateStr) {
         const time = new Date(dateStr).getTime();
@@ -232,9 +230,13 @@ function getLatestRegularOrForcedResetAt(): string | null {
   return latestDateStr;
 }
 
-function getRegularResetForecast(latestResetAt: string | null | undefined, locale: Locale = "ja") {
+function getRegularResetForecast(
+  latestResetAt: string | null | undefined,
+  locale: Locale = "ja",
+  data?: RadarData | null,
+) {
   // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
-  const autoLatestResetAt = getLatestRegularOrForcedResetAt();
+  const autoLatestResetAt = getLatestRegularOrForcedResetAt(data);
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
@@ -428,8 +430,8 @@ function getLatestWindowWithRegularReset(
   };
 }
 
-function getLatestCompletedLocalWindow(): WindowLike | undefined {
-  const globalHistory = getCombinedResetHistory();
+function getLatestCompletedLocalWindow(data?: RadarData | null): WindowLike | undefined {
+  const globalHistory = getCombinedResetHistory(data);
 
   return globalHistory
     .filter((item) => getCompletedResetAt(item))
@@ -700,12 +702,15 @@ function isPendingResetNotice(item: WindowLike & { kind?: string }) {
   );
 }
 
-function getLocalModelUpdatedAt(openAIStatus?: OpenAIStatusSignals | null) {
+function getLocalModelUpdatedAt(
+  openAIStatus?: OpenAIStatusSignals | null,
+  data?: RadarData | null,
+) {
   const candidates = [
     LOCAL_MODEL_UPDATED_AT,
     openAIStatus?.updatedAt,
     ...LOCAL_OBSERVATION_SIGNALS.map((signal) => signal.observedAt),
-    ...getCombinedResetHistory().flatMap((item) => [
+    ...getCombinedResetHistory(data).flatMap((item) => [
       item.closed_at,
       item.completed_at,
       item.opened_at,
@@ -806,8 +811,8 @@ function getValue(
   return undefined;
 }
 
-function getRecentHistory(_data: RadarData | null, locale: Locale = "ja", limit: boolean = true) {
-  const items = getCombinedResetHistory().filter((item): item is WindowEventLike =>
+function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: boolean = true) {
+  const items = getCombinedResetHistory(data).filter((item): item is WindowEventLike =>
     Boolean(item?.title),
   );
 
@@ -1011,7 +1016,7 @@ function getCompletedResetAt(item: WindowEventLike) {
   return item.kind === "reset_completed" ? item.opened_at ?? item.date ?? null : null;
 }
 
-function getCombinedResetHistory(): Array<WindowEventLike> {
+function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike> {
   const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved" && !sig.skipAutoHistoryMerge
   );
@@ -1040,5 +1045,9 @@ function getCombinedResetHistory(): Array<WindowEventLike> {
     };
   });
 
-  return [...LOCAL_RESET_HISTORY, ...autoResolvedItems];
+  return combineResetHistory(
+    [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+  );
 }
