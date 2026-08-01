@@ -1,6 +1,6 @@
 import React from "react";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { RadarDashboard } from "../components/RadarDashboard";
@@ -42,9 +42,13 @@ test("renders unknown probabilities without aria-valuenow and with localized val
   assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 2);
 });
 
-test("labels a dynamic notice by its post time when no execution time is scheduled", () => {
-  const openedAt = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+test("labels a dynamic notice by its post time when no execution time is scheduled", (t: TestContext) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-08-02T00:00:00.000Z"),
+  });
+  const openedAt = "2026-08-01T23:45:00.000Z";
+  const expiresAt = "2026-08-02T12:00:00.000Z";
   const data = getLocalRadarData({
     activeTiboSignals: [
       {
