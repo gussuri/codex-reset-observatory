@@ -26,6 +26,28 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Last updated",
     zh: "上次更新",
   },
+  staleDataWarning: {
+    ja: "最新データの取得に失敗したため、最後に取得できた結果を表示しています。",
+    en: "Live refresh failed. Showing the last successfully fetched result.",
+    zh: "实时更新失败，当前显示上次成功获取的结果。",
+  },
+  degradedDataWarning: {
+    ja: "一部のライブ情報源を取得できていないため、見積もりが不完全な可能性があります。",
+    en: "Some live sources are unavailable, so this estimate may be incomplete.",
+    zh: "部分实时数据源暂不可用，因此当前估算可能不完整。",
+  },
+  dataUnavailable: {
+    ja: "ライブデータも保存済みデータも取得できません。確率表示を一時停止しています。",
+    en: "Live and cached data are unavailable. Probability values are temporarily hidden.",
+    zh: "实时数据和缓存数据均不可用，概率数值已暂时隐藏。",
+  },
+  lastSuccessfulRefresh: {
+    ja: "最終取得成功時刻",
+    en: "Last successful refresh",
+    zh: "上次成功更新时间",
+  },
+  unknownProbability: { ja: "不明", en: "Unknown", zh: "未知" },
+  noticePostedAt: { ja: "予告投稿時刻", en: "Notice posted", zh: "预告发布时间" },
   subTitle: {
     ja: "Codex制限解除・使用量リセット情報",
     en: "Codex reset notices, history, and probability",

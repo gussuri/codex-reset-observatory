@@ -18,18 +18,18 @@ import {
   isSafeHttpUrl,
   probabilityToPercent,
 } from "@/lib/radar";
+import {
+  applyRefreshFailure,
+  applyRefreshSuccess,
+  getDashboardDataState,
+  type RadarLoadState,
+} from "@/lib/radar/clientState";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
-import { MANUAL_REVIEW_STATUS } from "@/data/manualReviewStatus";
 
 const CACHE_KEY = "codex-reset-observatory:last-success";
-
-type LoadState = {
-  data: RadarData | null;
-  fetchedAt: string | null;
-};
 
 export function RadarDashboard({
   initialData,
@@ -40,9 +40,11 @@ export function RadarDashboard({
   initialFetchedAt?: string | null;
   locale?: Locale;
 }) {
-  const [state, setState] = useState<LoadState>({
+  const [state, setState] = useState<RadarLoadState>({
     data: initialData ?? null,
     fetchedAt: initialFetchedAt ?? null,
+    isStale: false,
+    refreshError: null,
   });
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
@@ -65,21 +67,19 @@ export function RadarDashboard({
       const data = (await response.json()) as RadarData;
       const fetchedAt = new Date().toISOString();
 
-      window.localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({ data, fetchedAt } satisfies CachedRadarData),
-      );
+      setState(applyRefreshSuccess(data, fetchedAt));
 
-      setState({
-        data,
-        fetchedAt,
-      });
+      try {
+        window.localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ data, fetchedAt } satisfies CachedRadarData),
+        );
+      } catch {
+        // Cache persistence is best-effort; the successful live response remains current.
+      }
     } catch {
       const cached = loadCachedData();
-      setState((current) => ({
-        data: cached?.data ?? current.data,
-        fetchedAt: cached?.fetchedAt ?? current.fetchedAt,
-      }));
+      setState((current) => applyRefreshFailure(current, cached));
     }
   }, [loadCachedData]);
 
@@ -88,7 +88,10 @@ export function RadarDashboard({
   }, [fetchRadar]);
 
   const viewModel = useMemo(() => getRadarViewModel(state.data, locale), [state.data, locale]);
-  const probability24h = viewModel.probability24h;
+  const dashboardDataState = getDashboardDataState(state);
+  const isDataUnavailable = dashboardDataState === "unavailable";
+  const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
+  const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const refreshMs = useMemo(
     () => getRefreshIntervalMs(probability24h),
     [probability24h],
@@ -164,6 +167,26 @@ export function RadarDashboard({
             )}
           </div>
         </header>
+
+        {dashboardDataState !== "ready" ? (
+          <section
+            role={dashboardDataState === "unavailable" ? "alert" : "status"}
+            className={`rounded-lg border px-4 py-3 text-sm leading-6 ${
+              dashboardDataState === "unavailable"
+                ? "border-rose-200 bg-rose-50 text-rose-950"
+                : "border-amber-200 bg-amber-50 text-amber-950"
+            }`}
+          >
+            {translateUI(
+              dashboardDataState === "stale"
+                ? "staleDataWarning"
+                : dashboardDataState === "degraded"
+                  ? "degradedDataWarning"
+                  : "dataUnavailable",
+              locale,
+            )}
+          </section>
+        ) : null}
 
         <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
           <div className="sm:hidden">
@@ -255,7 +278,7 @@ export function RadarDashboard({
                 <h2 className="ui-heading mt-1 text-2xl font-semibold text-slate-950">
                   <span className="block">{translateUI("randomReset", locale)}</span>
                   <span className="block mt-1 text-lg sm:mt-0 sm:inline">
-                    {translateUI("expectationLabel", locale)}{locale === "en" ? ": " : "："}{viewModel.expectation}
+                    {translateUI("expectationLabel", locale)}{locale === "en" ? ": " : "："}{isDataUnavailable ? translateUI("unknownProbability", locale) : viewModel.expectation}
                   </span>
                 </h2>
               </div>
@@ -270,13 +293,13 @@ export function RadarDashboard({
               />
               <Metric
                 label={translateUI("within48h", locale)}
-                probability={viewModel.probability48h}
-                value={probabilityToPercent(viewModel.probability48h, locale)}
+                probability={probability48h}
+                value={probabilityToPercent(probability48h, locale)}
               />
             </div>
 
             <dl className="mt-5 space-y-4">
-              {viewModel.reasoningSummary ? (
+              {!isDataUnavailable && viewModel.reasoningSummary ? (
                 <RecommendationRow reason={viewModel.reasoningSummary} locale={locale} />
               ) : null}
             </dl>
@@ -436,9 +459,9 @@ export function RadarDashboard({
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">
             <p className="font-medium text-slate-500">
-              {translateUI("lastCheckedLabel", locale)}{locale === "en" ? ": " : "："}
+              {translateUI("lastSuccessfulRefresh", locale)}{locale === "en" ? ": " : "："}
             </p>
-            <LocalizedDateTime value={MANUAL_REVIEW_STATUS.lastCheckedAt} locale={locale} className="font-medium text-slate-700" />
+            <LocalizedDateTime value={state.fetchedAt} locale={locale} className="font-medium text-slate-700" />
           </div>
         </section>
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert";
 import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { translateDynamic } from "../lib/radar/i18n";
+import { translateDynamic, UI_TRANSLATIONS } from "../lib/radar/i18n";
 import { getRadarViewModel, getLocalRadarData } from "../lib/radar";
 
 const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
@@ -68,4 +68,32 @@ test("i18n Automated Check: RadarViewModel reasoningSummary contains zero Japane
 
   const zhViewModel = getRadarViewModel(radarData, "zh");
   assert.strictEqual(typeof zhViewModel.reasoningSummary, "string");
+});
+
+test("i18n Automated Check: data-state warnings are complete for every locale", () => {
+  const warningKeys = [
+    "staleDataWarning",
+    "degradedDataWarning",
+    "dataUnavailable",
+    "lastSuccessfulRefresh",
+    "unknownProbability",
+    "noticePostedAt",
+  ];
+
+  for (const key of warningKeys) {
+    const translations = UI_TRANSLATIONS[key];
+
+    for (const locale of ["ja", "en", "zh"] as const) {
+      assert.ok(
+        translations?.[locale]?.trim(),
+        `${key} ${locale} translation is empty`,
+      );
+    }
+
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(translations.en),
+      false,
+      `${key} English translation contains Japanese characters. Got: "${translations.en}"`,
+    );
+  }
 });
