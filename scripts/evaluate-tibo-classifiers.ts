@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import { classifyTiboTweet, type ClassificationSignalType } from "../lib/radar/classification";
 import {
   classifyWithGemini,
@@ -84,6 +85,53 @@ const RESET_EXECUTED_ID = new Set([
 ]);
 const TEASER_ID = "2081899343091843463";
 const AMBIGUOUS_ID = "2083053369351090254";
+const RESUME_DELAY_MS = 30_000;
+const RESUME_TWEET_IDS = new Set([
+  "2082981910209540352",
+  "2081899343091843463",
+  "2083387677945036995",
+  "2082637967852806207",
+  "2082609662231502932",
+  "2082241164850364555",
+]);
+
+type EvaluationStatusRow = {
+  tweetId: string;
+  geminiStatus: GeminiClassificationStatus;
+};
+
+export function selectRowsForResume<T extends EvaluationStatusRow>(rows: T[]): T[] {
+  return rows.filter((row) => row.geminiStatus !== "success");
+}
+
+export function shouldStopAfterStatus(status: GeminiClassificationStatus): boolean {
+  return status === "rate_limited";
+}
+
+export function mergeEvaluationRows<T extends { tweetId: string }>(rows: T[], updatedRow: T): T[] {
+  return rows.map((row) => (row.tweetId === updatedRow.tweetId ? updatedRow : row));
+}
+
+export function shouldWriteResumeReport(
+  rows: Array<{ geminiStatus: GeminiClassificationStatus }>,
+  expectedRowCount: number
+): boolean {
+  return rows.length === expectedRowCount && rows.every((row) => row.geminiStatus === "success");
+}
+
+function loadLocalEnvironment() {
+  const envPath = path.join(process.cwd(), ".env.local");
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match || process.env[match[1]]) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[match[1]] = value;
+  }
+}
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -198,53 +246,32 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function isRetryable(status: GeminiClassificationStatus): boolean {
-  // The current production classifier exposes 429 as rate_limited and groups
-  // HTTP 5xx with api_error. It does not expose the raw status code.
-  return status === "rate_limited" || status === "api_error";
-}
-
 async function classifyGemini(
   row: GoldRow,
   apiKey: string | undefined,
   model: string | undefined,
-  delayMs: number,
 ): Promise<{
   output: GeminiClassificationOutput;
   latencyMs: number;
   attemptCount: number;
 }> {
   const started = performance.now();
-  const configured = Boolean(apiKey && model);
-  let attemptCount = 0;
-  let output: GeminiClassificationOutput;
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (configured && attempt > 0) {
-      await sleep(delayMs * 2 ** (attempt - 1));
+  const output = await classifyWithGemini(
+    {
+      text: row.text,
+      tweetCreatedAt: row.tweetCreatedAt,
+    },
+    {
+      apiKey,
+      model,
+      mode: "shadow",
     }
-    attemptCount += 1;
-    output = await classifyWithGemini(
-      {
-        text: row.text,
-        tweetCreatedAt: row.tweetCreatedAt,
-      },
-      {
-        apiKey,
-        model,
-        mode: "shadow",
-      }
-    );
-    if (!configured || output.status === "success" || !isRetryable(output.status) || attempt === 2) {
-      return {
-        output,
-        latencyMs: Math.round(performance.now() - started),
-        attemptCount,
-      };
-    }
-  }
-
-  throw new Error("Gemini classification loop ended without a result");
+  );
+  return {
+    output,
+    latencyMs: Math.round(performance.now() - started),
+    attemptCount: 1,
+  };
 }
 
 function makeMetrics(rows: EvaluationRow[], prediction: (row: EvaluationRow) => SignalType | null): EvaluationMetrics {
@@ -439,6 +466,34 @@ function writeResults(filePath: string, rows: EvaluationRow[]) {
   fs.writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
 }
 
+function readExistingResults(filePath: string, sourceRows: GoldRow[]): EvaluationRow[] {
+  const sourceById = new Map(sourceRows.map((row) => [row.tweetId, row]));
+  return csvRecords(fs.readFileSync(filePath, "utf8")).map((record) => {
+    const source = sourceById.get(required(record, "tweet_id"));
+    if (!source) throw new Error(`Result row has no matching source tweet: ${record.tweet_id}`);
+    const optionalNumber = (value: string | undefined) => value ? Number(value) : null;
+    const optionalText = (value: string | undefined) => value || null;
+    return {
+      ...source,
+      rulePrediction: required(record, "rule_prediction") as SignalType,
+      ruleConfidence: Number(required(record, "rule_confidence")),
+      ruleReason: required(record, "rule_reason"),
+      geminiPrediction: optionalText(record.gemini_prediction) as SignalType | null,
+      geminiConfidence: optionalNumber(record.gemini_confidence),
+      geminiTemporalDirection: optionalText(record.gemini_temporal_direction) as GeminiClassificationOutput["temporalDirection"],
+      geminiEvidenceQuote: optionalText(record.gemini_evidence_quote),
+      geminiReasonJa: optionalText(record.gemini_reason_ja),
+      geminiResetTypeJa: optionalText(record.gemini_reset_type_ja) as GeminiClassificationOutput["resetTypeJa"],
+      geminiNoticeToExecution: optionalText(record.gemini_notice_to_execution),
+      geminiStatus: required(record, "gemini_status") as GeminiClassificationStatus,
+      geminiLatencyMs: Number(record.gemini_latency_ms || 0),
+      geminiAttemptCount: Number(record.gemini_attempt_count || 0),
+      geminiModel: optionalText(record.gemini_model),
+      fallbackPrediction: required(record, "fallback_prediction") as SignalType,
+    };
+  });
+}
+
 function buildReport(
   inputPath: string,
   rows: EvaluationRow[],
@@ -455,8 +510,10 @@ function buildReport(
   const statuses = countBy(rows.map((row) => row.geminiStatus));
   const goldCounts = countBy(rows.map((row) => row.gold));
   const disagreements = rows.filter((row) => row.geminiStatus === "success" && row.rulePrediction !== row.geminiPrediction);
-  const errors = rows.filter((row) => row.rulePrediction !== row.gold || (row.geminiStatus === "success" && row.geminiPrediction !== row.gold));
-  const apiFailures = rows.filter((row) => row.geminiStatus !== "success");
+  const ruleMistakes = rows.filter((row) => row.rulePrediction !== row.gold);
+  const geminiMistakes = rows.filter((row) => row.geminiStatus === "success" && row.geminiPrediction !== row.gold);
+  const fallbackMistakes = rows.filter((row) => row.fallbackPrediction !== row.gold);
+  const unavailableGemini = rows.filter((row) => row.geminiStatus !== "success");
 
   lines.push("# Tibo classifier evaluation");
   lines.push("");
@@ -465,6 +522,9 @@ function buildReport(
   lines.push(`- Primary rows: ${primaryRows.length} (ambiguous tweet ${AMBIGUOUS_ID} excluded)`);
   lines.push(`- Provisional-all rows: ${rows.length}`);
   lines.push(`- Gemini model: ${model || "未設定"}`);
+  const modelsUsed = Array.from(new Set(rows.map((row) => row.geminiModel).filter((model): model is string => Boolean(model))));
+  lines.push(`- Gemini models actually used: ${modelsUsed.length ? modelsUsed.join(", ") : "なし"}`);
+  lines.push("- API input mode: one CSV row per request; tweet text is never batched with another post.");
   lines.push(`- API key: ${process.env.GEMINI_API_KEY ? "configured (value omitted)" : "not configured"}`);
   lines.push(`- API success: ${apiSuccess} / ${rows.length}`);
   lines.push(`- First-attempt success: ${firstAttemptSuccess} / ${rows.length}`);
@@ -534,12 +594,34 @@ function buildReport(
   lines.push(`- p95 latency: ${percentile(0.95) === null ? "n/a" : `${percentile(0.95)} ms`}`);
   lines.push("- Token usage: unavailable because the current production Gemini classifier does not expose usageMetadata.");
   lines.push("");
+  lines.push("## Gemini classification results");
+  lines.push("");
+  const successfulClassifications = rows.filter((row) => row.geminiStatus === "success" && row.geminiPrediction);
+  if (successfulClassifications.length === 0) {
+    lines.push("- No valid Gemini classification results were recorded.");
+  }
+  for (const row of successfulClassifications) {
+    lines.push(`- ${row.tweetId}: Gemini=${row.geminiPrediction}, confidence=${row.geminiConfidence ?? "n/a"}, gold=${row.gold}, correct=${row.geminiPrediction === row.gold}, model=${row.geminiModel ?? "n/a"}`);
+  }
+  lines.push("");
   lines.push("## Mistakes and disagreements");
   lines.push("");
-  lines.push("### All classifier mistakes");
-  if (errors.length === 0) lines.push("- None");
-  for (const row of errors) {
-    lines.push(`- ${row.tweetId}: gold=${row.gold}, rule=${row.rulePrediction}, gemini=${row.geminiPrediction ?? `(${row.geminiStatus})`}, fallback=${row.fallbackPrediction}`);
+  lines.push("### Rule classification mistakes");
+  if (ruleMistakes.length === 0) lines.push("- None");
+  for (const row of ruleMistakes) {
+    lines.push(`- ${row.tweetId}: gold=${row.gold}, rule=${row.rulePrediction}`);
+  }
+  lines.push("");
+  lines.push("### Gemini classification mistakes");
+  if (geminiMistakes.length === 0) lines.push("- None among valid Gemini responses");
+  for (const row of geminiMistakes) {
+    lines.push(`- ${row.tweetId}: gold=${row.gold}, Gemini=${row.geminiPrediction}`);
+  }
+  lines.push("");
+  lines.push("### Gemini + rule fallback mistakes");
+  if (fallbackMistakes.length === 0) lines.push("- None");
+  for (const row of fallbackMistakes) {
+    lines.push(`- ${row.tweetId}: gold=${row.gold}, fallback=${row.fallbackPrediction}`);
   }
   lines.push("");
   lines.push("### Rule/Gemini disagreements");
@@ -548,9 +630,9 @@ function buildReport(
     lines.push(`- ${row.tweetId}: rule=${row.rulePrediction}, Gemini=${row.geminiPrediction}, evidence=${row.geminiEvidenceQuote ? `\`${row.geminiEvidenceQuote}\`` : "none"}`);
   }
   lines.push("");
-  lines.push("### Gemini API failures");
-  if (apiFailures.length === 0) lines.push("- None");
-  for (const row of apiFailures) lines.push(`- ${row.tweetId}: ${row.geminiStatus}, attempts=${row.geminiAttemptCount}`);
+  lines.push("### Gemini classification unavailable");
+  if (unavailableGemini.length === 0) lines.push("- None");
+  for (const row of unavailableGemini) lines.push(`- ${row.tweetId}: no classification result (${row.geminiStatus})`);
   lines.push("");
   lines.push("## Interpretation and recommendation");
   lines.push("");
@@ -571,30 +653,63 @@ function buildReport(
 }
 
 async function main() {
+  loadLocalEnvironment();
   const args = parseArgs(process.argv.slice(2));
+  const skipGemini = args.get("skip-gemini") === "true";
+  const resume = args.get("resume") === "true";
+  if (skipGemini) delete process.env.GEMINI_API_KEY;
   const inputPath = path.resolve(args.get("input") || path.join("Downloads", "tibo_signals_rows.csv"));
   const outputDir = path.resolve(args.get("output-dir") || "reports");
-  const delayMs = Number(args.get("delay-ms") || 11_000);
-  if (!Number.isFinite(delayMs) || delayMs < 0) throw new Error("--delay-ms must be a non-negative number");
+  const limit = Number(args.get("limit") || 0);
+  if (!Number.isInteger(limit) || limit < 0) throw new Error("--limit must be a non-negative integer");
+  if (resume && limit > 0) throw new Error("--limit cannot be used with --resume");
   if (!fs.existsSync(inputPath)) throw new Error(`Input CSV not found: ${inputPath}`);
 
-  const inputRows = readInput(inputPath);
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
-  const rows: EvaluationRow[] = [];
-  let firstAttemptSuccess = 0;
-  let totalRequests = 0;
+  const allInputRows = readInput(inputPath).slice(0, limit || undefined);
+  const apiKey = skipGemini ? undefined : process.env.GEMINI_API_KEY;
+  const model = process.env.GEMINI_MODEL?.trim();
+  if (resume && (!apiKey || !model)) {
+    throw new Error("--resume requires GEMINI_API_KEY and GEMINI_MODEL in the environment");
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+  const dateStamp = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date()).replaceAll("-", "");
+  const csvPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.csv`);
+  const reportPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.md`);
+  if (resume && !fs.existsSync(csvPath)) {
+    throw new Error(`Cannot resume because the result CSV does not exist: ${csvPath}`);
+  }
+  const existingRows = resume ? readExistingResults(csvPath, allInputRows) : [];
+  const existingIds = new Set(existingRows.map((row) => row.tweetId));
+  if (
+    resume &&
+    (existingRows.length !== allInputRows.length ||
+      existingIds.size !== allInputRows.length ||
+      allInputRows.some((row) => !existingIds.has(row.tweetId)))
+  ) {
+    throw new Error(`Cannot resume safely: result CSV has ${existingRows.length} rows, expected ${allInputRows.length}`);
+  }
+  let resultRows = existingRows;
+  const resultById = new Map(resultRows.map((row) => [row.tweetId, row]));
+  const inputRows = resume
+    ? selectRowsForResume(allInputRows.map((row) => resultById.get(row.tweetId)!))
+      .map((resultRow) => allInputRows.find((row) => row.tweetId === resultRow.tweetId)!)
+    : allInputRows;
+  if (resume) {
+    const unexpectedRows = inputRows.filter((row) => !RESUME_TWEET_IDS.has(row.tweetId));
+    if (unexpectedRows.length > 0) {
+      throw new Error(`Cannot resume safely: unexpected unfinished tweet_id(s): ${unexpectedRows.map((row) => row.tweetId).join(", ")}`);
+    }
+    console.log(`Resume model: ${model}`);
+    console.log(`Pending Gemini requests: ${inputRows.length}; successful rows preserved: ${allInputRows.length - inputRows.length}`);
+  }
 
+  let stoppedOnRateLimit = false;
   for (let index = 0; index < inputRows.length; index += 1) {
     const row = inputRows[index];
-    if (apiKey && model && index > 0) await sleep(delayMs);
+    if (apiKey && model && index > 0) await sleep(RESUME_DELAY_MS);
     const ruleResult = classifyTiboTweet(row.text, "");
-    const gemini = await classifyGemini(row, apiKey, model, delayMs);
-    totalRequests += gemini.attemptCount;
-    if (gemini.output.status === "success") {
-      if (gemini.attemptCount === 1) firstAttemptSuccess += 1;
-    }
-    rows.push({
+    const gemini = await classifyGemini(row, apiKey, model);
+    const evaluatedRow: EvaluationRow = {
       ...row,
       rulePrediction: ruleResult.signalType,
       ruleConfidence: ruleResult.confidence,
@@ -611,10 +726,31 @@ async function main() {
       geminiAttemptCount: gemini.attemptCount,
       geminiModel: gemini.output.model,
       fallbackPrediction: gemini.output.status === "success" && gemini.output.signalType ? gemini.output.signalType : ruleResult.signalType,
-    });
+    };
+    resultRows = mergeEvaluationRows(resultRows, evaluatedRow);
+    if (!resultRows.some((resultRow) => resultRow.tweetId === row.tweetId)) resultRows.push(evaluatedRow);
+    resultById.set(row.tweetId, evaluatedRow);
+    const checkpointRows = allInputRows
+      .map((sourceRow) => resultById.get(sourceRow.tweetId))
+      .filter((result): result is EvaluationRow => Boolean(result));
+    writeResults(csvPath, checkpointRows);
     console.log(`${index + 1}/${inputRows.length}: ${row.tweetId} rule=${ruleResult.signalType} gemini=${gemini.output.signalType ?? gemini.output.status}`);
+    if (shouldStopAfterStatus(gemini.output.status)) {
+      console.warn("Gemini returned rate_limited (HTTP 429); stopping immediately.");
+      stoppedOnRateLimit = true;
+      break;
+    }
   }
 
+  const rows = allInputRows
+    .map((sourceRow) => resultById.get(sourceRow.tweetId))
+    .filter((result): result is EvaluationRow => Boolean(result));
+  if (stoppedOnRateLimit || (resume && !shouldWriteResumeReport(rows, allInputRows.length))) {
+    console.log("Evaluation incomplete; CSV checkpoint saved. Markdown report was not regenerated.");
+    return;
+  }
+  const firstAttemptSuccess = rows.filter((row) => row.geminiStatus === "success" && row.geminiAttemptCount === 1).length;
+  const totalRequests = rows.reduce((sum, row) => sum + row.geminiAttemptCount, 0);
   const primaryRows = rows.filter((row) => !row.ambiguous);
   const metrics: Record<string, EvaluationMetrics> = {
     primaryRule: makeMetrics(primaryRows, (row) => row.rulePrediction),
@@ -633,10 +769,6 @@ async function main() {
     primaryFallbackExecuted: binaryMetrics(primaryRows, (row) => row.fallbackPrediction, (value) => value === "reset_executed"),
   };
 
-  fs.mkdirSync(outputDir, { recursive: true });
-  const dateStamp = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date()).replaceAll("-", "");
-  const csvPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.csv`);
-  const reportPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.md`);
   writeResults(csvPath, rows);
   fs.writeFileSync(
     reportPath,
@@ -658,7 +790,9 @@ async function main() {
   console.log(`Wrote ${reportPath}`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "Evaluation failed");
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : "Evaluation failed");
+    process.exitCode = 1;
+  });
+}

@@ -11,6 +11,7 @@
     "monitor:x": "tsx scripts/monitor-tibo-x.ts",
     "tibo:ai-backfill": "tsx scripts/backfill-tibo-ai-classification.ts",
     "eval:tibo-classifiers": "tsx scripts/evaluate-tibo-classifiers.ts",
+    "eval:tibo-classifiers:resume": "tsx scripts/evaluate-tibo-classifiers.ts --resume",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

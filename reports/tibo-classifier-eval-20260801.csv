@@ -1,54 +1,54 @@
 tweet_id,text,gold_signal_type,is_ambiguous,rule_prediction,rule_confidence,rule_reason,rule_correct,gemini_prediction,gemini_confidence,gemini_temporal_direction,gemini_evidence_quote,gemini_reason_ja,gemini_reset_type_ja,gemini_notice_to_execution,gemini_status,gemini_latency_ms,gemini_attempt_count,gemini_model,gemini_correct,fallback_prediction,fallback_correct
-2083048892405604681,What should we improve on Codex to improve the everyday experience? Nothing too small,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,1,1,,false,irrelevant,true
-2082883808194707792,Changes both affect API prices and usage in paid subscriptions. Something for everyone.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+2083048892405604681,What should we improve on Codex to improve the everyday experience? Nothing too small,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,このツイートはCodexの日常的な体験改善に関する意見を求める一般的な質問であり、使用制限リセットに関する言及が含まれていないため「irrelevant」と分類されます。,,,success,4074,1,gemini-flash-latest,true,irrelevant,true
+2082883808194707792,Changes both affect API prices and usage in paid subscriptions. Something for everyone.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.98,unclear,,API価格および有料サブスクリプションの使用量変更に関する告知であり、使用制限のリセット（実施完了、事前通知、ティーザー）に関する内容を含まないため。,,,success,4775,1,gemini-flash-latest,true,irrelevant,true
 2082883636177916306,"We kept ourselves busy with GPT-5.6 Sol. It's pretty good at things.
 
 Rolling out
 - 80% lower prices on Luna
 - 20% lower prices on Terra
 - faster speeds on GPT-5.6 Sol in /fast mode
-- ~ 10X cheaper auto-approve mode (""review for me"" in the app), which now uses Luna to prevent",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+- ~ 10X cheaper auto-approve mode (""review for me"" in the app), which now uses Luna to prevent",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,新モデルのアップデートや価格引き下げ、速度向上などの機能更新に関する告知であり、使用制限のリセット（Reset）に関する言及がないため。,,,success,3938,1,gemini-flash-latest,true,irrelevant,true
 2083395449814229287,"To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.
 
-Enjoy.",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i have reset usage limits""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
-2082326593532473523,One day we created the reset button and the rest is history.,irrelevant,false,irrelevant,0.1,"Matched negative, past, or retrospective pattern: ""one day we created the reset button""",true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+Enjoy.",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i have reset usage limits""",true,reset_executed,1,completed_now,I have reset usage limits for Codex and ChatGPT Work,ツイート内で「I have reset usage limits for Codex and ChatGPT Work」（CodexとChatGPT Workの使用制限をリセットしました）と述べられており、リセットがすでに完了し有効化されたことを明確に示しているため。,ご祝儀リセット,,success,4761,1,gemini-flash-latest,true,reset_executed,true
+2082326593532473523,One day we created the reset button and the rest is history.,irrelevant,false,irrelevant,0.1,"Matched negative, past, or retrospective pattern: ""one day we created the reset button""",true,irrelevant,1,historical,One day we created the reset button and the rest is history.,このツイートは過去にリセットボタンを作成したという歴史的な回想（思い出）を語っているのみであり、現在の実行や将来のリセット予告を示すものではないためirrelevantに分類されます。,,,success,3458,1,gemini-flash-latest,true,irrelevant,true
 2082317452755751098,"Hello people of Sol! I've reset usage limits for all ChatGPT Work and Codex users. Together with that, a quick update on GPT-5.6 Sol usage limits.
 
-Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i've reset usage limits""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
-2081839118531834176,Spotted Codex making friends at the OpenAI office,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2081979033261412537,Update. I have decided to take a break from x to recharge a bit. See you back tomorrow for more ChatGPT and Codex fun. It's going to be a fun week.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""i've reset usage limits""",true,reset_executed,1,completed_now,I've reset usage limits for all ChatGPT Work and Codex users.,ツイート内で「I've reset usage limits for all ChatGPT Work and Codex users.」（すべてのChatGPT WorkおよびCodexユーザーの利用制限をリセットしました）と述べており、リセットが既に実施・完了したことを明確に報告しているため。,詫びリセット,,success,6789,1,gemini-flash-latest,true,reset_executed,true
+2081839118531834176,Spotted Codex making friends at the OpenAI office,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート内容はOpenAIオフィス内での日常的な話題であり、使用制限のリセットに関する言及が一切含まれていないため。,,,success,3119,1,gemini-flash-latest,true,irrelevant,true
+2081979033261412537,Update. I have decided to take a break from x to recharge a bit. See you back tomorrow for more ChatGPT and Codex fun. It's going to be a fun week.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート内容は一時的な休息の報告および明日以降の活動についての雑談であり、Codexの利用制限リセットに関する直接的または間接的な言及が一切含まれていないため。,,,success,4431,1,gemini-flash-latest,true,irrelevant,true
 2083053369351090254,"The day we develop really good models. There will be signs.
 
 Reliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.
 
-These kinds of things.",irrelevant,true,teaser,0.85,"Matched teaser keyword ""resets"" with future indicator",false,,,,,,,,model_not_configured,0,1,,false,teaser,false
-2082895472184987985,承認します,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+These kinds of things.",irrelevant,true,teaser,0.85,"Matched teaser keyword ""resets"" with future indicator",false,irrelevant,0.95,unclear,Resets.,優れたモデルが開発された際の一般的な兆候（サイン）の1つとして「リセット」を例示しているだけであり、具体的なリセットの実施・予告・ティーザーのいずれにも該当しないため。,,,success,4492,1,gemini-flash-latest,true,irrelevant,true
+2082895472184987985,承認します,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,unclear,,「承認します」という短文であり、使用制限のリセットに関する具体的な言及や文脈が含まれていないため、無関係（irrelevant）と判定します。,,,success,3692,1,gemini-flash-latest,true,irrelevant,true
 2081860991210631476,"Turns out GPT-5.6 Sol and friends are absolutely amazing at performance and efficiency improvements. Good time to brush up on using OpenAI models if you haven’t switched already. 
 
-Excited to be able to share more soon. Pretty wild.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2083373529081291076,"I don't come often to GMail (OpenAI is a Slack company), but I swear, every time I do open it, there is a new button somewhere around the top right corner.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""limits have been reset""",true,,,,,,,,model_not_configured,0,1,,false,reset_executed,true
-2082981910209540352,Benefits all,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+Excited to be able to share more soon. Pretty wild.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート内で使用制限のリセットについて触れられておらず、モデルの性能向上や将来の共有に関する一般的な投稿であるため。,,,success,4093,1,gemini-flash-latest,true,irrelevant,true
+2083373529081291076,"I don't come often to GMail (OpenAI is a Slack company), but I swear, every time I do open it, there is a new button somewhere around the top right corner.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,制限リセットとは一切関係のない、GmailのUIに関する雑談ツイートであるため。,,,success,4053,1,gemini-flash-latest,true,irrelevant,true
+2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,future,,ツイート内には使用制限のリセットに関する言及がなく、明日の機能リリース（ship）に関する一般的な投稿であるため、対象外（irrelevant）と判定しました。,,,success,3978,1,gemini-flash-latest,true,irrelevant,true
+2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""limits have been reset""",true,reset_executed,1,completed_now,The usage limits have been reset for all paid users of Codex and ChatGPT Work.,ツイート内で「CodexおよびChatGPT Workのすべての有料ユーザーの利用制限がリセットされた」と、リセットが既に完了し現在有効であることを明確に宣言しているため。,,,success,4112,1,gemini-flash-latest,true,reset_executed,true
+2082981910209540352,Benefits all,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,176,1,gemini-1.5-flash-latest,false,irrelevant,true
 2082578335167807775,"効率！
 
 2つのステップで
 a) 素晴らしいモデルを訓練する
 b) 素晴らしいモデルを使ってすべてを改善する。その中には、自身のインフラ、推論スタック、カーネルなどなど
 
-https://openai.com/index/gpt-5-6-frontier-intelligence-efficiency/…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,1,1,,false,irrelevant,true
+https://openai.com/index/gpt-5-6-frontier-intelligence-efficiency/…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート内に使用制限やレートリセットに関する言及が一切なく、モデルのトレーニング効率やインフラ改善に関する投稿であるため。,,,success,3200,1,gemini-flash-latest,true,irrelevant,true
 2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
 
-Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",teaser,false,irrelevant,0.2,No reset notice or execution patterns matched.,false,,,,,,,,model_not_configured,0,1,,false,irrelevant,false
-2083387677945036995,ChatGPT Work counted,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2082574687020966126,やった！科学！,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",teaser,false,irrelevant,0.2,No reset notice or execution patterns matched.,false,,,,,,,,api_error,141,1,gemini-1.5-flash-latest,false,irrelevant,false
+2083387677945036995,ChatGPT Work counted,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,134,1,gemini-1.5-flash-latest,false,irrelevant,true
+2082574687020966126,やった！科学！,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート「やった！科学！」には使用制限やリセットに関する言及が一切含まれておらず、一般的な発言であるため無関係と判定しました。,,,success,3050,1,gemini-flash-latest,true,irrelevant,true
 2082637967852806207,"Terrific work by 
 @ilanbigio
  and 
 @sandersted
  on the investigation and post. Seems like it was a lot of fun.
 
-Take care of your harnesses out there, your model will thank you.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+Take care of your harnesses out there, your model will thank you.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,151,1,gemini-1.5-flash-latest,false,irrelevant,true
 2082609662231502932,"Turns out GPT-5.6 Sol is actually SoTA on ARC-AGI-3. 
 
 Just took two setting changes. You just have to allow it to reason and work over multiple context windows with the help of our canonical compaction implementation.
@@ -57,6 +57,6 @@ Just took two setting changes. You just have to allow it to reason and work over
 https://
 openai.com/index/how-two-
 settings-tripled-our-arc-agi-3-scores/
-…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2083378916203343920,"And yet, I don't see a reset button there.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
-2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,model_not_configured,0,1,,false,irrelevant,true
+…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,129,1,gemini-1.5-flash-latest,false,irrelevant,true
+2083378916203343920,"And yet, I don't see a reset button there.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,unclear,I don't see a reset button there,ツイート内で「リセットボタンが見当たらない」と述べているのみであり、リセットの実施、事前告知、ティーザーのいずれにも該当しないため、無関連（irrelevant）と分類されます。,,,success,3828,1,gemini-flash-latest,true,irrelevant,true
+2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,130,1,gemini-1.5-flash-latest,false,irrelevant,true
