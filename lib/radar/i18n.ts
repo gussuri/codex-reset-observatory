@@ -251,6 +251,31 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Codex reliability compensation reset",
     zh: "Codex 可靠性事故补偿重置",
   },
+  "過去24時間以内に発生したCodexの信頼性に影響する3件の障害への補償として、全有料プランの利用制限がリセットされました。": {
+    ja: "過去24時間以内に発生したCodexの信頼性に影響する3件の障害への補償として、全有料プランの利用制限がリセットされました。",
+    en: "As compensation for three incidents affecting Codex reliability in the past 24 hours, usage limits for all paid plans were reset.",
+    zh: "为补偿过去 24 小时内发生的 3 起影响 Codex 可靠性的故障，所有付费套餐的使用限制已重置。",
+  },
+  "Codexアクティブユーザー数500万人達成を記念し、全有料ChatGPT/Codexユーザーの利用回数が強制リセットされました。": {
+    ja: "Codexアクティブユーザー数500万人達成を記念し、全有料ChatGPT/Codexユーザーの利用回数が強制リセットされました。",
+    en: "To celebrate reaching 5 million active Codex users, usage counts for all paid ChatGPT/Codex users were forcibly reset.",
+    zh: "为庆祝 Codex 活跃用户数达到 500 万，所有付费 ChatGPT/Codex 用户的使用次数已被强制重置。",
+  },
+  "Codex長セッション圧縮のキャッシュヒット率低下による過剰消費バグが修正され、全有料ユーザーのリセットが実施されました。": {
+    ja: "Codex長セッション圧縮のキャッシュヒット率低下による過剰消費バグが修正され、全有料ユーザーのリセットが実施されました。",
+    en: "After a bug causing excessive consumption due to lower cache-hit rates in Codex long-session compression was fixed, all paid users' limits were reset.",
+    zh: "修复 Codex 长会话压缩缓存命中率下降导致的过度消耗漏洞后，所有付费用户的使用限制均已重置。",
+  },
+  "Sam Altman氏のツイート1いいね達成に伴い、Tibo氏によって即座にCodex利用上限がリセットされました。": {
+    ja: "Sam Altman氏のツイート1いいね達成に伴い、Tibo氏によって即座にCodex利用上限がリセットされました。",
+    en: "After Sam Altman's tweet reached one like, Tibo immediately reset the Codex usage limit.",
+    zh: "Sam Altman 的推文获得 1 个赞后，Tibo 立即重置了 Codex 使用限制。",
+  },
+  "GPT-5.5モデルの能力一時退化不具合が解消されたことに伴い、全有料プランの利用回数が強制リセットされました。": {
+    ja: "GPT-5.5モデルの能力一時退化不具合が解消されたことに伴い、全有料プランの利用回数が強制リセットされました。",
+    en: "Following the resolution of a temporary GPT-5.5 performance-degradation issue, usage counts for all paid plans were forcibly reset.",
+    zh: "随着 GPT-5.5 模型暂时性能力退化问题得到解决，所有付费套餐的使用次数已被强制重置。",
+  },
   "500万人アクティブユーザー記念リセット": {
     ja: "500万人アクティブユーザー記念リセット",
     en: "5M active users milestone celebration reset",
