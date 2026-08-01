@@ -2,10 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   mergeEvaluationRows,
+  REQUIRED_RESUME_GEMINI_MODEL,
+  isAllowedResumeGeminiModel,
   shouldStopAfterStatus,
   selectRowsForResume,
   shouldWriteResumeReport,
 } from "../scripts/evaluate-tibo-classifiers";
+
+test("resume accepts only the explicitly approved Gemini model", () => {
+  assert.equal(REQUIRED_RESUME_GEMINI_MODEL, "gemini-3.5-flash-lite");
+  assert.equal(isAllowedResumeGeminiModel("gemini-3.5-flash-lite"), true);
+  assert.equal(isAllowedResumeGeminiModel("gemini-flash-latest"), false);
+  assert.equal(isAllowedResumeGeminiModel(undefined), false);
+});
 
 test("resume selects only rows whose Gemini status is not success", () => {
   const rows = [

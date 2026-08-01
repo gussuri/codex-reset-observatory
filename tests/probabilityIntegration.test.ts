@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert";
+import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { getLocalRadarData } from "../lib/radar";
 import { getLocalResetProbability, getDaysSinceLastGlobalReset } from "../lib/radar/probability";
 
@@ -89,12 +90,46 @@ test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", 
 import { getRadarViewModel } from "../lib/radar";
 
 test("getLocalResetProbabilityReason formats English summary without un-translated Japanese text for Tibo Teaser", () => {
-  const viewModel = getRadarViewModel(getLocalRadarData(), "en");
-  const englishReason = viewModel.reasoningSummary;
+  const teaserSignal = LOCAL_OBSERVATION_SIGNALS.find(
+    (signal) => signal.id === "official-tibo-signs-resets-teaser-2026-07-31",
+  );
+  assert.ok(teaserSignal, "The Tibo teaser fixture must exist");
 
-  assert.strictEqual(typeof englishReason, "string");
-  assert.ok(englishReason.includes("Tibo's teaser post stating 'There will be signs... Resets'"), `Expected English translation, but got: "${englishReason}"`);
-  assert.strictEqual(englishReason.includes("匂わせ投稿"), false, "English summary MUST NOT contain Japanese text '匂わせ投稿'");
+  const previousStatus = teaserSignal.status;
+  const previousResolvedAt = teaserSignal.resolvedAt;
+  const previousExpiresAt = teaserSignal.expiresAt;
+  teaserSignal.status = "active";
+  delete teaserSignal.resolvedAt;
+  teaserSignal.expiresAt = "2099-01-01T00:00:00.000Z";
+
+  try {
+    const viewModel = getRadarViewModel(
+      getLocalRadarData({
+        activeTiboSignals: [
+          {
+            tweet_id: "tibo-teaser-fixture",
+            signal_type: "teaser",
+            confidence: 0.85,
+            tweet_created_at: "2026-07-31T13:50:00.000Z",
+            expires_at: "2099-01-01T00:00:00.000Z",
+            verification_status: "auto_unverified",
+          },
+        ],
+      }),
+      "en",
+    );
+    const englishReason = viewModel.reasoningSummary;
+
+    assert.strictEqual(typeof englishReason, "string");
+    assert.ok(englishReason.includes("Tibo's teaser post stating 'There will be signs... Resets'"), `Expected English translation, but got: "${englishReason}"`);
+    assert.strictEqual(englishReason.includes("匂わせ投稿"), false, "English summary MUST NOT contain Japanese text '匂わせ投稿'");
+  } finally {
+    teaserSignal.status = previousStatus;
+    if (previousResolvedAt === undefined) delete teaserSignal.resolvedAt;
+    else teaserSignal.resolvedAt = previousResolvedAt;
+    if (previousExpiresAt === undefined) delete teaserSignal.expiresAt;
+    else teaserSignal.expiresAt = previousExpiresAt;
+  }
 });
 
 test("old reset_executed does not cancel newer official_notice", () => {

@@ -29,7 +29,7 @@ Excited to be able to share more soon. Pretty wild.",irrelevant,false,irrelevant
 2083373529081291076,"I don't come often to GMail (OpenAI is a Slack company), but I swear, every time I do open it, there is a new button somewhere around the top right corner.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,制限リセットとは一切関係のない、GmailのUIに関する雑談ツイートであるため。,,,success,4053,1,gemini-flash-latest,true,irrelevant,true
 2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,future,,ツイート内には使用制限のリセットに関する言及がなく、明日の機能リリース（ship）に関する一般的な投稿であるため、対象外（irrelevant）と判定しました。,,,success,3978,1,gemini-flash-latest,true,irrelevant,true
 2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,reset_executed,false,reset_executed,0.98,"Matched immediate reset execution pattern: ""limits have been reset""",true,reset_executed,1,completed_now,The usage limits have been reset for all paid users of Codex and ChatGPT Work.,ツイート内で「CodexおよびChatGPT Workのすべての有料ユーザーの利用制限がリセットされた」と、リセットが既に完了し現在有効であることを明確に宣言しているため。,,,success,4112,1,gemini-flash-latest,true,reset_executed,true
-2082981910209540352,Benefits all,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,176,1,gemini-1.5-flash-latest,false,irrelevant,true
+2082981910209540352,Benefits all,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,unclear,,リセットに関する言及がなく、文脈が不明確な一般の投稿であるため。,,,success,1189,1,gemini-3.5-flash-lite,true,irrelevant,true
 2082578335167807775,"効率！
 
 2つのステップで
@@ -39,8 +39,8 @@ b) 素晴らしいモデルを使ってすべてを改善する。その中に�
 https://openai.com/index/gpt-5-6-frontier-intelligence-efficiency/…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート内に使用制限やレートリセットに関する言及が一切なく、モデルのトレーニング効率やインフラ改善に関する投稿であるため。,,,success,3200,1,gemini-flash-latest,true,irrelevant,true
 2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
 
-Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",teaser,false,irrelevant,0.2,No reset notice or execution patterns matched.,false,,,,,,,,api_error,141,1,gemini-1.5-flash-latest,false,irrelevant,false
-2083387677945036995,ChatGPT Work counted,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,134,1,gemini-1.5-flash-latest,false,irrelevant,true
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",teaser,false,irrelevant,0.2,No reset notice or execution patterns matched.,false,teaser,0.95,future,I’m feeling like a limit reset.,ChatGPT Workの普及を祝い、数時間後にラップトップに戻るという文脈でリセットへの言及があるため、24〜48時間以内のリセットを示唆するティーザーに該当します。,ご祝儀リセット,in a few hours,success,1058,1,gemini-3.5-flash-lite,true,teaser,true
+2083387677945036995,ChatGPT Work counted,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ChatGPTの利用カウントに関する言及であり、利用制限のリセットや予告に関する内容が含まれていないため。,,,success,976,1,gemini-3.5-flash-lite,true,irrelevant,true
 2082574687020966126,やった！科学！,irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,ツイート「やった！科学！」には使用制限やリセットに関する言及が一切含まれておらず、一般的な発言であるため無関係と判定しました。,,,success,3050,1,gemini-flash-latest,true,irrelevant,true
 2082637967852806207,"Terrific work by 
 @ilanbigio
@@ -48,7 +48,7 @@ Hold on tight to your ultra and /fast and see you in a few hours when I’m back
 @sandersted
  on the investigation and post. Seems like it was a lot of fun.
 
-Take care of your harnesses out there, your model will thank you.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,151,1,gemini-1.5-flash-latest,false,irrelevant,true
+Take care of your harnesses out there, your model will thank you.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,リセットや制限に関する言及がなく、調査やモデルのハーネスについての一般的な投稿であるため。,,,success,1054,1,gemini-3.5-flash-lite,true,irrelevant,true
 2082609662231502932,"Turns out GPT-5.6 Sol is actually SoTA on ARC-AGI-3. 
 
 Just took two setting changes. You just have to allow it to reason and work over multiple context windows with the help of our canonical compaction implementation.
@@ -57,6 +57,6 @@ Just took two setting changes. You just have to allow it to reason and work over
 https://
 openai.com/index/how-two-
 settings-tripled-our-arc-agi-3-scores/
-…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,129,1,gemini-1.5-flash-latest,false,irrelevant,true
+…",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,unclear,,GPT-5.6 Solのパフォーマンス向上に関する公式ブログ記事の共有であり、利用制限のリセットに関する言及や予告は含まれていないため。,,,success,1154,1,gemini-3.5-flash-lite,true,irrelevant,true
 2083378916203343920,"And yet, I don't see a reset button there.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,0.95,unclear,I don't see a reset button there,ツイート内で「リセットボタンが見当たらない」と述べているのみであり、リセットの実施、事前告知、ティーザーのいずれにも該当しないため、無関連（irrelevant）と分類されます。,,,success,3828,1,gemini-flash-latest,true,irrelevant,true
-2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,,,,,,,,api_error,130,1,gemini-1.5-flash-latest,false,irrelevant,true
+2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",irrelevant,false,irrelevant,0.2,No reset notice or execution patterns matched.,true,irrelevant,1,historical,,このツイートはオープンソースのCLIおよびTypeScript SDKのリリースに関するものであり、利用制限のリセットとは一切関係がありません。,,,success,1038,1,gemini-3.5-flash-lite,true,irrelevant,true

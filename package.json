@@ -12,6 +12,7 @@
     "tibo:ai-backfill": "tsx scripts/backfill-tibo-ai-classification.ts",
     "eval:tibo-classifiers": "tsx scripts/evaluate-tibo-classifiers.ts",
     "eval:tibo-classifiers:resume": "tsx scripts/evaluate-tibo-classifiers.ts --resume",
+    "eval:tibo-classifiers:fixed": "tsx scripts/evaluate-tibo-classifiers.ts --fixed-model --output-prefix tibo-classifier-eval-gemini-3.5-flash-lite",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

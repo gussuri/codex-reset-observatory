@@ -85,7 +85,8 @@ const RESET_EXECUTED_ID = new Set([
 ]);
 const TEASER_ID = "2081899343091843463";
 const AMBIGUOUS_ID = "2083053369351090254";
-const RESUME_DELAY_MS = 30_000;
+export const REQUIRED_RESUME_GEMINI_MODEL = "gemini-3.5-flash-lite";
+const RESUME_DELAY_MS = 10_000;
 const RESUME_TWEET_IDS = new Set([
   "2082981910209540352",
   "2081899343091843463",
@@ -94,11 +95,22 @@ const RESUME_TWEET_IDS = new Set([
   "2082609662231502932",
   "2082241164850364555",
 ]);
+const HISTORICAL_MODEL_ATTEMPTS = [
+  ["gemini-2.0-flash", "initial candidate-order probe", "no valid classification"],
+  ["gemini-flash-latest", "all 23 posts", "17 valid classifications; 6 rate_limited"],
+  ["gemini-flash-latest", "remaining 6 retry", "6 rate_limited"],
+  ["gemini-2.0-flash-lite", "remaining 6 retry", "6 rate_limited"],
+  ["gemini-1.5-flash-latest", "remaining 6 retry", "6 api_error"],
+] as const;
 
 type EvaluationStatusRow = {
   tweetId: string;
   geminiStatus: GeminiClassificationStatus;
 };
+
+export function isAllowedResumeGeminiModel(model: string | undefined): model is string {
+  return model === REQUIRED_RESUME_GEMINI_MODEL;
+}
 
 export function selectRowsForResume<T extends EvaluationStatusRow>(rows: T[]): T[] {
   return rows.filter((row) => row.geminiStatus !== "success");
@@ -499,6 +511,8 @@ function buildReport(
   rows: EvaluationRow[],
   primaryRows: EvaluationRow[],
   model: string | undefined,
+  currentRunRows: EvaluationRow[],
+  runMode: "standard" | "resume" | "fixed",
   apiSuccess: number,
   firstAttemptSuccess: number,
   totalRequests: number,
@@ -514,6 +528,14 @@ function buildReport(
   const geminiMistakes = rows.filter((row) => row.geminiStatus === "success" && row.geminiPrediction !== row.gold);
   const fallbackMistakes = rows.filter((row) => row.fallbackPrediction !== row.gold);
   const unavailableGemini = rows.filter((row) => row.geminiStatus !== "success");
+  const fixedRunRows = runMode === "fixed"
+    ? (currentRunRows.length > 0 ? currentRunRows : rows)
+    : runMode === "resume"
+      ? (currentRunRows.length > 0
+        ? currentRunRows
+        : rows.filter((row) => row.geminiModel === model && RESUME_TWEET_IDS.has(row.tweetId)))
+      : [];
+  const historicalRows = rows.filter((row) => !fixedRunRows.some((currentRow) => currentRow.tweetId === row.tweetId));
 
   lines.push("# Tibo classifier evaluation");
   lines.push("");
@@ -521,16 +543,37 @@ function buildReport(
   lines.push(`- Unique input rows: ${rows.length}`);
   lines.push(`- Primary rows: ${primaryRows.length} (ambiguous tweet ${AMBIGUOUS_ID} excluded)`);
   lines.push(`- Provisional-all rows: ${rows.length}`);
-  lines.push(`- Gemini model: ${model || "未設定"}`);
+  lines.push(`- Gemini model configured for this run: ${model || "未設定"}`);
   const modelsUsed = Array.from(new Set(rows.map((row) => row.geminiModel).filter((model): model is string => Boolean(model))));
-  lines.push(`- Gemini models actually used: ${modelsUsed.length ? modelsUsed.join(", ") : "なし"}`);
+  lines.push(`- Models recorded in CSV (including historical rows): ${modelsUsed.length ? modelsUsed.join(", ") : "なし"}`);
   lines.push("- API input mode: one CSV row per request; tweet text is never batched with another post.");
   lines.push(`- API key: ${process.env.GEMINI_API_KEY ? "configured (value omitted)" : "not configured"}`);
   lines.push(`- API success: ${apiSuccess} / ${rows.length}`);
-  lines.push(`- First-attempt success: ${firstAttemptSuccess} / ${rows.length}`);
+  lines.push(`- Current run requests: ${runMode === "standard" ? rows.length : fixedRunRows.length}`);
+  lines.push(`- Current run successes: ${runMode === "standard" ? apiSuccess : fixedRunRows.filter((row) => row.geminiStatus === "success").length}`);
+  lines.push(`- Current run first-attempt success: ${runMode === "standard" ? firstAttemptSuccess : fixedRunRows.filter((row) => row.geminiStatus === "success" && row.geminiAttemptCount === 1).length}`);
   lines.push(`- Total requests: ${totalRequests}`);
   lines.push(`- Retry requests: ${retryCount}`);
   lines.push(`- Statuses: ${Object.entries(statuses).map(([key, value]) => `${key}=${value}`).join(", ")}`);
+  lines.push("");
+  lines.push("## Evaluation run separation");
+  lines.push("");
+  lines.push("### Historical multi-model attempts");
+  lines.push("");
+  lines.push("These attempts belong to the earlier exploratory evaluation. They are historical only and were not called during the current fixed-model evaluation.");
+  lines.push("");
+  lines.push("| model | scope | result |");
+  lines.push("|---|---|---|");
+  for (const [historicalModel, scope, result] of HISTORICAL_MODEL_ATTEMPTS) {
+    lines.push(`| ${historicalModel} | ${scope} | ${result} |`);
+  }
+  lines.push("");
+  lines.push(runMode === "fixed" ? "### Fixed-model evaluation" : "### Fixed-model resume");
+  lines.push("");
+  lines.push(`- Model: ${model || "未設定"}`);
+  lines.push(`- Requests in this run: ${fixedRunRows.length}`);
+  lines.push(`- Successful rows preserved from the existing CSV: ${runMode === "resume" ? historicalRows.filter((row) => row.geminiStatus === "success").length : 0}`);
+  lines.push(`- Result: ${fixedRunRows.length > 0 && fixedRunRows.every((row) => row.geminiStatus === "success") ? "all successful" : "incomplete"}`);
   lines.push("");
   lines.push("## Gold labels");
   lines.push("");
@@ -647,7 +690,13 @@ function buildReport(
   lines.push("## Re-run");
   lines.push("");
   lines.push("```text");
-  lines.push(`npm run eval:tibo-classifiers -- --input "${inputPath}"`);
+  if (runMode === "fixed") {
+    lines.push(`npm run eval:tibo-classifiers:fixed -- --input "${inputPath}"`);
+  } else if (runMode === "resume") {
+    lines.push(`npm run eval:tibo-classifiers:resume -- --input "${inputPath}"`);
+  } else {
+    lines.push(`npm run eval:tibo-classifiers -- --input "${inputPath}"`);
+  }
   lines.push("```");
   return `${lines.join("\n")}\n`;
 }
@@ -657,24 +706,35 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const skipGemini = args.get("skip-gemini") === "true";
   const resume = args.get("resume") === "true";
+  const fixedModelEvaluation = args.get("fixed-model") === "true";
   if (skipGemini) delete process.env.GEMINI_API_KEY;
   const inputPath = path.resolve(args.get("input") || path.join("Downloads", "tibo_signals_rows.csv"));
   const outputDir = path.resolve(args.get("output-dir") || "reports");
   const limit = Number(args.get("limit") || 0);
   if (!Number.isInteger(limit) || limit < 0) throw new Error("--limit must be a non-negative integer");
   if (resume && limit > 0) throw new Error("--limit cannot be used with --resume");
+  if (fixedModelEvaluation && resume) throw new Error("--fixed-model cannot be combined with --resume");
+  if (fixedModelEvaluation && limit > 0) throw new Error("--limit cannot be used with --fixed-model");
   if (!fs.existsSync(inputPath)) throw new Error(`Input CSV not found: ${inputPath}`);
 
   const allInputRows = readInput(inputPath).slice(0, limit || undefined);
   const apiKey = skipGemini ? undefined : process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL?.trim();
-  if (resume && (!apiKey || !model)) {
-    throw new Error("--resume requires GEMINI_API_KEY and GEMINI_MODEL in the environment");
+  if ((resume || fixedModelEvaluation) && !isAllowedResumeGeminiModel(model)) {
+    throw new Error(`固定モデル評価にはGEMINI_MODEL=${REQUIRED_RESUME_GEMINI_MODEL}が必要です。APIは呼び出していません`);
+  }
+  if ((resume || fixedModelEvaluation) && !apiKey) {
+    throw new Error("固定モデル評価にはGEMINI_API_KEYが必要です。APIは呼び出していません");
   }
   fs.mkdirSync(outputDir, { recursive: true });
   const dateStamp = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date()).replaceAll("-", "");
-  const csvPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.csv`);
-  const reportPath = path.join(outputDir, `tibo-classifier-eval-${dateStamp}.md`);
+  const outputPrefix = args.get("output-prefix")?.trim();
+  const outputStem = outputPrefix ? `${outputPrefix}-${dateStamp}` : `tibo-classifier-eval-${dateStamp}`;
+  const csvPath = path.join(outputDir, `${outputStem}.csv`);
+  const reportPath = path.join(outputDir, `${outputStem}.md`);
+  if (fixedModelEvaluation && (fs.existsSync(csvPath) || fs.existsSync(reportPath))) {
+    throw new Error(`Fixed-model output already exists; refusing to overwrite: ${outputStem}`);
+  }
   if (resume && !fs.existsSync(csvPath)) {
     throw new Error(`Cannot resume because the result CSV does not exist: ${csvPath}`);
   }
@@ -702,8 +762,13 @@ async function main() {
     console.log(`Resume model: ${model}`);
     console.log(`Pending Gemini requests: ${inputRows.length}; successful rows preserved: ${allInputRows.length - inputRows.length}`);
   }
+  if (fixedModelEvaluation) {
+    console.log(`Fixed-model evaluation: ${model}`);
+    console.log(`New Gemini requests: ${inputRows.length}; existing results reused: 0`);
+  }
 
   let stoppedOnRateLimit = false;
+  const currentRunRows: EvaluationRow[] = [];
   for (let index = 0; index < inputRows.length; index += 1) {
     const row = inputRows[index];
     if (apiKey && model && index > 0) await sleep(RESUME_DELAY_MS);
@@ -727,6 +792,7 @@ async function main() {
       geminiModel: gemini.output.model,
       fallbackPrediction: gemini.output.status === "success" && gemini.output.signalType ? gemini.output.signalType : ruleResult.signalType,
     };
+    currentRunRows.push(evaluatedRow);
     resultRows = mergeEvaluationRows(resultRows, evaluatedRow);
     if (!resultRows.some((resultRow) => resultRow.tweetId === row.tweetId)) resultRows.push(evaluatedRow);
     resultById.set(row.tweetId, evaluatedRow);
@@ -777,6 +843,8 @@ async function main() {
       rows,
       primaryRows,
       model,
+      currentRunRows,
+      fixedModelEvaluation ? "fixed" : resume ? "resume" : "standard",
       rows.filter((row) => row.geminiStatus === "success").length,
       firstAttemptSuccess,
       totalRequests,

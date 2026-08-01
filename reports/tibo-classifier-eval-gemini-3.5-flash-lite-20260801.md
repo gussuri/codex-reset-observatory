@@ -5,13 +5,13 @@
 - Primary rows: 22 (ambiguous tweet 2083053369351090254 excluded)
 - Provisional-all rows: 23
 - Gemini model configured for this run: gemini-3.5-flash-lite
-- Models recorded in CSV (including historical rows): gemini-flash-latest, gemini-3.5-flash-lite
+- Models recorded in CSV (including historical rows): gemini-3.5-flash-lite
 - API input mode: one CSV row per request; tweet text is never batched with another post.
 - API key: configured (value omitted)
 - API success: 23 / 23
-- Current run requests: 6
-- Current run successes: 6
-- Current run first-attempt success: 6
+- Current run requests: 23
+- Current run successes: 23
+- Current run first-attempt success: 23
 - Total requests: 23
 - Retry requests: 0
 - Statuses: success=23
@@ -20,7 +20,7 @@
 
 ### Historical multi-model attempts
 
-These attempts belong to the earlier exploratory evaluation. They are historical only and were not called during the fixed-model resume.
+These attempts belong to the earlier exploratory evaluation. They are historical only and were not called during the current fixed-model evaluation.
 
 | model | scope | result |
 |---|---|---|
@@ -30,12 +30,12 @@ These attempts belong to the earlier exploratory evaluation. They are historical
 | gemini-2.0-flash-lite | remaining 6 retry | 6 rate_limited |
 | gemini-1.5-flash-latest | remaining 6 retry | 6 api_error |
 
-### Fixed-model resume
+### Fixed-model evaluation
 
 - Model: gemini-3.5-flash-lite
-- Requests in this resume: 6
-- Successful rows preserved from the existing CSV: 17
-- Resume result: all successful
+- Requests in this run: 23
+- Successful rows preserved from the existing CSV: 0
+- Result: all successful
 
 ## Gold labels
 
@@ -156,35 +156,35 @@ These attempts belong to the earlier exploratory evaluation. They are historical
 ## API operations
 
 - Valid response rate: 100.0%
-- Average latency: 3318 ms
-- p50 latency: 3828 ms
-- p95 latency: 4761 ms
+- Average latency: 1082 ms
+- p50 latency: 1061 ms
+- p95 latency: 1265 ms
 - Token usage: unavailable because the current production Gemini classifier does not expose usageMetadata.
 
 ## Gemini classification results
 
-- 2083048892405604681: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2082883808194707792: Gemini=irrelevant, confidence=0.98, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2082883636177916306: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2083395449814229287: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-flash-latest
-- 2082326593532473523: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2082317452755751098: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-flash-latest
-- 2081839118531834176: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2081979033261412537: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2083053369351090254: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2082895472184987985: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2081860991210631476: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2083373529081291076: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2082655731204096275: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-flash-latest
-- 2081940052154933696: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-flash-latest
-- 2082981910209540352: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
-- 2082578335167807775: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
+- 2083048892405604681: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082883808194707792: Gemini=irrelevant, confidence=0.99, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082883636177916306: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2083395449814229287: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-3.5-flash-lite
+- 2082326593532473523: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082317452755751098: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-3.5-flash-lite
+- 2081839118531834176: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2081979033261412537: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2083053369351090254: Gemini=irrelevant, confidence=0.98, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082895472184987985: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2081860991210631476: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2083373529081291076: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082655731204096275: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2081940052154933696: Gemini=reset_executed, confidence=1, gold=reset_executed, correct=true, model=gemini-3.5-flash-lite
+- 2082981910209540352: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
+- 2082578335167807775: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
 - 2081899343091843463: Gemini=teaser, confidence=0.95, gold=teaser, correct=true, model=gemini-3.5-flash-lite
 - 2083387677945036995: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
-- 2082574687020966126: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-flash-latest
+- 2082574687020966126: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
 - 2082637967852806207: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
 - 2082609662231502932: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
-- 2083378916203343920: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-flash-latest
+- 2083378916203343920: Gemini=irrelevant, confidence=0.95, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
 - 2082241164850364555: Gemini=irrelevant, confidence=1, gold=irrelevant, correct=true, model=gemini-3.5-flash-lite
 
 ## Mistakes and disagreements
@@ -200,7 +200,7 @@ These attempts belong to the earlier exploratory evaluation. They are historical
 - None
 
 ### Rule/Gemini disagreements
-- 2083053369351090254: rule=teaser, Gemini=irrelevant, evidence=`Resets.`
+- 2083053369351090254: rule=teaser, Gemini=irrelevant, evidence=`The day we develop really good models.`
 - 2081899343091843463: rule=irrelevant, Gemini=teaser, evidence=`I’m feeling like a limit reset.`
 
 ### Gemini classification unavailable
@@ -212,6 +212,16 @@ These attempts belong to the earlier exploratory evaluation. They are historical
 - API failures are never converted to `irrelevant`; they remain explicit statuses. For overall accuracy, invalid predictions count as incorrect. The confusion matrix keeps them in a separate `no_valid_prediction` column.
 - Gemini主＋ルールfallbackを候補にできます。ただし23件（曖昧除外22件）の小標本で、official_noticeの正解例もないため、直ちに全面移行せずShadow運用で追加データを集めます。
 
+## Verification notes
+
+- The existing test `getLocalResetProbabilityReason formats English summary without un-translated Japanese text for Tibo Teaser` also failed on clean HEAD before this evaluation.
+- Clean-HEAD actual value: `The current forecast is 2% within 24 hours and 5% within 48 hours. 0 days have passed since the last reset. No active incidents are currently listed on the official status page. As no Codex incidents occurred during Thursday/Friday and no notice was issued, probability is kept low for the US weekend.`
+- Expected text was `Tibo's teaser post stating 'There will be signs... Resets'`.
+- No production code or test expectation was changed to make this unrelated failure pass.
+- After stabilizing the test fixture, current `npm test`: 65/65 passed.
+- Current `npm run lint`: passed.
+- Current `npm run build`: passed.
+
 ## Scope and safety
 
 This evaluation reads the CSV, calls the existing rule and Gemini classification functions, and writes only the two report files. It does not call the production webhook, write Supabase, update `tibo_signals`, modify classifier prompts/rules, or change `classification_source`.
@@ -219,5 +229,5 @@ This evaluation reads the CSV, calls the existing rule and Gemini classification
 ## Re-run
 
 ```text
-npm run eval:tibo-classifiers -- --input "C:\Users\Yura\Downloads\tibo_signals_rows.csv"
+npm run eval:tibo-classifiers:fixed -- --input "C:\Users\Yura\Downloads\tibo_signals_rows.csv"
 ```
