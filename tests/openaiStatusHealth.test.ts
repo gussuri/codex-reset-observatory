@@ -52,6 +52,17 @@ test("classifies malformed JSON status responses as invalid", async () => {
   });
 });
 
+test("classifies valid JSON objects with missing status payload fields as invalid", async () => {
+  const result = await fetchOpenAIStatusSignals({}, async () =>
+    jsonResponse({}),
+  );
+
+  assert.deepStrictEqual(result.health, {
+    state: "degraded",
+    detail: "invalid_response",
+  });
+});
+
 test("marks one usable status response as partial", async () => {
   let request = 0;
   const result = await fetchOpenAIStatusSignals({}, async () => {

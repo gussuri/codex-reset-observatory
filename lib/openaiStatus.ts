@@ -284,17 +284,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isStatusSummaryResponse(value: unknown): value is StatusSummaryResponse {
   return (
     isRecord(value) &&
-    (value.page === undefined || isRecord(value.page)) &&
+    isRecord(value.page) &&
     (value.status === undefined || isRecord(value.status)) &&
-    (value.components === undefined || Array.isArray(value.components))
+    Array.isArray(value.components)
   );
 }
 
 function isStatusIncidentsResponse(value: unknown): value is StatusIncidentsResponse {
   return (
     isRecord(value) &&
-    (value.page === undefined || isRecord(value.page)) &&
-    (value.incidents === undefined || Array.isArray(value.incidents))
+    isRecord(value.page) &&
+    Array.isArray(value.incidents)
   );
 }
 
