@@ -1,16 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
+import { LOCAL_PROBABILITY_WEIGHTS } from "../data/predictionWeights";
 import { getLocalRadarData } from "../lib/radar";
 import {
   getLocalResetProbability,
   getTeaserBoost,
-  getWeekendCalmAdjustment,
 } from "../lib/radar/probability";
 
-test("weekend calm correction remains a small adjustment", () => {
-  assert.equal(getWeekendCalmAdjustment("24h"), -0.05);
-  assert.equal(getWeekendCalmAdjustment("48h"), -0.08);
+test("weekend calm correction is not configured", () => {
+  assert.equal("weekendCalmAdjustment" in LOCAL_PROBABILITY_WEIGHTS, false);
 });
 
 test("Tibo teaser boost starts lower and decays to zero over 48 hours", () => {

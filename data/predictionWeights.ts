@@ -86,10 +86,6 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     medium: 0.05,
     low: 0,
   },
-  weekendCalmAdjustment: {
-    within24h: -0.05,
-    within48h: -0.08,
-  },
   elapsedDayBoost: {
     perDay: 0.01,
   },
