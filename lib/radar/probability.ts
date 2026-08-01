@@ -833,24 +833,13 @@ export function getLocalProbabilityReason(
     }
   }
 
-  const isWeekendCalm = isUSWeekendCalmPeriod(data, new Date(), activeOfficialNotice);
-  let weekendText = "";
-  if (isWeekendCalm) {
-    if (locale === "en") {
-      weekendText = " As no Codex incidents occurred during Thursday/Friday and no notice was issued, probability is kept low for the US weekend.";
-    } else if (locale === "zh") {
-      weekendText = " 由于周四和周五没有发生 Codex 故障且无重置预告，美国周末期间预测概率保持较低水平。";
-    } else {
-      weekendText = " 木・金曜日にCodexの障害がなく予告もないため、米国時間の土日は予測確率を低めに設定しています。";
-    }
-  }
 
   if (locale === "en") {
-    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
+    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
+    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
 }
 
