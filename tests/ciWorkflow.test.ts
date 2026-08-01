@@ -4,18 +4,38 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const workflowPath = resolve(".github/workflows/ci.yml");
+const packageJsonPath = resolve("package.json");
 
 test("CI workflow enforces the ordered quality gate contract", () => {
   assert.ok(existsSync(workflowPath), `Expected ${workflowPath} to exist`);
 
-  const workflow = readFileSync(workflowPath, "utf8");
+  const workflow = readFileSync(workflowPath, "utf8").replace(/\r\n/g, "\n");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+    packageManager?: string;
+  };
+  const packageManagerPin = packageJson.packageManager;
 
-  assert.match(
-    workflow,
-    /^on:\r?\n  push:\r?\n  pull_request:\r?\n/m,
+  assert.equal(
+    packageManagerPin,
+    "pnpm@11.18.0",
+    "package.json must keep the pinned pnpm version",
   );
-  assert.match(workflow, /^permissions:\r?\n  contents: read\r?\n/m);
-  assert.match(workflow, /^\s+node-version: 20\s*$/m);
+
+  assert.match(workflow, /^on:\n  push:\n  pull_request:\n/m);
+  assert.match(workflow, /^permissions:\n  contents: read\n/m);
+  assert.match(workflow, /^          node-version: 20\s*$/m);
+
+  assert.ok(
+    workflow.includes(
+      [
+        "      - name: Enable pinned pnpm",
+        "        run: |",
+        "          corepack enable",
+        `          corepack prepare ${packageManagerPin} --activate`,
+      ].join("\n"),
+    ),
+    "CI must enable Corepack and activate the package.json pnpm pin",
+  );
 
   const commands = [
     "corepack pnpm install --frozen-lockfile",
@@ -26,14 +46,10 @@ test("CI workflow enforces the ordered quality gate contract", () => {
     "corepack pnpm audit --prod --audit-level high",
   ];
 
-  let previousCommandIndex = -1;
-  for (const command of commands) {
-    const commandIndex = workflow.indexOf(command);
-    assert.notEqual(commandIndex, -1, `Missing CI command: ${command}`);
-    assert.ok(
-      commandIndex > previousCommandIndex,
-      `CI command is out of order: ${command}`,
-    );
-    previousCommandIndex = commandIndex;
-  }
+  const runCommands = workflow.split("\n").flatMap((line) => {
+    const match = line.match(/^      - run: ([^\s].*?)\s*$/);
+    return match === null ? [] : [match[1]];
+  });
+
+  assert.deepStrictEqual(runCommands, commands);
 });
