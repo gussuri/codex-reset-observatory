@@ -23,7 +23,7 @@ test("CI workflow enforces the ordered quality gate contract", () => {
 
   assert.match(workflow, /^on:\n  push:\n  pull_request:\n/m);
   assert.match(workflow, /^permissions:\n  contents: read\n/m);
-  assert.match(workflow, /^          node-version: 20\s*$/m);
+  assert.match(workflow, /^          node-version: 22\.13\.0\s*$/m);
 
   assert.ok(
     workflow.includes(
