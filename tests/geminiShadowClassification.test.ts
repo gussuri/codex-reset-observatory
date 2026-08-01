@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert";
 import { classifyWithGemini, GeminiClassificationOutput } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
+import {
+  buildTiboClassificationResponse,
+  selectTiboClassification,
+  shouldRunGeminiClassification,
+} from "../lib/radar/tiboClassificationMode";
 
 test("1. GEMINI_CLASSIFICATION_MODE=off skips Gemini API call", async () => {
   const result = await classifyWithGemini(
@@ -31,38 +36,185 @@ test("2. GEMINI_MODEL or GEMINI_API_KEY missing returns model_not_configured wit
   assert.strictEqual(resultNoKey.status, "model_not_configured");
 });
 
-test("3. Shadow mode preserves Rule result as primary signal_type even if AI predicts different", () => {
+test("3. Primary mode adopts a successful Gemini result as the final classification", () => {
   const tweetText = "Just chatting about models today.";
   const tweetUrl = "https://x.com/thsottiaux/status/123456";
 
-  // Rule classifies as irrelevant
   const ruleResult = classifyTiboTweet(tweetText, tweetUrl);
   assert.strictEqual(ruleResult.signalType, "irrelevant");
 
-  // Simulated AI shadow output predicting reset_executed
   const simulatedAiOutput: GeminiClassificationOutput = {
-    signalType: "reset_executed",
-    confidence: 0.95,
-    temporalDirection: "completed_now",
+    signalType: "teaser",
+    confidence: 0.9,
+    temporalDirection: "future",
     evidenceQuote: "models today",
-    reasonJa: "誤判定テスト",
+    reasonJa: "将来のリセットを示唆しています。",
     resetTypeJa: null,
     noticeToExecution: null,
-    model: "gemini-2.0-flash",
+    model: "gemini-3.5-flash-lite",
     status: "success",
     classifiedAt: new Date().toISOString(),
   };
 
-  // Webhook logic simulation: primary signal_type must retain ruleResult
-  const finalSignalType = ruleResult.signalType;
-  const finalConfidence = ruleResult.confidence;
+  const selected = selectTiboClassification("primary", ruleResult, simulatedAiOutput);
 
-  assert.strictEqual(finalSignalType, "irrelevant", "Shadow Mode MUST retain ruleResult as final signal_type");
-  assert.strictEqual(finalConfidence, ruleResult.confidence, "Shadow Mode MUST retain ruleResult confidence");
-  assert.strictEqual(simulatedAiOutput.signalType, "reset_executed", "AI result is stored separately in ai_signal_type");
+  assert.strictEqual(selected.signalType, "teaser");
+  assert.strictEqual(selected.confidence, 0.9);
+  assert.strictEqual(selected.reason, "将来のリセットを示唆しています。");
+  assert.strictEqual(selected.classificationSource, "gemini");
 });
 
-test("4. Invalid evidenceQuote (not substring of original text) returns invalid_evidence status", async () => {
+test("4. Primary mode falls back to the rule result for every Gemini failure status", () => {
+  const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
+  const failedStatuses: GeminiClassificationOutput["status"][] = [
+    "timeout",
+    "rate_limited",
+    "invalid_json",
+    "invalid_schema",
+    "invalid_evidence",
+    "api_error",
+    "model_not_configured",
+    "skipped",
+  ];
+
+  for (const status of failedStatuses) {
+    const selected = selectTiboClassification("primary", ruleResult, {
+      signalType: null,
+      confidence: null,
+      temporalDirection: null,
+      evidenceQuote: null,
+      reasonJa: null,
+      resetTypeJa: null,
+      noticeToExecution: null,
+      model: "gemini-3.5-flash-lite",
+      status,
+      classifiedAt: new Date().toISOString(),
+    });
+
+    assert.strictEqual(selected.signalType, ruleResult.signalType, `${status} must use rule signal type`);
+    assert.strictEqual(selected.confidence, ruleResult.confidence, `${status} must use rule confidence`);
+    assert.strictEqual(selected.classificationSource, "rule_fallback", `${status} must use rule_fallback`);
+  }
+});
+
+test("5. A successful Gemini result with an invalid structured payload falls back to rules", () => {
+  const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
+  const selected = selectTiboClassification("primary", ruleResult, {
+    signalType: "teaser",
+    confidence: null,
+    temporalDirection: "future",
+    evidenceQuote: null,
+    reasonJa: "不完全な結果",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  });
+
+  assert.strictEqual(selected.signalType, ruleResult.signalType);
+  assert.strictEqual(selected.classificationSource, "rule_fallback");
+});
+
+test("6. Shadow mode keeps the rule result while recording shadow source", () => {
+  const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
+  const aiResult: GeminiClassificationOutput = {
+    signalType: "reset_executed",
+    confidence: 0.95,
+    temporalDirection: "completed_now",
+    evidenceQuote: "models today",
+    reasonJa: "監査用の別判定です。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  };
+
+  const selected = selectTiboClassification("shadow", ruleResult, aiResult);
+
+  assert.strictEqual(selected.signalType, ruleResult.signalType);
+  assert.strictEqual(selected.confidence, ruleResult.confidence);
+  assert.strictEqual(selected.classificationSource, "shadow");
+});
+
+test("7. Off mode keeps the rule result and skips the AI source", () => {
+  const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
+  const selected = selectTiboClassification("off", ruleResult, null);
+
+  assert.strictEqual(shouldRunGeminiClassification("off"), false);
+  assert.strictEqual(shouldRunGeminiClassification(undefined), false);
+  assert.strictEqual(shouldRunGeminiClassification("shadow"), true);
+  assert.strictEqual(shouldRunGeminiClassification("primary"), true);
+  assert.strictEqual(selected.signalType, ruleResult.signalType);
+  assert.strictEqual(selected.classificationSource, "rule");
+});
+
+test("8. Hybrid mode is an alias for primary and the webhook response exposes final and audit values", () => {
+  const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
+  const aiResult: GeminiClassificationOutput = {
+    signalType: "teaser",
+    confidence: 0.85,
+    temporalDirection: "future",
+    evidenceQuote: "models today",
+    reasonJa: "リセットを示唆しています。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  };
+
+  const response = buildTiboClassificationResponse("hybrid", ruleResult, aiResult);
+
+  assert.deepStrictEqual(response, {
+    signalType: "teaser",
+    confidence: 0.85,
+    classificationSource: "gemini",
+    aiStatus: "success",
+    ruleSignalType: "irrelevant",
+    aiSignalType: "teaser",
+  });
+});
+
+test("9. Known rule/Gemini disagreement examples adopt the fixed Gemini labels in primary mode", () => {
+  const teaserText = "I'm feeling like a limit reset.";
+  const irrelevantText = "The day we develop really good models.";
+  const teaserRule = classifyTiboTweet(teaserText, "https://x.com/thsottiaux/status/2081899343091843463");
+  const irrelevantRule = classifyTiboTweet(irrelevantText, "https://x.com/thsottiaux/status/2083053369351090254");
+
+  const teaserSelected = selectTiboClassification("primary", teaserRule, {
+    signalType: "teaser",
+    confidence: 0.8,
+    temporalDirection: "future",
+    evidenceQuote: "limit reset",
+    reasonJa: "リセットを示唆しています。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  });
+  const irrelevantSelected = selectTiboClassification("primary", irrelevantRule, {
+    signalType: "irrelevant",
+    confidence: 0.99,
+    temporalDirection: "historical",
+    evidenceQuote: "good models",
+    reasonJa: "リセットの具体的な情報ではありません。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  });
+
+  assert.strictEqual(teaserSelected.signalType, "teaser");
+  assert.strictEqual(teaserSelected.classificationSource, "gemini");
+  assert.strictEqual(irrelevantSelected.signalType, "irrelevant");
+  assert.strictEqual(irrelevantSelected.classificationSource, "gemini");
+});
+
+test("10. Invalid evidenceQuote (not substring of original text) returns invalid_evidence status", async () => {
   // Mock API returning quote not present in original text
   const originalText = "Limits are refreshed for all users.";
   const normQuote = "completely invented text not in tweet".toLowerCase();
@@ -71,7 +223,7 @@ test("4. Invalid evidenceQuote (not substring of original text) returns invalid_
   assert.strictEqual(normText.includes(normQuote), false);
 });
 
-test("5. Webhook logic handles Gemini API failure gracefully with HTTP 200 and rule fallback", () => {
+test("11. Primary webhook response handles Gemini API failure with rule_fallback", () => {
   const ruleResult = classifyTiboTweet("We reset usage limits", "https://x.com/thsottiaux/status/777");
 
   // Simulated AI failure (Rate limited 429 or Timeout)
@@ -88,21 +240,22 @@ test("5. Webhook logic handles Gemini API failure gracefully with HTTP 200 and r
     classifiedAt: new Date().toISOString(),
   };
 
+  const response = buildTiboClassificationResponse("primary", ruleResult, failedAiOutput);
   const payload = {
-    signal_type: ruleResult.signalType,
-    confidence: ruleResult.confidence,
+    signal_type: response.signalType,
+    confidence: response.confidence,
     rule_signal_type: ruleResult.signalType,
     ai_signal_type: failedAiOutput.signalType,
     ai_classification_status: failedAiOutput.status,
-    classification_source: "rule",
+    classification_source: response.classificationSource,
   };
 
   assert.strictEqual(payload.signal_type, "reset_executed");
   assert.strictEqual(payload.ai_classification_status, "rate_limited");
-  assert.strictEqual(payload.classification_source, "rule");
+  assert.strictEqual(payload.classification_source, "rule_fallback");
 });
 
-test("6. Invalid schema response from API is sanitized to invalid_schema status", () => {
+test("12. Invalid schema response from API is sanitized to invalid_schema status", () => {
   const allowedSignalTypes = ["official_notice", "reset_executed", "teaser", "irrelevant"];
 
   const invalidJsonParsed = {
@@ -117,7 +270,7 @@ test("6. Invalid schema response from API is sanitized to invalid_schema status"
   assert.strictEqual(isValidConfidence, false);
 });
 
-test("7. Backfill query filters out already processed rows with status=success", () => {
+test("13. Backfill query filters out already processed rows with status=success", () => {
   const mockRows = [
     { tweet_id: "1", ai_classification_status: "success" },
     { tweet_id: "2", ai_classification_status: "skipped" },
@@ -132,7 +285,7 @@ test("7. Backfill query filters out already processed rows with status=success",
   assert.deepStrictEqual(unclassifiedRows.map((r) => r.tweet_id), ["2", "3"]);
 });
 
-test("8. Backfill script can resume from unclassified rows after interruption", () => {
+test("14. Backfill script can resume from unclassified rows after interruption", () => {
   const dbRows = [
     { tweet_id: "101", ai_classification_status: "success" },
     { tweet_id: "102", ai_classification_status: "success" },
@@ -144,7 +297,7 @@ test("8. Backfill script can resume from unclassified rows after interruption", 
   assert.strictEqual(remainingToProcess[0].tweet_id, "103");
 });
 
-test("9. Gemini API prompt & schema evaluation on today's real Tibo tweet fixture", () => {
+test("15. Gemini API prompt & schema evaluation on today's real Tibo tweet fixture", () => {
   const todayText = "The day we develop really good models. There will be signs.\n\nReliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.\n\nThese kinds of things.";
 
   // Simulated Gemini API output matching system prompt & schema rules for today's tweet

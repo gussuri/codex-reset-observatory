@@ -11,19 +11,20 @@ OpenAI Codex および ChatGPT Work の利用上限（レートリミット）�
 ## 🌟 主な特徴
 
 - 📊 **確率予測レーダー**: 直近のリセット履歴・経過日数・障害件数・コミュニティの報告量を統合解析し、24時間以内／48時間以内のリセット確率を統計モデルでリアルタイム試算。
-- 📝 **公式シグナルのリアルタイム監視**: Chrome拡張機能 / Webhook 経由で Tibo氏（@thsottiaux）の投稿を自動収集。ルールベース分類エンジン＋Gemini AI シャドー分類器で監査・蓄積。
+- 📝 **公式シグナルのリアルタイム監視**: Chrome拡張機能 / Webhook 経由で Tibo氏（@thsottiaux）の投稿を自動収集。ルールベース分類エンジンとGemini AIの結果を監査・蓄積。
 - 🌐 **完全多言語対応**: 日本語 (`ja`)・英語 (`en`)・中国語 (`zh`) に完全対応。時間の自動解釈パーサーを搭載。
 
 ---
 
-## 🤖 Gemini AI シャドー分類器（設定・環境変数）
+## 🤖 Tibo投稿分類（設定・環境変数）
 
-Tibo氏のX投稿分類の精度検証のため、Gemini API による **シャドー分類モード** をサポートしています。
+Tibo氏のX投稿は、ルール分類とGemini APIを組み合わせて分類できます。
 
 ### 環境変数設定例
 ```bash
-# シャドー分類の動作モード (off: 無効 [デフォルト], shadow: AI結果をDB保存するが公開確率へは非反映)
-GEMINI_CLASSIFICATION_MODE=off
+# 分類モード (off: ルールのみ, shadow: ルールを採用してAIを監査保存,
+#             primary: 成功時はAIを採用し失敗時はルールへfallback)
+GEMINI_CLASSIFICATION_MODE=primary
 
 # 推奨モデル (gemini-3.5-flash-lite)
 GEMINI_MODEL=gemini-3.5-flash-lite
@@ -32,7 +33,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-> **Note**: レート制限遵守のため、1投稿あたり Gemini API 呼び出しは最大1回とし、モデルの自動フォールバックは行いません。API障害やレート超過時は自動的に既存のルール分類へフォールバックします。
+> **Note**: レート制限遵守のため、1投稿あたり Gemini API 呼び出しは最大1回とし、モデルの自動フォールバックは行いません。`primary` ではGeminiのタイムアウト・レート制限・不正応答・APIエラーなどの失敗時にルール分類へfallbackします。`hybrid` は `primary` の後方互換名です。
 
 ---
 

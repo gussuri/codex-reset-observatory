@@ -59,7 +59,7 @@ Respond ONLY with a JSON object strictly matching this schema:
 `;
 
 /**
- * Classifies a Tibo tweet using Gemini API in Shadow Mode.
+ * Classifies a Tibo tweet using the configured Gemini model.
  * Does not throw exceptions; returns structured output with status on failure.
  */
 export async function classifyWithGemini(
