@@ -131,7 +131,7 @@ export function getLocalResetProbability(
 
   const score =
     base +
-    getMomentumBoost(period) +
+    getMomentumBoost(period, data) +
     (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period, data) : 0) +
     getElapsedDayBoost(data) +
     statusIncidents *
@@ -340,17 +340,27 @@ export function getRecent7DayResetCount(): number {
   }).length;
 }
 
-export function getMomentumBoost(period: "24h" | "48h"): number {
+export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null): number {
   const count = getRecent7DayResetCount();
   const weightKey = period === "24h" ? "within24h" : "within48h";
+  const daysSince = getDaysSinceLastGlobalReset(data);
 
+  let rawBoost = 0;
   if (count >= 4) {
-    return LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level2[weightKey];
+    rawBoost = LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level2[weightKey];
+  } else if (count === 3) {
+    rawBoost = LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level1[weightKey];
   }
-  if (count === 3) {
-    return LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level1[weightKey];
+
+  // 0〜1日目はクールダウン期のため、ラッシュ期ブーストを抑制する
+  if (daysSince === 0) {
+    return 0;
   }
-  return 0;
+  if (daysSince === 1) {
+    return rawBoost * 0.5;
+  }
+
+  return rawBoost;
 }
 
 export function getLocalHistoryPressure(period: "24h" | "48h", data?: RadarData | null) {
@@ -604,13 +614,16 @@ export function getLocalProbabilityReason(
   }
 
   const resetCount7d = getRecent7DayResetCount();
+  const currentMomentum = getMomentumBoost("48h", data);
   let momentumText = "";
-  if (resetCount7d >= 4) {
-    const text = "直近7日間でリセットが4回以上発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。";
-    momentumText = ` ${translateDynamic(text, locale)}`;
-  } else if (resetCount7d === 3) {
-    const text = "直近7日間でリセットが3回発生しており、リセット頻度が高まっているため予測確率を上昇補正しています。";
-    momentumText = ` ${translateDynamic(text, locale)}`;
+  if (currentMomentum > 0) {
+    if (resetCount7d >= 4) {
+      const text = "直近7日間でリセットが4回以上発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。";
+      momentumText = ` ${translateDynamic(text, locale)}`;
+    } else if (resetCount7d === 3) {
+      const text = "直近7日間でリセットが3回発生しており、リセット頻度が高まっているため予測確率を上昇補正しています。";
+      momentumText = ` ${translateDynamic(text, locale)}`;
+    }
   }
 
   if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
