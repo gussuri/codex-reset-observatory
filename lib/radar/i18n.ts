@@ -839,6 +839,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "6 million active users celebration reset",
     zh: "600万活跃用户庆祝重置",
   },
+  "Luna 10万スレッド到達・効率改善記念リセット": {
+    ja: "Luna 10万スレッド到達・効率改善記念リセット",
+    en: "Luna 100k Threads & Efficiency Milestone Reset",
+    zh: "Luna 10万线程与效率改进庆祝重置",
+  },
+  "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。": {
+    ja: "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
+    en: "Tibo announced a forced reset for all Codex and ChatGPT Work users to celebrate a week of efficiency gains and enable 100,000 Luna threads over the weekend.",
+    zh: "Tibo 宣布由于本周效率提升，全员重置 Codex 与 ChatGPT Work 用量上限，方便周末运行 10 万个 Luna 线程。",
+  },
   "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "アクティブユーザー数600万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 6 million active users.",

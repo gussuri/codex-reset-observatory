@@ -1,6 +1,6 @@
 import type { WindowEventLike } from "../lib/radar/types";
 
-export const LOCAL_MODEL_UPDATED_AT = "2026-07-29T13:09:00+09:00";
+export const LOCAL_MODEL_UPDATED_AT = "2026-08-01T12:32:00+09:00";
 export const HISTORY_LIMIT = 5;
 export const MANUAL_LAST_REGULAR_RESET_AT = null;
 export const MANUAL_NEXT_REGULAR_RESET_AT = null;
@@ -9,10 +9,32 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全27件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット権配布含む）
+ * 全28件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット権配布含む）
  * details.resetMethod 属性によって予測エンジンの起算点フィルター等に使用されます。
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+    "title": "Luna 10万スレッド到達・効率改善記念リセット",
+    "kind": "reset_completed",
+    "status": "closed",
+    "opened_at": "2026-07-31T13:50:00.000Z",
+    "closed_at": "2026-08-01T12:32:00+09:00",
+    "completed_at": "2026-08-01T12:32:00+09:00",
+    "window_minutes": 1362,
+    "scope": "全有料プラン",
+    "summary": "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
+    "source_url": "https://x.com/thsottiaux/status/2083053369351090254",
+    "details": {
+      "cycleType": "ランダムリセット",
+      "reasonType": "ご祝儀リセット",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "noticeToExecution": "22時間42分",
+      "noticeType": "匂わせ投稿あり",
+      "note": "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。"
+    }
+  },
   {
     "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
     "title": "GPT-5.6 Sol利用効率改善リセット",
