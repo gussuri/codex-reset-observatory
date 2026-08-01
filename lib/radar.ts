@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
+import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
 import {
   translateUI,
@@ -56,6 +56,7 @@ import {
 } from "./radar/helpers";
 import {
   getLocalResetProbability,
+  getActiveOfficialNotice,
   getLocalSignalEnvironment,
   getLocalSignalEvaluation,
   getSignalEnvironment,
@@ -89,10 +90,10 @@ export function getLocalRadarData({
   rejectedTiboResets = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
-  activeTiboSignals?: Array<any>;
+  activeTiboSignals?: RadarData["active_tibo_signals"];
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
-} = {}): RadarData & { active_tibo_signals?: Array<any> } {
+} = {}): RadarData {
   const checkedAt = new Date().toISOString();
   const updatedAt = getLocalModelUpdatedAt(openAIStatus, {
     formal_tibo_resets: formalTiboResets,
@@ -126,9 +127,13 @@ export function getRadarViewModel(
   const source = unwrapRadarData(data);
   const signalEvaluation =
     signalEvaluationOverride ?? getLocalSignalEvaluation(source);
-  const probability24h = getProbability(source, "24h", signalEvaluation);
-  const probability48h = getProbability(source, "48h", signalEvaluation);
-  const predictionLevel = getLocalExpectationLevel(source, locale, signalEvaluation);
+  const activeOfficialNotice = getActiveOfficialNotice(
+    source,
+    signalEvaluation.latestResetAt,
+  );
+  const probability24h = getProbability(source, "24h", signalEvaluation, activeOfficialNotice);
+  const probability48h = getProbability(source, "48h", signalEvaluation, activeOfficialNotice);
+  const predictionLevel = getLocalExpectationLevel(source, locale, signalEvaluation, activeOfficialNotice);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
@@ -147,7 +152,7 @@ export function getRadarViewModel(
       regularResetForecast,
       locale
     ) ?? latestCompletedLocalWindow;
-  const activeWindow = getDisplayResetNotice(getActiveWindow(source, locale));
+  const activeWindow = getDisplayResetNotice(getActiveWindow(activeOfficialNotice, locale));
   const recentHistory = addPersonalResetEventsToHistory(
     addRegularResetForecastToHistory(observedHistory, regularResetForecast, locale, limitHistory),
     locale,
@@ -163,7 +168,7 @@ export function getRadarViewModel(
     expectation: predictionLevel ?? getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale),
     probability24h,
     probability48h,
-    action: getRecommendedAction(source, probability24h, locale),
+    action: getRecommendedAction(activeWindow, probability24h, locale),
     lastUpdated:
       source?.checked_at ??
       source?.monitored_at ??
@@ -178,6 +183,7 @@ export function getRadarViewModel(
       probability48h,
       locale,
       signalEvaluation,
+      activeOfficialNotice,
     ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
@@ -725,8 +731,9 @@ function getProbability(
   data: RadarData | null,
   period: "24h" | "48h",
   signalEvaluation: LocalSignalEvaluation,
+  activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
 ): number | undefined {
-  return getLocalResetProbability(data, period, signalEvaluation);
+  return getLocalResetProbability(data, period, signalEvaluation, activeOfficialNotice);
 }
 
 function getLatestWindow(data: RadarData | null): WindowLike | undefined {
@@ -867,8 +874,10 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
   return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
-function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarViewModel["activeWindow"] {
-  const officialNotice = getLatestActiveLocalSignal("official_notice");
+function getActiveWindow(
+  officialNotice: ReturnType<typeof getActiveOfficialNotice>,
+  locale: Locale = "ja",
+): RadarViewModel["activeWindow"] {
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
   const expectedAt = officialNotice?.expectedAt ?? null;
@@ -924,12 +933,10 @@ function getActiveWindow(_data: RadarData | null, locale: Locale = "ja"): RadarV
 }
 
 function getRecommendedAction(
-  data: RadarData | null,
+  activeWindow: RadarViewModel["activeWindow"],
   probability24h: number | undefined,
   locale: Locale = "ja",
 ) {
-  const activeWindow = getActiveWindow(data, locale);
-
   if (activeWindow.active) {
     return locale === "en"
       ? "An official reset notice is active. Prioritize using up your remaining quota or plan your work ahead."
@@ -978,6 +985,7 @@ function getReasoningSummary(
   probability48h: number | undefined,
   locale: Locale,
   signalEvaluation: LocalSignalEvaluation,
+  activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
 ): string | null {
   return getLocalProbabilityReason(
     data,
@@ -985,6 +993,7 @@ function getReasoningSummary(
     probability48h,
     locale,
     signalEvaluation,
+    activeOfficialNotice,
   );
 }
 

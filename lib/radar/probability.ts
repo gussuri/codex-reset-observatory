@@ -12,9 +12,7 @@ import {
 } from "./signalEvaluation";
 import {
   getCalendarDayDelta,
-  getHoursUntil,
   getLatestIsoDate,
-  isUpcomingWithinHours,
   isWithinHours,
   getDateTime,
   probabilityToPercent,
@@ -29,16 +27,32 @@ export type LocalSignalEvaluation = {
   latestResetAt: Date | null;
 };
 
+export type ActiveOfficialNotice = {
+  origin: "dynamic" | "local";
+  id: string;
+  title: string | null;
+  summary: string | null;
+  observedAt: string;
+  expectedAt: string | null;
+  expectedEndAt: string | null;
+  expiresAt: string | null;
+  source: string | null;
+  sourceLabel: string;
+};
+
 export function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
   signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
+  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
+    data,
+    signalEvaluation.latestResetAt,
+  ),
 ): number {
   const weightKey = period === "24h" ? "within24h" : "within48h";
-  const periodHours = period === "24h" ? 24 : 48;
   const tiboSignals = [
-    ...(((data as any)?.active_tibo_signals as Array<any> | undefined) ?? []),
-    ...(((data as any)?.formal_tibo_resets as Array<any> | undefined) ?? []),
+    ...(data?.active_tibo_signals ?? []),
+    ...(data?.formal_tibo_resets ?? []),
   ];
 
   // 1. Sort active Tibo signals by tweet_created_at ascending for time-ordered evaluation
@@ -47,19 +61,8 @@ export function getLocalResetProbability(
     .sort((a, b) => new Date(a.tweet_created_at).getTime() - new Date(b.tweet_created_at).getTime());
 
   // 2. Find latest valid reset_executed signal (confidence >= 0.95)
-  const latestExecution = sortedSignals
-    .filter((s) => s.signal_type === "reset_executed" && (s.confidence ?? 0) >= 0.95)
-    .at(-1);
-
-  const executionTime = latestExecution ? new Date(latestExecution.tweet_created_at).getTime() : 0;
-
-  // 3. Only notices and teasers posted AFTER the latest reset_executed are valid
-  const hasValidNotice = sortedSignals.some(
-    (s) =>
-      s.signal_type === "official_notice" &&
-      (s.confidence ?? 0) >= 0.95 &&
-      new Date(s.tweet_created_at).getTime() > executionTime
-  );
+  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
+  const executionTime = latestExecutionAt?.getTime() ?? 0;
 
   const validTeaser = sortedSignals.find(
     (s) =>
@@ -68,10 +71,8 @@ export function getLocalResetProbability(
       new Date(s.tweet_created_at).getTime() > executionTime
   );
 
-  const officialNotice = getLatestActiveLocalSignal("official_notice");
-
-  // If a valid notice exists AFTER the latest execution, trigger Notice Mode (24h: 90%, 48h: 96%)
-  if (hasValidNotice || (!latestExecution && hasOfficialNoticeWithinHours(officialNotice, periodHours))) {
+  // A normalized active official notice drives Notice Mode (24h: 90%, 48h: 96%).
+  if (activeOfficialNotice) {
     return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
   }
 
@@ -133,7 +134,7 @@ export function getLocalResetProbability(
 
   const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0 || Boolean(validTeaser);
 
-  const isWeekendCalm = isUSWeekendCalmPeriod(data);
+  const isWeekendCalm = isUSWeekendCalmPeriod(data, new Date(), activeOfficialNotice);
   const weekendCalmAdjustment = isWeekendCalm ? (period === "24h" ? -0.15 : -0.25) : 0;
 
   const score =
@@ -287,15 +288,22 @@ export function getLocalSignalEvaluation(
   };
 }
 
-export function getLatestActiveLocalSignal(type: LocalObservationSignal["type"]) {
+export function getLatestActiveLocalSignal(
+  type: LocalObservationSignal["type"],
+  now: Date = new Date(),
+) {
   return LOCAL_OBSERVATION_SIGNALS.filter(
-    (signal) => signal.type === type && isCurrentLocalSignal(signal),
+    (signal) => signal.type === type && isCurrentLocalSignal(signal, now),
   )
     .sort((a, b) => getDateTime(b.observedAt) - getDateTime(a.observedAt))
     .at(0);
 }
 
-export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
+export function getEffectiveSignalStatus(
+  signal: LocalObservationSignal,
+  now: Date = new Date(),
+) {
+  const nowTime = now.getTime();
   if (signal.resolvedAt) {
     return "resolved";
   }
@@ -306,7 +314,7 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
     (signal.status !== "resolved" &&
       signal.expiresAt &&
       getDateTime(signal.expiresAt) > 0 &&
-      getDateTime(signal.expiresAt) <= Date.now())
+      getDateTime(signal.expiresAt) <= nowTime)
   ) {
     return "expired";
   }
@@ -317,9 +325,9 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
   if (
     signal.expectedAt &&
     getDateTime(signal.expectedAt) > 0 &&
-    getDateTime(signal.expectedAt) <= Date.now()
+    getDateTime(signal.expectedAt) <= nowTime
   ) {
-    if (signal.expiresAt && getDateTime(signal.expiresAt) > Date.now()) {
+    if (signal.expiresAt && getDateTime(signal.expiresAt) > nowTime) {
       return signal.status ?? "active";
     }
     return "resolved";
@@ -328,8 +336,101 @@ export function getEffectiveSignalStatus(signal: LocalObservationSignal) {
   return signal.status ?? "active";
 }
 
-export function isCurrentLocalSignal(signal: LocalObservationSignal) {
-  return getEffectiveSignalStatus(signal) === "active";
+export function isCurrentLocalSignal(
+  signal: LocalObservationSignal,
+  now: Date = new Date(),
+) {
+  return getEffectiveSignalStatus(signal, now) === "active";
+}
+
+function getLatestAcceptedTiboExecutionAt(data: RadarData | null | undefined) {
+  const executions = [
+    ...(data?.active_tibo_signals ?? []),
+    ...(data?.formal_tibo_resets ?? []),
+  ].flatMap((signal) => {
+    if (
+      signal.signal_type !== "reset_executed" ||
+      (signal.confidence ?? 0) < 0.95 ||
+      signal.verification_status === "rejected"
+    ) {
+      return [];
+    }
+
+    const timestamp = new Date(signal.tweet_created_at).getTime();
+    return Number.isNaN(timestamp) ? [] : [timestamp];
+  });
+  const latestTimestamp = Math.max(...executions, Number.NEGATIVE_INFINITY);
+
+  return Number.isFinite(latestTimestamp) ? new Date(latestTimestamp) : null;
+}
+
+export function getActiveOfficialNotice(
+  data: RadarData | null,
+  latestResetAt: Date | null = getLastGlobalResetAt(data),
+  now: Date = new Date(),
+): ActiveOfficialNotice | null {
+  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
+  const cutoff = Math.max(
+    latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+    latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+  );
+  const dynamicNotices: Array<ActiveOfficialNotice> = (data?.active_tibo_signals ?? [])
+    .flatMap((signal) => {
+      if (
+        signal.signal_type !== "official_notice" ||
+        (signal.confidence ?? 0) < 0.95 ||
+        signal.verification_status === "rejected"
+      ) {
+        return [];
+      }
+
+      const observedTime = new Date(signal.tweet_created_at).getTime();
+      const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
+      if (
+        Number.isNaN(observedTime) ||
+        Number.isNaN(expiresTime) ||
+        expiresTime <= now.getTime() ||
+        observedTime <= cutoff
+      ) {
+        return [];
+      }
+
+      return [{
+        origin: "dynamic" as const,
+        id: signal.tweet_id,
+        title: signal.text ?? null,
+        summary: signal.text ?? null,
+        observedAt: signal.tweet_created_at,
+        expectedAt: null,
+        expectedEndAt: null,
+        expiresAt: signal.expires_at ?? null,
+        source: signal.tweet_url ?? null,
+        sourceLabel: "Tibo (@tibo_maker)",
+      }];
+    });
+  const localNotices = LOCAL_OBSERVATION_SIGNALS
+    .filter(
+      (signal) =>
+        signal.type === "official_notice" &&
+        isCurrentLocalSignal(signal, now) &&
+        !Number.isNaN(new Date(signal.observedAt).getTime()),
+    )
+    .map((signal): ActiveOfficialNotice => ({
+      origin: "local",
+      id: signal.id,
+      title: signal.title ?? null,
+      summary: signal.title ?? null,
+      observedAt: signal.observedAt,
+      expectedAt: signal.expectedAt ?? null,
+      expectedEndAt: signal.expectedEndAt ?? null,
+      expiresAt: signal.expiresAt ?? null,
+      source: signal.source ?? null,
+      sourceLabel: signal.sourceLabel,
+    }));
+
+  return [...dynamicNotices, ...localNotices]
+    .sort((left, right) => new Date(right.observedAt).getTime() - new Date(left.observedAt).getTime())
+    .at(0) ?? null;
 }
 
 export function getRecent7DayResetCount(data?: RadarData | null): number {
@@ -378,7 +479,12 @@ export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null)
 
 export function isUSWeekendCalmPeriod(
   data?: RadarData | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
+    data ?? null,
+    getLastGlobalResetAt(data),
+    now,
+  ),
 ): boolean {
   const ptFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",
@@ -391,9 +497,8 @@ export function isUSWeekendCalmPeriod(
     return false;
   }
 
-  // If official notice is active, do NOT suppress
-  const officialNotice = getLatestActiveLocalSignal("official_notice");
-  if (hasOfficialNoticeWithinHours(officialNotice, 48)) {
+  // If an official notice is active, do NOT suppress.
+  if (activeOfficialNotice) {
     return false;
   }
 
@@ -459,33 +564,32 @@ export function getLastGlobalResetAt(data?: RadarData | null) {
   });
 
   const latestOfficialStr = getLatestIsoDate(candidates);
-  return latestOfficialStr ? new Date(latestOfficialStr) : null;
+  const latestOfficialAt = latestOfficialStr ? new Date(latestOfficialStr) : null;
+  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
+
+  if (!latestOfficialAt) {
+    return latestExecutionAt;
+  }
+
+  if (!latestExecutionAt || latestOfficialAt >= latestExecutionAt) {
+    return latestOfficialAt;
+  }
+
+  return latestExecutionAt;
 }
 
 export function getLocalExpectationLevel(
   data: RadarData | null,
   locale: Locale = "ja",
   signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
+  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
+    data,
+    signalEvaluation.latestResetAt,
+  ),
 ) {
-  const probability24h = getLocalResetProbability(data, "24h", signalEvaluation);
-  const probability48h = getLocalResetProbability(data, "48h", signalEvaluation);
+  const probability24h = getLocalResetProbability(data, "24h", signalEvaluation, activeOfficialNotice);
+  const probability48h = getLocalResetProbability(data, "48h", signalEvaluation, activeOfficialNotice);
   return getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale);
-}
-
-function hasOfficialNoticeWithinHours(
-  notice: ReturnType<typeof getLatestActiveLocalSignal>,
-  periodHours: number,
-) {
-  const scheduledHoursUntil = getHoursUntil(notice?.expectedAt);
-  if (isUpcomingWithinHours(scheduledHoursUntil, periodHours)) {
-    return true;
-  }
-
-  if (notice?.expectedAt) {
-    return false;
-  }
-
-  return isUpcomingWithinHours(getHoursUntil(notice?.expiresAt), periodHours);
 }
 
 export function getLocalProbabilityReason(
@@ -494,25 +598,19 @@ export function getLocalProbabilityReason(
   probability48h: number | undefined,
   locale: Locale = "ja",
   signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
+  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
+    data,
+    signalEvaluation.latestResetAt,
+  ),
 ): string | null {
   const environment = signalEvaluation.environment;
-  const officialNotice = getLatestActiveLocalSignal("official_notice");
-  const noticeHoursUntil = getHoursUntil(officialNotice?.expectedAt);
 
-  if (hasOfficialNoticeWithinHours(officialNotice, 24)) {
+  if (activeOfficialNotice) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a very high probability within 24 hours."
       : locale === "zh"
         ? "有官方重置预告，预计 24 小时内执行的概率极高。"
         : "公式リセット予告があるため、通常より高めに見ています。";
-  }
-
-  if (hasOfficialNoticeWithinHours(officialNotice, 48)) {
-    return locale === "en"
-      ? "An official reset notice has been detected, indicating a high probability within 48 hours."
-      : locale === "zh"
-        ? "有官方重置预告，预计 48 小时内执行的概率较高。"
-        : "公式リセット予告があり、48時間以内の見込みを高めに見ています。";
   }
 
   const p24 = probabilityToPercent(probability24h, locale);
@@ -662,7 +760,7 @@ export function getLocalProbabilityReason(
     }
   }
 
-  const isWeekendCalm = isUSWeekendCalmPeriod(data);
+  const isWeekendCalm = isUSWeekendCalmPeriod(data, new Date(), activeOfficialNotice);
   let weekendText = "";
   if (isWeekendCalm) {
     if (locale === "en") {
@@ -671,16 +769,6 @@ export function getLocalProbabilityReason(
       weekendText = " 由于周四和周五没有发生 Codex 故障且无重置预告，美国周末期间预测概率保持较低水平。";
     } else {
       weekendText = " 木・金曜日にCodexの障害がなく予告もないため、米国時間の土日は予測確率を低めに設定しています。";
-    }
-  }
-
-  if (officialNotice && noticeHoursUntil !== null && noticeHoursUntil > 48) {
-    if (locale === "en") {
-      return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. There is an official notice, but scheduled more than 48 hours away. ${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
-    } else if (locale === "zh") {
-      return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。虽然有官方重置预告，但计划时间在 48 小时之后。${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
-    } else {
-      return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。公式リセット予告はありますが、予定時刻はまだ48時間より先です。${combinedSignalSummary}${boostText}${momentumText}${weekendText}`;
     }
   }
 

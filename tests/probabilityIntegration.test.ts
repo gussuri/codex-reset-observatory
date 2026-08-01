@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert";
 import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { getLocalRadarData } from "../lib/radar";
-import { getLocalResetProbability, getDaysSinceLastGlobalReset } from "../lib/radar/probability";
+import {
+  getActiveOfficialNotice,
+  getLocalResetProbability,
+  getDaysSinceLastGlobalReset,
+} from "../lib/radar/probability";
 
 test("reset_executed resets days since last reset to 0 and updates effectiveLatestResetAt", () => {
   const recentExecutionTime = new Date().toISOString();
@@ -160,4 +164,103 @@ test("old reset_executed does not cancel newer official_notice", () => {
 
   const p24 = getLocalResetProbability(mockRadarData as any, "24h");
   assert.strictEqual(p24, 0.90, "Old execution must not cancel newer notice");
+});
+
+test("dynamic official notice drives probability, card, reason, and action together", () => {
+  const now = Date.now();
+  const resetCreatedAt = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+  const noticeCreatedAt = new Date(now - 60 * 60 * 1000).toISOString();
+  const noticeUrl = "https://x.com/tibo_maker/status/dynamic-notice";
+  const data = getLocalRadarData({
+    activeTiboSignals: [
+      {
+        tweet_id: "dynamic-reset",
+        signal_type: "reset_executed",
+        confidence: 0.98,
+        tweet_created_at: resetCreatedAt,
+        expires_at: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+        verification_status: "auto_unverified",
+      },
+      {
+        tweet_id: "dynamic-notice",
+        signal_type: "official_notice",
+        text: "A reset notice from Tibo",
+        tweet_url: noticeUrl,
+        confidence: 0.96,
+        tweet_created_at: noticeCreatedAt,
+        expires_at: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const viewModel = getRadarViewModel(data, "en");
+
+  assert.strictEqual(viewModel.probability24h, 0.9);
+  assert.strictEqual(viewModel.probability48h, 0.96);
+  assert.strictEqual(viewModel.activeWindow.active, true);
+  assert.strictEqual(viewModel.activeWindow.kind, "official");
+  assert.strictEqual(viewModel.activeWindow.source, noticeUrl);
+  assert.strictEqual(viewModel.activeWindow.openedAt, noticeCreatedAt);
+  assert.strictEqual(viewModel.activeWindow.expectedAt, null);
+  assert.match(viewModel.reasoningSummary ?? "", /official reset notice/i);
+  assert.match(viewModel.action, /official reset notice/i);
+});
+
+for (const { name, signal } of [
+  {
+    name: "expired notice",
+    signal: {
+      tweet_id: "expired-notice",
+      signal_type: "official_notice" as const,
+      confidence: 0.95,
+      tweet_created_at: "2026-08-01T11:00:00.000Z",
+      expires_at: "2026-08-01T11:30:00.000Z",
+      verification_status: "auto_unverified" as const,
+    },
+  },
+  {
+    name: "rejected notice",
+    signal: {
+      tweet_id: "rejected-notice",
+      signal_type: "official_notice" as const,
+      confidence: 0.95,
+      tweet_created_at: "2026-08-01T11:00:00.000Z",
+      expires_at: "2026-08-01T13:00:00.000Z",
+      verification_status: "rejected" as const,
+    },
+  },
+]) {
+  test(`${name} is not selected as an active official notice`, () => {
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const data = getLocalRadarData({ activeTiboSignals: [signal] });
+
+    assert.strictEqual(getActiveOfficialNotice(data, null, now), null);
+  });
+}
+
+test("notice older than latest accepted reset is not selected as an active official notice", () => {
+  const now = new Date("2026-08-01T12:00:00.000Z");
+  const data = getLocalRadarData({
+    activeTiboSignals: [
+      {
+        tweet_id: "older-notice",
+        signal_type: "official_notice",
+        confidence: 0.95,
+        tweet_created_at: "2026-08-01T10:00:00.000Z",
+        expires_at: "2026-08-01T13:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+      {
+        tweet_id: "newer-reset",
+        signal_type: "reset_executed",
+        confidence: 0.95,
+        tweet_created_at: "2026-08-01T11:00:00.000Z",
+        expires_at: "2026-08-01T13:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  assert.strictEqual(getActiveOfficialNotice(data, null, now), null);
 });

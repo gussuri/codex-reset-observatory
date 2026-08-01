@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { fetchOpenAIStatusSignals } from "@/lib/openaiStatus";
 import { getLocalRadarData } from "@/lib/radar";
-import type { RadarData } from "@/lib/radar";
+import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
@@ -12,21 +12,6 @@ import {
 } from "@/lib/radar/tiboHistory";
 
 export const API_CACHE_CONTROL = "s-maxage=300, stale-while-revalidate=600";
-
-export type ActiveTiboSignal = {
-  tweet_id: string;
-  signal_type: "official_notice" | "reset_executed" | "teaser" | "irrelevant";
-  text: string;
-  tweet_url: string;
-  tweet_created_at: string;
-  detected_at: string;
-  expires_at: string;
-  verification_status: "auto_unverified" | "confirmed" | "rejected";
-  confidence: number;
-  classification_reason: string;
-  is_reply?: boolean;
-  is_quote?: boolean;
-};
 
 // 1. Raw Supabase fetch function
 async function fetchRawTiboSignals(): Promise<ActiveTiboSignal[]> {
@@ -178,6 +163,7 @@ export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
   // Dynamic filtering outside the cache on every request
   return cachedSignals.filter((signal) => {
     if (signal.verification_status === "rejected") return false;
+    if (!signal.expires_at) return false;
     const expiresTime = new Date(signal.expires_at).getTime();
     return !isNaN(expiresTime) && expiresTime > now;
   });

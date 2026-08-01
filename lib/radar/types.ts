@@ -60,6 +60,21 @@ export type SignalSummaryLike = {
   counts?: Record<string, number>;
 };
 
+export type ActiveTiboSignal = {
+  tweet_id: string;
+  signal_type: "official_notice" | "reset_executed" | "teaser" | "irrelevant";
+  text?: string;
+  tweet_url?: string;
+  tweet_created_at: string;
+  detected_at?: string;
+  expires_at?: string;
+  verification_status?: "auto_unverified" | "confirmed" | "rejected";
+  confidence?: number;
+  classification_reason?: string;
+  is_reply?: boolean;
+  is_quote?: boolean;
+};
+
 export type RadarData = {
   data?: RadarData;
   result?: RadarData;
@@ -136,6 +151,7 @@ export type RadarData = {
     rss?: string;
   };
   openai_status_history?: Array<OpenAIStatusHistoryItem>;
+  active_tibo_signals?: Array<ActiveTiboSignal>;
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   codex_environment?: {
