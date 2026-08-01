@@ -6,9 +6,11 @@ export type MonitorHealthDetail =
   | "healthy"
   | "heartbeat_missing"
   | "heartbeat_invalid"
+  | "heartbeat_future"
   | "heartbeat_stale"
   | "parse_missing"
   | "parse_invalid"
+  | "parse_future"
   | "parse_stale"
   | "scan_error"
   | "page_reload_failed";
@@ -54,6 +56,10 @@ export function evaluateTiboHeartbeat(
     return { status: "unhealthy", detail: "heartbeat_invalid" };
   }
 
+  if (heartbeatTimestamp > now.getTime()) {
+    return { status: "unhealthy", detail: "heartbeat_future" };
+  }
+
   const heartbeatAgeSeconds = getAgeSeconds(heartbeatTimestamp, now);
   if (heartbeatAgeSeconds > MONITOR_HEALTH_MAX_AGE_SECONDS) {
     const parseTimestamp = getTimestamp(snapshot.last_successful_parse_at);
@@ -61,6 +67,14 @@ export function evaluateTiboHeartbeat(
       return {
         status: "unhealthy",
         detail: "heartbeat_stale",
+        heartbeatAgeSeconds,
+      };
+    }
+
+    if (parseTimestamp > now.getTime()) {
+      return {
+        status: "unhealthy",
+        detail: "parse_future",
         heartbeatAgeSeconds,
       };
     }
@@ -86,6 +100,14 @@ export function evaluateTiboHeartbeat(
     return {
       status: "unhealthy",
       detail: "parse_invalid",
+      heartbeatAgeSeconds,
+    };
+  }
+
+  if (parseTimestamp > now.getTime()) {
+    return {
+      status: "unhealthy",
+      detail: "parse_future",
       heartbeatAgeSeconds,
     };
   }

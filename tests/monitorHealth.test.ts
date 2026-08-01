@@ -111,6 +111,18 @@ test("reports an invalid heartbeat timestamp as unhealthy", () => {
   });
 });
 
+test("reports a future heartbeat timestamp as unhealthy", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({ last_heartbeat_at: "2026-08-02T00:00:01.000Z" }),
+    now,
+  );
+
+  assert.deepStrictEqual(result, {
+    status: "unhealthy",
+    detail: "heartbeat_future",
+  });
+});
+
 test("reports a parse timestamp older than fifteen minutes as unhealthy", () => {
   const result = evaluateTiboHeartbeat(
     snapshot({ last_successful_parse_at: "2026-08-01T23:44:59.000Z" }),
@@ -122,6 +134,19 @@ test("reports a parse timestamp older than fifteen minutes as unhealthy", () => 
     detail: "parse_stale",
     heartbeatAgeSeconds: 120,
     parseAgeSeconds: 901,
+  });
+});
+
+test("reports a future parse timestamp as unhealthy", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({ last_successful_parse_at: "2026-08-02T00:00:01.000Z" }),
+    now,
+  );
+
+  assert.deepStrictEqual(result, {
+    status: "unhealthy",
+    detail: "parse_future",
+    heartbeatAgeSeconds: 120,
   });
 });
 

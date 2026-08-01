@@ -45,4 +45,11 @@ test("workflow notifier only opens one issue and closes it after recovery", () =
   assert.match(workflow, /issues\.update\(/);
   assert.match(workflow, /state: "open"/);
   assert.match(workflow, /existingIssue/);
+  assert.match(
+    workflow,
+    /^concurrency:\n  group: workflow-alert-\$\{\{ github\.event\.workflow_run\.name \}\}\n  cancel-in-progress: false$/m,
+  );
+  assert.match(workflow, /github\.paginate\(\s*github\.rest\.issues\.listForRepo,/);
+  assert.match(workflow, /!issue\.pull_request/);
+  assert.match(workflow, /issue\.body\?\.includes\(marker\)/);
 });
