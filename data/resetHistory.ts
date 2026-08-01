@@ -49,7 +49,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "source_url": "https://x.com/thsottiaux",
     "details": {
       "cycleType": "ランダムリセット",
-      "reasonType": "詫びリセット",
+      "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
       "noticeToExecution": "23時間9分",
