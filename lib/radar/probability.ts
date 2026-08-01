@@ -172,11 +172,6 @@ function calculateLocalResetProbability(
 
   const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0 || Boolean(validTeaser);
 
-  const isWeekendCalm = isUSWeekendCalmPeriod(data, now, activeOfficialNotice);
-  const weekendCalmAdjustment = isWeekendCalm
-    ? getWeekendCalmAdjustment(period)
-    : 0;
-
   const score =
     base +
     getMomentumBoost(period, data) +
@@ -193,8 +188,7 @@ function calculateLocalResetProbability(
     issueAnomalies *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.issueAnomaly[weightKey] +
     pressureBoost +
-    eventBoost +
-    weekendCalmAdjustment;
+    eventBoost;
 
   const minLimit =
     typeof LOCAL_PROBABILITY_WEIGHTS.min === "object"
@@ -205,11 +199,6 @@ function calculateLocalResetProbability(
     LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
     Math.max(minLimit, score),
   );
-}
-
-export function getWeekendCalmAdjustment(period: "24h" | "48h") {
-  const weightKey = period === "24h" ? "within24h" : "within48h";
-  return LOCAL_PROBABILITY_WEIGHTS.weekendCalmAdjustment[weightKey];
 }
 
 export function getTeaserDecayFactor(
@@ -548,43 +537,6 @@ export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null)
   }
 
   return rawBoost;
-}
-
-export function isUSWeekendCalmPeriod(
-  data?: RadarData | null,
-  now: Date = new Date(),
-  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
-    data ?? null,
-    getLastGlobalResetAt(data),
-    now,
-  ),
-): boolean {
-  const ptFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles",
-    weekday: "short",
-  });
-  const ptDay = ptFormatter.format(now); // "Sat", "Sun", "Mon", etc.
-
-  // Only applicable on US Pacific Time Saturday or Sunday
-  if (ptDay !== "Sat" && ptDay !== "Sun") {
-    return false;
-  }
-
-  // If an official notice is active, do NOT suppress.
-  if (activeOfficialNotice) {
-    return false;
-  }
-
-  // Check if there were Codex incidents or hints
-  const evalResult = getLocalSignalEvaluation(data ?? null, now);
-  const hasStatusIncidents = evalResult.statusIncidents.weightedStatusScore > 0;
-  const hasIncidentHints = (evalResult.environment.official_incident_hints_24h ?? 0) > 0;
-
-  if (hasStatusIncidents || hasIncidentHints) {
-    return false;
-  }
-
-  return true;
 }
 
 export function getLocalHistoryPressure(period: "24h" | "48h", data?: RadarData | null) {
