@@ -1,0 +1,185 @@
+# Tibo監視とリセット履歴更新の運用・復旧手順
+
+この手順書は、Tibo氏（`@thsottiaux`）のX投稿を監視し、Codex Reset Observatoryへ保存・反映する現在の運用をまとめたものです。
+
+標準手順は、リポジトリの `extension/tibo-monitor/` にあるChrome Manifest V3拡張機能を使う方法です。`scripts/tibo-monitor.user.js` のTampermonkey版は別実装で、10分ごとのプロフィール自動再読み込みは行いません。
+
+## 1. 自動監視が動く条件
+
+次の条件がすべてそろっている必要があります。
+
+- PCが起動している
+- Chromeが起動している
+- Tibo氏のプロフィールタブ（`https://x.com/thsottiaux` または `https://twitter.com/thsottiaux`）を開いている
+- PCがスリープしていない
+- Xの投稿が翻訳表示ではなく、英語の原文表示になっている
+- 拡張機能が有効で、オプションにWebhook Secretと観測所ドメインが設定されている
+
+Chromeの通知ページは投稿スキャンの対象になり得ますが、10分ごとの自動再読み込み対象はプロフィールURLだけです。夜間の自動監視ではプロフィールタブを開いたままにします。
+
+## 2. 通常の自動処理
+
+1. Service WorkerのChrome Alarmが約10分ごとに動きます。
+2. プロフィールタブが見つかれば、そのタブを再読み込みします。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
+3. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
+4. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。
+5. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
+6. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
+7. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
+8. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。
+9. 次回のレーダーデータ取得で、条件を満たす `reset_executed` は正式リセット履歴へ自動統合されます。正式採用は `confirmed` へ自動変更する処理ではなく、`auto_unverified` のままでも採用条件を満たせば反映されます。
+
+正式履歴の採用条件は、`signal_type=reset_executed`、confidence 0.95以上、`verification_status` が `rejected` ではないことに加え、`classification_source` が `gemini` または `rule_fallback` であることです。`verification_status=confirmed` の行は、分類ソースにかかわらず採用対象です。`expires_at` は正式履歴の判定には使いません。
+
+正式履歴は静的な `data/resetHistory.ts` と統合されます。同じtweet_id・URL、または強制リセットの実施時刻が5分以内の重複は1件にまとめられます。Webhook成功後も表示側のキャッシュにより、反映まで最大およそ60秒かかることがあります。
+
+## 3. プロフィールタブを閉じていた場合
+
+プロフィールタブが無いと、10分アラームはページを再読み込みしません。このとき拡張機能のローカル状態に `tibo_last_page_reload_status=monitored_tab_missing` が保存されます。前回の成功した再読み込み時刻は上書きされません。
+
+復旧するには次の順で操作します。
+
+1. Chromeで `https://x.com/thsottiaux` を開く。
+2. 対象投稿までスクロールして、投稿本文を画面上に読み込む。
+3. 「翻訳を表示」ではなく「原文を表示」の状態に戻す。
+4. 10〜60秒待つ。初回DOMスキャン、MutationObserver、60秒ポーリングのいずれかで送信されます。
+5. 投稿が処理済みIDに入っていない場合、Webhookの2xx応答後にSupabaseへ保存されます。
+
+タブを開くだけでは過去の投稿すべてをAPIから取得する仕組みではありません。画面上に読み込まれていない投稿は、対象位置までスクロールしてください。
+
+## 4. Supabaseでの確認方法
+
+投稿単位の分類・履歴反映は `public.tibo_signals` で確認します。SQL Editorでは次の列を確認します。
+
+```sql
+SELECT
+  tweet_id,
+  signal_type,
+  classification_source,
+  ai_classification_status,
+  ai_model,
+  verification_status,
+  tweet_created_at
+FROM public.tibo_signals
+WHERE tweet_id = '投稿ID'
+LIMIT 1;
+```
+
+確認する列の意味は次のとおりです。
+
+- `tweet_id`: X投稿のID。Webhookの重複排除・upsertキーです。
+- `signal_type`: 最終採用された `reset_executed`、`official_notice`、`teaser`、`irrelevant`。
+- `classification_source`: `gemini`、`rule_fallback`、`shadow`、`rule` のいずれか。
+- `ai_classification_status`: Geminiの `success`、`timeout`、`rate_limited`、`invalid_json`、`invalid_schema`、`invalid_evidence`、`api_error`、`model_not_configured`、`skipped` など。
+- `ai_model`: 実際に呼び出したGeminiモデル名。Geminiを呼ばなかった場合は空です。
+- `verification_status`: `auto_unverified`、`confirmed`、`rejected`。自動処理は通常 `auto_unverified` で保存されます。
+- `tweet_created_at`: 投稿本文から取得したX投稿時刻。履歴の実施時刻の基準です。
+
+監視の稼働状態は `public.tibo_heartbeat` の `id='main'` を確認します。`last_heartbeat_at`、`last_successful_parse_at`、`last_seen_tweet_id`、`last_scan_error`、`last_page_reload_at`、`last_page_reload_status`、`last_page_reload_error` が手掛かりになります。
+
+## 5. 正常時とfallback時の期待値
+
+本番の推奨設定は `GEMINI_CLASSIFICATION_MODE=primary` です。
+
+| 状態 | `ai_classification_status` | `classification_source` | 最終分類 |
+| --- | --- | --- | --- |
+| Gemini正常 | `success` | `gemini` | Geminiのsignal_typeとconfidence |
+| Gemini失敗 | `timeout`、`rate_limited`、`invalid_json`、`invalid_schema`、`invalid_evidence`、`api_error`、`model_not_configured` など | `rule_fallback` | ルール分類のsignal_typeとconfidence |
+| Geminiを無効化 | `skipped` | `rule` | ルール分類 |
+| Shadow監査 | 成功または失敗 | `shadow` | ルール分類。Geminiは監査列だけ |
+
+Geminiの失敗で投稿全体を `irrelevant` にすることはありません。`primary` では必ずルール分類を保存します。`reset_executed` が正式履歴に採用されるかは、最終分類のconfidence、verification_status、classification_sourceの組み合わせで決まります。
+
+## 6. 誤判定の修正方法
+
+SupabaseのSQL Editorなど、管理権限のある場所で対象行の `verification_status` を更新します。行自体は削除しません。
+
+### 正式履歴と予測から除外する場合
+
+```sql
+UPDATE public.tibo_signals
+SET verification_status = 'rejected'
+WHERE tweet_id = '投稿ID';
+```
+
+`rejected` の行は正式履歴、最新リセット、確率計算から除外されます。監査用の分類結果・本文・時刻は残ります。キャッシュのため、画面から消えるまで最大およそ60秒かかる場合があります。
+
+### 明示的に正式採用する場合
+
+```sql
+UPDATE public.tibo_signals
+SET verification_status = 'confirmed'
+WHERE tweet_id = '投稿ID';
+```
+
+`confirmed` は明示的な採用意思を記録します。ただし、正式履歴にするには対象行が `reset_executed` でconfidence 0.95以上である必要があります。
+
+## 7. 手動Webhook送信
+
+自動監視が間に合わなかった投稿は、次のPowerShell例でWebhookへ送信できます。実際の秘密値やAPIキーはコマンド・リポジトリ・手順書へ書きません。
+
+```powershell
+$secret = $env:TIBO_WEBHOOK_SECRET
+if (-not $secret) {
+  $secret = Read-Host "TIBO_WEBHOOK_SECRET"
+}
+
+$body = @{
+  tweetId        = "投稿ID"
+  text           = "投稿本文（原文）"
+  tweetUrl       = "https://x.com/thsottiaux/status/投稿ID"
+  tweetCreatedAt = "2026-08-01T00:00:00.000Z"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "https://codex-reset-observatory.vercel.app/api/webhook/tibo" `
+  -Headers @{ Authorization = "Bearer $secret" } `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+`tweetId` は数字の投稿ID、`tweetUrl` はTibo氏のstatus URL、`tweetCreatedAt` はISO 8601形式で指定します。Webhookは投稿時刻が現在より5分を超えて未来の場合、URLがTibo氏のstatus URLでない場合、本文が2000文字を超える場合などを拒否します。送信後はHTTP 2xxとSupabaseの行を確認してください。
+
+## 8. `data/resetHistory.ts`への手動追記
+
+Webhookが使えない緊急時には、`data/resetHistory.ts` へ静的なリセット履歴を手動追記する手段も残っています。ただし通常はWebhook経由を優先します。
+
+手動追記では、既存の履歴イベント形式、実施時刻、分類、対象範囲、ソースURLをそろえ、`npm test` と `npm run build` を実行します。静的履歴とSupabase由来の動的履歴が同じリセットを表す場合は、tweet_id・URL、または強制リセットの実施時刻5分以内という条件で統合されます。二重表示を避けるため、同じイベントを両方へ無計画に追加しないでください。
+
+## 9. トラブルシューティング
+
+### `monitored_tab_missing`
+
+- プロフィールタブが閉じていないか確認します。
+- URLが `x.com/thsottiaux` または `twitter.com/thsottiaux` になっているか確認します。
+- Chromeと拡張機能が動作中か、PCがスリープしていないか確認します。
+- プロフィールを開いて対象投稿までスクロールし、10〜60秒待ちます。
+- SupabaseのHeartbeat行は、次のHeartbeat送信後に更新されます。
+
+### `translated_text_detected`
+
+- Xの投稿を「原文を表示」に戻します。
+- 日本語などの翻訳文ではなく、英語原文が表示されていることを確認します。
+- 対象投稿を画面上に再表示して、再スキャンを待ちます。
+
+### Webhook Secret未設定
+
+- 拡張機能のオプションでWebhook Secretを設定し、接続テストを実行します。
+- サーバー側の `TIBO_WEBHOOK_SECRET` が未設定ならWebhookは503になります。
+- 秘密値をコンソール、Issue、手順書、Gitへ貼り付けないでください。
+
+### Gemini失敗時の `rule_fallback`
+
+- `ai_classification_status` と `ai_model` をSupabaseで確認します。
+- `primary` ではGemini失敗時もWebhookはルール分類で保存を完了します。
+- `classification_source=rule_fallback` なら、最終分類はルール結果です。必要なら本文と監査列を確認してから `confirmed` または `rejected` を設定します。
+
+### Supabaseに行が追加されない場合
+
+1. WebhookのHTTP応答が2xxか確認します。401はSecret不一致、503はサーバー側Secret未設定、400は入力値の形式不正です。
+2. 拡張機能のService WorkerコンソールでWebhookエラーを確認します。
+3. `tweetId` が数字、URLがTibo氏のstatus URL、本文が原文、投稿日時が有効なISO 8601形式か確認します。
+4. 同じtweet_idが既にある場合は新規行ではなくupsertによる更新です。
+5. サーバー側のSupabase接続設定と、`tibo_signals` の制約・権限を管理者に確認します。秘密値は表示・共有しません。
+6. 保存成功後もレーダー画面はキャッシュ中のことがあるため、最大およそ60秒待って再読み込みします。
