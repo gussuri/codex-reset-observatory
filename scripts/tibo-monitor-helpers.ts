@@ -1,5 +1,8 @@
 import type { LocalObservationSignal } from "../data/observationSignals";
-import { AUTOMATED_TIBO_SIGNAL_WEIGHTS } from "../data/predictionWeights";
+import {
+  AUTOMATED_TIBO_SIGNAL_WEIGHTS,
+  TIBO_TEASER_DECAY_HOURS,
+} from "../data/predictionWeights";
 
 export type TiboClassificationResult = {
   category:
@@ -118,6 +121,7 @@ export function buildAutomatedTiboSignal(
     boostValue48h: isTeaser
       ? AUTOMATED_TIBO_SIGNAL_WEIGHTS.teaser.within48h
       : undefined,
+    boostDecayHours: isTeaser ? TIBO_TEASER_DECAY_HOURS : undefined,
     boostReason: `Tibo氏のX投稿（AI自動判定: ${classification.reason_ja}）`,
     title: isTeaser
       ? `Tibo氏がXにて投稿（${classification.reason_ja}）`

@@ -20,14 +20,16 @@ export const REFRESH_INTERVAL_MS = {
 
 export const AUTOMATED_TIBO_SIGNAL_WEIGHTS = {
   teaser: {
-    within24h: 0.4,
-    within48h: 0.55,
+    within24h: 0.2,
+    within48h: 0.3,
   },
   afterFeatureRelease: {
-    within24h: 0.4,
-    within48h: 0.55,
+    within24h: 0.2,
+    within48h: 0.3,
   },
 } as const;
+
+export const TIBO_TEASER_DECAY_HOURS = 48;
 
 export const LOCAL_PROBABILITY_WEIGHTS = {
   min: {
@@ -83,6 +85,10 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
     high: 0.12,
     medium: 0.05,
     low: 0,
+  },
+  weekendCalmAdjustment: {
+    within24h: -0.05,
+    within48h: -0.08,
   },
   elapsedDayBoost: {
     perDay: 0.01,

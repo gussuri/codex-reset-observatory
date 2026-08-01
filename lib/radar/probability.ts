@@ -1,5 +1,9 @@
 import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "@/data/observationSignals";
-import { LOCAL_PROBABILITY_WEIGHTS } from "@/data/predictionWeights";
+import {
+  AUTOMATED_TIBO_SIGNAL_WEIGHTS,
+  LOCAL_PROBABILITY_WEIGHTS,
+  TIBO_TEASER_DECAY_HOURS,
+} from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData } from "./types";
@@ -43,11 +47,42 @@ export type ActiveOfficialNotice = {
 export function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
-  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
-  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
+  signalEvaluation?: LocalSignalEvaluation,
+  activeOfficialNotice?: ActiveOfficialNotice | null,
+  now: Date = new Date(),
+): number {
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedOfficialNotice = activeOfficialNotice === undefined
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    : activeOfficialNotice;
+  const probability = calculateLocalResetProbability(
     data,
-    signalEvaluation.latestResetAt,
-  ),
+    period,
+    resolvedSignalEvaluation,
+    resolvedOfficialNotice,
+    now,
+  );
+
+  if (period === "48h") {
+    const probability24h = calculateLocalResetProbability(
+      data,
+      "24h",
+      resolvedSignalEvaluation,
+      resolvedOfficialNotice,
+      now,
+    );
+    return Math.max(probability24h, probability);
+  }
+
+  return probability;
+}
+
+function calculateLocalResetProbability(
+  data: RadarData | null,
+  period: "24h" | "48h",
+  signalEvaluation: LocalSignalEvaluation,
+  activeOfficialNotice: ActiveOfficialNotice | null,
+  now: Date,
 ): number {
   const weightKey = period === "24h" ? "within24h" : "within48h";
   const tiboSignals = [
@@ -115,7 +150,7 @@ export function getLocalResetProbability(
         typeof signal.boostValue24h === "number" ||
         typeof signal.boostValue48h === "number" ||
         typeof signal.boostValue === "number") &&
-      isCurrentLocalSignal(signal)
+      isCurrentLocalSignal(signal, now)
   );
 
   let eventBoost = activeBoostSignals.reduce((sum, sig) => {
@@ -123,19 +158,24 @@ export function getLocalResetProbability(
       ? (sig.boostValue24h ?? sig.boostValue ?? 0)
       : (sig.boostValue48h ?? sig.boostValue ?? 0);
 
-    return sum + boost;
+    const decayFactor = typeof sig.boostDecayHours === "number"
+      ? getTeaserDecayFactor(sig.observedAt, now, sig.boostDecayHours)
+      : 1;
+
+    return sum + boost * decayFactor;
   }, 0);
 
   // If valid time-ordered teaser exists (confidence >= 0.80) and no local teaser boost signal is already applied, add automated teaser boost
   if (validTeaser && activeBoostSignals.length === 0) {
-    const teaserBoost = period === "24h" ? 0.40 : 0.55;
-    eventBoost += teaserBoost;
+    eventBoost += getTeaserBoost(period, validTeaser.tweet_created_at, now);
   }
 
   const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0 || Boolean(validTeaser);
 
-  const isWeekendCalm = isUSWeekendCalmPeriod(data, new Date(), activeOfficialNotice);
-  const weekendCalmAdjustment = isWeekendCalm ? (period === "24h" ? -0.15 : -0.25) : 0;
+  const isWeekendCalm = isUSWeekendCalmPeriod(data, now, activeOfficialNotice);
+  const weekendCalmAdjustment = isWeekendCalm
+    ? getWeekendCalmAdjustment(period)
+    : 0;
 
   const score =
     base +
@@ -165,6 +205,39 @@ export function getLocalResetProbability(
     LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
     Math.max(minLimit, score),
   );
+}
+
+export function getWeekendCalmAdjustment(period: "24h" | "48h") {
+  const weightKey = period === "24h" ? "within24h" : "within48h";
+  return LOCAL_PROBABILITY_WEIGHTS.weekendCalmAdjustment[weightKey];
+}
+
+export function getTeaserDecayFactor(
+  observedAt: string,
+  now: Date = new Date(),
+  decayHours: number = TIBO_TEASER_DECAY_HOURS,
+) {
+  const observedTime = getDateTime(observedAt);
+  if (observedTime <= 0 || !Number.isFinite(decayHours) || decayHours <= 0) {
+    return 1;
+  }
+
+  const ageHours = (now.getTime() - observedTime) / (60 * 60 * 1000);
+  if (ageHours <= 0) {
+    return 1;
+  }
+
+  return Math.max(0, 1 - ageHours / decayHours);
+}
+
+export function getTeaserBoost(
+  period: "24h" | "48h",
+  observedAt: string,
+  now: Date = new Date(),
+) {
+  const weightKey = period === "24h" ? "within24h" : "within48h";
+  const baseBoost = AUTOMATED_TIBO_SIGNAL_WEIGHTS.teaser[weightKey];
+  return baseBoost * getTeaserDecayFactor(observedAt, now);
 }
 
 export function getLocalSignalEnvironment(

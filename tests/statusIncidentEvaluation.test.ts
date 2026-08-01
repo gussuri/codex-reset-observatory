@@ -351,8 +351,9 @@ test("builds automated teaser signals with the shared tuned weights", async () =
   );
 
   assert.equal(signal.type, "probability_boost");
-  assert.equal(signal.boostValue24h, 0.4);
-  assert.equal(signal.boostValue48h, 0.55);
+  assert.equal(signal.boostValue24h, 0.2);
+  assert.equal(signal.boostValue48h, 0.3);
+  assert.equal(signal.boostDecayHours, 48);
   assert.equal(signal.expiresAt, "2026-07-31T01:00:00.000Z");
 });
 
@@ -369,8 +370,8 @@ test("feature release adjustment changes only an active Tibo teaser", async () =
     id: "official-tibo-auto-hint-2026-07-29-7890",
     type: "probability_boost",
     status: "active",
-    boostValue24h: 0.4,
-    boostValue48h: 0.55,
+    boostValue24h: 0.2,
+    boostValue48h: 0.3,
   },
   {
     id: "boost-community-event",
@@ -383,8 +384,8 @@ test("feature release adjustment changes only an active Tibo teaser", async () =
     id: "official-tibo-old-hint",
     type: "probability_boost",
     status: "resolved",
-    boostValue24h: 0.4,
-    boostValue48h: 0.55,
+    boostValue24h: 0.2,
+    boostValue48h: 0.3,
   },
 ];`;
 
@@ -392,7 +393,7 @@ test("feature release adjustment changes only an active Tibo teaser", async () =
 
   assert.match(
     updated,
-    /official-tibo-auto-hint[\s\S]*?boostValue24h: 0\.4,[\s\S]*?boostValue48h: 0\.55/,
+    /official-tibo-auto-hint[\s\S]*?boostValue24h: 0\.2,[\s\S]*?boostValue48h: 0\.3/,
   );
   assert.match(
     updated,
@@ -400,7 +401,7 @@ test("feature release adjustment changes only an active Tibo teaser", async () =
   );
   assert.match(
     updated,
-    /official-tibo-old-hint[\s\S]*?status: "resolved"[\s\S]*?boostValue24h: 0\.4,[\s\S]*?boostValue48h: 0\.55/,
+    /official-tibo-old-hint[\s\S]*?status: "resolved"[\s\S]*?boostValue24h: 0\.2,[\s\S]*?boostValue48h: 0\.3/,
   );
 });
 

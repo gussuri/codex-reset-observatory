@@ -10,6 +10,7 @@ export type LocalObservationSignal = {
   boostValue?: number;
   boostValue24h?: number;
   boostValue48h?: number;
+  boostDecayHours?: number;
   boostReason?: string;
   title: string;
   source: string;
@@ -28,6 +29,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-08-01T23:59:59.000Z",
     boostValue24h: 0.10,
     boostValue48h: 0.10,
+    boostDecayHours: 48,
     boostReason: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     title: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     source: "https://x.com/thsottiaux/status/206987654321",
@@ -42,6 +44,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     expiresAt: "2026-07-30T04:00:00.000Z",
     boostValue24h: 0.230,
     boostValue48h: 0.55,
+    boostDecayHours: 48,
     boostReason: "Tibo氏の「明日また会いましょう」匂わせ投稿",
     title: "Tibo氏の「明日また会いましょう」匂わせ投稿",
     source: "https://x.com/thsottiaux/status/1987541298716945904",
