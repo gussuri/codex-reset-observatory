@@ -75,6 +75,34 @@ export type ActiveTiboSignal = {
   is_quote?: boolean;
 };
 
+export type DataSourceState = "ok" | "degraded" | "misconfigured";
+
+export type DataSourceDetail =
+  | "missing_configuration"
+  | "request_failed"
+  | "invalid_response"
+  | "database_error"
+  | "partial_response";
+
+export type DataSourceHealth = {
+  state: DataSourceState;
+  detail?: DataSourceDetail;
+};
+
+export type DataFetchResult<T> = {
+  data: T;
+  health: DataSourceHealth;
+};
+
+export type RadarDataHealth = {
+  overall: "ok" | "degraded";
+  checkedAt: string;
+  sources: {
+    supabaseSignals: DataSourceHealth;
+    openAIStatus: DataSourceHealth;
+  };
+};
+
 export type RadarData = {
   data?: RadarData;
   result?: RadarData;
@@ -84,6 +112,7 @@ export type RadarData = {
   purpose?: string;
   timezone?: string;
   checked_at?: string;
+  data_health?: RadarDataHealth;
   monitored_at?: string;
   updated_at?: string;
   status?: string;

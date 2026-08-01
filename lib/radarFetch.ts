@@ -2,7 +2,18 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { fetchOpenAIStatusSignals } from "@/lib/openaiStatus";
 import { getLocalRadarData } from "@/lib/radar";
-import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
+import {
+  combineDataSourceHealth,
+  createRadarDataHealth,
+  getDatabaseReadHealth,
+  getRequiredConfigurationHealth,
+} from "@/lib/radar/dataHealth";
+import type {
+  ActiveTiboSignal,
+  DataFetchResult,
+  DataSourceHealth,
+  RadarData,
+} from "@/lib/radar/types";
 import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
@@ -14,12 +25,16 @@ import {
 export const API_CACHE_CONTROL = "s-maxage=300, stale-while-revalidate=600";
 
 // 1. Raw Supabase fetch function
-async function fetchRawTiboSignals(): Promise<ActiveTiboSignal[]> {
+async function fetchRawTiboSignals(): Promise<DataFetchResult<ActiveTiboSignal[]>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return [];
+    return { data: [], health: configuration };
   }
 
   try {
@@ -33,13 +48,17 @@ async function fetchRawTiboSignals(): Promise<ActiveTiboSignal[]> {
       .order("tweet_created_at", { ascending: false })
       .limit(20);
 
-    if (error || !data) {
-      return [];
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: data !== null,
+      hasError: Boolean(error),
+    });
+    if (error) {
+      console.error("Active Tibo signals query failed", error);
     }
-
-    return data as ActiveTiboSignal[];
-  } catch {
-    return [];
+    return { data: data ? (data as ActiveTiboSignal[]) : [], health };
+  } catch (error) {
+    console.error("Failed to load active Tibo signals", error);
+    return { data: [], health: { state: "degraded", detail: "request_failed" } };
   }
 }
 
@@ -53,12 +72,16 @@ const getCachedTiboSignals = unstable_cache(
   }
 );
 
-async function fetchRawTiboHistorySignals(): Promise<Array<FormalTiboResetSignal>> {
+async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return [];
+    return { data: [], health: configuration };
   }
 
   try {
@@ -74,13 +97,20 @@ async function fetchRawTiboHistorySignals(): Promise<Array<FormalTiboResetSignal
       .order("tweet_created_at", { ascending: false })
       .limit(1000);
 
-    if (error || !data) {
-      return [];
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: data !== null,
+      hasError: Boolean(error),
+    });
+    if (error) {
+      console.error("Tibo reset history query failed", error);
     }
-
-    return data as Array<FormalTiboResetSignal>;
-  } catch {
-    return [];
+    return {
+      data: data ? (data as Array<FormalTiboResetSignal>) : [],
+      health,
+    };
+  } catch (error) {
+    console.error("Failed to load Tibo reset history", error);
+    return { data: [], health: { state: "degraded", detail: "request_failed" } };
   }
 }
 
@@ -109,14 +139,32 @@ function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null 
   };
 }
 
-export async function fetchFormalTiboResetSignals(): Promise<Array<FormalTiboResetSignal>> {
-  const signals = await getCachedTiboHistorySignals();
+type TiboSignalBundle = {
+  activeSignals: Array<ActiveTiboSignal>;
+  formalResets: Array<FormalTiboResetSignal>;
+  rejectedResets: Array<RejectedTiboResetSignal>;
+  health: DataSourceHealth;
+};
+
+async function getTiboSignalBundle(): Promise<TiboSignalBundle> {
+  const [activeResult, historyResult] = await Promise.all([
+    getCachedTiboSignals(),
+    getCachedTiboHistorySignals(),
+  ]);
+  const now = Date.now();
+  const activeSignals = activeResult.data.filter((signal) => {
+    if (signal.verification_status === "rejected") return false;
+    if (!signal.expires_at) return false;
+    const expiresTime = new Date(signal.expires_at).getTime();
+    return !isNaN(expiresTime) && expiresTime > now;
+  });
+  const signals = historyResult.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
   const notices = signals
     .map(toNoticeSignal)
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
-  return acceptedResets.map((signal) => {
+  const formalResets = acceptedResets.map((signal) => {
     const resetTime = new Date(signal.tweet_created_at).getTime();
     const previousReset = acceptedResets
       .filter((candidate) => new Date(candidate.tweet_created_at).getTime() < resetTime)
@@ -134,12 +182,7 @@ export async function fetchFormalTiboResetSignals(): Promise<Array<FormalTiboRes
       ),
     };
   });
-}
-
-export async function fetchRejectedTiboResetSignals(): Promise<Array<RejectedTiboResetSignal>> {
-  const signals = await getCachedTiboHistorySignals();
-
-  return signals
+  const rejectedResets = signals
     .filter(
       (signal) =>
         signal.signal_type === "reset_executed" &&
@@ -151,38 +194,49 @@ export async function fetchRejectedTiboResetSignals(): Promise<Array<RejectedTib
       tweet_url,
       tweet_created_at,
     }));
+
+  return {
+    activeSignals,
+    formalResets,
+    rejectedResets,
+    health: combineDataSourceHealth(activeResult.health, historyResult.health),
+  };
+}
+
+export async function fetchFormalTiboResetSignals(): Promise<Array<FormalTiboResetSignal>> {
+  return (await getTiboSignalBundle()).formalResets;
+}
+
+export async function fetchRejectedTiboResetSignals(): Promise<Array<RejectedTiboResetSignal>> {
+  return (await getTiboSignalBundle()).rejectedResets;
 }
 
 /**
  * Fetches recent active Tibo signals with dynamic time-filtering performed OUTSIDE the cache.
  */
 export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
-  const cachedSignals = await getCachedTiboSignals();
-  const now = Date.now();
-
-  // Dynamic filtering outside the cache on every request
-  return cachedSignals.filter((signal) => {
-    if (signal.verification_status === "rejected") return false;
-    if (!signal.expires_at) return false;
-    const expiresTime = new Date(signal.expires_at).getTime();
-    return !isNaN(expiresTime) && expiresTime > now;
-  });
+  return (await getTiboSignalBundle()).activeSignals;
 }
 
 export async function fetchCurrentRadarData(
   options: { cache?: RequestCache; revalidate?: number } = {},
 ): Promise<RadarData> {
-  const [openAIStatus, activeSignals, formalTiboResets, rejectedTiboResets] = await Promise.all([
+  const checkedAt = new Date().toISOString();
+  const [openAIStatus, tiboSignals] = await Promise.all([
     fetchOpenAIStatusSignals(options),
-    getActiveTiboSignals(),
-    fetchFormalTiboResetSignals(),
-    fetchRejectedTiboResetSignals(),
+    getTiboSignalBundle(),
   ]);
 
   return getLocalRadarData({
-    openAIStatus,
-    activeTiboSignals: activeSignals,
-    formalTiboResets,
-    rejectedTiboResets,
+    checkedAt,
+    dataHealth: createRadarDataHealth(
+      checkedAt,
+      tiboSignals.health,
+      openAIStatus.health,
+    ),
+    openAIStatus: openAIStatus.data,
+    activeTiboSignals: tiboSignals.activeSignals,
+    formalTiboResets: tiboSignals.formalResets,
+    rejectedTiboResets: tiboSignals.rejectedResets,
   });
 }

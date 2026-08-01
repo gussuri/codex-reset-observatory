@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
+import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
 import {
   translateUI,
@@ -85,16 +85,19 @@ export {
 
 export function getLocalRadarData({
   openAIStatus,
+  checkedAt = new Date().toISOString(),
+  dataHealth,
   activeTiboSignals = [],
   formalTiboResets = [],
   rejectedTiboResets = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
+  checkedAt?: string;
+  dataHealth?: RadarDataHealth;
   activeTiboSignals?: RadarData["active_tibo_signals"];
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
 } = {}): RadarData {
-  const checkedAt = new Date().toISOString();
   const updatedAt = getLocalModelUpdatedAt(openAIStatus, {
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
@@ -106,6 +109,7 @@ export function getLocalRadarData({
     purpose: "local-reset-observation",
     timezone: DISPLAY_TIME_ZONE,
     checked_at: checkedAt,
+    data_health: dataHealth,
     monitored_at: checkedAt,
     updated_at: updatedAt,
     status: "none",

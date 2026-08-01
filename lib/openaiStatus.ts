@@ -1,4 +1,5 @@
 import { LOCAL_OPENAI_STATUS_HISTORY } from "@/data/statusHistory";
+import type { DataFetchResult, DataSourceDetail } from "@/lib/radar/types";
 
 const OPENAI_STATUS_SUMMARY_URL =
   "https://status.openai.com/api/v2/summary.json";
@@ -79,26 +80,44 @@ type FetchOptions = {
 
 export async function fetchOpenAIStatusSignals(
   options: FetchOptions = {},
-): Promise<OpenAIStatusSignals | null> {
+  fetchImpl: typeof fetch = fetch,
+): Promise<DataFetchResult<OpenAIStatusSignals>> {
   const [summaryResult, incidentsResult] = await Promise.allSettled([
-    fetchStatusJson<StatusSummaryResponse>(OPENAI_STATUS_SUMMARY_URL, options),
+    fetchStatusJson<StatusSummaryResponse>(
+      OPENAI_STATUS_SUMMARY_URL,
+      options,
+      fetchImpl,
+      isStatusSummaryResponse,
+    ),
     fetchStatusJson<StatusIncidentsResponse>(
       OPENAI_STATUS_INCIDENTS_URL,
       options,
+      fetchImpl,
+      isStatusIncidentsResponse,
     ),
   ]);
 
-  const summary =
-    summaryResult.status === "fulfilled" ? summaryResult.value : null;
-  const incidents =
-    incidentsResult.status === "fulfilled" ? incidentsResult.value : null;
+  const summary = summaryResult.status === "fulfilled" ? summaryResult.value : {
+    data: null,
+    failure: "request_failed" as const,
+  };
+  const incidents = incidentsResult.status === "fulfilled" ? incidentsResult.value : {
+    data: null,
+    failure: "request_failed" as const,
+  };
 
-  if (!summary && !incidents) {
-    return getStoredStatusSignals();
+  if (!summary.data && !incidents.data) {
+    return {
+      data: getStoredStatusSignals(),
+      health: {
+        state: "degraded",
+        detail: getStatusFailureDetail(summary.failure, incidents.failure),
+      },
+    };
   }
 
   const codexComponents =
-    summary?.components?.filter((component) => isCodexText(component.name)) ??
+    summary.data?.components?.filter((component) => isCodexText(component.name)) ??
     [];
   const hasCodexComponentData = codexComponents.length > 0;
   const affectedCodexComponents = codexComponents.filter(
@@ -111,7 +130,7 @@ export async function fetchOpenAIStatusSignals(
     hasCodexComponentData && affectedCodexComponents === 0;
 
   const codexIncidents =
-    incidents?.incidents?.filter((incident) => isCodexIncident(incident)) ?? [];
+    incidents.data?.incidents?.filter((incident) => isCodexIncident(incident)) ?? [];
   const activeCodexIncidents = codexIncidents.filter(
     (incident) => !isResolvedIncident(incident),
   );
@@ -133,27 +152,33 @@ export async function fetchOpenAIStatusSignals(
     codexIncidents.map(normalizeStatusIncident),
   );
   const updatedAt = getLatestIsoDate([
-    summary?.page?.updated_at,
-    incidents?.page?.updated_at,
+    summary.data?.page?.updated_at,
+    incidents.data?.page?.updated_at,
     latestCodexIncident?.updated_at,
     latestCodexIncident?.resolved_at,
     latestCodexIncident?.created_at,
   ]);
 
   return {
-    updatedAt,
-    // コンポーネントが全部正常なら incidents は 0 扱い（誤検知防止）
-    statusIncidents24h: allCodexComponentsOperational
-      ? 0
-      : incidentIds.size + affectedCodexComponents,
-    activeCodexIncidents: allCodexComponentsOperational
-      ? 0
-      : activeCodexIncidents.length,
-    recentCodexIncidents: recentCodexIncidents.length,
-    affectedCodexComponents,
-    suppressCodexIncidents: allCodexComponentsOperational,
-    latestCodexIncidentName: latestCodexIncident?.name ?? null,
-    history,
+    data: {
+      updatedAt,
+      // コンポーネントが全部正常なら incidents は 0 扱い（誤検知防止）
+      statusIncidents24h: allCodexComponentsOperational
+        ? 0
+        : incidentIds.size + affectedCodexComponents,
+      activeCodexIncidents: allCodexComponentsOperational
+        ? 0
+        : activeCodexIncidents.length,
+      recentCodexIncidents: recentCodexIncidents.length,
+      affectedCodexComponents,
+      suppressCodexIncidents: allCodexComponentsOperational,
+      latestCodexIncidentName: latestCodexIncident?.name ?? null,
+      history,
+    },
+    health:
+      summary.data && incidents.data
+        ? { state: "ok" }
+        : { state: "degraded", detail: "partial_response" },
   };
 }
 
@@ -179,38 +204,98 @@ function getStoredStatusSignals(): OpenAIStatusSignals {
   };
 }
 
-async function fetchStatusJson<T>(url: string, options: FetchOptions) {
+type StatusFetchResult<T> = {
+  data: T | null;
+  failure?: Extract<DataSourceDetail, "request_failed" | "invalid_response">;
+};
+
+async function fetchStatusJson<T>(
+  url: string,
+  options: FetchOptions,
+  fetchImpl: typeof fetch,
+  isValidResponse: (value: unknown) => value is T,
+): Promise<StatusFetchResult<T>> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json",
-      },
-      cache: options.cache,
-      next:
-        typeof options.revalidate === "number"
-          ? { revalidate: options.revalidate }
-          : undefined,
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        headers: {
+          accept: "application/json",
+        },
+        cache: options.cache,
+        next:
+          typeof options.revalidate === "number"
+            ? { revalidate: options.revalidate }
+            : undefined,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      console.error(`OpenAI Status request failed for ${url}`, error);
+      return { data: null, failure: "request_failed" };
+    }
 
     if (!response.ok) {
-      return null;
+      console.error(
+        `OpenAI Status request returned ${response.status} for ${url}`,
+      );
+      return { data: null, failure: "request_failed" };
     }
 
     const contentType = response.headers.get("content-type");
     if (!contentType?.includes("application/json")) {
-      return null;
+      console.error(`OpenAI Status returned non-JSON content for ${url}`);
+      return { data: null, failure: "invalid_response" };
     }
 
-    return (await response.json()) as T;
-  } catch {
-    return null;
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (error) {
+      console.error(`OpenAI Status returned malformed JSON for ${url}`, error);
+      return { data: null, failure: "invalid_response" };
+    }
+
+    if (!isValidResponse(data)) {
+      console.error(`OpenAI Status returned malformed data for ${url}`);
+      return { data: null, failure: "invalid_response" };
+    }
+
+    return { data };
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function getStatusFailureDetail(
+  ...failures: Array<StatusFetchResult<unknown>["failure"]>
+): Extract<DataSourceDetail, "request_failed" | "invalid_response"> {
+  return failures.includes("invalid_response")
+    ? "invalid_response"
+    : "request_failed";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStatusSummaryResponse(value: unknown): value is StatusSummaryResponse {
+  return (
+    isRecord(value) &&
+    (value.page === undefined || isRecord(value.page)) &&
+    (value.status === undefined || isRecord(value.status)) &&
+    (value.components === undefined || Array.isArray(value.components))
+  );
+}
+
+function isStatusIncidentsResponse(value: unknown): value is StatusIncidentsResponse {
+  return (
+    isRecord(value) &&
+    (value.page === undefined || isRecord(value.page)) &&
+    (value.incidents === undefined || Array.isArray(value.incidents))
+  );
 }
 
 function isCodexIncident(incident: StatuspageIncident) {
