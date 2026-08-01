@@ -61,8 +61,25 @@ test("rule_fallback reset_executed is eligible for formal history", () => {
   );
 });
 
+test("rule reset_executed is eligible for formal history", () => {
+  assert.equal(
+    isFormalTiboResetSignal(resetSignal({ classification_source: "rule" })),
+    true,
+  );
+});
+
+test("shadow reset_executed is eligible for formal history", () => {
+  assert.equal(
+    isFormalTiboResetSignal(resetSignal({ classification_source: "shadow" })),
+    true,
+  );
+});
+
 test("reset_executed below the confidence threshold is excluded", () => {
-  assert.equal(isFormalTiboResetSignal(resetSignal({ confidence: 0.94 })), false);
+  assert.equal(
+    isFormalTiboResetSignal(resetSignal({ classification_source: "rule", confidence: 0.94 })),
+    false,
+  );
 });
 
 test("teaser and irrelevant signals are excluded from formal history", () => {
@@ -72,7 +89,9 @@ test("teaser and irrelevant signals are excluded from formal history", () => {
 
 test("rejected reset_executed is excluded while confirmed reset_executed is accepted", () => {
   assert.equal(
-    isFormalTiboResetSignal(resetSignal({ verification_status: "rejected" })),
+    isFormalTiboResetSignal(
+      resetSignal({ classification_source: "rule", verification_status: "rejected" }),
+    ),
     false,
   );
   assert.equal(

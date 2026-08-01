@@ -52,6 +52,11 @@ const OFFICIAL_NOTICE_CONFIDENCE = 0.95;
 const TEASER_CONFIDENCE = 0.8;
 const NOTICE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const DUPLICATE_RESET_WINDOW_MS = 5 * 60 * 1000;
+const RULE_BACKED_CLASSIFICATION_SOURCES = new Set<TiboClassificationSource>([
+  "rule",
+  "shadow",
+  "rule_fallback",
+]);
 
 function getTimestamp(value: string | null | undefined) {
   if (!value) return null;
@@ -110,7 +115,7 @@ export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
   return (
     signal.verification_status === "confirmed" ||
     signal.classification_source === "gemini" ||
-    signal.classification_source === "rule_fallback"
+    RULE_BACKED_CLASSIFICATION_SOURCES.has(signal.classification_source ?? "")
   );
 }
 

@@ -29,7 +29,7 @@ Chromeの通知ページは投稿スキャンの対象になり得ますが、10
 8. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。
 9. 次回のレーダーデータ取得で、条件を満たす `reset_executed` は正式リセット履歴へ自動統合されます。正式採用は `confirmed` へ自動変更する処理ではなく、`auto_unverified` のままでも採用条件を満たせば反映されます。
 
-正式履歴の採用条件は、`signal_type=reset_executed`、confidence 0.95以上、`verification_status` が `rejected` ではないことに加え、`classification_source` が `gemini` または `rule_fallback` であることです。`verification_status=confirmed` の行は、分類ソースにかかわらず採用対象です。`expires_at` は正式履歴の判定には使いません。
+正式履歴の採用条件は、`signal_type=reset_executed`、confidence 0.95以上、`verification_status` が `rejected` ではないことに加え、`classification_source` が `gemini`、`rule`、`shadow`、または `rule_fallback` のいずれかであることです。`verification_status=confirmed` の行は、分類ソースにかかわらず採用対象となる上書きです。`expires_at` は正式履歴の判定には使いません。
 
 正式履歴は静的な `data/resetHistory.ts` と統合されます。同じtweet_id・URL、または強制リセットの実施時刻が5分以内の重複は1件にまとめられます。Webhook成功後も表示側のキャッシュにより、反映まで最大およそ60秒かかることがあります。
 
