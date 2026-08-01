@@ -4,6 +4,7 @@ import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { LOCAL_PROBABILITY_WEIGHTS } from "../data/predictionWeights";
 import { getLocalRadarData } from "../lib/radar";
 import {
+  getHistoricalResetPressure,
   getLocalResetProbability,
   getRegularResetProximityBoost,
   getTeaserBoost,
@@ -87,6 +88,18 @@ test("regular reset proximity increases toward the expected time", () => {
     getRegularResetProximityBoost("48h", "2026-08-01T08:00:00.000Z", now),
     0,
   );
+});
+
+test("historical reset pressure stays capped while reflecting short random-reset intervals", () => {
+  const data = getLocalRadarData({});
+  const now = new Date("2026-08-02T08:00:00.000Z");
+  const pressure24h = getHistoricalResetPressure("24h", data, now);
+  const pressure48h = getHistoricalResetPressure("48h", data, now);
+
+  assert.ok(pressure24h > 0);
+  assert.ok(pressure48h > pressure24h);
+  assert.ok(pressure24h <= LOCAL_PROBABILITY_WEIGHTS.historicalResetPressure.forecast24h.maxBoost);
+  assert.ok(pressure48h <= LOCAL_PROBABILITY_WEIGHTS.historicalResetPressure.forecast48h.maxBoost);
 });
 
 test("48-hour probability is never lower than 24-hour probability", () => {

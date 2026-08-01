@@ -6,7 +6,7 @@ import {
 } from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
-import type { Locale, RadarData } from "./types";
+import type { Locale, RadarData, WindowEventLike } from "./types";
 import { translateDynamic } from "./i18n";
 import {
   deriveComplaintPressure,
@@ -22,7 +22,11 @@ import {
   probabilityToPercent,
   getExpectationLabel,
 } from "./helpers";
-import { combineResetHistory } from "./tiboHistory";
+import {
+  combineResetHistory,
+  convertTiboResetSignalToHistoryEvent,
+  isFormalTiboResetSignal,
+} from "./tiboHistory";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -181,6 +185,7 @@ function calculateLocalResetProbability(
     getMomentumBoost(period, data) +
     (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period, data) : 0) +
     getElapsedDayBoost(data) +
+    getHistoricalResetPressure(period, data, now) +
     getRegularResetProximityBoost(period, regularResetExpectedAt, now) +
     statusIncidents *
       LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
@@ -258,6 +263,133 @@ export function getRegularResetProximityBoost(
 
   const progress = 1 - hoursUntil / weight.leadInHours;
   return weight.entry + (weight.max - weight.entry) * progress;
+}
+
+export function getHistoricalResetPressure(
+  period: "24h" | "48h",
+  data: RadarData | null,
+  now: Date = new Date(),
+) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
+  if (daysSinceLastReset === null) {
+    return 0;
+  }
+
+  const intervals = getRandomResetIntervals(data, now);
+  if (intervals.length === 0) {
+    return 0;
+  }
+
+  const horizonDays = period === "24h" ? 1 : 2;
+  const atRiskIntervals = intervals.filter((days) => days > daysSinceLastReset);
+  if (atRiskIntervals.length === 0) {
+    return 0;
+  }
+
+  const successfulIntervals = atRiskIntervals.filter(
+    (days) => days <= daysSinceLastReset + horizonDays,
+  ).length;
+  const weight = LOCAL_PROBABILITY_WEIGHTS.historicalResetPressure[
+    period === "24h" ? "forecast24h" : "forecast48h"
+  ];
+  const smoothedRate = (
+    successfulIntervals + weight.priorRate * LOCAL_PROBABILITY_WEIGHTS.historicalResetPressure.priorWeight
+  ) / (atRiskIntervals.length + LOCAL_PROBABILITY_WEIGHTS.historicalResetPressure.priorWeight);
+  const excessRate = Math.max(0, smoothedRate - weight.priorRate);
+  const normalizedExcess = excessRate / (1 - weight.priorRate);
+
+  return Math.min(weight.maxBoost, normalizedExcess * weight.maxBoost);
+}
+
+function getRandomResetIntervals(data: RadarData | null, now: Date) {
+  const dynamicHistory = (data?.formal_tibo_resets ?? [])
+    .filter(isFormalTiboResetSignal)
+    .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
+  const staticHistory = LOCAL_RESET_HISTORY.filter(
+    (item) =>
+      !data?.rejected_tibo_resets?.some((signal) => isRejectedHistoricalReset(item, signal)) &&
+      !dynamicHistory.some((itemFromDynamicHistory) =>
+        isDuplicateHistoricalReset(item, itemFromDynamicHistory),
+      ),
+  );
+  const historicalItems = [...staticHistory, ...dynamicHistory];
+  const resetTimes = historicalItems
+    .filter((item) => {
+      if (item.details?.cycleType !== "ランダムリセット") {
+        return false;
+      }
+      if (item.details?.resetMethod === "任意リセット権1回配布") {
+        return false;
+      }
+
+      const date = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
+      const time = getDateTime(date);
+      return time > 0 && time <= now.getTime();
+    })
+    .map((item) => getDateTime(item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null))
+    .sort((left, right) => left - right);
+
+  return resetTimes.slice(1).map((time, index) =>
+    (time - resetTimes[index]) / (24 * 60 * 60 * 1000),
+  );
+}
+
+function getHistoricalResetTime(item: WindowEventLike) {
+  return getDateTime(item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null);
+}
+
+function getTweetId(sourceUrl: string | null | undefined) {
+  return sourceUrl?.match(/\/status\/(\d+)/i)?.[1] ?? null;
+}
+
+function isDuplicateHistoricalReset(left: WindowEventLike, right: WindowEventLike) {
+  const leftTweetId = getTweetId(left.source_url);
+  const rightTweetId = getTweetId(right.source_url);
+  if (leftTweetId && rightTweetId && leftTweetId === rightTweetId) {
+    return true;
+  }
+
+  if (
+    left.source_url &&
+    right.source_url &&
+    left.source_url === right.source_url &&
+    left.source_url.includes("/status/")
+  ) {
+    return true;
+  }
+
+  const leftTime = getHistoricalResetTime(left);
+  const rightTime = getHistoricalResetTime(right);
+  return Boolean(
+    (leftTweetId || rightTweetId) &&
+    leftTime > 0 &&
+    rightTime > 0 &&
+    Math.abs(leftTime - rightTime) <= 5 * 60 * 1000,
+  );
+}
+
+function isRejectedHistoricalReset(
+  item: WindowEventLike,
+  rejectedSignal: NonNullable<RadarData["rejected_tibo_resets"]>[number],
+) {
+  const itemTweetId = getTweetId(item.source_url);
+  const signalTweetId = getTweetId(rejectedSignal.tweet_url);
+  if (itemTweetId && signalTweetId && itemTweetId === signalTweetId) {
+    return true;
+  }
+
+  if (item.source_url && item.source_url === rejectedSignal.tweet_url) {
+    return true;
+  }
+
+  const itemTime = getHistoricalResetTime(item);
+  const signalTime = getDateTime(rejectedSignal.tweet_created_at);
+  return Boolean(
+    item.details?.resetMethod === "強制リセット" &&
+    itemTime > 0 &&
+    signalTime > 0 &&
+    Math.abs(itemTime - signalTime) <= 5 * 60 * 1000,
+  );
 }
 
 export function getLocalSignalEnvironment(
@@ -593,13 +725,13 @@ export function getElapsedDayBoost(data?: RadarData | null) {
   return daysSinceLastReset * LOCAL_PROBABILITY_WEIGHTS.elapsedDayBoost.perDay;
 }
 
-export function getDaysSinceLastGlobalReset(data?: RadarData | null) {
+export function getDaysSinceLastGlobalReset(data?: RadarData | null, now: Date = new Date()) {
   const lastReset = getLastGlobalResetAt(data);
   if (!lastReset) {
     return null;
   }
 
-  return Math.max(0, getCalendarDayDelta(new Date(), lastReset));
+  return Math.max(0, getCalendarDayDelta(now, lastReset));
 }
 
 export function getLastGlobalResetAt(data?: RadarData | null) {

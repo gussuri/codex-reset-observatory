@@ -101,6 +101,17 @@ export const LOCAL_PROBABILITY_WEIGHTS = {
       max: 0.07,
     },
   },
+  historicalResetPressure: {
+    priorWeight: 8,
+    forecast24h: {
+      priorRate: 0.12,
+      maxBoost: 0.08,
+    },
+    forecast48h: {
+      priorRate: 0.25,
+      maxBoost: 0.12,
+    },
+  },
   historyPressure: [
     {
       // リセットから24時間以内 (0日経過)
