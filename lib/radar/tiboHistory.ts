@@ -80,16 +80,6 @@ function getScope(text: string) {
   return isAllPaidScope(text) ? "全有料プラン" : "Codex / ChatGPT Work";
 }
 
-function getSummaryTarget(text: string) {
-  const hasCodex = /codex/i.test(text) || text.includes("Codex");
-  const hasChatGptWork = /chatgpt\s+work/i.test(text) || text.includes("ChatGPT Work");
-
-  if (hasCodex && hasChatGptWork) return "CodexとChatGPT Work";
-  if (hasCodex) return "Codex";
-  if (hasChatGptWork) return "ChatGPT Work";
-  return "CodexとChatGPT Work";
-}
-
 function getReasonType(signal: FormalTiboResetSignal) {
   const allowed = new Set(["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"]);
   return signal.ai_reset_type_ja && allowed.has(signal.ai_reset_type_ja)
@@ -166,14 +156,8 @@ export function convertTiboResetSignalToHistoryEvent(
   const reasonType = getReasonType(signal);
   const cycleType = reasonType === "定期リセット" ? "定期リセット" : "ランダムリセット";
   const scope = getScope(signal.text);
-  const summary = `Tibo氏が${getSummaryTarget(signal.text)}の利用上限リセット完了を発表しました。`;
-  const title = reasonType === "ご祝儀リセット"
-    ? "Tibo氏によるご祝儀リセット"
-    : reasonType === "詫びリセット"
-      ? "Tibo氏による詫びリセット"
-      : reasonType === "定期リセット"
-        ? "Tibo氏による定期リセット"
-        : "Tibo氏による利用上限リセット";
+  const summary = "Tibo氏がCodexの利用上限リセット完了を発表しました。";
+  const title = "ランダムリセット";
 
   return {
     id: `tibo-reset-${signal.tweet_id}`,
@@ -222,39 +206,32 @@ function isSameReset(left: WindowEventLike, right: WindowEventLike) {
   );
 }
 
-function chooseDetailedValue(
-  dynamicValue: string | null | undefined,
-  staticValue: string | null | undefined,
-): string | undefined {
-  if (!dynamicValue) return staticValue ?? undefined;
-  if (!staticValue) return dynamicValue;
-  return staticValue.length > dynamicValue.length ? staticValue : dynamicValue;
-}
-
 function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowEventLike): WindowEventLike {
+  const dynamicDetails = dynamicItem.details;
+  const staticDetails = staticItem.details;
   const dynamicScope = dynamicItem.scope ?? dynamicItem.details?.scope;
   const staticScope = staticItem.scope ?? staticItem.details?.scope;
-  const scope = dynamicScope === "Codex / ChatGPT Work" ? staticScope ?? dynamicScope : dynamicScope;
+  const scope = staticScope ?? dynamicScope;
+  const note = staticDetails && Object.prototype.hasOwnProperty.call(staticDetails, "note")
+    ? staticDetails.note ?? null
+    : dynamicDetails?.note ?? null;
 
   return {
-    ...staticItem,
     ...dynamicItem,
+    ...staticItem,
     id: dynamicItem.id ?? staticItem.id,
-    title: chooseDetailedValue(dynamicItem.title, staticItem.title),
-    summary: chooseDetailedValue(dynamicItem.summary, staticItem.summary),
+    title: staticItem.title ?? dynamicItem.title,
+    summary: staticItem.summary ?? dynamicItem.summary,
     scope,
-    source_url: dynamicItem.source_url ?? staticItem.source_url,
+    source_url: staticItem.source_url ?? dynamicItem.source_url,
     details: {
-      cycleType: dynamicItem.details?.cycleType ?? staticItem.details?.cycleType ?? "",
-      reasonType: dynamicItem.details?.reasonType ?? staticItem.details?.reasonType ?? "",
-      resetMethod: dynamicItem.details?.resetMethod ?? staticItem.details?.resetMethod ?? "",
+      cycleType: staticDetails?.cycleType ?? dynamicDetails?.cycleType ?? "",
+      reasonType: staticDetails?.reasonType ?? dynamicDetails?.reasonType ?? "",
+      resetMethod: staticDetails?.resetMethod ?? dynamicDetails?.resetMethod ?? "",
       scope: scope ?? "",
-      noticeToExecution:
-        dynamicItem.details?.noticeToExecution ??
-        staticItem.details?.noticeToExecution ??
-        "0分",
-      noticeType: dynamicItem.details?.noticeType ?? staticItem.details?.noticeType,
-      note: chooseDetailedValue(dynamicItem.details?.note, staticItem.details?.note),
+      noticeToExecution: staticDetails?.noticeToExecution ?? dynamicDetails?.noticeToExecution ?? "0分",
+      noticeType: staticDetails?.noticeType ?? dynamicDetails?.noticeType,
+      note,
     },
   };
 }
