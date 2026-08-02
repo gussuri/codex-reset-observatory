@@ -159,6 +159,96 @@ test("static and dynamic history entries with the same tweet URL are merged once
   assert.equal(combined[0].summary, dynamic.summary);
 });
 
+test("legacy static entries sharing a profile URL remain separate history records", () => {
+  const combined = combineResetHistory([
+    {
+      id: "legacy-reset-1",
+      title: "過去のリセット1",
+      kind: "reset_completed",
+      status: "closed",
+      closed_at: "2026-07-28T03:00:00.000Z",
+      completed_at: "2026-07-28T03:00:00.000Z",
+      source_url: "https://x.com/thsottiaux",
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "ご祝儀リセット",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: "0分",
+        note: "過去の記録1",
+      },
+    },
+    {
+      id: "legacy-reset-2",
+      title: "過去のリセット2",
+      kind: "reset_completed",
+      status: "closed",
+      closed_at: "2026-07-29T03:00:00.000Z",
+      completed_at: "2026-07-29T03:00:00.000Z",
+      source_url: "https://x.com/thsottiaux",
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "詫びリセット",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: "0分",
+        note: "過去の記録2",
+      },
+    },
+  ], []);
+
+  assert.equal(combined.length, 2);
+  assert.deepEqual(
+    combined.map((item) => item.id).sort(),
+    ["legacy-reset-1", "legacy-reset-2"],
+  );
+});
+
+test("legacy static entries sharing a tweet URL remain separate when their reset methods differ", () => {
+  const combined = combineResetHistory([
+    {
+      id: "legacy-forced-reset",
+      title: "定期リセット",
+      kind: "reset_completed",
+      status: "closed",
+      closed_at: "2026-06-18T07:00:00.000Z",
+      completed_at: "2026-06-18T07:00:00.000Z",
+      source_url: "https://x.com/thsottiaux/status/2066956441173323943",
+      details: {
+        cycleType: "定期リセット",
+        reasonType: "定期更新",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: "0分（定期）",
+        note: "定期リセット",
+      },
+    },
+    {
+      id: "legacy-manual-reset",
+      title: "詫びリセット権配布",
+      kind: "reset_completed",
+      status: "closed",
+      closed_at: "2026-06-18T07:00:00.000Z",
+      completed_at: "2026-06-18T07:00:00.000Z",
+      source_url: "https://x.com/thsottiaux/status/2066956441173323943",
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "詫びリセット",
+        resetMethod: "任意リセット権1回配布",
+        scope: "全有料プラン",
+        noticeToExecution: "0分",
+        note: "任意リセット権配布",
+      },
+    },
+  ], []);
+
+  assert.equal(combined.length, 2);
+  assert.deepEqual(
+    combined.map((item) => item.id).sort(),
+    ["legacy-forced-reset", "legacy-manual-reset"],
+  );
+});
+
 test("formal reset updates latest reset time and regular forecast anchor", () => {
   const data = getLocalRadarData({ formalTiboResets: [resetSignal()] });
   const latest = getLastGlobalResetAt(data);

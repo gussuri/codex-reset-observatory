@@ -207,7 +207,6 @@ function isSameReset(left: WindowEventLike, right: WindowEventLike) {
   const leftTweetId = getTweetId(left.source_url);
   const rightTweetId = getTweetId(right.source_url);
   if (leftTweetId && rightTweetId && leftTweetId === rightTweetId) return true;
-  if (left.source_url && right.source_url && left.source_url === right.source_url) return true;
 
   const leftMethod = left.details?.resetMethod;
   const rightMethod = right.details?.resetMethod;
@@ -288,13 +287,19 @@ export function combineResetHistory(
     .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
   const filteredStaticHistory = staticHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];
+  const matchedDynamicIndexes = new Set<number>();
 
+  // Keep legacy static records intact. Only a dynamic Tibo record may merge with one static record.
   for (const item of filteredStaticHistory) {
-    const duplicateIndex = combined.findIndex((dynamicItem) => isSameReset(dynamicItem, item));
+    const duplicateIndex = dynamicItems.findIndex(
+      (dynamicItem, index) =>
+        !matchedDynamicIndexes.has(index) && isSameReset(dynamicItem, item),
+    );
     if (duplicateIndex === -1) {
       combined.push(item);
     } else {
       combined[duplicateIndex] = mergeDuplicateHistory(combined[duplicateIndex], item);
+      matchedDynamicIndexes.add(duplicateIndex);
     }
   }
 
