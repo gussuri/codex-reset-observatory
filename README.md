@@ -1,98 +1,71 @@
 # Codex Reset Observatory (Codex リセット観測所)
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![Vercel](https://img.shields.io/badge/Vercel-Deployed-black?style=flat-square&logo=vercel)](https://vercel.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+Track and explain signals around Codex usage-limit resets.
 
-OpenAI Codex および ChatGPT Work の利用上限（レートリミット）強制リセット・ご祝儀リセット・障害補償リセットの発生確率をリアルタイムに予測・可視化する観測所ダッシュボードです。
+OpenAI Codex および ChatGPT Work の利用上限（レートリミット）に関するリセットシグナルを集め、リセット履歴やステータス情報とあわせて確率予測・可視化するダッシュボードです。
 
----
+[**Open the live observatory →**](https://codex-reset-observatory.vercel.app/en)
 
-## 🌟 主な特徴
+## 主な機能
 
-- 📊 **確率予測レーダー**: 直近のリセット履歴・経過日数・障害件数・コミュニティの報告量を統合解析し、24時間以内／48時間以内のリセット確率を統計モデルでリアルタイム試算。
-- 📝 **公式シグナルのリアルタイム監視**: Chrome拡張機能 / Webhook 経由で Tibo氏（@thsottiaux）の投稿を自動収集。ルールベース分類エンジンとGemini AIの結果を監査・蓄積。
-- 🛠️ **運用・復旧手順**: [Tibo監視とリセット履歴更新の運用・復旧手順](docs/operations/tibo-monitor-runbook.md)
-- 🌐 **完全多言語対応**: 日本語 (`ja`)・英語 (`en`)・中国語 (`zh`) に完全対応。時間の自動解釈パーサーを搭載。
+- 📊 **確率予測レーダー**: 直近のリセット履歴・経過日数・障害件数・コミュニティの報告量を統合し、24時間以内／48時間以内のリセット確率を試算。
+- 📝 **公式シグナルの監視**: Chrome拡張機能とWebhookでTibo氏（@thsottiaux）の投稿を収集し、分類結果と監査情報を保存。
+- 🌐 **多言語ダッシュボード**: 日本語 (`ja`)・英語 (`en`)・中国語 (`zh`) に対応し、時間表現の自動解釈も行います。
 
----
+## LLMを含む技術的な特徴
 
-## 🤖 Tibo投稿分類（設定・環境変数）
+Tibo氏の投稿は、常に実行されるルールベース分類と、設定時だけ呼び出すGemini分類を組み合わせて処理します。
 
-Tibo氏のX投稿は、ルール分類とGemini APIを組み合わせて分類できます。
+- `off`: ルール分類のみ。
+- `shadow`: ルール分類を最終結果として採用し、Geminiの結果を監査列へ保存。
+- `primary`: Geminiの有効な成功結果を採用し、タイムアウト・レート制限・不正応答・APIエラーなどの失敗時はルール分類へfallback。
+- `hybrid`: `primary` と同じ動作をする後方互換名。
 
-### 環境変数設定例
-```bash
-# 分類モード (off: ルールのみ, shadow: ルールを採用してAIを監査保存,
-#             primary: 成功時はAIを採用し失敗時はルールへfallback)
-GEMINI_CLASSIFICATION_MODE=primary
+1投稿あたりのGemini API呼び出しは最大1回で、モデルの自動フォールバックは行いません。設定例と保存される分類ステータスの詳細は、[Gemini分類モードと環境変数](docs/gemini-classification.md)にまとめています。
 
-# 推奨モデル (gemini-3.5-flash-lite)
-GEMINI_MODEL=gemini-3.5-flash-lite
-
-# Google AI Studio API キー
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-> **Note**: レート制限遵守のため、1投稿あたり Gemini API 呼び出しは最大1回とし、モデルの自動フォールバックは行いません。`primary` ではGeminiのタイムアウト・レート制限・不正応答・APIエラーなどの失敗時にルール分類へfallbackします。`hybrid` は `primary` の後方互換名です。
-
----
-
-## 🔍 Supabase AI シャドー分類 比較監査用 SQL
-
-Gemini AI 分類器（シャドーモード）と既存ルール分類の比較・評価を行うための SQL クエリです。
-
-### 1. 全シグナルのルール分類 vs AI分類の比較
-```sql
-SELECT
-  tweet_created_at,
-  LEFT(text, 120) AS text,
-  rule_signal_type,
-  rule_confidence,
-  ai_signal_type,
-  ai_confidence,
-  ai_temporal_direction,
-  ai_evidence_quote,
-  ai_reason_ja,
-  ai_model,
-  ai_classification_status
-FROM public.tibo_signals
-ORDER BY tweet_created_at DESC;
-```
-
-### 2. ルール分類とAI分類の不一致ケース抽出
-```sql
-SELECT
-  tweet_created_at,
-  LEFT(text, 120) AS text,
-  rule_signal_type,
-  ai_signal_type,
-  rule_confidence,
-  ai_confidence,
-  ai_reason_ja
-FROM public.tibo_signals
-WHERE ai_classification_status = 'success'
-  AND rule_signal_type IS DISTINCT FROM ai_signal_type
-ORDER BY tweet_created_at DESC;
-```
-
----
-
-## 🛠️ 技術スタック
+## 技術スタック
 
 - **Framework**: Next.js 15 (App Router), React 18, TypeScript
-- **Database**: Supabase (PostgreSQL / RLS)
+- **Data**: Supabase (PostgreSQL / RLS)
+- **Monitoring**: Chrome Manifest V3 extension
 - **Deployment**: Vercel
 
----
+## データフロー
+
+```text
+Tibo氏のXプロフィール
+  → Manifest V3監視拡張
+  → /api/webhook/tibo
+  → ルール分類 + 任意のGemini分類
+  → Supabase の tibo_signals
+  → リセット履歴・ステータス情報とのレーダー集約
+  → Next.jsダッシュボード
+```
+
+## ローカル開発
+
+Node.js と pnpm（`package.json` の `packageManager` は pnpm 11.18.0）を用意してください。
+
+```bash
+pnpm install
+pnpm dev
+```
+
+開発サーバーは通常 `http://localhost:3000` で起動します。動的な監視・分類を試す場合のSupabase、Webhook、Geminiの環境変数はリポジトリ外で設定し、[運用・復旧手順](docs/operations/tibo-monitor-runbook.md)と[Gemini分類モードと環境変数](docs/gemini-classification.md)を参照してください。
+
+## 詳細ドキュメント
+
+- [Gemini分類モードと環境変数](docs/gemini-classification.md)
+- [AI分類の比較・監査用SQL](docs/ai-classification-audit.md)
+- [Tibo監視とリセット履歴更新の運用・復旧手順](docs/operations/tibo-monitor-runbook.md)
+- [TiboのXフィード調査](docs/tibo-x-feed-research.md)
+- [監視拡張機能のREADME](extension/tibo-monitor/README.md)
 
 ## Developer
 
 開発・運用の記録や個人開発について、Xで発信しています。
 
 [Xで開発者をフォロー](https://x.com/gussuri_s)
-
----
 
 ## 📄 ライセンス
 
