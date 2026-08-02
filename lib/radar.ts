@@ -207,6 +207,15 @@ export function getRadarViewModel(
       signalEvaluation,
       activeOfficialNotice,
     ),
+    displayReasoningSummary: getReasoningSummary(
+      source,
+      probability24h,
+      probability48h,
+      locale,
+      signalEvaluation,
+      activeOfficialNotice,
+      false,
+    ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       title: translateDynamic(latestWindow?.title, locale),
@@ -1016,6 +1025,7 @@ function getReasoningSummary(
   locale: Locale,
   signalEvaluation: LocalSignalEvaluation,
   activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
+  includeMomentumReason = true,
 ): string | null {
   return getLocalProbabilityReason(
     data,
@@ -1024,6 +1034,7 @@ function getReasoningSummary(
     locale,
     signalEvaluation,
     activeOfficialNotice,
+    includeMomentumReason,
   );
 }
 

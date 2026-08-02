@@ -806,6 +806,7 @@ export function getLocalProbabilityReason(
     data,
     signalEvaluation.latestResetAt,
   ),
+  includeMomentumReason = true,
 ): string | null {
   const environment = signalEvaluation.environment;
 
@@ -954,7 +955,7 @@ export function getLocalProbabilityReason(
   const resetCount7d = getRecent7DayResetCount();
   const currentMomentum = getMomentumBoost("48h", data);
   let momentumText = "";
-  if (currentMomentum > 0) {
+  if (includeMomentumReason && currentMomentum > 0) {
     if (resetCount7d >= 4) {
       const text = "直近7日間でリセットが4回以上発生しており、連続リセットウェーブ（ラッシュ期）に入っているため予測確率を大幅に上昇補正しています。";
       momentumText = ` ${translateDynamic(text, locale)}`;

@@ -76,3 +76,16 @@ test("labels a dynamic notice by its post time when no execution time is schedul
   assert.doesNotMatch(html, /Estimated reset window/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
 });
+
+test("keeps the forecast reason while hiding the weekly frequency boost explanation", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: getLocalRadarData({}),
+      locale: "ja",
+    }),
+  );
+
+  assert.match(html, /現在の見立ては/);
+  assert.match(html, /公式ステータスに発生中の障害はありません/);
+  assert.doesNotMatch(html, /リセット頻度が高まっている/);
+});

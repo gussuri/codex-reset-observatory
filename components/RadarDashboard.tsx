@@ -303,8 +303,8 @@ export function RadarDashboard({
             />
 
             <dl className="mt-5 space-y-4">
-              {!isDataUnavailable && viewModel.reasoningSummary ? (
-                <RecommendationRow reason={viewModel.reasoningSummary} locale={locale} />
+              {!isDataUnavailable && viewModel.displayReasoningSummary ? (
+                <RecommendationRow reason={viewModel.displayReasoningSummary} locale={locale} />
               ) : null}
             </dl>
             <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">

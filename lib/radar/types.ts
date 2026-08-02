@@ -245,6 +245,7 @@ export type RadarViewModel = {
     remaining?: string;
   };
   reasoningSummary: string | null;
+  displayReasoningSummary: string | null;
   latestWindow: {
     kind: "observed" | "regular";
     title: string;
