@@ -122,6 +122,38 @@
       border: 1px solid rgba(239, 68, 68, 0.3);
       color: #f87171;
     }
+    .checkbox-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.4;
+      margin-top: 10px;
+    }
+    .checkbox-row input {
+      margin-top: 3px;
+      accent-color: var(--primary);
+    }
+    .diagnostic-panel {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .diagnostic-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .diagnostic-actions button {
+      padding: 9px 10px;
+      font-size: 0.8rem;
+    }
+    #diagnosticCount {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -139,14 +171,37 @@
       <input type="text" id="observatoryDomain" value="https://codex-reset-observatory.vercel.app">
     </div>
 
+    <div class="field">
+      <label>Local diagnostics</label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="diagnosticsEnabled" checked>
+        <span>Save detailed scan diagnostics in this browser only</span>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="diagnosticsMaskText" checked>
+        <span>Mask post text and display names in DOM snapshots</span>
+      </label>
+    </div>
+
     <div class="actions">
       <button id="saveBtn" class="btn-primary">保存</button>
       <button id="testBtn" class="btn-secondary">接続テスト</button>
     </div>
 
+    <div class="diagnostic-panel">
+      <label>Diagnostic log</label>
+      <div id="diagnosticCount">読み込み中...</div>
+      <div class="diagnostic-actions">
+        <button id="refreshDiagnosticsBtn" class="btn-secondary">更新</button>
+        <button id="exportDiagnosticsBtn" class="btn-secondary">JSONエクスポート</button>
+        <button id="clearDiagnosticsBtn" class="btn-secondary">すべて削除</button>
+      </div>
+    </div>
+
     <div id="statusMessage"></div>
   </div>
 
+  <script src="diagnostics.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

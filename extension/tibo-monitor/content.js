@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.4-extension";
+  const SELECTOR_VERSION = "v1.5-diagnostics";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -26,6 +26,7 @@
   let lastSuccessfulParseAt = null;
   let lastSeenTweetId = null;
   let lastScanError = null;
+  let lastScanSummary = null;
 
   // Check if tweet article is currently showing machine-translated text
   function isTranslatedTweet(article) {
@@ -80,6 +81,7 @@
       lastSuccessfulParseAt,
       lastSeenTweetId,
       lastScanError,
+      lastScanSummary,
       selectorVersion: SELECTOR_VERSION,
       last_page_reload_at: storageData.tibo_last_page_reload_at || null,
       last_page_reload_status: storageData.tibo_last_page_reload_status || null,
@@ -108,40 +110,131 @@
   }, 10 * 1000);
 
   // Tweet DOM Inspector
+  function buildArticleSnapshot(article, maskPostText) {
+    const clone = article.cloneNode(true);
+    clone
+      .querySelectorAll("script, style, svg, img, video, source, iframe")
+      .forEach((element) => element.remove());
+
+    clone.querySelectorAll("input, textarea, select").forEach((element) => {
+      element.textContent = "[REDACTED]";
+      element.setAttribute("value", "[REDACTED]");
+    });
+
+    [clone, ...clone.querySelectorAll("*")].forEach((element) => {
+      for (const attribute of Array.from(element.attributes)) {
+        const name = attribute.name.toLowerCase();
+        const value = attribute.value;
+        if (
+          /authorization|proxy-authorization|cookie|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|password/.test(
+            name,
+          )
+        ) {
+          element.setAttribute(attribute.name, "[REDACTED]");
+        } else if (/^(data|blob):/i.test(value)) {
+          element.setAttribute(attribute.name, "[REDACTED_URL]");
+        }
+      }
+    });
+
+    if (maskPostText) {
+      clone.querySelectorAll('[data-testid="tweetText"]').forEach((element) => {
+        element.textContent = "[POST_TEXT_MASKED]";
+      });
+      clone
+        .querySelectorAll('[data-testid="User-Name"], [data-testid="UserName"], [data-testid="User-Names"]')
+        .forEach((element) => {
+          element.textContent = "[DISPLAY_NAME_MASKED]";
+        });
+    }
+
+    return TiboDiagnostics.sanitizeSnapshotHtml(clone.outerHTML, {
+      maskPostText,
+      maxChars: TiboDiagnostics.MAX_SNAPSHOT_CHARS,
+    });
+  }
+
+  async function saveScanDiagnostic(summary, reasonCode, articles, messages, error) {
+    const settings = await TiboDiagnostics.getDiagnosticSettings(chrome.storage.local);
+    if (!settings.enabled) return;
+
+    const snapshots = Array.from(articles)
+      .slice(0, 3)
+      .map((article) => buildArticleSnapshot(article, settings.maskPostText));
+
+    await TiboDiagnostics.appendDiagnosticLog(chrome.storage.local, {
+      type: "scan",
+      reasonCode,
+      currentUrl: summary.currentUrl,
+      selectorVersion: SELECTOR_VERSION,
+      scanTimestamp: summary.scanTimestamp,
+      summary,
+      snapshots,
+      messages: [
+        "No new Tibo post was parsed during this scan.",
+        `reason=${reasonCode}`,
+        `articles=${summary.articleCount}, time=${summary.timeElementCount}, text=${summary.tweetTextCount}, matchingStatus=${summary.matchingTiboStatusCount}, translated=${summary.translatedTweetCount}`,
+        ...(messages || []),
+        ...(error ? [TiboDiagnostics.sanitizeDiagnosticText(error.message || error)] : []),
+      ],
+    });
+  }
+
   async function scanTweets() {
+    const scanTimestamp = new Date().toISOString();
+    let tweetArticles = [];
+    const records = [];
+    const scanMessages = [];
+    let scanError = null;
+
     try {
-      const tweetArticles = document.querySelectorAll('article[data-testid="tweet"]');
+      tweetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
 
       for (const article of tweetArticles) {
         const timeEl = article.querySelector("time");
+        const textEl = article.querySelector('div[data-testid="tweetText"]');
+        const translated = isTranslatedTweet(article);
+        const linkEl = timeEl?.closest('a[href*="/status/"]');
+        const href = linkEl?.getAttribute("href") || "";
+        const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
+        const datetime = timeEl?.getAttribute("datetime") || "";
+        const hasValidDatetime = Boolean(datetime && !Number.isNaN(new Date(datetime).getTime()));
+
+        const record = {
+          hasTime: Boolean(timeEl),
+          hasTweetText: Boolean(textEl),
+          hasMatchingTiboStatus: Boolean(match),
+          isTranslated: translated,
+          hasValidDatetime,
+          isParseSuccess: false,
+        };
+        records.push(record);
+
         if (!timeEl) continue;
 
         // Canonical permalink: Must be closest status link anchored to timeEl
-        const linkEl = timeEl.closest('a[href*="/status/"]');
-        const textEl = article.querySelector('div[data-testid="tweetText"]');
-
         if (!linkEl || !textEl) continue;
-
-        const datetime = timeEl.getAttribute("datetime");
         if (!datetime) continue;
-
-        const href = linkEl.getAttribute("href") || "";
-        const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
 
         // Strict URL check: Must belong to @thsottiaux
         if (!match) continue;
+
+        if (!hasValidDatetime) continue;
+
+        // Translation is checked after the safe DOM counters are collected.
+        if (translated) {
+          lastScanError = "translated_text_detected";
+          console.warn(`[Tibo Extension] Translated text detected for ${match[1]}. Skipping.`);
+          continue;
+        }
+
+        // A valid DOM parse is useful even when the webhook deduplicator skips the tweet.
+        record.isParseSuccess = true;
 
         const tweetId = match[1];
 
         // Silent skip if already processed or currently in-flight
         if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
-          continue;
-        }
-
-        // 1. Skip if translated text is detected
-        if (isTranslatedTweet(article)) {
-          lastScanError = "translated_text_detected";
-          console.warn(`[Tibo Extension] Translated text detected for ${tweetId}. Skipping.`);
           continue;
         }
 
@@ -160,8 +253,25 @@
         sendWebhook(tweetId, text, tweetUrl, createdAt);
       }
     } catch (err) {
-      lastScanError = err.message || String(err);
+      lastScanError = "scan_exception";
+      scanError = err;
+      scanMessages.push("The DOM scan raised an exception.");
       console.error("[Tibo Extension] Scan error:", err);
+    }
+
+    const summary = TiboDiagnostics.buildScanSummary(
+      records,
+      window.location.href,
+      SELECTOR_VERSION,
+      scanTimestamp,
+    );
+    lastScanSummary = summary;
+
+    const reasonCode = TiboDiagnostics.getScanFailureReason(summary);
+    if (reasonCode) {
+      saveScanDiagnostic(summary, reasonCode, tweetArticles, scanMessages, scanError).catch((error) => {
+        console.warn("[Tibo Extension] Diagnostic log save failed:", error);
+      });
     }
   }
 

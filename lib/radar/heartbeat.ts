@@ -1,12 +1,27 @@
+export interface HeartbeatScanSummary {
+  articleCount: number;
+  timeElementCount: number;
+  tweetTextCount: number;
+  matchingTiboStatusCount: number;
+  translatedTweetCount: number;
+  tweetDatetimeCount: number;
+  parseSuccessCount: number;
+  currentUrl: string;
+  selectorVersion: string;
+  scanTimestamp: string;
+}
+
 export interface HeartbeatRequestBody {
   sessionId?: string | null;
   lastSuccessfulParseAt?: string | null;
   lastSeenTweetId?: string | null;
   lastScanError?: string | null;
+  lastScanSummary?: unknown | null;
   selectorVersion?: string | null;
   last_page_reload_at?: string | null;
   last_page_reload_status?: string | null;
   last_page_reload_error?: string | null;
+  last_scan_summary?: unknown | null;
   lastPageReloadAt?: string | null;
   lastPageReloadStatus?: string | null;
   lastPageReloadError?: string | null;
@@ -19,6 +34,7 @@ export interface ExistingHeartbeatRecord {
   last_heartbeat_at?: string | null;
   heartbeat_count?: number | null;
   max_gap_seconds?: number | null;
+  last_scan_summary?: unknown | null;
 }
 
 export interface HeartbeatRecord {
@@ -33,10 +49,67 @@ export interface HeartbeatRecord {
   last_page_reload_at: string | null;
   last_page_reload_status: string | null;
   last_page_reload_error: string | null;
+  last_scan_summary: HeartbeatScanSummary | null;
   heartbeat_count: number;
   max_gap_seconds: number;
   last_gap_seconds: number;
   updated_at: string;
+}
+
+const SAFE_SCAN_ERROR_CODES = new Set([
+  "translated_text_detected",
+  "scan_exception",
+  "article_missing",
+  "time_element_missing",
+  "tweet_text_missing",
+  "tibo_status_url_missing",
+  "tweet_datetime_missing",
+  "no_parse_success",
+  "scan_error",
+]);
+
+function normalizeScanError(value: unknown): string | null {
+  if (value === null || typeof value === "undefined" || value === "") {
+    return null;
+  }
+  const code = String(value);
+  return SAFE_SCAN_ERROR_CODES.has(code) ? code : "scan_error";
+}
+
+function normalizeCount(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(10_000, Math.floor(number))) : 0;
+}
+
+function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const summary = value as Record<string, unknown>;
+  let currentUrl = "";
+  try {
+    const url = new URL(String(summary.currentUrl || ""));
+    const host = url.hostname.toLowerCase();
+    if (host !== "x.com" && host !== "twitter.com") return null;
+    currentUrl = `${url.origin}${url.pathname}`.slice(0, 500);
+  } catch {
+    return null;
+  }
+
+  const selectorVersion = String(summary.selectorVersion || "unknown").slice(0, 100);
+  const scanTimestamp = String(summary.scanTimestamp || "").slice(0, 40);
+  if (!/^[-A-Za-z0-9_.]+$/.test(selectorVersion) || !scanTimestamp) return null;
+
+  return {
+    articleCount: normalizeCount(summary.articleCount),
+    timeElementCount: normalizeCount(summary.timeElementCount),
+    tweetTextCount: normalizeCount(summary.tweetTextCount),
+    matchingTiboStatusCount: normalizeCount(summary.matchingTiboStatusCount),
+    translatedTweetCount: normalizeCount(summary.translatedTweetCount),
+    tweetDatetimeCount: normalizeCount(summary.tweetDatetimeCount),
+    parseSuccessCount: normalizeCount(summary.parseSuccessCount),
+    currentUrl,
+    selectorVersion,
+    scanTimestamp,
+  };
 }
 
 export function buildHeartbeatRecord(
@@ -51,6 +124,16 @@ export function buildHeartbeatRecord(
   let heartbeatCount = (existing?.heartbeat_count || 0) + 1;
   let maxGapSeconds = existing?.max_gap_seconds || 0;
   let lastGapSeconds = 0;
+  const requestedPageReloadStatus =
+    body.last_page_reload_status ?? body.lastPageReloadStatus ?? null;
+  const pageReloadStatus =
+    requestedPageReloadStatus === null ||
+    requestedPageReloadStatus === "success" ||
+    requestedPageReloadStatus === "monitored_tab_missing" ||
+    requestedPageReloadStatus === "error"
+      ? requestedPageReloadStatus
+      : "error";
+  const requestedScanSummary = body.last_scan_summary ?? body.lastScanSummary;
 
   const isNewSession = existing?.session_id !== normalizedSessionId;
   if (isNewSession) {
@@ -73,11 +156,15 @@ export function buildHeartbeatRecord(
     last_heartbeat_at: nowIso,
     last_successful_parse_at: body.lastSuccessfulParseAt || null,
     last_seen_tweet_id: body.lastSeenTweetId || null,
-    last_scan_error: body.lastScanError || null,
+    last_scan_error: normalizeScanError(body.lastScanError),
     selector_version: body.selectorVersion || "v1",
     last_page_reload_at: body.last_page_reload_at ?? body.lastPageReloadAt ?? null,
-    last_page_reload_status: body.last_page_reload_status ?? body.lastPageReloadStatus ?? null,
-    last_page_reload_error: body.last_page_reload_error ?? body.lastPageReloadError ?? null,
+    last_page_reload_status: pageReloadStatus,
+    last_page_reload_error: pageReloadStatus === "error" ? "page_reload_error" : null,
+    last_scan_summary:
+      typeof requestedScanSummary === "undefined"
+        ? normalizeScanSummary(existing?.last_scan_summary)
+        : normalizeScanSummary(requestedScanSummary),
     heartbeat_count: heartbeatCount,
     max_gap_seconds: maxGapSeconds,
     last_gap_seconds: lastGapSeconds,

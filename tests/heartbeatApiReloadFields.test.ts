@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   buildHeartbeatRecord,
   type ExistingHeartbeatRecord,
+  type HeartbeatRecord,
   type HeartbeatRequestBody,
 } from "../lib/radar/heartbeat";
 
@@ -25,6 +26,7 @@ test("builds the complete same-session record with snake_case reload fields", ()
     last_page_reload_at: "2026-07-31T22:30:00.000Z",
     last_page_reload_status: "success",
     last_page_reload_error: null,
+    last_scan_summary: null,
   };
 
   const payload = buildHeartbeatRecord(body, existing, now);
@@ -41,6 +43,7 @@ test("builds the complete same-session record with snake_case reload fields", ()
     last_page_reload_at: "2026-07-31T22:30:00.000Z",
     last_page_reload_status: "success",
     last_page_reload_error: null,
+    last_scan_summary: null,
     heartbeat_count: 8,
     max_gap_seconds: 300,
     last_gap_seconds: 300,
@@ -73,6 +76,7 @@ test("resets session start, count, and gaps for a new session", () => {
     last_page_reload_at: null,
     last_page_reload_status: null,
     last_page_reload_error: null,
+    last_scan_summary: null,
     heartbeat_count: 1,
     max_gap_seconds: 0,
     last_gap_seconds: 0,
@@ -112,7 +116,8 @@ test("accepts camelCase reload aliases in the persistence record", () => {
     selector_version: "v1",
     last_page_reload_at: "2026-08-01T01:59:00.000Z",
     last_page_reload_status: "success",
-    last_page_reload_error: "",
+    last_page_reload_error: null,
+    last_scan_summary: null,
     heartbeat_count: 3,
     max_gap_seconds: 10,
     last_gap_seconds: 10,
@@ -154,8 +159,9 @@ test("gives snake_case reload fields precedence over camelCase aliases", () => {
     last_scan_error: null,
     selector_version: "v1",
     last_page_reload_at: "snake-at",
-    last_page_reload_status: "",
-    last_page_reload_error: "snake-error",
+    last_page_reload_status: "error",
+    last_page_reload_error: "page_reload_error",
+    last_scan_summary: null,
     heartbeat_count: 5,
     max_gap_seconds: 20,
     last_gap_seconds: 20,
@@ -180,4 +186,43 @@ test("uses default_session before comparing an omitted session id", () => {
   assert.strictEqual(payload.heartbeat_count, 7);
   assert.strictEqual(payload.last_gap_seconds, 30);
   assert.strictEqual(payload.max_gap_seconds, 30);
+});
+
+test("persists only the safe scan summary and never raw diagnostic content", () => {
+  const now = new Date("2026-08-01T05:00:00.000Z");
+  const body = {
+    sessionId: "summary-session",
+    lastScanError: "translated_text_detected",
+    lastScanSummary: {
+      articleCount: 3,
+      timeElementCount: 2,
+      tweetTextCount: 2,
+      matchingTiboStatusCount: 1,
+      translatedTweetCount: 1,
+      tweetDatetimeCount: 1,
+      parseSuccessCount: 0,
+      currentUrl: "https://x.com/thsottiaux",
+      selectorVersion: "v1.5-diagnostics",
+      scanTimestamp: "2026-08-01T04:59:50.000Z",
+      snapshots: ["<article>secret HTML</article>"],
+    },
+  } as HeartbeatRequestBody;
+
+  const payload = buildHeartbeatRecord(body, null, now) as HeartbeatRecord & {
+    last_scan_summary?: Record<string, unknown>;
+  };
+
+  assert.deepStrictEqual(payload.last_scan_summary, {
+    articleCount: 3,
+    timeElementCount: 2,
+    tweetTextCount: 2,
+    matchingTiboStatusCount: 1,
+    translatedTweetCount: 1,
+    tweetDatetimeCount: 1,
+    parseSuccessCount: 0,
+    currentUrl: "https://x.com/thsottiaux",
+    selectorVersion: "v1.5-diagnostics",
+    scanTimestamp: "2026-08-01T04:59:50.000Z",
+  });
+  assert.doesNotMatch(JSON.stringify(payload.last_scan_summary), /secret HTML|snapshots/i);
 });

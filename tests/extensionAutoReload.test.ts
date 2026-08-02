@@ -7,7 +7,15 @@ import path from "node:path";
 // Helper to load service-worker.js with custom mocked chrome API
 function setupServiceWorkerContext(
   customTabs: Array<{ id: number; url: string }> = [],
-  opts: { failReloadTabId?: number } = {}
+  opts: {
+    failReloadTabId?: number;
+    fetchResponse?: {
+      ok: boolean;
+      status: number;
+      text?: () => Promise<string>;
+      json?: () => Promise<unknown>;
+    };
+  } = {}
 ) {
   const localStore: Record<string, any> = {};
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
@@ -75,6 +83,14 @@ function setupServiceWorkerContext(
 
   const mockFetch = async (url: string, fetchOpts: any) => {
     mockFetchCalls.push({ url, body: fetchOpts.body ? JSON.parse(fetchOpts.body) : null });
+    if (opts.fetchResponse) {
+      return {
+        ok: opts.fetchResponse.ok,
+        status: opts.fetchResponse.status,
+        text: opts.fetchResponse.text || (async () => ""),
+        json: opts.fetchResponse.json || (async () => ({})),
+      };
+    }
     return {
       ok: true,
       status: 200,
@@ -97,7 +113,15 @@ function setupServiceWorkerContext(
     URL,
   };
 
-  const context = vm.createContext(sandbox);
+  let context: vm.Context;
+  (sandbox as typeof sandbox & { importScripts: (...scriptNames: string[]) => void }).importScripts = (...scriptNames: string[]) => {
+    for (const scriptName of scriptNames) {
+      const sharedPath = path.join(__dirname, "../extension/tibo-monitor", scriptName);
+      vm.runInContext(fs.readFileSync(sharedPath, "utf8"), context);
+    }
+  };
+
+  context = vm.createContext(sandbox);
   vm.runInContext(swCode, context);
 
   return {
@@ -166,7 +190,7 @@ test("REQUIREMENT 4: When tab reload fails with an error, preserves last_page_re
     "last_page_reload_at MUST NOT be overwritten on error"
   );
   assert.strictEqual(localStore["tibo_last_page_reload_status"], "error");
-  assert.strictEqual(localStore["tibo_last_page_reload_error"], "Simulated tab reload failure");
+  assert.strictEqual(localStore["tibo_last_page_reload_error"], "page_reload_error");
 });
 
 test("REQUIREMENT 5: Ignores tweet status detail tabs (/thsottiaux/status/...) and only reloads profile tabs (/thsottiaux or /thsottiaux/)", async () => {
@@ -227,4 +251,65 @@ test("REQUIREMENT 2 & 3: Heartbeat API & Service Worker include 3 page reload fi
   assert.strictEqual(sentBody.last_page_reload_at, sampleTime);
   assert.strictEqual(sentBody.last_page_reload_status, "success");
   assert.strictEqual(sentBody.last_page_reload_error, null);
+});
+
+test("Service Worker keeps non-2xx response details local and redacts secrets", async () => {
+  const { sendMessage, localStore } = setupServiceWorkerContext([], {
+    fetchResponse: {
+      ok: false,
+      status: 500,
+      text: async () => "Authorization: Bearer secret-token api_key=private-key",
+    },
+  });
+  localStore["webhook_secret"] = "secret-token";
+
+  const result = await sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "123456789",
+      text: "Sample",
+      tweetUrl: "https://x.com/thsottiaux/status/123456789",
+      tweetCreatedAt: "2026-08-02T00:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.match(result.error, /HTTP 500/);
+  assert.doesNotMatch(JSON.stringify(localStore["tibo_diagnostic_logs"] || []), /secret-token|private-key/);
+  assert.match(JSON.stringify(localStore["tibo_diagnostic_logs"] || []), /webhook_http_error|REDACTED/);
+});
+
+test("Service Worker sends only safe heartbeat counters and omits snapshot data", async () => {
+  const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext();
+  localStore["webhook_secret"] = "test-secret";
+
+  const response = await sendMessage({
+    action: "POST_HEARTBEAT",
+    payload: {
+      sessionId: "session_safe_1",
+      lastSuccessfulParseAt: "2026-08-02T00:00:00.000Z",
+      lastSeenTweetId: "123456789",
+      lastScanError: "raw secret error",
+      selectorVersion: "v1.5-diagnostics",
+      lastScanSummary: {
+        articleCount: 1,
+        timeElementCount: 1,
+        tweetTextCount: 1,
+        matchingTiboStatusCount: 1,
+        translatedTweetCount: 0,
+        tweetDatetimeCount: 1,
+        parseSuccessCount: 0,
+        currentUrl: "https://x.com/thsottiaux",
+        selectorVersion: "v1.5-diagnostics",
+        scanTimestamp: "2026-08-02T00:00:00.000Z",
+        snapshots: ["<article>secret HTML</article>"],
+      },
+    },
+  });
+
+  assert.equal(response.success, true);
+  const sentBody = mockFetchCalls[0].body;
+  assert.equal(sentBody.lastScanError, "scan_error");
+  assert.equal(sentBody.lastScanSummary.snapshots, undefined);
+  assert.doesNotMatch(JSON.stringify(sentBody), /secret HTML|raw secret error/i);
 });

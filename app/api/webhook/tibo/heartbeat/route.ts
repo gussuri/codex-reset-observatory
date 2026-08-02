@@ -13,6 +13,14 @@ function getSupabaseServiceClient() {
   });
 }
 
+function isMissingScanSummaryColumn(error: { code?: string; message?: string } | null) {
+  return Boolean(
+    error &&
+      (error.code === "PGRST204" ||
+        error.message?.toLowerCase().includes("last_scan_summary")),
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Fail closed if TIBO_WEBHOOK_SECRET is not configured
@@ -45,9 +53,19 @@ export async function POST(req: NextRequest) {
 
     const payload = buildHeartbeatRecord(body, existing, now);
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from("tibo_heartbeat")
       .upsert(payload, { onConflict: "id" });
+
+    // Keep the heartbeat operational while an existing deployment is waiting
+    // for the additive migration to reach its Supabase project.
+    if (isMissingScanSummaryColumn(error)) {
+      const { last_scan_summary: _ignoredSummary, ...legacyPayload } = payload;
+      const retry = await supabase
+        .from("tibo_heartbeat")
+        .upsert(legacyPayload, { onConflict: "id" });
+      error = retry.error;
+    }
 
     if (error) {
       console.error("[Heartbeat Error] Supabase upsert failed:", error);

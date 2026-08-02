@@ -31,6 +31,12 @@ test("reports recent heartbeat and parse activity with safe ages", () => {
   });
 });
 
+test("health output contains no scan snapshot or diagnostic payload", () => {
+  const result = evaluateTiboHeartbeat(snapshot(), now);
+
+  assert.doesNotMatch(JSON.stringify(result), /html|snapshot|tweetText|scanSummary/i);
+});
+
 test("reports a heartbeat older than fifteen minutes as unhealthy", () => {
   const result = evaluateTiboHeartbeat(
     snapshot({ last_heartbeat_at: "2026-08-01T23:44:59.000Z" }),

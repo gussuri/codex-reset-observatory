@@ -3,12 +3,21 @@
  * Serialized Deduplication & Webhook Dispatcher
  */
 
+importScripts("diagnostics.js");
+
 const QUEUE_KEY = "tibo_processed_tweet_ids";
 const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
+
+function saveServiceDiagnostic(entry) {
+  return TiboDiagnostics.appendDiagnosticLog(chrome.storage.local, {
+    type: "service_worker",
+    ...entry,
+  }).catch(() => {});
+}
 
 // Setup alarms on Service Worker initialization
 function setupReloadAlarm() {
@@ -99,10 +108,15 @@ async function handleReloadAlarm() {
   } catch (err) {
     const errorMsg = err.message || String(err);
     console.error("[Service Worker] Page reload error:", err);
-    // DO NOT overwrite tibo_last_page_reload_at on error
+    // DO NOT overwrite tibo_last_page_reload_at on error. Keep only a safe code in sync data.
     await chrome.storage.local.set({
       tibo_last_page_reload_status: "error",
-      tibo_last_page_reload_error: errorMsg,
+      tibo_last_page_reload_error: "page_reload_error",
+    });
+    await saveServiceDiagnostic({
+      reasonCode: "page_reload_error",
+      messages: ["The monitored profile tab could not be reloaded."],
+      error: errorMsg,
     });
     return { success: false, error: errorMsg };
   }
@@ -174,18 +188,39 @@ async function executePostTweet(payload) {
     throw new Error("Webhook secret is not configured in extension options.");
   }
 
-  const response = await fetch(`${domain}/api/webhook/tibo`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${secret}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  let response;
+  try {
+    response = await fetch(`${domain}/api/webhook/tibo`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${secret}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    await saveServiceDiagnostic({
+      reasonCode: "webhook_network_error",
+      messages: ["The tweet webhook request failed before receiving a response."],
+      error: err?.message || String(err),
+    });
+    throw new Error("Tweet webhook request failed.");
+  }
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText}`);
+    let errorText = "";
+    try {
+      errorText = await response.text();
+    } catch {
+      errorText = "Response body could not be read.";
+    }
+    await saveServiceDiagnostic({
+      reasonCode: "webhook_http_error",
+      httpStatus: response.status,
+      responseBody: errorText,
+      messages: ["The tweet webhook returned a non-2xx response."],
+    });
+    throw new Error(`Tweet webhook returned HTTP ${response.status}.`);
   }
 
   const json = await response.json();
@@ -212,6 +247,7 @@ async function executePostTweet(payload) {
 }
 
 async function handlePostHeartbeat(payload) {
+  payload = payload && typeof payload === "object" ? payload : {};
   const { secret, domain } = await getConfig();
   if (!secret) {
     throw new Error("Webhook secret is not configured in extension options.");
@@ -224,43 +260,75 @@ async function handlePostHeartbeat(payload) {
     "tibo_last_page_reload_error",
   ]);
 
-  const lastPageReloadAt =
+  const rawLastPageReloadAt =
     payload.last_page_reload_at ||
     payload.lastPageReloadAt ||
     storageData.tibo_last_page_reload_at ||
     null;
 
-  const lastPageReloadStatus =
+  const rawLastPageReloadStatus =
     payload.last_page_reload_status ||
     payload.lastPageReloadStatus ||
     storageData.tibo_last_page_reload_status ||
     null;
 
-  const lastPageReloadError =
+  const rawLastPageReloadError =
     payload.last_page_reload_error ||
     payload.lastPageReloadError ||
     storageData.tibo_last_page_reload_error ||
     null;
 
+  const lastPageReloadStatus = TiboDiagnostics.sanitizePageReloadStatus(rawLastPageReloadStatus);
+  const lastPageReloadError =
+    lastPageReloadStatus === "error" && rawLastPageReloadError
+      ? "page_reload_error"
+      : null;
+
   const enrichedPayload = {
-    ...payload,
-    last_page_reload_at: lastPageReloadAt,
+    sessionId: TiboDiagnostics.sanitizeOpaqueId(payload.sessionId) || "session_default",
+    lastSuccessfulParseAt: TiboDiagnostics.sanitizeTimestamp(payload.lastSuccessfulParseAt),
+    lastSeenTweetId: TiboDiagnostics.sanitizeOpaqueId(payload.lastSeenTweetId),
+    lastScanError: TiboDiagnostics.sanitizeReasonCode(payload.lastScanError),
+    lastScanSummary: TiboDiagnostics.sanitizeScanSummary(payload.lastScanSummary),
+    selectorVersion: TiboDiagnostics.sanitizeSelectorVersion(payload.selectorVersion),
+    last_page_reload_at: TiboDiagnostics.sanitizeTimestamp(rawLastPageReloadAt),
     last_page_reload_status: lastPageReloadStatus,
     last_page_reload_error: lastPageReloadError,
   };
 
-  const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${secret}`,
-    },
-    body: JSON.stringify(enrichedPayload),
-  });
+  let response;
+  try {
+    response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${secret}`,
+      },
+      body: JSON.stringify(enrichedPayload),
+    });
+  } catch (err) {
+    await saveServiceDiagnostic({
+      reasonCode: "heartbeat_network_error",
+      messages: ["The heartbeat request failed before receiving a response."],
+      error: err?.message || String(err),
+    });
+    throw new Error("Heartbeat request failed.");
+  }
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText}`);
+    let errorText = "";
+    try {
+      errorText = await response.text();
+    } catch {
+      errorText = "Response body could not be read.";
+    }
+    await saveServiceDiagnostic({
+      reasonCode: "heartbeat_http_error",
+      httpStatus: response.status,
+      responseBody: errorText,
+      messages: ["The heartbeat webhook returned a non-2xx response."],
+    });
+    throw new Error(`Heartbeat webhook returned HTTP ${response.status}.`);
   }
 
   return await response.json();
@@ -278,27 +346,51 @@ async function handleTestConnection() {
     "tibo_last_page_reload_error",
   ]);
 
-  const response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${secret}`,
-    },
-    body: JSON.stringify({
-      leaderTabId: 9999,
-      isLeader: true,
-      lastSuccessfulParseAt: new Date().toISOString(),
-      lastSeenTweetId: "test-connection",
-      lastScanError: null,
-      last_page_reload_at: storageData.tibo_last_page_reload_at || null,
-      last_page_reload_status: storageData.tibo_last_page_reload_status || null,
-      last_page_reload_error: storageData.tibo_last_page_reload_error || null,
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${domain}/api/webhook/tibo/heartbeat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${secret}`,
+      },
+      body: JSON.stringify({
+        leaderTabId: 9999,
+        isLeader: true,
+        lastSuccessfulParseAt: new Date().toISOString(),
+        lastSeenTweetId: "test-connection",
+        lastScanError: null,
+        last_page_reload_at: storageData.tibo_last_page_reload_at || null,
+        last_page_reload_status: storageData.tibo_last_page_reload_status || null,
+        last_page_reload_error:
+          storageData.tibo_last_page_reload_status === "error"
+            ? "page_reload_error"
+            : null,
+      }),
+    });
+  } catch (err) {
+    await saveServiceDiagnostic({
+      reasonCode: "heartbeat_network_error",
+      messages: ["The connection test failed before receiving a response."],
+      error: err?.message || String(err),
+    });
+    throw new Error("Connection test request failed.");
+  }
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText}`);
+    let errorText = "";
+    try {
+      errorText = await response.text();
+    } catch {
+      errorText = "Response body could not be read.";
+    }
+    await saveServiceDiagnostic({
+      reasonCode: "heartbeat_http_error",
+      httpStatus: response.status,
+      responseBody: errorText,
+      messages: ["The connection test returned a non-2xx response."],
+    });
+    throw new Error(`Connection test returned HTTP ${response.status}.`);
   }
 
   return await response.json();
