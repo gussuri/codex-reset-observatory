@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/radar/types";
+import { DeveloperLink } from "./DeveloperLink";
 
 type FaqViewProps = {
   locale: Locale;
@@ -326,6 +327,12 @@ export function FaqView({ locale }: FaqViewProps) {
             </>
           )}
         </nav>
+        <footer className="border-t border-slate-200 pt-4">
+          <DeveloperLink
+            locale={locale}
+            className="text-slate-600 hover:text-teal-700"
+          />
+        </footer>
       </div>
     </main>
   );

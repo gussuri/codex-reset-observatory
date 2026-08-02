@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
+import { DeveloperLink } from "./DeveloperLink";
 
 type AboutViewProps = {
   locale: Locale;
@@ -81,6 +82,13 @@ export function AboutView({ locale }: AboutViewProps) {
             {content.paragraphs.map((p, idx) => (
               <p key={idx}>{p}</p>
             ))}
+            <p>{translateUI("aboutDeveloper", locale)}</p>
+          </div>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <DeveloperLink
+              locale={locale}
+              className="text-slate-600 hover:text-teal-700"
+            />
           </div>
         </section>
 

@@ -25,6 +25,7 @@ import {
 } from "@/lib/radar/clientState";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
@@ -512,6 +513,12 @@ export function RadarDashboard({
               </>
             )}
           </nav>
+          <div className="mt-4 border-t border-white/10 pt-3">
+            <DeveloperLink
+              locale={locale}
+              className="text-xs text-slate-400 hover:text-white"
+            />
+          </div>
         </footer>
       </div>
     </main>

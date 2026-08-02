@@ -8,6 +8,7 @@ import type { Locale, RadarData } from "@/lib/radar/types";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { translateUI } from "@/lib/radar/i18n";
+import { DeveloperLink } from "./DeveloperLink";
 
 type HistoryViewProps = {
   data: RadarData;
@@ -220,6 +221,10 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
                 </Link>
               </>
             )}
+            <DeveloperLink
+              locale={locale}
+              className="text-slate-300 hover:text-white"
+            />
           </nav>
           <p className="font-semibold text-slate-300">{content.footerText}</p>
         </footer>

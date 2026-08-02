@@ -86,6 +86,14 @@ ORDER BY tweet_created_at DESC;
 
 ---
 
+## Developer
+
+開発・運用の記録や個人開発について、Xで発信しています。
+
+[Xで開発者をフォロー](https://x.com/gussuri_s)
+
+---
+
 ## 📄 ライセンス
 
 This project is open-source under the [MIT License](LICENSE).

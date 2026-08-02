@@ -238,6 +238,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "History",
     zh: "历史",
   },
+  githubDevelopmentLink: {
+    ja: "GitHubで開発を見る",
+    en: "View development on GitHub",
+    zh: "在 GitHub 查看开发",
+  },
+  githubDevelopmentAriaLabel: {
+    ja: "GitHubでCodexリセット観測所の開発状況を見る",
+    en: "View Codex Reset Observatory development on GitHub",
+    zh: "在 GitHub 查看 Codex 重置观测站的开发情况",
+  },
+  aboutDeveloper: {
+    ja: "Codex Reset Observatoryは個人開発・運用されています。実装や更新履歴はGitHubで公開しています。",
+    en: "Codex Reset Observatory is independently developed and operated. Its implementation and development history are available on GitHub.",
+    zh: "Codex Reset Observatory 由个人独立开发和运营。实现代码和开发记录可在 GitHub 查看。",
+  },
   languageName: {
     ja: "日本語",
     en: "English",
