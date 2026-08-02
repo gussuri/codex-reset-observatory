@@ -4,10 +4,12 @@
   const LOG_KEY = "tibo_diagnostic_logs";
   const ENABLED_KEY = "tibo_diagnostics_enabled";
   const MASK_TEXT_KEY = "tibo_diagnostics_mask_text";
+  const LAST_SUCCESS_KEY = "tibo_diagnostics_last_success_at";
   const MAX_ENTRIES = 20;
   const MAX_TOTAL_CHARS = 1_000_000;
   const MAX_MESSAGE_CHARS = 2_000;
   const MAX_SNAPSHOT_CHARS = 20_000;
+  const DEDUP_WINDOW_MS = 30 * 1000;
   const SAFE_SCAN_ERROR_CODES = new Set([
     "translated_text_detected",
     "scan_exception",
@@ -21,6 +23,14 @@
   ]);
 
   let writeQueue = Promise.resolve();
+
+  const SUMMARY_FINGERPRINT_FIELDS = [
+    "articleCount",
+    "timeElementCount",
+    "tweetTextCount",
+    "matchingTiboStatusCount",
+    "translatedTweetCount",
+  ];
 
   function truncate(value, maxChars) {
     const text = String(value == null ? "" : value);
@@ -88,6 +98,38 @@
       : null;
   }
 
+  function normalizeCount(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, Math.min(10_000, Math.floor(number))) : 0;
+  }
+
+  function getTimestamp(value) {
+    const timestamp = value == null ? new Date() : new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString();
+  }
+
+  function getTimestampMilliseconds(value) {
+    if (typeof value !== "string" || value.length === 0) return null;
+    const timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? null : timestamp.getTime();
+  }
+
+  function getDiagnosticFingerprint(entry) {
+    const source = entry && typeof entry === "object" ? entry : {};
+    const summary = source.summary && typeof source.summary === "object" ? source.summary : {};
+    const currentUrl = sanitizeCurrentUrl(summary.currentUrl || source.currentUrl);
+    const selectorVersion = sanitizeSelectorVersion(
+      summary.selectorVersion || source.selectorVersion,
+    );
+
+    return JSON.stringify({
+      reasonCode: sanitizeReasonCode(source.reasonCode),
+      counts: SUMMARY_FINGERPRINT_FIELDS.map((field) => normalizeCount(summary[field])),
+      currentUrl,
+      selectorVersion,
+    });
+  }
+
   function sanitizeScanSummary(value) {
     if (!value || typeof value !== "object") return null;
     const source = value;
@@ -98,8 +140,7 @@
     }
 
     const count = (key) => {
-      const number = Number(source[key]);
-      return Number.isFinite(number) ? Math.max(0, Math.min(10_000, Math.floor(number))) : 0;
+      return normalizeCount(source[key]);
     };
 
     return {
@@ -243,19 +284,75 @@
     if (typeof source.reasonCode !== "undefined") {
       result.reasonCode = truncate(source.reasonCode, 100).replace(/[^a-z0-9_.-]/gi, "_");
     }
+    if (typeof source.occurrenceCount !== "undefined") {
+      result.occurrenceCount = normalizeCount(source.occurrenceCount);
+    }
+    if (typeof source.lastOccurredAt !== "undefined") {
+      result.lastOccurredAt = sanitizeTimestamp(source.lastOccurredAt);
+    }
 
     return result;
   }
 
-  function appendDiagnosticLog(storage, entry) {
+  function appendDiagnosticLog(storage, entry, nowValue) {
     writeQueue = writeQueue
       .catch(() => {})
       .then(async () => {
-        const data = await storage.get([LOG_KEY]);
+        const now = getTimestamp(nowValue);
+        const nowMilliseconds = getTimestampMilliseconds(now);
+        const data = await storage.get([LOG_KEY, LAST_SUCCESS_KEY]);
         const logs = Array.isArray(data[LOG_KEY]) ? data[LOG_KEY] : [];
-        logs.push({ ...sanitizeEntry(entry), savedAt: new Date().toISOString() });
+        const sanitizedEntry = sanitizeEntry(entry);
+        const fingerprint = getDiagnosticFingerprint(sanitizedEntry);
+        const lastSuccessfulScanAt = getTimestampMilliseconds(data[LAST_SUCCESS_KEY]);
+        let matchingIndex = -1;
+
+        for (let index = logs.length - 1; index >= 0; index -= 1) {
+          const existing = logs[index];
+          if (getDiagnosticFingerprint(existing) !== fingerprint) continue;
+
+          const lastOccurredAt = getTimestampMilliseconds(
+            existing.lastOccurredAt || existing.savedAt,
+          );
+          const occurredAfterSuccessfulScan =
+            lastSuccessfulScanAt !== null &&
+            lastOccurredAt !== null &&
+            lastSuccessfulScanAt > lastOccurredAt;
+          const withinDeduplicationWindow =
+            nowMilliseconds !== null &&
+            lastOccurredAt !== null &&
+            nowMilliseconds >= lastOccurredAt &&
+            nowMilliseconds - lastOccurredAt < DEDUP_WINDOW_MS;
+
+          if (withinDeduplicationWindow && !occurredAfterSuccessfulScan) {
+            matchingIndex = index;
+          }
+          break;
+        }
+
+        if (matchingIndex >= 0) {
+          const existing = logs[matchingIndex];
+          existing.occurrenceCount = normalizeCount(existing.occurrenceCount || 1) + 1;
+          existing.lastOccurredAt = now;
+        } else {
+          logs.push({
+            ...sanitizedEntry,
+            savedAt: now,
+            occurrenceCount: 1,
+            lastOccurredAt: now,
+          });
+        }
+
         await storage.set({ [LOG_KEY]: trimDiagnosticLogs(logs) });
       });
+    return writeQueue;
+  }
+
+  function markSuccessfulScan(storage, nowValue) {
+    const timestamp = getTimestamp(nowValue);
+    writeQueue = writeQueue
+      .catch(() => {})
+      .then(() => storage.set({ [LAST_SUCCESS_KEY]: timestamp }));
     return writeQueue;
   }
 
@@ -265,7 +362,7 @@
   }
 
   async function clearDiagnosticLogs(storage) {
-    await storage.set({ [LOG_KEY]: [] });
+    await storage.set({ [LOG_KEY]: [], [LAST_SUCCESS_KEY]: null });
   }
 
   function serializeDiagnosticLogs(logs) {
@@ -284,10 +381,12 @@
     LOG_KEY,
     ENABLED_KEY,
     MASK_TEXT_KEY,
+    LAST_SUCCESS_KEY,
     MAX_ENTRIES,
     MAX_TOTAL_CHARS,
     MAX_MESSAGE_CHARS,
     MAX_SNAPSHOT_CHARS,
+    DEDUP_WINDOW_MS,
     buildScanSummary,
     getScanFailureReason,
     sanitizeDiagnosticText,
@@ -298,9 +397,11 @@
     sanitizeSelectorVersion,
     sanitizePageReloadStatus,
     sanitizeScanSummary,
+    getDiagnosticFingerprint,
     sanitizeSnapshotHtml,
     trimDiagnosticLogs,
     appendDiagnosticLog,
+    markSuccessfulScan,
     getDiagnosticLogs,
     clearDiagnosticLogs,
     serializeDiagnosticLogs,

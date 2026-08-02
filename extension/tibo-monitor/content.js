@@ -267,6 +267,12 @@
     );
     lastScanSummary = summary;
 
+    if (summary.parseSuccessCount > 0) {
+      TiboDiagnostics.markSuccessfulScan(chrome.storage.local).catch((error) => {
+        console.warn("[Tibo Extension] Diagnostic recovery marker save failed:", error);
+      });
+    }
+
     const reasonCode = TiboDiagnostics.getScanFailureReason(summary);
     if (reasonCode) {
       saveScanDiagnostic(summary, reasonCode, tweetArticles, scanMessages, scanError).catch((error) => {

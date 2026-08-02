@@ -7,6 +7,7 @@ import vm from "node:vm";
 type Diagnostics = {
   MAX_ENTRIES: number;
   MAX_TOTAL_CHARS: number;
+  DEDUP_WINDOW_MS: number;
   buildScanSummary: (
     records: ReadonlyArray<{
       hasTime?: boolean;
@@ -26,7 +27,12 @@ type Diagnostics = {
     options?: { maskPostText?: boolean; maxChars?: number },
   ) => string;
   trimDiagnosticLogs: (logs: unknown[]) => unknown[];
-  appendDiagnosticLog: (storage: StorageLike, entry: Record<string, unknown>) => Promise<void>;
+  appendDiagnosticLog: (
+    storage: StorageLike,
+    entry: Record<string, unknown>,
+    now?: string,
+  ) => Promise<void>;
+  markSuccessfulScan: (storage: StorageLike, now?: string) => Promise<void>;
   getDiagnosticLogs: (storage: StorageLike) => Promise<unknown[]>;
   clearDiagnosticLogs: (storage: StorageLike) => Promise<void>;
   serializeDiagnosticLogs: (logs: unknown[]) => string;
@@ -56,6 +62,23 @@ function createStorage(): StorageLike & { values: Record<string, unknown> } {
     },
     async set(value) {
       Object.assign(values, value);
+    },
+  };
+}
+
+function createFailureEntry(reasonCode = "article_missing") {
+  return {
+    reasonCode,
+    currentUrl: "https://x.com/thsottiaux",
+    selectorVersion: "v1.5-diagnostics",
+    summary: {
+      articleCount: 0,
+      timeElementCount: 0,
+      tweetTextCount: 0,
+      matchingTiboStatusCount: 0,
+      translatedTweetCount: 0,
+      currentUrl: "https://x.com/thsottiaux",
+      selectorVersion: "v1.5-diagnostics",
     },
   };
 }
@@ -171,6 +194,11 @@ test("keeps diagnostic logs in a bounded ring buffer and supports export/delete"
     await diagnostics.appendDiagnosticLog(storage, {
       reasonCode: "article_missing",
       sequence: index,
+      summary: {
+        articleCount: index,
+        currentUrl: "https://x.com/thsottiaux",
+        selectorVersion: "v1.5-diagnostics",
+      },
       savedAt: `2026-08-02T00:00:${String(index).padStart(2, "0")}.000Z`,
     });
   }
@@ -197,4 +225,85 @@ test("evicts oversized diagnostic entries as well as entries over the count limi
   const trimmed = diagnostics.trimDiagnosticLogs([hugeEntry, { sequence: 2 }]);
   assert.ok(trimmed.length <= 1);
   assert.equal((trimmed[0] as { sequence: number }).sequence, 2);
+});
+
+test("coalesces ten identical failures into one log and counts every occurrence", async () => {
+  const diagnostics = loadDiagnostics();
+  const storage = createStorage();
+
+  for (let index = 0; index < 10; index += 1) {
+    await diagnostics.appendDiagnosticLog(
+      storage,
+      createFailureEntry(),
+      `2026-08-02T00:00:${String(index).padStart(2, "0")}.000Z`,
+    );
+  }
+
+  const logs = (await diagnostics.getDiagnosticLogs(storage)) as Array<{
+    occurrenceCount: number;
+    savedAt: string;
+    lastOccurredAt: string;
+  }>;
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].occurrenceCount, 10);
+  assert.equal(logs[0].savedAt, "2026-08-02T00:00:00.000Z");
+  assert.equal(logs[0].lastOccurredAt, "2026-08-02T00:00:09.000Z");
+});
+
+test("saves a new log when the deduplication window reaches thirty seconds", async () => {
+  const diagnostics = loadDiagnostics();
+  const storage = createStorage();
+
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry(),
+    "2026-08-02T00:00:00.000Z",
+  );
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry(),
+    "2026-08-02T00:00:30.000Z",
+  );
+
+  const logs = await diagnostics.getDiagnosticLogs(storage);
+  assert.equal(logs.length, 2);
+});
+
+test("saves a new failure after a successful parse resets deduplication", async () => {
+  const diagnostics = loadDiagnostics();
+  const storage = createStorage();
+
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry(),
+    "2026-08-02T00:00:00.000Z",
+  );
+  await diagnostics.markSuccessfulScan(storage, "2026-08-02T00:00:01.000Z");
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry(),
+    "2026-08-02T00:00:02.000Z",
+  );
+
+  const logs = await diagnostics.getDiagnosticLogs(storage);
+  assert.equal(logs.length, 2);
+});
+
+test("saves a separate log when the failure reason changes", async () => {
+  const diagnostics = loadDiagnostics();
+  const storage = createStorage();
+
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry("article_missing"),
+    "2026-08-02T00:00:00.000Z",
+  );
+  await diagnostics.appendDiagnosticLog(
+    storage,
+    createFailureEntry("time_element_missing"),
+    "2026-08-02T00:00:01.000Z",
+  );
+
+  const logs = await diagnostics.getDiagnosticLogs(storage);
+  assert.equal(logs.length, 2);
 });
