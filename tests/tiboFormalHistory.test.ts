@@ -142,6 +142,56 @@ test("converted event uses a conservative scope and a fixed factual summary", ()
   assert.equal(event.details?.resetMethod, "強制リセット");
 });
 
+test("automatically generated Tibo history is localized without Japanese leakage", () => {
+  const japaneseCharacters = /[\u3040-\u30FF]/;
+  const cases = [
+    { id: "celebration", reason: "ご祝儀リセット", text: "I reset usage limits for Codex and ChatGPT Work." },
+    { id: "compensation", reason: "詫びリセット", text: "I reset usage limits for Codex." },
+    { id: "regular", reason: "定期リセット", text: "I reset usage limits for ChatGPT Work." },
+    { id: "fallback", reason: null, text: "I reset usage limits." },
+  ] as const;
+
+  for (const testCase of cases) {
+    const signal = resetSignal({
+      tweet_id: `i18n-auto-reset-${testCase.id}`,
+      tweet_url: `https://x.com/thsottiaux/status/i18n-auto-reset-${testCase.id}`,
+      text: testCase.text,
+      ai_reset_type_ja: testCase.reason,
+    });
+    const data = getLocalRadarData({ formalTiboResets: [signal] });
+
+    for (const locale of ["en", "zh"] as const) {
+      const viewModel = getRadarViewModel(data, locale, false);
+      const item = viewModel.recentHistory.find(
+        (historyItem) => historyItem.key === `tibo-reset-${signal.tweet_id}`,
+      );
+
+      assert.ok(item, `${locale} Tibo history item should be present`);
+      const visibleText = [
+        item.title,
+        item.summary,
+        item.details?.cycleType,
+        item.details?.reasonType,
+        item.details?.resetMethod,
+        item.details?.scope,
+        item.details?.noticeToExecution,
+        item.details?.noticeType,
+        item.details?.note,
+        viewModel.latestWindow.title,
+        viewModel.latestWindow.summary,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join(" ");
+
+      assert.doesNotMatch(
+        visibleText,
+        japaneseCharacters,
+        `${locale} Tibo history contains un-translated Japanese text: ${visibleText}`,
+      );
+    }
+  }
+});
+
 test("static and dynamic history entries with the same tweet URL are merged once", () => {
   const dynamic = convertTiboResetSignalToHistoryEvent(resetSignal());
   const staticItem = {

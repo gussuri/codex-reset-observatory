@@ -307,6 +307,41 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo's teaser post stating 'See you tomorrow'",
     zh: "Tibo 关于‘明天见’的暗示动态",
   },
+  "Tibo氏によるご祝儀リセット": {
+    ja: "Tibo氏によるご祝儀リセット",
+    en: "Tibo celebration reset",
+    zh: "Tibo 庆祝重置",
+  },
+  "Tibo氏による詫びリセット": {
+    ja: "Tibo氏による詫びリセット",
+    en: "Tibo compensation reset",
+    zh: "Tibo 补偿重置",
+  },
+  "Tibo氏による定期リセット": {
+    ja: "Tibo氏による定期リセット",
+    en: "Tibo regular reset",
+    zh: "Tibo 定期重置",
+  },
+  "Tibo氏による利用上限リセット": {
+    ja: "Tibo氏による利用上限リセット",
+    en: "Tibo usage limits reset",
+    zh: "Tibo 使用限制重置",
+  },
+  "Tibo氏がCodexとChatGPT Workの利用上限リセット完了を発表しました。": {
+    ja: "Tibo氏がCodexとChatGPT Workの利用上限リセット完了を発表しました。",
+    en: "Tibo announced that usage limits for Codex and ChatGPT Work were reset.",
+    zh: "Tibo 宣布 Codex 和 ChatGPT Work 的使用限制已重置。",
+  },
+  "Tibo氏がCodexの利用上限リセット完了を発表しました。": {
+    ja: "Tibo氏がCodexの利用上限リセット完了を発表しました。",
+    en: "Tibo announced that Codex usage limits were reset.",
+    zh: "Tibo 宣布 Codex 的使用限制已重置。",
+  },
+  "Tibo氏がChatGPT Workの利用上限リセット完了を発表しました。": {
+    ja: "Tibo氏がChatGPT Workの利用上限リセット完了を発表しました。",
+    en: "Tibo announced that ChatGPT Work usage limits were reset.",
+    zh: "Tibo 宣布 ChatGPT Work 的使用限制已重置。",
+  },
   "Tibo氏の公式Xで告知あり": {
     ja: "Tibo氏の公式Xで告知あり",
     en: "Announced on Tibo's official X",
