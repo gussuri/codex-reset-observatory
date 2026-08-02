@@ -24,7 +24,7 @@
         "https://twitter.com/thsottiaux*",
         "https://twitter.com/notifications*"
       ],
-      "js": ["diagnostics.js", "content.js"],
+      "js": ["diagnostics.js", "runtime.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

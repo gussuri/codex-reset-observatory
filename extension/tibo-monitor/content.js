@@ -27,6 +27,40 @@
   let lastSeenTweetId = null;
   let lastScanError = null;
   let lastScanSummary = null;
+  let extensionContextInvalidated = false;
+  const intervalIds = [];
+  let mutationObserver = null;
+
+  function handleExtensionError(error, operation) {
+    if (TiboExtensionRuntime.isExtensionContextInvalidated(error)) {
+      if (!extensionContextInvalidated) {
+        console.info(
+          "[Tibo Extension] Extension context invalidated; stopping until the page is reloaded.",
+        );
+      }
+      extensionContextInvalidated = true;
+      intervalIds.forEach((intervalId) => clearInterval(intervalId));
+      mutationObserver?.disconnect();
+      return;
+    }
+
+    console.warn(`[Tibo Extension] ${operation} failed:`, error);
+  }
+
+  function runExtensionTask(task, operation) {
+    if (extensionContextInvalidated) return Promise.resolve();
+    return TiboExtensionRuntime.runSafely(task, (error) => {
+      handleExtensionError(error, operation);
+    });
+  }
+
+  function scheduleExtensionInterval(task, delay, operation) {
+    const intervalId = setInterval(() => {
+      runExtensionTask(task, operation);
+    }, delay);
+    intervalIds.push(intervalId);
+    return intervalId;
+  }
 
   // Check if tweet article is currently showing machine-translated text
   function isTranslatedTweet(article) {
@@ -89,25 +123,34 @@
     };
 
     chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn("[Tibo Extension] Heartbeat error:", chrome.runtime.lastError.message);
-      } else if (response && response.success) {
-        console.log("[Tibo Extension] Heartbeat sent successfully by leader tab.");
+      try {
+        if (chrome.runtime.lastError) {
+          handleExtensionError(
+            new Error(chrome.runtime.lastError.message),
+            "heartbeat message",
+          );
+        } else if (response && response.success) {
+          console.log("[Tibo Extension] Heartbeat sent successfully by leader tab.");
+        }
+      } catch (error) {
+        handleExtensionError(error, "heartbeat callback");
       }
     });
   }
 
   // Send initial heartbeat immediately and schedule 5-min timer
-  sendHeartbeat();
-  setInterval(sendHeartbeat, 5 * 60 * 1000);
+  runExtensionTask(sendHeartbeat, "initial heartbeat");
+  scheduleExtensionInterval(sendHeartbeat, 5 * 60 * 1000, "heartbeat");
 
   // Maintain leader lock timestamp every 10s if we are the current leader
-  setInterval(async () => {
+  async function refreshLeaderLock() {
     const data = await chrome.storage.local.get(["tibo_leader_tab_id"]);
     if (data.tibo_leader_tab_id === TAB_ID) {
       await chrome.storage.local.set({ tibo_leader_timestamp: Date.now() });
     }
-  }, 10 * 1000);
+  }
+
+  scheduleExtensionInterval(refreshLeaderLock, 10 * 1000, "leader lock");
 
   // Tweet DOM Inspector
   function buildArticleSnapshot(article, maskPostText) {
@@ -269,14 +312,14 @@
 
     if (summary.parseSuccessCount > 0) {
       TiboDiagnostics.markSuccessfulScan(chrome.storage.local).catch((error) => {
-        console.warn("[Tibo Extension] Diagnostic recovery marker save failed:", error);
+        handleExtensionError(error, "diagnostic recovery marker");
       });
     }
 
     const reasonCode = TiboDiagnostics.getScanFailureReason(summary);
     if (reasonCode) {
       saveScanDiagnostic(summary, reasonCode, tweetArticles, scanMessages, scanError).catch((error) => {
-        console.warn("[Tibo Extension] Diagnostic log save failed:", error);
+        handleExtensionError(error, "diagnostic log");
       });
     }
   }
@@ -284,38 +327,50 @@
   function sendWebhook(tweetId, text, tweetUrl, tweetCreatedAt) {
     const payload = { tweetId, text, tweetUrl, tweetCreatedAt };
 
-    chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
-      inFlightTweetIds.delete(tweetId);
+    try {
+      chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
+        inFlightTweetIds.delete(tweetId);
 
-      if (chrome.runtime.lastError) {
-        console.warn(`[Tibo Extension] Webhook error for ${tweetId}:`, chrome.runtime.lastError.message);
-        return;
-      }
+        try {
+          if (chrome.runtime.lastError) {
+            handleExtensionError(
+              new Error(chrome.runtime.lastError.message),
+              `Webhook for ${tweetId}`,
+            );
+            return;
+          }
 
-      if (response && response.success) {
-        processedTweetIds.add(tweetId);
-        if (response.skipped) {
-          console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
-        } else {
-          console.log(`[Tibo Extension] Webhook Success for ${tweetId}.`);
+          if (response && response.success) {
+            processedTweetIds.add(tweetId);
+            if (response.skipped) {
+              console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
+            } else {
+              console.log(`[Tibo Extension] Webhook Success for ${tweetId}.`);
+            }
+          } else {
+            console.warn(`[Tibo Extension] Webhook rejected for ${tweetId}:`, response?.error);
+          }
+        } catch (error) {
+          handleExtensionError(error, `Webhook callback for ${tweetId}`);
         }
-      } else {
-        console.warn(`[Tibo Extension] Webhook rejected for ${tweetId}:`, response?.error);
-      }
-    });
+      });
+    } catch (error) {
+      inFlightTweetIds.delete(tweetId);
+      handleExtensionError(error, `Webhook for ${tweetId}`);
+    }
   }
 
   // Initial Scan & MutationObserver Integration
-  scanTweets();
+  runExtensionTask(scanTweets, "initial scan");
 
-  const observer = new MutationObserver(() => {
-    scanTweets();
+  mutationObserver = new MutationObserver(() => {
+    runExtensionTask(scanTweets, "DOM scan");
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  mutationObserver.observe(document.body, { childList: true, subtree: true });
 
   // 60-second fallback polling interval
-  setInterval(scanTweets, 60 * 1000);
+  scheduleExtensionInterval(scanTweets, 60 * 1000, "polling scan");
 
   console.log("[Tibo Extension] Content script initialized with Service Worker Deduplication Delegation.");
 })();
