@@ -1,34 +1,39 @@
 import type { Metadata } from "next";
 import { HistoryView } from "@/components/HistoryView";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
+import {
+  SITE_NAME,
+  SITE_OG_IMAGE_URL,
+  siteUrl,
+} from "@/lib/siteMetadata";
 
 export const metadata: Metadata = {
-  applicationName: "Codex Reset Observatory",
+  applicationName: SITE_NAME,
   title: {
     absolute: "Codex Reset History - Recent Usage Limits Reset Signals",
   },
   description:
     "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
   alternates: {
-    canonical: "/en/history",
+    canonical: siteUrl("/en/history"),
     languages: {
-      ja: "/history",
-      en: "/en/history",
-      zh: "/zh/history",
+      ja: siteUrl("/history"),
+      en: siteUrl("/en/history"),
+      zh: siteUrl("/zh/history"),
     },
   },
   openGraph: {
     title: "Codex Reset History - Usage Limits Reset Signals",
     description:
       "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
-    url: "/en/history",
-    siteName: "Codex Reset Observatory",
+    url: siteUrl("/en/history"),
+    siteName: SITE_NAME,
     type: "article",
     locale: "en_US",
     alternateLocale: ["ja_JP"],
     images: [
       {
-        url: "/og-image.png",
+        url: SITE_OG_IMAGE_URL,
         width: 1200,
         height: 630,
         alt: "Codex Reset History",
@@ -40,7 +45,7 @@ export const metadata: Metadata = {
     title: "Codex Reset History - Usage Limits Reset Signals",
     description:
       "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
-    images: ["/og-image.png"],
+    images: [SITE_OG_IMAGE_URL],
   },
 };
 

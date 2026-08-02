@@ -1,0 +1,42 @@
+export const SITE_URL = "https://codex-reset-observatory.vercel.app";
+export const SITE_NAME = "Codex Reset Observatory";
+export const SITE_NAME_JA = "Codexリセット観測所";
+export const SITE_OG_IMAGE_URL = SITE_URL + "/og-image.png";
+
+export const HOME_TITLE_JA = "Codex利用上限のリセット状況・履歴・次回予測";
+export const HOME_DESCRIPTION_JA =
+  "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。";
+export const HOME_TITLE_EN =
+  "Codex Usage Limit Reset Status, History and Forecast";
+export const HOME_DESCRIPTION_EN =
+  "Check the latest Codex reset time, recent history, official notices, and the estimated likelihood of a reset within the next 24 or 48 hours.";
+export const HOME_TITLE_ZH = "Codex 使用上限重置状态、历史与预测";
+export const HOME_DESCRIPTION_ZH =
+  "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内重置的预测。";
+
+export function siteUrl(path = "/"): string {
+  if (path === "/") {
+    return SITE_URL + "/";
+  }
+
+  return SITE_URL + (path.startsWith("/") ? path : "/" + path);
+}
+
+export function getSiteJsonLd(locale: "ja" | "en" | "zh" = "ja") {
+  const descriptions = {
+    ja: HOME_DESCRIPTION_JA,
+    en: HOME_DESCRIPTION_EN,
+    zh: HOME_DESCRIPTION_ZH,
+  };
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": SITE_URL + "/#website",
+    name: SITE_NAME,
+    alternateName: [SITE_NAME_JA],
+    url: siteUrl("/"),
+    description: descriptions[locale],
+    inLanguage: locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP",
+  };
+}

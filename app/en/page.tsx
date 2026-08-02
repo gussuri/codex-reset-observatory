@@ -1,55 +1,50 @@
 import type { Metadata } from "next";
 import { RadarDashboard } from "@/components/RadarDashboard";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
+import {
+  HOME_DESCRIPTION_EN,
+  HOME_TITLE_EN,
+  SITE_NAME,
+  SITE_OG_IMAGE_URL,
+  siteUrl,
+} from "@/lib/siteMetadata";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  applicationName: "Codex Reset Observatory",
-  title: {
-    absolute: "Codex Usage Limits Reset Forecast & History",
-  },
-  description:
-    "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
-  keywords: [
-    "Codex reset",
-    "Codex usage limit reset",
-    "Codex Banked Reset",
-    "Codex reset history",
-    "OpenAI Codex reset",
-  ],
+  applicationName: SITE_NAME,
+  title: { absolute: HOME_TITLE_EN },
+  description: HOME_DESCRIPTION_EN,
   alternates: {
-    canonical: "/en",
+    canonical: siteUrl("/en"),
     languages: {
-      ja: "/",
-      en: "/en",
-      zh: "/zh",
+      ja: siteUrl("/"),
+      en: siteUrl("/en"),
+      zh: siteUrl("/zh"),
     },
   },
   openGraph: {
-    title: "Codex Usage Limits Reset Forecast & History",
-    description:
-      "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
-    url: "/en",
-    siteName: "Codex Reset Observatory",
+    title: HOME_TITLE_EN,
+    description: HOME_DESCRIPTION_EN,
+    url: siteUrl("/en"),
+    siteName: SITE_NAME,
     type: "website",
     locale: "en_US",
     alternateLocale: ["ja_JP"],
     images: [
       {
-        url: "/og-image.png",
+        url: SITE_OG_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "Codex Reset Observatory",
+        alt: SITE_NAME,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Codex Usage Limits Reset Forecast & History",
-    description:
-      "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
-    images: ["/og-image.png"],
+    title: HOME_TITLE_EN,
+    description: HOME_DESCRIPTION_EN,
+    images: [SITE_OG_IMAGE_URL],
   },
 };
 

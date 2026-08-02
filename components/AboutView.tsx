@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
+import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 
 type AboutViewProps = {
@@ -11,7 +12,7 @@ export function AboutView({ locale }: AboutViewProps) {
   const content = {
     ja: {
       category: "Codexリセット観測",
-      title: "Codexリセット観測所について",
+      title: SITE_NAME_JA + "について",
       subTitle: "Codexのリセット情報を観測・整理する非公式サイトです。",
       paragraphs: [
         "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
@@ -28,10 +29,10 @@ export function AboutView({ locale }: AboutViewProps) {
     },
     en: {
       category: "Codex reset reference",
-      title: "About Codex Reset Observatory",
+      title: "About " + SITE_NAME,
       subTitle: "An unofficial reference site for Codex reset history, weekly reset references, Banked Reset credits, and unscheduled reset signals.",
       paragraphs: [
-        "Codex Reset Observatory collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
+        SITE_NAME + " collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices, past reset history, and a weekly-cycle reference date so you can compare what is happening now with earlier reset patterns.",
         "The weekly reset date is a shared reference, not a guarantee that every account will refresh on exactly the same date.",
         "The unscheduled reset probability is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official OpenAI notice.",
@@ -45,10 +46,10 @@ export function AboutView({ locale }: AboutViewProps) {
     },
     zh: {
       category: "Codex 重置观测",
-      title: "关于 Codex 重置观测所",
+      title: "关于 " + SITE_NAME,
       subTitle: "一个用于了解 Codex 重置历史、每周循环重置参考日、手动重置额度以及随机重置信号的非官方参考网站。",
       paragraphs: [
-        "Codex 重置观测所旨在将重置相关的信息汇总在一处，以便用户快速查看最近的重置历史和当前的重置状况。",
+        SITE_NAME + "旨在将重置相关的信息汇总在一处，以便用户快速查看最近的重置历史和当前的重置状况。",
         "它汇集了官方重置预告、历史重置记录以及每周循环参考日期，让您可以将当前状况与早期的重置模式进行对比。",
         "每周重置日期仅为共享的参考基准，并不能保证每个账号都会在完全相同的日期刷新。",
         "随机重置期望度是基于公开信号、使用限制异常、社区活跃度以及官方更新整理出的参考估算值，并非 OpenAI 官方通知。",

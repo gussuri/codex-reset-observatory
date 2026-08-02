@@ -1,10 +1,11 @@
 import type { Locale } from "./types";
+import { SITE_NAME } from "../siteMetadata";
 
 export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   title: {
-    ja: "Codexリセット観測所",
-    en: "Codex Reset Observatory",
-    zh: "Codex 重置观测站",
+    ja: SITE_NAME,
+    en: SITE_NAME,
+    zh: SITE_NAME,
   },
   siteStatus: {
     ja: "サイトの状態",

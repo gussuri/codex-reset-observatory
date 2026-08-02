@@ -1,45 +1,50 @@
 import type { Metadata } from "next";
 import { AboutView } from "@/components/AboutView";
+import {
+  SITE_NAME,
+  SITE_OG_IMAGE_URL,
+  siteUrl,
+} from "@/lib/siteMetadata";
 
 export const metadata: Metadata = {
-  applicationName: "Codex Reset Observatory",
+  applicationName: SITE_NAME,
   title: {
-    absolute: "About Codex Reset Observatory",
+    absolute: "About " + SITE_NAME,
   },
   description:
-    "Learn what Codex Reset Observatory tracks, how reset history is handled, and why weekly reset references may differ after Banked Resets (Banked Resets).",
+    "Learn what " + SITE_NAME + " tracks, how reset history is handled, and why weekly reset references may differ after Banked Resets.",
   alternates: {
-    canonical: "/en/about",
+    canonical: siteUrl("/en/about"),
     languages: {
-      ja: "/about",
-      en: "/en/about",
-      zh: "/zh/about",
+      ja: siteUrl("/about"),
+      en: siteUrl("/en/about"),
+      zh: siteUrl("/zh/about"),
     },
   },
   openGraph: {
-    title: "About Codex Reset Observatory",
+    title: "About " + SITE_NAME,
     description:
       "A short explanation of the reset history, weekly reset reference, Banked Reset, and unscheduled reset probability shown on this unofficial Codex reset site.",
-    url: "/en/about",
-    siteName: "Codex Reset Observatory",
+    url: siteUrl("/en/about"),
+    siteName: SITE_NAME,
     type: "article",
     locale: "en_US",
     alternateLocale: ["ja_JP"],
     images: [
       {
-        url: "/og-image.png",
+        url: SITE_OG_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "About Codex Reset Observatory",
+        alt: "About " + SITE_NAME,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "About Codex Reset Observatory",
+    title: "About " + SITE_NAME,
     description:
       "What this unofficial Codex reset site tracks and how to read its reset references.",
-    images: ["/og-image.png"],
+    images: [SITE_OG_IMAGE_URL],
   },
 };
 

@@ -25,6 +25,7 @@ import {
 } from "@/lib/radar/clientState";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
@@ -131,10 +132,10 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-xs font-medium leading-5 text-teal-700 sm:text-sm sm:leading-6">
-                {translateUI("subTitle", locale)}
+                {locale === "ja" ? SITE_NAME_JA : translateUI("subTitle", locale)}
               </p>
               <h1 className="mt-0.5 whitespace-nowrap text-[1.15rem] font-semibold leading-tight tracking-normal text-slate-950 sm:mt-1 sm:text-4xl">
-                {translateUI("title", locale)}
+                {SITE_NAME}
               </h1>
               <p className="mt-2 max-h-10 max-w-2xl overflow-hidden text-xs leading-5 text-slate-600 sm:mt-3 sm:max-h-none sm:text-sm sm:leading-6">
                 {translateUI("description", locale)}
@@ -472,7 +473,7 @@ export function RadarDashboard({
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav
-            aria-label={translateUI("title", locale)}
+            aria-label={SITE_NAME}
             className="flex flex-wrap gap-3 text-sm text-slate-300"
           >
             <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/about" : `/${locale}/about`}>

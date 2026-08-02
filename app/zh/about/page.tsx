@@ -1,45 +1,50 @@
 import type { Metadata } from "next";
 import { AboutView } from "@/components/AboutView";
+import {
+  SITE_NAME,
+  SITE_OG_IMAGE_URL,
+  siteUrl,
+} from "@/lib/siteMetadata";
 
 export const metadata: Metadata = {
-  applicationName: "Codex 重置观测所",
+  applicationName: SITE_NAME,
   title: {
-    absolute: "关于 Codex 重置观测所",
+    absolute: "关于 " + SITE_NAME,
   },
   description:
-    "了解 Codex 重置观测所观测的内容、如何处理重置历史，以及为什么每周重置参考日期在手动重置后可能有所不同。",
+    "了解 " + SITE_NAME + " 观测的内容、如何处理重置历史，以及为什么每周重置参考日期在手动重置后可能有所不同。",
   alternates: {
-    canonical: "/zh/about",
+    canonical: siteUrl("/zh/about"),
     languages: {
-      ja: "/about",
-      en: "/en/about",
-      zh: "/zh/about",
+      ja: siteUrl("/about"),
+      en: siteUrl("/en/about"),
+      zh: siteUrl("/zh/about"),
     },
   },
   openGraph: {
-    title: "关于 Codex 重置观测所",
+    title: "关于 " + SITE_NAME,
     description:
       "在本站简要了解 Codex 重置历史、每周循环重置参考日、手动重置以及随机重置期望度。",
-    url: "/zh/about",
-    siteName: "Codex 重置观测所",
+    url: siteUrl("/zh/about"),
+    siteName: SITE_NAME,
     type: "article",
     locale: "zh_CN",
     alternateLocale: ["ja_JP", "en_US"],
     images: [
       {
-        url: "/og-image.png",
+        url: SITE_OG_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "关于 Codex 重置观测所",
+        alt: "关于 " + SITE_NAME,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "关于 Codex 重置观测所",
+    title: "关于 " + SITE_NAME,
     description:
       "本站简要了解 Codex 重置历史、每周循环重置参考日、手动重置以及随机重置期望度。",
-    images: ["/og-image.png"],
+    images: [SITE_OG_IMAGE_URL],
   },
 };
 
