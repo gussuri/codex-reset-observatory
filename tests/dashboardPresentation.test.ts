@@ -8,6 +8,7 @@ import { FaqView } from "../components/FaqView";
 import { ProbabilityMetrics } from "../components/ProbabilityMetrics";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -80,9 +81,11 @@ test("labels a dynamic notice by its post time when no execution time is schedul
 });
 
 test("keeps the normal dashboard focused on the current outlook", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
-      initialData: toPublicRadarSnapshot(getLocalRadarData({}), "ja"),
+      initialData: toPublicRadarSnapshot(data, "ja", { calculationNow }),
       locale: "ja",
     }),
   );
@@ -98,10 +101,15 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.ok(outlookIndex >= 0 && outlookIndex < disclaimerIndex);
   assert.match(html, /公式予告：なし/);
   assert.match(html, /現在の見立て/);
-  assert.match(html, /直近のリセットから\d+日経過しています/);
+  assert.match(
+    html,
+    /直近7日間でリセットが3回あり、現在の見込みは中程度です。直近のリセットから2日経過しています。/,
+  );
   assert.doesNotMatch(outlookText, /現在の見立ては24時間以内/);
+  assert.doesNotMatch(outlookText, /現在の可能性/);
   assert.doesNotMatch(outlookText, /基礎確率を算出/);
   assert.doesNotMatch(outlookText, /観測シグナルで補正/);
+  assert.doesNotMatch(outlookText, /。 /);
   assert.doesNotMatch(outlookText, /\d+%/);
   assert.match(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
   assert.match(html, /予測のしくみを見る →/);
@@ -156,7 +164,7 @@ test("keeps the forecast method link and labels localized across all dashboard l
   for (const item of cases) {
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
-        initialData: toPublicRadarSnapshot(getLocalRadarData({}), item.locale),
+        initialData: toPublicRadarSnapshot(getLocalRadarData({ calculationNow: new Date("2026-08-04T00:00:00.000Z") }), item.locale, { calculationNow: new Date("2026-08-04T00:00:00.000Z") }),
         locale: item.locale,
       }),
     );
@@ -165,6 +173,14 @@ test("keeps the forecast method link and labels localized across all dashboard l
     assert.match(html, new RegExp(item.description));
     assert.match(html, new RegExp(`href="${item.link.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.match(html, new RegExp(item.method));
+    const outlookLabel = item.locale === "ja" ? "現在の見立て" : item.locale === "en" ? "Current outlook" : "当前判断";
+    const outlookIndex = html.indexOf(outlookLabel);
+    const disclaimerIndex = html.indexOf(item.locale === "ja" ? "非公式の予測です" : item.locale === "en" ? "This is an unofficial forecast" : "本预测并非官方信息");
+    const outlookText = html.slice(outlookIndex, disclaimerIndex);
+    assert.doesNotMatch(outlookText, /。 /);
+    if (item.locale === "en") {
+      assert.doesNotMatch(outlookText, / {2,}/);
+    }
     assert.doesNotMatch(
       html,
       /過去のリセット間隔から算出した基礎確率|Track Codex reset history and a statistical forecast|查看 Codex 重置历史，以及根据过去重置间隔计算基础概率/,
@@ -180,5 +196,52 @@ test("adds the forecast-method anchor to each localized FAQ", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const html = renderToStaticMarkup(React.createElement(FaqView, { locale }));
     assert.match(html, /id="forecast-method"/);
+  }
+});
+
+test("joins display outlook sentences without locale-specific spacing errors", () => {
+  const now = new Date("2026-08-04T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const baseEvaluation = getLocalSignalEvaluation(data, now);
+  const branchEvaluations = [
+    {
+      environment: { official_updates_24h: 1 },
+      statusIncidents: {},
+    },
+    {
+      environment: {},
+      statusIncidents: { activeStatusIncidentCount: 1 },
+    },
+    {
+      environment: { issue_or_limit_anomalies_24h: 1 },
+      statusIncidents: {},
+    },
+  ];
+
+  for (const branch of branchEvaluations) {
+    const evaluation = {
+      ...baseEvaluation,
+      environment: { ...baseEvaluation.environment, ...branch.environment },
+      statusIncidents: { ...baseEvaluation.statusIncidents, ...branch.statusIncidents },
+    };
+
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const reason = getDisplayProbabilityReason(
+        data,
+        0.25,
+        0.45,
+        locale,
+        evaluation,
+        null,
+        now,
+      );
+
+      assert.ok(reason);
+      if (locale === "en") {
+        assert.doesNotMatch(reason, / {2,}/);
+      } else {
+        assert.doesNotMatch(reason, /。 /);
+      }
+    }
   }
 });

@@ -1394,7 +1394,7 @@ export function getDisplayProbabilityReason(
         ? `There have been ${recentResetCount7d} resets in the last seven days, so the current likelihood is ${expectationText}.`
         : locale === "zh"
           ? `最近 7 天内已发生 ${recentResetCount7d} 次重置，当前可能性${expectationText}。`
-          : `直近7日間でリセットが${recentResetCount7d}回あり、現在の可能性は${expectationText}です。`,
+          : `直近7日間でリセットが${recentResetCount7d}回あり、現在の見込みは${expectationText}です。`,
     );
   }
 
@@ -1427,7 +1427,11 @@ export function getDisplayProbabilityReason(
     );
   }
 
-  return sentences.slice(0, 2).join(" ");
+  return joinDisplayReasonSentences(sentences.slice(0, 2), locale);
+}
+
+function joinDisplayReasonSentences(sentences: string[], locale: Locale) {
+  return sentences.filter(Boolean).join(locale === "en" ? " " : "");
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {
