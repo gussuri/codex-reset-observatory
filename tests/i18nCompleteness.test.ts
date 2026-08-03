@@ -77,7 +77,6 @@ test("i18n Automated Check: RadarViewModel reasoningSummary contains zero Japane
 
 test("i18n Automated Check: data-state warnings are complete for every locale", () => {
   const warningKeys = [
-    "staleDataWarning",
     "degradedDataWarning",
     "dataUnavailable",
     "lastSuccessfulRefresh",

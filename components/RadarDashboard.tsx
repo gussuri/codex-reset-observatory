@@ -94,6 +94,8 @@ export function RadarDashboard({
   );
   const dashboardDataState = getDashboardDataState(state);
   const isDataUnavailable = dashboardDataState === "unavailable";
+  const shouldShowDataWarning =
+    dashboardDataState === "degraded" || dashboardDataState === "unavailable";
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const refreshMs = useMemo(
@@ -172,7 +174,7 @@ export function RadarDashboard({
           </div>
         </header>
 
-        {dashboardDataState !== "ready" ? (
+        {shouldShowDataWarning ? (
           <section
             role={dashboardDataState === "unavailable" ? "alert" : "status"}
             className={`rounded-lg border px-4 py-3 text-sm leading-6 ${
@@ -182,11 +184,9 @@ export function RadarDashboard({
             }`}
           >
             {translateUI(
-              dashboardDataState === "stale"
-                ? "staleDataWarning"
-                : dashboardDataState === "degraded"
-                  ? "degradedDataWarning"
-                  : "dataUnavailable",
+              dashboardDataState === "degraded"
+                ? "degradedDataWarning"
+                : "dataUnavailable",
               locale,
             )}
           </section>

@@ -27,11 +27,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Last updated",
     zh: "上次更新",
   },
-  staleDataWarning: {
-    ja: "最新データの取得に失敗したため、最後に取得できた結果を表示しています。",
-    en: "Live refresh failed. Showing the last successfully fetched result.",
-    zh: "实时更新失败，当前显示上次成功获取的结果。",
-  },
   degradedDataWarning: {
     ja: "一部のライブ情報源を取得できていないため、見積もりが不完全な可能性があります。",
     en: "Some live sources are unavailable, so this estimate may be incomplete.",

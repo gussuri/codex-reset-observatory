@@ -90,3 +90,33 @@ test("dashboard renders the translated reset history label", () => {
   assert.match(html, /Reset history/);
   assert.doesNotMatch(html, />resetHistory</);
 });
+
+test("stale fallback data renders normally without a public warning in every locale", () => {
+  const warningText = {
+    ja: "最新データの取得に失敗したため、最後に取得できた結果を表示しています。",
+    en: "Live refresh failed. Showing the last successfully fetched result.",
+    zh: "实时更新失败，当前显示上次成功获取的结果。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const data = toPublicRadarSnapshot(getLocalRadarData({}), locale, {
+      stale: true,
+      generatedAt: "2026-08-03T00:00:00.000Z",
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: data, locale }),
+    );
+
+    assert.doesNotMatch(html, new RegExp(warningText[locale]));
+    assert.match(html, /24/);
+    assert.match(html, /48/);
+  }
+});
+
+test("unavailable data keeps the existing public error warning", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: null, locale: "ja" }),
+  );
+
+  assert.match(html, /ライブデータも保存済みデータも取得できません/);
+});
