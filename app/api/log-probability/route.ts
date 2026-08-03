@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
 import { getRadarViewModel } from "@/lib/radar";
-import { getLocalSignalEvaluation } from "@/lib/radar/probability";
+import {
+  getActiveOfficialNotice,
+  getLocalProbabilityCalculation,
+  getLocalSignalEvaluation,
+} from "@/lib/radar/probability";
 import { getExpectationKey } from "@/lib/radar/helpers";
-import { hasOfficialNoticeForLog } from "@/lib/logProbability";
+import {
+  buildProbabilityDebugInfo,
+  hasOfficialNoticeForLog,
+} from "@/lib/logProbability";
 
 export const dynamic = "force-dynamic";
 
@@ -38,12 +45,33 @@ async function handleLogRequest(request: NextRequest) {
   }
 
   try {
+    const calculationNow = new Date();
     // 1. 最新の観測データをフェッチ
-    const rawData = await fetchCurrentRadarData({ cache: "no-store" });
+    const rawData = await fetchCurrentRadarData({
+      cache: "no-store",
+      calculationNow,
+    });
     
-    const signalEvaluation = getLocalSignalEvaluation(rawData);
+    const signalEvaluation = getLocalSignalEvaluation(rawData, calculationNow);
+    const activeOfficialNotice = getActiveOfficialNotice(
+      rawData,
+      signalEvaluation.latestResetAt,
+      calculationNow,
+    );
     // 2. 同じシグナル判定を使ってViewModelと保存情報を構築
-    const viewModel = getRadarViewModel(rawData, "ja", true, signalEvaluation);
+    const viewModel = getRadarViewModel(
+      rawData,
+      "ja",
+      true,
+      signalEvaluation,
+      calculationNow,
+    );
+    const probabilityCalculation = getLocalProbabilityCalculation(rawData, {
+      now: calculationNow,
+      signalEvaluation,
+      activeOfficialNotice,
+      regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+    });
 
     // 3. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;
@@ -58,7 +86,7 @@ async function handleLogRequest(request: NextRequest) {
     });
 
     // 4. 重複排除用の logged_hour の計算 (時分秒を 00:00:00 に丸める)
-    const loggedHour = new Date();
+    const loggedHour = new Date(calculationNow);
     loggedHour.setMinutes(0, 0, 0);
     loggedHour.setMilliseconds(0);
 
@@ -76,8 +104,8 @@ async function handleLogRequest(request: NextRequest) {
           official_notice: hasOfficialNotice,
           incident_hint: incidentHintCount,
           status_incidents: statusIncidentCount,
-          debug_info: {
-            logged_at: new Date().toISOString(),
+          debug_info: buildProbabilityDebugInfo({
+            logged_at: calculationNow.toISOString(),
             latest_reset_at:
               signalEvaluation.latestResetAt?.toISOString() ?? null,
             observed_status_incident_count:
@@ -101,7 +129,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          },
+          }, probabilityCalculation, rawData.checked_at, calculationNow),
         },
         {
           onConflict: "logged_hour",
@@ -115,7 +143,7 @@ async function handleLogRequest(request: NextRequest) {
     }
 
     const savedRecord = insertedRows && insertedRows.length > 0 ? insertedRows[0] : null;
-    const recordedAt = savedRecord?.recorded_at || new Date().toISOString();
+    const recordedAt = savedRecord?.recorded_at || calculationNow.toISOString();
 
     return NextResponse.json({
       ok: true,

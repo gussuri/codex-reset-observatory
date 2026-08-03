@@ -4,6 +4,8 @@ export const EXPECTATION_THRESHOLDS = {
   veryHigh: { p24h: 0.80, p48h: 0.85 },
 } as const;
 
+export const PROBABILITY_MODEL_VERSION = "heuristic-v2-time-consistent";
+
 export const RECOMMENDED_ACTION_THRESHOLDS = {
   watch: 0.1,
   medium: 0.3,

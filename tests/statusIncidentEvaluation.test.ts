@@ -283,8 +283,8 @@ test("applies operational suppression consistently to probability", () => {
   };
 
   assert.equal(
-    getLocalResetProbability(withIncident, "24h"),
-    getLocalResetProbability(withoutIncident, "24h"),
+    getLocalResetProbability(withIncident, "24h", undefined, undefined, NOW),
+    getLocalResetProbability(withoutIncident, "24h", undefined, undefined, NOW),
   );
 });
 

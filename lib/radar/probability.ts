@@ -2,6 +2,7 @@ import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "@/data/o
 import {
   AUTOMATED_TIBO_SIGNAL_WEIGHTS,
   LOCAL_PROBABILITY_WEIGHTS,
+  PROBABILITY_MODEL_VERSION,
   TIBO_TEASER_DECAY_HOURS,
 } from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
@@ -15,7 +16,6 @@ import {
   type StatusIncidentEvaluation,
 } from "./signalEvaluation";
 import {
-  getCalendarDayDelta,
   getLatestIsoDate,
   isWithinHours,
   getDateTime,
@@ -48,6 +48,423 @@ export type ActiveOfficialNotice = {
   sourceLabel: string;
 };
 
+export type ProbabilityPair = {
+  probability24h: number;
+  probability48h: number;
+};
+
+export type ProbabilityBreakdown = {
+  unit: "decimal";
+  base: ProbabilityPair;
+  contributions: {
+    recentResetMomentum: ProbabilityPair;
+    elapsedSinceReset: ProbabilityPair;
+    localHistoryPressure: ProbabilityPair;
+    historicalIntervalPressure: ProbabilityPair;
+    regularResetProximity: ProbabilityPair;
+    teaserOrEvent: ProbabilityPair;
+    statusSignal: ProbabilityPair;
+    officialIncidentHint: ProbabilityPair;
+    officialUpdate: ProbabilityPair;
+    communitySignal: ProbabilityPair;
+    usageLimitAnomaly: ProbabilityPair;
+    complaintPressure: ProbabilityPair;
+  };
+  beforeClamp: ProbabilityPair;
+  afterClamp: ProbabilityPair;
+  officialNoticeOverride: {
+    active: boolean;
+    probability24h: number | null;
+    probability48h: number | null;
+  };
+};
+
+export type ProbabilityInputSnapshot = {
+  calculatedAt: string;
+  lastCompletedResetAt: string | null;
+  elapsedHoursSinceReset: number | null;
+  elapsedDaysSinceReset: number | null;
+  recentCompletedResetCount7d: number;
+  regularResetExpectedAt: string | null;
+  activeOfficialNotice: boolean;
+  activeTeaserCount: number;
+  weightedStatusScore: number;
+  officialIncidentHintCount: number;
+  officialUpdateCount: number;
+  communityMentionCount: number;
+  usageLimitAnomalyCount: number;
+  complaintPressure: "low" | "medium" | "high";
+  activeStatusIncidentCount: number;
+  recentResolvedStatusIncidentCount: number;
+  includedStatusIncidentCount: number;
+};
+
+export type ProbabilityCalculationAudit = {
+  modelVersion: string;
+  probability24h: number;
+  probability48h: number;
+  inputSnapshot: ProbabilityInputSnapshot;
+  breakdown: ProbabilityBreakdown;
+};
+
+export type ProbabilityCalculationOptions = {
+  now?: Date;
+  signalEvaluation?: LocalSignalEvaluation;
+  activeOfficialNotice?: ActiveOfficialNotice | null;
+  regularResetExpectedAt?: string | null;
+};
+
+type ProbabilityContributions = ProbabilityBreakdown["contributions"];
+type PeriodContributions = {
+  [Key in keyof ProbabilityContributions]: number;
+};
+
+function zeroProbabilityPair(): ProbabilityPair {
+  return { probability24h: 0, probability48h: 0 };
+}
+
+function getProbabilityComponents(
+  data: RadarData | null,
+  signalEvaluation: LocalSignalEvaluation,
+  now: Date,
+) {
+  const environment = signalEvaluation.environment;
+  const sortedSignals = [
+    ...(data?.active_tibo_signals ?? []),
+    ...(data?.formal_tibo_resets ?? []),
+  ]
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(left.tweet_created_at).getTime() -
+        new Date(right.tweet_created_at).getTime(),
+    );
+  const executionTime = getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
+  const validTeasers = sortedSignals.filter(
+    (signal) =>
+      signal.signal_type === "teaser" &&
+      (signal.confidence ?? 0) >= 0.8 &&
+      new Date(signal.tweet_created_at).getTime() > executionTime,
+  );
+
+  const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (signal) =>
+      (signal.type === "probability_boost" ||
+        typeof signal.boostValue24h === "number" ||
+        typeof signal.boostValue48h === "number" ||
+        typeof signal.boostValue === "number") &&
+      isCurrentLocalSignal(signal, now),
+  );
+  const activeTeaserOrEvent = activeBoostSignals.length > 0 || validTeasers.length > 0;
+  const teaserOrEvent: ProbabilityPair = {
+    probability24h: activeBoostSignals.reduce(
+      (sum, signal) =>
+        sum +
+        (signal.boostValue24h ?? signal.boostValue ?? 0) *
+          (typeof signal.boostDecayHours === "number"
+            ? getTeaserDecayFactor(signal.observedAt, now, signal.boostDecayHours)
+            : 1),
+      0,
+    ),
+    probability48h: activeBoostSignals.reduce(
+      (sum, signal) =>
+        sum +
+        (signal.boostValue48h ?? signal.boostValue ?? 0) *
+          (typeof signal.boostDecayHours === "number"
+            ? getTeaserDecayFactor(signal.observedAt, now, signal.boostDecayHours)
+            : 1),
+      0,
+    ),
+  };
+
+  if (validTeasers.length > 0 && activeBoostSignals.length === 0) {
+    const teaser = validTeasers[0];
+    teaserOrEvent.probability24h += getTeaserBoost("24h", teaser.tweet_created_at, now);
+    teaserOrEvent.probability48h += getTeaserBoost("48h", teaser.tweet_created_at, now);
+  }
+
+  const officialIncidentHintCount = clampCount(
+    environment.official_incident_hints_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialIncidentHints,
+  );
+  const officialUpdateCount = clampCount(
+    environment.official_updates_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialUpdates,
+  );
+  const communityMentionCount = clampCount(
+    environment.community_mentions_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.communityMentions,
+  );
+  const usageLimitAnomalyCount = clampCount(
+    environment.issue_or_limit_anomalies_24h,
+    0,
+    LOCAL_PROBABILITY_WEIGHTS.countLimits.issueAnomalies,
+  );
+  const complaintPressure = signalEvaluation.complaintPressure.level;
+  const complaintPressureValue =
+    complaintPressure === "high"
+      ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.high
+      : complaintPressure === "medium"
+        ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.medium
+        : LOCAL_PROBABILITY_WEIGHTS.pressureBoost.low;
+
+  return {
+    activeTeaserCount: validTeasers.length,
+    activeTeaserOrEvent,
+    teaserOrEvent,
+    officialIncidentHintCount,
+    officialUpdateCount,
+    communityMentionCount,
+    usageLimitAnomalyCount,
+    complaintPressure,
+    complaintPressureValue,
+  };
+}
+
+function getPeriodContributions(
+  period: "24h" | "48h",
+  data: RadarData | null,
+  signalEvaluation: LocalSignalEvaluation,
+  components: ReturnType<typeof getProbabilityComponents>,
+  regularResetExpectedAt: string | null | undefined,
+  now: Date,
+): PeriodContributions {
+  const weightKey = period === "24h" ? "within24h" : "within48h";
+  return {
+    recentResetMomentum: getMomentumBoost(period, data, now),
+    elapsedSinceReset: getElapsedDayBoost(data, now),
+    localHistoryPressure: components.activeTeaserOrEvent
+      ? getLocalHistoryPressure(period, data, now)
+      : 0,
+    historicalIntervalPressure: getHistoricalResetPressure(period, data, now),
+    regularResetProximity: getRegularResetProximityBoost(
+      period,
+      regularResetExpectedAt,
+      now,
+    ),
+    teaserOrEvent:
+      period === "24h"
+        ? components.teaserOrEvent.probability24h
+        : components.teaserOrEvent.probability48h,
+    statusSignal:
+      signalEvaluation.statusIncidents.weightedStatusScore *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey],
+    officialIncidentHint:
+      components.officialIncidentHintCount *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialIncidentHint[weightKey],
+    officialUpdate:
+      components.officialUpdateCount *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialUpdate[weightKey],
+    communitySignal:
+      components.communityMentionCount *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.communityMention[weightKey],
+    usageLimitAnomaly:
+      components.usageLimitAnomalyCount *
+      LOCAL_PROBABILITY_WEIGHTS.signalWeights.issueAnomaly[weightKey],
+    complaintPressure: components.complaintPressureValue,
+  };
+}
+
+function sumPeriodContributions(
+  base: number,
+  contributions: ProbabilityContributions,
+  period: "24h" | "48h",
+) {
+  return base + Object.values(contributions).reduce(
+    (sum, value) => sum + value[period === "24h" ? "probability24h" : "probability48h"],
+    0,
+  );
+}
+
+function clampProbability(value: number, period: "24h" | "48h") {
+  const weightKey = period === "24h" ? "within24h" : "within48h";
+  const minLimit = LOCAL_PROBABILITY_WEIGHTS.min[weightKey];
+  return Math.min(
+    LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
+    Math.max(minLimit, value),
+  );
+}
+
+export function getLocalProbabilityCalculation(
+  data: RadarData | null,
+  options: ProbabilityCalculationOptions = {},
+): ProbabilityCalculationAudit {
+  const now = options.now ?? new Date();
+  const signalEvaluation =
+    options.signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const activeOfficialNotice =
+    options.activeOfficialNotice === undefined
+      ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now)
+      : options.activeOfficialNotice;
+  const regularResetExpectedAt = options.regularResetExpectedAt ?? null;
+  const components = getProbabilityComponents(data, signalEvaluation, now);
+  const lastResetAt = getLastGlobalResetAt(data, now);
+  const elapsedMs = lastResetAt
+    ? Math.max(0, now.getTime() - lastResetAt.getTime())
+    : null;
+  const elapsedHoursSinceReset = elapsedMs === null ? null : elapsedMs / (60 * 60 * 1000);
+  const elapsedDaysSinceReset = elapsedMs === null ? null : elapsedMs / (24 * 60 * 60 * 1000);
+  const recentCompletedResetCount7d = getRecent7DayResetCount(data, now);
+  const inputSnapshot: ProbabilityInputSnapshot = {
+    calculatedAt: now.toISOString(),
+    lastCompletedResetAt: lastResetAt?.toISOString() ?? null,
+    elapsedHoursSinceReset,
+    elapsedDaysSinceReset,
+    recentCompletedResetCount7d,
+    regularResetExpectedAt,
+    activeOfficialNotice: Boolean(activeOfficialNotice),
+    activeTeaserCount: components.activeTeaserCount,
+    weightedStatusScore: signalEvaluation.statusIncidents.weightedStatusScore,
+    officialIncidentHintCount: components.officialIncidentHintCount,
+    officialUpdateCount: components.officialUpdateCount,
+    communityMentionCount: components.communityMentionCount,
+    usageLimitAnomalyCount: components.usageLimitAnomalyCount,
+    complaintPressure: components.complaintPressure,
+    activeStatusIncidentCount: signalEvaluation.statusIncidents.activeStatusIncidentCount,
+    recentResolvedStatusIncidentCount: signalEvaluation.statusIncidents.recentResolvedIncidentCount,
+    includedStatusIncidentCount: signalEvaluation.statusIncidents.includedIncidentCount,
+  };
+
+  const base: ProbabilityPair = {
+    probability24h: LOCAL_PROBABILITY_WEIGHTS.base.within24h,
+    probability48h: LOCAL_PROBABILITY_WEIGHTS.base.within48h,
+  };
+  if (activeOfficialNotice) {
+    const probability24h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within24h;
+    const probability48h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within48h;
+    return {
+      modelVersion: PROBABILITY_MODEL_VERSION,
+      probability24h,
+      probability48h,
+      inputSnapshot,
+      breakdown: {
+        unit: "decimal",
+        base,
+        contributions: {
+          recentResetMomentum: zeroProbabilityPair(),
+          elapsedSinceReset: zeroProbabilityPair(),
+          localHistoryPressure: zeroProbabilityPair(),
+          historicalIntervalPressure: zeroProbabilityPair(),
+          regularResetProximity: zeroProbabilityPair(),
+          teaserOrEvent: zeroProbabilityPair(),
+          statusSignal: zeroProbabilityPair(),
+          officialIncidentHint: zeroProbabilityPair(),
+          officialUpdate: zeroProbabilityPair(),
+          communitySignal: zeroProbabilityPair(),
+          usageLimitAnomaly: zeroProbabilityPair(),
+          complaintPressure: zeroProbabilityPair(),
+        },
+        beforeClamp: { probability24h, probability48h },
+        afterClamp: { probability24h, probability48h },
+        officialNoticeOverride: {
+          active: true,
+          probability24h,
+          probability48h,
+        },
+      },
+    };
+  }
+
+  const contributions24h = getPeriodContributions(
+    "24h",
+    data,
+    signalEvaluation,
+    components,
+    regularResetExpectedAt,
+    now,
+  );
+  const contributions48h = getPeriodContributions(
+    "48h",
+    data,
+    signalEvaluation,
+    components,
+    regularResetExpectedAt,
+    now,
+  );
+  const contributions: ProbabilityContributions = {
+    recentResetMomentum: {
+      probability24h: contributions24h.recentResetMomentum,
+      probability48h: contributions48h.recentResetMomentum,
+    },
+    elapsedSinceReset: {
+      probability24h: contributions24h.elapsedSinceReset,
+      probability48h: contributions48h.elapsedSinceReset,
+    },
+    localHistoryPressure: {
+      probability24h: contributions24h.localHistoryPressure,
+      probability48h: contributions48h.localHistoryPressure,
+    },
+    historicalIntervalPressure: {
+      probability24h: contributions24h.historicalIntervalPressure,
+      probability48h: contributions48h.historicalIntervalPressure,
+    },
+    regularResetProximity: {
+      probability24h: contributions24h.regularResetProximity,
+      probability48h: contributions48h.regularResetProximity,
+    },
+    teaserOrEvent: {
+      probability24h: contributions24h.teaserOrEvent,
+      probability48h: contributions48h.teaserOrEvent,
+    },
+    statusSignal: {
+      probability24h: contributions24h.statusSignal,
+      probability48h: contributions48h.statusSignal,
+    },
+    officialIncidentHint: {
+      probability24h: contributions24h.officialIncidentHint,
+      probability48h: contributions48h.officialIncidentHint,
+    },
+    officialUpdate: {
+      probability24h: contributions24h.officialUpdate,
+      probability48h: contributions48h.officialUpdate,
+    },
+    communitySignal: {
+      probability24h: contributions24h.communitySignal,
+      probability48h: contributions48h.communitySignal,
+    },
+    usageLimitAnomaly: {
+      probability24h: contributions24h.usageLimitAnomaly,
+      probability48h: contributions48h.usageLimitAnomaly,
+    },
+    complaintPressure: {
+      probability24h: contributions24h.complaintPressure,
+      probability48h: contributions48h.complaintPressure,
+    },
+  };
+  const beforeClamp: ProbabilityPair = {
+    probability24h: sumPeriodContributions(base.probability24h, contributions, "24h"),
+    probability48h: sumPeriodContributions(base.probability48h, contributions, "48h"),
+  };
+  const clamped24h = clampProbability(beforeClamp.probability24h, "24h");
+  const clamped48h = clampProbability(beforeClamp.probability48h, "48h");
+  const afterClamp: ProbabilityPair = {
+    probability24h: clamped24h,
+    probability48h: Math.max(clamped24h, clamped48h),
+  };
+
+  return {
+    modelVersion: PROBABILITY_MODEL_VERSION,
+    probability24h: afterClamp.probability24h,
+    probability48h: afterClamp.probability48h,
+    inputSnapshot,
+    breakdown: {
+      unit: "decimal",
+      base,
+      contributions,
+      beforeClamp,
+      afterClamp,
+      officialNoticeOverride: {
+        active: false,
+        probability24h: null,
+        probability48h: null,
+      },
+    },
+  };
+}
+
 export function getLocalResetProbability(
   data: RadarData | null,
   period: "24h" | "48h",
@@ -56,159 +473,15 @@ export function getLocalResetProbability(
   now: Date = new Date(),
   regularResetExpectedAt?: string | null,
 ): number {
-  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
-  const resolvedOfficialNotice = activeOfficialNotice === undefined
-    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
-    : activeOfficialNotice;
-  const probability = calculateLocalResetProbability(
-    data,
-    period,
-    resolvedSignalEvaluation,
-    resolvedOfficialNotice,
+  const calculation = getLocalProbabilityCalculation(data, {
     now,
+    signalEvaluation,
+    activeOfficialNotice,
     regularResetExpectedAt,
-  );
-
-  if (period === "48h") {
-    const probability24h = calculateLocalResetProbability(
-      data,
-      "24h",
-      resolvedSignalEvaluation,
-      resolvedOfficialNotice,
-      now,
-      regularResetExpectedAt,
-    );
-    return Math.max(probability24h, probability);
-  }
-
-  return probability;
-}
-
-function calculateLocalResetProbability(
-  data: RadarData | null,
-  period: "24h" | "48h",
-  signalEvaluation: LocalSignalEvaluation,
-  activeOfficialNotice: ActiveOfficialNotice | null,
-  now: Date,
-  regularResetExpectedAt?: string | null,
-): number {
-  const weightKey = period === "24h" ? "within24h" : "within48h";
-  const tiboSignals = [
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.formal_tibo_resets ?? []),
-  ];
-
-  // 1. Sort active Tibo signals by tweet_created_at ascending for time-ordered evaluation
-  const sortedSignals = (tiboSignals ?? [])
-    .slice()
-    .sort((a, b) => new Date(a.tweet_created_at).getTime() - new Date(b.tweet_created_at).getTime());
-
-  // 2. Find latest valid reset_executed signal (confidence >= 0.95)
-  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
-  const executionTime = latestExecutionAt?.getTime() ?? 0;
-
-  const validTeaser = sortedSignals.find(
-    (s) =>
-      s.signal_type === "teaser" &&
-      (s.confidence ?? 0) >= 0.80 &&
-      new Date(s.tweet_created_at).getTime() > executionTime
-  );
-
-  // A normalized active official notice drives Notice Mode (24h: 90%, 48h: 96%).
-  if (activeOfficialNotice) {
-    return LOCAL_PROBABILITY_WEIGHTS.officialNotice[weightKey];
-  }
-
-  const environment = signalEvaluation.environment;
-  const statusIncidents = signalEvaluation.statusIncidents.weightedStatusScore;
-  const officialIncidentHints = clampCount(
-    environment?.official_incident_hints_24h,
-    0,
-    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialIncidentHints,
-  );
-  const officialUpdates = clampCount(
-    environment?.official_updates_24h,
-    0,
-    LOCAL_PROBABILITY_WEIGHTS.countLimits.officialUpdates,
-  );
-  const communityMentions = clampCount(
-    environment?.community_mentions_24h,
-    0,
-    LOCAL_PROBABILITY_WEIGHTS.countLimits.communityMentions,
-  );
-  const issueAnomalies = clampCount(
-    environment?.issue_or_limit_anomalies_24h,
-    0,
-    LOCAL_PROBABILITY_WEIGHTS.countLimits.issueAnomalies,
-  );
-  const complaintPressure = signalEvaluation.complaintPressure.level;
-  const pressureBoost =
-    complaintPressure === "high"
-      ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.high
-      : complaintPressure === "medium"
-        ? LOCAL_PROBABILITY_WEIGHTS.pressureBoost.medium
-        : LOCAL_PROBABILITY_WEIGHTS.pressureBoost.low;
-
-  const base = LOCAL_PROBABILITY_WEIGHTS.base[weightKey];
-
-  // 期間限定のイベントブースト（確率底上げ）を収集して加算
-  const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
-    (signal) =>
-      (signal.type === "probability_boost" ||
-        typeof signal.boostValue24h === "number" ||
-        typeof signal.boostValue48h === "number" ||
-        typeof signal.boostValue === "number") &&
-      isCurrentLocalSignal(signal, now)
-  );
-
-  let eventBoost = activeBoostSignals.reduce((sum, sig) => {
-    const boost = period === "24h"
-      ? (sig.boostValue24h ?? sig.boostValue ?? 0)
-      : (sig.boostValue48h ?? sig.boostValue ?? 0);
-
-    const decayFactor = typeof sig.boostDecayHours === "number"
-      ? getTeaserDecayFactor(sig.observedAt, now, sig.boostDecayHours)
-      : 1;
-
-    return sum + boost * decayFactor;
-  }, 0);
-
-  // If valid time-ordered teaser exists (confidence >= 0.80) and no local teaser boost signal is already applied, add automated teaser boost
-  if (validTeaser && activeBoostSignals.length === 0) {
-    eventBoost += getTeaserBoost(period, validTeaser.tweet_created_at, now);
-  }
-
-  const hasActiveTeaserOrEventBoost = activeBoostSignals.length > 0 || Boolean(validTeaser);
-
-  const score =
-    base +
-    getMomentumBoost(period, data) +
-    (hasActiveTeaserOrEventBoost ? getLocalHistoryPressure(period, data) : 0) +
-    getElapsedDayBoost(data) +
-    getHistoricalResetPressure(period, data, now) +
-    getRegularResetProximityBoost(period, regularResetExpectedAt, now) +
-    statusIncidents *
-      LOCAL_PROBABILITY_WEIGHTS.signalWeights.statusIncident[weightKey] +
-    officialIncidentHints *
-      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialIncidentHint[weightKey] +
-    officialUpdates *
-      LOCAL_PROBABILITY_WEIGHTS.signalWeights.officialUpdate[weightKey] +
-    communityMentions *
-      LOCAL_PROBABILITY_WEIGHTS.signalWeights.communityMention[weightKey] +
-    issueAnomalies *
-      LOCAL_PROBABILITY_WEIGHTS.signalWeights.issueAnomaly[weightKey] +
-    pressureBoost +
-    eventBoost;
-
-  const minLimit =
-    typeof LOCAL_PROBABILITY_WEIGHTS.min === "object"
-      ? LOCAL_PROBABILITY_WEIGHTS.min[weightKey]
-      : LOCAL_PROBABILITY_WEIGHTS.min;
-
-  return Math.min(
-    LOCAL_PROBABILITY_WEIGHTS.max[weightKey],
-    Math.max(minLimit, score),
-  );
+  });
+  return period === "24h"
+    ? calculation.probability24h
+    : calculation.probability48h;
 }
 
 export function getTeaserDecayFactor(
@@ -322,11 +595,10 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
         return false;
       }
 
-      const date = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
-      const time = getDateTime(date);
-      return time > 0 && time <= now.getTime();
+      const time = getCompletedResetTimestamp(item);
+      return time !== null && time <= now.getTime();
     })
-    .map((item) => getDateTime(item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null))
+    .map((item) => getCompletedResetTimestamp(item)!)
     .sort((left, right) => left - right);
 
   return resetTimes.slice(1).map((time, index) =>
@@ -335,7 +607,28 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
 }
 
 function getHistoricalResetTime(item: WindowEventLike) {
-  return getDateTime(item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null);
+  return getDateTime(item.closed_at ?? item.completed_at ?? null);
+}
+
+function isPendingResetRecord(item: WindowEventLike) {
+  const status = item.status?.toLowerCase();
+  return (
+    item.kind === "window_opened" ||
+    status === "open" ||
+    status === "active" ||
+    status === "pending" ||
+    status === "scheduled" ||
+    status === "announced"
+  );
+}
+
+export function getCompletedResetTimestamp(item: WindowEventLike) {
+  if (isPendingResetRecord(item)) {
+    return null;
+  }
+
+  const timestamp = getHistoricalResetTime(item);
+  return timestamp > 0 ? timestamp : null;
 }
 
 function getTweetId(sourceUrl: string | null | undefined) {
@@ -394,9 +687,10 @@ function isRejectedHistoricalReset(
 
 export function getLocalSignalEnvironment(
   openAIStatus?: OpenAIStatusSignals | null,
+  now: Date = new Date(),
 ): NonNullable<RadarData["codex_environment"]> {
   const recentSignals = LOCAL_OBSERVATION_SIGNALS.filter((signal) =>
-    isCurrentLocalSignal(signal) && isWithinHours(signal.observedAt, 24),
+    isCurrentLocalSignal(signal, now) && isWithinHours(signal.observedAt, 24, now),
   );
   const localStatusIncidents = recentSignals.filter(
     (signal) => signal.type === "status_incident",
@@ -435,7 +729,7 @@ export function getLocalSignalEnvironment(
       item.date,
     ]),
   ];
-  const updatedAt = getLatestIsoDate(updatedCandidates) ?? new Date().toISOString();
+  const updatedAt = getLatestIsoDate(updatedCandidates) ?? now.toISOString();
 
   return {
     updated_at: updatedAt,
@@ -464,20 +758,21 @@ export function getLocalSignalEnvironment(
 
 export function getSignalEnvironment(
   data: RadarData | null,
+  now: Date = new Date(),
 ): NonNullable<RadarData["codex_environment"]> {
-  return data?.codex_environment ?? getLocalSignalEnvironment();
+  return data?.codex_environment ?? getLocalSignalEnvironment(undefined, now);
 }
 
 export function getLocalSignalEvaluation(
   data: RadarData | null,
   now: Date = new Date(),
 ): LocalSignalEvaluation {
-  const environment = getSignalEnvironment(data);
-  const latestResetAt = getLastGlobalResetAt(data);
+  const environment = data?.codex_environment ?? getLocalSignalEnvironment(undefined, now);
+  const latestResetAt = getLastGlobalResetAt(data, now);
   const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
       signal.type === "status_incident" &&
-      isCurrentLocalSignal(signal) &&
+      isCurrentLocalSignal(signal, now) &&
       isWithinHours(signal.observedAt, 24, now),
   );
   const statusIncidents = evaluateStatusIncidents({
@@ -568,7 +863,10 @@ export function isCurrentLocalSignal(
   return getEffectiveSignalStatus(signal, now) === "active";
 }
 
-function getLatestAcceptedTiboExecutionAt(data: RadarData | null | undefined) {
+function getLatestAcceptedTiboExecutionAt(
+  data: RadarData | null | undefined,
+  now: Date = new Date(),
+) {
   const executions = [
     ...(data?.active_tibo_signals ?? []),
     ...(data?.formal_tibo_resets ?? []),
@@ -582,7 +880,7 @@ function getLatestAcceptedTiboExecutionAt(data: RadarData | null | undefined) {
     }
 
     const timestamp = new Date(signal.tweet_created_at).getTime();
-    return Number.isNaN(timestamp) ? [] : [timestamp];
+    return Number.isNaN(timestamp) || timestamp > now.getTime() ? [] : [timestamp];
   });
   const latestTimestamp = Math.max(...executions, Number.NEGATIVE_INFINITY);
 
@@ -591,12 +889,15 @@ function getLatestAcceptedTiboExecutionAt(data: RadarData | null | undefined) {
 
 export function getActiveOfficialNotice(
   data: RadarData | null,
-  latestResetAt: Date | null = getLastGlobalResetAt(data),
+  latestResetAt?: Date | null,
   now: Date = new Date(),
 ): ActiveOfficialNotice | null {
-  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
+  const resolvedLatestResetAt = latestResetAt === undefined
+    ? getLastGlobalResetAt(data, now)
+    : latestResetAt;
+  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
   const cutoff = Math.max(
-    latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+    resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
     latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
   );
   const dynamicNotices: Array<ActiveOfficialNotice> = (data?.active_tibo_signals ?? [])
@@ -613,6 +914,7 @@ export function getActiveOfficialNotice(
       const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
       if (
         Number.isNaN(observedTime) ||
+        observedTime > now.getTime() ||
         Number.isNaN(expiresTime) ||
         expiresTime <= now.getTime() ||
         observedTime <= cutoff
@@ -638,6 +940,7 @@ export function getActiveOfficialNotice(
       (signal) =>
         signal.type === "official_notice" &&
         isCurrentLocalSignal(signal, now) &&
+        getDateTime(signal.observedAt) <= now.getTime() &&
         !Number.isNaN(new Date(signal.observedAt).getTime()),
     )
     .map((signal): ActiveOfficialNotice => ({
@@ -658,9 +961,12 @@ export function getActiveOfficialNotice(
     .at(0) ?? null;
 }
 
-export function getRecent7DayResetCount(data?: RadarData | null): number {
-  const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+export function getRecent7DayResetCount(
+  data?: RadarData | null,
+  now: Date = new Date(),
+): number {
+  const nowTime = now.getTime();
+  const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -672,17 +978,19 @@ export function getRecent7DayResetCount(data?: RadarData | null): number {
     if (resetMethod === "任意リセット権1回配布") {
       return false;
     }
-    const dateStr = item.completed_at ?? item.closed_at ?? item.opened_at ?? (item as any).date;
-    if (!dateStr) return false;
-    const time = new Date(dateStr).getTime();
-    return !Number.isNaN(time) && time >= sevenDaysAgo && time <= now;
+    const time = getCompletedResetTimestamp(item);
+    return time !== null && time >= sevenDaysAgo && time <= nowTime;
   }).length;
 }
 
-export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null): number {
-  const count = getRecent7DayResetCount(data);
+export function getMomentumBoost(
+  period: "24h" | "48h",
+  data?: RadarData | null,
+  now: Date = new Date(),
+): number {
+  const count = getRecent7DayResetCount(data, now);
   const weightKey = period === "24h" ? "within24h" : "within48h";
-  const daysSince = getDaysSinceLastGlobalReset(data);
+  const daysSince = getDaysSinceLastGlobalReset(data, now);
 
   let rawBoost = 0;
   if (count >= 4) {
@@ -691,19 +999,27 @@ export function getMomentumBoost(period: "24h" | "48h", data?: RadarData | null)
     rawBoost = LOCAL_PROBABILITY_WEIGHTS.momentumBoost.level1[weightKey];
   }
 
+  if (daysSince === null) {
+    return rawBoost;
+  }
+
   // 0〜1日目はクールダウン期のため、ラッシュ期ブーストを抑制する
-  if (daysSince === 0) {
+  if (daysSince < 1) {
     return 0;
   }
-  if (daysSince === 1) {
+  if (daysSince < 2) {
     return rawBoost * 0.5;
   }
 
   return rawBoost;
 }
 
-export function getLocalHistoryPressure(period: "24h" | "48h", data?: RadarData | null) {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset(data);
+export function getLocalHistoryPressure(
+  period: "24h" | "48h",
+  data?: RadarData | null,
+  now: Date = new Date(),
+) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -716,8 +1032,11 @@ export function getLocalHistoryPressure(period: "24h" | "48h", data?: RadarData 
   return pressure?.[weightKey] ?? 0;
 }
 
-export function getElapsedDayBoost(data?: RadarData | null) {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset(data);
+export function getElapsedDayBoost(
+  data?: RadarData | null,
+  now: Date = new Date(),
+) {
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -726,34 +1045,37 @@ export function getElapsedDayBoost(data?: RadarData | null) {
 }
 
 export function getDaysSinceLastGlobalReset(data?: RadarData | null, now: Date = new Date()) {
-  const lastReset = getLastGlobalResetAt(data);
+  const lastReset = getLastGlobalResetAt(data, now);
   if (!lastReset) {
     return null;
   }
 
-  return Math.max(0, getCalendarDayDelta(now, lastReset));
+  return Math.max(0, (now.getTime() - lastReset.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-export function getLastGlobalResetAt(data?: RadarData | null) {
+export function getLastGlobalResetAt(
+  data?: RadarData | null,
+  now: Date = new Date(),
+) {
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
   );
   const candidates = combinedHistory.map((item) => {
-    if ((item.kind === "window_opened" || item.status === "open") && !item.closed_at && !item.completed_at) {
-      return null;
-    }
     const resetMethod = item.details?.resetMethod;
     if (resetMethod === "任意リセット権1回配布") {
       return null;
     }
-    return item.closed_at ?? item.completed_at ?? item.opened_at ?? (item as any).date ?? null;
+    const time = getCompletedResetTimestamp(item);
+    return time !== null && time <= now.getTime()
+      ? new Date(time).toISOString()
+      : null;
   });
 
   const latestOfficialStr = getLatestIsoDate(candidates);
   const latestOfficialAt = latestOfficialStr ? new Date(latestOfficialStr) : null;
-  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data);
+  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
 
   if (!latestOfficialAt) {
     return latestExecutionAt;
@@ -769,27 +1091,28 @@ export function getLastGlobalResetAt(data?: RadarData | null) {
 export function getLocalExpectationLevel(
   data: RadarData | null,
   locale: Locale = "ja",
-  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
-  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
-    data,
-    signalEvaluation.latestResetAt,
-  ),
+  signalEvaluation?: LocalSignalEvaluation,
+  activeOfficialNotice?: ActiveOfficialNotice | null,
   regularResetExpectedAt?: string | null,
   now: Date = new Date(),
 ) {
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedOfficialNotice = activeOfficialNotice === undefined
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    : activeOfficialNotice;
   const probability24h = getLocalResetProbability(
     data,
     "24h",
-    signalEvaluation,
-    activeOfficialNotice,
+    resolvedSignalEvaluation,
+    resolvedOfficialNotice,
     now,
     regularResetExpectedAt,
   );
   const probability48h = getLocalResetProbability(
     data,
     "48h",
-    signalEvaluation,
-    activeOfficialNotice,
+    resolvedSignalEvaluation,
+    resolvedOfficialNotice,
     now,
     regularResetExpectedAt,
   );
@@ -801,16 +1124,18 @@ export function getLocalProbabilityReason(
   probability24h: number | undefined,
   probability48h: number | undefined,
   locale: Locale = "ja",
-  signalEvaluation: LocalSignalEvaluation = getLocalSignalEvaluation(data),
-  activeOfficialNotice: ActiveOfficialNotice | null = getActiveOfficialNotice(
-    data,
-    signalEvaluation.latestResetAt,
-  ),
+  signalEvaluation?: LocalSignalEvaluation,
+  activeOfficialNotice?: ActiveOfficialNotice | null,
   includeMomentumReason = true,
+  now: Date = new Date(),
 ): string | null {
-  const environment = signalEvaluation.environment;
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedOfficialNotice = activeOfficialNotice === undefined
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    : activeOfficialNotice;
+  const environment = resolvedSignalEvaluation.environment;
 
-  if (activeOfficialNotice) {
+  if (resolvedOfficialNotice) {
     return locale === "en"
       ? "An official reset notice has been detected, indicating a very high probability within 24 hours."
       : locale === "zh"
@@ -824,11 +1149,13 @@ export function getLocalProbabilityReason(
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
-  const lastReset = signalEvaluation.latestResetAt;
+  const lastReset = resolvedSignalEvaluation.latestResetAt;
   
   let lastResetLabel = "";
   if (lastReset) {
-    const days = getCalendarDayDelta(new Date(), lastReset);
+    const days = Math.floor(
+      Math.max(0, now.getTime() - lastReset.getTime()) / (24 * 60 * 60 * 1000),
+    );
     if (locale === "en") {
       if (days === 1) {
         lastResetLabel = "One day has passed since the last reset";
@@ -845,7 +1172,7 @@ export function getLocalProbabilityReason(
   }
 
   const statusSummary = formatStatusIncidentReason(
-    signalEvaluation.statusIncidents,
+    resolvedSignalEvaluation.statusIncidents,
     locale,
   );
   let signalSummary = statusSummary;
@@ -899,7 +1226,7 @@ export function getLocalProbabilityReason(
   const activeHintSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
       signal.type === "official_incident_hint" &&
-      isCurrentLocalSignal(signal)
+      isCurrentLocalSignal(signal, now)
   );
 
   let hintSummary: string | null = null;
@@ -922,7 +1249,7 @@ export function getLocalProbabilityReason(
         typeof signal.boostValue24h === "number" ||
         typeof signal.boostValue48h === "number" ||
         typeof signal.boostValue === "number") &&
-      isCurrentLocalSignal(signal)
+      isCurrentLocalSignal(signal, now)
   );
 
   const activeBoostSignalsWithReason = activeBoostSignals.filter(
@@ -952,8 +1279,8 @@ export function getLocalProbabilityReason(
     }
   }
 
-  const resetCount7d = getRecent7DayResetCount();
-  const currentMomentum = getMomentumBoost("48h", data);
+  const resetCount7d = getRecent7DayResetCount(data, now);
+  const currentMomentum = getMomentumBoost("48h", data, now);
   let momentumText = "";
   if (includeMomentumReason && currentMomentum > 0) {
     if (resetCount7d >= 4) {

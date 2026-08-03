@@ -55,7 +55,7 @@ import {
   DAY_MS,
 } from "./radar/helpers";
 import {
-  getLocalResetProbability,
+  getLocalProbabilityCalculation,
   getActiveOfficialNotice,
   getLocalSignalEnvironment,
   getLocalSignalEvaluation,
@@ -66,8 +66,8 @@ import {
   getLocalHistoryPressure,
   getElapsedDayBoost,
   getDaysSinceLastGlobalReset,
+  getCompletedResetTimestamp,
   getLastGlobalResetAt,
-  getLocalExpectationLevel,
   getLocalProbabilityReason,
   type LocalSignalEvaluation,
 } from "./radar/probability";
@@ -85,7 +85,8 @@ export {
 
 export function getLocalRadarData({
   openAIStatus,
-  checkedAt = new Date().toISOString(),
+  checkedAt,
+  calculationNow,
   dataHealth,
   activeTiboSignals = [],
   formalTiboResets = [],
@@ -93,11 +94,14 @@ export function getLocalRadarData({
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   checkedAt?: string;
+  calculationNow?: Date;
   dataHealth?: RadarDataHealth;
   activeTiboSignals?: RadarData["active_tibo_signals"];
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
 } = {}): RadarData {
+  const now = calculationNow ?? new Date();
+  const resolvedCheckedAt = checkedAt ?? now.toISOString();
   const updatedAt = getLocalModelUpdatedAt(openAIStatus, {
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
@@ -108,14 +112,14 @@ export function getLocalRadarData({
     service: "codex-reset-observatory",
     purpose: "local-reset-observation",
     timezone: DISPLAY_TIME_ZONE,
-    checked_at: checkedAt,
+    checked_at: resolvedCheckedAt,
     data_health: dataHealth,
-    monitored_at: checkedAt,
+    monitored_at: resolvedCheckedAt,
     updated_at: updatedAt,
     status: "none",
     window_open: false,
     openai_status_history: openAIStatus?.history ?? [],
-    codex_environment: getLocalSignalEnvironment(openAIStatus),
+    codex_environment: getLocalSignalEnvironment(openAIStatus, now),
     active_tibo_signals: activeTiboSignals,
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
@@ -127,18 +131,20 @@ export function getRadarViewModel(
   locale: Locale = "ja",
   limitHistory: boolean = true,
   signalEvaluationOverride?: LocalSignalEvaluation,
+  calculationNow: Date = new Date(),
 ): RadarViewModel {
   const source = unwrapRadarData(data);
   const signalEvaluation =
-    signalEvaluationOverride ?? getLocalSignalEvaluation(source);
+    signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow);
   const activeOfficialNotice = getActiveOfficialNotice(
     source,
     signalEvaluation.latestResetAt,
+    calculationNow,
   );
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
-  const effectiveLatestResetAt = getLastGlobalResetAt(source)?.toISOString() ??
+  const effectiveLatestResetAt = getLastGlobalResetAt(source, calculationNow)?.toISOString() ??
     observedHistory.find((item) => item.resetAt)?.resetAt ??
     null;
 
@@ -146,27 +152,19 @@ export function getRadarViewModel(
     effectiveLatestResetAt,
     locale,
     source,
+    calculationNow,
   );
-  const probability24h = getProbability(
-    source,
-    "24h",
+  const probabilityCalculation = getLocalProbabilityCalculation(source, {
+    now: calculationNow,
     signalEvaluation,
     activeOfficialNotice,
-    regularResetForecast.expectedAt,
-  );
-  const probability48h = getProbability(
-    source,
-    "48h",
-    signalEvaluation,
-    activeOfficialNotice,
-    regularResetForecast.expectedAt,
-  );
-  const predictionLevel = getLocalExpectationLevel(
-    source,
+    regularResetExpectedAt: regularResetForecast.expectedAt,
+  });
+  const probability24h = probabilityCalculation.probability24h;
+  const probability48h = probabilityCalculation.probability48h;
+  const predictionLevel = getExpectationLabel(
+    { p24h: probability24h, p48h: probability48h },
     locale,
-    signalEvaluation,
-    activeOfficialNotice,
-    regularResetForecast.expectedAt,
   );
   const latestWindow =
     getLatestWindowWithRegularReset(
@@ -206,6 +204,8 @@ export function getRadarViewModel(
       locale,
       signalEvaluation,
       activeOfficialNotice,
+      true,
+      calculationNow,
     ),
     displayReasoningSummary: getReasoningSummary(
       source,
@@ -215,6 +215,7 @@ export function getRadarViewModel(
       signalEvaluation,
       activeOfficialNotice,
       false,
+      calculationNow,
     ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
@@ -239,7 +240,10 @@ export function getRadarViewModel(
   };
 }
 
-function getLatestRegularOrForcedResetAt(data?: RadarData | null): string | null {
+function getLatestRegularOrForcedResetAt(
+  data?: RadarData | null,
+  now: Date = new Date(),
+): string | null {
   let latestTime = 0;
   let latestDateStr: string | null = null;
 
@@ -253,10 +257,17 @@ function getLatestRegularOrForcedResetAt(data?: RadarData | null): string | null
     const isGlobalScope = item.scope === "全有料プラン" || item.scope === "Codex / ChatGPT Work";
 
     if ((isForced || isRegular) && isGlobalScope) {
-      const dateStr = item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
-      if (dateStr) {
-        const time = new Date(dateStr).getTime();
-        if (!Number.isNaN(time) && time > latestTime) {
+      const completedTime = getCompletedResetTimestamp(item);
+      const dateStr = completedTime === null
+        ? null
+        : item.closed_at ?? item.completed_at ?? null;
+      if (dateStr && completedTime !== null) {
+        const time = completedTime;
+        if (
+          !Number.isNaN(time) &&
+          time <= now.getTime() &&
+          time > latestTime
+        ) {
           latestTime = time;
           latestDateStr = dateStr;
         }
@@ -271,16 +282,17 @@ function getRegularResetForecast(
   latestResetAt: string | null | undefined,
   locale: Locale = "ja",
   data?: RadarData | null,
+  now: Date = new Date(),
 ) {
   // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
-  const autoLatestResetAt = getLatestRegularOrForcedResetAt(data);
+  const autoLatestResetAt = getLatestRegularOrForcedResetAt(data, now);
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
 
   // 「最後に完了した定期リセット日」= 自動検出された最新の基準リセット時刻
   const lastCompletedAt = autoLatestResetAt;
-  const current = new Date();
+  const current = now;
 
   // 2. 次回定期リセット予想日: 検出された基準リセット時刻からちょうど7日後
   const nextRegularReset = autoLatestResetAt
@@ -758,23 +770,6 @@ function getLocalModelUpdatedAt(
   return getLatestIsoDate(candidates) ?? LOCAL_MODEL_UPDATED_AT;
 }
 
-function getProbability(
-  data: RadarData | null,
-  period: "24h" | "48h",
-  signalEvaluation: LocalSignalEvaluation,
-  activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
-  regularResetExpectedAt?: string | null,
-): number | undefined {
-  return getLocalResetProbability(
-    data,
-    period,
-    signalEvaluation,
-    activeOfficialNotice,
-    undefined,
-    regularResetExpectedAt,
-  );
-}
-
 function getLatestWindow(data: RadarData | null): WindowLike | undefined {
   if (!data) {
     return undefined;
@@ -1026,6 +1021,7 @@ function getReasoningSummary(
   signalEvaluation: LocalSignalEvaluation,
   activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
   includeMomentumReason = true,
+  now: Date = new Date(),
 ): string | null {
   return getLocalProbabilityReason(
     data,
@@ -1035,6 +1031,7 @@ function getReasoningSummary(
     signalEvaluation,
     activeOfficialNotice,
     includeMomentumReason,
+    now,
   );
 }
 

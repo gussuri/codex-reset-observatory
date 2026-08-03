@@ -12,6 +12,7 @@ export type PublicRadarSnapshotOptions = {
   stale?: boolean;
   generatedAt?: string;
   limitHistory?: boolean;
+  calculationNow?: Date;
 };
 
 function safeHttpUrl(value: string | null | undefined) {
@@ -137,11 +138,14 @@ export function toPublicRadarSnapshot(
   locale: Locale,
   options: PublicRadarSnapshotOptions = {},
 ): PublicRadarSnapshot {
-  const checkedAt = internal.checked_at ?? new Date().toISOString();
+  const calculationNow = options.calculationNow ?? new Date();
+  const checkedAt = internal.checked_at ?? calculationNow.toISOString();
   const viewModel = getRadarViewModel(
     internal,
     locale,
     options.limitHistory ?? true,
+    undefined,
+    calculationNow,
   );
 
   return {

@@ -151,17 +151,16 @@ type TiboSignalBundle = {
   health: DataSourceHealth;
 };
 
-async function getTiboSignalBundle(): Promise<TiboSignalBundle> {
+async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBundle> {
   const [activeResult, historyResult] = await Promise.all([
     getCachedTiboSignals(),
     getCachedTiboHistorySignals(),
   ]);
-  const now = Date.now();
   const activeSignals = activeResult.data.filter((signal) => {
     if (signal.verification_status === "rejected") return false;
     if (!signal.expires_at) return false;
     const expiresTime = new Date(signal.expires_at).getTime();
-    return !isNaN(expiresTime) && expiresTime > now;
+    return !isNaN(expiresTime) && expiresTime > now.getTime();
   });
   const signals = historyResult.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
@@ -224,16 +223,18 @@ export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
 }
 
 export async function fetchCurrentRadarData(
-  options: { cache?: RequestCache; revalidate?: number } = {},
+  options: { cache?: RequestCache; revalidate?: number; calculationNow?: Date } = {},
 ): Promise<RadarData> {
-  const checkedAt = new Date().toISOString();
+  const calculationNow = options.calculationNow ?? new Date();
+  const checkedAt = calculationNow.toISOString();
   const [openAIStatus, tiboSignals] = await Promise.all([
     fetchOpenAIStatusSignals(options),
-    getTiboSignalBundle(),
+    getTiboSignalBundle(calculationNow),
   ]);
 
   return getLocalRadarData({
     checkedAt,
+    calculationNow,
     dataHealth: createRadarDataHealth(
       checkedAt,
       tiboSignals.health,
@@ -336,10 +337,12 @@ export async function fetchPublicRadarSnapshot(
   locale: Locale,
   options: { limitHistory?: boolean } = {},
 ): Promise<PublicRadarSnapshot> {
+  const calculationNow = new Date();
   const core = await fetchSharedRadarCore();
   return toPublicRadarSnapshot(core.data, locale, {
     stale: core.stale,
     generatedAt: core.generatedAt,
     limitHistory: options.limitHistory,
+    calculationNow,
   });
 }

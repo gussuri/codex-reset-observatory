@@ -9,7 +9,8 @@ import {
 } from "../lib/radar/probability";
 
 test("reset_executed resets days since last reset to 0 and updates effectiveLatestResetAt", () => {
-  const recentExecutionTime = new Date().toISOString();
+  const now = new Date("2026-07-18T15:00:00.000Z");
+  const recentExecutionTime = now.toISOString();
   const mockRadarData = getLocalRadarData({
     activeTiboSignals: [
       {
@@ -17,13 +18,14 @@ test("reset_executed resets days since last reset to 0 and updates effectiveLate
         signal_type: "reset_executed",
         confidence: 0.98,
         tweet_created_at: recentExecutionTime,
-        expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        expires_at: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow: now,
   });
 
-  const days = getDaysSinceLastGlobalReset(mockRadarData as any);
+  const days = getDaysSinceLastGlobalReset(mockRadarData as any, now);
   assert.strictEqual(days, 0, "Days since last reset should be 0 when a recent reset_executed exists");
 });
 
