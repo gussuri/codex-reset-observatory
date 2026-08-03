@@ -10,6 +10,13 @@ function setupServiceWorkerContext(
   opts: {
     failReloadTabId?: number;
     notificationError?: boolean;
+    notificationPromiseError?: string;
+    notificationPermission?: "granted" | "denied";
+    notificationPermissionError?: string;
+    iconFetchError?: string;
+    iconFetchStatus?: number;
+    iconContentType?: string;
+    iconEmpty?: boolean;
     fetchResponse?: {
       ok: boolean;
       status: number;
@@ -23,6 +30,8 @@ function setupServiceWorkerContext(
   const reloadedTabIds: number[] = [];
   const openedTabs: Array<{ url: string }> = [];
   const createdNotifications: Array<{ id: string; options: any }> = [];
+  const activeNotificationIds: Record<string, boolean> = {};
+  let notificationCreateCalls = 0;
   let alarmListener: ((alarm: { name: string }) => void) | null = null;
   let messageListener: Function | null = null;
   let notificationClickListener: ((notificationId: string) => void) | null = null;
@@ -84,7 +93,17 @@ function setupServiceWorkerContext(
           notificationClickListener = fn;
         },
       },
+      getPermissionLevel: async () => {
+        if (opts.notificationPermissionError) {
+          throw new Error(opts.notificationPermissionError);
+        }
+        return opts.notificationPermission || "granted";
+      },
       create: (id: string, options: any, callback: (createdId?: string) => void) => {
+        notificationCreateCalls += 1;
+        if (opts.notificationPromiseError) {
+          return Promise.reject(new Error(opts.notificationPromiseError));
+        }
         if (opts.notificationError) {
           (mockChrome.runtime as any).lastError = { message: "notifications unavailable" };
           callback(undefined);
@@ -92,9 +111,14 @@ function setupServiceWorkerContext(
           return;
         }
         createdNotifications.push({ id, options });
+        activeNotificationIds[id] = true;
         callback(id);
       },
-      clear: async () => true,
+      getAll: async () => ({ ...activeNotificationIds }),
+      clear: async (id: string) => {
+        delete activeNotificationIds[id];
+        return true;
+      },
     },
     runtime: {
       lastError: undefined,
@@ -110,6 +134,19 @@ function setupServiceWorkerContext(
   };
 
   const mockFetch = async (url: string, fetchOpts: any) => {
+    if (url.startsWith("chrome-extension://")) {
+      if (opts.iconFetchError) {
+        throw new Error(opts.iconFetchError);
+      }
+      return {
+        ok: (opts.iconFetchStatus || 200) >= 200 && (opts.iconFetchStatus || 200) < 300,
+        status: opts.iconFetchStatus || 200,
+        headers: {
+          get: () => opts.iconContentType || "image/png",
+        },
+        arrayBuffer: async () => (opts.iconEmpty ? new ArrayBuffer(0) : new ArrayBuffer(1)),
+      };
+    }
     mockFetchCalls.push({ url, body: fetchOpts.body ? JSON.parse(fetchOpts.body) : null });
     if (opts.fetchResponse) {
       return {
@@ -159,6 +196,7 @@ function setupServiceWorkerContext(
     reloadedTabIds,
     openedTabs,
     createdNotifications,
+    getNotificationCreateCalls: () => notificationCreateCalls,
     mockFetchCalls,
     fireAlarm: async (name: string) => {
       if (alarmListener) {
@@ -452,11 +490,17 @@ test("notification self-test is local, repeatable, and opens the history page", 
   assert.equal(first.ok, true);
   assert.ok(first.notificationId);
   assert.equal(createdNotifications.length, 1);
+  assert.equal(createdNotifications[0].options.type, "basic");
+  assert.match(
+    createdNotifications[0].options.iconUrl,
+    /^chrome-extension:\/\/test\/icons\/icon-128\.png$/,
+  );
   assert.equal(createdNotifications[0].options.title, "Codexリセット通知のテスト");
   assert.equal(
     createdNotifications[0].options.message,
     "通知機能は正常に動作しています。",
   );
+  assert.equal(first.details.notificationPresence, "present");
   assert.equal(localStore.tibo_formal_adoption_notified_ids, undefined);
   assert.equal(localStore.tibo_processed_tweet_ids, undefined);
   assert.deepEqual(mockFetchCalls, []);
@@ -484,8 +528,69 @@ test("notification self-test reports notification API failure without network ac
   });
 
   assert.equal(result.ok, false);
-  assert.equal(result.error, "notifications.create failed");
+  assert.equal(result.error, "notifications unavailable");
   assert.equal(createdNotifications.length, 0);
   assert.equal(localStore.tibo_formal_adoption_notified_ids, undefined);
   assert.deepEqual(mockFetchCalls, []);
+});
+
+test("notification self-test does not call create when permission is denied", async () => {
+  const { sendMessage, getNotificationCreateCalls, localStore } =
+    setupServiceWorkerContext([], {
+      notificationPermission: "denied",
+    });
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "Chrome extension notification permission is denied.");
+  assert.equal(result.details.permissionLevel, "denied");
+  assert.equal(getNotificationCreateCalls(), 0);
+  assert.equal(localStore.tibo_formal_adoption_notified_ids, undefined);
+});
+
+test("notification self-test preserves a Promise rejection from Chrome", async () => {
+  const { sendMessage, getNotificationCreateCalls } = setupServiceWorkerContext([], {
+    notificationPromiseError: "Unable to download all specified images.",
+  });
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "Unable to download all specified images.");
+  assert.equal(result.details.errorMessage, "Unable to download all specified images.");
+  assert.equal(getNotificationCreateCalls(), 1);
+});
+
+test("notification self-test reports icon load failures before create", async () => {
+  const { sendMessage, getNotificationCreateCalls, localStore } =
+    setupServiceWorkerContext([], {
+      iconFetchStatus: 404,
+    });
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "Notification icon could not be loaded: HTTP 404");
+  assert.equal(result.details.iconLoadStatus, "http_error");
+  assert.equal(getNotificationCreateCalls(), 0);
+  assert.equal(localStore.tibo_diagnostic_logs.at(-1).event, "notification_test_failed");
+  assert.equal(
+    localStore.tibo_diagnostic_logs.at(-1).error,
+    "Notification icon could not be loaded: HTTP 404",
+  );
+});
+
+test("notification self-test records concrete local diagnostic details", async () => {
+  const { sendMessage, localStore } = setupServiceWorkerContext();
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+  assert.equal(result.ok, true);
+
+  const logs = localStore.tibo_diagnostic_logs || [];
+  assert.equal(logs.at(-1).event, "notification_test_succeeded");
+  assert.equal(logs.at(-1).permissionLevel, "granted");
+  assert.equal(logs.at(-1).iconLoadStatus, "ok");
+  assert.match(logs.at(-1).iconUrl, /^chrome-extension:\/\//);
+  assert.equal(logs.at(-1).notificationId, result.notificationId);
 });

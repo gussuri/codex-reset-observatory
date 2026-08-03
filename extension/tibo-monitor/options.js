@@ -33,6 +33,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     statusMsg.className = isError ? "error" : "success";
   }
 
+  function safeNotificationError(value) {
+    const text = typeof value === "string" ? value : "notifications API is unavailable";
+    return text
+      .replace(/(authorization|bearer|api[_ -]?key|secret|token)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
+      .replace(/[\r\n]+/g, " ")
+      .slice(0, 300);
+  }
+
+  function formatNotificationDetails(details) {
+    if (!details || typeof details !== "object") return "";
+    const parts = [];
+    if (details.permissionLevel && details.permissionLevel !== "unavailable") {
+      parts.push(`通知権限: ${details.permissionLevel}`);
+    }
+    if (details.iconLoadStatus && details.iconLoadStatus !== "not_checked") {
+      parts.push(
+        `アイコン確認: ${details.iconLoadStatus === "ok" ? "成功" : details.iconLoadStatus}`,
+      );
+    }
+    return parts.length > 0 ? ` (${parts.join(" / ")})` : "";
+  }
+
   saveBtn.addEventListener("click", async () => {
     const secret = secretInput.value.trim();
     const domain = domainInput.value.trim().replace(/\/+$/, "");
@@ -122,7 +144,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       (response) => {
         notificationTestBtn.disabled = false;
         if (chrome.runtime.lastError) {
-          showStatus("通知の送信に失敗しました: extension context invalidated", true);
+          showStatus(
+            `通知の送信に失敗しました: ${safeNotificationError(
+              chrome.runtime.lastError.message,
+            )}`,
+            true,
+          );
           return;
         }
 
@@ -131,11 +158,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           return;
         }
 
-        const error =
-          typeof response?.error === "string" && response.error.length <= 120
-            ? response.error
-            : "notifications API is unavailable";
-        showStatus(`通知の送信に失敗しました: ${error}`, true);
+        const error = safeNotificationError(response?.error);
+        showStatus(
+          `通知の送信に失敗しました: ${error}${formatNotificationDetails(
+            response?.details,
+          )}`,
+          true,
+        );
       },
     );
   });

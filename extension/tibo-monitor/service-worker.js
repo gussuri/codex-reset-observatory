@@ -13,6 +13,8 @@ const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
 const HISTORY_PATH = "/history";
 const TEST_HISTORY_URL = "https://codex-reset-observatory.vercel.app/history";
+let notificationIconDiagnosticsPromise = null;
+let notificationIconDiagnosticsUrl = null;
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
@@ -335,29 +337,261 @@ function getSafeHistoryUrl(domain) {
     : `https://codex-reset-observatory.vercel.app${HISTORY_PATH}`;
 }
 
-function createNotification(notificationId, options) {
-  return new Promise((resolve) => {
-    if (!chrome.notifications || typeof chrome.notifications.create !== "function") {
-      resolve({ ok: false, error: "notifications permission is unavailable" });
-      return;
+function getRuntimeLastErrorMessage() {
+  try {
+    return chrome.runtime?.lastError?.message || null;
+  } catch {
+    return "extension context invalidated";
+  }
+}
+
+function sanitizeNotificationError(error, fallback) {
+  const raw =
+    getRuntimeLastErrorMessage() ||
+    (error && typeof error.message === "string" ? error.message : String(error || ""));
+  const redacted = raw
+    .replace(/(authorization|bearer|api[_ -]?key|secret|token)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
+    .replace(/[\r\n]+/g, " ")
+    .trim();
+  return (redacted || fallback).slice(0, 500);
+}
+
+function callChromeApi(method, args) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+    const callback = (...values) => {
+      const lastError = getRuntimeLastErrorMessage();
+      if (lastError) {
+        finish(reject, new Error(lastError));
+        return;
+      }
+      finish(resolve, values.length <= 1 ? values[0] : values);
+    };
+
+    try {
+      const result = method(...args, callback);
+      if (result && typeof result.then === "function") {
+        result.then(
+          (value) => finish(resolve, value),
+          (error) => finish(reject, error),
+        );
+      } else if (result !== undefined) {
+        finish(resolve, result);
+      } else if (method.length <= args.length) {
+        setTimeout(() => finish(resolve, undefined), 0);
+      }
+    } catch (error) {
+      finish(reject, error);
+    }
+  });
+}
+
+async function getNotificationPermissionLevel() {
+  if (
+    !chrome.notifications ||
+    typeof chrome.notifications.getPermissionLevel !== "function"
+  ) {
+    return { level: "unavailable", error: null };
+  }
+
+  try {
+    const level = await callChromeApi(
+      chrome.notifications.getPermissionLevel.bind(chrome.notifications),
+      [],
+    );
+    return { level: level || "unavailable", error: null };
+  } catch (error) {
+    return {
+      level: "unavailable",
+      error: {
+        errorName: error?.name || "Error",
+        errorMessage: sanitizeNotificationError(error, "permission lookup failed"),
+      },
+    };
+  }
+}
+
+async function inspectNotificationIcon(iconUrl) {
+  if (notificationIconDiagnosticsUrl === iconUrl && notificationIconDiagnosticsPromise) {
+    return notificationIconDiagnosticsPromise;
+  }
+
+  notificationIconDiagnosticsUrl = iconUrl;
+  notificationIconDiagnosticsPromise = (async () => {
+    if (!iconUrl) {
+      return {
+        status: "missing",
+        errorName: "Error",
+        errorMessage: "Notification icon URL is missing.",
+      };
+    }
+    if (typeof fetch !== "function") {
+      return {
+        status: "unavailable",
+        errorName: "Error",
+        errorMessage: "Notification icon could not be checked in this context.",
+      };
     }
 
     try {
-      chrome.notifications.create(notificationId, options, (createdId) => {
-        if (chrome.runtime?.lastError) {
-          resolve({ ok: false, error: "notifications.create failed" });
-          return;
+      const response = await fetch(iconUrl, { cache: "force-cache" });
+      if (!response.ok) {
+        return {
+          status: "http_error",
+          errorName: "Error",
+          errorMessage: `Notification icon could not be loaded: HTTP ${response.status}`,
+        };
+      }
+
+      const contentType = response.headers?.get?.("content-type") || null;
+      if (
+        contentType &&
+        !contentType.toLowerCase().startsWith("image/") &&
+        !contentType.toLowerCase().includes("octet-stream")
+      ) {
+        return {
+          status: "invalid_content_type",
+          contentType,
+          errorName: "Error",
+          errorMessage: `Notification icon returned ${contentType}, not an image.`,
+        };
+      }
+
+      if (typeof response.arrayBuffer === "function") {
+        const bytes = await response.arrayBuffer();
+        if (!bytes || bytes.byteLength === 0) {
+          return {
+            status: "empty",
+            contentType,
+            errorName: "Error",
+            errorMessage: "Notification icon is empty.",
+          };
         }
-        if (!createdId) {
-          resolve({ ok: false, error: "notifications.create returned no id" });
-          return;
-        }
-        resolve({ ok: true, notificationId: createdId });
-      });
-    } catch {
-      resolve({ ok: false, error: "notifications.create failed" });
+      }
+
+      return { status: "ok", contentType };
+    } catch (error) {
+      return {
+        status: "load_error",
+        errorName: error?.name || "Error",
+        errorMessage: sanitizeNotificationError(
+          error,
+          "Notification icon could not be loaded.",
+        ),
+      };
     }
-  });
+  })();
+
+  return notificationIconDiagnosticsPromise;
+}
+
+async function verifyNotificationCreated(notificationId) {
+  if (!chrome.notifications || typeof chrome.notifications.getAll !== "function") {
+    return { status: "unavailable", present: null };
+  }
+
+  try {
+    const notifications = await callChromeApi(
+      chrome.notifications.getAll.bind(chrome.notifications),
+      [],
+    );
+    const present = Boolean(notifications && notifications[notificationId]);
+    return { status: present ? "present" : "missing", present };
+  } catch (error) {
+    return {
+      status: "error",
+      present: null,
+      errorName: error?.name || "Error",
+      errorMessage: sanitizeNotificationError(error, "notification verification failed"),
+    };
+  }
+}
+
+async function createNotificationWithDiagnostics(notificationId, options) {
+  const details = {
+    notificationId,
+    iconUrl: options?.iconUrl || null,
+    apiAvailable: Boolean(
+      chrome.notifications && typeof chrome.notifications.create === "function",
+    ),
+    permissionLevel: "unavailable",
+    iconLoadStatus: "not_checked",
+  };
+
+  if (!details.apiAvailable) {
+    return {
+      ok: false,
+      error: "notifications API is unavailable",
+      details,
+    };
+  }
+
+  const permission = await getNotificationPermissionLevel();
+  details.permissionLevel = permission.level;
+  if (permission.level === "denied") {
+    return {
+      ok: false,
+      error: "Chrome extension notification permission is denied.",
+      details: {
+        ...details,
+        ...(permission.error || {}),
+      },
+    };
+  }
+
+  const icon = await inspectNotificationIcon(options?.iconUrl);
+  details.iconLoadStatus = icon.status;
+  if (icon.status !== "ok") {
+    return {
+      ok: false,
+      error: icon.errorMessage || "Notification icon could not be loaded.",
+      details: {
+        ...details,
+        ...icon,
+      },
+    };
+  }
+
+  try {
+    const createdId = await callChromeApi(
+      chrome.notifications.create.bind(chrome.notifications),
+      [notificationId, options],
+    );
+    if (!createdId) {
+      return {
+        ok: false,
+        error: "notifications.create returned no id",
+        details,
+      };
+    }
+
+    const verification = await verifyNotificationCreated(createdId);
+    return {
+      ok: true,
+      notificationId: createdId,
+      details: {
+        ...details,
+        notificationPresence: verification.status,
+        ...(verification.errorName ? { errorName: verification.errorName } : {}),
+        ...(verification.errorMessage ? { errorMessage: verification.errorMessage } : {}),
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: sanitizeNotificationError(error, "notifications.create failed"),
+      details: {
+        ...details,
+        errorName: error?.name || "Error",
+        errorMessage: sanitizeNotificationError(error, "notifications.create failed"),
+      },
+    };
+  }
 }
 
 function createTestNotificationId() {
@@ -410,20 +644,30 @@ async function showFormalAdoptionNotification(adoption, domain) {
 
     let iconUrl;
     try {
-      iconUrl = chrome.runtime.getURL("icon.svg");
+      iconUrl = chrome.runtime.getURL("icons/icon-128.png");
     } catch {
       return { ok: false, error: "extension context invalidated" };
     }
 
-    const created = await createNotification(notificationId, {
+    const created = await createNotificationWithDiagnostics(notificationId, {
       type: "basic",
       iconUrl,
       title: notification.title,
       message: notification.message,
-      priority: 2,
+      priority: isTest ? 0 : 2,
     });
 
-    if (!created.ok) return created;
+    if (!created.ok) {
+      if (isTest) {
+        await saveServiceDiagnostic({
+          reasonCode: "notification_test_failed",
+          event: "notification_test_failed",
+          ...created.details,
+          error: created.error,
+        });
+      }
+      return created;
+    }
 
     const urlKey = isTest
       ? TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY
@@ -443,9 +687,25 @@ async function showFormalAdoptionNotification(adoption, domain) {
     }
 
     await chrome.storage.local.set(update);
+    if (isTest) {
+      await saveServiceDiagnostic({
+        reasonCode: "notification_test_succeeded",
+        event: "notification_test_succeeded",
+        ...created.details,
+      });
+    }
     return created;
   } catch {
-    return { ok: false, error: "notification state could not be saved" };
+    const result = { ok: false, error: "notification state could not be saved" };
+    if (isTest) {
+      await saveServiceDiagnostic({
+        reasonCode: "notification_test_failed",
+        event: "notification_test_failed",
+        notificationId: String(adoption?.tweetId || "notification-test"),
+        error: result.error,
+      });
+    }
+    return result;
   }
 }
 

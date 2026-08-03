@@ -35,11 +35,25 @@ test("options page exposes a safe notification test and reports its result", asy
   const extensionRoot = path.join(__dirname, "../extension/tibo-monitor");
   const html = fs.readFileSync(path.join(extensionRoot, "options.html"), "utf8");
   const source = fs.readFileSync(path.join(extensionRoot, "options.js"), "utf8");
+  const serviceWorker = fs.readFileSync(
+    path.join(extensionRoot, "service-worker.js"),
+    "utf8",
+  );
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(extensionRoot, "manifest.json"), "utf8"),
+  );
+  const iconPath = path.join(extensionRoot, "icons/icon-128.png");
+  const icon = fs.readFileSync(iconPath);
 
   assert.match(html, /id="notificationTestBtn"/);
   assert.match(html, /本番データを変更せず、Chrome通知だけを確認します。/);
   assert.match(source, /TEST_FORMAL_ADOPTION_NOTIFICATION/);
   assert.doesNotMatch(source, /fetch\(/);
+  assert.match(serviceWorker, /icons\/icon-128\.png/);
+  assert.equal(manifest.icons["128"], "icons/icon-128.png");
+  assert.equal(icon.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.equal(icon.readUInt32BE(16), 128);
+  assert.equal(icon.readUInt32BE(20), 128);
 
   const ids = [
     "webhookSecret",
