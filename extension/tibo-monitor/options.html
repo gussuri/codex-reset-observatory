@@ -140,6 +140,17 @@
       padding-top: 20px;
       border-top: 1px solid var(--border);
     }
+    .notification-test-panel {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .notification-test-description {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 6px 0 12px;
+    }
     .diagnostic-actions {
       display: flex;
       gap: 8px;
@@ -186,6 +197,12 @@
     <div class="actions">
       <button id="saveBtn" class="btn-primary">保存</button>
       <button id="testBtn" class="btn-secondary">接続テスト</button>
+    </div>
+
+    <div class="notification-test-panel">
+      <label for="notificationTestBtn">通知テスト</label>
+      <p class="notification-test-description">本番データを変更せず、Chrome通知だけを確認します。</p>
+      <button id="notificationTestBtn" class="btn-secondary">通知をテスト</button>
     </div>
 
     <div class="diagnostic-panel">

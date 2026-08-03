@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const domainInput = document.getElementById("observatoryDomain");
   const saveBtn = document.getElementById("saveBtn");
   const testBtn = document.getElementById("testBtn");
+  const notificationTestBtn = document.getElementById("notificationTestBtn");
   const statusMsg = document.getElementById("statusMessage");
   const diagnosticsEnabled = document.getElementById("diagnosticsEnabled");
   const diagnosticsMaskText = document.getElementById("diagnosticsMaskText");
@@ -107,5 +108,35 @@ document.addEventListener("DOMContentLoaded", async () => {
         showStatus("❌ 接続失敗: " + (response?.error || "不明なエラー"), true);
       }
     });
+  });
+
+  notificationTestBtn.addEventListener("click", () => {
+    showStatus("通知テストを実行中...");
+    notificationTestBtn.disabled = true;
+
+    chrome.runtime.sendMessage(
+      {
+        action: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+        type: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+      },
+      (response) => {
+        notificationTestBtn.disabled = false;
+        if (chrome.runtime.lastError) {
+          showStatus("通知の送信に失敗しました: extension context invalidated", true);
+          return;
+        }
+
+        if (response?.ok) {
+          showStatus("通知を送信しました。Windowsの通知欄を確認してください。");
+          return;
+        }
+
+        const error =
+          typeof response?.error === "string" && response.error.length <= 120
+            ? response.error
+            : "notifications API is unavailable";
+        showStatus(`通知の送信に失敗しました: ${error}`, true);
+      },
+    );
   });
 });

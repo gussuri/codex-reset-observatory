@@ -434,3 +434,58 @@ test("notification API failure does not fail tweet collection", async () => {
   assert.equal(createdNotifications.length, 0);
   assert.deepEqual(localStore.tibo_processed_tweet_ids, ["2084000000000000003"]);
 });
+
+test("notification self-test is local, repeatable, and opens the history page", async () => {
+  const {
+    sendMessage,
+    localStore,
+    createdNotifications,
+    clickNotification,
+    openedTabs,
+    mockFetchCalls,
+  } = setupServiceWorkerContext();
+
+  const first = await sendMessage({
+    type: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+  });
+
+  assert.equal(first.ok, true);
+  assert.ok(first.notificationId);
+  assert.equal(createdNotifications.length, 1);
+  assert.equal(createdNotifications[0].options.title, "Codexリセット通知のテスト");
+  assert.equal(
+    createdNotifications[0].options.message,
+    "通知機能は正常に動作しています。",
+  );
+  assert.equal(localStore.tibo_formal_adoption_notified_ids, undefined);
+  assert.equal(localStore.tibo_processed_tweet_ids, undefined);
+  assert.deepEqual(mockFetchCalls, []);
+
+  await clickNotification(first.notificationId);
+  assert.deepEqual(openedTabs, [
+    { url: "https://codex-reset-observatory.vercel.app/history" },
+  ]);
+
+  const second = await sendMessage({
+    action: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+  });
+  assert.equal(second.ok, true);
+  assert.notEqual(second.notificationId, first.notificationId);
+  assert.equal(createdNotifications.length, 2);
+});
+
+test("notification self-test reports notification API failure without network activity", async () => {
+  const { sendMessage, localStore, createdNotifications, mockFetchCalls } =
+    setupServiceWorkerContext([], { notificationError: true });
+
+  const result = await sendMessage({
+    action: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+    type: "TEST_FORMAL_ADOPTION_NOTIFICATION",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "notifications.create failed");
+  assert.equal(createdNotifications.length, 0);
+  assert.equal(localStore.tibo_formal_adoption_notified_ids, undefined);
+  assert.deepEqual(mockFetchCalls, []);
+});

@@ -8,9 +8,11 @@ importScripts("diagnostics.js");
 const QUEUE_KEY = "tibo_processed_tweet_ids";
 const FORMAL_ADOPTION_NOTIFIED_KEY = "tibo_formal_adoption_notified_ids";
 const FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_notification_urls";
+const TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_test_notification_urls";
 const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
 const HISTORY_PATH = "/history";
+const TEST_HISTORY_URL = "https://codex-reset-observatory.vercel.app/history";
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
@@ -62,9 +64,11 @@ if (
     try {
       const data = await chrome.storage.local.get([
         FORMAL_ADOPTION_NOTIFICATION_URLS_KEY,
+        TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY,
       ]);
       const urls = data[FORMAL_ADOPTION_NOTIFICATION_URLS_KEY] || {};
-      const url = urls[notificationId] || null;
+      const testUrls = data[TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY] || {};
+      const url = urls[notificationId] || testUrls[notificationId] || null;
       const fallbackDomain = (await getConfig()).domain;
       const fallbackUrl = getSafeHistoryUrl(fallbackDomain);
       const targetUrl = isSafeNotificationUrl(url)
@@ -76,8 +80,10 @@ if (
       }
 
       delete urls[notificationId];
+      delete testUrls[notificationId];
       await chrome.storage.local.set({
         [FORMAL_ADOPTION_NOTIFICATION_URLS_KEY]: urls,
+        [TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY]: testUrls,
       });
       if (typeof chrome.notifications.clear === "function") {
         await chrome.notifications.clear(notificationId);
@@ -180,6 +186,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     handleTestConnection()
       .then((res) => sendResponse({ success: true, data: res }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (
+    request.action === "TEST_FORMAL_ADOPTION_NOTIFICATION" ||
+    request.type === "TEST_FORMAL_ADOPTION_NOTIFICATION"
+  ) {
+    handleTestFormalAdoptionNotification()
+      .then((res) => sendResponse(res))
+      .catch(() =>
+        sendResponse({
+          ok: false,
+          error: "notification test failed",
+        }),
+      );
     return true;
   }
 
@@ -317,69 +338,139 @@ function getSafeHistoryUrl(domain) {
 function createNotification(notificationId, options) {
   return new Promise((resolve) => {
     if (!chrome.notifications || typeof chrome.notifications.create !== "function") {
-      resolve(false);
+      resolve({ ok: false, error: "notifications permission is unavailable" });
       return;
     }
 
     try {
       chrome.notifications.create(notificationId, options, (createdId) => {
-        resolve(!chrome.runtime?.lastError && Boolean(createdId));
+        if (chrome.runtime?.lastError) {
+          resolve({ ok: false, error: "notifications.create failed" });
+          return;
+        }
+        if (!createdId) {
+          resolve({ ok: false, error: "notifications.create returned no id" });
+          return;
+        }
+        resolve({ ok: true, notificationId: createdId });
       });
     } catch {
-      resolve(false);
+      resolve({ ok: false, error: "notifications.create failed" });
     }
   });
 }
 
-async function notifyFormalAdoption(adoption, domain) {
-  if (!adoption || adoption.newlyAdopted !== true || !adoption.tweetId) {
-    return;
+function createTestNotificationId() {
+  return `tibo-formal-adoption-test-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+async function showFormalAdoptionNotification(adoption, domain) {
+  const isTest = adoption?.isTest === true;
+  if (!adoption || (!isTest && (adoption.newlyAdopted !== true || !adoption.tweetId))) {
+    return { ok: true, skipped: true };
   }
 
-  const tweetId = String(adoption.tweetId);
-  const stored = await chrome.storage.local.get([
-    FORMAL_ADOPTION_NOTIFIED_KEY,
-    FORMAL_ADOPTION_NOTIFICATION_URLS_KEY,
-  ]);
-  const notifiedIds = Array.isArray(stored[FORMAL_ADOPTION_NOTIFIED_KEY])
-    ? stored[FORMAL_ADOPTION_NOTIFIED_KEY]
-    : [];
+  try {
+    const tweetId = String(adoption.tweetId || "notification-test");
+    const stored = await chrome.storage.local.get(
+      isTest
+        ? [TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY]
+        : [FORMAL_ADOPTION_NOTIFIED_KEY, FORMAL_ADOPTION_NOTIFICATION_URLS_KEY],
+    );
+    const notifiedIds = Array.isArray(stored[FORMAL_ADOPTION_NOTIFIED_KEY])
+      ? stored[FORMAL_ADOPTION_NOTIFIED_KEY]
+      : [];
 
-  if (notifiedIds.includes(tweetId)) return;
+    if (!isTest && notifiedIds.includes(tweetId)) {
+      return { ok: true, skipped: true };
+    }
 
-  const notificationId = `tibo-formal-adoption-${tweetId}`;
-  const confidence =
-    typeof adoption.confidence === "number"
-      ? ` (${Math.round(adoption.confidence * 100)}%)`
-      : "";
-  const title =
-    typeof adoption.title === "string" && adoption.title.trim()
-      ? adoption.title.trim()
-      : "ランダムリセット";
-  const created = await createNotification(notificationId, {
-    type: "basic",
-    iconUrl: chrome.runtime.getURL("icon.svg"),
-    title: "Codexリセットを正式採用",
-    message: `${title}${confidence}`,
-    priority: 2,
-  });
+    const notificationId = isTest
+      ? createTestNotificationId()
+      : `tibo-formal-adoption-${tweetId}`;
+    const confidence =
+      typeof adoption.confidence === "number"
+        ? ` (${Math.round(adoption.confidence * 100)}%)`
+        : "";
+    const title =
+      typeof adoption.title === "string" && adoption.title.trim()
+        ? adoption.title.trim()
+        : "ランダムリセット";
+    const notification = isTest
+      ? {
+          title: "Codexリセット通知のテスト",
+          message: "通知機能は正常に動作しています。",
+        }
+      : {
+          title: "Codexリセットを正式採用",
+          message: `${title}${confidence}`,
+        };
 
-  if (!created) return;
+    let iconUrl;
+    try {
+      iconUrl = chrome.runtime.getURL("icon.svg");
+    } catch {
+      return { ok: false, error: "extension context invalidated" };
+    }
 
-  const nextIds = [...notifiedIds, tweetId].slice(-200);
-  const urls =
-    stored[FORMAL_ADOPTION_NOTIFICATION_URLS_KEY] &&
-    typeof stored[FORMAL_ADOPTION_NOTIFICATION_URLS_KEY] === "object"
-      ? { ...stored[FORMAL_ADOPTION_NOTIFICATION_URLS_KEY] }
-      : {};
-  urls[notificationId] = isSafeNotificationUrl(adoption.sourceUrl)
-    ? adoption.sourceUrl
-    : getSafeHistoryUrl(domain);
+    const created = await createNotification(notificationId, {
+      type: "basic",
+      iconUrl,
+      title: notification.title,
+      message: notification.message,
+      priority: 2,
+    });
 
-  await chrome.storage.local.set({
-    [FORMAL_ADOPTION_NOTIFIED_KEY]: nextIds,
-    [FORMAL_ADOPTION_NOTIFICATION_URLS_KEY]: urls,
-  });
+    if (!created.ok) return created;
+
+    const urlKey = isTest
+      ? TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY
+      : FORMAL_ADOPTION_NOTIFICATION_URLS_KEY;
+    const storedUrls = stored[urlKey];
+    const urls = storedUrls && typeof storedUrls === "object" ? { ...storedUrls } : {};
+    urls[notificationId] = isTest
+      ? TEST_HISTORY_URL
+      : isSafeNotificationUrl(adoption.sourceUrl)
+        ? adoption.sourceUrl
+        : getSafeHistoryUrl(domain);
+
+    const nextUrls = Object.fromEntries(Object.entries(urls).slice(-50));
+    const update = { [urlKey]: nextUrls };
+    if (!isTest) {
+      update[FORMAL_ADOPTION_NOTIFIED_KEY] = [...notifiedIds, tweetId].slice(-200);
+    }
+
+    await chrome.storage.local.set(update);
+    return created;
+  } catch {
+    return { ok: false, error: "notification state could not be saved" };
+  }
+}
+
+async function notifyFormalAdoption(adoption, domain) {
+  return showFormalAdoptionNotification(adoption, domain);
+}
+
+async function handleTestFormalAdoptionNotification() {
+  let domain = "https://codex-reset-observatory.vercel.app";
+  try {
+    domain = (await getConfig()).domain;
+  } catch {
+    // The test does not need the webhook secret or a network request.
+  }
+
+  return showFormalAdoptionNotification(
+    {
+      tweetId: "notification-test",
+      title: "通知機能は正常に動作しています",
+      confidence: null,
+      sourceUrl: TEST_HISTORY_URL,
+      isTest: true,
+    },
+    domain,
+  );
 }
 
 async function handlePostHeartbeat(payload) {
