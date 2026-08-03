@@ -28,7 +28,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "リセット期待度とは何ですか？",
-          answer: "今後リセットが行われる可能性の目安です。公式予告、Statusの障害情報、コミュニティの動き、過去の履歴などを参考にしています。公式な確率ではありません。",
+          answer: "今後リセットが行われる可能性の目安です。過去のリセット間隔から基礎確率を算出し、公式予告、Statusの障害情報、コミュニティの動きなど現在の観測シグナルで補正しています。公式な確率ではありません。",
         },
         {
           question: "Codexのリセットタイミングはいつ分かりますか？",
@@ -103,7 +103,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "Why does the reset forecast change?",
-          answer: "The forecast changes as official notices, OpenAI Status incidents, capacity or rate-limit signals, community reports, and elapsed time since the last reset change. The percentage is not guaranteed and may move up or down.",
+          answer: "The forecast starts with a baseline derived from past reset intervals and is adjusted as official notices, OpenAI Status incidents, capacity or rate-limit signals, community reports, and current timing change. The percentage is not guaranteed and may move up or down.",
         },
         {
           question: "What does this site track?",
@@ -111,7 +111,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is the random reset probability?",
-          answer: "It is a reference estimate of how likely a reset will happen soon, based on official notices, Status incident logs, community reports, and history patterns. It is not an official probability.",
+          answer: "It is a statistical reference forecast. A baseline derived from past reset intervals is adjusted using official notices, Status incident logs, community reports, and other current signals. It is not an official probability.",
         },
         {
           question: "When can I know the Codex reset timing?",
@@ -170,7 +170,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "重置可能性是什么意思？",
-          answer: "重置可能性表示未来发生重置的参考概率。计算时会参考官方预告、OpenAI Status 上的故障信息、社区讨论以及历史规律等。这并不是 OpenAI 官方公布的概率。",
+          answer: "重置可能性表示未来发生重置的参考概率。本站先根据过去的重置间隔计算基础概率，再根据官方预告、OpenAI Status 故障信息、社区讨论等当前观测信号进行调整。这并不是 OpenAI 官方公布的概率。",
         },
         {
           question: "什么时候可以知道 Codex 重置的具体时间？",

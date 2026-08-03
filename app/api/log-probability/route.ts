@@ -4,10 +4,9 @@ import { fetchCurrentRadarData } from "@/lib/radarFetch";
 import { getRadarViewModel } from "@/lib/radar";
 import {
   getActiveOfficialNotice,
-  getLocalProbabilityCalculation,
   getLocalSignalEvaluation,
 } from "@/lib/radar/probability";
-import { calculateShadowProbability } from "@/lib/radar/shadowProbability";
+import { calculatePublishedProbability } from "@/lib/radar/publishedProbability";
 import { getExpectationKey } from "@/lib/radar/helpers";
 import {
   buildProbabilityDebugInfo,
@@ -67,13 +66,7 @@ async function handleLogRequest(request: NextRequest) {
       signalEvaluation,
       calculationNow,
     );
-    const probabilityCalculation = getLocalProbabilityCalculation(rawData, {
-      now: calculationNow,
-      signalEvaluation,
-      activeOfficialNotice,
-      regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
-    });
-    const shadowProbability = calculateShadowProbability(rawData, {
+    const publishedProbability = calculatePublishedProbability(rawData, {
       now: calculationNow,
       signalEvaluation,
       activeOfficialNotice,
@@ -136,7 +129,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          }, probabilityCalculation, rawData.checked_at, calculationNow, shadowProbability),
+          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.shadow, publishedProbability),
         },
         {
           onConflict: "logged_hour",

@@ -50,9 +50,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Codex 使用限制重置信息",
   },
   description: {
-    ja: "利用上限リセット、制限解除タイミング、リセット履歴、期待度をまとめて確認できます。",
-    en: "Track the likelihood of an OpenAI Codex usage-limit reset, recent signals, and past reset events. This site estimates whether another reset is likely within the next 24 or 48 hours.",
-    zh: "一站式查看 Codex 使用限制的重置状态、预计时间、历史记录和重置可能性。",
+    ja: "過去のリセット間隔から算出した基礎確率を、現在の観測シグナルで補正したCodexのリセット予測と履歴を確認できます。",
+    en: "Track Codex reset history and a statistical forecast that starts with past reset intervals and adjusts the baseline using current observable signals.",
+    zh: "查看 Codex 重置历史，以及根据过去重置间隔计算基础概率、再由当前观测信号调整的统计预测。",
   },
   officialNotice: {
     ja: "公式リセット予告",
@@ -115,9 +115,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "48小时内",
   },
   disclaimer: {
-    ja: "※この予測はコミュニティや障害状況などを基にした目安であり、公式の発表とは異なる場合があります。",
-    en: "This is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official notice.",
-    zh: "※本预测仅供参考，依据社区动态、故障状态等信息计算，可能与官方实际安排不同。",
+    ja: "※過去のリセット間隔を基礎に現在の公開シグナルで補正した参考値であり、公式の発表や確率ではありません。",
+    en: "This is a statistical reference estimate based on past reset intervals and current public signals. It is not an official notice or probability.",
+    zh: "※本预测以过去的重置间隔为基础，并根据当前公开信号调整，仅供参考，不是官方公告或概率。",
   },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",

@@ -1294,11 +1294,11 @@ export function getLocalProbabilityReason(
 
 
   if (locale === "en") {
-    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
+    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. It starts with a baseline derived from past reset intervals and is adjusted using current observable signals. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
+    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。预测先根据过去的重置间隔计算基础概率，再根据当前观测信号进行调整。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
+    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。過去のリセット間隔から基礎確率を算出し、現在の観測シグナルで補正しています。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
 }
 

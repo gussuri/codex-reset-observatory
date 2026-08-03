@@ -2,6 +2,7 @@ import { LOCAL_PROBABILITY_HISTORY, type ProbabilityHistoryItem } from "../data/
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalProbabilityCalculation, getRecent7DayResetCount } from "../lib/radar/probability";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
+import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 import {
   buildShadowHazard,
   calculateShadowProbability,
@@ -245,8 +246,9 @@ function main() {
   const data = getLocalRadarData({ calculationNow: now });
   const currentViewModel = getRadarViewModel(data, "ja", false, undefined, now);
   const regularResetExpectedAt = currentViewModel.regularResetForecast.expectedAt;
-  const primary = getLocalProbabilityCalculation(data, { now, regularResetExpectedAt });
-  const shadow = calculateShadowProbability(data, { now, regularResetExpectedAt });
+  const published = calculatePublishedProbability(data, { now, regularResetExpectedAt });
+  const primary = published.primary;
+  const shadow = published.shadow ?? calculateShadowProbability(data, { now, regularResetExpectedAt });
   console.log("\n## Current preview (not used for historical scores)");
   console.log(JSON.stringify({
     primary: {
@@ -262,6 +264,13 @@ function main() {
       confidence: shadow.confidence,
       combinedMultiplier: shadow.multipliers.combinedAfterCap,
       recentResetCount7d: getRecent7DayResetCount(data, now),
+    },
+    published: {
+      source: published.source,
+      modelVersion: published.adoptedModel,
+      fallbackReason: published.fallbackReason,
+      probability24h: published.probability24h,
+      probability48h: published.probability48h,
     },
   }, null, 2));
 }

@@ -1,5 +1,6 @@
 import type { RadarViewModel } from "@/lib/radar/types";
 import type { ProbabilityCalculationAudit } from "@/lib/radar/probability";
+import type { PublishedProbabilityCalculation } from "@/lib/radar/publishedProbability";
 import type { ShadowProbabilityResult } from "@/lib/radar/shadowProbability";
 
 export function hasOfficialNoticeForLog(
@@ -13,7 +14,8 @@ export function buildProbabilityDebugInfo(
   calculation: ProbabilityCalculationAudit,
   generatedAt: string | null | undefined,
   calculatedAt: Date,
-  shadowProbability?: ShadowProbabilityResult,
+  shadowProbability?: ShadowProbabilityResult | null,
+  publishedProbability?: PublishedProbabilityCalculation,
 ) {
   const calculatedAtIso = calculatedAt.toISOString();
 
@@ -30,6 +32,17 @@ export function buildProbabilityDebugInfo(
     },
     ...(shadowProbability
       ? { shadowProbabilityModel: shadowProbability }
+      : {}),
+    ...(publishedProbability
+      ? {
+          publishedProbabilityModel: {
+            version: publishedProbability.adoptedModel,
+            source: publishedProbability.source,
+            probability24h: publishedProbability.probability24h,
+            probability48h: publishedProbability.probability48h,
+            fallbackReason: publishedProbability.fallbackReason,
+          },
+        }
       : {}),
   };
 }

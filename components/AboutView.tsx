@@ -17,7 +17,7 @@ export function AboutView({ locale }: AboutViewProps) {
       paragraphs: [
         "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
         "リセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく確認できるようまとめています。",
-        "ランダムリセット期待度は公式情報ではなく、公開情報や過去の履歴を参考にした観測上の目安です。",
+        "ランダムリセット期待度は、過去のリセット間隔から算出した基礎確率を現在の観測シグナルで補正した統計予測です。公式情報や確定的な確率ではありません。",
         "実際のリセット実施有無や時期については、必ず公式情報をご確認ください。",
         "任意リセット（マニュアルリセット）や友達紹介リセットを使用した場合、次回定期リセット日がこちらに表示している日付とずれます。任意リセット（マニュアルリセット）枠には、付与から1ヶ月間の有効期限があります。",
       ],
@@ -35,7 +35,7 @@ export function AboutView({ locale }: AboutViewProps) {
         SITE_NAME + " collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices, past reset history, and a weekly-cycle reference date so you can compare what is happening now with earlier reset patterns.",
         "The weekly reset date is a shared reference, not a guarantee that every account will refresh on exactly the same date.",
-        "The unscheduled reset probability is a reference estimate based on public signals, usage-limit anomalies, community activity, and official updates. It is not an official OpenAI notice.",
+        "The unscheduled reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
         "Banked Reset credits (manual resets) are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here. The Banked Reset credit is a one-time credit and expires within one month.",
       ],
       nav: {
@@ -52,7 +52,7 @@ export function AboutView({ locale }: AboutViewProps) {
         SITE_NAME + "旨在将重置相关的信息汇总在一处，以便用户快速查看最近的重置历史和当前的重置状况。",
         "它汇集了官方重置预告、历史重置记录以及每周循环参考日期，让您可以将当前状况与早期的重置模式进行对比。",
         "每周重置日期仅为共享的参考基准，并不能保证每个账号都会在完全相同的日期刷新。",
-        "随机重置期望度是基于公开信号、使用限制异常、社区活跃度以及官方更新整理出的参考估算值，并非 OpenAI 官方通知。",
+        "随机重置期望度是一种统计预测：先根据过去的重置间隔计算基础概率，再根据当前可观测信号进行调整，并非 OpenAI 官方通知或概率。",
         "手动重置额度是针对特定账号的。如果您使用了手动重置，您账号的下一次每周重置日期将与此处显示的共享参考日期有所不同。手动重置额度为一次性额度，且在一个月内有效。",
       ],
       nav: {

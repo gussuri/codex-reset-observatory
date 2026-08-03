@@ -55,7 +55,6 @@ import {
   DAY_MS,
 } from "./radar/helpers";
 import {
-  getLocalProbabilityCalculation,
   getActiveOfficialNotice,
   getLocalSignalEnvironment,
   getLocalSignalEvaluation,
@@ -71,6 +70,7 @@ import {
   getLocalProbabilityReason,
   type LocalSignalEvaluation,
 } from "./radar/probability";
+import { calculatePublishedProbability } from "./radar/publishedProbability";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
 export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
@@ -154,7 +154,7 @@ export function getRadarViewModel(
     source,
     calculationNow,
   );
-  const probabilityCalculation = getLocalProbabilityCalculation(source, {
+  const probabilityCalculation = calculatePublishedProbability(source, {
     now: calculationNow,
     signalEvaluation,
     activeOfficialNotice,

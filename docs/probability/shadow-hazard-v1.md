@@ -2,9 +2,10 @@
 
 ## Purpose
 
-`hazard-odds-v1` is an internal comparison model. It does not replace the
-current public heuristic model and is not shown in the dashboard or
-`/api/current`.
+`hazard-odds-v1` is the public probability model. The former heuristic model
+is retained as a comparison model and is used only when the shadow result is
+invalid or throws an exception. Model metadata and audit details remain
+internal and are not shown in the dashboard or `/api/current`.
 
 The model is a **ベイズ平滑化した区分ハザードと保守的なシグナル倍率を組み合わせたshadow確率モデル**. It uses a transparent empirical-Bayes prior rather than model training or parameter optimization.
 
@@ -76,8 +77,9 @@ available without backfilling old rows.
 
 ## Promotion criteria
 
-The shadow model must remain internal until it has a meaningful multi-period
-evaluation, stable calibration, no major 24/48-hour ordering or leakage bugs,
-and clear improvement over simple baselines across more than one concentrated
-reset period. A single favorable result is not sufficient. Promotion would be
-a separate change and is intentionally outside this version.
+The public switch is intentionally conservative: the shadow result must be
+finite, stay within 0%-100%, and satisfy `P24 <= P48`. Otherwise the former
+heuristic result is published for that calculation and the fallback reason is
+kept in internal debug information. Future evaluation should continue to
+check multi-period calibration, 24/48-hour ordering, and behavior across more
+than one concentrated reset period.

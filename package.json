@@ -15,6 +15,7 @@
     "eval:tibo-classifiers:resume": "tsx scripts/evaluate-tibo-classifiers.ts --resume",
     "eval:tibo-classifiers:fixed": "tsx scripts/evaluate-tibo-classifiers.ts --fixed-model --output-prefix tibo-classifier-eval-gemini-3.5-flash-lite",
     "evaluate:shadow-probability": "tsx scripts/evaluate-shadow-probability.ts",
+    "check": "pnpm test && pnpm run lint && pnpm run typecheck",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "tsx --test tests/*.test.ts"
   },
