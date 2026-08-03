@@ -67,6 +67,7 @@ import {
   getDaysSinceLastGlobalReset,
   getCompletedResetTimestamp,
   getLastGlobalResetAt,
+  getDisplayProbabilityReason,
   getLocalProbabilityReason,
   type LocalSignalEvaluation,
 } from "./radar/probability";
@@ -197,7 +198,7 @@ export function getRadarViewModel(
       null,
     regularResetForecast,
     activeWindow,
-    reasoningSummary: getReasoningSummary(
+    reasoningSummary: getLocalProbabilityReason(
       source,
       probability24h,
       probability48h,
@@ -207,14 +208,13 @@ export function getRadarViewModel(
       true,
       calculationNow,
     ),
-    displayReasoningSummary: getReasoningSummary(
+    displayReasoningSummary: getDisplayProbabilityReason(
       source,
       probability24h,
       probability48h,
       locale,
       signalEvaluation,
       activeOfficialNotice,
-      false,
       calculationNow,
     ),
     latestWindow: {
@@ -1011,28 +1011,6 @@ function getRecommendedAction(
     : locale === "zh"
       ? "重置概率较低。您可以照常进行各项工作。"
       : "リセットの可能性は低いです。通常通り作業を進めて問題ありません。";
-}
-
-function getReasoningSummary(
-  data: RadarData | null,
-  probability24h: number | undefined,
-  probability48h: number | undefined,
-  locale: Locale,
-  signalEvaluation: LocalSignalEvaluation,
-  activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>,
-  includeMomentumReason = true,
-  now: Date = new Date(),
-): string | null {
-  return getLocalProbabilityReason(
-    data,
-    probability24h,
-    probability48h,
-    locale,
-    signalEvaluation,
-    activeOfficialNotice,
-    includeMomentumReason,
-    now,
-  );
 }
 
 function isRegularResetWindow(value: WindowLike | undefined) {

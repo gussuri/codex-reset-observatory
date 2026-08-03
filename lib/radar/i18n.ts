@@ -50,9 +50,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Codex 使用限制重置信息",
   },
   description: {
-    ja: "過去のリセット間隔から算出した基礎確率を、現在の観測シグナルで補正したCodexのリセット予測と履歴を確認できます。",
-    en: "Track Codex reset history and a statistical forecast that starts with past reset intervals and adjusts the baseline using current observable signals.",
-    zh: "查看 Codex 重置历史，以及根据过去重置间隔计算基础概率、再由当前观测信号调整的统计预测。",
+    ja: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。",
+    en: "Check the latest Codex reset forecast, official updates, and recent reset history.",
+    zh: "集中查看 Codex 重置预测、最新信息和近期重置记录。",
   },
   officialNotice: {
     ja: "公式リセット予告",
@@ -73,6 +73,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "予告なし",
     en: "No notice",
     zh: "无预告",
+  },
+  officialNoticeStatus: {
+    ja: "公式予告",
+    en: "Official notice",
+    zh: "官方预告",
+  },
+  noOfficialNotice: {
+    ja: "なし",
+    en: "None",
+    zh: "无",
   },
   checkAction: {
     ja: "要確認",
@@ -115,9 +125,19 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "48小时内",
   },
   disclaimer: {
-    ja: "※過去のリセット間隔を基礎に現在の公開シグナルで補正した参考値であり、公式の発表や確率ではありません。",
-    en: "This is a statistical reference estimate based on past reset intervals and current public signals. It is not an official notice or probability.",
-    zh: "※本预测以过去的重置间隔为基础，并根据当前公开信号调整，仅供参考，不是官方公告或概率。",
+    ja: "※非公式の予測です。実際の実施時期は公式情報をご確認ください。",
+    en: "This is an unofficial forecast. Check official sources for confirmed reset timing.",
+    zh: "本预测并非官方信息，实际重置时间请以官方消息为准。",
+  },
+  forecastOutlook: {
+    ja: "現在の見立て",
+    en: "Current outlook",
+    zh: "当前判断",
+  },
+  forecastMethod: {
+    ja: "予測のしくみを見る →",
+    en: "How the forecast works →",
+    zh: "查看预测方式 →",
   },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",

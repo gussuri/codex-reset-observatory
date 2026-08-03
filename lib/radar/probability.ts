@@ -20,6 +20,7 @@ import {
   isWithinHours,
   getDateTime,
   probabilityToPercent,
+  getExpectationKey,
   getExpectationLabel,
 } from "./helpers";
 import {
@@ -1300,6 +1301,133 @@ export function getLocalProbabilityReason(
   } else {
     return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。過去のリセット間隔から基礎確率を算出し、現在の観測シグナルで補正しています。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
+}
+
+export function getDisplayProbabilityReason(
+  data: RadarData | null,
+  probability24h: number | undefined,
+  probability48h: number | undefined,
+  locale: Locale = "ja",
+  signalEvaluation?: LocalSignalEvaluation,
+  activeOfficialNotice?: ActiveOfficialNotice | null,
+  now: Date = new Date(),
+): string | null {
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedOfficialNotice = activeOfficialNotice === undefined
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    : activeOfficialNotice;
+
+  if (resolvedOfficialNotice) {
+    return locale === "en"
+      ? "An official reset notice has been detected. Please prioritize checking the notice and scheduled timing."
+      : locale === "zh"
+        ? "已确认官方重置预告。请优先查看预告内容和计划时间。"
+        : "公式リセット予告が確認されています。予告内容と実施予定時刻を優先して確認してください。";
+  }
+
+  const environment = resolvedSignalEvaluation.environment;
+  const expectationKey = getExpectationKey({ p24h: probability24h, p48h: probability48h });
+  const expectationText = {
+    ja: {
+      low: "低め",
+      medium: "中程度",
+      high: "高め",
+      very_high: "かなり高め",
+      unknown: "不明",
+    },
+    en: {
+      low: "low",
+      medium: "moderate",
+      high: "high",
+      very_high: "very high",
+      unknown: "unclear",
+    },
+    zh: {
+      low: "偏低",
+      medium: "中等",
+      high: "较高",
+      very_high: "很高",
+      unknown: "不明",
+    },
+  }[locale][expectationKey];
+  const sentences: string[] = [];
+  const activeIncidentCount = resolvedSignalEvaluation.statusIncidents.activeStatusIncidentCount;
+  const officialSignalCount =
+    (environment.official_incident_hints_24h ?? 0) +
+    (environment.official_updates_24h ?? 0);
+  const issueAnomalyCount = environment.issue_or_limit_anomalies_24h ?? 0;
+
+  if (officialSignalCount > 0) {
+    sentences.push(
+      locale === "en"
+        ? `Official developer activity suggests an update or reset, and the likelihood is ${expectationText}.`
+        : locale === "zh"
+          ? `检测到官方开发者关于更新或重置的动向，可能性${expectationText}。`
+          : `公式開発者から更新やリセットを示唆する動きが確認されており、可能性は${expectationText}です。`,
+    );
+  }
+
+  if (activeIncidentCount > 0) {
+    sentences.push(
+      locale === "en"
+        ? "A Codex-related incident is currently active, so a reset is considered more likely than usual."
+        : locale === "zh"
+          ? "当前有 Codex 相关故障正在发生，因此重置可能性高于平时。"
+          : "現在、Codex関連の障害が発生しており、障害対応によるリセットの可能性を通常より高めに見ています。",
+    );
+  }
+
+  if (issueAnomalyCount > 0) {
+    sentences.push(
+      locale === "en"
+        ? "Usage-limit anomalies have been reported, so a reset is considered more likely than usual."
+        : locale === "zh"
+          ? "有使用限制异常报告，因此重置可能性高于平时。"
+          : "利用上限まわりの異常が報告されており、リセットの可能性を通常より高めに見ています。",
+    );
+  }
+
+  const recentResetCount7d = getRecent7DayResetCount(data, now);
+  if (recentResetCount7d >= 3) {
+    sentences.push(
+      locale === "en"
+        ? `There have been ${recentResetCount7d} resets in the last seven days, so the current likelihood is ${expectationText}.`
+        : locale === "zh"
+          ? `最近 7 天内已发生 ${recentResetCount7d} 次重置，当前可能性${expectationText}。`
+          : `直近7日間でリセットが${recentResetCount7d}回あり、現在の可能性は${expectationText}です。`,
+    );
+  }
+
+  const lastReset = resolvedSignalEvaluation.latestResetAt;
+  if (lastReset) {
+    const days = Math.floor(
+      Math.max(0, now.getTime() - lastReset.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    sentences.push(
+      locale === "en"
+        ? `${days === 1 ? "One day has" : `${days} days have`} passed since the last reset.`
+        : locale === "zh"
+          ? `自上次重置以来已过去 ${days} 天。`
+          : `直近のリセットから${days}日経過しています。`,
+    );
+  }
+
+  const hasRelevantSignal =
+    officialSignalCount > 0 ||
+    activeIncidentCount > 0 ||
+    issueAnomalyCount > 0 ||
+    recentResetCount7d >= 3;
+  if (!hasRelevantSignal) {
+    sentences.push(
+      locale === "en"
+        ? "There is currently no official notice or active Codex-related incident."
+        : locale === "zh"
+          ? "目前没有官方预告，也没有正在发生的 Codex 相关故障。"
+          : "現在、公式予告や発生中のCodex関連障害はありません。",
+    );
+  }
+
+  return sentences.slice(0, 2).join(" ");
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {

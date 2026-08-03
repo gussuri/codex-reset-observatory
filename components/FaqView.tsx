@@ -7,6 +7,7 @@ type FaqViewProps = {
 };
 
 type FaqItem = {
+  id?: string;
   question: string;
   answer: string;
 };
@@ -27,6 +28,7 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "Codexのリセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく整理しています。",
         },
         {
+          id: "forecast-method",
           question: "リセット期待度とは何ですか？",
           answer: "今後リセットが行われる可能性の目安です。過去のリセット間隔から基礎確率を算出し、公式予告、Statusの障害情報、コミュニティの動きなど現在の観測シグナルで補正しています。公式な確率ではありません。",
         },
@@ -110,6 +112,7 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and random reset probability based on public information, community activity, and OpenAI Status updates.",
         },
         {
+          id: "forecast-method",
           question: "What is the random reset probability?",
           answer: "It is a statistical reference forecast. A baseline derived from past reset intervals is adjusted using official notices, Status incident logs, community reports, and other current signals. It is not an official probability.",
         },
@@ -169,6 +172,7 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "本站根据 Codex 重置历史、官方预告、社区动态以及 OpenAI 服务状态，整理当前的重置情况和最新进展。",
         },
         {
+          id: "forecast-method",
           question: "重置可能性是什么意思？",
           answer: "重置可能性表示未来发生重置的参考概率。本站先根据过去的重置间隔计算基础概率，再根据官方预告、OpenAI Status 故障信息、社区讨论等当前观测信号进行调整。这并不是 OpenAI 官方公布的概率。",
         },
@@ -277,7 +281,11 @@ export function FaqView({ locale }: FaqViewProps) {
 
         <section className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
           {translations.faqs.map((faq) => (
-            <article className="py-5 first:pt-0 last:pb-0" key={faq.question}>
+            <article
+              id={faq.id}
+              className="scroll-mt-4 py-5 first:pt-0 last:pb-0"
+              key={faq.question}
+            >
               <h2 className="text-lg font-semibold leading-7 text-slate-950">
                 {faq.question}
               </h2>

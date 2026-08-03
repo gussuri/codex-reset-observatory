@@ -111,18 +111,12 @@ export function RadarDashboard({
     return () => window.clearInterval(timer);
   }, [fetchRadar, refreshMs]);
 
-  const resetNoticeTone =
-    viewModel.activeWindow.kind === "official"
-      ? {
-          card: "border-amber-300 bg-amber-50 text-amber-950",
-          icon: "text-amber-700",
-          badge: "bg-amber-200 text-amber-950",
-        }
-      : {
-          card: "border-slate-200 bg-white/90 text-slate-950",
-          icon: "text-teal-700",
-          badge: "bg-slate-100 text-slate-600",
-        };
+  const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const resetNoticeTone = {
+    card: "border-amber-300 bg-amber-50 text-amber-950",
+    icon: "text-amber-700",
+    badge: "bg-amber-200 text-amber-950",
+  };
 
   return (
     <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-5 lg:px-8" lang={locale}>
@@ -141,7 +135,7 @@ export function RadarDashboard({
               <h1 className="mt-0.5 whitespace-nowrap text-[1.15rem] font-semibold leading-tight tracking-normal text-slate-950 sm:mt-1 sm:text-4xl">
                 {SITE_NAME}
               </h1>
-              <p className="mt-2 max-h-10 max-w-2xl overflow-hidden text-xs leading-5 text-slate-600 sm:mt-3 sm:max-h-none sm:text-sm sm:leading-6">
+              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-600 sm:mt-3 sm:text-sm sm:leading-6">
                 {translateUI("description", locale)}
               </p>
             </div>
@@ -192,7 +186,8 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
+        {hasOfficialNotice ? (
+          <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
           <div className="sm:hidden">
             <div className="flex items-center gap-3">
               <Bell className={`h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
@@ -283,7 +278,8 @@ export function RadarDashboard({
               />
             </dl>
           ) : null}
-        </section>
+          </section>
+        ) : null}
 
         <section className="grid gap-5 lg:grid-cols-[1.12fr_0.88fr]">
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -306,6 +302,20 @@ export function RadarDashboard({
               probability48h={probability48h}
             />
 
+            {!isDataUnavailable && !hasOfficialNotice ? (
+              <div
+                role="status"
+                className="mt-4 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600"
+              >
+                <Bell className="h-4 w-4 text-slate-500" />
+                <span className="font-medium">
+                  {translateUI("officialNoticeStatus", locale)}
+                  {locale === "en" ? ": " : "："}
+                  {translateUI("noOfficialNotice", locale)}
+                </span>
+              </div>
+            ) : null}
+
             <dl className="mt-5 space-y-4">
               {!isDataUnavailable && viewModel.displayReasoningSummary ? (
                 <RecommendationRow reason={viewModel.displayReasoningSummary} locale={locale} />
@@ -314,6 +324,14 @@ export function RadarDashboard({
             <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
               {translateUI("disclaimer", locale)}
             </p>
+            <div className="mt-2 text-right text-xs">
+              <Link
+                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
+                href={locale === "ja" ? "/faq#forecast-method" : locale === "en" ? "/en/faq#forecast-method" : "/zh/faq#forecast-method"}
+              >
+                {translateUI("forecastMethod", locale)}
+              </Link>
+            </div>
           </article>
 
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -549,7 +567,7 @@ function RecommendationRow({
   return (
     <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:grid sm:grid-cols-[7rem_1fr] sm:items-start sm:gap-6">
       <dt className="whitespace-nowrap text-sm font-medium text-slate-500">
-        {translateUI("reason", locale)}
+        {translateUI("forecastOutlook", locale)}
       </dt>
       <dd className="text-sm leading-6 text-slate-700">
         {reason}
