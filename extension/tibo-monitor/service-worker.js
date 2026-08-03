@@ -13,6 +13,7 @@ const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
 const HISTORY_PATH = "/history";
 const TEST_HISTORY_URL = "https://codex-reset-observatory.vercel.app/history";
+const TEST_NOTIFICATION_ID = "tibo-monitor-notification-test";
 let notificationIconDiagnosticsPromise = null;
 let notificationIconDiagnosticsUrl = null;
 
@@ -356,41 +357,6 @@ function sanitizeNotificationError(error, fallback) {
   return (redacted || fallback).slice(0, 500);
 }
 
-function callChromeApi(method, args) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      callback(value);
-    };
-    const callback = (...values) => {
-      const lastError = getRuntimeLastErrorMessage();
-      if (lastError) {
-        finish(reject, new Error(lastError));
-        return;
-      }
-      finish(resolve, values.length <= 1 ? values[0] : values);
-    };
-
-    try {
-      const result = method(...args, callback);
-      if (result && typeof result.then === "function") {
-        result.then(
-          (value) => finish(resolve, value),
-          (error) => finish(reject, error),
-        );
-      } else if (result !== undefined) {
-        finish(resolve, result);
-      } else if (method.length <= args.length) {
-        setTimeout(() => finish(resolve, undefined), 0);
-      }
-    } catch (error) {
-      finish(reject, error);
-    }
-  });
-}
-
 async function getNotificationPermissionLevel() {
   if (
     !chrome.notifications ||
@@ -400,10 +366,7 @@ async function getNotificationPermissionLevel() {
   }
 
   try {
-    const level = await callChromeApi(
-      chrome.notifications.getPermissionLevel.bind(chrome.notifications),
-      [],
-    );
+    const level = await chrome.notifications.getPermissionLevel();
     return { level: level || "unavailable", error: null };
   } catch (error) {
     return {
@@ -496,10 +459,7 @@ async function verifyNotificationCreated(notificationId) {
   }
 
   try {
-    const notifications = await callChromeApi(
-      chrome.notifications.getAll.bind(chrome.notifications),
-      [],
-    );
+    const notifications = await chrome.notifications.getAll();
     const present = Boolean(notifications && notifications[notificationId]);
     return { status: present ? "present" : "missing", present };
   } catch (error) {
@@ -512,9 +472,34 @@ async function verifyNotificationCreated(notificationId) {
   }
 }
 
+function buildNotificationFailure(notificationId, details, error) {
+  return {
+    ok: false,
+    notificationId,
+    requestedNotificationId: notificationId,
+    returnedNotificationId: null,
+    actualNotificationId: notificationId,
+    permissionLevel: details.permissionLevel,
+    iconLoadStatus: details.iconLoadStatus,
+    getAllContainsRequestedId: null,
+    warning: null,
+    error,
+    details: {
+      ...details,
+      requestedNotificationId: notificationId,
+      returnedNotificationId: null,
+      actualNotificationId: notificationId,
+      error,
+    },
+  };
+}
+
 async function createNotificationWithDiagnostics(notificationId, options) {
   const details = {
     notificationId,
+    requestedNotificationId: notificationId,
+    returnedNotificationId: null,
+    actualNotificationId: notificationId,
     iconUrl: options?.iconUrl || null,
     apiAvailable: Boolean(
       chrome.notifications && typeof chrome.notifications.create === "function",
@@ -524,80 +509,105 @@ async function createNotificationWithDiagnostics(notificationId, options) {
   };
 
   if (!details.apiAvailable) {
-    return {
-      ok: false,
-      error: "notifications API is unavailable",
+    return buildNotificationFailure(
+      notificationId,
       details,
-    };
+      "notifications API is unavailable",
+    );
   }
 
   const permission = await getNotificationPermissionLevel();
   details.permissionLevel = permission.level;
   if (permission.level === "denied") {
-    return {
-      ok: false,
-      error: "Chrome extension notification permission is denied.",
-      details: {
-        ...details,
-        ...(permission.error || {}),
-      },
-    };
+    return buildNotificationFailure(
+      notificationId,
+      { ...details, ...(permission.error || {}) },
+      "Chrome extension notification permission is denied.",
+    );
   }
 
   const icon = await inspectNotificationIcon(options?.iconUrl);
   details.iconLoadStatus = icon.status;
   if (icon.status !== "ok") {
-    return {
-      ok: false,
-      error: icon.errorMessage || "Notification icon could not be loaded.",
-      details: {
-        ...details,
-        ...icon,
-      },
-    };
+    return buildNotificationFailure(
+      notificationId,
+      { ...details, ...icon },
+      icon.errorMessage || "Notification icon could not be loaded.",
+    );
   }
 
   try {
-    const createdId = await callChromeApi(
-      chrome.notifications.create.bind(chrome.notifications),
-      [notificationId, options],
-    );
-    if (!createdId) {
-      return {
-        ok: false,
-        error: "notifications.create returned no id",
-        details,
-      };
-    }
-
-    const verification = await verifyNotificationCreated(createdId);
+    const returnedValue = await chrome.notifications.create(notificationId, options);
+    const returnedNotificationId =
+      typeof returnedValue === "string" && returnedValue.length > 0
+        ? returnedValue
+        : null;
+    const actualNotificationId = returnedNotificationId || notificationId;
+    const returnedIdWarning = returnedNotificationId
+      ? null
+      : "notifications.create returned no id; requested id was used";
+    const verification = await verifyNotificationCreated(notificationId);
+    const warning = [
+      returnedIdWarning,
+      verification.status === "missing"
+        ? "getAll did not contain the requested notification id"
+        : null,
+      verification.status === "error"
+        ? "getAll verification failed"
+        : null,
+    ]
+      .filter(Boolean)
+      .join("; ") || null;
     return {
       ok: true,
-      notificationId: createdId,
+      notificationId: actualNotificationId,
+      requestedNotificationId: notificationId,
+      returnedNotificationId,
+      actualNotificationId,
+      permissionLevel: details.permissionLevel,
+      iconLoadStatus: details.iconLoadStatus,
+      getAllContainsRequestedId: verification.present,
+      warning,
+      error: null,
       details: {
         ...details,
+        requestedNotificationId: notificationId,
+        returnedNotificationId,
+        actualNotificationId,
+        warning,
+        getAllContainsRequestedId: verification.present,
         notificationPresence: verification.status,
         ...(verification.errorName ? { errorName: verification.errorName } : {}),
         ...(verification.errorMessage ? { errorMessage: verification.errorMessage } : {}),
       },
     };
   } catch (error) {
+    const errorMessage = sanitizeNotificationError(error, "notifications.create failed");
     return {
       ok: false,
-      error: sanitizeNotificationError(error, "notifications.create failed"),
+      notificationId,
+      requestedNotificationId: notificationId,
+      returnedNotificationId: null,
+      actualNotificationId: notificationId,
+      permissionLevel: details.permissionLevel,
+      iconLoadStatus: details.iconLoadStatus,
+      getAllContainsRequestedId: null,
+      warning: null,
+      error: errorMessage,
       details: {
         ...details,
+        requestedNotificationId: notificationId,
+        returnedNotificationId: null,
+        actualNotificationId: notificationId,
         errorName: error?.name || "Error",
-        errorMessage: sanitizeNotificationError(error, "notifications.create failed"),
+        errorMessage,
       },
     };
   }
 }
 
 function createTestNotificationId() {
-  return `tibo-formal-adoption-test-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+  return TEST_NOTIFICATION_ID;
 }
 
 async function showFormalAdoptionNotification(adoption, domain) {
@@ -679,6 +689,17 @@ async function showFormalAdoptionNotification(adoption, domain) {
       : isSafeNotificationUrl(adoption.sourceUrl)
         ? adoption.sourceUrl
         : getSafeHistoryUrl(domain);
+
+    const actualNotificationId =
+      created.actualNotificationId || created.notificationId || notificationId;
+    urls[actualNotificationId] = urls[notificationId] || (isTest
+      ? TEST_HISTORY_URL
+      : isSafeNotificationUrl(adoption.sourceUrl)
+        ? adoption.sourceUrl
+        : getSafeHistoryUrl(domain));
+    if (actualNotificationId !== notificationId) {
+      delete urls[notificationId];
+    }
 
     const nextUrls = Object.fromEntries(Object.entries(urls).slice(-50));
     const update = { [urlKey]: nextUrls };

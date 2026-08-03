@@ -11,6 +11,10 @@ function setupServiceWorkerContext(
     failReloadTabId?: number;
     notificationError?: boolean;
     notificationPromiseError?: string;
+    notificationRuntimeError?: string;
+    notificationReturnUndefined?: boolean;
+    notificationGetAllError?: string;
+    notificationGetAllMissing?: boolean;
     notificationPermission?: "granted" | "denied";
     notificationPermissionError?: string;
     iconFetchError?: string;
@@ -99,22 +103,33 @@ function setupServiceWorkerContext(
         }
         return opts.notificationPermission || "granted";
       },
-      create: (id: string, options: any, callback: (createdId?: string) => void) => {
+      create: async (id: string, options: any) => {
         notificationCreateCalls += 1;
         if (opts.notificationPromiseError) {
           return Promise.reject(new Error(opts.notificationPromiseError));
         }
         if (opts.notificationError) {
-          (mockChrome.runtime as any).lastError = { message: "notifications unavailable" };
-          callback(undefined);
-          (mockChrome.runtime as any).lastError = undefined;
-          return;
+          throw new Error("notifications unavailable");
+        }
+        if (opts.notificationRuntimeError) {
+          (mockChrome.runtime as any).lastError = {
+            message: opts.notificationRuntimeError,
+          };
+          throw new Error("Promise rejected after runtime.lastError");
         }
         createdNotifications.push({ id, options });
         activeNotificationIds[id] = true;
-        callback(id);
+        return opts.notificationReturnUndefined ? undefined : id;
       },
-      getAll: async () => ({ ...activeNotificationIds }),
+      getAll: async () => {
+        if (opts.notificationGetAllError) {
+          throw new Error(opts.notificationGetAllError);
+        }
+        if (opts.notificationGetAllMissing) {
+          return {};
+        }
+        return { ...activeNotificationIds };
+      },
       clear: async (id: string) => {
         delete activeNotificationIds[id];
         return true;
@@ -438,6 +453,43 @@ test("formal adoption creates one local notification and opens its source", asyn
   assert.equal(createdNotifications.length, 1);
 });
 
+test("production notification keeps dedup state when create returns no id", async () => {
+  const { sendMessage, localStore, createdNotifications } = setupServiceWorkerContext([], {
+    notificationReturnUndefined: true,
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        formalAdoption: {
+          newlyAdopted: true,
+          tweetId: "2084000000000000004",
+          title: "ランダムリセット",
+          confidence: 0.98,
+          sourceUrl: "https://x.com/thsottiaux/status/2084000000000000004",
+        },
+      }),
+    },
+  });
+  localStore.webhook_secret = "test-secret";
+
+  const result = await sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2084000000000000004",
+      text: "I reset usage limits.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000004",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(createdNotifications.length, 1);
+  assert.deepEqual(localStore.tibo_formal_adoption_notified_ids, [
+    "2084000000000000004",
+  ]);
+});
+
 test("notification API failure does not fail tweet collection", async () => {
   const { sendMessage, localStore, createdNotifications } = setupServiceWorkerContext([], {
     notificationError: true,
@@ -514,8 +566,52 @@ test("notification self-test is local, repeatable, and opens the history page", 
     action: "TEST_FORMAL_ADOPTION_NOTIFICATION",
   });
   assert.equal(second.ok, true);
-  assert.notEqual(second.notificationId, first.notificationId);
+  assert.equal(second.notificationId, first.notificationId);
   assert.equal(createdNotifications.length, 2);
+});
+
+test("notification self-test accepts an empty create return value", async () => {
+  const { sendMessage, localStore, createdNotifications } = setupServiceWorkerContext([], {
+    notificationReturnUndefined: true,
+  });
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.requestedNotificationId, "tibo-monitor-notification-test");
+  assert.equal(result.returnedNotificationId, null);
+  assert.equal(result.actualNotificationId, "tibo-monitor-notification-test");
+  assert.equal(
+    result.warning,
+    "notifications.create returned no id; requested id was used",
+  );
+  assert.equal(result.getAllContainsRequestedId, true);
+  assert.equal(createdNotifications.length, 1);
+  assert.equal(localStore.tibo_diagnostic_logs.at(-1).event, "notification_test_succeeded");
+  assert.equal(
+    localStore.tibo_diagnostic_logs.at(-1).warning,
+    "notifications.create returned no id; requested id was used",
+  );
+});
+
+test("getAll verification is diagnostic-only after a successful create", async () => {
+  const missing = await (async () => {
+    const context = setupServiceWorkerContext([], { notificationGetAllMissing: true });
+    return context.sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+  })();
+  assert.equal(missing.ok, true);
+  assert.equal(missing.getAllContainsRequestedId, false);
+  assert.match(missing.warning, /getAll did not contain/);
+
+  const rejected = await (async () => {
+    const context = setupServiceWorkerContext([], {
+      notificationGetAllError: "getAll unavailable",
+    });
+    return context.sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+  })();
+  assert.equal(rejected.ok, true);
+  assert.equal(rejected.getAllContainsRequestedId, null);
+  assert.match(rejected.warning, /getAll verification failed/);
 });
 
 test("notification self-test reports notification API failure without network activity", async () => {
@@ -559,6 +655,18 @@ test("notification self-test preserves a Promise rejection from Chrome", async (
   assert.equal(result.ok, false);
   assert.equal(result.error, "Unable to download all specified images.");
   assert.equal(result.details.errorMessage, "Unable to download all specified images.");
+  assert.equal(getNotificationCreateCalls(), 1);
+});
+
+test("notification self-test preserves runtime.lastError", async () => {
+  const { sendMessage, getNotificationCreateCalls } = setupServiceWorkerContext([], {
+    notificationRuntimeError: "The notifications permission is denied.",
+  });
+
+  const result = await sendMessage({ action: "TEST_FORMAL_ADOPTION_NOTIFICATION" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "The notifications permission is denied.");
   assert.equal(getNotificationCreateCalls(), 1);
 });
 

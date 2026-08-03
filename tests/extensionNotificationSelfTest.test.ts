@@ -94,9 +94,24 @@ test("options page exposes a safe notification test and reports its result", asy
     },
     runtime: {
       lastError: undefined,
-      sendMessage: (message: unknown, callback: (response: { ok: boolean }) => void) => {
+      sendMessage: (
+        message: unknown,
+        callback: (response: {
+          ok: boolean;
+          requestedNotificationId: string;
+          returnedNotificationId: string | null;
+          actualNotificationId: string;
+          warning: string;
+        }) => void,
+      ) => {
         sentMessage = message;
-        callback({ ok: true });
+        callback({
+          ok: true,
+          requestedNotificationId: "tibo-monitor-notification-test",
+          returnedNotificationId: null,
+          actualNotificationId: "tibo-monitor-notification-test",
+          warning: "notifications.create returned no id; requested id was used",
+        });
       },
     },
   };
