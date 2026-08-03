@@ -208,12 +208,7 @@ export type RadarData = {
   };
 };
 
-export type CachedRadarData = {
-  data: RadarData;
-  fetchedAt: string;
-};
-
-export type RadarViewModel = {
+export type PublicRadarViewModel = {
   status: string;
   expectation: string;
   probability24h?: number;
@@ -276,4 +271,31 @@ export type RadarViewModel = {
     source?: string | null;
     summary?: string | null;
   }>;
+};
+
+// The view model is display-only and is kept as the compatibility name used by
+// the existing prediction and presentation helpers.
+export type RadarViewModel = PublicRadarViewModel;
+
+export type PublicDataHealth = {
+  overall: "ok" | "degraded";
+  stale: boolean;
+  generatedAt: string;
+  sources: {
+    supabaseSignals: DataSourceHealth;
+    openAIStatus: DataSourceHealth;
+  };
+};
+
+export type PublicRadarSnapshot = {
+  schemaVersion: string;
+  checkedAt: string;
+  updatedAt: string | null;
+  dataHealth: PublicDataHealth;
+  viewModel: PublicRadarViewModel;
+};
+
+export type CachedRadarData = {
+  data: PublicRadarSnapshot;
+  fetchedAt: string;
 };

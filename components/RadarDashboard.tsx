@@ -12,7 +12,6 @@ import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CachedRadarData,
-  RadarData,
   getRadarViewModel,
   getRefreshIntervalMs,
   isSafeHttpUrl,
@@ -23,7 +22,7 @@ import {
   getDashboardDataState,
   type RadarLoadState,
 } from "@/lib/radar/clientState";
-import type { Locale } from "@/lib/radar/types";
+import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
@@ -38,14 +37,14 @@ export function RadarDashboard({
   initialFetchedAt,
   locale = "ja",
 }: {
-  initialData?: RadarData | null;
+  initialData?: PublicRadarSnapshot | null;
   initialFetchedAt?: string | null;
   locale?: Locale;
 }) {
   const [state, setState] = useState<RadarLoadState>({
     data: initialData ?? null,
-    fetchedAt: initialFetchedAt ?? null,
-    isStale: false,
+    fetchedAt: initialFetchedAt ?? initialData?.checkedAt ?? null,
+    isStale: initialData?.dataHealth.stale ?? false,
     refreshError: null,
   });
 
@@ -60,14 +59,14 @@ export function RadarDashboard({
 
   const fetchRadar = useCallback(async () => {
     try {
-      const response = await fetch("/api/current", { cache: "no-store" });
+      const response = await fetch(`/api/current?locale=${locale}`, { cache: "no-store" });
 
       if (!response.ok) {
         throw new Error("Failed to fetch current data");
       }
 
-      const data = (await response.json()) as RadarData;
-      const fetchedAt = new Date().toISOString();
+      const data = (await response.json()) as PublicRadarSnapshot;
+      const fetchedAt = data.checkedAt;
 
       setState(applyRefreshSuccess(data, fetchedAt));
 
@@ -83,13 +82,16 @@ export function RadarDashboard({
       const cached = loadCachedData();
       setState((current) => applyRefreshFailure(current, cached));
     }
-  }, [loadCachedData]);
+  }, [loadCachedData, locale]);
 
   useEffect(() => {
     void fetchRadar();
   }, [fetchRadar]);
 
-  const viewModel = useMemo(() => getRadarViewModel(state.data, locale), [state.data, locale]);
+  const viewModel = useMemo(
+    () => state.data?.viewModel ?? getRadarViewModel(null, locale),
+    [state.data, locale],
+  );
   const dashboardDataState = getDashboardDataState(state);
   const isDataUnavailable = dashboardDataState === "unavailable";
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;

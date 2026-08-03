@@ -12,8 +12,11 @@ import type {
   ActiveTiboSignal,
   DataFetchResult,
   DataSourceHealth,
+  Locale,
+  PublicRadarSnapshot,
   RadarData,
 } from "@/lib/radar/types";
+import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
 import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
@@ -22,7 +25,9 @@ import {
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 
-export const API_CACHE_CONTROL = "s-maxage=300, stale-while-revalidate=600";
+export const API_CACHE_CONTROL =
+  "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
+export const RADAR_CORE_CACHE_TTL_SECONDS = 60;
 
 // 1. Raw Supabase fetch function
 async function fetchRawTiboSignals(): Promise<DataFetchResult<ActiveTiboSignal[]>> {
@@ -238,5 +243,103 @@ export async function fetchCurrentRadarData(
     activeTiboSignals: tiboSignals.activeSignals,
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
+  });
+}
+
+type SharedRadarCore = {
+  data: RadarData;
+  generatedAt: string;
+};
+
+/**
+ * One locale-independent Data Cache entry feeds the pages and the API. Next's
+ * persistent Data Cache keeps the last successful value available during a
+ * stale-while-revalidate cycle and across normal cold starts.
+ */
+const getCachedRadarCore = unstable_cache(
+  async (): Promise<SharedRadarCore> => {
+    const data = await fetchCurrentRadarData({ cache: "no-store" });
+    if (data.data_health?.overall === "degraded") {
+      // Do not replace a healthy Data Cache entry with a partial live result.
+      // Next can continue serving the previous value while this revalidates.
+      throw new Error("required_source_degraded");
+    }
+    return {
+      data,
+      generatedAt: data.checked_at ?? new Date().toISOString(),
+    };
+  },
+  ["radar-core-cache-v1"],
+  {
+    revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
+    tags: ["radar-data"],
+  },
+);
+
+function isOlderThanCacheTtl(generatedAt: string) {
+  const generatedTime = new Date(generatedAt).getTime();
+  return (
+    !Number.isNaN(generatedTime) &&
+    Date.now() - generatedTime > RADAR_CORE_CACHE_TTL_SECONDS * 1000
+  );
+}
+
+async function getSafeRadarFallback(): Promise<SharedRadarCore> {
+  const data = await fetchCurrentRadarData({ cache: "no-store" });
+  return {
+    data,
+    generatedAt: data.checked_at ?? new Date().toISOString(),
+  };
+}
+
+export async function fetchSharedRadarCore() {
+  try {
+    const core = await getCachedRadarCore();
+    const stale = isOlderThanCacheTtl(core.generatedAt);
+    if (stale) {
+      console.warn("[Radar stale fallback] serving an older cached snapshot", {
+        reason: "cached_data_stale",
+      });
+    }
+    return {
+      ...core,
+      stale,
+    };
+  } catch {
+    // A first-request failure has no Data Cache value to serve. The existing
+    // local/static fallback remains renderable and is marked degraded/stale.
+    console.warn("[Radar stale fallback] live radar data was unavailable", {
+      reason: "live_data_unavailable",
+    });
+    try {
+      const fallback = await getSafeRadarFallback();
+      return { ...fallback, stale: true };
+    } catch {
+      const checkedAt = new Date().toISOString();
+      const fallback = getLocalRadarData({
+        checkedAt,
+        dataHealth: {
+          overall: "degraded",
+          checkedAt,
+          sources: {
+            supabaseSignals: { state: "degraded", detail: "request_failed" },
+            openAIStatus: { state: "degraded", detail: "request_failed" },
+          },
+        },
+      });
+      return { data: fallback, generatedAt: checkedAt, stale: true };
+    }
+  }
+}
+
+export async function fetchPublicRadarSnapshot(
+  locale: Locale,
+  options: { limitHistory?: boolean } = {},
+): Promise<PublicRadarSnapshot> {
+  const core = await fetchSharedRadarCore();
+  return toPublicRadarSnapshot(core.data, locale, {
+    stale: core.stale,
+    generatedAt: core.generatedAt,
+    limitHistory: options.limitHistory,
   });
 }

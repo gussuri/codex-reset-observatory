@@ -1,7 +1,7 @@
-import type { CachedRadarData, RadarData } from "./types";
+import type { CachedRadarData, PublicRadarSnapshot } from "./types";
 
 export type RadarLoadState = {
-  data: RadarData | null;
+  data: PublicRadarSnapshot | null;
   fetchedAt: string | null;
   isStale: boolean;
   refreshError: "request_failed" | null;
@@ -10,13 +10,13 @@ export type RadarLoadState = {
 export type DashboardDataState = "ready" | "degraded" | "stale" | "unavailable";
 
 export function applyRefreshSuccess(
-  data: RadarData,
+  data: PublicRadarSnapshot,
   fetchedAt: string,
 ): RadarLoadState {
   return {
     data,
     fetchedAt,
-    isStale: false,
+    isStale: data.dataHealth.stale,
     refreshError: null,
   };
 }
@@ -53,7 +53,7 @@ export function getDashboardDataState(
     return "stale";
   }
 
-  if (state.data.data_health?.overall === "degraded") {
+  if (state.data.dataHealth.overall === "degraded") {
     return "degraded";
   }
 

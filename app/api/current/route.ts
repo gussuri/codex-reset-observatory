@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
-import { API_CACHE_CONTROL, fetchCurrentRadarData } from "@/lib/radarFetch";
+import { API_CACHE_CONTROL, fetchPublicRadarSnapshot } from "@/lib/radarFetch";
+import type { Locale } from "@/lib/radar/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const data = await fetchCurrentRadarData({ cache: "no-store" });
+function getLocale(value: string | null): Locale {
+  return value === "en" || value === "zh" ? value : "ja";
+}
+
+export async function GET(request: Request) {
+  const locale = getLocale(new URL(request.url).searchParams.get("locale"));
+  const data = await fetchPublicRadarSnapshot(locale);
 
   return NextResponse.json(data, {
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "Cache-Control": API_CACHE_CONTROL,
     },
   });
 }

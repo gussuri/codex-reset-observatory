@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@/lib/radar/types";
+import { DISPLAY_TIME_ZONE } from "@/lib/radar/helpers";
 
 type LocalizedDateTimeProps = {
   value: string | null | undefined;
@@ -10,11 +11,13 @@ type LocalizedDateTimeProps = {
 };
 
 export function LocalizedDateTime({ value, locale = "ja", className }: LocalizedDateTimeProps) {
-  const [timeZone, setTimeZone] = useState<string | null>(null);
+  // JST is deterministic during SSR and the first hydration render. The
+  // browser timezone is applied only after hydration to avoid a mismatch.
+  const [timeZone, setTimeZone] = useState(DISPLAY_TIME_ZONE);
   const date = useMemo(() => parseDate(value), [value]);
 
   useEffect(() => {
-    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone ?? null);
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || DISPLAY_TIME_ZONE);
   }, []);
 
   if (!value) {
@@ -27,15 +30,19 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
   }
 
   const formatLocale = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
-  const local = timeZone ? formatDateTimeInZone(date, timeZone, formatLocale) : null;
-
-  const detectingLabel = locale === "en" ? "Detecting time zone..." : locale === "zh" ? "正在检测时区..." : "タイムゾーンを検出中...";
+  const local = formatDateTimeInZone(date, timeZone, formatLocale);
+  const classes = ["inline-flex", "flex-col", className]
+    .filter((item): item is string => Boolean(item))
+    .join(" ");
 
   return (
-    <span className={`inline-flex flex-col ${className}`}>
-      <span className="block font-bold text-slate-900 leading-tight">
-        {local ?? detectingLabel}
-      </span>
+    <span className={classes}>
+      <time
+        dateTime={date.toISOString()}
+        className="block font-bold leading-tight text-slate-900"
+      >
+        {local}
+      </time>
     </span>
   );
 }
@@ -50,7 +57,7 @@ function parseDate(value: string | null | undefined) {
 }
 
 function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
-  return new Intl.DateTimeFormat(localeStr, {
+  const formatted = new Intl.DateTimeFormat(localeStr, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -60,4 +67,10 @@ function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
     timeZone,
     timeZoneName: "short",
   }).format(date);
+
+  if (timeZone === DISPLAY_TIME_ZONE && !/\bJST\b/.test(formatted)) {
+    return `${formatted} JST`;
+  }
+
+  return formatted;
 }

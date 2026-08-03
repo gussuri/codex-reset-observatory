@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import test from "node:test";
-import type { CachedRadarData, RadarData } from "../lib/radar/types";
+import type { CachedRadarData, PublicRadarSnapshot } from "../lib/radar/types";
 import {
   applyRefreshFailure,
   applyRefreshSuccess,
@@ -8,8 +8,26 @@ import {
   type RadarLoadState,
 } from "../lib/radar/clientState";
 
-const currentData: RadarData = { checked_at: "2026-08-01T00:00:00.000Z" };
-const cachedData: RadarData = { checked_at: "2026-07-31T00:00:00.000Z" };
+function snapshot(checkedAt: string, overall: "ok" | "degraded" = "ok"): PublicRadarSnapshot {
+  return {
+    schemaVersion: "public-v1",
+    checkedAt,
+    updatedAt: null,
+    dataHealth: {
+      overall,
+      stale: false,
+      generatedAt: checkedAt,
+      sources: {
+        supabaseSignals: { state: overall === "ok" ? "ok" : "degraded" },
+        openAIStatus: { state: overall === "ok" ? "ok" : "degraded" },
+      },
+    },
+    viewModel: {} as PublicRadarSnapshot["viewModel"],
+  };
+}
+
+const currentData = snapshot("2026-08-01T00:00:00.000Z");
+const cachedData = snapshot("2026-07-31T00:00:00.000Z");
 
 test("applyRefreshSuccess clears an earlier refresh failure", () => {
   assert.deepStrictEqual(
@@ -79,16 +97,7 @@ test("applyRefreshFailure without current or cached data is unavailable", () => 
 });
 
 test("getDashboardDataState gives unavailable, stale, and degraded data the required precedence", () => {
-  const degradedData: RadarData = {
-    data_health: {
-      overall: "degraded",
-      checkedAt: "2026-08-01T12:00:00.000Z",
-      sources: {
-        supabaseSignals: { state: "ok" },
-        openAIStatus: { state: "degraded", detail: "request_failed" },
-      },
-    },
-  };
+  const degradedData = snapshot("2026-08-01T12:00:00.000Z", "degraded");
 
   assert.strictEqual(
     getDashboardDataState({ data: null, fetchedAt: null, isStale: true, refreshError: "request_failed" }),

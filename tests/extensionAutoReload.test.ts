@@ -9,6 +9,7 @@ function setupServiceWorkerContext(
   customTabs: Array<{ id: number; url: string }> = [],
   opts: {
     failReloadTabId?: number;
+    notificationError?: boolean;
     fetchResponse?: {
       ok: boolean;
       status: number;
@@ -20,8 +21,11 @@ function setupServiceWorkerContext(
   const localStore: Record<string, any> = {};
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
   const reloadedTabIds: number[] = [];
+  const openedTabs: Array<{ url: string }> = [];
+  const createdNotifications: Array<{ id: string; options: any }> = [];
   let alarmListener: ((alarm: { name: string }) => void) | null = null;
   let messageListener: Function | null = null;
+  let notificationClickListener: ((notificationId: string) => void) | null = null;
 
   const mockFetchCalls: Array<{ url: string; body: any }> = [];
 
@@ -69,8 +73,32 @@ function setupServiceWorkerContext(
         }
         reloadedTabIds.push(tabId);
       },
+      create: async (tab: { url: string }) => {
+        openedTabs.push(tab);
+        return { id: openedTabs.length };
+      },
+    },
+    notifications: {
+      onClicked: {
+        addListener: (fn: (notificationId: string) => void) => {
+          notificationClickListener = fn;
+        },
+      },
+      create: (id: string, options: any, callback: (createdId?: string) => void) => {
+        if (opts.notificationError) {
+          (mockChrome.runtime as any).lastError = { message: "notifications unavailable" };
+          callback(undefined);
+          (mockChrome.runtime as any).lastError = undefined;
+          return;
+        }
+        createdNotifications.push({ id, options });
+        callback(id);
+      },
+      clear: async () => true,
     },
     runtime: {
+      lastError: undefined,
+      getURL: (fileName: string) => `chrome-extension://test/${fileName}`,
       onInstalled: { addListener: () => {} },
       onStartup: { addListener: () => {} },
       onMessage: {
@@ -129,6 +157,8 @@ function setupServiceWorkerContext(
     localStore,
     alarmsCreated,
     reloadedTabIds,
+    openedTabs,
+    createdNotifications,
     mockFetchCalls,
     fireAlarm: async (name: string) => {
       if (alarmListener) {
@@ -143,6 +173,11 @@ function setupServiceWorkerContext(
           resolve(null);
         }
       });
+    },
+    clickNotification: async (notificationId: string) => {
+      if (notificationClickListener) {
+        await notificationClickListener(notificationId);
+      }
     },
   };
 }
@@ -312,4 +347,90 @@ test("Service Worker sends only safe heartbeat counters and omits snapshot data"
   assert.equal(sentBody.lastScanError, "scan_error");
   assert.equal(sentBody.lastScanSummary.snapshots, undefined);
   assert.doesNotMatch(JSON.stringify(sentBody), /secret HTML|raw secret error/i);
+});
+
+test("formal adoption creates one local notification and opens its source", async () => {
+  const { sendMessage, localStore, createdNotifications, clickNotification, openedTabs } =
+    setupServiceWorkerContext([], {
+      fetchResponse: {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          formalAdoption: {
+            newlyAdopted: true,
+            tweetId: "2084000000000000001",
+            title: "ランダムリセット",
+            confidence: 0.98,
+            sourceUrl: "https://x.com/thsottiaux/status/2084000000000000001",
+          },
+        }),
+      },
+    });
+  localStore.webhook_secret = "test-secret";
+
+  const first = await sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2084000000000000001",
+      text: "I reset usage limits.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000001",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    },
+  });
+  assert.equal(first.success, true);
+  assert.equal(createdNotifications.length, 1);
+  assert.match(createdNotifications[0].options.message, /98%/);
+
+  await clickNotification(createdNotifications[0].id);
+  assert.deepEqual(openedTabs, [
+    { url: "https://x.com/thsottiaux/status/2084000000000000001" },
+  ]);
+
+  // A second webhook response with the same formal tweet ID remains locally deduped.
+  await sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2084000000000000002",
+      text: "I reset usage limits again.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000002",
+      tweetCreatedAt: "2026-08-04T00:01:00.000Z",
+    },
+  });
+  assert.equal(createdNotifications.length, 1);
+});
+
+test("notification API failure does not fail tweet collection", async () => {
+  const { sendMessage, localStore, createdNotifications } = setupServiceWorkerContext([], {
+    notificationError: true,
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        formalAdoption: {
+          newlyAdopted: true,
+          tweetId: "2084000000000000003",
+          title: "ランダムリセット",
+          confidence: 0.98,
+          sourceUrl: "https://x.com/thsottiaux/status/2084000000000000003",
+        },
+      }),
+    },
+  });
+  localStore.webhook_secret = "test-secret";
+
+  const result = await sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2084000000000000003",
+      text: "I reset usage limits.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000003",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(createdNotifications.length, 0);
+  assert.deepEqual(localStore.tibo_processed_tweet_ids, ["2084000000000000003"]);
 });

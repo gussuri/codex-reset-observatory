@@ -204,6 +204,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Recent reset events",
     zh: "最近的重置历史",
   },
+  resetHistory: {
+    ja: "リセット履歴",
+    en: "Reset history",
+    zh: "重置历史",
+  },
   noHistory: {
     ja: "直近履歴は取得できていません。",
     en: "No reset history is available.",

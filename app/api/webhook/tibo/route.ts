@@ -9,6 +9,11 @@ import {
   selectTiboClassification,
   shouldRunGeminiClassification,
 } from "@/lib/radar/tiboClassificationMode";
+import type { FormalTiboResetSignal } from "@/lib/radar/tiboHistory";
+import {
+  buildFormalAdoptionResult,
+  isNewFormalAdoption,
+} from "@/lib/radar/formalAdoption";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -124,7 +129,7 @@ export async function POST(req: NextRequest) {
       tweet_created_at: createdDate.toISOString(),
       detected_at: new Date().toISOString(),
       expires_at: expiresAt.toISOString(),
-      verification_status: "auto_unverified",
+      verification_status: "auto_unverified" as const,
       classification_reason: selectedClassification.reason,
       is_reply: ruleResult.isReply,
       is_quote: ruleResult.isQuote,
@@ -145,8 +150,55 @@ export async function POST(req: NextRequest) {
       classification_source: selectedClassification.classificationSource,
     };
 
-    // 7. Supabase Upsert
+    // 7. Detect a first formal adoption before the upsert. The lookup is
+    // best-effort so a lookup failure never changes webhook persistence.
     const supabase = getSupabaseServiceClient();
+    let formalLookupAvailable = true;
+    let existingSignal: Partial<FormalTiboResetSignal> | null = null;
+    try {
+      const { data, error: lookupError } = await supabase
+        .from("tibo_signals")
+        .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source")
+        .eq("tweet_id", tweetId)
+        .maybeSingle();
+
+      if (lookupError) {
+        formalLookupAvailable = false;
+        console.warn("[Webhook Warning] Formal adoption lookup failed", {
+          reason: "lookup_failed",
+        });
+      } else {
+        existingSignal = data as Partial<FormalTiboResetSignal> | null;
+      }
+    } catch {
+      formalLookupAvailable = false;
+      console.warn("[Webhook Warning] Formal adoption lookup failed", {
+        reason: "lookup_failed",
+      });
+    }
+
+    const formalCandidate: FormalTiboResetSignal = {
+      tweet_id: payload.tweet_id,
+      text: payload.text,
+      tweet_url: payload.tweet_url,
+      tweet_created_at: payload.tweet_created_at,
+      detected_at: payload.detected_at,
+      signal_type: payload.signal_type,
+      confidence: payload.confidence,
+      verification_status: payload.verification_status,
+      classification_source: payload.classification_source,
+      ai_classification_status: payload.ai_classification_status,
+      ai_reset_type_ja: payload.ai_reset_type_ja,
+      ai_notice_to_execution: payload.ai_notice_to_execution,
+      expires_at: payload.expires_at,
+    };
+    const newlyAdopted = isNewFormalAdoption(
+      formalCandidate,
+      existingSignal,
+      formalLookupAvailable,
+    );
+
+    // 8. Supabase Upsert
     const { error } = await supabase
       .from("tibo_signals")
       .upsert(payload, { onConflict: "tweet_id" });
@@ -156,14 +208,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
-    // 8. Purge Next.js Cache
+    const formalAdoption = buildFormalAdoptionResult(newlyAdopted, formalCandidate);
+
+    if (newlyAdopted) {
+      console.info("[Tibo Formal Adoption]", {
+        tweetId,
+        signalType: selectedClassification.signalType,
+        confidence: selectedClassification.confidence,
+        sourceUrl: tweetUrl,
+        adoptedAt: new Date().toISOString(),
+      });
+    }
+
+    // 9. Purge Next.js Cache
     try {
       revalidateTag("radar-data");
     } catch (e) {
       console.warn("[Webhook Warning] Cache revalidation skipped:", e);
     }
 
-    return NextResponse.json({ success: true, ...classificationResponse });
+    return NextResponse.json({
+      success: true,
+      ...classificationResponse,
+      formalAdoption,
+    });
   } catch {
     console.error("[Webhook Error] Request processing failed.");
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });

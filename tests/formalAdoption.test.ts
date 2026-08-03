@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  buildFormalAdoptionResult,
+  isNewFormalAdoption,
+} from "../lib/radar/formalAdoption";
+import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
+
+function candidate(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
+  return {
+    tweet_id: "2084000000000000100",
+    text: "I reset usage limits for Codex.",
+    tweet_url: "https://x.com/thsottiaux/status/2084000000000000100",
+    tweet_created_at: "2026-08-04T00:00:00.000Z",
+    signal_type: "reset_executed",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ...overrides,
+  };
+}
+
+test("new formal Tibo reset is adopted once", () => {
+  const signal = candidate();
+  assert.equal(isNewFormalAdoption(signal, null), true);
+  assert.equal(isNewFormalAdoption(signal, signal), false);
+  assert.equal(
+    isNewFormalAdoption(signal, { ...signal, verification_status: "confirmed" }),
+    false,
+  );
+});
+test("formal adoption rejects ineligible or unavailable candidates", () => {
+  assert.equal(
+    isNewFormalAdoption(candidate({ signal_type: "teaser" }), null),
+    false,
+  );
+  assert.equal(
+    isNewFormalAdoption(candidate({ confidence: 0.94 }), null),
+    false,
+  );
+  assert.equal(isNewFormalAdoption(candidate(), null, false), false);
+  assert.equal(
+    isNewFormalAdoption(
+      candidate({ tweet_id: "2083395449814229287", tweet_url: "https://x.com/thsottiaux/status/2083395449814229287" }),
+      null,
+    ),
+    false,
+  );
+});
+
+test("formal adoption response contains only display-safe adoption fields", () => {
+  const result = buildFormalAdoptionResult(true, candidate());
+  assert.deepEqual(result, {
+    newlyAdopted: true,
+    tweetId: "2084000000000000100",
+    title: "ランダムリセット",
+    confidence: 0.98,
+    sourceUrl: "https://x.com/thsottiaux/status/2084000000000000100",
+  });
+  assert.equal("text" in result, false);
+  assert.equal("classification_reason" in result, false);
+});

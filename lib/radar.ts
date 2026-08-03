@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData } from "./radar/types";
+import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
 import {
   translateUI,
@@ -73,7 +73,7 @@ import {
 } from "./radar/probability";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
-export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData };
+export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
 export {
   probabilityToPercent,
   getExpectationLabel,

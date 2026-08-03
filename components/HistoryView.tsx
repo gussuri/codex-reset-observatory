@@ -1,22 +1,21 @@
 import Link from "next/link";
 import { ExternalLink, History, Info } from "lucide-react";
 import {
-  getRadarViewModel,
   isSafeHttpUrl,
 } from "@/lib/radar";
-import type { Locale, RadarData } from "@/lib/radar/types";
+import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { translateUI } from "@/lib/radar/i18n";
 import { DeveloperLink } from "./DeveloperLink";
 
 type HistoryViewProps = {
-  data: RadarData;
+  data: PublicRadarSnapshot;
   locale: Locale;
 };
 
 export function HistoryView({ data, locale }: HistoryViewProps) {
-  const viewModel = getRadarViewModel(data, locale, false);
+  const viewModel = data.viewModel;
 
   const content = {
     ja: {

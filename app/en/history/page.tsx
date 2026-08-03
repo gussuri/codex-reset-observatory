@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { HistoryView } from "@/components/HistoryView";
-import { fetchCurrentRadarData } from "@/lib/radarFetch";
+import { fetchPublicRadarSnapshot } from "@/lib/radarFetch";
 import {
   SITE_NAME,
   SITE_OG_IMAGE_URL,
@@ -49,10 +49,10 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 export default async function EnglishHistoryPage() {
-  const data = await fetchCurrentRadarData({ revalidate });
+  const data = await fetchPublicRadarSnapshot("en", { limitHistory: false });
 
   return <HistoryView data={data} locale="en" />;
 }

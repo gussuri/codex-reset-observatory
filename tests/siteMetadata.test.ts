@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
   getSiteJsonLd,
   HOME_DESCRIPTION_EN,
@@ -45,7 +46,9 @@ function titleFrom(metadata: Metadata): string {
     return metadata.title;
   }
 
-  return metadata.title?.absolute ?? metadata.title?.default ?? "";
+  const title = metadata.title;
+  if (!title) return "";
+  return "absolute" in title ? title.absolute ?? "" : title.default ?? "";
 }
 
 function openGraphFrom(metadata: Metadata) {
@@ -70,7 +73,16 @@ test("home metadata uses the unified brand and requested localized titles/descri
     assert.strictEqual(openGraph.title, title);
     assert.strictEqual(openGraph.description, description);
     assert.strictEqual(openGraph.url, siteUrl(path === "ja" ? "/" : "/" + path));
-    assert.strictEqual(openGraph.images?.[0]?.url, SITE_OG_IMAGE_URL);
+    const firstImage = Array.isArray(openGraph.images)
+      ? openGraph.images[0]
+      : openGraph.images;
+    const firstImageUrl =
+      typeof firstImage === "string"
+        ? firstImage
+        : firstImage instanceof URL
+          ? firstImage.toString()
+          : firstImage?.url;
+    assert.strictEqual(firstImageUrl, SITE_OG_IMAGE_URL);
 
     assert.strictEqual(metadata.twitter?.title, title);
     assert.strictEqual(metadata.twitter?.description, description);
@@ -131,7 +143,7 @@ test("canonical and hreflang links point to the same three localized routes", ()
 test("Japanese home HTML exposes the English formal brand and Japanese supporting name", () => {
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
-      initialData: getLocalRadarData({}),
+      initialData: toPublicRadarSnapshot(getLocalRadarData({}), "ja"),
       locale: "ja",
     }),
   );
@@ -144,7 +156,7 @@ test("all home locales expose the same formal brand in the main heading", () => 
   for (const locale of ["ja", "en", "zh"] as const) {
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
-        initialData: getLocalRadarData({}),
+        initialData: toPublicRadarSnapshot(getLocalRadarData({}), locale),
         locale,
       }),
     );

@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { ProbabilityMetrics } from "../components/ProbabilityMetrics";
 import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -66,7 +67,7 @@ test("labels a dynamic notice by its post time when no execution time is schedul
 
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
-      initialData: data,
+      initialData: toPublicRadarSnapshot(data, "en"),
       initialFetchedAt: openedAt,
       locale: "en",
     }),
@@ -80,7 +81,7 @@ test("labels a dynamic notice by its post time when no execution time is schedul
 test("keeps the forecast reason while hiding the weekly frequency boost explanation", () => {
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
-      initialData: getLocalRadarData({}),
+      initialData: toPublicRadarSnapshot(getLocalRadarData({}), "ja"),
       locale: "ja",
     }),
   );
