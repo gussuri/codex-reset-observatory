@@ -1,5 +1,6 @@
 import type { RadarViewModel } from "@/lib/radar/types";
 import type { ProbabilityCalculationAudit } from "@/lib/radar/probability";
+import type { ShadowProbabilityResult } from "@/lib/radar/shadowProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
@@ -12,6 +13,7 @@ export function buildProbabilityDebugInfo(
   calculation: ProbabilityCalculationAudit,
   generatedAt: string | null | undefined,
   calculatedAt: Date,
+  shadowProbability?: ShadowProbabilityResult,
 ) {
   const calculatedAtIso = calculatedAt.toISOString();
 
@@ -26,5 +28,8 @@ export function buildProbabilityDebugInfo(
       inputs: calculation.inputSnapshot,
       breakdown: calculation.breakdown,
     },
+    ...(shadowProbability
+      ? { shadowProbabilityModel: shadowProbability }
+      : {}),
   };
 }

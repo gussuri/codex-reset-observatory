@@ -7,6 +7,7 @@ import {
   getLocalProbabilityCalculation,
   getLocalSignalEvaluation,
 } from "@/lib/radar/probability";
+import { calculateShadowProbability } from "@/lib/radar/shadowProbability";
 import { getExpectationKey } from "@/lib/radar/helpers";
 import {
   buildProbabilityDebugInfo,
@@ -72,6 +73,12 @@ async function handleLogRequest(request: NextRequest) {
       activeOfficialNotice,
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
     });
+    const shadowProbability = calculateShadowProbability(rawData, {
+      now: calculationNow,
+      signalEvaluation,
+      activeOfficialNotice,
+      regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+    });
 
     // 3. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;
@@ -129,7 +136,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          }, probabilityCalculation, rawData.checked_at, calculationNow),
+          }, probabilityCalculation, rawData.checked_at, calculationNow, shadowProbability),
         },
         {
           onConflict: "logged_hour",
