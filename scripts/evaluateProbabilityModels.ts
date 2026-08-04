@@ -15,6 +15,13 @@ import {
   calculateRecencyWeightedShadowProbability,
 } from "../lib/radar/recencyWeightedProbability";
 import {
+  calculateConstantHazardBenchmark,
+  calculatePrequentialLogitCalibration,
+  PREQUENTIAL_CALIBRATION_MIN_SAMPLES,
+  PREQUENTIAL_CALIBRATION_PRIOR_STD_DEV,
+  type PrequentialCalibrationAudit,
+} from "../lib/radar/evaluationProbabilityModels";
+import {
   calculateShadowProbability,
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
@@ -27,6 +34,9 @@ const BOOTSTRAP_ITERATIONS = 2_000;
 const BOOTSTRAP_SEED = 20260804;
 const MIN_COMPLETED_INTERVALS = 5;
 const LOG_LOSS_EPSILON = 1e-12;
+
+export const CONSTANT_HAZARD_MODEL_VERSION = "benchmark-constant-hazard-v1";
+export const CALIBRATED_V2_MODEL_VERSION = "benchmark-v2-logit-calibrated-prequential-v1";
 
 export type EvaluationRow = {
   recordedAt: string;
@@ -73,10 +83,65 @@ export type ModelClassification =
 export type ProbabilityModelDefinition = {
   modelVersion: string;
   halfLifeDays: number | null;
+  kind: "shadow" | "constant_hazard" | "prequential_calibrated" | "recency";
+};
+
+export type ModelEvaluation = {
+  modelVersion: string;
+  halfLifeDays: number | null;
+  kind: ProbabilityModelDefinition["kind"];
+  classification: ModelClassification;
+  metrics24h: MetricSummary;
+  metrics48h: MetricSummary;
+  nonOverlapping48h: MetricSummary;
+  differenceVsCurrent: {
+    brier24h: number;
+    brier48h: number;
+    logLoss24h: number;
+    logLoss48h: number;
+    bootstrap24h: BootstrapSummary;
+    bootstrap48h: BootstrapSummary;
+  } | null;
+  nonOverlapping48hDifferenceVsCurrent: {
+    brier: number;
+    logLoss: number;
+  } | null;
+};
+
+export type LabelSummary = {
+  originCount: number;
+  positive24h: number;
+  positive48h: number;
+};
+
+export type EventContribution = {
+  eventId: string;
+  resetAt: string;
+  positiveOrigins24h: number;
+  positiveOrigins48h: number;
+};
+
+export type EvaluationDiagnostics = {
+  ageStructure:
+    | "age_structure_not_supported"
+    | "age_structure_inconclusive"
+    | "age_structure_supported"
+    | "mixed_or_inconclusive";
+  calibration:
+    | "underprediction_calibration_signal"
+    | "calibration_inconclusive"
+    | "calibration_worse"
+    | "mixed_or_inconclusive";
+  constantHazardClassification: Exclude<ModelClassification, "baseline">;
+  calibratedV2Classification: Exclude<ModelClassification, "baseline">;
+  nonOverlapping48h: {
+    constantHazardDirection: "better" | "worse" | "same" | "mixed";
+    calibratedV2Direction: "better" | "worse" | "same" | "mixed";
+  };
 };
 
 export type ProbabilityModelEvaluationReport = {
-  schemaVersion: "probability-model-evaluation-v1";
+  schemaVersion: "probability-model-evaluation-v2";
   asOf: string;
   generatedAt: string;
   targetDefinition: string;
@@ -88,21 +153,19 @@ export type ProbabilityModelEvaluationReport = {
   };
   originCount: number;
   origins: string[];
-  models: Array<{
-    modelVersion: string;
-    halfLifeDays: number | null;
-    classification: ModelClassification;
-    metrics24h: MetricSummary;
-    metrics48h: MetricSummary;
-    differenceVsCurrent: {
-      brier24h: number;
-      brier48h: number;
-      logLoss24h: number;
-      logLoss48h: number;
-      bootstrap24h: BootstrapSummary;
-      bootstrap48h: BootstrapSummary;
-    } | null;
-  }>;
+  nonOverlapping48hOriginCount: number;
+  nonOverlapping48hOrigins: string[];
+  labelSummary: LabelSummary;
+  nonOverlapping48hLabelSummary: LabelSummary;
+  eventContributions: Array<EventContribution>;
+  models: Array<ModelEvaluation>;
+  prequentialCalibration: {
+    priorStdDev: number;
+    minimumSamples: number;
+    origins: Array<PrequentialCalibrationAudit>;
+    final: PrequentialCalibrationAudit | null;
+  };
+  diagnostics: EvaluationDiagnostics;
   notes: string[];
 };
 
@@ -185,6 +248,22 @@ export function getActualWithinHorizon(
   });
 }
 
+export function calculateEventContributions(
+  events: Array<ShadowResetEvent>,
+  origins: Array<string>,
+): Array<EventContribution> {
+  return sortEvents(events).map((event) => ({
+    eventId: event.id,
+    resetAt: event.resetAt,
+    positiveOrigins24h: origins.filter((origin) =>
+      getActualWithinHorizon([event], origin, 24),
+    ).length,
+    positiveOrigins48h: origins.filter((origin) =>
+      getActualWithinHorizon([event], origin, 48),
+    ).length,
+  }));
+}
+
 export function createWalkForwardOrigins(
   events: Array<ShadowResetEvent>,
   asOf: string,
@@ -206,6 +285,29 @@ export function createWalkForwardOrigins(
     origins.push(new Date(current).toISOString());
   }
   return origins;
+}
+
+export function selectNonOverlappingOrigins(
+  origins: Array<string>,
+  horizonHours = 48,
+) {
+  if (!Number.isFinite(horizonHours) || horizonHours <= 0) {
+    throw new RangeError("horizonHours must be a positive number");
+  }
+  const sorted = origins
+    .map((origin) => ({ origin, time: timestamp(origin) }))
+    .filter((item): item is { origin: string; time: number } => item.time !== null)
+    .sort((left, right) => left.time - right.time);
+  const selected: string[] = [];
+  let lastSelectedTime: number | null = null;
+  const horizonMs = horizonHours * HOUR_MS;
+  for (const item of sorted) {
+    if (lastSelectedTime === null || item.time - lastSelectedTime >= horizonMs) {
+      selected.push(item.origin);
+      lastSelectedTime = item.time;
+    }
+  }
+  return selected;
 }
 
 function clampProbability(value: number) {
@@ -373,17 +475,30 @@ export function classifyModelResult(input: {
 }
 
 const MODEL_DEFINITIONS: Array<ProbabilityModelDefinition> = [
-  { modelVersion: SHADOW_PROBABILITY_MODEL_VERSION, halfLifeDays: null },
+  { modelVersion: SHADOW_PROBABILITY_MODEL_VERSION, halfLifeDays: null, kind: "shadow" },
+  { modelVersion: CONSTANT_HAZARD_MODEL_VERSION, halfLifeDays: null, kind: "constant_hazard" },
+  { modelVersion: CALIBRATED_V2_MODEL_VERSION, halfLifeDays: null, kind: "prequential_calibrated" },
   ...RECENCY_SHADOW_MODEL_CONFIG.map(({ modelVersion, halfLifeDays }) => ({
     modelVersion,
     halfLifeDays,
+    kind: "recency" as const,
   })),
 ];
+
+const BASE_MODEL_DEFINITIONS = MODEL_DEFINITIONS.filter(
+  (model) => model.kind !== "prequential_calibrated",
+);
 
 function getModelPrediction(
   model: ProbabilityModelDefinition,
   data: ReturnType<typeof getLocalRadarData>,
   origin: Date,
+  shadowResult = calculateShadowProbability(data, {
+    now: origin,
+    staticHistory: LOCAL_RESET_HISTORY,
+    regularResetExpectedAt: null,
+    activeOfficialNotice: undefined,
+  }),
 ) {
   const options = {
     now: origin,
@@ -391,10 +506,16 @@ function getModelPrediction(
     regularResetExpectedAt: null,
     activeOfficialNotice: undefined,
   } as const;
-  if (model.halfLifeDays === null) {
-    return calculateShadowProbability(data, options).predictions;
+  if (model.kind === "shadow") {
+    return shadowResult.predictions;
   }
-  return calculateRecencyWeightedShadowProbability(data, model.halfLifeDays, options).predictions;
+  if (model.kind === "constant_hazard") {
+    return calculateConstantHazardBenchmark(shadowResult).predictions;
+  }
+  if (model.halfLifeDays !== null) {
+    return calculateRecencyWeightedShadowProbability(data, model.halfLifeDays, options).predictions;
+  }
+  throw new Error(`unsupported direct model prediction: ${model.modelVersion}`);
 }
 
 function formatPercent(value: number) {
@@ -411,6 +532,79 @@ function formatCalibration(metric: MetricSummary) {
     .join("; ");
 }
 
+function summarizeLabels(rows: Array<EvaluationRow>): LabelSummary {
+  return {
+    originCount: rows.length,
+    positive24h: rows.filter((row) => row.actual24h).length,
+    positive48h: rows.filter((row) => row.actual48h).length,
+  };
+}
+
+function getBrierDirection(
+  candidate: MetricSummary,
+  current: MetricSummary,
+): "better" | "worse" | "same" | "mixed" {
+  const differences = [candidate.brier - current.brier, candidate.logLoss - current.logLoss];
+  const hasBetter = differences.some((difference) => difference < 0);
+  const hasWorse = differences.some((difference) => difference > 0);
+  if (hasBetter && hasWorse) return "mixed";
+  if (hasBetter) return "better";
+  if (hasWorse) return "worse";
+  return "same";
+}
+
+function getDiagnosticDirection(
+  candidate: ModelEvaluation,
+  current: ModelEvaluation,
+): "better" | "worse" | "same" | "mixed" {
+  return getBrierDirection(candidate.metrics24h, current.metrics24h) === "mixed"
+    || getBrierDirection(candidate.metrics48h, current.metrics48h) === "mixed"
+    ? "mixed"
+    : getBrierDirection(candidate.metrics24h, current.metrics24h) === "better"
+      && getBrierDirection(candidate.metrics48h, current.metrics48h) === "better"
+      ? "better"
+      : getBrierDirection(candidate.metrics24h, current.metrics24h) === "worse"
+        && getBrierDirection(candidate.metrics48h, current.metrics48h) === "worse"
+        ? "worse"
+        : "same";
+}
+
+function buildStructureDiagnostic(
+  constantHazard: ModelEvaluation,
+  current: ModelEvaluation,
+  nonOverlappingDirection: "better" | "worse" | "same" | "mixed",
+): EvaluationDiagnostics["ageStructure"] {
+  if (constantHazard.classification === "clearly_better") {
+    return "age_structure_not_supported";
+  }
+  if (constantHazard.classification === "worse") {
+    return "age_structure_supported";
+  }
+  const dailyDirection = getDiagnosticDirection(constantHazard, current);
+  if (dailyDirection === "mixed" || nonOverlappingDirection === "mixed") {
+    return "mixed_or_inconclusive";
+  }
+  return "age_structure_inconclusive";
+}
+
+function buildCalibrationDiagnostic(
+  calibratedV2: ModelEvaluation,
+  current: ModelEvaluation,
+  nonOverlappingDirection: "better" | "worse" | "same" | "mixed",
+): EvaluationDiagnostics["calibration"] {
+  if (calibratedV2.classification === "clearly_better") {
+    return "underprediction_calibration_signal";
+  }
+  if (calibratedV2.classification === "worse") {
+    return "calibration_worse";
+  }
+  const dailyDirection = getDiagnosticDirection(calibratedV2, current);
+  if (dailyDirection === "mixed" || nonOverlappingDirection === "mixed") {
+    return "mixed_or_inconclusive";
+  }
+  return "calibration_inconclusive";
+}
+
 function writeMarkdown(report: ProbabilityModelEvaluationReport) {
   const lines = [
     "# Probability Model Evaluation",
@@ -420,6 +614,7 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
     `- Completed intervals: ${report.completedIntervalCount}`,
     `- Origins: ${report.originCount}`,
     `- Observation period: ${report.observationPeriod.start ?? "unavailable"} to ${report.observationPeriod.end}`,
+    `- Non-overlapping 48h origins: ${report.nonOverlapping48hOriginCount}`,
     "",
     "## Models",
     "",
@@ -443,16 +638,51 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
         `- 48h block bootstrap 95% CI: [${difference.bootstrap48h.lower.toFixed(4)}, ${difference.bootstrap48h.upper.toFixed(4)}]`,
       );
     }
+    lines.push(`- Non-overlapping 48h: ${formatMetric(model.nonOverlapping48h)}`);
+    if (model.nonOverlapping48hDifferenceVsCurrent) {
+      lines.push(
+        `- Non-overlapping 48h difference vs v2: Brier ${(model.nonOverlapping48hDifferenceVsCurrent.brier >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.brier.toFixed(4)}, logLoss ${(model.nonOverlapping48hDifferenceVsCurrent.logLoss >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.logLoss.toFixed(4)}`,
+      );
+    }
     lines.push("");
   }
 
   lines.push(
+    "## Diagnostics",
+    "",
+    `- Age structure: ${report.diagnostics.ageStructure}`,
+    `- Calibration: ${report.diagnostics.calibration}`,
+    `- Constant hazard daily comparison: ${report.diagnostics.constantHazardClassification}`,
+    `- Calibrated v2 daily comparison: ${report.diagnostics.calibratedV2Classification}`,
+    `- Non-overlapping 48h direction: constant=${report.diagnostics.nonOverlapping48h.constantHazardDirection}, calibrated=${report.diagnostics.nonOverlapping48h.calibratedV2Direction}`,
+    "",
+    "## Label and event contribution",
+    "",
+    `- Daily labels: 24h positive=${report.labelSummary.positive24h}/${report.labelSummary.originCount}, 48h positive=${report.labelSummary.positive48h}/${report.labelSummary.originCount}`,
+    `- Non-overlapping 48h labels: positive=${report.nonOverlapping48hLabelSummary.positive48h}/${report.nonOverlapping48hLabelSummary.originCount}`,
+    "",
+    "| Event | Reset at | Positive daily origins (24h) | Positive daily origins (48h) |",
+    "| --- | --- | ---: | ---: |",
+    ...report.eventContributions.map((contribution) =>
+      `| ${contribution.eventId} | ${contribution.resetAt} | ${contribution.positiveOrigins24h} | ${contribution.positiveOrigins48h} |`,
+    ),
+    "",
+    "## Prequential calibration",
+    "",
+    `- Prior: Normal(0, ${report.prequentialCalibration.priorStdDev}^2)` ,
+    `- Minimum samples: ${report.prequentialCalibration.minimumSamples}`,
+    `- Final audit: ${report.prequentialCalibration.final
+      ? `alpha24h=${report.prequentialCalibration.final.alpha24h.toFixed(6)}, alpha48h=${report.prequentialCalibration.final.alpha48h.toFixed(6)}, samples24h=${report.prequentialCalibration.final.calibrationSampleCount24h}, samples48h=${report.prequentialCalibration.final.calibrationSampleCount48h}`
+      : "unavailable"}`,
+    "",
     "## Notes",
     "",
     `- ${report.notes.join("\n- ")}`,
-    "- Daily evaluation origins overlap, so metric differences are not independent.",
-    "- The public model remains hazard-odds-v2-random-only; these recency models are Shadow-only experiments.",
-    "- No automatic winner is selected. The sample is small and should not be treated as a production adoption decision.",
+    "- Daily evaluation origins overlap, so daily metric differences are not independent.",
+    "- The non-overlapping 48h section is a lower-sample reference analysis.",
+    "- The public model remains hazard-odds-v2-random-only; benchmark models are evaluation-only.",
+    "- Benchmark results do not change API responses, UI, DTOs, Supabase, or stored Shadow forecasts.",
+    "- No automatic winner is selected from an inconclusive result.",
   );
   return `${lines.join("\n")}\n`;
 }
@@ -462,17 +692,28 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
   const asOfIso = asOf.toISOString();
   const allEvents = getShadowCompletedResetEvents(null, asOf, LOCAL_RESET_HISTORY);
   const origins = createWalkForwardOrigins(allEvents, asOfIso);
+  const nonOverlapping48hOrigins = selectNonOverlappingOrigins(origins, 48);
+  const nonOverlappingOriginSet = new Set(nonOverlapping48hOrigins);
   const rowsByModel = new Map<string, Array<EvaluationRow>>(
     MODEL_DEFINITIONS.map((model) => [model.modelVersion, []]),
   );
+  const prequentialCalibrationAudits: Array<PrequentialCalibrationAudit> = [];
 
   for (const recordedAt of origins) {
     const origin = new Date(recordedAt);
     const data = getLocalRadarData({ calculationNow: origin });
     const actual24h = getActualWithinHorizon(allEvents, recordedAt, 24);
     const actual48h = getActualWithinHorizon(allEvents, recordedAt, 48);
-    for (const model of MODEL_DEFINITIONS) {
-      const prediction = getModelPrediction(model, data, origin);
+    const previousV2Rows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.slice();
+    const shadow = calculateShadowProbability(data, {
+      now: origin,
+      staticHistory: LOCAL_RESET_HISTORY,
+      regularResetExpectedAt: null,
+      activeOfficialNotice: undefined,
+    });
+
+    for (const model of BASE_MODEL_DEFINITIONS) {
+      const prediction = getModelPrediction(model, data, origin, shadow);
       rowsByModel.get(model.modelVersion)!.push({
         recordedAt,
         probability24h: prediction.probability24h,
@@ -481,23 +722,41 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
         actual48h,
       });
     }
+
+    const currentV2Row = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.at(-1)!;
+    const calibrationAudit = calculatePrequentialLogitCalibration(currentV2Row, previousV2Rows);
+    prequentialCalibrationAudits.push(calibrationAudit);
+    rowsByModel.get(CALIBRATED_V2_MODEL_VERSION)!.push({
+      recordedAt,
+      probability24h: calibrationAudit.calibratedProbability24h,
+      probability48h: calibrationAudit.calibratedProbability48h,
+      actual24h,
+      actual48h,
+    });
   }
 
   const currentRows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION) ?? [];
+  const currentNonOverlappingRows = currentRows.filter((row) => nonOverlappingOriginSet.has(row.recordedAt));
   const current24h = calculateMetric(currentRows, "24h");
   const current48h = calculateMetric(currentRows, "48h");
-  const models = MODEL_DEFINITIONS.map((model) => {
+  const currentNonOverlapping48h = calculateMetric(currentNonOverlappingRows, "48h");
+  const models = MODEL_DEFINITIONS.map((model): ModelEvaluation => {
     const rows = rowsByModel.get(model.modelVersion) ?? [];
+    const nonOverlappingRows = rows.filter((row) => nonOverlappingOriginSet.has(row.recordedAt));
     const metrics24h = calculateMetric(rows, "24h");
     const metrics48h = calculateMetric(rows, "48h");
+    const nonOverlapping48h = calculateMetric(nonOverlappingRows, "48h");
     if (model.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION) {
       return {
         modelVersion: model.modelVersion,
         halfLifeDays: model.halfLifeDays,
-        classification: "baseline" as const,
+        kind: model.kind,
+        classification: "baseline",
         metrics24h,
         metrics48h,
+        nonOverlapping48h,
         differenceVsCurrent: null,
+        nonOverlapping48hDifferenceVsCurrent: null,
       };
     }
     const bootstrap24h = calculateBlockBootstrapDifference(rows, currentRows, "24h", BOOTSTRAP_SEED);
@@ -505,6 +764,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     return {
       modelVersion: model.modelVersion,
       halfLifeDays: model.halfLifeDays,
+      kind: model.kind,
       classification: classifyModelResult({
         brier24h: metrics24h.brier,
         brier48h: metrics48h.brier,
@@ -515,6 +775,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
       }),
       metrics24h,
       metrics48h,
+      nonOverlapping48h,
       differenceVsCurrent: {
         brier24h: metrics24h.brier - current24h.brier,
         brier48h: metrics48h.brier - current48h.brier,
@@ -523,11 +784,22 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
         bootstrap24h,
         bootstrap48h,
       },
+      nonOverlapping48hDifferenceVsCurrent: {
+        brier: nonOverlapping48h.brier - currentNonOverlapping48h.brier,
+        logLoss: nonOverlapping48h.logLoss - currentNonOverlapping48h.logLoss,
+      },
     };
   });
 
+  const currentModel = models.find((model) => model.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION)!;
+  const constantHazardModel = models.find((model) => model.modelVersion === CONSTANT_HAZARD_MODEL_VERSION)!;
+  const calibratedV2Model = models.find((model) => model.modelVersion === CALIBRATED_V2_MODEL_VERSION)!;
+  const constantDirection = getBrierDirection(constantHazardModel.nonOverlapping48h, currentModel.nonOverlapping48h);
+  const calibratedDirection = getBrierDirection(calibratedV2Model.nonOverlapping48h, currentModel.nonOverlapping48h);
+  const labelSummary = summarizeLabels(currentRows);
+  const nonOverlapping48hLabelSummary = summarizeLabels(currentNonOverlappingRows);
   const report: ProbabilityModelEvaluationReport = {
-    schemaVersion: "probability-model-evaluation-v1",
+    schemaVersion: "probability-model-evaluation-v2",
     asOf: asOfIso,
     generatedAt: asOfIso,
     targetDefinition: SHADOW_TARGET_DEFINITION,
@@ -539,12 +811,43 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     },
     originCount: origins.length,
     origins,
+    nonOverlapping48hOriginCount: nonOverlapping48hOrigins.length,
+    nonOverlapping48hOrigins,
+    labelSummary,
+    nonOverlapping48hLabelSummary,
+    eventContributions: calculateEventContributions(allEvents, origins),
     models,
+    prequentialCalibration: {
+      priorStdDev: PREQUENTIAL_CALIBRATION_PRIOR_STD_DEV,
+      minimumSamples: PREQUENTIAL_CALIBRATION_MIN_SAMPLES,
+      origins: prequentialCalibrationAudits,
+      final: prequentialCalibrationAudits.at(-1) ?? null,
+    },
+    diagnostics: {
+      ageStructure: buildStructureDiagnostic(
+        constantHazardModel,
+        currentModel,
+        constantDirection,
+      ),
+      calibration: buildCalibrationDiagnostic(
+        calibratedV2Model,
+        currentModel,
+        calibratedDirection,
+      ),
+      constantHazardClassification: constantHazardModel.classification as Exclude<ModelClassification, "baseline">,
+      calibratedV2Classification: calibratedV2Model.classification as Exclude<ModelClassification, "baseline">,
+      nonOverlapping48h: {
+        constantHazardDirection: constantDirection,
+        calibratedV2Direction: calibratedDirection,
+      },
+    },
     notes: [
-      `Models use the same target event definition and signal multiplier path as the current Shadow model.`,
-      `Completed interval event and exposure weights use exp(-ln(2) * ageDays / halfLifeDays); censored exposure uses weight 1.`,
-      `The fixed bootstrap seed is ${BOOTSTRAP_SEED} with ${BLOCK_DAYS}-day blocks and ${BOOTSTRAP_ITERATIONS} iterations.`,
+      "Models use the same target event definition and signal multiplier path as the current Shadow model.",
+      "The constant hazard benchmark uses the v2 global lambda and censored exposure without age bins.",
+      "Prequential calibration uses only pastOrigin + horizon <= currentOrigin, a fixed Normal(0, 0.5^2) prior, and a minimum of 10 confirmed samples.",
+      `The fixed bootstrap seed is ${BOOTSTRAP_SEED} with ${BLOCK_DAYS}-day blocks and ${BOOTSTRAP_ITERATIONS} iterations for overlapping daily comparisons.`,
       `There are ${allEvents.length} target events and ${Math.max(0, allEvents.length - 1)} completed intervals available as of ${asOfIso}.`,
+      "Benchmark models are evaluation-only and are not written to experimentalProbabilityForecasts or used by the public model.",
     ],
   };
   return report;
