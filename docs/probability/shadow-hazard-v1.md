@@ -1,25 +1,27 @@
-# Shadow Hazard Probability v1
+# Shadow Hazard Probability v2 (random-only)
 
 ## Purpose
 
-`hazard-odds-v1` is the public probability model. The former heuristic model
-is retained as a comparison model and is used only when the shadow result is
-invalid or throws an exception. Model metadata and audit details remain
-internal and are not shown in the dashboard or `/api/current`.
+`hazard-odds-v2-random-only` is the candidate public probability model. The
+former heuristic model is retained as a comparison model and is used when the
+shadow result is invalid, throws an exception, or has low confidence. Model
+metadata and audit details remain internal and are not shown in the dashboard
+or `/api/current`.
 
 The model is a **ベイズ平滑化した区分ハザードと保守的なシグナル倍率を組み合わせたshadow確率モデル**. It uses a transparent empirical-Bayes prior rather than model training or parameter optimization.
 
 ## Event definition
 
-The event collection reuses the existing global reset semantics:
+The event collection reuses the existing reset-history merge and deduplication,
+but deliberately models random resets only:
 
 - static history and formally accepted Tibo reset signals are combined by
   `combineResetHistory`;
 - opened, pending, invalid, rejected, future, and execution-time-less records
   are excluded;
 - records with `details.resetMethod === "任意リセット権1回配布"` are excluded;
-- completed regular and random resets are both included because the current
-  global reset age/count calculations use that same combined collection;
+- completed regular resets are excluded from this model;
+- completed random resets are included;
 - explicitly narrow scopes such as a specific user, individual account, or
   subset are excluded; known account-wide and legacy regular-reset scope
   labels are retained.
@@ -51,10 +53,12 @@ piecewise hourly curve from the current reset age.
 ## Signal odds multipliers
 
 Signals are applied after the baseline through odds, not direct probability
-addition. Available inputs are recent completed reset count, regular-reset
-proximity, teaser strength, weighted Status score, official incident hints,
+addition. Teaser strength, weighted Status score, official incident hints,
 official updates, community mentions, usage-limit anomalies, and independent
-complaint pressure. Missing inputs remain at multiplier `1`.
+complaint pressure remain active inputs. Recent completed reset count and
+regular-reset proximity remain in the audit input shape, but both are fixed at
+multiplier `1` because they describe regular-cycle or frequency effects rather
+than the random-reset target.
 
 The conservative initial multipliers and total caps are configuration values,
 not values optimized against this small history. An active official notice
@@ -78,8 +82,9 @@ available without backfilling old rows.
 ## Promotion criteria
 
 The public switch is intentionally conservative: the shadow result must be
-finite, stay within 0%-100%, and satisfy `P24 <= P48`. Otherwise the former
-heuristic result is published for that calculation and the fallback reason is
-kept in internal debug information. Future evaluation should continue to
-check multi-period calibration, 24/48-hour ordering, and behavior across more
-than one concentrated reset period.
+finite, stay within 0%-100%, satisfy `P24 <= P48`, and have medium or high
+confidence. Otherwise the former heuristic result is published for that
+calculation and the fallback reason is kept in internal debug information.
+Future evaluation should continue to check multi-period calibration,
+24/48-hour ordering, and behavior across more than one concentrated reset
+period.

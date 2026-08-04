@@ -103,8 +103,9 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.match(html, /現在の見立て/);
   assert.match(
     html,
-    /直近7日間でリセットが3回あり、現在の見込みは中程度です。直近のリセットから2日経過しています。/,
+    /直近のリセットから2日経過しています。現在、公式予告や発生中のCodex関連障害はありません。/,
   );
+  assert.doesNotMatch(outlookText, /直近7日間でリセットが3回/);
   assert.doesNotMatch(outlookText, /現在の見立ては24時間以内/);
   assert.doesNotMatch(outlookText, /現在の可能性/);
   assert.doesNotMatch(outlookText, /基礎確率を算出/);

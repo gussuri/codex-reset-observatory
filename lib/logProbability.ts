@@ -41,6 +41,9 @@ export function buildProbabilityDebugInfo(
             probability24h: publishedProbability.probability24h,
             probability48h: publishedProbability.probability48h,
             fallbackReason: publishedProbability.fallbackReason,
+            confidence: publishedProbability.shadow?.confidence.level ?? null,
+            completedIntervalCount: publishedProbability.shadow?.confidence.completedIntervalCount ?? null,
+            totalExposureDays: publishedProbability.shadow?.confidence.totalExposureDays ?? null,
           },
         }
       : {}),

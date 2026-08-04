@@ -140,7 +140,7 @@ test("shadow event collection deduplicates a static record and an accepted Tibo 
   assert.equal(events.length, 1);
 });
 
-test("shadow event collection keeps regular and random completed resets but excludes credit grants", () => {
+test("shadow event collection keeps random completed resets but excludes regular resets and credit grants", () => {
   const now = new Date("2026-08-10T00:00:00.000Z");
   const regular = resetEvent("regular", "2026-08-08T00:00:00.000Z", {
     details: {
@@ -163,7 +163,7 @@ test("shadow event collection keeps regular and random completed resets but excl
   });
 
   const events = getShadowCompletedResetEvents(null, now, [regular, random, credit]);
-  assert.deepEqual(events.map((item) => item.id), ["regular", "random"]);
+  assert.deepEqual(events.map((item) => item.id), ["random"]);
 });
 
 test("hazard intervals ignore the period before the first event and use censored exposure after the last event", () => {
@@ -263,7 +263,8 @@ test("signal multipliers use the specified conservative caps", () => {
     complaintPressure: "high",
   });
 
-  assert.equal(multipliers.recentResetMomentum.probability24h, 1.15);
+  assert.equal(multipliers.recentResetMomentum.probability24h, 1);
+  assert.equal(multipliers.regularResetProximity.probability24h, 1);
   assert.equal(multipliers.teaser.probability24h, 1.8);
   assert.equal(multipliers.teaser.probability48h, 2.2);
   assert.equal(multipliers.statusSignal.probability24h, 1.5);
@@ -398,7 +399,7 @@ test("shadow internals do not cross the public DTO boundary", () => {
   const publicSnapshot = toPublicRadarSnapshot(internal, "en", { calculationNow: now });
   const serialized = JSON.stringify(publicSnapshot);
 
-  assert.doesNotMatch(serialized, /hazard-odds-v1|posteriorLambdaPerHour|shadowProbabilityModel|combinedAfterCap/);
+  assert.doesNotMatch(serialized, /hazard-odds-v2-random-only|posteriorLambdaPerHour|shadowProbabilityModel|combinedAfterCap/);
 });
 
 test("shadow result has no post content or secret-like fields", () => {

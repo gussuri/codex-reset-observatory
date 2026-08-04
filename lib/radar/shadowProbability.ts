@@ -150,7 +150,7 @@ function isPredictableScope(item: WindowEventLike) {
 
 function isShadowTargetReset(item: WindowEventLike, nowTime: number) {
   const cycleType = item.details?.cycleType;
-  if (cycleType !== "定期リセット" && cycleType !== "ランダムリセット") {
+  if (cycleType !== "ランダムリセット") {
     return false;
   }
   if (item.details?.resetMethod === "任意リセット権1回配布") {
@@ -164,7 +164,7 @@ function isShadowTargetReset(item: WindowEventLike, nowTime: number) {
     return false;
   }
 
-  // Keep known account-wide and legacy regular-reset scope labels. Explicitly
+  // The public Shadow target is the random-reset process only. Explicitly
   // narrow records are excluded because they are not the global target.
   return true;
 }
@@ -371,15 +371,11 @@ function multiplyPairs(values: Array<ShadowProbabilityPair>) {
 }
 
 export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): ShadowSignalMultipliers {
-  const recentResetCount = finiteNonNegative(input.recentResetCount7d);
-  const recentResetMultiplier = recentResetCount >= 4
-    ? SHADOW_SIGNAL_MULTIPLIER_CONFIG.recentResetMomentum.fourOrMore
-    : recentResetCount >= 3
-      ? SHADOW_SIGNAL_MULTIPLIER_CONFIG.recentResetMomentum.three
-      : recentResetCount >= 2
-        ? SHADOW_SIGNAL_MULTIPLIER_CONFIG.recentResetMomentum.two
-        : 1;
-  const proximity = clamp01(input.regularResetProximity);
+  // hazard-odds-v2-random-only estimates the random-reset process. Recent
+  // reset frequency and regular-reset proximity remain in the input shape for
+  // audit compatibility, but must not change the public random-reset odds.
+  const recentResetMultiplier = 1;
+  const regularResetMultiplier = 1;
   const teaserScore = clamp01(input.teaserScore);
   const statusScore = clamp01(input.normalizedStatusScore);
   const communityScore = clamp01(input.communityScore);
@@ -392,10 +388,7 @@ export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): Sha
 
   const multipliersWithoutCombined: Omit<ShadowSignalMultipliers, "combinedBeforeCap" | "combinedAfterCap"> = {
     recentResetMomentum: pair(recentResetMultiplier, recentResetMultiplier),
-    regularResetProximity: pair(
-      1 + proximity * SHADOW_SIGNAL_MULTIPLIER_CONFIG.regularResetProximity.probability24h,
-      1 + proximity * SHADOW_SIGNAL_MULTIPLIER_CONFIG.regularResetProximity.probability48h,
-    ),
+    regularResetProximity: pair(regularResetMultiplier, regularResetMultiplier),
     teaser: pair(
       1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability24h,
       1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability48h,
@@ -644,7 +637,7 @@ export function calculateShadowProbability(
     warnings.push("Historical completed intervals are sparse; treat this shadow result as exploratory.");
   }
   if (!options.regularResetExpectedAt) {
-    warnings.push("No regular reset reference time was available, so regular proximity stayed at multiplier 1.");
+    warnings.push("Regular reset proximity is retained for audit input but is not applied by the random-only shadow model.");
   }
 
   return {

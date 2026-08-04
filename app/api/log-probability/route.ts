@@ -71,7 +71,7 @@ async function handleLogRequest(request: NextRequest) {
       signalEvaluation,
       activeOfficialNotice,
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
-    });
+    }, { logFallback: false });
 
     // 3. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;

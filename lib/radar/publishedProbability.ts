@@ -12,13 +12,17 @@ import {
 import type { RadarData } from "./types";
 
 export type PublishedProbabilitySource = "shadow" | "heuristic-fallback";
+export type PublishedProbabilityFallbackReason =
+  | "shadow_exception"
+  | "shadow_invalid_prediction"
+  | "shadow_low_confidence";
 
 export type PublishedProbabilityCalculation = {
   probability24h: number;
   probability48h: number;
   adoptedModel: string;
   source: PublishedProbabilitySource;
-  fallbackReason: "shadow_exception" | "shadow_invalid_prediction" | null;
+  fallbackReason: PublishedProbabilityFallbackReason | null;
   primary: ProbabilityCalculationAudit;
   shadow: ShadowProbabilityResult | null;
 };
@@ -41,12 +45,18 @@ export function isValidShadowPrediction(
   );
 }
 
+export function hasAdoptableShadowConfidence(
+  shadow: Pick<ShadowProbabilityResult, "confidence">,
+) {
+  return shadow.confidence.level === "medium" || shadow.confidence.level === "high";
+}
+
 export function selectPublishedProbability(
   primary: ProbabilityCalculationAudit,
   shadow: ShadowProbabilityResult | null,
   fallbackReason: PublishedProbabilityCalculation["fallbackReason"] = null,
 ): PublishedProbabilityCalculation {
-  if (shadow && isValidShadowPrediction(shadow)) {
+  if (shadow && isValidShadowPrediction(shadow) && hasAdoptableShadowConfidence(shadow)) {
     return {
       probability24h: shadow.predictions.probability24h,
       probability48h: shadow.predictions.probability48h,
@@ -58,15 +68,35 @@ export function selectPublishedProbability(
     };
   }
 
+  const resolvedFallbackReason = fallbackReason ?? (
+    shadow && isValidShadowPrediction(shadow) && !hasAdoptableShadowConfidence(shadow)
+      ? "shadow_low_confidence"
+      : "shadow_invalid_prediction"
+  );
+
   return {
     probability24h: primary.probability24h,
     probability48h: primary.probability48h,
     adoptedModel: primary.modelVersion,
     source: "heuristic-fallback",
-    fallbackReason: fallbackReason ?? "shadow_invalid_prediction",
+    fallbackReason: resolvedFallbackReason,
     primary,
     shadow,
   };
+}
+
+function logPublishedProbabilityFallback(
+  calculation: PublishedProbabilityCalculation,
+) {
+  if (calculation.source !== "heuristic-fallback") return;
+
+  console.warn("[Published probability fallback]", {
+    reason: calculation.fallbackReason,
+    shadowModelVersion: calculation.shadow?.modelVersion ?? null,
+    shadowConfidence: calculation.shadow?.confidence.level ?? null,
+    completedIntervalCount: calculation.shadow?.confidence.completedIntervalCount ?? null,
+    totalExposureDays: calculation.shadow?.confidence.totalExposureDays ?? null,
+  });
 }
 
 export function calculatePublishedProbability(
@@ -75,15 +105,20 @@ export function calculatePublishedProbability(
     now?: Date;
     signalEvaluation?: LocalSignalEvaluation;
     activeOfficialNotice?: ActiveOfficialNotice | null;
-    regularResetExpectedAt?: string | null;
-  } = {},
+      regularResetExpectedAt?: string | null;
+    } = {},
+  runtime: { logFallback?: boolean } = {},
 ): PublishedProbabilityCalculation {
   const primary = getLocalProbabilityCalculation(data, options);
 
   try {
     const shadow = calculateShadowProbability(data, options);
-    return selectPublishedProbability(primary, shadow);
+    const selected = selectPublishedProbability(primary, shadow);
+    if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
+    return selected;
   } catch {
-    return selectPublishedProbability(primary, null, "shadow_exception");
+    const selected = selectPublishedProbability(primary, null, "shadow_exception");
+    if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
+    return selected;
   }
 }

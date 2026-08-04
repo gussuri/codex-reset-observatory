@@ -1387,17 +1387,6 @@ export function getDisplayProbabilityReason(
     );
   }
 
-  const recentResetCount7d = getRecent7DayResetCount(data, now);
-  if (recentResetCount7d >= 3) {
-    sentences.push(
-      locale === "en"
-        ? `There have been ${recentResetCount7d} resets in the last seven days, so the current likelihood is ${expectationText}.`
-        : locale === "zh"
-          ? `最近 7 天内已发生 ${recentResetCount7d} 次重置，当前可能性${expectationText}。`
-          : `直近7日間でリセットが${recentResetCount7d}回あり、現在の見込みは${expectationText}です。`,
-    );
-  }
-
   const lastReset = resolvedSignalEvaluation.latestResetAt;
   if (lastReset) {
     const days = Math.floor(
@@ -1415,8 +1404,7 @@ export function getDisplayProbabilityReason(
   const hasRelevantSignal =
     officialSignalCount > 0 ||
     activeIncidentCount > 0 ||
-    issueAnomalyCount > 0 ||
-    recentResetCount7d >= 3;
+    issueAnomalyCount > 0;
   if (!hasRelevantSignal) {
     sentences.push(
       locale === "en"

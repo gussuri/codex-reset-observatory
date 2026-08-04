@@ -1,5 +1,6 @@
 import { LOCAL_PROBABILITY_HISTORY, type ProbabilityHistoryItem } from "../data/probabilityHistory";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
+import { basename } from "node:path";
 import { getLocalProbabilityCalculation, getRecent7DayResetCount } from "../lib/radar/probability";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
@@ -40,6 +41,20 @@ type MetricSummary = {
     actualRate: number;
   }>;
 };
+
+export type ShadowEvaluationReadiness = {
+  snapshotCount: number;
+  independentDayCount: number;
+  completedRandomResetCount: number;
+  fullSignalEvaluable: boolean;
+  shadowConfidence: "low" | "medium" | "high";
+  publicAdoptionEligible: boolean;
+  reasons: string[];
+};
+
+const MIN_VALIDATION_SNAPSHOTS = 30;
+const MIN_VALIDATION_DAYS = 7;
+const MIN_VALIDATION_RANDOM_RESETS = 5;
 
 function getTimestamp(value: string) {
   const timestamp = new Date(value).getTime();
@@ -164,6 +179,58 @@ function chooseDailySnapshots(snapshots: Array<ProbabilityHistoryItem>) {
     });
 }
 
+export function assessShadowEvaluationReadiness(
+  snapshots: Array<ProbabilityHistoryItem>,
+  dailySnapshots: Array<ProbabilityHistoryItem>,
+  completedRandomResetEvents: Array<ShadowResetEvent>,
+  options: {
+    fullSignalEvaluable: boolean;
+    shadowConfidence: "low" | "medium" | "high";
+  },
+): ShadowEvaluationReadiness {
+  const reasons: string[] = [];
+  if (snapshots.length < MIN_VALIDATION_SNAPSHOTS) {
+    reasons.push(`fewer than ${MIN_VALIDATION_SNAPSHOTS} valid probability snapshots`);
+  }
+  if (dailySnapshots.length < MIN_VALIDATION_DAYS) {
+    reasons.push(`fewer than ${MIN_VALIDATION_DAYS} independent JST days`);
+  }
+  if (completedRandomResetEvents.length < MIN_VALIDATION_RANDOM_RESETS) {
+    reasons.push(`fewer than ${MIN_VALIDATION_RANDOM_RESETS} completed random resets`);
+  }
+  if (!options.fullSignalEvaluable) {
+    reasons.push("historical point-in-time signal snapshots are unavailable");
+  }
+  if (options.shadowConfidence === "low") {
+    reasons.push("current Shadow confidence is low");
+  }
+
+  return {
+    snapshotCount: snapshots.length,
+    independentDayCount: dailySnapshots.length,
+    completedRandomResetCount: completedRandomResetEvents.length,
+    fullSignalEvaluable: options.fullSignalEvaluable,
+    shadowConfidence: options.shadowConfidence,
+    publicAdoptionEligible: reasons.length === 0,
+    reasons,
+  };
+}
+
+function printReadiness(label: string, readiness: ShadowEvaluationReadiness) {
+  console.log(`\n## ${label}`);
+  console.log(`snapshotCount=${readiness.snapshotCount}`);
+  console.log(`independentDayCount=${readiness.independentDayCount}`);
+  console.log(`completedRandomResetCount=${readiness.completedRandomResetCount}`);
+  console.log(`fullSignalEvaluable=${readiness.fullSignalEvaluable}`);
+  console.log(`shadowConfidence=${readiness.shadowConfidence}`);
+  console.log(`publicAdoptionEligible=${readiness.publicAdoptionEligible}`);
+  if (readiness.reasons.length > 0) {
+    console.log(`readinessReasons=${readiness.reasons.join("; ")}`);
+    console.log("INSUFFICIENT DATA FOR MODEL VALIDATION");
+    console.log("NOT ELIGIBLE FOR PUBLIC ADOPTION");
+  }
+}
+
 function printEvaluation(label: string, snapshots: Array<ProbabilityHistoryItem>, allEvents: Array<ShadowResetEvent>) {
   const primaryRows = getRowsForSnapshots(
     snapshots,
@@ -237,18 +304,28 @@ function main() {
   );
   const dailySnapshots = chooseDailySnapshots(snapshots);
 
-  console.log("Shadow probability evaluation (read-only; no Supabase, webhook, Gemini, or network calls)");
-  console.log(`snapshots=${snapshots.length}, dailyJstSnapshots=${dailySnapshots.length}, completedEventsForLabels=${allEvents.length}`);
-  printEvaluation("All snapshots", snapshots, allEvents);
-  printEvaluation("One snapshot per JST day", dailySnapshots, allEvents);
-
   const now = new Date();
   const data = getLocalRadarData({ calculationNow: now });
   const currentViewModel = getRadarViewModel(data, "ja", false, undefined, now);
   const regularResetExpectedAt = currentViewModel.regularResetForecast.expectedAt;
-  const published = calculatePublishedProbability(data, { now, regularResetExpectedAt });
+  const published = calculatePublishedProbability(data, { now, regularResetExpectedAt }, { logFallback: false });
   const primary = published.primary;
   const shadow = published.shadow ?? calculateShadowProbability(data, { now, regularResetExpectedAt });
+  const readiness = assessShadowEvaluationReadiness(
+    snapshots,
+    dailySnapshots,
+    allEvents,
+    {
+      fullSignalEvaluable: false,
+      shadowConfidence: shadow.confidence.level,
+    },
+  );
+
+  console.log("Shadow probability evaluation (read-only; no Supabase, webhook, Gemini, or network calls)");
+  printReadiness("Evaluation readiness", readiness);
+  printEvaluation("All snapshots", snapshots, allEvents);
+  printEvaluation("One snapshot per JST day", dailySnapshots, allEvents);
+
   console.log("\n## Current preview (not used for historical scores)");
   console.log(JSON.stringify({
     primary: {
@@ -273,6 +350,16 @@ function main() {
       probability48h: published.probability48h,
     },
   }, null, 2));
+
+  printReadiness("Evaluation summary", readiness);
+  const allowInsufficientData = process.argv.includes("--allow-insufficient-data");
+  if (!readiness.publicAdoptionEligible && !allowInsufficientData) {
+    process.exitCode = 2;
+  } else if (!readiness.publicAdoptionEligible) {
+    console.warn("WARNING: continuing because --allow-insufficient-data was supplied");
+  }
 }
 
-main();
+if (basename(process.argv[1] ?? "") === "evaluate-shadow-probability.ts") {
+  main();
+}

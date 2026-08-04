@@ -1,4 +1,4 @@
-export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v1";
+export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 
 export const HAZARD_BIN_HOURS = 24;
 export const HAZARD_TAIL_START_DAYS = 7;
@@ -58,4 +58,4 @@ export const SHADOW_SIGNAL_MULTIPLIER_CONFIG = {
 } as const;
 
 export const SHADOW_TARGET_DEFINITION =
-  "Completed定期リセット・ランダムリセット events already used by the current global reset calculations, after combineResetHistory deduplication, excluding pending/opened-only records, rejected Tibo signals, future or invalid timestamps, explicit narrow-scope records, and 任意リセット権1回配布 records.";
+  "Completed random reset events after reset-history deduplication; excludes regular resets, manual reset-credit grants, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and explicitly narrow-scope records.";
