@@ -29,8 +29,43 @@ export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 60;
 
-// 1. Raw Supabase fetch function
-async function fetchRawTiboSignals(): Promise<DataFetchResult<ActiveTiboSignal[]>> {
+export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
+  "official_notice",
+  "reset_executed",
+  "teaser",
+];
+const TIBO_CACHE_BUCKET_MS = 60 * 1000;
+
+type ActiveTiboQueryBuilder = {
+  not(column: string, operator: string, value: null): ActiveTiboQueryBuilder;
+  gt(column: string, value: string): ActiveTiboQueryBuilder;
+  or(filters: string): ActiveTiboQueryBuilder;
+  in(column: string, values: string[]): ActiveTiboQueryBuilder;
+  order(column: string, options: { ascending: boolean }): ActiveTiboQueryBuilder;
+  limit(count: number): Promise<{ data: unknown[] | null; error: unknown | null }>;
+};
+
+export function applyActiveTiboQueryFilters(
+  query: ActiveTiboQueryBuilder,
+  expiryBoundaryIso: string,
+) {
+  return query
+    .not("expires_at", "is", null)
+    .gt("expires_at", expiryBoundaryIso)
+    .or("verification_status.is.null,verification_status.neq.rejected")
+    .in("signal_type", [...ACTIVE_TIBO_SIGNAL_TYPES]);
+}
+
+function getTiboCacheBoundary(now: Date) {
+  const time = now.getTime();
+  if (!Number.isFinite(time)) return new Date(0).toISOString();
+  return new Date(Math.floor(time / TIBO_CACHE_BUCKET_MS) * TIBO_CACHE_BUCKET_MS).toISOString();
+}
+
+// 1. Raw Supabase fetch function. The boundary is both a safe query cutoff and
+// an unstable_cache argument, so active expiry filters are not frozen forever
+// under a constant cache key while avoiding a per-second cache key explosion.
+async function fetchRawTiboSignals(expiryBoundaryIso: string): Promise<DataFetchResult<ActiveTiboSignal[]>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const configuration = getRequiredConfigurationHealth([
@@ -47,9 +82,10 @@ async function fetchRawTiboSignals(): Promise<DataFetchResult<ActiveTiboSignal[]
       auth: { persistSession: false },
     });
 
-    const { data, error } = await supabase
-      .from("tibo_signals")
-      .select("*")
+    const { data, error } = await applyActiveTiboQueryFilters(
+      supabase.from("tibo_signals").select("*") as unknown as ActiveTiboQueryBuilder,
+      expiryBoundaryIso,
+    )
       .order("tweet_created_at", { ascending: false })
       .limit(20);
 
@@ -70,7 +106,7 @@ async function fetchRawTiboSignals(): Promise<DataFetchResult<ActiveTiboSignal[]
 // 2. Module-scoped unstable_cache wrapper (60s TTL, tagged "radar-data")
 const getCachedTiboSignals = unstable_cache(
   fetchRawTiboSignals,
-  ["tibo-signals-cache"],
+  ["tibo-signals-cache-v2"],
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -151,9 +187,44 @@ type TiboSignalBundle = {
   health: DataSourceHealth;
 };
 
+export function associateTiboNotices(
+  acceptedResets: Array<FormalTiboResetSignal>,
+  notices: Array<TiboNoticeSignal>,
+) {
+  const sortedResets = acceptedResets
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(left.tweet_created_at).getTime() - new Date(right.tweet_created_at).getTime(),
+    );
+  const associated: Array<FormalTiboResetSignal> = [];
+  let previousResetAt: string | null = null;
+  let index = 0;
+
+  while (index < sortedResets.length) {
+    const groupTime = new Date(sortedResets[index].tweet_created_at).getTime();
+    const groupPreviousResetAt = previousResetAt;
+    while (
+      index < sortedResets.length &&
+      new Date(sortedResets[index].tweet_created_at).getTime() === groupTime
+    ) {
+      const signal = sortedResets[index];
+      associated.push({
+        ...signal,
+        related_notice: findRelatedTiboNotice(signal, notices, groupPreviousResetAt),
+      });
+      index += 1;
+    }
+    previousResetAt = sortedResets[index - 1].tweet_created_at;
+  }
+
+  return associated.reverse();
+}
+
 async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBundle> {
+  const tiboCacheBoundary = getTiboCacheBoundary(now);
   const [activeResult, historyResult] = await Promise.all([
-    getCachedTiboSignals(),
+    getCachedTiboSignals(tiboCacheBoundary),
     getCachedTiboHistorySignals(),
   ]);
   const activeSignals = activeResult.data.filter((signal) => {
@@ -168,24 +239,7 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     .map(toNoticeSignal)
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
-  const formalResets = acceptedResets.map((signal) => {
-    const resetTime = new Date(signal.tweet_created_at).getTime();
-    const previousReset = acceptedResets
-      .filter((candidate) => new Date(candidate.tweet_created_at).getTime() < resetTime)
-      .sort(
-        (left, right) =>
-          new Date(right.tweet_created_at).getTime() - new Date(left.tweet_created_at).getTime(),
-      )[0];
-
-    return {
-      ...signal,
-      related_notice: findRelatedTiboNotice(
-        signal,
-        notices,
-        previousReset?.tweet_created_at ?? null,
-      ),
-    };
-  });
+  const formalResets = associateTiboNotices(acceptedResets, notices);
   const rejectedResets = signals
     .filter(
       (signal) =>

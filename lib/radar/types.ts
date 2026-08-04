@@ -208,7 +208,7 @@ export type RadarData = {
   };
 };
 
-export type PublicRadarViewModel = {
+export type RadarViewModel = {
   status: string;
   expectation: string;
   probability24h?: number;
@@ -273,9 +273,21 @@ export type PublicRadarViewModel = {
   }>;
 };
 
-// The view model is display-only and is kept as the compatibility name used by
-// the existing prediction and presentation helpers.
-export type RadarViewModel = PublicRadarViewModel;
+// The browser-facing view model is an explicit projection of the internal
+// model. Audit-only action and reasoning fields stay server-side.
+export type PublicRadarViewModel = Pick<
+  RadarViewModel,
+  | "status"
+  | "expectation"
+  | "probability24h"
+  | "probability48h"
+  | "lastUpdated"
+  | "regularResetForecast"
+  | "activeWindow"
+  | "displayReasoningSummary"
+  | "latestWindow"
+  | "recentHistory"
+>;
 
 export type PublicDataHealth = {
   overall: "ok" | "degraded";
@@ -296,6 +308,8 @@ export type PublicRadarSnapshot = {
 };
 
 export type CachedRadarData = {
+  schemaVersion: "public-v1";
+  locale: Locale;
   data: PublicRadarSnapshot;
   fetchedAt: string;
 };

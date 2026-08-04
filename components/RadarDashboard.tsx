@@ -20,6 +20,7 @@ import {
   applyRefreshFailure,
   applyRefreshSuccess,
   getDashboardDataState,
+  parseCachedRadarData,
   type RadarLoadState,
 } from "@/lib/radar/clientState";
 import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
@@ -29,8 +30,6 @@ import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
-
-const CACHE_KEY = "codex-reset-observatory:last-success";
 
 export function RadarDashboard({
   initialData,
@@ -47,15 +46,15 @@ export function RadarDashboard({
     isStale: initialData?.dataHealth.stale ?? false,
     refreshError: null,
   });
+  const cacheKey = `codex-reset-observatory:last-success:${locale}`;
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
     try {
-      const cached = window.localStorage.getItem(CACHE_KEY);
-      return cached ? (JSON.parse(cached) as CachedRadarData) : null;
+      return parseCachedRadarData(window.localStorage.getItem(cacheKey), locale);
     } catch {
       return null;
     }
-  }, []);
+  }, [cacheKey, locale]);
 
   const fetchRadar = useCallback(async () => {
     try {
@@ -72,8 +71,13 @@ export function RadarDashboard({
 
       try {
         window.localStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({ data, fetchedAt } satisfies CachedRadarData),
+          cacheKey,
+          JSON.stringify({
+            schemaVersion: "public-v1",
+            locale,
+            data,
+            fetchedAt,
+          } satisfies CachedRadarData),
         );
       } catch {
         // Cache persistence is best-effort; the successful live response remains current.
@@ -82,7 +86,7 @@ export function RadarDashboard({
       const cached = loadCachedData();
       setState((current) => applyRefreshFailure(current, cached));
     }
-  }, [loadCachedData, locale]);
+  }, [cacheKey, loadCachedData, locale]);
 
   useEffect(() => {
     void fetchRadar();

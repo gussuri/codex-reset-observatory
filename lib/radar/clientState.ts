@@ -1,4 +1,4 @@
-import type { CachedRadarData, PublicRadarSnapshot } from "./types";
+import type { CachedRadarData, Locale, PublicRadarSnapshot } from "./types";
 
 export type RadarLoadState = {
   data: PublicRadarSnapshot | null;
@@ -8,6 +8,51 @@ export type RadarLoadState = {
 };
 
 export type DashboardDataState = "ready" | "degraded" | "stale" | "unavailable";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isValidIsoDate(value: unknown) {
+  return typeof value === "string" && Number.isFinite(new Date(value).getTime());
+}
+
+function hasRequiredPublicSnapshotFields(data: unknown): data is PublicRadarSnapshot {
+  if (!isRecord(data)) return false;
+  if (data.schemaVersion !== "public-v1" || !isValidIsoDate(data.checkedAt)) return false;
+  if (!isRecord(data.dataHealth) || !isRecord(data.viewModel)) return false;
+  if (data.dataHealth.overall !== "ok" && data.dataHealth.overall !== "degraded") return false;
+  const viewModel = data.viewModel;
+
+  return [
+    "status",
+    "expectation",
+    "regularResetForecast",
+    "activeWindow",
+    "latestWindow",
+    "recentHistory",
+  ].every((key) => key in viewModel);
+}
+
+export function parseCachedRadarData(
+  raw: string | null,
+  locale: Locale,
+): CachedRadarData | null {
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+    if (parsed.schemaVersion !== "public-v1" || parsed.locale !== locale) return null;
+    if (!isValidIsoDate(parsed.fetchedAt) || !hasRequiredPublicSnapshotFields(parsed.data)) {
+      return null;
+    }
+
+    return parsed as CachedRadarData;
+  } catch {
+    return null;
+  }
+}
 
 export function applyRefreshSuccess(
   data: PublicRadarSnapshot,

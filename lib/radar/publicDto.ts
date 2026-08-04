@@ -41,7 +41,6 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
     expectation: viewModel.expectation,
     probability24h: viewModel.probability24h,
     probability48h: viewModel.probability48h,
-    action: viewModel.action,
     lastUpdated: viewModel.lastUpdated ?? null,
     regularResetForecast: {
       date: viewModel.regularResetForecast.date,
@@ -67,7 +66,6 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       forecastTime: viewModel.activeWindow.forecastTime ?? null,
       remaining: viewModel.activeWindow.remaining,
     },
-    reasoningSummary: viewModel.reasoningSummary,
     displayReasoningSummary: viewModel.displayReasoningSummary,
     latestWindow: {
       kind: viewModel.latestWindow.kind,
