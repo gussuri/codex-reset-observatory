@@ -209,11 +209,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
     zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
   },
-  weeklyResetReferenceBadge: {
-    ja: "参考値",
-    en: "Reference",
-    zh: "参考值",
-  },
   recentResetEvents: {
     ja: "直近のリセット履歴",
     en: "Recent reset events",
@@ -223,16 +218,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "リセット履歴",
     en: "Reset history",
     zh: "重置历史",
-  },
-  historyKindGlobal: {
-    ja: "全体リセット",
-    en: "Global reset",
-    zh: "全局重置",
-  },
-  historyKindBanked: {
-    ja: "任意リセット配布",
-    en: "Banked Reset",
-    zh: "手动重置发放",
   },
   sourceOriginalPost: {
     ja: "元投稿",

@@ -10,9 +10,22 @@ import { HistoryView } from "../components/HistoryView";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
-import { translateDynamic } from "../lib/radar/i18n";
+import { translateDynamic, translateUI } from "../lib/radar/i18n";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
 
 test("public radar DTO uses an allowlist and excludes internal audit fields", () => {
   const internal = getLocalRadarData({
@@ -95,7 +108,7 @@ test("dashboard renders the translated reset history label", () => {
 
   assert.match(html, /Reset history/);
   assert.doesNotMatch(html, />resetHistory</);
-  assert.match(html, /Global reset/);
+  assert.doesNotMatch(html, /Global reset|Banked Reset/);
 });
 
 test("stale fallback data renders normally without a public warning in every locale", () => {
@@ -134,14 +147,16 @@ test("history page combines confirmed events and banked distributions in one chr
 
   assert.match(html, /<h2[^>]*>Reset history<\/h2>/);
   assert.doesNotMatch(html, /<h2[^>]*>Confirmed global resets|<h2[^>]*>Banked Reset distributions/);
-  assert.match(html, /Global reset/);
-  assert.match(html, /Banked Reset/);
+  assert.doesNotMatch(html, /text-\[11px\]/);
   const visibleItems = data.viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
   );
   assert.ok(visibleItems.length >= 2);
   const firstTitle = translateDynamic(visibleItems[0].title, "en");
   const secondTitle = translateDynamic(visibleItems[1].title, "en");
+  for (const item of visibleItems) {
+    assert.match(html, new RegExp(escapeRegExp(escapeHtml(translateDynamic(item.title, "en")))));
+  }
   assert.ok(html.indexOf(firstTitle) < html.indexOf(secondTitle));
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
@@ -164,20 +179,14 @@ test("history page combines confirmed events and banked distributions in one chr
   const localizedAssertions = {
     ja: {
       title: "リセット履歴",
-      global: "全体リセット",
-      banked: "任意リセット配布",
       reference: "週間リセット参考日時",
     },
     en: {
       title: "Reset history",
-      global: "Global reset",
-      banked: "Banked Reset",
       reference: "Weekly reset reference time",
     },
     zh: {
       title: "重置记录",
-      global: "全局重置",
-      banked: "手动重置发放",
       reference: "每周重置参考时间",
     },
   } as const;
@@ -188,9 +197,45 @@ test("history page combines confirmed events and banked distributions in one chr
       React.createElement(HistoryView, { data: localizedData, locale }),
     );
     assert.match(localizedHtml, new RegExp(`<h2[^>]*>${localizedAssertions[locale].title}<\\/h2>`));
-    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].global));
-    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].banked));
+    assert.doesNotMatch(localizedHtml, /text-\[11px\]/);
     assert.doesNotMatch(localizedHtml, new RegExp(localizedAssertions[locale].reference));
+
+    const description = {
+      ja: "Codexの全体リセットと任意リセット配布を、新しい順にまとめています。",
+      en: "Global resets and Banked Reset distributions are listed together in chronological order.",
+      zh: "按时间倒序汇总 Codex 全局重置和手动重置发放记录。",
+    }[locale];
+    assert.equal((localizedHtml.match(new RegExp(escapeRegExp(description), "g")) ?? []).length, 1);
+  }
+});
+
+test("top latest reset card keeps only its title, execution time, and safe source link", () => {
+  const labels = {
+    ja: { latest: "最新のリセット", resetTime: "リセット実施時刻", source: "ソース", sourceLink: "元投稿" },
+    en: { latest: "Latest reset", resetTime: "Reset time", source: "Source", sourceLink: "Original post" },
+    zh: { latest: "最新重置", resetTime: "重置执行时间", source: "来源", sourceLink: "原帖" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const data = toPublicRadarSnapshot(getLocalRadarData({}), locale);
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: data, locale }),
+    );
+    const latestStart = html.indexOf(labels[locale].latest);
+    const weeklyStart = html.indexOf(translateUI("weeklyResetRef", locale));
+    const latestCard = html.slice(latestStart, weeklyStart);
+    const latestWindow = data.viewModel.latestWindow;
+
+    assert.ok(latestStart >= 0);
+    assert.ok(weeklyStart > latestStart);
+    assert.match(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.title, locale)))));
+    assert.match(latestCard, new RegExp(labels[locale].resetTime));
+    assert.match(latestCard, new RegExp(labels[locale].source));
+    assert.match(latestCard, new RegExp(labels[locale].sourceLink));
+    assert.doesNotMatch(html, /text-\[11px\]/);
+    assert.doesNotMatch(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.summary, locale)))));
+    assert.doesNotMatch(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.scope, locale)))));
+    assert.doesNotMatch(latestCard, /Notice|予告|预告|告知から実施まで|Time from notice to reset|从预告到执行/);
   }
 });
 

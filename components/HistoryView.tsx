@@ -64,19 +64,6 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
   }
 }
 
-function getHistoryKindLabel(
-  recordKind: HistoryItem["recordKind"],
-  locale: Locale,
-) {
-  if (recordKind === "confirmed_global") {
-    return translateUI("historyKindGlobal", locale);
-  }
-  if (recordKind === "banked_distribution") {
-    return translateUI("historyKindBanked", locale);
-  }
-  return null;
-}
-
 function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) {
   const label = getSourceLabel(item.sourceKind, locale);
   const canLink = Boolean(item.sourceKind && item.sourceKind !== "none" && isSafeHttpUrl(item.source));
@@ -98,13 +85,11 @@ function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) 
 
 function HistoryEventSection({
   title,
-  description,
   empty,
   items,
   locale,
 }: {
   title: string;
-  description: string;
   empty: string;
   items: HistoryItem[];
   locale: Locale;
@@ -113,7 +98,6 @@ function HistoryEventSection({
     <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
       <header className="border-b border-slate-100 pb-4">
         <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
       </header>
       <div className="mt-5 space-y-7">
         {groupByMonth(items, locale).map((group) => (
@@ -126,16 +110,9 @@ function HistoryEventSection({
                   key={item.key}
                 >
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="ui-heading text-lg font-semibold text-slate-950">
-                        {translateDynamic(item.title, locale)}
-                      </h4>
-                      {getHistoryKindLabel(item.recordKind, locale) ? (
-                        <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-                          {getHistoryKindLabel(item.recordKind, locale)}
-                        </span>
-                      ) : null}
-                    </div>
+                    <h4 className="ui-heading text-lg font-semibold text-slate-950">
+                      {translateDynamic(item.title, locale)}
+                    </h4>
                     <ResetHistoryDetails item={item} locale={locale} />
                   </div>
 
@@ -259,7 +236,6 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
 
         <HistoryEventSection
           title={content.sectionTitle}
-          description={content.description}
           empty={content.empty}
           items={visibleItems}
           locale={locale}

@@ -57,21 +57,6 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
   }
 }
 
-type DashboardHistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
-
-function getHistoryKindLabel(
-  recordKind: DashboardHistoryItem["recordKind"],
-  locale: Locale,
-) {
-  if (recordKind === "confirmed_global") {
-    return translateUI("historyKindGlobal", locale);
-  }
-  if (recordKind === "banked_distribution") {
-    return translateUI("historyKindBanked", locale);
-  }
-  return null;
-}
-
 export function RadarDashboard({
   initialData,
   initialFetchedAt,
@@ -542,29 +527,10 @@ export function RadarDashboard({
               <Sparkles className="h-7 w-7 text-amber-600" />
             </div>
 
-            <p className="mt-4 text-sm leading-6 text-slate-700">
-              {translateDynamic(viewModel.latestWindow.summary, locale)}
-            </p>
-
             <dl className="mt-5 space-y-4">
-              <InfoRow
-                label={viewModel.latestWindow.scopeLabel ?? translateUI("scope", locale)}
-                value={translateDynamic(viewModel.latestWindow.scope, locale)}
-              />
-              {viewModel.latestWindow.kind === "observed" &&
-              hasPriorSignal(viewModel.latestWindow.openedAt, viewModel.latestWindow.closedAt) ? (
-                <InfoRow
-                  label={translateUI("detectionTime", locale)}
-                  value={<LocalizedDateTime value={viewModel.latestWindow.openedAt} locale={locale} />}
-                />
-              ) : null}
               <InfoRow
                 label={translateUI("resetTime", locale)}
                 value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
-              />
-              <InfoRow
-                label={viewModel.latestWindow.windowLabel ?? translateUI("windowLength", locale)}
-                value={translateDynamic(viewModel.latestWindow.windowLength, locale)}
               />
               <InfoRow
                 label={translateUI("source", locale)}
@@ -593,11 +559,8 @@ export function RadarDashboard({
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500">
+              <p className="text-sm font-medium text-slate-500">
                 {translateUI("weeklyResetRef", locale)}
-                <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                  {translateUI("weeklyResetReferenceBadge", locale)}
-                </span>
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
                 <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
@@ -633,16 +596,9 @@ export function RadarDashboard({
                   key={item.key}
                 >
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="ui-heading text-lg font-bold text-slate-950 sm:text-base sm:font-semibold">
-                        {translateDynamic(item.title, locale)}
-                      </h3>
-                      {getHistoryKindLabel(item.recordKind, locale) ? (
-                        <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-                          {getHistoryKindLabel(item.recordKind, locale)}
-                        </span>
-                      ) : null}
-                    </div>
+                    <h3 className="ui-heading text-lg font-bold text-slate-950 sm:text-base sm:font-semibold">
+                      {translateDynamic(item.title, locale)}
+                    </h3>
                     <ResetHistoryDetails
                       item={item}
                       locale={locale}
