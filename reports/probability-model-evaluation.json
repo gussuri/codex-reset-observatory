@@ -1,0 +1,533 @@
+{
+  "schemaVersion": "probability-model-evaluation-v1",
+  "asOf": "2026-08-01T03:32:00.000Z",
+  "generatedAt": "2026-08-01T03:32:00.000Z",
+  "targetDefinition": "Completed random reset events after reset-history deduplication; excludes regular resets, manual reset-credit grants, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and explicitly narrow-scope records.",
+  "eventCount": 19,
+  "completedIntervalCount": 18,
+  "observationPeriod": {
+    "start": "2026-05-16T17:51:00.000Z",
+    "end": "2026-08-01T03:32:00.000Z"
+  },
+  "originCount": 31,
+  "origins": [
+    "2026-06-29T15:00:00.000Z",
+    "2026-06-30T15:00:00.000Z",
+    "2026-07-01T15:00:00.000Z",
+    "2026-07-02T15:00:00.000Z",
+    "2026-07-03T15:00:00.000Z",
+    "2026-07-04T15:00:00.000Z",
+    "2026-07-05T15:00:00.000Z",
+    "2026-07-06T15:00:00.000Z",
+    "2026-07-07T15:00:00.000Z",
+    "2026-07-08T15:00:00.000Z",
+    "2026-07-09T15:00:00.000Z",
+    "2026-07-10T15:00:00.000Z",
+    "2026-07-11T15:00:00.000Z",
+    "2026-07-12T15:00:00.000Z",
+    "2026-07-13T15:00:00.000Z",
+    "2026-07-14T15:00:00.000Z",
+    "2026-07-15T15:00:00.000Z",
+    "2026-07-16T15:00:00.000Z",
+    "2026-07-17T15:00:00.000Z",
+    "2026-07-18T15:00:00.000Z",
+    "2026-07-19T15:00:00.000Z",
+    "2026-07-20T15:00:00.000Z",
+    "2026-07-21T15:00:00.000Z",
+    "2026-07-22T15:00:00.000Z",
+    "2026-07-23T15:00:00.000Z",
+    "2026-07-24T15:00:00.000Z",
+    "2026-07-25T15:00:00.000Z",
+    "2026-07-26T15:00:00.000Z",
+    "2026-07-27T15:00:00.000Z",
+    "2026-07-28T15:00:00.000Z",
+    "2026-07-29T15:00:00.000Z"
+  ],
+  "models": [
+    {
+      "modelVersion": "hazard-odds-v2-random-only",
+      "halfLifeDays": null,
+      "classification": "baseline",
+      "metrics24h": {
+        "count": 31,
+        "actualRate": 0.3548387096774194,
+        "averagePrediction": 0.15636298552644926,
+        "brier": 0.27427221914328864,
+        "logLoss": 0.7987497289145521,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 26,
+            "averagePrediction": 0.1449680823825807,
+            "actualRate": 0.4230769230769231
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 5,
+            "averagePrediction": 0.21561648187456553,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 31,
+        "actualRate": 0.5806451612903226,
+        "averagePrediction": 0.2850653695027771,
+        "brier": 0.3288750640967863,
+        "logLoss": 0.8725919206281272,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 6,
+            "averagePrediction": 0.18643598925977609,
+            "actualRate": 0.5
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 25,
+            "averagePrediction": 0.30873642076109736,
+            "actualRate": 0.6
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": null
+    },
+    {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h14",
+      "halfLifeDays": 14,
+      "classification": "clearly_better",
+      "metrics24h": {
+        "count": 31,
+        "actualRate": 0.3548387096774194,
+        "averagePrediction": 0.25033941351223854,
+        "brier": 0.24037665614646678,
+        "logLoss": 0.6843962630652459,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 12,
+            "averagePrediction": 0.1571892216458243,
+            "actualRate": 0.25
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 19,
+            "averagePrediction": 0.30917111363839495,
+            "actualRate": 0.42105263157894735
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 31,
+        "actualRate": 0.5806451612903226,
+        "averagePrediction": 0.43174559361747644,
+        "brier": 0.251114680442514,
+        "logLoss": 0.6977164569264588,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 12,
+            "averagePrediction": 0.2883536656593862,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 19,
+            "averagePrediction": 0.5223089165383756,
+            "actualRate": 0.7368421052631579
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.033895562996821865,
+        "brier48h": -0.07776038365427229,
+        "logLoss24h": -0.11435346584930617,
+        "logLoss48h": -0.1748754637016684,
+        "bootstrap24h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.06631658648465452,
+          "median": -0.03389556299682192,
+          "upper": -0.010734613711528358
+        },
+        "bootstrap48h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.11704507798024785,
+          "median": -0.07776038365427226,
+          "upper": -0.023405514343646953
+        }
+      }
+    },
+    {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h30",
+      "halfLifeDays": 30,
+      "classification": "clearly_better",
+      "metrics24h": {
+        "count": 31,
+        "actualRate": 0.3548387096774194,
+        "averagePrediction": 0.20284895108955886,
+        "brier": 0.2559077445710764,
+        "logLoss": 0.7314166993920191,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 15,
+            "averagePrediction": 0.1437427745570636,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 16,
+            "averagePrediction": 0.2582609915887732,
+            "actualRate": 0.375
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 31,
+        "actualRate": 0.5806451612903226,
+        "averagePrediction": 0.36125695859969,
+        "brier": 0.2851998195495944,
+        "logLoss": 0.7709480049480341,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 16,
+            "averagePrediction": 0.27298127828136165,
+            "actualRate": 0.5
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 15,
+            "averagePrediction": 0.4554176842725736,
+            "actualRate": 0.6666666666666666
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.01836447457221224,
+        "brier48h": -0.043675244547191905,
+        "logLoss24h": -0.06733302952253295,
+        "logLoss48h": -0.10164391568009312,
+        "bootstrap24h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.036485977812081065,
+          "median": -0.0183644745722123,
+          "upper": -0.005523564020669586
+        },
+        "bootstrap48h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.06530587292728486,
+          "median": -0.04370116213648038,
+          "upper": -0.015225946602048443
+        }
+      }
+    },
+    {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h60",
+      "halfLifeDays": 60,
+      "classification": "clearly_better",
+      "metrics24h": {
+        "count": 31,
+        "actualRate": 0.3548387096774194,
+        "averagePrediction": 0.17749377133848218,
+        "brier": 0.26485127500460137,
+        "logLoss": 0.7625708673158422,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 17,
+            "averagePrediction": 0.1372415121183698,
+            "actualRate": 0.35294117647058826
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 14,
+            "averagePrediction": 0.22637151467719013,
+            "actualRate": 0.35714285714285715
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 31,
+        "actualRate": 0.5806451612903226,
+        "averagePrediction": 0.3218084548966826,
+        "brier": 0.30627865782273817,
+        "logLoss": 0.8185291971445818,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 2,
+            "averagePrediction": 0.19050769194592754,
+            "actualRate": 1
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 20,
+            "averagePrediction": 0.2925845856914354,
+            "actualRate": 0.6
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 9,
+            "averagePrediction": 0.41592833378628846,
+            "actualRate": 0.4444444444444444
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.00942094413868727,
+        "brier48h": -0.02259640627404813,
+        "logLoss24h": -0.036178861598709866,
+        "logLoss48h": -0.05406272348354535,
+        "bootstrap24h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.018588667349397084,
+          "median": -0.009420944138687331,
+          "upper": -0.0027688016899525244
+        },
+        "bootstrap48h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.03327552978191381,
+          "median": -0.022890443393926277,
+          "upper": -0.00830179106714638
+        }
+      }
+    }
+  ],
+  "notes": [
+    "Models use the same target event definition and signal multiplier path as the current Shadow model.",
+    "Completed interval event and exposure weights use exp(-ln(2) * ageDays / halfLifeDays); censored exposure uses weight 1.",
+    "The fixed bootstrap seed is 20260804 with 7-day blocks and 2000 iterations.",
+    "There are 19 target events and 18 completed intervals available as of 2026-08-01T03:32:00.000Z."
+  ]
+}
