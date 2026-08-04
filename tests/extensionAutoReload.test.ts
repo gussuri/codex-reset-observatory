@@ -327,6 +327,7 @@ test("REQUIREMENT 2 & 3: Heartbeat API & Service Worker include 3 page reload fi
       sessionId: "session_test_456",
       lastSuccessfulParseAt: "2026-07-31T22:05:00.000Z",
       lastSeenTweetId: "tweet_222",
+      newestSeenTweetCreatedAt: "2026-07-31T22:04:00.000Z",
       lastScanError: null,
       selectorVersion: "v1.4-extension",
     },
@@ -339,6 +340,7 @@ test("REQUIREMENT 2 & 3: Heartbeat API & Service Worker include 3 page reload fi
   assert.strictEqual(sentBody.last_page_reload_at, sampleTime);
   assert.strictEqual(sentBody.last_page_reload_status, "success");
   assert.strictEqual(sentBody.last_page_reload_error, null);
+  assert.strictEqual(sentBody.newestSeenTweetCreatedAt, "2026-07-31T22:04:00.000Z");
 });
 
 test("Service Worker keeps non-2xx response details local and redacts secrets", async () => {
@@ -377,6 +379,7 @@ test("Service Worker sends only safe heartbeat counters and omits snapshot data"
       sessionId: "session_safe_1",
       lastSuccessfulParseAt: "2026-08-02T00:00:00.000Z",
       lastSeenTweetId: "123456789",
+      newestSeenTweetCreatedAt: "not-a-date",
       lastScanError: "raw secret error",
       selectorVersion: "v1.5-diagnostics",
       lastScanSummary: {
@@ -398,6 +401,7 @@ test("Service Worker sends only safe heartbeat counters and omits snapshot data"
   assert.equal(response.success, true);
   const sentBody = mockFetchCalls[0].body;
   assert.equal(sentBody.lastScanError, "scan_error");
+  assert.equal(sentBody.newestSeenTweetCreatedAt, null);
   assert.equal(sentBody.lastScanSummary.snapshots, undefined);
   assert.doesNotMatch(JSON.stringify(sentBody), /secret HTML|raw secret error/i);
 });

@@ -14,6 +14,7 @@ import {
   buildFormalAdoptionResult,
   isNewFormalAdoption,
 } from "@/lib/radar/formalAdoption";
+import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Expiration Calculation based on tweet_created_at
     const expiresAt = new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
+    const receivedAt = new Date().toISOString();
 
     // 6. Build Supabase Payload
     const payload = {
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
       text: text.trim(),
       tweet_url: tweetUrl,
       tweet_created_at: createdDate.toISOString(),
-      detected_at: new Date().toISOString(),
+      detected_at: receivedAt,
       expires_at: expiresAt.toISOString(),
       verification_status: "auto_unverified" as const,
       classification_reason: selectedClassification.reason,
@@ -158,7 +160,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -177,20 +179,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const persistedPayload = preserveTiboWebhookState(payload, existingSignal, receivedAt);
+
     const formalCandidate: FormalTiboResetSignal = {
-      tweet_id: payload.tweet_id,
-      text: payload.text,
-      tweet_url: payload.tweet_url,
-      tweet_created_at: payload.tweet_created_at,
-      detected_at: payload.detected_at,
-      signal_type: payload.signal_type,
-      confidence: payload.confidence,
-      verification_status: payload.verification_status,
-      classification_source: payload.classification_source,
-      ai_classification_status: payload.ai_classification_status,
-      ai_reset_type_ja: payload.ai_reset_type_ja,
-      ai_notice_to_execution: payload.ai_notice_to_execution,
-      expires_at: payload.expires_at,
+      tweet_id: persistedPayload.tweet_id,
+      text: persistedPayload.text,
+      tweet_url: persistedPayload.tweet_url,
+      tweet_created_at: persistedPayload.tweet_created_at,
+      detected_at: persistedPayload.detected_at,
+      signal_type: persistedPayload.signal_type,
+      confidence: persistedPayload.confidence,
+      verification_status: persistedPayload.verification_status,
+      classification_source: persistedPayload.classification_source,
+      ai_classification_status: persistedPayload.ai_classification_status,
+      ai_reset_type_ja: persistedPayload.ai_reset_type_ja,
+      ai_notice_to_execution: persistedPayload.ai_notice_to_execution,
+      expires_at: persistedPayload.expires_at,
     };
     const newlyAdopted = isNewFormalAdoption(
       formalCandidate,
@@ -201,7 +205,7 @@ export async function POST(req: NextRequest) {
     // 8. Supabase Upsert
     const { error } = await supabase
       .from("tibo_signals")
-      .upsert(payload, { onConflict: "tweet_id" });
+      .upsert(persistedPayload, { onConflict: "tweet_id" });
 
     if (error) {
       console.error("[Webhook Error] Supabase upsert failed:", error);

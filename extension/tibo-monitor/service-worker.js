@@ -796,6 +796,7 @@ async function handlePostHeartbeat(payload) {
     sessionId: TiboDiagnostics.sanitizeOpaqueId(payload.sessionId) || "session_default",
     lastSuccessfulParseAt: TiboDiagnostics.sanitizeTimestamp(payload.lastSuccessfulParseAt),
     lastSeenTweetId: TiboDiagnostics.sanitizeOpaqueId(payload.lastSeenTweetId),
+    newestSeenTweetCreatedAt: TiboDiagnostics.sanitizeTimestamp(payload.newestSeenTweetCreatedAt),
     lastScanError: TiboDiagnostics.sanitizeReasonCode(payload.lastScanError),
     lastScanSummary: TiboDiagnostics.sanitizeScanSummary(payload.lastScanSummary),
     selectorVersion: TiboDiagnostics.sanitizeSelectorVersion(payload.selectorVersion),

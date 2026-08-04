@@ -25,6 +25,7 @@
 
   let lastSuccessfulParseAt = null;
   let lastSeenTweetId = null;
+  let newestSeenTweetCreatedAt = null;
   let lastScanError = null;
   let lastScanSummary = null;
   let extensionContextInvalidated = false;
@@ -114,6 +115,7 @@
       sessionId: sessionId || "session_default",
       lastSuccessfulParseAt,
       lastSeenTweetId,
+      newestSeenTweetCreatedAt,
       lastScanError,
       lastScanSummary,
       selectorVersion: SELECTOR_VERSION,
@@ -229,6 +231,7 @@
     const records = [];
     const scanMessages = [];
     let scanError = null;
+    let newestParsedTweet = null;
 
     try {
       tweetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
@@ -275,6 +278,12 @@
         record.isParseSuccess = true;
 
         const tweetId = match[1];
+        const createdAt = new Date(datetime).toISOString();
+
+        newestParsedTweet = TiboMonitorScan.selectNewestParsedTweet(newestParsedTweet, {
+          tweetId,
+          createdAt,
+        });
 
         // Silent skip if already processed or currently in-flight
         if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
@@ -283,11 +292,6 @@
 
         const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
         const text = textEl.innerText || "";
-        const createdAt = new Date(datetime).toISOString();
-
-        lastSuccessfulParseAt = new Date().toISOString();
-        lastSeenTweetId = tweetId;
-        lastScanError = null;
 
         console.log(`[Tibo Extension] New Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
 
@@ -311,6 +315,10 @@
     lastScanSummary = summary;
 
     if (summary.parseSuccessCount > 0) {
+      lastSuccessfulParseAt = new Date().toISOString();
+      lastSeenTweetId = newestParsedTweet?.tweetId || lastSeenTweetId;
+      newestSeenTweetCreatedAt = newestParsedTweet?.createdAt || newestSeenTweetCreatedAt;
+      lastScanError = null;
       TiboDiagnostics.markSuccessfulScan(chrome.storage.local).catch((error) => {
         handleExtensionError(error, "diagnostic recovery marker");
       });

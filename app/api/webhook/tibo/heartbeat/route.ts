@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { buildHeartbeatRecord } from "../../../../../lib/radar/heartbeat";
+import {
+  buildHeartbeatRecord,
+  isMissingHeartbeatDiagnosticColumn,
+  withoutHeartbeatDiagnosticColumns,
+} from "../../../../../lib/radar/heartbeat";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -11,14 +15,6 @@ function getSupabaseServiceClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { persistSession: false },
   });
-}
-
-function isMissingScanSummaryColumn(error: { code?: string; message?: string } | null) {
-  return Boolean(
-    error &&
-      (error.code === "PGRST204" ||
-        error.message?.toLowerCase().includes("last_scan_summary")),
-  );
 }
 
 export async function POST(req: NextRequest) {
@@ -59,8 +55,8 @@ export async function POST(req: NextRequest) {
 
     // Keep the heartbeat operational while an existing deployment is waiting
     // for the additive migration to reach its Supabase project.
-    if (isMissingScanSummaryColumn(error)) {
-      const { last_scan_summary: _ignoredSummary, ...legacyPayload } = payload;
+    if (isMissingHeartbeatDiagnosticColumn(error)) {
+      const legacyPayload = withoutHeartbeatDiagnosticColumns(payload);
       const retry = await supabase
         .from("tibo_heartbeat")
         .upsert(legacyPayload, { onConflict: "id" });

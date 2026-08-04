@@ -15,6 +15,8 @@ export interface HeartbeatRequestBody {
   sessionId?: string | null;
   lastSuccessfulParseAt?: string | null;
   lastSeenTweetId?: string | null;
+  newestSeenTweetCreatedAt?: string | null;
+  newest_seen_tweet_created_at?: string | null;
   lastScanError?: string | null;
   lastScanSummary?: unknown | null;
   selectorVersion?: string | null;
@@ -35,6 +37,7 @@ export interface ExistingHeartbeatRecord {
   heartbeat_count?: number | null;
   max_gap_seconds?: number | null;
   last_scan_summary?: unknown | null;
+  newest_seen_tweet_created_at?: string | null;
 }
 
 export interface HeartbeatRecord {
@@ -44,6 +47,7 @@ export interface HeartbeatRecord {
   last_heartbeat_at: string;
   last_successful_parse_at: string | null;
   last_seen_tweet_id: string | null;
+  newest_seen_tweet_created_at?: string | null;
   last_scan_error: string | null;
   selector_version: string;
   last_page_reload_at: string | null;
@@ -112,6 +116,36 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
   };
 }
 
+function normalizeNewestSeenTweetCreatedAt(value: unknown, now: Date): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp) || timestamp > now.getTime() + 5 * 60 * 1000) {
+    return null;
+  }
+  return new Date(timestamp).toISOString();
+}
+
+export function withoutHeartbeatDiagnosticColumns(payload: HeartbeatRecord) {
+  const {
+    last_scan_summary: _ignoredSummary,
+    newest_seen_tweet_created_at: _ignoredNewestTweetTime,
+    ...legacyPayload
+  } = payload;
+  return legacyPayload;
+}
+
+export function isMissingHeartbeatDiagnosticColumn(
+  error: { code?: string; message?: string } | null,
+) {
+  const message = error?.message?.toLowerCase() || "";
+  return Boolean(
+    error &&
+      (error.code === "PGRST204" ||
+        message.includes("last_scan_summary") ||
+        message.includes("newest_seen_tweet_created_at")),
+  );
+}
+
 export function buildHeartbeatRecord(
   body: HeartbeatRequestBody,
   existing: ExistingHeartbeatRecord | null,
@@ -134,6 +168,11 @@ export function buildHeartbeatRecord(
       ? requestedPageReloadStatus
       : "error";
   const requestedScanSummary = body.last_scan_summary ?? body.lastScanSummary;
+  const requestedNewestSeenTweetCreatedAt =
+    body.newest_seen_tweet_created_at ?? body.newestSeenTweetCreatedAt;
+  const newestSeenTweetCreatedAt =
+    normalizeNewestSeenTweetCreatedAt(requestedNewestSeenTweetCreatedAt, now) ??
+    normalizeNewestSeenTweetCreatedAt(existing?.newest_seen_tweet_created_at, now);
 
   const isNewSession = existing?.session_id !== normalizedSessionId;
   if (isNewSession) {
@@ -149,7 +188,7 @@ export function buildHeartbeatRecord(
     }
   }
 
-  return {
+  const record: HeartbeatRecord = {
     id: "main",
     session_id: normalizedSessionId,
     session_started_at: sessionStartedAt,
@@ -170,4 +209,10 @@ export function buildHeartbeatRecord(
     last_gap_seconds: lastGapSeconds,
     updated_at: nowIso,
   };
+
+  if (newestSeenTweetCreatedAt) {
+    record.newest_seen_tweet_created_at = newestSeenTweetCreatedAt;
+  }
+
+  return record;
 }

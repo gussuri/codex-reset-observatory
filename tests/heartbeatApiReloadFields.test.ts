@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert";
 import {
   buildHeartbeatRecord,
+  isMissingHeartbeatDiagnosticColumn,
+  withoutHeartbeatDiagnosticColumns,
   type ExistingHeartbeatRecord,
   type HeartbeatRecord,
   type HeartbeatRequestBody,
@@ -225,4 +227,63 @@ test("persists only the safe scan summary and never raw diagnostic content", () 
     scanTimestamp: "2026-08-01T04:59:50.000Z",
   });
   assert.doesNotMatch(JSON.stringify(payload.last_scan_summary), /secret HTML|snapshots/i);
+});
+
+test("persists the newest valid tweet timestamp without affecting health fields", () => {
+  const now = new Date("2026-08-01T06:00:00.000Z");
+  const payload = buildHeartbeatRecord(
+    {
+      sessionId: "tweet-time-session",
+      lastSuccessfulParseAt: "2026-08-01T05:59:00.000Z",
+      lastSeenTweetId: "tweet-newest",
+      newestSeenTweetCreatedAt: "2026-08-01T05:58:00.000Z",
+    },
+    null,
+    now,
+  );
+
+  assert.equal(payload.newest_seen_tweet_created_at, "2026-08-01T05:58:00.000Z");
+  assert.equal(payload.last_successful_parse_at, "2026-08-01T05:59:00.000Z");
+  assert.equal(payload.last_seen_tweet_id, "tweet-newest");
+});
+
+test("ignores invalid or too-far-future newest tweet timestamps and keeps the existing value", () => {
+  const now = new Date("2026-08-01T06:00:00.000Z");
+  const existing: ExistingHeartbeatRecord = {
+    session_id: "tweet-time-session",
+    session_started_at: "2026-08-01T05:00:00.000Z",
+    last_heartbeat_at: "2026-08-01T05:59:00.000Z",
+    newest_seen_tweet_created_at: "2026-08-01T05:58:00.000Z",
+  };
+
+  const invalid = buildHeartbeatRecord(
+    { sessionId: "tweet-time-session", newestSeenTweetCreatedAt: "not-a-date" },
+    existing,
+    now,
+  );
+  const future = buildHeartbeatRecord(
+    { sessionId: "tweet-time-session", newestSeenTweetCreatedAt: "2026-08-01T06:10:00.000Z" },
+    existing,
+    now,
+  );
+
+  assert.equal(invalid.newest_seen_tweet_created_at, existing.newest_seen_tweet_created_at);
+  assert.equal(future.newest_seen_tweet_created_at, existing.newest_seen_tweet_created_at);
+});
+
+test("legacy heartbeat retry removes both optional diagnostic columns", () => {
+  const payload = buildHeartbeatRecord(
+    { newestSeenTweetCreatedAt: "2026-08-01T05:58:00.000Z", lastScanSummary: {} },
+    null,
+    new Date("2026-08-01T06:00:00.000Z"),
+  );
+  const legacyPayload = withoutHeartbeatDiagnosticColumns(payload);
+
+  assert.equal("last_scan_summary" in legacyPayload, false);
+  assert.equal("newest_seen_tweet_created_at" in legacyPayload, false);
+  assert.equal(isMissingHeartbeatDiagnosticColumn({ code: "PGRST204", message: "column missing" }), true);
+  assert.equal(
+    isMissingHeartbeatDiagnosticColumn({ message: "Could not find newest_seen_tweet_created_at" }),
+    true,
+  );
 });
