@@ -141,6 +141,29 @@ test("all localized pages use the formal application name and absolute URL metad
   }
 });
 
+test("history metadata describes the combined chronological reset list", () => {
+  const cases = [
+    {
+      metadata: jaHistoryMetadata,
+      description: "Codexの全体リセット、任意リセット配布、実施時刻、出典を新しい順に確認できます。",
+    },
+    {
+      metadata: enHistoryMetadata,
+      description: "View Codex global resets, Banked Reset distributions, timestamps, and sources in chronological order.",
+    },
+    {
+      metadata: zhHistoryMetadata,
+      description: "按时间倒序查看 Codex 全局重置、手动重置发放记录、执行时间和来源。",
+    },
+  ];
+
+  for (const { metadata, description } of cases) {
+    assert.equal(metadata.description, description);
+    assert.equal(openGraphFrom(metadata).description, description);
+    assert.equal(metadata.twitter?.description, description);
+  }
+});
+
 test("canonical and hreflang links point to the same three localized routes", () => {
   for (const metadata of [jaHomeMetadata, enHomeMetadata, zhHomeMetadata]) {
     assert.deepStrictEqual(metadata.alternates?.languages, {

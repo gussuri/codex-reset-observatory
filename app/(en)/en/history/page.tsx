@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     absolute: "Codex Reset History - Recent Usage Limits Reset Signals",
   },
   description:
-    "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
+    "View Codex global resets, Banked Reset distributions, timestamps, and sources in chronological order.",
   alternates: {
     canonical: siteUrl("/en/history"),
     languages: {
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Reset History - Usage Limits Reset Signals",
     description:
-      "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
+      "View Codex global resets, Banked Reset distributions, timestamps, and sources in chronological order.",
     url: siteUrl("/en/history"),
     siteName: SITE_NAME,
     type: "article",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Reset History - Usage Limits Reset Signals",
     description:
-      "Review recent Codex usage limits reset signals, probability history, and forecast changes over time.",
+      "View Codex global resets, Banked Reset distributions, timestamps, and sources in chronological order.",
     images: [SITE_OG_IMAGE_URL],
   },
 };

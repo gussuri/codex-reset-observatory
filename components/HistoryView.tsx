@@ -64,6 +64,19 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
   }
 }
 
+function getHistoryKindLabel(
+  recordKind: HistoryItem["recordKind"],
+  locale: Locale,
+) {
+  if (recordKind === "confirmed_global") {
+    return translateUI("historyKindGlobal", locale);
+  }
+  if (recordKind === "banked_distribution") {
+    return translateUI("historyKindBanked", locale);
+  }
+  return null;
+}
+
 function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) {
   const label = getSourceLabel(item.sourceKind, locale);
   const canLink = Boolean(item.sourceKind && item.sourceKind !== "none" && isSafeHttpUrl(item.source));
@@ -113,21 +126,28 @@ function HistoryEventSection({
                   key={item.key}
                 >
                   <div>
-                    <h4 className="ui-heading text-lg font-semibold text-slate-950">
-                      {translateDynamic(item.title, locale)}
-                    </h4>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="ui-heading text-lg font-semibold text-slate-950">
+                        {translateDynamic(item.title, locale)}
+                      </h4>
+                      {getHistoryKindLabel(item.recordKind, locale) ? (
+                        <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                          {getHistoryKindLabel(item.recordKind, locale)}
+                        </span>
+                      ) : null}
+                    </div>
                     <ResetHistoryDetails item={item} locale={locale} />
                   </div>
 
                   <div className="text-sm leading-6 text-slate-700 md:text-right">
                     {hasPriorSignal(item) ? (
                       <p>
-                        {item.signalLabel}: <LocalizedDateTime value={item.signalAt} locale={locale} />
+                        {item.signalLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
                     ) : null}
                     {item.resetAt ? (
                       <p>
-                        {item.resetLabel}: <LocalizedDateTime value={item.resetAt} locale={locale} />
+                        {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} />
                       </p>
                     ) : null}
                     <HistorySource item={item} locale={locale} />
@@ -151,13 +171,10 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
   const content = {
     ja: {
       category: "Codexリセット履歴",
-      title: "リセット履歴",
-      description: "確認済みの全体リセットと、任意リセットの配布記録を、実施時刻と出典を分けて整理しています。",
+      pageTitle: "直近のリセット履歴",
+      sectionTitle: "リセット履歴",
+      description: "Codexの全体リセットと任意リセット配布を、新しい順にまとめています。",
       empty: "履歴データはまだ取得できていません。",
-      confirmedTitle: "確認済みの全体リセット",
-      confirmedDescription: "全体の利用上限に影響する、強制リセットや障害対応・記念のリセットを表示しています。",
-      bankedTitle: "任意リセットの配布記録",
-      bankedDescription: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
       nav: {
         top: "トップへ戻る",
         about: "Aboutを見る",
@@ -168,13 +185,10 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     },
     en: {
       category: "Codex usage limits reset history",
-      title: "Recent Codex Reset Events",
-      description: "Review confirmed global resets and Banked Reset distribution records with their execution times and source details.",
+      pageTitle: "Recent Codex Reset Events",
+      sectionTitle: "Reset history",
+      description: "Global resets and Banked Reset distributions are listed together in chronological order.",
       empty: "No reset history is available yet.",
-      confirmedTitle: "Confirmed global resets",
-      confirmedDescription: "This section lists forced resets and other incident, compensation, or celebration resets that affect global usage limits.",
-      bankedTitle: "Banked Reset distributions",
-      bankedDescription: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for your account may differ from the shared reference date on this site.",
       nav: {
         top: "Back to English top",
         about: "About",
@@ -185,13 +199,10 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     },
     zh: {
       category: "Codex 重置历史",
-      title: "重置记录历史",
-      description: "按类别整理已确认的全局重置和手动重置发放记录，并标明执行时间与来源。",
+      pageTitle: "重置记录历史",
+      sectionTitle: "重置记录",
+      description: "按时间倒序汇总 Codex 全局重置和手动重置发放记录。",
       empty: "暂无重置历史记录。",
-      confirmedTitle: "已确认的全局重置",
-      confirmedDescription: "这里显示会影响整体使用上限的强制重置，以及故障补偿或纪念活动等重置。",
-      bankedTitle: "手动重置发放记录",
-      bankedDescription: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
       nav: {
         top: "返回中文首页",
         about: "关于我们",
@@ -202,11 +213,8 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     },
   }[locale];
 
-  const confirmedItems = viewModel.recentHistory.filter(
-    (item) => item.recordKind === "confirmed_global",
-  );
-  const bankedItems = viewModel.recentHistory.filter(
-    (item) => item.recordKind === "banked_distribution",
+  const visibleItems = viewModel.recentHistory.filter(
+    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
   );
 
   return (
@@ -219,7 +227,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
                 {content.category}
               </p>
               <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950">
-                {content.title}
+                {content.pageTitle}
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
                 {content.description}
@@ -250,18 +258,10 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
         </header>
 
         <HistoryEventSection
-          title={content.confirmedTitle}
-          description={content.confirmedDescription}
+          title={content.sectionTitle}
+          description={content.description}
           empty={content.empty}
-          items={confirmedItems}
-          locale={locale}
-        />
-
-        <HistoryEventSection
-          title={content.bankedTitle}
-          description={content.bankedDescription}
-          empty={content.empty}
-          items={bankedItems}
+          items={visibleItems}
           locale={locale}
         />
 

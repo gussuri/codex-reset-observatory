@@ -134,11 +134,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Current outlook",
     zh: "当前判断",
   },
-  forecastMethod: {
-    ja: "予測のしくみを見る →",
-    en: "How the forecast works →",
-    zh: "查看预测方式 →",
-  },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",
     en: "View all reset history →",
@@ -160,9 +155,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "适用套餐",
   },
   detectionTime: {
-    ja: "予告・シグナル検知時刻",
-    en: "Notice or signal detected",
-    zh: "预告或信号检测时间",
+    ja: "予告",
+    en: "Notice",
+    zh: "预告",
   },
   resetTime: {
     ja: "リセット実施時刻",
@@ -229,15 +224,15 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset history",
     zh: "重置历史",
   },
-  confirmedGlobalResets: {
-    ja: "確認済みの全体リセット",
-    en: "Confirmed global resets",
-    zh: "已确认的全局重置",
+  historyKindGlobal: {
+    ja: "全体リセット",
+    en: "Global reset",
+    zh: "全局重置",
   },
-  bankedResetDistributions: {
-    ja: "任意リセットの配布記録",
-    en: "Banked Reset distributions",
-    zh: "手动重置发放记录",
+  historyKindBanked: {
+    ja: "任意リセット配布",
+    en: "Banked Reset",
+    zh: "手动重置发放",
   },
   sourceOriginalPost: {
     ja: "元投稿",
@@ -258,31 +253,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "出典未記録",
     en: "Source not recorded",
     zh: "未记录来源",
-  },
-  directAnswerResetToday: {
-    ja: "今日、全体リセットはありましたか？",
-    en: "Did Codex reset today?",
-    zh: "今天有全局重置吗？",
-  },
-  directAnswerResetTodayNo: {
-    ja: "本日確認された新しい全体リセットはありません。",
-    en: "No new global reset has been confirmed today.",
-    zh: "今天尚未确认有新的全局重置。",
-  },
-  directAnswerResetTodayYes: {
-    ja: "本日、全体リセットが確認されています。",
-    en: "A global reset has been confirmed today.",
-    zh: "今天已确认有全局重置。",
-  },
-  directAnswerNextReset: {
-    ja: "次のリセットはいつですか？",
-    en: "When is the next Codex reset?",
-    zh: "下一次 Codex 重置是什么时候？",
-  },
-  directAnswerNextResetText: {
-    ja: "公式な実施時刻は発表されていません。現在の24時間・48時間予測と週次参考日時を確認してください。",
-    en: "No official reset time has been announced. Check the 24-hour and 48-hour forecast below.",
-    zh: "官方尚未公布具体实施时间。请查看下方的24小时和48小时预测以及每周参考日期。",
   },
   noHistory: {
     ja: "直近履歴は取得できていません。",

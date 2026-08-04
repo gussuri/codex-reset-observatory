@@ -113,7 +113,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.doesNotMatch(outlookText, /。 /);
   assert.doesNotMatch(outlookText, /\d+%/);
   assert.match(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
-  assert.match(html, /予測のしくみを見る →/);
+  assert.doesNotMatch(html, /今日、全体リセットはありましたか？|次のリセットはいつですか？|予測のしくみを見る →/);
   assert.doesNotMatch(html, /border-amber-300 bg-amber-50/);
 });
 
@@ -155,11 +155,11 @@ test("keeps the large official notice card above the probability card", (t: Test
   assert.doesNotMatch(html, /border-slate-50/);
 });
 
-test("keeps the forecast method link and labels localized across all dashboard locales", () => {
+test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", link: "/faq#forecast-method", method: "予測のしくみを見る →" },
-    { locale: "en" as const, notice: "Official notice: None", description: "Check the latest Codex reset forecast, official updates, and recent reset history.", link: "/en/faq#forecast-method", method: "How the forecast works →" },
-    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 重置预测、最新信息和近期重置记录。", link: "/zh/faq#forecast-method", method: "查看预测方式 →" },
+    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official notice: None", description: "Check the latest Codex reset forecast, official updates, and recent reset history.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {
@@ -172,8 +172,8 @@ test("keeps the forecast method link and labels localized across all dashboard l
 
     assert.match(html, new RegExp(item.notice));
     assert.match(html, new RegExp(item.description));
-    assert.match(html, new RegExp(`href="${item.link.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
-    assert.match(html, new RegExp(item.method));
+    assert.doesNotMatch(html, new RegExp(item.directAnswer));
+    assert.doesNotMatch(html, /When is the next Codex reset\?|下一次 Codex 重置是什么时候？|予測のしくみを見る →|How the forecast works →|查看预测方式 →/);
     const outlookLabel = item.locale === "ja" ? "現在の見立て" : item.locale === "en" ? "Current outlook" : "当前判断";
     const outlookIndex = html.indexOf(outlookLabel);
     const disclaimerIndex = html.indexOf(item.locale === "ja" ? "非公式の予測です" : item.locale === "en" ? "This is an unofficial forecast" : "本预测并非官方信息");

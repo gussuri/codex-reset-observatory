@@ -10,6 +10,7 @@ import { HistoryView } from "../components/HistoryView";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { translateDynamic } from "../lib/radar/i18n";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -94,6 +95,7 @@ test("dashboard renders the translated reset history label", () => {
 
   assert.match(html, /Reset history/);
   assert.doesNotMatch(html, />resetHistory</);
+  assert.match(html, /Global reset/);
 });
 
 test("stale fallback data renders normally without a public warning in every locale", () => {
@@ -126,12 +128,21 @@ test("unavailable data keeps the existing public error warning", () => {
   assert.match(html, /ライブデータも保存済みデータも取得できません/);
 });
 
-test("history page separates confirmed events from banked distributions and groups by month", () => {
+test("history page combines confirmed events and banked distributions in one chronological list", () => {
   const data = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
   const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
 
-  assert.match(html, /Confirmed global resets/);
-  assert.match(html, /Banked Reset distributions/);
+  assert.match(html, /<h2[^>]*>Reset history<\/h2>/);
+  assert.doesNotMatch(html, /<h2[^>]*>Confirmed global resets|<h2[^>]*>Banked Reset distributions/);
+  assert.match(html, /Global reset/);
+  assert.match(html, /Banked Reset/);
+  const visibleItems = data.viewModel.recentHistory.filter(
+    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
+  );
+  assert.ok(visibleItems.length >= 2);
+  const firstTitle = translateDynamic(visibleItems[0].title, "en");
+  const secondTitle = translateDynamic(visibleItems[1].title, "en");
+  assert.ok(html.indexOf(firstTitle) < html.indexOf(secondTitle));
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
@@ -152,18 +163,21 @@ test("history page separates confirmed events from banked distributions and grou
 
   const localizedAssertions = {
     ja: {
-      confirmed: "確認済みの全体リセット",
-      banked: "任意リセットの配布記録",
+      title: "リセット履歴",
+      global: "全体リセット",
+      banked: "任意リセット配布",
       reference: "週間リセット参考日時",
     },
     en: {
-      confirmed: "Confirmed global resets",
-      banked: "Banked Reset distributions",
+      title: "Reset history",
+      global: "Global reset",
+      banked: "Banked Reset",
       reference: "Weekly reset reference time",
     },
     zh: {
-      confirmed: "已确认的全局重置",
-      banked: "手动重置发放记录",
+      title: "重置记录",
+      global: "全局重置",
+      banked: "手动重置发放",
       reference: "每周重置参考时间",
     },
   } as const;
@@ -173,9 +187,54 @@ test("history page separates confirmed events from banked distributions and grou
     const localizedHtml = renderToStaticMarkup(
       React.createElement(HistoryView, { data: localizedData, locale }),
     );
-    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].confirmed));
+    assert.match(localizedHtml, new RegExp(`<h2[^>]*>${localizedAssertions[locale].title}<\\/h2>`));
+    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].global));
     assert.match(localizedHtml, new RegExp(localizedAssertions[locale].banked));
     assert.doesNotMatch(localizedHtml, new RegExp(localizedAssertions[locale].reference));
+  }
+});
+
+test("history uses a short notice label only for a signal before execution", () => {
+  const expectedLabels = {
+    ja: "予告：",
+    en: "Notice:",
+    zh: "预告：",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const base = toPublicRadarSnapshot(getLocalRadarData({}), locale, { limitHistory: false });
+    const sourceItem = base.viewModel.recentHistory.find((item) => item.recordKind === "confirmed_global");
+    assert.ok(sourceItem);
+
+    const makeSnapshot = (signalAt: string) => ({
+      ...base,
+      viewModel: {
+        ...base.viewModel,
+        recentHistory: [
+          {
+            ...sourceItem,
+            signalAt,
+            resetAt: "2026-08-02T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const priorSignalHtml = renderToStaticMarkup(
+      React.createElement(HistoryView, {
+        data: makeSnapshot("2026-08-01T23:00:00.000Z"),
+        locale,
+      }),
+    );
+    const immediateHtml = renderToStaticMarkup(
+      React.createElement(HistoryView, {
+        data: makeSnapshot("2026-08-02T00:00:00.000Z"),
+        locale,
+      }),
+    );
+
+    assert.match(priorSignalHtml, new RegExp(expectedLabels[locale]));
+    assert.doesNotMatch(immediateHtml, new RegExp(expectedLabels[locale]));
   }
 });
 

@@ -37,16 +37,6 @@ import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
-function getCalendarDayKey(value: string | null | undefined) {
-  if (!value || Number.isNaN(new Date(value).getTime())) return null;
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "Asia/Tokyo",
-  }).format(new Date(value));
-}
-
 function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
   if (!signalAt || !resetAt) return false;
   const signalTime = new Date(signalAt).getTime();
@@ -65,6 +55,21 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
     default:
       return translateUI("sourceNotRecorded", locale);
   }
+}
+
+type DashboardHistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
+
+function getHistoryKindLabel(
+  recordKind: DashboardHistoryItem["recordKind"],
+  locale: Locale,
+) {
+  if (recordKind === "confirmed_global") {
+    return translateUI("historyKindGlobal", locale);
+  }
+  if (recordKind === "banked_distribution") {
+    return translateUI("historyKindBanked", locale);
+  }
+  return null;
 }
 
 export function RadarDashboard({
@@ -307,15 +312,6 @@ export function RadarDashboard({
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
-  const snapshotAt = state.data?.checkedAt ?? state.fetchedAt;
-  const hasResetToday = Boolean(
-    getCalendarDayKey(snapshotAt) &&
-      viewModel.recentHistory.some(
-        (item) =>
-          item.recordKind === "confirmed_global" &&
-          getCalendarDayKey(item.resetAt) === getCalendarDayKey(snapshotAt),
-      ),
-  );
   const visibleHistory = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
   );
@@ -509,27 +505,6 @@ export function RadarDashboard({
               probability48h={probability48h}
             />
 
-            {!isDataUnavailable ? (
-              <div className="mt-4 grid gap-3 border-y border-slate-100 py-3 sm:grid-cols-2 sm:gap-5">
-                <div>
-                  <p className="text-xs font-semibold text-slate-500">
-                    {translateUI("directAnswerResetToday", locale)}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-700">
-                    {translateUI(hasResetToday ? "directAnswerResetTodayYes" : "directAnswerResetTodayNo", locale)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-500">
-                    {translateUI("directAnswerNextReset", locale)}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-700">
-                    {translateUI("directAnswerNextResetText", locale)}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-
             {!isDataUnavailable && !hasOfficialNotice ? (
               <div
                 role="status"
@@ -552,14 +527,6 @@ export function RadarDashboard({
             <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
               {translateUI("disclaimer", locale)}
             </p>
-            <div className="mt-2 text-right text-xs">
-              <Link
-                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
-                href={locale === "ja" ? "/faq#forecast-method" : locale === "en" ? "/en/faq#forecast-method" : "/zh/faq#forecast-method"}
-              >
-                {translateUI("forecastMethod", locale)}
-              </Link>
-            </div>
           </article>
 
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -670,6 +637,11 @@ export function RadarDashboard({
                       <h3 className="ui-heading text-lg font-bold text-slate-950 sm:text-base sm:font-semibold">
                         {translateDynamic(item.title, locale)}
                       </h3>
+                      {getHistoryKindLabel(item.recordKind, locale) ? (
+                        <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                          {getHistoryKindLabel(item.recordKind, locale)}
+                        </span>
+                      ) : null}
                     </div>
                     <ResetHistoryDetails
                       item={item}
@@ -684,7 +656,7 @@ export function RadarDashboard({
                     />
                   </div>
                   <div className="border-t border-slate-200/80 pt-3 text-sm leading-6 text-slate-700 sm:border-t-0 sm:pt-0 md:text-right">
-                    {item.signalLabel ? (
+                    {item.signalLabel && hasPriorSignal(item.signalAt, item.resetAt) ? (
                       <p className="sm:block hidden">
                         {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
                       </p>
