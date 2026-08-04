@@ -469,7 +469,7 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        <section className="grid gap-5 lg:grid-cols-[1.12fr_0.88fr]">
+        <section className="grid items-start gap-5 lg:grid-cols-[1.12fr_0.88fr]">
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -514,64 +514,66 @@ export function RadarDashboard({
             </p>
           </article>
 
-          <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-slate-500">
-                  {translateUI("latestReset", locale)}
-                </p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-950 leading-tight break-words text-balance pb-0.5">
-                  {translateDynamic(viewModel.latestWindow.title, locale)}
-                </h2>
+          <div className="grid gap-5">
+            <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    {translateUI("latestReset", locale)}
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold text-slate-950 leading-tight break-words text-balance pb-0.5">
+                    {translateDynamic(viewModel.latestWindow.title, locale)}
+                  </h2>
+                </div>
+                <Sparkles className="h-7 w-7 text-amber-600" />
               </div>
-              <Sparkles className="h-7 w-7 text-amber-600" />
-            </div>
 
-            <dl className="mt-5 space-y-4">
-              <InfoRow
-                label={translateUI("resetTime", locale)}
-                value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
-              />
-              <InfoRow
-                label={translateUI("source", locale)}
-                value={
-                  viewModel.latestWindow.sourceKind &&
-                  viewModel.latestWindow.sourceKind !== "none" &&
-                  isSafeHttpUrl(viewModel.latestWindow.source) ? (
-                    <a
-                      className="inline-flex items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
-                      href={viewModel.latestWindow.source ?? undefined}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : (
-                    getSourceLabel("none", locale)
-                  )
-                }
-              />
-            </dl>
-          </article>
-        </section>
+              <dl className="mt-5 space-y-4">
+                <InfoRow
+                  label={translateUI("resetTime", locale)}
+                  value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
+                />
+                <InfoRow
+                  label={translateUI("source", locale)}
+                  value={
+                    viewModel.latestWindow.sourceKind &&
+                    viewModel.latestWindow.sourceKind !== "none" &&
+                    isSafeHttpUrl(viewModel.latestWindow.source) ? (
+                      <a
+                        className="inline-flex items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
+                        href={viewModel.latestWindow.source ?? undefined}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : (
+                      getSourceLabel("none", locale)
+                    )
+                  }
+                />
+              </dl>
+            </article>
 
-        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                {translateUI("weeklyResetRef", locale)}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
-                <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
-                <span className="text-sm font-medium text-slate-500">
-                  ({viewModel.regularResetForecast.remaining})
-                </span>
-              </h2>
-            </div>
-            <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500">
-              {translateUI("weeklyResetNote", locale)}
-            </p>
+            <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    {translateUI("weeklyResetRef", locale)}
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
+                    <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
+                    <span className="text-sm font-medium text-slate-500">
+                      ({viewModel.regularResetForecast.remaining})
+                    </span>
+                  </h2>
+                </div>
+                <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500">
+                  {translateUI("weeklyResetNote", locale)}
+                </p>
+              </div>
+            </section>
           </div>
         </section>
 

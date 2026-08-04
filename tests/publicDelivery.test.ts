@@ -239,6 +239,28 @@ test("top latest reset card keeps only its title, execution time, and safe sourc
   }
 });
 
+test("top dashboard keeps the current status, latest reset, and weekly reference in DOM order", () => {
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const data = toPublicRadarSnapshot(getLocalRadarData({}), locale);
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: data, locale }),
+    );
+    const currentStatusStart = html.indexOf(translateUI("currentStatus", locale));
+    const latestResetStart = html.indexOf(translateUI("latestReset", locale));
+    const weeklyResetStart = html.indexOf(translateUI("weeklyResetRef", locale));
+
+    assert.ok(currentStatusStart >= 0);
+    assert.ok(latestResetStart > currentStatusStart);
+    assert.ok(weeklyResetStart > latestResetStart);
+    assert.equal(
+      (html.match(new RegExp(escapeRegExp(translateUI("weeklyResetRef", locale)), "g")) ?? []).length,
+      1,
+    );
+    assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
+    assert.match(html, new RegExp(escapeRegExp(translateUI("within48h", locale))));
+  }
+});
+
 test("history uses a short notice label only for a signal before execution", () => {
   const expectedLabels = {
     ja: "予告：",
