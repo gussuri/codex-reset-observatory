@@ -19,7 +19,7 @@ export function AboutView({ locale }: AboutViewProps) {
         "リセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく確認できるようまとめています。",
         "ランダムリセット期待度は、過去のリセット間隔から算出した基礎確率を現在の観測シグナルで補正した統計予測です。公式情報や確定的な確率ではありません。",
         "実際のリセット実施有無や時期については、必ず公式情報をご確認ください。",
-        "任意リセット（マニュアルリセット）や友達紹介リセットを使用した場合、次回定期リセット日がこちらに表示している日付とずれます。任意リセット（マニュアルリセット）枠には、付与から1ヶ月間の有効期限があります。",
+        "任意リセット（マニュアルリセット）を使用した場合、次回定期リセット日がこちらに表示している日付とずれます。",
       ],
       nav: {
         top: "トップへ戻る",
@@ -30,13 +30,13 @@ export function AboutView({ locale }: AboutViewProps) {
     en: {
       category: "Codex reset reference",
       title: "About " + SITE_NAME,
-      subTitle: "An unofficial reference site for Codex reset history, weekly reset references, Banked Reset credits, and unscheduled reset signals.",
+      subTitle: "An unofficial reference site for Codex reset history, weekly reset references, Banked Resets, and unscheduled reset signals.",
       paragraphs: [
         SITE_NAME + " collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices, past reset history, and a weekly-cycle reference date so you can compare what is happening now with earlier reset patterns.",
         "The weekly reset date is a shared reference, not a guarantee that every account will refresh on exactly the same date.",
         "The unscheduled reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
-        "Banked Reset credits (manual resets) are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here. The Banked Reset credit is a one-time credit and expires within one month.",
+        "Banked Resets are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here.",
       ],
       nav: {
         top: "Back to English top",
@@ -47,13 +47,13 @@ export function AboutView({ locale }: AboutViewProps) {
     zh: {
       category: "Codex 重置观测",
       title: "关于 " + SITE_NAME,
-      subTitle: "一个用于了解 Codex 重置历史、每周循环重置参考日、手动重置额度以及随机重置信号的非官方参考网站。",
+      subTitle: "一个用于了解 Codex 重置历史、每周循环重置参考日、手动重置以及随机重置信号的非官方参考网站。",
       paragraphs: [
         SITE_NAME + "旨在将重置相关的信息汇总在一处，以便用户快速查看最近的重置历史和当前的重置状况。",
         "它汇集了官方重置预告、历史重置记录以及每周循环参考日期，让您可以将当前状况与早期的重置模式进行对比。",
         "每周重置日期仅为共享的参考基准，并不能保证每个账号都会在完全相同的日期刷新。",
         "随机重置期望度是一种统计预测：先根据过去的重置间隔计算基础概率，再根据当前可观测信号进行调整，并非 OpenAI 官方通知或概率。",
-        "手动重置额度是针对特定账号的。如果您使用了手动重置，您账号的下一次每周重置日期将与此处显示的共享参考日期有所不同。手动重置额度为一次性额度，且在一个月内有效。",
+        "手动重置针对特定账号。如果您使用了手动重置，您账号的下一次每周重置日期将与此处显示的共享参考日期有所不同。",
       ],
       nav: {
         top: "返回中文首页",

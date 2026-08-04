@@ -70,14 +70,14 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "任意リセットを使うとどうなりますか？",
-          answer: "任意リセットを使用すると、5時間制限と1週間制限がリセットされ100％になります。さらに次回の定期リセットが1週間後に変更されます。任意リセットを使用すると、こちらのサイトに表示される定期リセットのタイミングとずれるので注意してください。",
+          answer: "任意リセットを使用すると、対象となる利用上限がリセットされます。さらに次回の定期リセットが1週間後に変更されます。任意リセットを使用すると、こちらのサイトに表示される定期リセットのタイミングとずれるので注意してください。",
         },
       ] as Array<FaqItem>,
     },
     en: {
       category: "Codex Reset FAQ",
       title: "Frequently Asked Questions",
-      subTitle: "A short guide to Codex usage limits resets, reset timing, Banked Reset credits, and forecast changes.",
+      subTitle: "A short guide to Codex usage limits resets, reset timing, Banked Resets, and forecast changes.",
       backTop: "Back to English top",
       about: "About",
       history: "History",
@@ -97,7 +97,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is a Codex Banked Reset (Manual Reset)?",
-          answer: "A Banked Reset is an account-specific reset credit saved in your account. Triggering a manual reset restores both your 5-hour and 1-week limits to 100%, and your next weekly reset date will move to exactly one week from the moment of use.",
+          answer: "A Banked Reset is an account-specific reset available in your account. Triggering a manual reset restores the applicable usage limits, and your next weekly reset date will move to exactly one week from the moment of use.",
         },
         {
           question: "What is Codex usage limits reset?",
@@ -126,7 +126,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is a compensation reset (Wabi-reset)?",
-          answer: "A reset executed as compensation for incidents or issues. It may restore usage limits or grant Banked Reset credits to affected plans.",
+          answer: "A reset executed as compensation for incidents or issues. It may restore usage limits or grant additional Banked Resets to affected plans.",
         },
         {
           question: "What is a celebration reset?",
@@ -134,7 +134,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is the difference between a Hard Reset and a Banked Reset?",
-          answer: "A Hard Reset (Forced Reset) is a global, administrative reset executed by OpenAI for all users simultaneously. A Banked Reset (Manual Reset) is a personal credit saved in your account that you can manually trigger whenever you choose.",
+          answer: "A Hard Reset (Forced Reset) is a global, administrative reset executed by OpenAI for all users simultaneously. A Banked Reset (Manual Reset) is an account-specific reset that you can manually trigger whenever you choose.",
         },
         {
           question: "What is the difference between official notices and community signals?",
@@ -154,7 +154,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What happens if I use a Banked Reset?",
-          answer: "Using a Banked Reset (manual reset) restores both your 5-hour and 1-week limits to 100%. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
+          answer: "Using a Banked Reset (manual reset) restores the applicable usage limits. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
         },
       ] as Array<FaqItem>,
     },
@@ -214,7 +214,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "使用手动重置后会发生什么？",
-          answer: "使用手动重置后，5 小时和 1 周的使用限制会恢复至 100%。下一次定期重置时间也会调整为从使用手动重置起的一周后。因此，你的实际重置时间可能会与本站显示的公共定期重置参考日期不同。",
+          answer: "使用手动重置后，相关使用额度会恢复。下一次定期重置时间也会调整为从使用手动重置起的一周后。因此，你的实际重置时间可能会与本站显示的公共定期重置参考日期不同。",
         },
       ] as Array<FaqItem>,
     },

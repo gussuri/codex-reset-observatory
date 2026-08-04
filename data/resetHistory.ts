@@ -9,7 +9,7 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全28件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット権配布含む）
+ * 全28件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.resetMethod 属性によって予測エンジンの起算点フィルター等に使用されます。
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
@@ -511,7 +511,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "completed_at": "2026-06-12T09:11:00+09:00",
     "window_minutes": 0,
     "scope": "全有料プラン",
-    "summary": "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
+    "summary": "個人の利用制限の更新として、任意リセットが配布されました。",
     "source_url": "https://x.com/thsottiaux",
     "details": {
       "cycleType": "定期リセット",
@@ -520,7 +520,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
       "noticeType": "なし",
-      "note": "定期リセットが強制リセットから任意リセット権1回配布に変更されました。"
+      "note": "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。"
     }
   },
   {

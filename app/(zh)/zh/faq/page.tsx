@@ -9,10 +9,10 @@ import {
 export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: {
-    absolute: "Codex 重置 FAQ | 重置时机、使用限制与手动重置额度",
+    absolute: "Codex 重置 FAQ | 重置时机、使用限制与手动重置",
   },
   description:
-    "关于 Codex 重置具体时机、Token 和使用额度重置、每周循环重置参考日、手动重置额度以及随机重置期望度的常见问题解答。",
+    "关于 Codex 重置具体时机、Token 和使用额度重置、每周循环重置参考日、手动重置以及随机重置期望度的常见问题解答。",
   alternates: {
     canonical: siteUrl("/zh/faq"),
     languages: {

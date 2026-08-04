@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     absolute: "About " + SITE_NAME,
   },
   description:
-    "Learn what " + SITE_NAME + " tracks, how reset history is handled, and why weekly reset references may differ after Banked Resets.",
+    "Learn what " + SITE_NAME + " tracks, how reset history is handled, and why weekly reset references may differ after a Banked Reset.",
   alternates: {
     canonical: siteUrl("/en/about"),
     languages: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About " + SITE_NAME,
     description:
-      "A short explanation of the reset history, weekly reset reference, Banked Reset, and unscheduled reset probability shown on this unofficial Codex reset site.",
+      "A short explanation of the reset history, weekly reset reference, Banked Resets, and unscheduled reset probability shown on this unofficial Codex reset site.",
     url: siteUrl("/en/about"),
     siteName: SITE_NAME,
     type: "article",

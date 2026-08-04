@@ -9,10 +9,10 @@ import {
 export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: {
-    absolute: "Codex Reset FAQ | Usage Limits, Banked Reset, and Timing",
+    absolute: "Codex Reset FAQ | Usage Limits, Banked Resets, and Timing",
   },
   description:
-    "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
+    "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
   alternates: {
     canonical: siteUrl("/en/faq"),
     languages: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
+    "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
     url: siteUrl("/en/faq"),
     siteName: SITE_NAME,
     type: "article",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex Reset FAQ | Usage Limits Reset Timing",
     description:
-      "Did Codex reset today? Find answers about usage limits reset timing, Banked Reset credits, reset history, and why the forecast changes.",
+      "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
     images: [SITE_OG_IMAGE_URL],
   },
 };

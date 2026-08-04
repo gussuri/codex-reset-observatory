@@ -737,8 +737,8 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "任意リセット権1回配布": {
     ja: "任意リセット権1回配布",
-    en: "1 Banked Reset granted",
-    zh: "发放 1 次手动重置机会",
+    en: "1 Banked Reset",
+    zh: "手动重置 1 次",
   },
   "不明": {
     ja: "不明",
@@ -934,17 +934,17 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "アクティブユーザー数700万人到達を記念し、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One banked Banked Reset was granted to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
-    zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置机会（banked reset）。",
+    en: "One Banked Reset was granted to all paid users (Codex Go/Plus/Pro) to celebrate reaching 7 million active users.",
+    zh: "为庆祝活跃用户数达到700万，已向所有付费用户（Codex Go/Plus/Pro）发放了 1 次手动重置。",
   },
   "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。": {
     ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
-    en: "One banked Banked Reset was granted as compensation to approximately 500,000 affected users whose reset did not apply after they pressed the button during the web/mobile feature rollout.",
+    en: "One Banked Reset was granted as compensation to approximately 500,000 affected users whose reset did not apply after they pressed the button during the web/mobile feature rollout.",
     zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向所有受影响的付费用户补发 1 次手动重置机会。",
   },
   "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
-    en: "Tibo (OpenAI Codex developer) announced that a Banked Reset (banked reset) credit would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
+    en: "Tibo (OpenAI Codex developer) announced that a Banked Reset would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
     zh: "Tibo（OpenAI Codex开发者）宣布，明天将为庆祝活跃用户数突破700万，向所有付费用户发放 1 次手动重置机会（banked reset）。",
   },
   "即時": {
@@ -994,9 +994,9 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Tibo 表示过去 24 小时内有三次影响 Codex 可靠性的小事故，并已为所有付费套餐重置 Codex 使用限制。",
   },
   "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。": {
-    ja: "Codexの500万人達成を祝うリセットとして説明され、その後、有料ChatGPTプランの週次枠と5時間枠が100%に戻ったことが確認されました。",
-    en: "Tibo framed this reset as a celebration of Codex reaching 5M users; weekly and 5-hour limits for paid ChatGPT subscriptions were restored to 100%.",
-    zh: "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的周额度和 5 小时额度都已恢复到 100%。",
+    ja: "Codexの500万人達成を祝うリセットとして説明され、その後、有料ChatGPTプランの利用上限が回復したことが確認されました。",
+    en: "Tibo framed this reset as a celebration of Codex reaching 5M users; usage limits for paid ChatGPT subscriptions were restored.",
+    zh: "Tibo 将这次重置解释为庆祝 Codex 达到 500 万用户；随后确认所有付费 ChatGPT 订阅的使用额度已恢复。",
   },
   "Tibo 表示 Codex 长会话压缩的 cache hit rate 受回滚优化影响，导致限制消耗更快；修复后已为所有账号重置使用限制。": {
     ja: "長時間セッション圧縮のキャッシュヒット率が低下して利用上限の消費が速くなっていた問題について、修正後に全アカウントの利用制限がリセットされました。",
@@ -1155,8 +1155,8 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "1回分・期限1か月以内": {
     ja: "1回分・期限1か月以内",
-    en: "1 credit; expires within 1 month",
-    zh: "1 次额度・1 个月内有效",
+    en: "1 Banked Reset; valid within 1 month",
+    zh: "1 次手动重置・1 个月内有效",
   },
   "対象アカウント": {
     ja: "対象アカウント",
@@ -1165,18 +1165,18 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。": {
     ja: "モデル能力退化および過剰な制限消費不具合に対する補償として、任意リセット1回分が配布されました。",
-    en: "One Banked Reset credit was distributed as compensation for model degradation and excessive limit consumption issues.",
-    zh: "因模型能力退化及额度过度消耗问题，已发放 1 次手动重置机会作为补偿。",
+    en: "One Banked Reset was distributed as compensation for model degradation and excessive limit consumption issues.",
+    zh: "因模型能力退化及额度过度消耗问题，已发放 1 次手动重置作为补偿。",
   },
   "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、任意リセット1回分が配布されました。",
-    en: "One Banked Reset credit was distributed as compensation for issues affecting Codex reliability.",
-    zh: "因影响 Codex 可靠性的故障，已发放 1 次手动重置机会作为补偿。",
+    en: "One Banked Reset was distributed as compensation for issues affecting Codex reliability.",
+    zh: "因影响 Codex 可靠性的故障，已发放 1 次手动重置作为补偿。",
   },
-  "招待特典または個人の利用制限の更新として、任意リセットが配布されました。": {
-    ja: "招待特典または個人の利用制限の更新として、任意リセットが配布されました。",
-    en: "A Banked Reset credit was distributed as referral rewards or individual quota refresh.",
-    zh: "已发放手动重置机会作为推荐奖励或个人额度更新。",
+  "個人の利用制限の更新として、任意リセットが配布されました。": {
+    ja: "個人の利用制限の更新として、任意リセットが配布されました。",
+    en: "A Banked Reset was distributed as an individual usage-limit refresh.",
+    zh: "已发放手动重置，用于个人使用额度更新。",
   },
   "能力退化・過剰消費補償任意リセット": {
     ja: "能力退化・過剰消費補償任意リセット",
@@ -1185,8 +1185,8 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "モデルの能力退化および過剰な利用制限消費不具合に対する補償として、全有料プランに任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One Banked Reset credit was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
-    zh: "因模型能力退化及额度过度消耗问题，已对所有付费套餐发放 1 次手动重置机会作为补偿。",
+    en: "One Banked Reset was distributed to all paid plans as compensation for model degradation and excessive usage consumption issues.",
+    zh: "因模型能力退化及额度过度消耗问题，已对所有付费套餐发放 1 次手动重置作为补偿。",
   },
   "Codex信頼性障害補償任意リセット": {
     ja: "Codex信頼性障害補償任意リセット",
@@ -1195,8 +1195,8 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "Codexの信頼性に影響する不具合の補償として、全アカウントに対して任意リセット（マニュアルリセット）1回分が配布されました。",
-    en: "One Banked Reset credit was distributed to all accounts as compensation for issues affecting Codex reliability.",
-    zh: "因影响 Codex 可靠性的故障，已对所有账号发放 1 次手动重置机会作为补偿。",
+    en: "One Banked Reset was distributed to all accounts as compensation for issues affecting Codex reliability.",
+    zh: "因影响 Codex 可靠性的故障，已对所有账号发放 1 次手动重置作为补偿。",
   },
   "過剰消費バグ調査・強制補償リセット": {
     ja: "過剰消費バグ調査・強制補償リセット",
@@ -1215,7 +1215,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。": {
     ja: "Tibo氏が、過剰消費問題の調査が終了した後、追加の手動リセット（任意リセット枠）を全員に配布すると発表しました。",
-    en: "Tibo announced that more Banked Resets (credit tokens) will be provided to everyone after the excessive consumption investigation is complete.",
+    en: "Tibo announced that more Banked Resets will be provided to everyone after the excessive consumption investigation is complete.",
     zh: "Tibo 宣布在过度消耗问题的调查结束后，将对所有人发放额外的手动重置机会。",
   },
   "Tibo氏が、1時間以内に全員のCodex利用制限を再度フルリセットすると発表しました。": {
@@ -1225,7 +1225,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。": {
     ja: "Tibo氏が、今後24時間以内に全有料プランへ任意リセット枠をさらに1回分追加配布すると発表しました。",
-    en: "Tibo announced that one additional Banked Reset credit will be distributed to all paid plans within the next 24 hours.",
+    en: "Tibo announced that one additional Banked Reset will be distributed to all paid plans within the next 24 hours.",
     zh: "Tibo 宣布将在未来 24 小时内向所有付费套餐追加发放 1 次手动重置机会。",
   },
   "OpenAI関係者がAI Engineerイベントで Codex reset button の実演を示唆し、Tibo氏も “It's happening” と反応しています。": {
@@ -1253,15 +1253,15 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Banked Reset Distributed",
     zh: "手动重置已发放",
   },
-  "定期リセットが強制リセットから任意リセット権1回配布に変更されました。": {
-    ja: "定期リセットが強制リセットから任意リセット権1回配布に変更されました。",
-    en: "The regular reset has been changed from a Hard Reset to a distribution of one Banked Reset credit.",
-    zh: "定期重置已从强制重置更改为发放 1 次手动重置机会。",
+  "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。": {
+    ja: "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。",
+    en: "The regular reset has been changed from a Hard Reset to a distribution of one Banked Reset.",
+    zh: "定期重置已从强制重置更改为发放 1 次手动重置。",
   },
   "Codex reset button 配布 (AIE World's Fair 記念)": {
     ja: "Codex reset button 配布 (AIE World's Fair 記念)",
-    en: "Codex Reset Button Credit (AIE World's Fair)",
-    zh: "Codex 重置按钮额度（AIE World's Fair 纪念）",
+    en: "Codex Reset Button (AIE World's Fair)",
+    zh: "Codex 重置按钮（AIE World's Fair 纪念）",
   },
   "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。": {
     ja: "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
