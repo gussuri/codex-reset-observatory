@@ -209,37 +209,7 @@ test("history page combines confirmed events and banked distributions in one chr
   }
 });
 
-test("top latest reset card keeps only its title, execution time, and safe source link", () => {
-  const labels = {
-    ja: { latest: "最新のリセット", resetTime: "リセット実施時刻", source: "ソース", sourceLink: "元投稿" },
-    en: { latest: "Latest reset", resetTime: "Reset time", source: "Source", sourceLink: "Original post" },
-    zh: { latest: "最新重置", resetTime: "重置执行时间", source: "来源", sourceLink: "原帖" },
-  } as const;
-
-  for (const locale of ["ja", "en", "zh"] as const) {
-    const data = toPublicRadarSnapshot(getLocalRadarData({}), locale);
-    const html = renderToStaticMarkup(
-      React.createElement(RadarDashboard, { initialData: data, locale }),
-    );
-    const latestStart = html.indexOf(labels[locale].latest);
-    const historyStart = html.indexOf(translateUI("resetHistory", locale));
-    const latestCard = html.slice(latestStart, historyStart);
-    const latestWindow = data.viewModel.latestWindow;
-
-    assert.ok(latestStart >= 0);
-    assert.ok(historyStart > latestStart);
-    assert.match(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.title, locale)))));
-    assert.match(latestCard, new RegExp(labels[locale].resetTime));
-    assert.match(latestCard, new RegExp(labels[locale].source));
-    assert.match(latestCard, new RegExp(labels[locale].sourceLink));
-    assert.doesNotMatch(html, /text-\[11px\]/);
-    assert.doesNotMatch(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.summary, locale)))));
-    assert.doesNotMatch(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.scope, locale)))));
-    assert.doesNotMatch(latestCard, /Notice|予告|预告|告知から実施まで|Time from notice to reset|从预告到执行/);
-  }
-});
-
-test("top dashboard omits the weekly reference and keeps the simplified DOM order", () => {
+test("top dashboard omits latest reset and weekly reference cards", () => {
   const weeklyLabels = {
     ja: "1週間サイクルのリセット参考日",
     en: "Weekly reset reference",
@@ -257,13 +227,12 @@ test("top dashboard omits the weekly reference and keeps the simplified DOM orde
       React.createElement(RadarDashboard, { initialData: data, locale }),
     );
     const currentStatusStart = html.indexOf(translateUI("currentStatus", locale));
-    const latestResetStart = html.indexOf(translateUI("latestReset", locale));
     const historyStart = html.indexOf(translateUI("resetHistory", locale));
     const forecast = data.viewModel.regularResetForecast;
 
     assert.ok(currentStatusStart >= 0);
-    assert.ok(latestResetStart > currentStatusStart);
-    assert.ok(historyStart > latestResetStart);
+    assert.ok(historyStart > currentStatusStart);
+    assert.doesNotMatch(html, new RegExp(escapeRegExp(translateUI("latestReset", locale))));
     assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyLabels[locale])));
     assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyNotes[locale])));
     assert.doesNotMatch(html, new RegExp(escapeRegExp(forecast.date)));

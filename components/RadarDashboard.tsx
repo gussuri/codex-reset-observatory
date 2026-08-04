@@ -6,7 +6,6 @@ import {
   Gauge,
   History,
   Radio,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -469,7 +468,7 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        <section className="grid gap-5">
+        <section>
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -514,55 +513,6 @@ export function RadarDashboard({
             </p>
           </article>
 
-          <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
-              <div className="min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-500">
-                      {translateUI("latestReset", locale)}
-                    </p>
-                    <h2 className="mt-1 break-words text-2xl font-semibold leading-tight text-balance">
-                      {translateDynamic(viewModel.latestWindow.title, locale)}
-                    </h2>
-                  </div>
-                  <Sparkles className="h-7 w-7 shrink-0 text-amber-600" />
-                </div>
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500">
-                  {translateUI("resetTime", locale)}
-                </p>
-                <div className="mt-1 text-sm font-semibold leading-6 text-slate-900">
-                  <LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />
-                </div>
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500">
-                  {translateUI("source", locale)}
-                </p>
-                <div className="mt-1 text-sm font-semibold leading-6 text-slate-900">
-                  {viewModel.latestWindow.sourceKind &&
-                  viewModel.latestWindow.sourceKind !== "none" &&
-                  isSafeHttpUrl(viewModel.latestWindow.source) ? (
-                    <a
-                      className="inline-flex min-h-8 w-fit items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
-                      href={viewModel.latestWindow.source ?? undefined}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : (
-                    getSourceLabel("none", locale)
-                  )}
-                </div>
-              </div>
-            </div>
-          </article>
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
