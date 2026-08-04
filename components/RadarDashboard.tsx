@@ -316,6 +316,9 @@ export function RadarDashboard({
           getCalendarDayKey(item.resetAt) === getCalendarDayKey(snapshotAt),
       ),
   );
+  const visibleHistory = viewModel.recentHistory.filter(
+    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
+  );
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",
     icon: "text-amber-700",
@@ -656,8 +659,8 @@ export function RadarDashboard({
           </div>
 
           <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-0 sm:divide-y sm:divide-slate-100">
-            {viewModel.recentHistory.length > 0 ? (
-              viewModel.recentHistory.map((item, index) => (
+            {visibleHistory.length > 0 ? (
+              visibleHistory.map((item, index) => (
                 <div
                   className={`${index >= 7 ? "hidden sm:grid" : "grid"} gap-3 rounded-md border border-l-4 border-slate-200/90 border-l-teal-500 bg-slate-50/60 p-3 shadow-sm sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-4 sm:shadow-none sm:first:pt-0 sm:last:pb-0 md:grid-cols-[1fr_auto]`}
                   key={item.key}
@@ -719,7 +722,7 @@ export function RadarDashboard({
             )}
           </div>
 
-          {viewModel.recentHistory.length > 0 ? (
+          {visibleHistory.length > 0 ? (
             <div className="mt-5 flex justify-center border-t border-slate-100 pt-4">
               <Link
                 className="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 underline-offset-4 hover:underline hover:text-teal-800 transition"

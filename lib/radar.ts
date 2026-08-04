@@ -169,7 +169,7 @@ export function getRadarViewModel(
     locale,
   );
   const latestWindow =
-    (observedLatestWindow && getHistoryRecordKind(observedLatestWindow) !== "banked_distribution"
+    (observedLatestWindow && getHistoryRecordKind(observedLatestWindow) === "confirmed_global"
       ? observedLatestWindow
       : undefined) ?? latestCompletedLocalWindow;
   const activeWindow = getDisplayResetNotice(getActiveWindow(activeOfficialNotice, locale));
@@ -252,6 +252,10 @@ function getLatestRegularOrForcedResetAt(
   // 1. 全体履歴を走査 (getCombinedResetHistory)
   const combinedHistory = getCombinedResetHistory(data);
   for (const item of combinedHistory) {
+    if (getHistoryRecordKind(item) !== "confirmed_global") {
+      continue;
+    }
+
     const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
     const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
     if (resetMethod === "任意リセット権1回配布") {
@@ -445,29 +449,30 @@ function getHistoryText(item: WindowLike & { kind?: string }) {
 }
 
 export function getHistoryRecordKind(item: WindowLike): HistoryRecordKind {
-  if (item.recordKind) {
+  if (
+    item.recordKind === "confirmed_global" ||
+    item.recordKind === "banked_distribution" ||
+    item.recordKind === "reference"
+  ) {
     return item.recordKind;
   }
 
   const resetMethod = item.details?.resetMethod ?? "";
-  const text = `${item.id ?? ""} ${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${resetMethod}`.toLowerCase();
   if (
     resetMethod === "任意リセット権1回配布" ||
-    text.includes("banked reset") ||
-    text.includes("manual reset") ||
-    text.includes("任意リセット") ||
-    text.includes("手动重置") ||
-    text.includes("配布") ||
-    text.includes("reset button")
+    item.id?.includes("banked-reset") ||
+    item.id?.includes("reset-credit") ||
+    item.id?.includes("reset-button")
   ) {
     return "banked_distribution";
   }
 
-  if (item.id?.startsWith("regular-reset-")) {
+  if (item.id?.includes("regular-reset")) {
     return "reference";
   }
 
-  return "confirmed_global";
+  // Missing or unknown classifications must not become confirmed history.
+  return "reference";
 }
 
 export function getHistorySourceKind(item: WindowLike): HistorySourceKind {
@@ -1022,6 +1027,7 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
 
     return {
       id: sig.id,
+      recordKind: "confirmed_global",
       title: title,
       kind: "reset_completed",
       status: "closed",

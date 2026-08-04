@@ -589,6 +589,9 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
   const historicalItems = [...staticHistory, ...dynamicHistory];
   const resetTimes = historicalItems
     .filter((item) => {
+      if (item.recordKind !== "confirmed_global") {
+        return false;
+      }
       if (item.details?.cycleType !== "ランダムリセット") {
         return false;
       }
@@ -1070,6 +1073,9 @@ export function getLastGlobalResetAt(
     data?.rejected_tibo_resets ?? [],
   );
   const candidates = combinedHistory.map((item) => {
+    if (item.recordKind !== "confirmed_global") {
+      return null;
+    }
     const resetMethod = item.details?.resetMethod;
     if (resetMethod === "任意リセット権1回配布") {
       return null;

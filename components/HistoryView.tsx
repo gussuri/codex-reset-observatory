@@ -203,7 +203,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
   }[locale];
 
   const confirmedItems = viewModel.recentHistory.filter(
-    (item) => item.recordKind !== "banked_distribution" && item.recordKind !== "reference",
+    (item) => item.recordKind === "confirmed_global",
   );
   const bankedItems = viewModel.recentHistory.filter(
     (item) => item.recordKind === "banked_distribution",

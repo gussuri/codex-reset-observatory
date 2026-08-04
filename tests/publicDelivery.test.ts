@@ -135,8 +135,48 @@ test("history page separates confirmed events from banked distributions and grou
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
-  assert.match(html, /Source not recorded/);
+  assert.doesNotMatch(html, /Source not recorded/);
   assert.doesNotMatch(html, /Weekly reset reference/);
+  assert.doesNotMatch(html, /Unclassified history sentinel/);
+
+  const unclassifiedData = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
+  const firstItem = unclassifiedData.viewModel.recentHistory[0];
+  unclassifiedData.viewModel.recentHistory = [
+    ...unclassifiedData.viewModel.recentHistory,
+    { ...firstItem, key: "unclassified-history-test", title: "Unclassified history sentinel", recordKind: undefined },
+  ];
+  const unclassifiedHtml = renderToStaticMarkup(
+    React.createElement(HistoryView, { data: unclassifiedData, locale: "en" }),
+  );
+  assert.doesNotMatch(unclassifiedHtml, /Unclassified history sentinel/);
+
+  const localizedAssertions = {
+    ja: {
+      confirmed: "確認済みの全体リセット",
+      banked: "任意リセットの配布記録",
+      reference: "週間リセット参考日時",
+    },
+    en: {
+      confirmed: "Confirmed global resets",
+      banked: "Banked Reset distributions",
+      reference: "Weekly reset reference time",
+    },
+    zh: {
+      confirmed: "已确认的全局重置",
+      banked: "手动重置发放记录",
+      reference: "每周重置参考时间",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const localizedData = toPublicRadarSnapshot(getLocalRadarData({}), locale, { limitHistory: false });
+    const localizedHtml = renderToStaticMarkup(
+      React.createElement(HistoryView, { data: localizedData, locale }),
+    );
+    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].confirmed));
+    assert.match(localizedHtml, new RegExp(localizedAssertions[locale].banked));
+    assert.doesNotMatch(localizedHtml, new RegExp(localizedAssertions[locale].reference));
+  }
 });
 
 test("current API keeps its shared cache and excludes responses from search indexing", () => {

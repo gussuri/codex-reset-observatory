@@ -161,6 +161,7 @@ export function convertTiboResetSignalToHistoryEvent(
 
   return {
     id: `tibo-reset-${signal.tweet_id}`,
+    recordKind: "confirmed_global",
     title,
     kind: "reset_completed",
     status: "closed",

@@ -740,6 +740,26 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Weekly reset",
     zh: "定期重置",
   },
+  "週間リセット参考日時": {
+    ja: "週間リセット参考日時",
+    en: "Weekly reset reference time",
+    zh: "每周重置参考时间",
+  },
+  "参考日時": {
+    ja: "参考日時",
+    en: "Reference time",
+    zh: "参考时间",
+  },
+  "参考情報": {
+    ja: "参考情報",
+    en: "Reference information",
+    zh: "参考信息",
+  },
+  "共通参考日時": {
+    ja: "共通参考日時",
+    en: "Shared reference time",
+    zh: "公共参考时间",
+  },
   "詫びリセット": {
     ja: "詫びリセット",
     en: "Compensation reset",
@@ -1313,6 +1333,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Banked Reset Distributed",
     zh: "手动重置已发放",
   },
+  "仕様変更": {
+    ja: "仕様変更",
+    en: "Specification change",
+    zh: "规格变更",
+  },
   "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。": {
     ja: "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。",
     en: "The regular reset has been changed from a Hard Reset to a distribution of one Banked Reset.",
@@ -1352,6 +1377,21 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "任意リセットを使っていないアカウント",
     en: "Accounts that have not used a Banked Reset",
     zh: "未使用手动重置的账号",
+  },
+  "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。": {
+    ja: "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。",
+    en: "This is a shared reference time without a recorded source, not a confirmed global reset.",
+    zh: "这是没有记录来源的公共参考时间，并非已确认的全局重置。",
+  },
+  "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。": {
+    ja: "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。",
+    en: "A Banked Reset distribution is recorded, but this entry does not confirm a forced global reset, so it is treated as a shared reference time.",
+    zh: "可以确认发放了手动重置，但该记录无法确认全局强制重置，因此按公共参考时间处理。",
+  },
+  "定期的な強制リセットではなく、任意リセット権が1回分配布されました。使用後の利用枠や次回日時はユーザーごとに異なる場合があります。": {
+    ja: "定期的な強制リセットではなく、任意リセット権が1回分配布されました。使用後の利用枠や次回日時はユーザーごとに異なる場合があります。",
+    en: "This was not a regular forced reset. One Banked Reset was distributed, and the resulting usage window or next date may differ by account.",
+    zh: "这不是定期强制重置，而是发放了 1 次手动重置；使用后的额度周期和下次日期可能因账号而异。",
   },
   "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。": {
     ja: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",

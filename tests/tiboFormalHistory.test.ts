@@ -446,18 +446,37 @@ test("weekly reference dates stay out of observed history and latest reset selec
   );
 
   assert.equal(viewModel.regularResetForecast.expectedAt, "2026-08-08T03:32:00.000Z");
-  assert.equal(viewModel.recentHistory.some((item) => item.recordKind === "reference"), false);
+  assert.equal(viewModel.recentHistory.some((item) => item.recordKind === "reference"), true);
   assert.equal(viewModel.recentHistory.some((item) => item.key.startsWith("regular-reset-")), false);
   assert.notEqual(viewModel.latestWindow.title, "定期リセット");
   assert.equal(viewModel.latestWindow.recordKind, "confirmed_global");
 });
 
 test("history records distinguish confirmed resets, banked distributions, and source kinds", () => {
-  const forced = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-regular-reset-2026-06-25");
-  const banked = LOCAL_RESET_HISTORY.find((item) => item.id === "personal-reset-credit-2026-06-11");
+  const reference25 = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-regular-reset-2026-06-25");
+  const reference07 = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-regular-reset-2026-07-07");
+  const reference18 = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-rate-limit-reset-notice-2026-06-17");
+  const banked18 = LOCAL_RESET_HISTORY.find((item) => item.id === "personal-compensation-reset-credit-2026-06-18");
+  const banked12 = LOCAL_RESET_HISTORY.find((item) => item.id === "personal-reset-credit-2026-06-11");
+  const confirmed = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-forced-reset-2026-06-30");
 
-  assert.equal(forced ? getHistoryRecordKind(forced) : null, "confirmed_global");
-  assert.equal(banked ? getHistoryRecordKind(banked) : null, "banked_distribution");
+  assert.equal(
+    LOCAL_RESET_HISTORY.every((item) =>
+      item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "reference",
+    ),
+    true,
+  );
+  assert.equal(reference25 ? getHistoryRecordKind(reference25) : null, "reference");
+  assert.equal(reference07 ? getHistoryRecordKind(reference07) : null, "reference");
+  assert.equal(reference18 ? getHistoryRecordKind(reference18) : null, "reference");
+  assert.equal(banked18 ? getHistoryRecordKind(banked18) : null, "banked_distribution");
+  assert.equal(banked12 ? getHistoryRecordKind(banked12) : null, "banked_distribution");
+  assert.equal(confirmed ? getHistoryRecordKind(confirmed) : null, "confirmed_global");
+  assert.equal(getHistoryRecordKind({ title: "Unclassified event" }), "reference");
+  assert.equal(banked12?.details?.cycleType, "任意リセット配布");
+  assert.equal(banked12?.details?.reasonType, "仕様変更");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux/status/123" }), "direct_post");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
   assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");

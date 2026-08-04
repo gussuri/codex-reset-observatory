@@ -15,6 +15,7 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+    "recordKind": "confirmed_global",
     "title": "Luna 10万スレッド到達・効率改善記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -37,6 +38,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.6 Sol利用効率改善リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -59,6 +61,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+    "recordKind": "confirmed_global",
     "title": "ChatGPT Work急速採用記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -81,6 +84,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-outage-compensation-reset-2026-07-26",
+    "recordKind": "confirmed_global",
     "title": "大規模障害に伴う詫びリセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -103,6 +107,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-10m-users-reset-2026-07-22",
+    "recordKind": "confirmed_global",
     "title": "1000万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -125,6 +130,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.6 Solリリース記念リセット（4回目）",
     "kind": "reset_completed",
     "status": "closed",
@@ -147,6 +153,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-9m-users-reset-2026-07-16",
+    "recordKind": "confirmed_global",
     "title": "900万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -169,6 +176,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-8m-users-reset-2026-07-15",
+    "recordKind": "confirmed_global",
     "title": "800万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -191,6 +199,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "personal-tibo-7m-users-banked-reset-2026-07-14",
+    "recordKind": "banked_distribution",
     "title": "700万人アクティブユーザー記念任意リセット配布",
     "kind": "reset_completed",
     "status": "closed",
@@ -213,6 +222,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "personal-tibo-500k-compensation-reset-2026-07-13",
+    "recordKind": "banked_distribution",
     "title": "Web/モバイル機能不具合補償任意リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -235,6 +245,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-6m-users-reset-2026-07-13",
+    "recordKind": "confirmed_global",
     "title": "600万人アクティブユーザー記念リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -257,6 +268,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.6 Solリリース記念リセット（3回目）",
     "kind": "reset_completed",
     "status": "closed",
@@ -279,6 +291,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.6 Solリリース記念リセット（2回目）",
     "kind": "reset_completed",
     "status": "closed",
@@ -301,6 +314,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-gpt-5-6-release-reset-2026-07-10",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.6リリース記念リセット",
     "kind": "window_closed",
     "status": "closed",
@@ -323,7 +337,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-regular-reset-2026-07-07",
-    "title": "定期リセット",
+    "recordKind": "reference",
+    "title": "週間リセット参考日時",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-07-07T09:30:00+09:00",
@@ -331,21 +346,22 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "completed_at": "2026-07-07T09:30:00+09:00",
     "window_minutes": 0,
     "window_human": "定期実施",
-    "scope": "任意リセットを使っていないアカウント",
-    "summary": "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
+    "scope": "共通参考日時",
+    "summary": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。",
     "source_url": null,
     "details": {
-      "cycleType": "定期リセット",
-      "reasonType": "定期更新",
-      "resetMethod": "強制リセット",
-      "scope": "任意リセットを使っていないアカウント",
-      "noticeToExecution": "0分（定期）",
+      "cycleType": "参考日時",
+      "reasonType": "参考情報",
+      "resetMethod": "共通参考日時",
+      "scope": "共通参考日時",
+      "noticeToExecution": "不明",
       "noticeType": "なし",
-      "note": "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。"
+      "note": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。"
     }
   },
   {
     "id": "personal-codex-reset-button-aie-2026-07-02",
+    "recordKind": "banked_distribution",
     "title": "Codex reset button 配布 (AIE World's Fair 記念)",
     "kind": "reset_completed",
     "status": "closed",
@@ -368,6 +384,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-forced-reset-2026-06-30",
+    "recordKind": "confirmed_global",
     "title": "臨時リセット",
     "kind": "window_closed",
     "status": "closed",
@@ -390,6 +407,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-forced-comp-reset-2026-06-29",
+    "recordKind": "confirmed_global",
     "title": "過剰消費バグ調査・強制補償リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -413,6 +431,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "personal-compensation-reset-credit-2026-06-27",
+    "recordKind": "banked_distribution",
     "title": "能力退化・過剰消費補償任意リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -435,7 +454,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-codex-regular-reset-2026-06-25",
-    "title": "定期リセット",
+    "recordKind": "reference",
+    "title": "週間リセット参考日時",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-06-25T07:01:00+09:00",
@@ -444,21 +464,22 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
-    "summary": "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
+    "summary": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。",
     "source_url": null,
     "details": {
-      "cycleType": "定期リセット",
-      "reasonType": "定期更新",
-      "resetMethod": "強制リセット",
+      "cycleType": "参考日時",
+      "reasonType": "参考情報",
+      "resetMethod": "共通参考日時",
       "scope": "全有料プラン",
-      "noticeToExecution": "0分（定期）",
+      "noticeToExecution": "不明",
       "noticeType": "なし",
-      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+      "note": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。"
     }
   },
   {
     "id": "local-codex-rate-limit-reset-notice-2026-06-17",
-    "title": "定期リセット",
+    "recordKind": "reference",
+    "title": "週間リセット参考日時",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-06-18T07:00:00+09:00",
@@ -467,20 +488,21 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
-    "summary": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
+    "summary": "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。",
     "source_url": "https://x.com/thsottiaux/status/2066956441173323943",
     "details": {
-      "cycleType": "定期リセット",
-      "reasonType": "定期更新",
-      "resetMethod": "強制リセット",
-      "scope": "全有料プラン",
-      "noticeToExecution": "0分（定期）",
+      "cycleType": "参考日時",
+      "reasonType": "参考情報",
+      "resetMethod": "共通参考日時",
+      "scope": "共通参考日時",
+      "noticeToExecution": "不明",
       "noticeType": "なし",
-      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+      "note": "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。"
     }
   },
   {
     "id": "personal-compensation-reset-credit-2026-06-18",
+    "recordKind": "banked_distribution",
     "title": "Codex信頼性障害補償任意リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -503,6 +525,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "personal-reset-credit-2026-06-11",
+    "recordKind": "banked_distribution",
     "title": "任意リセット配布",
     "kind": "reset_completed",
     "status": "closed",
@@ -514,17 +537,18 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "summary": "個人の利用制限の更新として、任意リセットが配布されました。",
     "source_url": "https://x.com/thsottiaux",
     "details": {
-      "cycleType": "定期リセット",
-      "reasonType": "定期更新",
+      "cycleType": "任意リセット配布",
+      "reasonType": "仕様変更",
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
       "noticeType": "なし",
-      "note": "定期リセットが強制リセットから任意リセット1回分の配布に変更されました。"
+      "note": "定期的な強制リセットではなく、任意リセット権が1回分配布されました。使用後の利用枠や次回日時はユーザーごとに異なる場合があります。"
     }
   },
   {
     "id": "local-codex-reliability-compensation-2026-06-04",
+    "recordKind": "confirmed_global",
     "title": "Codex信頼性障害補償リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -548,6 +572,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-5m-users-celebration-2026-05-31",
+    "recordKind": "confirmed_global",
     "title": "500万人アクティブユーザー記念リセット",
     "kind": "window_closed",
     "opened_at": "2026-05-31T14:59:10+09:00",
@@ -570,6 +595,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-long-session-compression-compensation-2026-05-24",
+    "recordKind": "confirmed_global",
     "title": "長セッション圧縮過剰消費補償リセット",
     "kind": "reset_completed",
     "status": "closed",
@@ -593,6 +619,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-sam-like-promise-reset-2026-05-20",
+    "recordKind": "confirmed_global",
     "title": "Samいいね約束リセット",
     "kind": "window_closed",
     "opened_at": "2026-05-20T03:31:00+09:00",
@@ -615,6 +642,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   },
   {
     "id": "local-gpt-55-degradation-compensation-2026-05-17",
+    "recordKind": "confirmed_global",
     "title": "GPT-5.5能力退化補償リセット",
     "kind": "window_closed",
     "opened_at": "2026-05-16T09:31:00+09:00",

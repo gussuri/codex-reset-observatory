@@ -7,7 +7,7 @@ import {
   PROBABILITY_MODEL_VERSION,
 } from "../data/predictionWeights";
 import { buildProbabilityDebugInfo } from "../lib/logProbability";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
 import {
   getDaysSinceLastGlobalReset,
@@ -27,6 +27,7 @@ function resetEvent(
 ): WindowEventLike {
   return {
     id,
+    recordKind: "confirmed_global",
     title: "テストリセット",
     kind: "reset_completed",
     status: "closed",
@@ -82,6 +83,20 @@ test("fixed calculation time makes probability and audit output reproducible", (
       assert.equal(first.inputSnapshot.calculatedAt, now.toISOString());
     },
   );
+});
+
+test("strict history classification preserves the fixed public probability baseline", () => {
+  const now = new Date("2026-08-04T03:32:00.000Z");
+  const viewModel = getRadarViewModel(
+    getLocalRadarData({ calculationNow: now }),
+    "ja",
+    false,
+    undefined,
+    now,
+  );
+
+  assert.equal(viewModel.probability24h, 0.24356292502906995);
+  assert.equal(viewModel.probability48h, 0.42249878025667253);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {
