@@ -50,9 +50,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Codex 使用限制重置信息",
   },
   description: {
-    ja: "Codexの12時間・24時間・48時間・72時間以内のリセット予測、最新情報、過去の履歴をまとめて確認できます。",
-    en: "Check Codex reset forecasts for the next 12, 24, 48, and 72 hours, official updates, and recent reset history.",
-    zh: "集中查看 Codex 未来12小时、24小时、48小时和72小时内的重置预测、最新信息和近期重置记录。",
+    ja: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。",
+    en: "Check Codex reset forecasts, official updates, and recent reset history in one place.",
+    zh: "集中查看 Codex 的重置预测、最新信息和近期重置记录。",
   },
   officialNotice: {
     ja: "公式リセット予告",

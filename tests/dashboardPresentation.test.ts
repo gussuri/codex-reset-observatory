@@ -186,9 +186,9 @@ test("keeps the large official notice card above the probability card", (t: Test
 
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexの12時間・24時間・48時間・72時間以内のリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
-    { locale: "en" as const, notice: "Official notice: None", description: "Check Codex reset forecasts for the next 12, 24, 48, and 72 hours, official updates, and recent reset history.", directAnswer: "Did Codex reset today?" },
-    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 未来12小时、24小时、48小时和72小时内的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
+    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official notice: None", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {
