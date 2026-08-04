@@ -1,12 +1,87 @@
+import {
+  RECENCY_SHADOW_MODEL_CONFIG,
+  SHADOW_PROBABILITY_MODEL_VERSION,
+} from "@/data/shadowProbabilityConfig";
 import type { RadarViewModel } from "@/lib/radar/types";
 import type { ProbabilityCalculationAudit } from "@/lib/radar/probability";
 import type { PublishedProbabilityCalculation } from "@/lib/radar/publishedProbability";
-import type { ShadowProbabilityResult } from "@/lib/radar/shadowProbability";
+import {
+  calculateAllRecencyWeightedShadowProbabilities,
+} from "@/lib/radar/recencyWeightedProbability";
+import {
+  calculateShadowProbability,
+  type ShadowProbabilityOptions,
+  type ShadowProbabilityResult,
+} from "@/lib/radar/shadowProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
 ) {
   return viewModel.activeWindow.active && viewModel.activeWindow.kind === "official";
+}
+
+export type ExperimentalProbabilityForecast = {
+  modelVersion: string;
+  generatedAt: string;
+  probability24h: number;
+  probability48h: number;
+  halfLifeDays: number | null;
+  completedEventCount: number;
+  completedIntervalCount: number;
+  weightedEventCount: number;
+  weightedExposureDays: number;
+  baseline24h: number;
+  baseline48h: number;
+  combinedSignalMultiplier24h: number;
+  combinedSignalMultiplier48h: number;
+  officialNoticeOverride: boolean;
+  targetDefinition: string;
+};
+
+export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;
+
+function toExperimentalProbabilityForecast(
+  result: ShadowProbabilityResult,
+  halfLifeDays: number | null,
+): ExperimentalProbabilityForecast {
+  return {
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    halfLifeDays,
+    completedEventCount: result.hazard.completedEventCount,
+    completedIntervalCount: result.hazard.completedIntervalCount,
+    weightedEventCount: result.hazard.weightedEventCount,
+    weightedExposureDays: result.hazard.weightedExposureHours / 24,
+    baseline24h: result.baseline.probability24h,
+    baseline48h: result.baseline.probability48h,
+    combinedSignalMultiplier24h: result.multipliers.combinedAfterCap.probability24h,
+    combinedSignalMultiplier48h: result.multipliers.combinedAfterCap.probability48h,
+    officialNoticeOverride: result.officialNoticeOverride.active,
+    targetDefinition: result.targetDefinition,
+  };
+}
+
+export function buildExperimentalProbabilityForecasts(
+  data: Parameters<typeof calculateShadowProbability>[0],
+  options: ShadowProbabilityOptions & {
+    shadowProbability?: ShadowProbabilityResult | null;
+  } = {},
+): ExperimentalProbabilityForecasts {
+  const { shadowProbability, ...calculationOptions } = options;
+  const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
+  const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
+  const forecasts: ExperimentalProbabilityForecasts = {
+    [SHADOW_PROBABILITY_MODEL_VERSION]: toExperimentalProbabilityForecast(v2, null),
+  };
+  for (const result of recencyResults) {
+    const halfLifeDays = RECENCY_SHADOW_MODEL_CONFIG.find(
+      (model) => model.modelVersion === result.modelVersion,
+    )?.halfLifeDays ?? null;
+    forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
+  }
+  return forecasts;
 }
 
 export function buildProbabilityDebugInfo(
@@ -16,6 +91,7 @@ export function buildProbabilityDebugInfo(
   calculatedAt: Date,
   shadowProbability?: ShadowProbabilityResult | null,
   publishedProbability?: PublishedProbabilityCalculation,
+  experimentalProbabilityForecasts?: ExperimentalProbabilityForecasts,
 ) {
   const calculatedAtIso = calculatedAt.toISOString();
 
@@ -46,6 +122,9 @@ export function buildProbabilityDebugInfo(
             totalExposureDays: publishedProbability.shadow?.confidence.totalExposureDays ?? null,
           },
         }
+      : {}),
+    ...(experimentalProbabilityForecasts
+      ? { experimentalProbabilityForecasts }
       : {}),
   };
 }

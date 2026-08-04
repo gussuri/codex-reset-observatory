@@ -9,6 +9,7 @@ import {
 import { calculatePublishedProbability } from "@/lib/radar/publishedProbability";
 import { getExpectationKey } from "@/lib/radar/helpers";
 import {
+  buildExperimentalProbabilityForecasts,
   buildProbabilityDebugInfo,
   hasOfficialNoticeForLog,
 } from "@/lib/logProbability";
@@ -72,6 +73,13 @@ async function handleLogRequest(request: NextRequest) {
       activeOfficialNotice,
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
     }, { logFallback: false });
+    const experimentalProbabilityForecasts = buildExperimentalProbabilityForecasts(rawData, {
+      now: calculationNow,
+      signalEvaluation,
+      activeOfficialNotice,
+      regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+      shadowProbability: publishedProbability.shadow,
+    });
 
     // 3. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;
@@ -129,7 +137,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.shadow, publishedProbability),
+          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.shadow, publishedProbability, experimentalProbabilityForecasts),
         },
         {
           onConflict: "logged_hour",

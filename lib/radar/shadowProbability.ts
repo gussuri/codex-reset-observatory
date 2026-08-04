@@ -56,6 +56,7 @@ export type ShadowHazard = {
   globalLambdaPerHour: number;
   observedEventCount: number;
   weightedEventCount: number;
+  completedEventCount: number;
   completedIntervalCount: number;
   totalExposureHours: number;
   weightedExposureHours: number;
@@ -332,6 +333,7 @@ export function buildShadowHazard(
     globalLambdaPerHour,
     observedEventCount,
     weightedEventCount,
+    completedEventCount: uniqueEvents.length,
     completedIntervalCount: observedEventCount,
     totalExposureHours,
     weightedExposureHours: totalExposureHours,
