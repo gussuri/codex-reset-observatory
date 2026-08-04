@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import React from "react";
@@ -24,18 +24,18 @@ import {
   SITE_URL,
   siteUrl,
 } from "../lib/siteMetadata";
-import { metadata as jaHomeMetadata } from "../app/page";
-import { metadata as enHomeMetadata } from "../app/en/page";
-import { metadata as zhHomeMetadata } from "../app/zh/page";
-import { metadata as jaAboutMetadata } from "../app/about/page";
-import { metadata as enAboutMetadata } from "../app/en/about/page";
-import { metadata as zhAboutMetadata } from "../app/zh/about/page";
-import { metadata as jaFaqMetadata } from "../app/faq/page";
-import { metadata as enFaqMetadata } from "../app/en/faq/page";
-import { metadata as zhFaqMetadata } from "../app/zh/faq/page";
-import { metadata as jaHistoryMetadata } from "../app/history/page";
-import { metadata as enHistoryMetadata } from "../app/en/history/page";
-import { metadata as zhHistoryMetadata } from "../app/zh/history/page";
+import { metadata as jaHomeMetadata } from "../app/(ja)/page";
+import { metadata as enHomeMetadata } from "../app/(en)/en/page";
+import { metadata as zhHomeMetadata } from "../app/(zh)/zh/page";
+import { metadata as jaAboutMetadata } from "../app/(ja)/about/page";
+import { metadata as enAboutMetadata } from "../app/(en)/en/about/page";
+import { metadata as zhAboutMetadata } from "../app/(zh)/zh/about/page";
+import { metadata as jaFaqMetadata } from "../app/(ja)/faq/page";
+import { metadata as enFaqMetadata } from "../app/(en)/en/faq/page";
+import { metadata as zhFaqMetadata } from "../app/(zh)/zh/faq/page";
+import { metadata as jaHistoryMetadata } from "../app/(ja)/history/page";
+import { metadata as enHistoryMetadata } from "../app/(en)/en/history/page";
+import { metadata as zhHistoryMetadata } from "../app/(zh)/zh/history/page";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -101,8 +101,19 @@ test("WebSite JSON-LD uses one formal name and only the Japanese alternate name"
     assert.doesNotMatch(JSON.stringify(jsonLd.alternateName), /vercel|\.app/i);
   }
 
-  const appSource = readFileSync(join(root, "app/layout.tsx"), "utf8");
-  assert.strictEqual((appSource.match(/getSiteJsonLd\(/g) ?? []).length, 1);
+  const jsonLdSource = readFileSync(join(root, "components/SiteJsonLd.tsx"), "utf8");
+  assert.strictEqual((jsonLdSource.match(/getSiteJsonLd\(/g) ?? []).length, 1);
+
+  for (const [layout, lang] of [
+    ["app/(ja)/layout.tsx", "ja"],
+    ["app/(en)/layout.tsx", "en"],
+    ["app/(zh)/layout.tsx", "zh"],
+  ] as const) {
+    const source = readFileSync(join(root, layout), "utf8");
+    assert.match(source, new RegExp(`<html lang="${lang}">`));
+    assert.match(source, new RegExp(`<SiteJsonLd locale="${lang}"`));
+    assert.doesNotMatch(source, /headers\(|x-codex-pathname/);
+  }
 });
 
 test("all localized pages use the formal application name and absolute URL metadata", () => {
@@ -165,10 +176,18 @@ test("all home locales expose the same formal brand in the main heading", () => 
   }
 });
 
-test("root metadata no longer defines a meta keywords list or duplicate WebSite JSON-LD", () => {
-  const layoutSource = readFileSync(join(root, "app/layout.tsx"), "utf8");
+test("localized root layouts avoid keywords, headers, and duplicate JSON-LD", () => {
+  const layoutSources = [
+    "app/(ja)/layout.tsx",
+    "app/(en)/layout.tsx",
+    "app/(zh)/layout.tsx",
+  ].map((path) => readFileSync(join(root, path), "utf8"));
 
-  assert.match(layoutSource, /applicationName:\s*SITE_NAME/);
-  assert.doesNotMatch(layoutSource, /keywords\s*:/);
-  assert.strictEqual((layoutSource.match(/application\/ld\+json/g) ?? []).length, 1);
+  for (const layoutSource of layoutSources) {
+    assert.doesNotMatch(layoutSource, /keywords\s*:/);
+    assert.doesNotMatch(layoutSource, /headers\(/);
+    assert.strictEqual((layoutSource.match(/application\/ld\+json/g) ?? []).length, 0);
+  }
+
+  assert.equal(existsSync(join(root, "middleware.ts")), false);
 });

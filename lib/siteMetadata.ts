@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 export const SITE_URL = "https://codex-reset-observatory.vercel.app";
 export const SITE_NAME = "Codex Reset Observatory";
 export const SITE_NAME_JA = "Codexリセット観測所";
@@ -20,6 +22,47 @@ export function siteUrl(path = "/"): string {
   }
 
   return SITE_URL + (path.startsWith("/") ? path : "/" + path);
+}
+
+export type SiteLocale = "ja" | "en" | "zh";
+
+export function getRootMetadata(locale: SiteLocale): Metadata {
+  const path = locale === "ja" ? "/" : `/${locale}`;
+  const title =
+    locale === "ja" ? HOME_TITLE_JA : locale === "en" ? HOME_TITLE_EN : HOME_TITLE_ZH;
+  const description =
+    locale === "ja"
+      ? HOME_DESCRIPTION_JA
+      : locale === "en"
+        ? HOME_DESCRIPTION_EN
+        : HOME_DESCRIPTION_ZH;
+  const openGraphLocale = locale === "ja" ? "ja_JP" : locale === "en" ? "en_US" : "zh_CN";
+
+  return {
+    metadataBase: new URL(SITE_URL),
+    applicationName: SITE_NAME,
+    title: { default: title, template: "%s | " + SITE_NAME },
+    description,
+    alternates: {
+      canonical: siteUrl(path),
+      languages: { ja: siteUrl("/"), en: siteUrl("/en"), zh: siteUrl("/zh") },
+    },
+    openGraph: {
+      title,
+      description,
+      url: siteUrl(path),
+      siteName: SITE_NAME,
+      locale: openGraphLocale,
+      type: "website",
+      images: [{ url: SITE_OG_IMAGE_URL, width: 1200, height: 630, alt: SITE_NAME }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [SITE_OG_IMAGE_URL],
+    },
+  };
 }
 
 export function getSiteJsonLd(locale: "ja" | "en" | "zh" = "ja") {
