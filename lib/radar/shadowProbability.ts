@@ -55,10 +55,20 @@ export type ShadowHazardBin = {
 export type ShadowHazard = {
   globalLambdaPerHour: number;
   observedEventCount: number;
+  weightedEventCount: number;
   completedIntervalCount: number;
   totalExposureHours: number;
+  weightedExposureHours: number;
   totalExposureDays: number;
   bins: Array<ShadowHazardBin>;
+};
+
+export type ShadowHazardBuildOptions = {
+  completedIntervalWeight?: (input: {
+    previousTime: number;
+    currentTime: number;
+    intervalHours: number;
+  }) => number;
 };
 
 export type ShadowProbabilityPair = {
@@ -120,6 +130,11 @@ export type ShadowProbabilityOptions = {
   activeOfficialNotice?: ActiveOfficialNotice | null;
   regularResetExpectedAt?: string | null;
   staticHistory?: Array<WindowEventLike>;
+};
+
+export type ShadowProbabilityModelOptions = {
+  modelVersion?: string;
+  hazardOptions?: ShadowHazardBuildOptions;
 };
 
 function clamp01(value: number) {
@@ -241,7 +256,11 @@ function addExposure(bins: Array<ShadowHazardBin>, startHour: number, durationHo
   }
 }
 
-export function buildShadowHazard(events: Array<ShadowResetEvent>, now: Date): ShadowHazard {
+export function buildShadowHazard(
+  events: Array<ShadowResetEvent>,
+  now: Date,
+  options: ShadowHazardBuildOptions = {},
+): ShadowHazard {
   const nowTime = now.getTime();
   const uniqueEvents = Array.from(
     new Map(
@@ -257,6 +276,7 @@ export function buildShadowHazard(events: Array<ShadowResetEvent>, now: Date): S
 
   const bins = createEmptyBins();
   let observedEventCount = 0;
+  let weightedEventCount = 0;
   let totalExposureHours = 0;
 
   for (let index = 1; index < uniqueEvents.length; index += 1) {
@@ -264,10 +284,18 @@ export function buildShadowHazard(events: Array<ShadowResetEvent>, now: Date): S
     const currentTime = getTimestamp(uniqueEvents[index].resetAt)!;
     const intervalHours = (currentTime - previousTime) / HOUR_MS;
     if (intervalHours <= 0) continue;
-    addExposure(bins, 0, intervalHours);
-    bins[getBinIndex(intervalHours)].observedEvents += 1;
+    const rawWeight = options.completedIntervalWeight?.({
+      previousTime,
+      currentTime,
+      intervalHours,
+    }) ?? 1;
+    const weight = Number.isFinite(rawWeight) && rawWeight >= 0 ? rawWeight : 0;
+    const weightedIntervalHours = intervalHours * weight;
+    addExposure(bins, 0, weightedIntervalHours);
+    bins[getBinIndex(intervalHours)].observedEvents += weight;
     observedEventCount += 1;
-    totalExposureHours += intervalHours;
+    weightedEventCount += weight;
+    totalExposureHours += weightedIntervalHours;
   }
 
   if (uniqueEvents.length > 0) {
@@ -303,8 +331,10 @@ export function buildShadowHazard(events: Array<ShadowResetEvent>, now: Date): S
   return {
     globalLambdaPerHour,
     observedEventCount,
+    weightedEventCount,
     completedIntervalCount: observedEventCount,
     totalExposureHours,
+    weightedExposureHours: totalExposureHours,
     totalExposureDays: totalExposureHours / 24,
     bins,
   };
@@ -588,14 +618,15 @@ function getConfidence(
   };
 }
 
-export function calculateShadowProbability(
+export function calculateShadowProbabilityForModel(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
+  modelOptions: ShadowProbabilityModelOptions = {},
 ): ShadowProbabilityResult {
   const now = options.now ?? new Date();
   const signalEvaluation = options.signalEvaluation ?? getLocalSignalEvaluation(data, now);
   const events = getShadowCompletedResetEvents(data, now, options.staticHistory);
-  const hazard = buildShadowHazard(events, now);
+  const hazard = buildShadowHazard(events, now, modelOptions.hazardOptions);
   const latestResetTime = events.length > 0
     ? getTimestamp(events[events.length - 1].resetAt)
     : null;
@@ -641,7 +672,7 @@ export function calculateShadowProbability(
   }
 
   return {
-    modelVersion: SHADOW_PROBABILITY_MODEL_VERSION,
+    modelVersion: modelOptions.modelVersion ?? SHADOW_PROBABILITY_MODEL_VERSION,
     calculatedAt: now.toISOString(),
     targetDefinition: SHADOW_TARGET_DEFINITION,
     predictions: officialNoticeActive
@@ -658,6 +689,13 @@ export function calculateShadowProbability(
     officialNoticeOverride,
     warnings,
   };
+}
+
+export function calculateShadowProbability(
+  data: RadarData | null,
+  options: ShadowProbabilityOptions = {},
+) {
+  return calculateShadowProbabilityForModel(data, options);
 }
 
 export function getConstantProbabilityBaseline(

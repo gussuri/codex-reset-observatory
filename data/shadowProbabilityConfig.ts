@@ -59,3 +59,18 @@ export const SHADOW_SIGNAL_MULTIPLIER_CONFIG = {
 
 export const SHADOW_TARGET_DEFINITION =
   "Completed random reset events after reset-history deduplication; excludes regular resets, manual reset-credit grants, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and explicitly narrow-scope records.";
+
+export const RECENCY_SHADOW_MODEL_CONFIG = [
+  {
+    modelVersion: "hazard-odds-v3-recency-bayes-h14",
+    halfLifeDays: 14,
+  },
+  {
+    modelVersion: "hazard-odds-v3-recency-bayes-h30",
+    halfLifeDays: 30,
+  },
+  {
+    modelVersion: "hazard-odds-v3-recency-bayes-h60",
+    halfLifeDays: 60,
+  },
+] as const;
