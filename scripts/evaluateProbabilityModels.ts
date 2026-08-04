@@ -26,13 +26,17 @@ import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
+import {
+  createPrequentialOrigins,
+  getActualWithinHorizon as getSharedActualWithinHorizon,
+  getPointInTimeRadarData,
+} from "../lib/radar/prequentialCalibration";
+import { getPointInTimeLocalObservationSignals } from "../lib/radar/calibratedShadowProbability";
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 const BLOCK_DAYS = 7;
 const BOOTSTRAP_ITERATIONS = 2_000;
 const BOOTSTRAP_SEED = 20260804;
-const MIN_COMPLETED_INTERVALS = 5;
 const LOG_LOSS_EPSILON = 1e-12;
 
 export const CONSTANT_HAZARD_MODEL_VERSION = "benchmark-constant-hazard-v1";
@@ -187,30 +191,6 @@ function sortEvents(events: Array<ShadowResetEvent>) {
     .map((item) => item.event);
 }
 
-function getJstDayKey(value: number) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(value));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function getJstMidnight(dayKey: string) {
-  return new Date(`${dayKey}T00:00:00+09:00`).getTime();
-}
-
-function getJstMidnightAtOrAfter(value: number) {
-  const midnight = getJstMidnight(getJstDayKey(value));
-  return midnight >= value ? midnight : midnight + DAY_MS;
-}
-
-function getJstMidnightAtOrBefore(value: number) {
-  return getJstMidnight(getJstDayKey(value));
-}
-
 export function partitionEventsAtOrigin(
   events: Array<ShadowResetEvent>,
   origin: string,
@@ -237,15 +217,7 @@ export function getActualWithinHorizon(
   origin: string,
   horizonHours: number,
 ) {
-  const originTime = timestamp(origin);
-  if (originTime === null || !Number.isFinite(horizonHours) || horizonHours <= 0) {
-    return false;
-  }
-  const end = originTime + horizonHours * HOUR_MS;
-  return events.some((event) => {
-    const eventTime = timestamp(event.resetAt);
-    return eventTime !== null && eventTime > originTime && eventTime <= end;
-  });
+  return getSharedActualWithinHorizon(events, origin, horizonHours);
 }
 
 export function calculateEventContributions(
@@ -267,24 +239,9 @@ export function calculateEventContributions(
 export function createWalkForwardOrigins(
   events: Array<ShadowResetEvent>,
   asOf: string,
-  minimumCompletedIntervals: number = MIN_COMPLETED_INTERVALS,
+  minimumCompletedIntervals?: number,
 ) {
-  const asOfTime = timestamp(asOf);
-  if (asOfTime === null || !Number.isInteger(minimumCompletedIntervals) || minimumCompletedIntervals < 1) {
-    throw new RangeError("asOf and minimumCompletedIntervals must be valid");
-  }
-
-  const sorted = sortEvents(events);
-  const firstEligibleEvent = sorted[minimumCompletedIntervals];
-  if (!firstEligibleEvent) return [];
-  const firstEventTime = timestamp(firstEligibleEvent.resetAt)!;
-  const firstOrigin = getJstMidnightAtOrAfter(firstEventTime);
-  const lastOrigin = getJstMidnightAtOrBefore(asOfTime - 48 * HOUR_MS);
-  const origins: Array<string> = [];
-  for (let current = firstOrigin; current <= lastOrigin; current += DAY_MS) {
-    origins.push(new Date(current).toISOString());
-  }
-  return origins;
+  return createPrequentialOrigins(events, asOf, minimumCompletedIntervals);
 }
 
 export function selectNonOverlappingOrigins(
@@ -498,6 +455,7 @@ function getModelPrediction(
     staticHistory: LOCAL_RESET_HISTORY,
     regularResetExpectedAt: null,
     activeOfficialNotice: undefined,
+    localObservationSignals: getPointInTimeLocalObservationSignals(origin),
   }),
 ) {
   const options = {
@@ -505,6 +463,7 @@ function getModelPrediction(
     staticHistory: LOCAL_RESET_HISTORY,
     regularResetExpectedAt: null,
     activeOfficialNotice: undefined,
+    localObservationSignals: getPointInTimeLocalObservationSignals(origin),
   } as const;
   if (model.kind === "shadow") {
     return shadowResult.predictions;
@@ -698,10 +657,11 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     MODEL_DEFINITIONS.map((model) => [model.modelVersion, []]),
   );
   const prequentialCalibrationAudits: Array<PrequentialCalibrationAudit> = [];
+  const sourceData = getLocalRadarData({ calculationNow: asOf });
 
   for (const recordedAt of origins) {
     const origin = new Date(recordedAt);
-    const data = getLocalRadarData({ calculationNow: origin });
+    const data = getPointInTimeRadarData(sourceData, origin) ?? getLocalRadarData({ calculationNow: origin });
     const actual24h = getActualWithinHorizon(allEvents, recordedAt, 24);
     const actual48h = getActualWithinHorizon(allEvents, recordedAt, 48);
     const previousV2Rows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.slice();
@@ -710,6 +670,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
       staticHistory: LOCAL_RESET_HISTORY,
       regularResetExpectedAt: null,
       activeOfficialNotice: undefined,
+      localObservationSignals: getPointInTimeLocalObservationSignals(origin),
     });
 
     for (const model of BASE_MODEL_DEFINITIONS) {

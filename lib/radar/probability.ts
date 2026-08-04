@@ -689,8 +689,9 @@ function isRejectedHistoricalReset(
 export function getLocalSignalEnvironment(
   openAIStatus?: OpenAIStatusSignals | null,
   now: Date = new Date(),
+  localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): NonNullable<RadarData["codex_environment"]> {
-  const recentSignals = LOCAL_OBSERVATION_SIGNALS.filter((signal) =>
+  const recentSignals = localObservationSignals.filter((signal) =>
     isCurrentLocalSignal(signal, now) && isWithinHours(signal.observedAt, 24, now),
   );
   const localStatusIncidents = recentSignals.filter(
@@ -722,7 +723,7 @@ export function getLocalSignalEnvironment(
   // ここで getLocalModelUpdatedAt が必要だが循環参照を防ぐためにローカルで計算する
   const updatedCandidates = [
     openAIStatus?.updatedAt,
-    ...LOCAL_OBSERVATION_SIGNALS.map((signal) => signal.observedAt),
+    ...localObservationSignals.map((signal) => signal.observedAt),
     ...LOCAL_RESET_HISTORY.flatMap((item) => [
       item.closed_at,
       item.completed_at,
@@ -767,10 +768,11 @@ export function getSignalEnvironment(
 export function getLocalSignalEvaluation(
   data: RadarData | null,
   now: Date = new Date(),
+  localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): LocalSignalEvaluation {
-  const environment = data?.codex_environment ?? getLocalSignalEnvironment(undefined, now);
+  const environment = data?.codex_environment ?? getLocalSignalEnvironment(undefined, now, localObservationSignals);
   const latestResetAt = getLastGlobalResetAt(data, now);
-  const localStatusSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+  const localStatusSignals = localObservationSignals.filter(
     (signal) =>
       signal.type === "status_incident" &&
       isCurrentLocalSignal(signal, now) &&
@@ -825,7 +827,10 @@ export function getEffectiveSignalStatus(
   now: Date = new Date(),
 ) {
   const nowTime = now.getTime();
-  if (signal.resolvedAt) {
+  if (
+    signal.resolvedAt &&
+    getDateTime(signal.resolvedAt) <= nowTime
+  ) {
     return "resolved";
   }
 
@@ -892,6 +897,7 @@ export function getActiveOfficialNotice(
   data: RadarData | null,
   latestResetAt?: Date | null,
   now: Date = new Date(),
+  localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): ActiveOfficialNotice | null {
   const resolvedLatestResetAt = latestResetAt === undefined
     ? getLastGlobalResetAt(data, now)
@@ -936,7 +942,7 @@ export function getActiveOfficialNotice(
         sourceLabel: "Tibo (@tibo_maker)",
       }];
     });
-  const localNotices = LOCAL_OBSERVATION_SIGNALS
+  const localNotices = localObservationSignals
     .filter(
       (signal) =>
         signal.type === "official_notice" &&

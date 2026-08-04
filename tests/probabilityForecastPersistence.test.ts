@@ -23,9 +23,19 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
     "hazard-odds-v3-recency-bayes-h14-r2",
     "hazard-odds-v3-recency-bayes-h30-r2",
     "hazard-odds-v3-recency-bayes-h60-r2",
+    "hazard-odds-v4-logit-calibrated-prequential-v1",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);
+  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v1"];
+  assert.equal(calibrated.rawModelVersion, "hazard-odds-v2-random-only");
+  assert.equal(calibrated.evaluationMode, "prospective");
+  assert.equal(typeof calibrated.alpha24h, "number");
+  assert.equal(typeof calibrated.alpha48h, "number");
+  assert.equal(typeof calibrated.calibrationSampleCount24h, "number");
+  assert.equal(typeof calibrated.positiveCalibrationCount48h, "number");
+  assert.equal(typeof calibrated.horizonCoherenceAdjusted, "boolean");
+  assert.equal(typeof calibrated.fallbackUsed, "boolean");
   for (const forecast of Object.values(forecasts)) {
     assert.equal(forecast.generatedAt, now.toISOString());
     assert.ok(forecast.completedEventCount >= forecast.completedIntervalCount);
@@ -45,5 +55,8 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
     forecasts,
   );
   assert.deepEqual(Object.keys(debugInfo.experimentalProbabilityForecasts as object), Object.keys(forecasts));
-  assert.doesNotMatch(JSON.stringify(toPublicRadarSnapshot(data, "en", { calculationNow: now })), /hazard-odds-v3-recency/);
+  assert.doesNotMatch(
+    JSON.stringify(toPublicRadarSnapshot(data, "en", { calculationNow: now })),
+    /hazard-odds-v3-recency|hazard-odds-v4-logit-calibrated|alpha24h|alpha48h|calibrationSampleCount/,
+  );
 });

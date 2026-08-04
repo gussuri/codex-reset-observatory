@@ -1,4 +1,6 @@
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
+export const CALIBRATED_SHADOW_MODEL_VERSION =
+  "hazard-odds-v4-logit-calibrated-prequential-v1";
 
 export const HAZARD_BIN_HOURS = 24;
 export const HAZARD_TAIL_START_DAYS = 7;

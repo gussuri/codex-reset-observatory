@@ -13,6 +13,11 @@ import {
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
 } from "@/lib/radar/shadowProbability";
+import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  calculateCalibratedShadowProbability,
+  type CalibratedShadowProbabilityResult,
+} from "@/lib/radar/calibratedShadowProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
@@ -36,6 +41,22 @@ export type ExperimentalProbabilityForecast = {
   combinedSignalMultiplier48h: number;
   officialNoticeOverride: boolean;
   targetDefinition: string;
+  rawModelVersion?: string;
+  rawProbability24h?: number;
+  rawProbability48h?: number;
+  alpha24h?: number;
+  alpha48h?: number;
+  calibrationSampleCount24h?: number;
+  calibrationSampleCount48h?: number;
+  positiveCalibrationCount24h?: number;
+  positiveCalibrationCount48h?: number;
+  priorStdDev?: number;
+  minimumSamples?: number;
+  lastResolvedOrigin24h?: string | null;
+  lastResolvedOrigin48h?: string | null;
+  horizonCoherenceAdjusted?: boolean;
+  fallbackUsed?: boolean;
+  evaluationMode?: "prospective";
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;
@@ -63,6 +84,45 @@ function toExperimentalProbabilityForecast(
   };
 }
 
+function toCalibratedExperimentalProbabilityForecast(
+  result: CalibratedShadowProbabilityResult,
+  raw: ShadowProbabilityResult,
+): ExperimentalProbabilityForecast {
+  return {
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability24h: result.probability24h,
+    probability48h: result.probability48h,
+    halfLifeDays: null,
+    completedEventCount: raw.hazard.completedEventCount,
+    completedIntervalCount: raw.hazard.completedIntervalCount,
+    weightedEventCount: raw.hazard.weightedEventCount,
+    weightedExposureDays: raw.hazard.weightedExposureHours / 24,
+    baseline24h: raw.baseline.probability24h,
+    baseline48h: raw.baseline.probability48h,
+    combinedSignalMultiplier24h: raw.multipliers.combinedAfterCap.probability24h,
+    combinedSignalMultiplier48h: raw.multipliers.combinedAfterCap.probability48h,
+    officialNoticeOverride: result.officialNoticeOverride,
+    targetDefinition: result.targetDefinition,
+    rawModelVersion: result.rawModelVersion,
+    rawProbability24h: result.rawProbability24h,
+    rawProbability48h: result.rawProbability48h,
+    alpha24h: result.alpha24h,
+    alpha48h: result.alpha48h,
+    calibrationSampleCount24h: result.calibrationSampleCount24h,
+    calibrationSampleCount48h: result.calibrationSampleCount48h,
+    positiveCalibrationCount24h: result.positiveCalibrationCount24h,
+    positiveCalibrationCount48h: result.positiveCalibrationCount48h,
+    priorStdDev: result.priorStdDev,
+    minimumSamples: result.minimumSamples,
+    lastResolvedOrigin24h: result.lastResolvedOrigin24h,
+    lastResolvedOrigin48h: result.lastResolvedOrigin48h,
+    horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
+    fallbackUsed: result.fallbackUsed,
+    evaluationMode: result.evaluationMode,
+  };
+}
+
 export function buildExperimentalProbabilityForecasts(
   data: Parameters<typeof calculateShadowProbability>[0],
   options: ShadowProbabilityOptions & {
@@ -72,6 +132,10 @@ export function buildExperimentalProbabilityForecasts(
   const { shadowProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
+  const calibrated = calculateCalibratedShadowProbability(data, {
+    ...calculationOptions,
+    shadowProbability: v2,
+  });
   const forecasts: ExperimentalProbabilityForecasts = {
     [SHADOW_PROBABILITY_MODEL_VERSION]: toExperimentalProbabilityForecast(v2, null),
   };
@@ -81,6 +145,7 @@ export function buildExperimentalProbabilityForecasts(
     )?.halfLifeDays ?? null;
     forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
   }
+  forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
   return forecasts;
 }
 

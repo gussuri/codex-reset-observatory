@@ -18,7 +18,10 @@ import {
   SHADOW_SIGNAL_MULTIPLIER_CONFIG,
   SHADOW_TARGET_DEFINITION,
 } from "@/data/shadowProbabilityConfig";
-import { LOCAL_OBSERVATION_SIGNALS } from "@/data/observationSignals";
+import {
+  LOCAL_OBSERVATION_SIGNALS,
+  type LocalObservationSignal,
+} from "@/data/observationSignals";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type {
   ActiveOfficialNotice,
@@ -131,6 +134,7 @@ export type ShadowProbabilityOptions = {
   activeOfficialNotice?: ActiveOfficialNotice | null;
   regularResetExpectedAt?: string | null;
   staticHistory?: Array<WindowEventLike>;
+  localObservationSignals?: Array<LocalObservationSignal>;
 };
 
 export type ShadowProbabilityModelOptions = {
@@ -507,8 +511,13 @@ function getLatestAcceptedTiboResetTime(data: RadarData | null, now: Date) {
   );
 }
 
-function getTeaserScore(data: RadarData | null, now: Date, latestResetTime: number | null) {
-  const activeLocalBoosts = LOCAL_OBSERVATION_SIGNALS.filter((signal) => {
+function getTeaserScore(
+  data: RadarData | null,
+  now: Date,
+  latestResetTime: number | null,
+  localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
+) {
+  const activeLocalBoosts = localObservationSignals.filter((signal) => {
     const observedAt = getTimestamp(signal.observedAt);
     return Boolean(
       observedAt !== null &&
@@ -583,12 +592,13 @@ function getShadowSignalInputs(
   signalEvaluation: LocalSignalEvaluation,
   latestResetTime: number | null,
   regularResetExpectedAt: string | null | undefined,
+  localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
   return {
     recentResetCount7d: getRecent7DayResetCount(data, now),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
-    teaserScore: getTeaserScore(data, now, latestResetTime),
+    teaserScore: getTeaserScore(data, now, latestResetTime, localObservationSignals),
     normalizedStatusScore: clamp01(
       signalEvaluation.statusIncidents.weightedStatusScore /
         LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
@@ -638,7 +648,8 @@ export function calculateShadowProbabilityForModel(
   modelOptions: ShadowProbabilityModelOptions = {},
 ): ShadowProbabilityResult {
   const now = options.now ?? new Date();
-  const signalEvaluation = options.signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const localObservationSignals = options.localObservationSignals ?? LOCAL_OBSERVATION_SIGNALS;
+  const signalEvaluation = options.signalEvaluation ?? getLocalSignalEvaluation(data, now, localObservationSignals);
   const events = getShadowCompletedResetEvents(data, now, options.staticHistory);
   const hazard = buildShadowHazard(events, now, modelOptions.hazardOptions);
   const latestResetTime = events.length > 0
@@ -649,6 +660,7 @@ export function calculateShadowProbabilityForModel(
         data,
         latestResetTime === null ? null : new Date(latestResetTime),
         now,
+        localObservationSignals,
       )
     : options.activeOfficialNotice;
   const ageHours = latestResetTime === null
@@ -664,6 +676,7 @@ export function calculateShadowProbabilityForModel(
     signalEvaluation,
     latestResetTime,
     options.regularResetExpectedAt,
+    localObservationSignals,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs);
   const adjusted = pair(
