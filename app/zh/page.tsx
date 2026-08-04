@@ -54,6 +54,7 @@ export default async function ChineseHome() {
   return (
     <RadarDashboard
       initialData={initialData}
+      initialFetchedAt={initialData.checkedAt}
       locale="zh"
     />
   );

@@ -9,11 +9,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CachedRadarData,
   getRadarViewModel,
-  getRefreshIntervalMs,
   isSafeHttpUrl,
 } from "@/lib/radar";
 import {
@@ -25,6 +24,13 @@ import {
 } from "@/lib/radar/clientState";
 import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import {
+  canStartRadarRefresh,
+  getInitialRefreshPlan,
+  getRefreshRetryDelayMs,
+  RADAR_FETCH_TIMEOUT_MS,
+  startAbortTimeout,
+} from "@/lib/radar/refreshPolicy";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
@@ -40,12 +46,21 @@ export function RadarDashboard({
   initialFetchedAt?: string | null;
   locale?: Locale;
 }) {
-  const [state, setState] = useState<RadarLoadState>({
+  const resolvedInitialFetchedAt = initialFetchedAt ?? initialData?.checkedAt ?? null;
+  const [state, setState] = useState<RadarLoadState>(() => ({
     data: initialData ?? null,
-    fetchedAt: initialFetchedAt ?? initialData?.checkedAt ?? null,
+    fetchedAt: resolvedInitialFetchedAt,
     isStale: initialData?.dataHealth.stale ?? false,
     refreshError: null,
-  });
+  }));
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const lifecycleIdRef = useRef(0);
+  const inFlightRef = useRef<AbortController | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const failureCountRef = useRef(0);
+  const latestDataRef = useRef<PublicRadarSnapshot | null>(initialData ?? null);
+  const latestFetchedAtRef = useRef<string | null>(resolvedInitialFetchedAt);
   const cacheKey = `codex-reset-observatory:last-success:${locale}`;
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
@@ -56,9 +71,32 @@ export function RadarDashboard({
     }
   }, [cacheKey, locale]);
 
-  const fetchRadar = useCallback(async () => {
+  const fetchRadar = useCallback(async (lifecycleId: number) => {
+    const isCurrentLifecycle = () => lifecycleIdRef.current === lifecycleId;
+    const environment = {
+      visibilityState: typeof document === "undefined" ? "visible" : document.visibilityState,
+      onLine: typeof navigator === "undefined" || navigator.onLine !== false,
+      inFlight: inFlightRef.current !== null,
+    };
+
+    if (!isCurrentLifecycle() || !canStartRadarRefresh(environment)) {
+      return { kind: "skipped" as const };
+    }
+
+    const controller = new AbortController();
+    inFlightRef.current = controller;
+    const timeout = startAbortTimeout(
+      controller,
+      RADAR_FETCH_TIMEOUT_MS,
+      window.setTimeout.bind(window),
+      window.clearTimeout.bind(window),
+    );
+
     try {
-      const response = await fetch(`/api/current?locale=${locale}`, { cache: "no-store" });
+      const response = await fetch(`/api/current?locale=${locale}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch current data");
@@ -66,8 +104,16 @@ export function RadarDashboard({
 
       const data = (await response.json()) as PublicRadarSnapshot;
       const fetchedAt = data.checkedAt;
+      if (!isCurrentLifecycle()) {
+        return { kind: "aborted" as const };
+      }
 
-      setState(applyRefreshSuccess(data, fetchedAt));
+      const nextState = applyRefreshSuccess(data, fetchedAt);
+      stateRef.current = nextState;
+      setState(nextState);
+      latestDataRef.current = data;
+      latestFetchedAtRef.current = fetchedAt;
+      failureCountRef.current = 0;
 
       try {
         window.localStorage.setItem(
@@ -82,15 +128,143 @@ export function RadarDashboard({
       } catch {
         // Cache persistence is best-effort; the successful live response remains current.
       }
+      return { kind: "success" as const, data, fetchedAt };
     } catch {
+      if (!isCurrentLifecycle() || (controller.signal.aborted && !timeout.hasTimedOut())) {
+        return { kind: "aborted" as const };
+      }
+
       const cached = loadCachedData();
-      setState((current) => applyRefreshFailure(current, cached));
+      const nextState = applyRefreshFailure(stateRef.current, cached);
+      stateRef.current = nextState;
+      setState(nextState);
+      latestDataRef.current = nextState.data;
+      latestFetchedAtRef.current = nextState.fetchedAt;
+      failureCountRef.current += 1;
+
+      return {
+        kind: "failure" as const,
+        retryDelayMs: getRefreshRetryDelayMs(failureCountRef.current),
+      };
+    } finally {
+      timeout.cancel();
+      if (inFlightRef.current === controller) {
+        inFlightRef.current = null;
+      }
     }
   }, [cacheKey, loadCachedData, locale]);
 
   useEffect(() => {
-    void fetchRadar();
-  }, [fetchRadar]);
+    const lifecycleId = lifecycleIdRef.current + 1;
+    lifecycleIdRef.current = lifecycleId;
+    failureCountRef.current = 0;
+
+    const initialState: RadarLoadState = {
+      data: initialData ?? null,
+      fetchedAt: resolvedInitialFetchedAt,
+      isStale: initialData?.dataHealth.stale ?? false,
+      refreshError: null,
+    };
+    stateRef.current = initialState;
+    setState(initialState);
+    latestDataRef.current = initialData ?? null;
+    latestFetchedAtRef.current = resolvedInitialFetchedAt;
+
+    const clearRefreshTimer = () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+
+    const isCurrentLifecycle = () => lifecycleIdRef.current === lifecycleId;
+
+    const scheduleNextRefresh = (delayMs: number) => {
+      if (!isCurrentLifecycle()) return;
+
+      const canSchedule = canStartRadarRefresh({
+        visibilityState: document.visibilityState,
+        onLine: navigator.onLine !== false,
+        inFlight: false,
+      });
+      if (!canSchedule) return;
+
+      clearRefreshTimer();
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        void runRefresh();
+      }, Math.max(0, delayMs));
+    };
+
+    const runRefresh = async () => {
+      if (!isCurrentLifecycle()) return;
+
+      const result = await fetchRadar(lifecycleId);
+      if (!isCurrentLifecycle()) return;
+
+      if (result.kind === "success") {
+        const plan = getInitialRefreshPlan(result.data, result.fetchedAt, Date.now());
+        scheduleNextRefresh(
+          plan.action === "wait"
+            ? plan.delayMs
+            : getRefreshRetryDelayMs(Math.max(1, failureCountRef.current + 1)),
+        );
+      } else if (result.kind === "failure") {
+        scheduleNextRefresh(result.retryDelayMs);
+      }
+    };
+
+    const resumeRefreshLifecycle = () => {
+      if (!isCurrentLifecycle()) return;
+
+      const plan = getInitialRefreshPlan(
+        latestDataRef.current,
+        latestFetchedAtRef.current,
+        Date.now(),
+      );
+      if (plan.action === "fetch") {
+        void runRefresh();
+      } else {
+        scheduleNextRefresh(plan.delayMs);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        clearRefreshTimer();
+        return;
+      }
+
+      resumeRefreshLifecycle();
+    };
+
+    const handleOnline = () => {
+      resumeRefreshLifecycle();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
+
+    const initialPlan = getInitialRefreshPlan(
+      initialData,
+      resolvedInitialFetchedAt,
+      Date.now(),
+    );
+    if (initialPlan.action === "fetch") {
+      void runRefresh();
+    } else {
+      scheduleNextRefresh(initialPlan.delayMs);
+    }
+
+    return () => {
+      lifecycleIdRef.current += 1;
+      clearRefreshTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
+      inFlightRef.current?.abort();
+      inFlightRef.current = null;
+    };
+  }, [fetchRadar, initialData, locale, resolvedInitialFetchedAt]);
 
   const viewModel = useMemo(
     () => state.data?.viewModel ?? getRadarViewModel(null, locale),
@@ -102,19 +276,6 @@ export function RadarDashboard({
     dashboardDataState === "degraded" || dashboardDataState === "unavailable";
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
-  const refreshMs = useMemo(
-    () => getRefreshIntervalMs(probability24h),
-    [probability24h],
-  );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void fetchRadar();
-    }, refreshMs);
-
-    return () => window.clearInterval(timer);
-  }, [fetchRadar, refreshMs]);
-
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",

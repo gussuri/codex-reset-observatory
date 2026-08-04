@@ -54,6 +54,7 @@ export default async function EnglishHome() {
   return (
     <RadarDashboard
       initialData={initialData}
+      initialFetchedAt={initialData.checkedAt}
       locale="en"
     />
   );
