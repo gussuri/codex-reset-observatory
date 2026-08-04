@@ -20,9 +20,9 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
 
   assert.deepEqual(Object.keys(forecasts), [
     "hazard-odds-v2-random-only",
-    "hazard-odds-v3-recency-bayes-h14",
-    "hazard-odds-v3-recency-bayes-h30",
-    "hazard-odds-v3-recency-bayes-h60",
+    "hazard-odds-v3-recency-bayes-h14-r2",
+    "hazard-odds-v3-recency-bayes-h30-r2",
+    "hazard-odds-v3-recency-bayes-h60-r2",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);

@@ -239,8 +239,19 @@ function createEmptyBins() {
   }));
 }
 
-function addExposure(bins: Array<ShadowHazardBin>, startHour: number, durationHours: number) {
-  if (!Number.isFinite(startHour) || !Number.isFinite(durationHours) || durationHours <= 0) {
+function addExposure(
+  bins: Array<ShadowHazardBin>,
+  startHour: number,
+  durationHours: number,
+  weight = 1,
+) {
+  if (
+    !Number.isFinite(startHour)
+    || !Number.isFinite(durationHours)
+    || durationHours <= 0
+    || !Number.isFinite(weight)
+    || weight < 0
+  ) {
     return;
   }
 
@@ -251,7 +262,7 @@ function addExposure(bins: Array<ShadowHazardBin>, startHour: number, durationHo
     const bin = bins[index];
     const boundary = bin.endHour ?? Number.POSITIVE_INFINITY;
     const segmentEnd = Math.min(endHour, boundary);
-    bin.exposureHours += Math.max(0, segmentEnd - cursor);
+    bin.exposureHours += Math.max(0, segmentEnd - cursor) * weight;
     if (!Number.isFinite(segmentEnd) || segmentEnd <= cursor) break;
     cursor = segmentEnd;
   }
@@ -276,9 +287,9 @@ export function buildShadowHazard(
   ).sort((left, right) => getTimestamp(left.resetAt)! - getTimestamp(right.resetAt)!);
 
   const bins = createEmptyBins();
-  let observedEventCount = 0;
+  let rawObservedEventCount = 0;
   let weightedEventCount = 0;
-  let totalExposureHours = 0;
+  let weightedExposureHours = 0;
 
   for (let index = 1; index < uniqueEvents.length; index += 1) {
     const previousTime = getTimestamp(uniqueEvents[index - 1].resetAt)!;
@@ -291,25 +302,26 @@ export function buildShadowHazard(
       intervalHours,
     }) ?? 1;
     const weight = Number.isFinite(rawWeight) && rawWeight >= 0 ? rawWeight : 0;
-    const weightedIntervalHours = intervalHours * weight;
-    addExposure(bins, 0, weightedIntervalHours);
+    addExposure(bins, 0, intervalHours, weight);
     bins[getBinIndex(intervalHours)].observedEvents += weight;
-    observedEventCount += 1;
+    rawObservedEventCount += 1;
     weightedEventCount += weight;
-    totalExposureHours += weightedIntervalHours;
+    weightedExposureHours += intervalHours * weight;
   }
 
   if (uniqueEvents.length > 0) {
     const latestTime = getTimestamp(uniqueEvents[uniqueEvents.length - 1].resetAt)!;
     const censoredHours = Math.max(0, (nowTime - latestTime) / HOUR_MS);
-    addExposure(bins, 0, censoredHours);
-    totalExposureHours += censoredHours;
+    addExposure(bins, 0, censoredHours, 1);
+    weightedExposureHours += censoredHours;
   }
 
+  const effectiveEventCount = weightedEventCount;
+  const effectiveExposureHours = weightedExposureHours;
   const globalLambdaPerHour = (
-    observedEventCount + GLOBAL_PRIOR_EVENT_COUNT
+    effectiveEventCount + GLOBAL_PRIOR_EVENT_COUNT
   ) / (
-    totalExposureHours + GLOBAL_PRIOR_EXPOSURE_DAYS * 24
+    effectiveExposureHours + GLOBAL_PRIOR_EXPOSURE_DAYS * 24
   );
   const binPriorExposureHours = BIN_PRIOR_EQUIVALENT_EXPOSURE_DAYS * 24;
   const binPriorEventCount = globalLambdaPerHour * binPriorExposureHours;
@@ -331,13 +343,13 @@ export function buildShadowHazard(
 
   return {
     globalLambdaPerHour,
-    observedEventCount,
+    observedEventCount: rawObservedEventCount,
     weightedEventCount,
     completedEventCount: uniqueEvents.length,
-    completedIntervalCount: observedEventCount,
-    totalExposureHours,
-    weightedExposureHours: totalExposureHours,
-    totalExposureDays: totalExposureHours / 24,
+    completedIntervalCount: rawObservedEventCount,
+    totalExposureHours: weightedExposureHours,
+    weightedExposureHours,
+    totalExposureDays: weightedExposureHours / 24,
     bins,
   };
 }

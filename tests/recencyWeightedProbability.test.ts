@@ -6,6 +6,10 @@ import {
   calculateRecencyWeightedShadowProbability,
   getRecencyDecayWeight,
 } from "../lib/radar/recencyWeightedProbability";
+import {
+  GLOBAL_PRIOR_EVENT_COUNT,
+  GLOBAL_PRIOR_EXPOSURE_DAYS,
+} from "../data/shadowProbabilityConfig";
 import { buildShadowHazard, type ShadowResetEvent } from "../lib/radar/shadowProbability";
 import { getLocalRadarData } from "../lib/radar";
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
@@ -56,6 +60,43 @@ test("completed event and exposure use the same decay weight", () => {
   assert.ok(Math.abs(hazard.weightedEventCount - weight) < 1e-12);
   assert.ok(Math.abs(hazard.totalExposureHours - (intervalHours * weight + 44 * 24)) < 1e-9);
   assert.ok(Math.abs(hazard.weightedExposureHours - hazard.totalExposureHours) < 1e-12);
+});
+
+test("weighted exposure preserves every original segment of a 96-hour interval", () => {
+  const now = new Date("2026-01-05T00:00:00.000Z");
+  const hazard = buildShadowHazard([
+    event("a", "2026-01-01T00:00:00.000Z"),
+    event("b", "2026-01-05T00:00:00.000Z"),
+  ], now, {
+    completedIntervalWeight: () => 0.5,
+  });
+
+  assert.equal(hazard.completedIntervalCount, 1);
+  assert.deepEqual(
+    hazard.bins.slice(0, 4).map((bin) => bin.exposureHours),
+    [12, 12, 12, 12],
+  );
+  assert.equal(hazard.bins[4].exposureHours, 0);
+  assert.equal(hazard.bins[4].observedEvents, 0.5);
+  assert.equal(hazard.weightedEventCount, 0.5);
+});
+
+test("global lambda uses the same recency weight for events and exposure", () => {
+  const now = new Date("2026-01-05T00:00:00.000Z");
+  const weighted = buildShadowHazard([
+    event("a", "2026-01-01T00:00:00.000Z"),
+    event("b", "2026-01-05T00:00:00.000Z"),
+  ], now, {
+    completedIntervalWeight: () => 0.5,
+  });
+  const priorExposureHours = GLOBAL_PRIOR_EXPOSURE_DAYS * 24;
+  const effectiveEventCount = (
+    weighted.globalLambdaPerHour * (weighted.totalExposureHours + priorExposureHours)
+  ) - GLOBAL_PRIOR_EVENT_COUNT;
+  const priorExcludedRate = effectiveEventCount / weighted.totalExposureHours;
+
+  assert.ok(Math.abs(effectiveEventCount - weighted.weightedEventCount) < 1e-12);
+  assert.ok(Math.abs(priorExcludedRate - (1 / 96)) < 1e-12);
 });
 
 test("invalid half-life is rejected", () => {

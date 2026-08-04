@@ -62,15 +62,15 @@ export const SHADOW_TARGET_DEFINITION =
 
 export const RECENCY_SHADOW_MODEL_CONFIG = [
   {
-    modelVersion: "hazard-odds-v3-recency-bayes-h14",
+    modelVersion: "hazard-odds-v3-recency-bayes-h14-r2",
     halfLifeDays: 14,
   },
   {
-    modelVersion: "hazard-odds-v3-recency-bayes-h30",
+    modelVersion: "hazard-odds-v3-recency-bayes-h30-r2",
     halfLifeDays: 30,
   },
   {
-    modelVersion: "hazard-odds-v3-recency-bayes-h60",
+    modelVersion: "hazard-odds-v3-recency-bayes-h60-r2",
     halfLifeDays: 60,
   },
 ] as const;

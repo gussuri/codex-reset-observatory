@@ -16,6 +16,7 @@ import {
   applyOddsMultiplier,
   buildShadowHazard,
   calculateShadowProbability,
+  calculateShadowProbabilityForModel,
   calculateShadowSignalMultipliers,
   getShadowCompletedResetEvents,
   integrateHazardProbability,
@@ -193,6 +194,25 @@ test("hazard uses 24-hour bins and a 168-hour tail", () => {
     [0, 24], [24, 48], [48, 72], [72, 96], [96, 120], [120, 144], [144, 168], [168, null],
   ]);
   assert.equal(hazard.bins[7].observedEvents, 1);
+});
+
+test("unit recency weighting is an exact v2 regression", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const defaultResult = calculateShadowProbability(data, { now });
+  const unitWeightResult = calculateShadowProbabilityForModel(
+    data,
+    { now },
+    { hazardOptions: { completedIntervalWeight: () => 1 } },
+  );
+
+  assert.equal(unitWeightResult.hazard.globalLambdaPerHour, defaultResult.hazard.globalLambdaPerHour);
+  assert.deepEqual(unitWeightResult.hazard.bins, defaultResult.hazard.bins);
+  assert.equal(unitWeightResult.hazard.observedEventCount, defaultResult.hazard.observedEventCount);
+  assert.equal(unitWeightResult.hazard.weightedEventCount, defaultResult.hazard.weightedEventCount);
+  assert.equal(unitWeightResult.baseline.probability24h, defaultResult.baseline.probability24h);
+  assert.equal(unitWeightResult.baseline.probability48h, defaultResult.baseline.probability48h);
+  assert.deepEqual(unitWeightResult.predictions, defaultResult.predictions);
 });
 
 test("Bayesian smoothing keeps each implied daily probability inside the safety range", () => {
