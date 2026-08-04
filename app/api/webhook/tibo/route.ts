@@ -152,10 +152,9 @@ export async function POST(req: NextRequest) {
       classification_source: selectedClassification.classificationSource,
     };
 
-    // 7. Detect a first formal adoption before the upsert. The lookup is
-    // best-effort so a lookup failure never changes webhook persistence.
+    // 7. Detect a first formal adoption before the upsert. State lookup is
+    // fail-closed so an unknown existing state can never be overwritten.
     const supabase = getSupabaseServiceClient();
-    let formalLookupAvailable = true;
     let existingSignal: Partial<FormalTiboResetSignal> | null = null;
     try {
       const { data, error: lookupError } = await supabase
@@ -165,18 +164,24 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (lookupError) {
-        formalLookupAvailable = false;
-        console.warn("[Webhook Warning] Formal adoption lookup failed", {
+        console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
           reason: "lookup_failed",
         });
+        return NextResponse.json(
+          { error: "Tibo state lookup unavailable" },
+          { status: 503 },
+        );
       } else {
         existingSignal = data as Partial<FormalTiboResetSignal> | null;
       }
     } catch {
-      formalLookupAvailable = false;
-      console.warn("[Webhook Warning] Formal adoption lookup failed", {
+      console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
         reason: "lookup_failed",
       });
+      return NextResponse.json(
+        { error: "Tibo state lookup unavailable" },
+        { status: 503 },
+      );
     }
 
     const persistedPayload = preserveTiboWebhookState(payload, existingSignal, receivedAt);
@@ -196,11 +201,7 @@ export async function POST(req: NextRequest) {
       ai_notice_to_execution: persistedPayload.ai_notice_to_execution,
       expires_at: persistedPayload.expires_at,
     };
-    const newlyAdopted = isNewFormalAdoption(
-      formalCandidate,
-      existingSignal,
-      formalLookupAvailable,
-    );
+    const newlyAdopted = isNewFormalAdoption(formalCandidate, existingSignal);
 
     // 8. Supabase Upsert
     const { error } = await supabase
