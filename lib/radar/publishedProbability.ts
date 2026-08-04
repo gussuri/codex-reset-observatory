@@ -14,8 +14,7 @@ import type { RadarData } from "./types";
 export type PublishedProbabilitySource = "shadow" | "heuristic-fallback";
 export type PublishedProbabilityFallbackReason =
   | "shadow_exception"
-  | "shadow_invalid_prediction"
-  | "shadow_low_confidence";
+  | "shadow_invalid_prediction";
 
 export type PublishedProbabilityCalculation = {
   probability24h: number;
@@ -45,18 +44,12 @@ export function isValidShadowPrediction(
   );
 }
 
-export function hasAdoptableShadowConfidence(
-  shadow: Pick<ShadowProbabilityResult, "confidence">,
-) {
-  return shadow.confidence.level === "medium" || shadow.confidence.level === "high";
-}
-
 export function selectPublishedProbability(
   primary: ProbabilityCalculationAudit,
   shadow: ShadowProbabilityResult | null,
   fallbackReason: PublishedProbabilityCalculation["fallbackReason"] = null,
 ): PublishedProbabilityCalculation {
-  if (shadow && isValidShadowPrediction(shadow) && hasAdoptableShadowConfidence(shadow)) {
+  if (shadow && isValidShadowPrediction(shadow)) {
     return {
       probability24h: shadow.predictions.probability24h,
       probability48h: shadow.predictions.probability48h,
@@ -68,11 +61,7 @@ export function selectPublishedProbability(
     };
   }
 
-  const resolvedFallbackReason = fallbackReason ?? (
-    shadow && isValidShadowPrediction(shadow) && !hasAdoptableShadowConfidence(shadow)
-      ? "shadow_low_confidence"
-      : "shadow_invalid_prediction"
-  );
+  const resolvedFallbackReason = fallbackReason ?? "shadow_invalid_prediction";
 
   return {
     probability24h: primary.probability24h,

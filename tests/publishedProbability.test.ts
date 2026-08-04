@@ -17,7 +17,7 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
-test("low-confidence Shadow values fall back consistently across DTO, UI, and history fields", () => {
+test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const viewModel = getRadarViewModel(data, "ja", false, undefined, NOW);
   const published = calculatePublishedProbability(data, {
@@ -49,14 +49,16 @@ test("low-confidence Shadow values fall back consistently across DTO, UI, and hi
     probability48h: number;
   };
 
-  assert.equal(published.source, "heuristic-fallback");
+  assert.equal(published.source, "shadow");
   assert.ok(published.shadow);
+  assert.equal(published.adoptedModel, "hazard-odds-v2-random-only");
+  assert.equal(published.fallbackReason, null);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
   assert.equal(snapshot.viewModel.probability24h, published.probability24h);
   assert.equal(snapshot.viewModel.probability48h, published.probability48h);
-  assert.equal(publishedDebug.version, published.primary.modelVersion);
-  assert.equal(publishedDebug.source, "heuristic-fallback");
+  assert.equal(publishedDebug.version, "hazard-odds-v2-random-only");
+  assert.equal(publishedDebug.source, "shadow");
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
   assert.match(html, new RegExp(probabilityToPercent(published.probability24h, "ja")));
@@ -64,29 +66,53 @@ test("low-confidence Shadow values fall back consistently across DTO, UI, and hi
  assert.ok(published.probability24h <= published.probability48h);
  });
 
-test("medium-confidence Shadow values are adopted as the public model", () => {
+test("valid Shadow values are adopted at every confidence level", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const primary = getLocalProbabilityCalculation(data, { now: NOW });
   const shadow = calculatePublishedProbability(data, { now: NOW }, { logFallback: false }).shadow;
   assert.ok(shadow);
 
-  const selected = selectPublishedProbability(primary, {
-    ...shadow,
-    confidence: {
-      ...shadow.confidence,
-      level: "medium",
-    },
-    predictions: {
-      probability24h: 0.18,
-      probability48h: 0.31,
-    },
-  });
+  for (const level of ["low", "medium", "high"] as const) {
+    const selected = selectPublishedProbability(primary, {
+      ...shadow,
+      confidence: {
+        ...shadow.confidence,
+        level,
+      },
+      predictions: {
+        probability24h: 0.18,
+        probability48h: 0.31,
+      },
+    });
 
-  assert.equal(selected.source, "shadow");
-  assert.equal(selected.adoptedModel, "hazard-odds-v2-random-only");
-  assert.equal(selected.fallbackReason, null);
-  assert.equal(selected.probability24h, 0.18);
-  assert.equal(selected.probability48h, 0.31);
+    assert.equal(selected.source, "shadow");
+    assert.equal(selected.adoptedModel, "hazard-odds-v2-random-only");
+    assert.equal(selected.fallbackReason, null);
+    assert.equal(selected.probability24h, 0.18);
+    assert.equal(selected.probability48h, 0.31);
+  }
+});
+
+test("valid low-confidence Shadow values do not emit a fallback warning", () => {
+  const originalWarn = console.warn;
+  let warningCount = 0;
+  console.warn = () => {
+    warningCount += 1;
+  };
+
+  try {
+    const published = calculatePublishedProbability(
+      getLocalRadarData({ calculationNow: NOW }),
+      { now: NOW },
+    );
+
+    assert.equal(published.source, "shadow");
+    assert.equal(published.fallbackReason, null);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warningCount, 0);
 });
 
 test("official notice keeps the existing 90% and 96% override in the public model", () => {
@@ -142,8 +168,15 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
   assert.equal(exceptionFallback.source, "heuristic-fallback");
   assert.equal(exceptionFallback.fallbackReason, "shadow_exception");
 
-  const lowConfidence = selectPublishedProbability(primary, validShadow);
-  assert.equal(lowConfidence.fallbackReason, "shadow_low_confidence");
+  const lowConfidence = selectPublishedProbability(primary, {
+    ...validShadow,
+    confidence: {
+      ...validShadow.confidence,
+      level: "low",
+    },
+  });
+  assert.equal(lowConfidence.source, "shadow");
+  assert.equal(lowConfidence.fallbackReason, null);
 });
 
 test("public probability fields stay aligned in Japanese, English, and Chinese", () => {
