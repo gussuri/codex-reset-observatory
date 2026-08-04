@@ -151,7 +151,7 @@ test("canonical and hreflang links point to the same three localized routes", ()
   }
 });
 
-test("Japanese home HTML exposes the English formal brand and Japanese supporting name", () => {
+test("Japanese home HTML exposes the Japanese main brand and English supporting name", () => {
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
       initialData: toPublicRadarSnapshot(getLocalRadarData({}), "ja"),
@@ -159,11 +159,17 @@ test("Japanese home HTML exposes the English formal brand and Japanese supportin
     }),
   );
 
-  assert.match(html, /<h1[^>]*>Codex Reset Observatory<\/h1>/);
-  assert.match(html, /Codexリセット観測所/);
+  assert.match(html, /<h1[^>]*>Codexリセット観測所<\/h1>/);
+  assert.match(html, /<p[^>]*>Codex Reset Observatory<\/p>/);
 });
 
-test("all home locales expose the same formal brand in the main heading", () => {
+test("all home locales use the locale-appropriate main heading and formal brand", () => {
+  const expectedHeadings = {
+    ja: "Codexリセット観測所",
+    en: "Codex Reset Observatory",
+    zh: "Codex 重置观测站",
+  } as const;
+
   for (const locale of ["ja", "en", "zh"] as const) {
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
@@ -172,7 +178,8 @@ test("all home locales expose the same formal brand in the main heading", () => 
       }),
     );
 
-    assert.match(html, /<h1[^>]*>Codex Reset Observatory<\/h1>/, locale);
+    assert.match(html, new RegExp(`<h1[^>]*>${expectedHeadings[locale]}<\\/h1>`), locale);
+    assert.match(html, /Codex Reset Observatory/, locale);
   }
 });
 

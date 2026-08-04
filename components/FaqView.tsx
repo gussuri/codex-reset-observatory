@@ -70,7 +70,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "任意リセットを使うとどうなりますか？",
-          answer: "任意リセットを使用すると、対象となる利用上限がリセットされます。さらに次回の定期リセットが1週間後に変更されます。任意リセットを使用すると、こちらのサイトに表示される定期リセットのタイミングとずれるので注意してください。",
+          answer: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
         },
       ] as Array<FaqItem>,
     },
@@ -97,7 +97,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is a Codex Banked Reset (Manual Reset)?",
-          answer: "A Banked Reset is an account-specific reset available in your account. Triggering a manual reset restores the applicable usage limits, and your next weekly reset date will move to exactly one week from the moment of use.",
+          answer: "A Banked Reset is an account-specific reset available in your account. Using it refreshes the applicable usage limit. The following usage window and reset date shown for your account may differ from this site’s shared reference date.",
         },
         {
           question: "What is Codex usage limits reset?",
@@ -154,7 +154,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What happens if I use a Banked Reset?",
-          answer: "Using a Banked Reset (manual reset) restores the applicable usage limits. Additionally, your next weekly reset date will be rescheduled to exactly one week from the moment of use. Please note that this will cause your reset timing to differ from the reference weekly reset date shown on this site.",
+          answer: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and reset date shown for your account may differ from the shared reference date on this site.",
         },
       ] as Array<FaqItem>,
     },
@@ -214,7 +214,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "使用手动重置后会发生什么？",
-          answer: "使用手动重置后，相关使用额度会恢复。下一次定期重置时间也会调整为从使用手动重置起的一周后。因此，你的实际重置时间可能会与本站显示的公共定期重置参考日期不同。",
+          answer: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
         },
       ] as Array<FaqItem>,
     },

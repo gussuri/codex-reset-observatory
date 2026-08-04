@@ -1,18 +1,149 @@
 import Link from "next/link";
-import { ExternalLink, History, Info } from "lucide-react";
+import { ExternalLink, History } from "lucide-react";
 import {
   isSafeHttpUrl,
 } from "@/lib/radar";
-import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
+import type { HistorySourceKind, Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
-import { translateUI } from "@/lib/radar/i18n";
+import { translateDynamic, translateUI } from "@/lib/radar/i18n";
 import { DeveloperLink } from "./DeveloperLink";
 
 type HistoryViewProps = {
   data: PublicRadarSnapshot;
   locale: Locale;
 };
+
+type HistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
+
+function hasPriorSignal(item: HistoryItem) {
+  if (!item.signalAt || !item.resetAt) return false;
+  const signalTime = new Date(item.signalAt).getTime();
+  const resetTime = new Date(item.resetAt).getTime();
+  return Number.isFinite(signalTime) && Number.isFinite(resetTime) && signalTime < resetTime;
+}
+
+function getMonthLabel(value: string | null | undefined, locale: Locale) {
+  if (!value || Number.isNaN(new Date(value).getTime())) {
+    return locale === "en" ? "Date unknown" : locale === "zh" ? "日期未知" : "日付不明";
+  }
+
+  const language = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
+  return new Intl.DateTimeFormat(language, {
+    year: "numeric",
+    month: "long",
+    timeZone: "Asia/Tokyo",
+  }).format(new Date(value));
+}
+
+function groupByMonth(items: HistoryItem[], locale: Locale) {
+  const groups = new Map<string, { label: string; items: HistoryItem[] }>();
+  for (const item of items) {
+    const date = item.resetAt ?? item.date ?? null;
+    const label = getMonthLabel(date, locale);
+    const key = date && !Number.isNaN(new Date(date).getTime())
+      ? new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", timeZone: "Asia/Tokyo" }).format(new Date(date))
+      : "unknown";
+    const group = groups.get(key) ?? { label, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+}
+
+function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
+  switch (sourceKind) {
+    case "direct_post":
+      return translateUI("sourceOriginalPost", locale);
+    case "profile":
+      return translateUI("sourceProfile", locale);
+    case "official_status":
+      return translateUI("sourceOfficialStatus", locale);
+    default:
+      return translateUI("sourceNotRecorded", locale);
+  }
+}
+
+function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) {
+  const label = getSourceLabel(item.sourceKind, locale);
+  const canLink = Boolean(item.sourceKind && item.sourceKind !== "none" && isSafeHttpUrl(item.source));
+
+  return canLink ? (
+    <a
+      className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
+      href={item.source ?? undefined}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {label}
+      <ExternalLink className="h-3.5 w-3.5" />
+    </a>
+  ) : (
+    <span className="text-slate-500">{label}</span>
+  );
+}
+
+function HistoryEventSection({
+  title,
+  description,
+  empty,
+  items,
+  locale,
+}: {
+  title: string;
+  description: string;
+  empty: string;
+  items: HistoryItem[];
+  locale: Locale;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
+      <header className="border-b border-slate-100 pb-4">
+        <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      </header>
+      <div className="mt-5 space-y-7">
+        {groupByMonth(items, locale).map((group) => (
+          <div key={group.label}>
+            <h3 className="text-sm font-semibold text-teal-800">{group.label}</h3>
+            <div className="mt-2 divide-y divide-slate-100">
+              {group.items.map((item) => (
+                <article
+                  className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto]"
+                  key={item.key}
+                >
+                  <div>
+                    <h4 className="ui-heading text-lg font-semibold text-slate-950">
+                      {translateDynamic(item.title, locale)}
+                    </h4>
+                    <ResetHistoryDetails item={item} locale={locale} />
+                  </div>
+
+                  <div className="text-sm leading-6 text-slate-700 md:text-right">
+                    {hasPriorSignal(item) ? (
+                      <p>
+                        {item.signalLabel}: <LocalizedDateTime value={item.signalAt} locale={locale} />
+                      </p>
+                    ) : null}
+                    {item.resetAt ? (
+                      <p>
+                        {item.resetLabel}: <LocalizedDateTime value={item.resetAt} locale={locale} />
+                      </p>
+                    ) : null}
+                    <HistorySource item={item} locale={locale} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+        {items.length === 0 ? (
+          <p className="text-sm leading-6 text-slate-600">{empty}</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
 
 export function HistoryView({ data, locale }: HistoryViewProps) {
   const viewModel = data.viewModel;
@@ -21,12 +152,12 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     ja: {
       category: "Codexリセット履歴",
       title: "リセット履歴",
-      description: "詫び・ご祝儀・予告付き臨時リセットに加えて、1週間サイクルの定期リセットや任意リセット配布も表示します。",
+      description: "確認済みの全体リセットと、任意リセットの配布記録を、実施時刻と出典を分けて整理しています。",
       empty: "履歴データはまだ取得できていません。",
-      cardTitle: "そのほかのリセット",
-      cardHeader: "任意リセット",
-      cardParagraph1: "アカウントごとに付与・消費される個人向けの任意リセットです。使用したアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。",
-      cardParagraph2: "個人向けの配布記録は履歴に残しますが、全体向けのリセットではないため、最新リセットやランダムリセット期待度の計算には含めていません。",
+      confirmedTitle: "確認済みの全体リセット",
+      confirmedDescription: "全体の利用上限に影響する、強制リセットや障害対応・記念のリセットを表示しています。",
+      bankedTitle: "任意リセットの配布記録",
+      bankedDescription: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
       nav: {
         top: "トップへ戻る",
         about: "Aboutを見る",
@@ -38,12 +169,12 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     en: {
       category: "Codex usage limits reset history",
       title: "Recent Codex Reset Events",
-      description: "Review recent Codex usage limits reset signals, weekly reset events, Banked Resets, and forecast changes over time.",
+      description: "Review confirmed global resets and Banked Reset distribution records with their execution times and source details.",
       empty: "No reset history is available yet.",
-      cardTitle: "Other reset records",
-      cardHeader: "Manual and Banked Resets",
-      cardParagraph1: "Banked Resets are account-specific. They may appear in history as distribution records, but they are not counted as global reset events.",
-      cardParagraph2: "If you use one, your next weekly reset date will differ from the shared reference date shown on this site.",
+      confirmedTitle: "Confirmed global resets",
+      confirmedDescription: "This section lists forced resets and other incident, compensation, or celebration resets that affect global usage limits.",
+      bankedTitle: "Banked Reset distributions",
+      bankedDescription: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for your account may differ from the shared reference date on this site.",
       nav: {
         top: "Back to English top",
         about: "About",
@@ -55,12 +186,12 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
     zh: {
       category: "Codex 重置历史",
       title: "重置记录历史",
-      description: "显示故障补偿重置、庆祝重置、带预告的临时重置、每周循环的定期重置以及手动重置记录。",
+      description: "按类别整理已确认的全局重置和手动重置发放记录，并标明执行时间与来源。",
       empty: "暂无重置历史记录。",
-      cardTitle: "其他重置方式",
-      cardHeader: "手动重置",
-      cardParagraph1: "手动重置针对特定账号，相关记录可能会显示在历史记录中，但它们并不被视为全局重置事件。",
-      cardParagraph2: "如果您使用了手动重置，下一次定期重置的时间将与本站显示的公共参考日期产生偏差。",
+      confirmedTitle: "已确认的全局重置",
+      confirmedDescription: "这里显示会影响整体使用上限的强制重置，以及故障补偿或纪念活动等重置。",
+      bankedTitle: "手动重置发放记录",
+      bankedDescription: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
       nav: {
         top: "返回中文首页",
         about: "关于我们",
@@ -70,6 +201,13 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
       footerText: "正在显示重置历史。",
     },
   }[locale];
+
+  const confirmedItems = viewModel.recentHistory.filter(
+    (item) => item.recordKind !== "banked_distribution" && item.recordKind !== "reference",
+  );
+  const bankedItems = viewModel.recentHistory.filter(
+    (item) => item.recordKind === "banked_distribution",
+  );
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8" lang={locale}>
@@ -111,75 +249,21 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
           </div>
         </header>
 
-        <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-          <div className="divide-y divide-slate-100">
-            {viewModel.recentHistory.length > 0 ? (
-              viewModel.recentHistory.map((item) => (
-                <article
-                  className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto]"
-                  key={item.key}
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="ui-heading text-lg font-semibold text-slate-950">
-                        {item.title}
-                      </h2>
-                    </div>
-                    <ResetHistoryDetails item={item} locale={locale} />
-                  </div>
+        <HistoryEventSection
+          title={content.confirmedTitle}
+          description={content.confirmedDescription}
+          empty={content.empty}
+          items={confirmedItems}
+          locale={locale}
+        />
 
-                  <div className="text-sm leading-6 text-slate-700 md:text-right">
-                    {item.signalLabel ? (
-                      <p>
-                        {item.signalLabel}: <LocalizedDateTime value={item.signalAt} locale={locale} />
-                      </p>
-                    ) : null}
-                    {item.resetAt || item.resetLabel ? (
-                      <p>
-                        {item.resetLabel}: <LocalizedDateTime value={item.resetAt} locale={locale} />
-                      </p>
-                    ) : null}
-                    {isSafeHttpUrl(item.source) ? (
-                      <a
-                        className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
-                        href={item.source ?? undefined}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {translateUI("source", locale)}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="text-sm leading-6 text-slate-600">
-                {content.empty}
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-sky-200 bg-sky-50/90 p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
-            <div>
-              <p className="text-sm font-medium text-sky-700">
-                {content.cardTitle}
-              </p>
-              <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950">
-                {content.cardHeader}
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-700">
-                {content.cardParagraph1}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                {content.cardParagraph2}
-              </p>
-            </div>
-          </div>
-        </section>
+        <HistoryEventSection
+          title={content.bankedTitle}
+          description={content.bankedDescription}
+          empty={content.empty}
+          items={bankedItems}
+          locale={locale}
+        />
 
         <footer className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-950 p-5 text-sm text-white shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <nav className="flex flex-wrap gap-3 text-slate-300">

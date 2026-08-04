@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     absolute: "Codex 重置历史 | 确认最近的重置记录",
   },
   description:
-    "在简体中文中确认最近的 Codex 重置历史、故障补偿重置、庆祝重置、每周循环重置以及手动重置记录。",
+    "在简体中文中查看已确认的全局重置和手动重置发放记录。",
   alternates: {
     canonical: siteUrl("/zh/history"),
     languages: {
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex 重置历史",
     description:
-      "确认最近的 Codex 重置历史、每周循环重置以及手动重置记录。",
+      "查看已确认的全局重置和手动重置发放记录。",
     url: siteUrl("/zh/history"),
     siteName: SITE_NAME,
     type: "article",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex 重置历史",
     description:
-      "确认最近的 Codex 重置历史、每周循环重置以及手动重置记录。",
+      "查看已确认的全局重置和手动重置发放记录。",
     images: [SITE_OG_IMAGE_URL],
   },
 };

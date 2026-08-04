@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { LocalizedDateTime } from "../components/LocalizedDateTime";
+import { HistoryView } from "../components/HistoryView";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -121,4 +124,24 @@ test("unavailable data keeps the existing public error warning", () => {
   );
 
   assert.match(html, /ライブデータも保存済みデータも取得できません/);
+});
+
+test("history page separates confirmed events from banked distributions and groups by month", () => {
+  const data = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
+  const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
+
+  assert.match(html, /Confirmed global resets/);
+  assert.match(html, /Banked Reset distributions/);
+  assert.match(html, /August 2026/);
+  assert.match(html, /Original post/);
+  assert.match(html, /Source profile/);
+  assert.match(html, /Source not recorded/);
+  assert.doesNotMatch(html, /Weekly reset reference/);
+});
+
+test("current API keeps its shared cache and excludes responses from search indexing", () => {
+  const routeSource = readFileSync(resolve("app/api/current/route.ts"), "utf8");
+
+  assert.match(routeSource, /"Cache-Control": API_CACHE_CONTROL/);
+  assert.match(routeSource, /"X-Robots-Tag": "noindex, nofollow"/);
 });

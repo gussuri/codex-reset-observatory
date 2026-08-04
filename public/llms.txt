@@ -17,8 +17,11 @@ It estimates whether a Codex usage limits reset is likely within the next 24 or 
 - 48-hour Codex usage limits reset probability
 - Current expectation level and reasoning
 - Reset-related signals and status hints
+- A weekly reset reference calculated from the latest confirmed global reset; it is not a guaranteed account-wide execution time
 - Explanations of Codex Banked Reset (manual reset) and usage limits reset
 - Historical reset and probability information where available
+
+Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for an account may differ from this site’s shared weekly reference date.
 
 ## Common questions answered
 

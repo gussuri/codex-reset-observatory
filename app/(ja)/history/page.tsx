@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: "リセット履歴",
   description:
-    "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、任意リセット配布履歴を日本語で確認できます。",
+    "Codexの確認済み全体リセットと任意リセット配布記録を日本語で確認できます。",
   alternates: {
     canonical: siteUrl("/history"),
     languages: {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "リセット履歴",
     description:
-      "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、任意リセット配布履歴を日本語で確認できます。",
+      "Codexの確認済み全体リセットと任意リセット配布記録を日本語で確認できます。",
     url: siteUrl("/history"),
     siteName: SITE_NAME,
     type: "article",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "リセット履歴",
     description:
-      "Codexの臨時リセット、補償リセット、ご祝儀リセット、公式予告、1週間サイクルの定期リセット、任意リセット配布履歴を日本語で確認できます。",
+      "Codexの確認済み全体リセットと任意リセット配布記録を日本語で確認できます。",
     images: [SITE_OG_IMAGE_URL],
   },
 };

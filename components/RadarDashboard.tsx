@@ -22,7 +22,7 @@ import {
   parseCachedRadarData,
   type RadarLoadState,
 } from "@/lib/radar/clientState";
-import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
+import type { HistorySourceKind, Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import {
   canStartRadarRefresh,
@@ -36,6 +36,36 @@ import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
+
+function getCalendarDayKey(value: string | null | undefined) {
+  if (!value || Number.isNaN(new Date(value).getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Tokyo",
+  }).format(new Date(value));
+}
+
+function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
+  if (!signalAt || !resetAt) return false;
+  const signalTime = new Date(signalAt).getTime();
+  const resetTime = new Date(resetAt).getTime();
+  return Number.isFinite(signalTime) && Number.isFinite(resetTime) && signalTime < resetTime;
+}
+
+function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
+  switch (sourceKind) {
+    case "direct_post":
+      return translateUI("sourceOriginalPost", locale);
+    case "profile":
+      return translateUI("sourceProfile", locale);
+    case "official_status":
+      return translateUI("sourceOfficialStatus", locale);
+    default:
+      return translateUI("sourceNotRecorded", locale);
+  }
+}
 
 export function RadarDashboard({
   initialData,
@@ -277,6 +307,15 @@ export function RadarDashboard({
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const snapshotAt = state.data?.checkedAt ?? state.fetchedAt;
+  const hasResetToday = Boolean(
+    getCalendarDayKey(snapshotAt) &&
+      viewModel.recentHistory.some(
+        (item) =>
+          item.recordKind === "confirmed_global" &&
+          getCalendarDayKey(item.resetAt) === getCalendarDayKey(snapshotAt),
+      ),
+  );
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",
     icon: "text-amber-700",
@@ -295,10 +334,10 @@ export function RadarDashboard({
             </div>
             <div>
               <p className="text-xs font-medium leading-5 text-teal-700 sm:text-sm sm:leading-6">
-                {locale === "ja" ? SITE_NAME_JA : translateUI("subTitle", locale)}
+                {locale === "ja" || locale === "zh" ? SITE_NAME : translateUI("subTitle", locale)}
               </p>
               <h1 className="mt-0.5 whitespace-nowrap text-[1.15rem] font-semibold leading-tight tracking-normal text-slate-950 sm:mt-1 sm:text-4xl">
-                {SITE_NAME}
+                {locale === "ja" ? SITE_NAME_JA : locale === "zh" ? "Codex 重置观测站" : SITE_NAME}
               </h1>
               <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-600 sm:mt-3 sm:text-sm sm:leading-6">
                 {translateUI("description", locale)}
@@ -308,7 +347,7 @@ export function RadarDashboard({
           <div className="flex flex-wrap justify-end gap-2 sm:justify-start">
             {locale !== "ja" && (
               <Link
-                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
+                className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/"
               >
                 日本語
@@ -316,7 +355,7 @@ export function RadarDashboard({
             )}
             {locale !== "en" && (
               <Link
-                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
+                className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/en"
               >
                 English
@@ -324,7 +363,7 @@ export function RadarDashboard({
             )}
             {locale !== "zh" && (
               <Link
-                className="w-fit rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
+                className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/zh"
               >
                 简体中文
@@ -467,6 +506,27 @@ export function RadarDashboard({
               probability48h={probability48h}
             />
 
+            {!isDataUnavailable ? (
+              <div className="mt-4 grid gap-3 border-y border-slate-100 py-3 sm:grid-cols-2 sm:gap-5">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {translateUI("directAnswerResetToday", locale)}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">
+                    {translateUI(hasResetToday ? "directAnswerResetTodayYes" : "directAnswerResetTodayNo", locale)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {translateUI("directAnswerNextReset", locale)}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">
+                    {translateUI("directAnswerNextResetText", locale)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             {!isDataUnavailable && !hasOfficialNotice ? (
               <div
                 role="status"
@@ -521,7 +581,8 @@ export function RadarDashboard({
                 label={viewModel.latestWindow.scopeLabel ?? translateUI("scope", locale)}
                 value={translateDynamic(viewModel.latestWindow.scope, locale)}
               />
-              {viewModel.latestWindow.kind === "observed" ? (
+              {viewModel.latestWindow.kind === "observed" &&
+              hasPriorSignal(viewModel.latestWindow.openedAt, viewModel.latestWindow.closedAt) ? (
                 <InfoRow
                   label={translateUI("detectionTime", locale)}
                   value={<LocalizedDateTime value={viewModel.latestWindow.openedAt} locale={locale} />}
@@ -535,6 +596,26 @@ export function RadarDashboard({
                 label={viewModel.latestWindow.windowLabel ?? translateUI("windowLength", locale)}
                 value={translateDynamic(viewModel.latestWindow.windowLength, locale)}
               />
+              <InfoRow
+                label={translateUI("source", locale)}
+                value={
+                  viewModel.latestWindow.sourceKind &&
+                  viewModel.latestWindow.sourceKind !== "none" &&
+                  isSafeHttpUrl(viewModel.latestWindow.source) ? (
+                    <a
+                      className="inline-flex items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
+                      href={viewModel.latestWindow.source ?? undefined}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    getSourceLabel("none", locale)
+                  )
+                }
+              />
             </dl>
           </article>
         </section>
@@ -542,8 +623,11 @@ export function RadarDashboard({
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-500">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500">
                 {translateUI("weeklyResetRef", locale)}
+                <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                  {translateUI("weeklyResetReferenceBadge", locale)}
+                </span>
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
                 <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
@@ -616,7 +700,7 @@ export function RadarDashboard({
                     ) : null}
                     {isSafeHttpUrl(item.source) ? (
                       <a
-                        className="hidden items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline sm:inline-flex"
+                        className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
                         href={item.source ?? undefined}
                         rel="noreferrer"
                         target="_blank"

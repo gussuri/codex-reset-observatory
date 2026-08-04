@@ -19,7 +19,7 @@ export function AboutView({ locale }: AboutViewProps) {
         "リセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく確認できるようまとめています。",
         "ランダムリセット期待度は、過去のリセット間隔から算出した基礎確率を現在の観測シグナルで補正した統計予測です。公式情報や確定的な確率ではありません。",
         "実際のリセット実施有無や時期については、必ず公式情報をご確認ください。",
-        "任意リセット（マニュアルリセット）を使用した場合、次回定期リセット日がこちらに表示している日付とずれます。",
+        "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
       ],
       nav: {
         top: "トップへ戻る",
@@ -36,7 +36,7 @@ export function AboutView({ locale }: AboutViewProps) {
         "It brings together official reset notices, past reset history, and a weekly-cycle reference date so you can compare what is happening now with earlier reset patterns.",
         "The weekly reset date is a shared reference, not a guarantee that every account will refresh on exactly the same date.",
         "The unscheduled reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
-        "Banked Resets are account-specific. If you use one, your next weekly reset date will differ from the shared reference date shown here.",
+        "Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for your account may differ from the shared reference date on this site.",
       ],
       nav: {
         top: "Back to English top",
@@ -53,7 +53,7 @@ export function AboutView({ locale }: AboutViewProps) {
         "它汇集了官方重置预告、历史重置记录以及每周循环参考日期，让您可以将当前状况与早期的重置模式进行对比。",
         "每周重置日期仅为共享的参考基准，并不能保证每个账号都会在完全相同的日期刷新。",
         "随机重置期望度是一种统计预测：先根据过去的重置间隔计算基础概率，再根据当前可观测信号进行调整，并非 OpenAI 官方通知或概率。",
-        "手动重置针对特定账号。如果您使用了手动重置，您账号的下一次每周重置日期将与此处显示的共享参考日期有所不同。",
+        "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
       ],
       nav: {
         top: "返回中文首页",
