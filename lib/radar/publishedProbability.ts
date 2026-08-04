@@ -8,6 +8,7 @@ import { getLocalProbabilityCalculation } from "./probability";
 import {
   calculateShadowProbability,
   derive12hFrom24hProbability,
+  derive72hFrom48hProbability,
   type ShadowProbabilityResult,
 } from "./shadowProbability";
 import type { RadarData } from "./types";
@@ -21,6 +22,7 @@ export type PublishedProbabilityCalculation = {
   probability12h: number;
   probability24h: number;
   probability48h: number;
+  probability72h: number;
   adoptedModel: string;
   source: PublishedProbabilitySource;
   fallbackReason: PublishedProbabilityFallbackReason | null;
@@ -34,20 +36,25 @@ export function isValidShadowPrediction(
   const probability12h = shadow.predictions?.probability12h;
   const probability24h = shadow.predictions?.probability24h;
   const probability48h = shadow.predictions?.probability48h;
+  const probability72h = shadow.predictions?.probability72h;
 
   return (
     shadow.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION &&
     Number.isFinite(probability12h) &&
     Number.isFinite(probability24h) &&
     Number.isFinite(probability48h) &&
+    Number.isFinite(probability72h) &&
     probability12h >= 0 &&
     probability12h <= 1 &&
     probability24h >= 0 &&
     probability24h <= 1 &&
     probability48h >= 0 &&
     probability48h <= 1 &&
+    probability72h >= 0 &&
+    probability72h <= 1 &&
     probability12h <= probability24h &&
-    probability24h <= probability48h
+    probability24h <= probability48h &&
+    probability48h <= probability72h
   );
 }
 
@@ -61,6 +68,7 @@ export function selectPublishedProbability(
       probability12h: shadow.predictions.probability12h,
       probability24h: shadow.predictions.probability24h,
       probability48h: shadow.predictions.probability48h,
+      probability72h: shadow.predictions.probability72h,
       adoptedModel: shadow.modelVersion,
       source: "shadow",
       fallbackReason: null,
@@ -75,6 +83,7 @@ export function selectPublishedProbability(
     probability12h: derive12hFrom24hProbability(primary.probability24h),
     probability24h: primary.probability24h,
     probability48h: primary.probability48h,
+    probability72h: derive72hFrom48hProbability(primary.probability48h),
     adoptedModel: primary.modelVersion,
     source: "heuristic-fallback",
     fallbackReason: resolvedFallbackReason,

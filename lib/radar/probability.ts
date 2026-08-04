@@ -1142,6 +1142,7 @@ export function getLocalProbabilityReason(
   includeMomentumReason = true,
   now: Date = new Date(),
   probability12h?: number,
+  probability72h?: number,
 ): string | null {
   const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
@@ -1149,18 +1150,20 @@ export function getLocalProbabilityReason(
     : activeOfficialNotice;
   const environment = resolvedSignalEvaluation.environment;
   const hasProbability12h = typeof probability12h === "number" && Number.isFinite(probability12h);
+  const hasProbability72h = typeof probability72h === "number" && Number.isFinite(probability72h);
 
   if (resolvedOfficialNotice) {
     return locale === "en"
-      ? "An official reset notice has been detected, indicating a very high probability within the next 12, 24, and 48 hours."
+      ? "An official reset notice has been detected, indicating a very high probability within the next 12, 24, 48, and 72 hours."
       : locale === "zh"
-        ? "有官方重置预告，预计未来 12 小时、24 小时和 48 小时内执行的概率极高。"
+        ? "有官方重置预告，预计未来 12 小时、24 小时、48 小时和 72 小时内执行的概率极高。"
         : "公式リセット予告があるため、通常より高めに見ています。";
   }
 
   const p12 = probabilityToPercent(probability12h, locale);
   const p24 = probabilityToPercent(probability24h, locale);
   const p48 = probabilityToPercent(probability48h, locale);
+  const p72 = probabilityToPercent(probability72h, locale);
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
@@ -1310,19 +1313,25 @@ export function getLocalProbabilityReason(
 
 
   if (locale === "en") {
-    const horizonSummary = hasProbability12h
-      ? `${p12} within 12 hours, ${p24} within 24 hours, and ${p48} within 48 hours`
-      : `${p24} within 24 hours and ${p48} within 48 hours`;
+    const horizonSummary = hasProbability12h && hasProbability72h
+      ? `${p12} within 12 hours, ${p24} within 24 hours, ${p48} within 48 hours, and ${p72} within 72 hours`
+      : hasProbability12h
+        ? `${p12} within 12 hours, ${p24} within 24 hours, and ${p48} within 48 hours`
+        : `${p24} within 24 hours and ${p48} within 48 hours`;
     return `The current forecast is ${horizonSummary}. It starts with a baseline derived from past reset intervals and is adjusted using current observable signals. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
   } else if (locale === "zh") {
-    const horizonSummary = hasProbability12h
-      ? `12 小时内 ${p12}、24 小时内 ${p24}、48 小时内 ${p48}`
-      : `24 小时内 ${p24}、48 小时内 ${p48}`;
+    const horizonSummary = hasProbability12h && hasProbability72h
+      ? `12 小时内 ${p12}、24 小时内 ${p24}、48 小时内 ${p48}、72 小时内 ${p72}`
+      : hasProbability12h
+        ? `12 小时内 ${p12}、24 小时内 ${p24}、48 小时内 ${p48}`
+        : `24 小时内 ${p24}、48 小时内 ${p48}`;
     return `当前预测为 ${horizonSummary}。预测先根据过去的重置间隔计算基础概率，再根据当前观测信号进行调整。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
   } else {
-    const horizonSummary = hasProbability12h
-      ? `12時間以内${p12}・24時間以内${p24}・48時間以内${p48}`
-      : `24時間以内${p24}・48時間以内${p48}`;
+    const horizonSummary = hasProbability12h && hasProbability72h
+      ? `12時間以内${p12}・24時間以内${p24}・48時間以内${p48}・72時間以内${p72}`
+      : hasProbability12h
+        ? `12時間以内${p12}・24時間以内${p24}・48時間以内${p48}`
+        : `24時間以内${p24}・48時間以内${p48}`;
     return `現在の見立ては${horizonSummary}です。過去のリセット間隔から基礎確率を算出し、現在の観測シグナルで補正しています。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
 }

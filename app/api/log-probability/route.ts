@@ -161,6 +161,7 @@ async function handleLogRequest(request: NextRequest) {
       probability_12h: viewModel.probability12h,
       probability_24h: viewModel.probability24h,
       probability_48h: viewModel.probability48h,
+      probability_72h: viewModel.probability72h,
       expectation: expectationKey,
     });
   } catch (err: any) {

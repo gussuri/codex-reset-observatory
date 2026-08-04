@@ -31,6 +31,7 @@ export type ExperimentalProbabilityForecast = {
   probability12h?: number;
   probability24h: number;
   probability48h: number;
+  probability72h?: number;
   halfLifeDays: number | null;
   completedEventCount: number;
   completedIntervalCount: number;
@@ -39,8 +40,10 @@ export type ExperimentalProbabilityForecast = {
   baseline12h?: number;
   baseline24h: number;
   baseline48h: number;
+  baseline72h?: number;
   combinedSignalMultiplier24h: number;
   combinedSignalMultiplier48h: number;
+  combinedSignalMultiplier72h?: number;
   officialNoticeOverride: boolean;
   targetDefinition: string;
   rawModelVersion?: string;
@@ -75,6 +78,7 @@ function toExperimentalProbabilityForecast(
     probability12h: result.predictions.probability12h,
     probability24h: result.predictions.probability24h,
     probability48h: result.predictions.probability48h,
+    probability72h: result.predictions.probability72h,
     halfLifeDays,
     completedEventCount: result.hazard.completedEventCount,
     completedIntervalCount: result.hazard.completedIntervalCount,
@@ -83,8 +87,10 @@ function toExperimentalProbabilityForecast(
     baseline12h: result.baseline.probability12h,
     baseline24h: result.baseline.probability24h,
     baseline48h: result.baseline.probability48h,
+    baseline72h: result.baseline.probability72h,
     combinedSignalMultiplier24h: result.multipliers.combinedAfterCap.probability24h,
     combinedSignalMultiplier48h: result.multipliers.combinedAfterCap.probability48h,
+    combinedSignalMultiplier72h: result.multipliers.combinedAfterCap.probability48h,
     officialNoticeOverride: result.officialNoticeOverride.active,
     targetDefinition: result.targetDefinition,
   };
@@ -190,6 +196,7 @@ export function buildProbabilityDebugInfo(
             probability12h: publishedProbability.probability12h,
             probability24h: publishedProbability.probability24h,
             probability48h: publishedProbability.probability48h,
+            probability72h: publishedProbability.probability72h,
             fallbackReason: publishedProbability.fallbackReason,
             confidence: publishedProbability.shadow?.confidence.level ?? null,
             completedIntervalCount: publishedProbability.shadow?.confidence.completedIntervalCount ?? null,

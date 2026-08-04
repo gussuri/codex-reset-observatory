@@ -84,6 +84,7 @@ export type ShadowProbabilityHorizons = {
   probability12h: number;
   probability24h: number;
   probability48h: number;
+  probability72h: number;
 };
 
 export type ShadowSignalMultipliers = {
@@ -131,6 +132,7 @@ export type ShadowProbabilityResult = {
     probability12h: number | null;
     probability24h: number | null;
     probability48h: number | null;
+    probability72h: number | null;
   };
   warnings: string[];
 };
@@ -156,6 +158,11 @@ function clamp01(value: number) {
 export function derive12hFrom24hProbability(probability24h: number) {
   const safe24h = clamp01(probability24h);
   return clamp01(1 - Math.pow(1 - safe24h, 12 / 24));
+}
+
+export function derive72hFrom48hProbability(probability48h: number) {
+  const safe48h = clamp01(probability48h);
+  return clamp01(1 - Math.pow(1 - safe48h, 72 / 48));
 }
 
 function finiteNonNegative(value: number | undefined | null) {
@@ -682,6 +689,7 @@ export function calculateShadowProbabilityForModel(
     probability12h: integrateHazardProbability(hazard, ageHours, 12),
     probability24h: integrateHazardProbability(hazard, ageHours, 24),
     probability48h: integrateHazardProbability(hazard, ageHours, 48),
+    probability72h: integrateHazardProbability(hazard, ageHours, 72),
   };
   const inputs = getShadowSignalInputs(
     data,
@@ -705,6 +713,10 @@ export function calculateShadowProbabilityForModel(
       baseline.probability48h,
       multipliers.combinedAfterCap.probability48h,
     ),
+    probability72h: applyOddsMultiplier(
+      baseline.probability72h,
+      multipliers.combinedAfterCap.probability48h,
+    ),
   };
   const officialNoticeActive = Boolean(resolvedOfficialNotice);
   const officialNoticeOverride = {
@@ -712,6 +724,7 @@ export function calculateShadowProbabilityForModel(
     probability12h: officialNoticeActive ? derive12hFrom24hProbability(0.9) : null,
     probability24h: officialNoticeActive ? 0.9 : null,
     probability48h: officialNoticeActive ? 0.96 : null,
+    probability72h: officialNoticeActive ? derive72hFrom48hProbability(0.96) : null,
   };
   const confidence = getConfidence(hazard, officialNoticeActive);
   const warnings: string[] = [];
@@ -731,6 +744,7 @@ export function calculateShadowProbabilityForModel(
           probability12h: officialNoticeOverride.probability12h!,
           probability24h: officialNoticeOverride.probability24h!,
           probability48h: officialNoticeOverride.probability48h!,
+          probability72h: officialNoticeOverride.probability72h!,
         }
       : adjusted,
     baseline,

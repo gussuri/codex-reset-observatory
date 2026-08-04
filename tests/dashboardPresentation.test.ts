@@ -12,26 +12,29 @@ import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/ra
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
-test("renders three named probability progressbars in a definition list", () => {
+test("renders four named probability progressbars in a definition list", () => {
   const html = renderToStaticMarkup(
     React.createElement(ProbabilityMetrics, {
       locale: "en",
       probability12h: 0.11,
       probability24h: 0.23,
       probability48h: 0.765,
+      probability72h: 0.91,
     }),
   );
 
-  assert.match(html, /^<dl class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">/);
-  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 3);
+  assert.match(html, /^<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">/);
+  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 4);
   assert.match(html, /aria-label="Within 12 hours"/);
   assert.match(html, /aria-label="Within 24h"/);
   assert.match(html, /aria-label="Within 48h"/);
-  assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 3);
-  assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 3);
+  assert.match(html, /aria-label="Within 72 hours"/);
+  assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 4);
+  assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 4);
   assert.match(html, /aria-valuenow="11"/);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
+  assert.match(html, /aria-valuenow="91"/);
 });
 
 test("renders unknown probabilities without aria-valuenow and with localized value text", () => {
@@ -41,12 +44,34 @@ test("renders unknown probabilities without aria-valuenow and with localized val
       probability12h: undefined,
       probability24h: undefined,
       probability48h: undefined,
+      probability72h: undefined,
     }),
   );
 
-  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 3);
+  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 4);
   assert.strictEqual((html.match(/aria-valuenow=/g) ?? []).length, 0);
-  assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 3);
+  assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 4);
+});
+
+test("derives the 72-hour metric from a legacy snapshot without showing zero", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "en",
+    { calculationNow },
+  );
+  delete snapshot.viewModel.probability72h;
+
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: snapshot,
+      locale: "en",
+    }),
+  );
+
+  assert.match(html, /aria-label="Within 72 hours"/);
+  assert.match(html, /aria-valuenow="56"/);
+  assert.doesNotMatch(html, /aria-label="Within 72 hours"[^>]*aria-valuenow="0"/);
 });
 
 test("labels a dynamic notice by its post time when no execution time is scheduled", (t: TestContext) => {
@@ -161,9 +186,9 @@ test("keeps the large official notice card above the probability card", (t: Test
 
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexの12時間・24時間・48時間以内のリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
-    { locale: "en" as const, notice: "Official notice: None", description: "Check Codex reset forecasts for the next 12, 24, and 48 hours, official updates, and recent reset history.", directAnswer: "Did Codex reset today?" },
-    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 未来12小时、24小时和48小时内的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
+    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexの12時間・24時間・48時間・72時間以内のリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official notice: None", description: "Check Codex reset forecasts for the next 12, 24, 48, and 72 hours, official updates, and recent reset history.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 未来12小时、24小时、48小时和72小时内的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {

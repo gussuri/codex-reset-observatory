@@ -8,14 +8,16 @@ export function ProbabilityMetrics({
   probability12h,
   probability24h,
   probability48h,
+  probability72h,
 }: {
   locale: Locale;
   probability12h: number | undefined;
   probability24h: number | undefined;
   probability48h: number | undefined;
+  probability72h: number | undefined;
 }) {
   return (
-    <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <dl className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
       <Metric
         horizon="12h"
         label={translateUI("within12h", locale)}
@@ -31,12 +33,18 @@ export function ProbabilityMetrics({
         value={probabilityToPercent(probability24h, locale)}
       />
       <Metric
-        className="col-span-2 sm:col-span-1"
         horizon="48h"
         label={translateUI("within48h", locale)}
         locale={locale}
         probability={probability48h}
         value={probabilityToPercent(probability48h, locale)}
+      />
+      <Metric
+        horizon="72h"
+        label={translateUI("within72h", locale)}
+        locale={locale}
+        probability={probability72h}
+        value={probabilityToPercent(probability72h, locale)}
       />
     </dl>
   );
@@ -51,7 +59,7 @@ function Metric({
   value,
 }: {
   className?: string;
-  horizon: "12h" | "24h" | "48h";
+  horizon: "12h" | "24h" | "48h" | "72h";
   label: string;
   locale: Locale;
   probability: number | undefined;
@@ -62,7 +70,7 @@ function Metric({
   const isKnown = percent !== undefined;
 
   return (
-    <div className={`rounded-lg border p-4 ${tone.card} ${className ?? ""}`}>
+    <div className={`h-full rounded-lg border p-4 ${tone.card} ${className ?? ""}`}>
       <dt className={`text-sm font-medium ${tone.label}`}>{label}</dt>
       <dd className={`mt-2 text-3xl font-semibold ${tone.value}`}>{value}</dd>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/75">
@@ -82,7 +90,10 @@ function Metric({
   );
 }
 
-function getProbabilityTone(probability: number | undefined, horizon: "12h" | "24h" | "48h") {
+function getProbabilityTone(
+  probability: number | undefined,
+  horizon: "12h" | "24h" | "48h" | "72h",
+) {
   if (typeof probability !== "number" || Number.isNaN(probability)) {
     return {
       bar: "bg-slate-400",
@@ -98,6 +109,15 @@ function getProbabilityTone(probability: number | undefined, horizon: "12h" | "2
       card: "border-teal-200 bg-teal-50",
       label: "text-teal-700",
       value: "text-teal-950",
+    };
+  }
+
+  if (horizon === "72h") {
+    return {
+      bar: "bg-violet-500",
+      card: "border-violet-200 bg-violet-50",
+      label: "text-violet-700",
+      value: "text-violet-950",
     };
   }
 

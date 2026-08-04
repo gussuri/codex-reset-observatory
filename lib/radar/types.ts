@@ -164,6 +164,9 @@ export type RadarData = {
     probability_48h?: number;
     probability48h?: number;
     probability_48_hours?: number;
+    probability_72h?: number;
+    probability72h?: number;
+    probability_72_hours?: number;
     expected_window?: string;
     summary?: string;
     summary_en?: string;
@@ -190,6 +193,9 @@ export type RadarData = {
     probability24h?: number;
     probability_48h?: number;
     probability48h?: number;
+    probability_72h?: number;
+    probability72h?: number;
+    within_72h?: number;
     within_24h?: number;
     within_48h?: number;
     "24h"?: number;
@@ -234,6 +240,7 @@ export type RadarViewModel = {
   probability12h?: number;
   probability24h?: number;
   probability48h?: number;
+  probability72h?: number;
   action: string;
   lastUpdated?: string | null;
   regularResetForecast: {
@@ -308,6 +315,7 @@ export type PublicRadarViewModel = Pick<
   | "probability12h"
   | "probability24h"
   | "probability48h"
+  | "probability72h"
   | "lastUpdated"
   | "regularResetForecast"
   | "activeWindow"

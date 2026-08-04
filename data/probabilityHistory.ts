@@ -4,6 +4,7 @@ export type ProbabilityHistoryItem = {
   probability12h?: number;
   probability24h: number;
   probability48h: number;
+  probability72h?: number;
   expectation: "低" | "中" | "高" | "超高" | "不明";
   displayedProbability24h: string;
   displayedProbability48h: string;

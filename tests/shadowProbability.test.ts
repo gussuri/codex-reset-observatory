@@ -18,6 +18,7 @@ import {
   calculateShadowProbability,
   calculateShadowProbabilityForModel,
   calculateShadowSignalMultipliers,
+  getShadowBaselineAgeHours,
   getShadowCompletedResetEvents,
   integrateHazardProbability,
   oddsToProbability,
@@ -245,6 +246,7 @@ test("the same hazard curve produces ordered continuous 24-hour and 48-hour prob
   const p24 = integrateHazardProbability(hazard, 0, 24);
   const p12 = integrateHazardProbability(hazard, 0, 12);
   const p48 = integrateHazardProbability(hazard, 0, 48);
+  const p72 = integrateHazardProbability(hazard, 0, 72);
   const justBefore = integrateHazardProbability(hazard, 47.999, 24);
   const justAfter = integrateHazardProbability(hazard, 48.001, 24);
 
@@ -252,6 +254,8 @@ test("the same hazard curve produces ordered continuous 24-hour and 48-hour prob
   assert.ok(p12 <= p24);
   assert.ok(p24 >= 0 && p24 <= 1);
   assert.ok(p48 >= p24 && p48 <= 1);
+  assert.ok(Number.isFinite(p72));
+  assert.ok(p72 >= p48 && p72 <= 1);
   assert.ok(Math.abs(justAfter - justBefore) < 0.02);
 });
 
@@ -348,6 +352,8 @@ test("shadow calculation uses official notice override without changing primary"
   assert.equal(shadow.predictions.probability24h, 0.9);
   assert.equal(shadow.predictions.probability48h, 0.96);
   assert.equal(shadow.predictions.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
+  assert.equal(shadow.predictions.probability72h, 1 - Math.pow(1 - 0.96, 72 / 48));
+  assert.equal(shadow.officialNoticeOverride.probability72h, 1 - Math.pow(1 - 0.96, 72 / 48));
   assert.equal(shadow.officialNoticeOverride.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
   assert.equal(shadow.officialNoticeOverride.active, true);
 });
@@ -373,6 +379,29 @@ test("shadow calculation discovers the same active official notice when no overr
   assert.equal(result.predictions.probability24h, 0.9);
   assert.equal(result.predictions.probability48h, 0.96);
   assert.equal(result.predictions.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
+  assert.equal(result.predictions.probability72h, 1 - Math.pow(1 - 0.96, 72 / 48));
+});
+
+test("72-hour shadow probability integrates the hazard and reuses the 48-hour multiplier", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const result = calculateShadowProbability(
+    data,
+    { now, activeOfficialNotice: null },
+  );
+
+  assert.equal(
+    result.baseline.probability72h,
+    integrateHazardProbability(result.hazard, getShadowBaselineAgeHours(data, now), 72),
+  );
+  assert.equal(
+    result.predictions.probability72h,
+    applyOddsMultiplier(
+      result.baseline.probability72h,
+      result.multipliers.combinedAfterCap.probability48h,
+    ),
+  );
+  assert.equal("probability72h" in result.multipliers.combinedAfterCap, false);
 });
 
 test("running shadow calculation leaves the current primary calculation unchanged", () => {

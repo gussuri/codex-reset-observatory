@@ -163,6 +163,7 @@ test("constant hazard excludes future events and keeps the shared signal path", 
       probability12h: 1 - Math.sqrt(0.1),
       probability24h: 0.9,
       probability48h: 0.96,
+      probability72h: 1 - Math.pow(1 - 0.96, 72 / 48),
     },
   };
   const noticeBenchmark = calculateConstantHazardBenchmark(notice);

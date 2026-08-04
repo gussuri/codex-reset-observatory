@@ -165,6 +165,7 @@ export function getRadarViewModel(
   const probability12h = probabilityCalculation.probability12h;
   const probability24h = probabilityCalculation.probability24h;
   const probability48h = probabilityCalculation.probability48h;
+  const probability72h = probabilityCalculation.probability72h;
   const predictionLevel = getExpectationLabel(
     { p24h: probability24h, p48h: probability48h },
     locale,
@@ -190,6 +191,7 @@ export function getRadarViewModel(
     probability12h,
     probability24h,
     probability48h,
+    probability72h,
     action: getRecommendedAction(activeWindow, probability24h, locale),
     lastUpdated:
       source?.checked_at ??
@@ -209,6 +211,7 @@ export function getRadarViewModel(
       true,
       calculationNow,
       probability12h,
+      probability72h,
     ),
     displayReasoningSummary: getDisplayProbabilityReason(
       source,

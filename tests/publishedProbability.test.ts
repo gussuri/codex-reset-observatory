@@ -48,6 +48,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
     probability12h: number;
     probability24h: number;
     probability48h: number;
+    probability72h: number;
   };
 
   assert.equal(published.source, "shadow");
@@ -57,21 +58,27 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(published.probability12h, 0.12531415896999543);
   assert.equal(published.probability24h, 0.23935872212855733);
   assert.equal(published.probability48h, 0.42025014832759205);
+  assert.equal(published.probability72h, 0.5242166900463578);
+  assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
   assert.equal(viewModel.probability12h, published.probability12h);
+  assert.equal(viewModel.probability72h, published.probability72h);
   assert.ok(published.probability12h <= published.probability24h);
   assert.equal(snapshot.viewModel.probability24h, published.probability24h);
   assert.equal(snapshot.viewModel.probability48h, published.probability48h);
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
+  assert.equal(snapshot.viewModel.probability72h, published.probability72h);
   assert.equal(publishedDebug.version, "hazard-odds-v2-random-only");
   assert.equal(publishedDebug.source, "shadow");
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
+  assert.equal(publishedDebug.probability72h, snapshot.viewModel.probability72h);
   assert.match(html, new RegExp(probabilityToPercent(published.probability24h, "ja")));
   assert.match(html, new RegExp(probabilityToPercent(published.probability48h, "ja")));
   assert.ok(published.probability24h <= published.probability48h);
+  assert.ok(published.probability48h <= published.probability72h);
  });
 
 test("valid Shadow values are adopted at every confidence level", () => {
@@ -91,6 +98,7 @@ test("valid Shadow values are adopted at every confidence level", () => {
         probability12h: 0.09,
         probability24h: 0.18,
         probability48h: 0.31,
+        probability72h: 0.45,
       },
     });
 
@@ -100,6 +108,7 @@ test("valid Shadow values are adopted at every confidence level", () => {
     assert.equal(selected.probability24h, 0.18);
     assert.equal(selected.probability48h, 0.31);
     assert.equal(selected.probability12h, 0.09);
+    assert.equal(selected.probability72h, 0.45);
   }
 });
 
@@ -147,10 +156,12 @@ test("official notice keeps the existing 90% and 96% override in the public mode
   assert.equal(published.probability24h, 0.9);
   assert.equal(published.probability48h, 0.96);
   assert.equal(published.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
+  assert.equal(published.probability72h, 1 - Math.pow(1 - 0.96, 72 / 48));
   assert.ok(published.probability12h <= published.probability24h);
   assert.equal(snapshot.viewModel.probability24h, 0.9);
   assert.equal(snapshot.viewModel.probability48h, 0.96);
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
+  assert.equal(snapshot.viewModel.probability72h, published.probability72h);
 });
 
 test("invalid Shadow predictions fall back to the old heuristic model", () => {
@@ -160,11 +171,13 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
   assert.ok(validShadow);
 
   for (const predictions of [
-    { probability12h: 0.1, probability24h: Number.NaN, probability48h: 0.4 },
-    { probability12h: 0.1, probability24h: -0.01, probability48h: 0.4 },
-    { probability12h: 0.1, probability24h: 0.8, probability48h: 1.01 },
-    { probability12h: 0.7, probability24h: 0.8, probability48h: 0.3 },
-    { probability12h: 0.3, probability24h: 0.2, probability48h: 0.4 },
+    { probability12h: 0.1, probability24h: Number.NaN, probability48h: 0.4, probability72h: 0.5 },
+    { probability12h: 0.1, probability24h: -0.01, probability48h: 0.4, probability72h: 0.5 },
+    { probability12h: 0.1, probability24h: 0.8, probability48h: 1.01, probability72h: 1.01 },
+    { probability12h: 0.7, probability24h: 0.8, probability48h: 0.3, probability72h: 0.5 },
+    { probability12h: 0.3, probability24h: 0.2, probability48h: 0.4, probability72h: 0.5 },
+    { probability12h: 0.1, probability24h: 0.2, probability48h: 0.4, probability72h: Number.NaN },
+    { probability12h: 0.1, probability24h: 0.2, probability48h: 0.6, probability72h: 0.5 },
   ]) {
     const selected = selectPublishedProbability(primary, {
       ...validShadow,
@@ -177,6 +190,7 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
     assert.equal(selected.probability24h, primary.probability24h);
     assert.equal(selected.probability48h, primary.probability48h);
     assert.equal(selected.probability12h, 1 - Math.pow(1 - primary.probability24h, 12 / 24));
+    assert.equal(selected.probability72h, 1 - Math.pow(1 - primary.probability48h, 72 / 48));
   }
 
   const exceptionFallback = selectPublishedProbability(primary, null, "shadow_exception");
@@ -204,6 +218,7 @@ test("public probability fields stay aligned in Japanese, English, and Chinese",
     assert.equal(snapshot.viewModel.probability24h, viewModel.probability24h);
     assert.equal(snapshot.viewModel.probability48h, viewModel.probability48h);
     assert.equal(snapshot.viewModel.probability12h, viewModel.probability12h);
+    assert.equal(snapshot.viewModel.probability72h, viewModel.probability72h);
     assert.equal(snapshot.viewModel.expectation, viewModel.expectation);
     assert.equal("reasoningSummary" in snapshot.viewModel, false);
     assert.equal("action" in snapshot.viewModel, false);

@@ -240,6 +240,7 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     assert.match(html, new RegExp(escapeRegExp(translateUI("within12h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within48h", locale))));
+    assert.match(html, new RegExp(escapeRegExp(translateUI("within72h", locale))));
   }
 });
 
