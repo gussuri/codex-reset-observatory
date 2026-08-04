@@ -35,7 +35,7 @@ X (旧Twitter) 上で Tibo 氏（`@thsottiaux`）の投稿をリアルタイム�
 1. `chrome://extensions` 画面で **「Codex Reset Observatory - Tibo Real-Time Monitor」** の **「詳細」** をクリックします。
 2. 画面下の **「拡張機能のオプション」** をクリックします（または拡張機能アイコンの右クリックメニューから「オプション」を選択）。
 3. **`TIBO_WEBHOOK_SECRET`**: Vercel の環境変数で設定した秘密鍵を入力します。
-4. **`Observatory Domain`**: `https://codex-reset-observatory.vercel.app` (デフォルト)
+4. **`Observatory Domain`**: `https://codex.gussuriworks.com` (デフォルト)
 5. **「保存」** ボタンをクリックします。
 6. **「接続テスト」** ボタンをクリックし、`✅ 接続テスト成功！` と表示されることを確認してください。
 

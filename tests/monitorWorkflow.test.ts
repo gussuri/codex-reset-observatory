@@ -21,7 +21,7 @@ test("monitor health workflow checks the production endpoint every ten minutes",
   assert.match(workflow, /^  workflow_dispatch:\s*$/m);
   assert.match(
     workflow,
-    /https:\/\/codex-reset-observatory\.vercel\.app\/api\/monitor\/health/,
+    /https:\/\/codex\.gussuriworks\.com\/api\/monitor\/health/,
   );
   assert.match(workflow, /secrets\.CRON_SECRET/);
   assert.match(workflow, /HTTP_STATUS.*!= "200"/);

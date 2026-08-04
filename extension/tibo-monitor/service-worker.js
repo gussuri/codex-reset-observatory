@@ -12,7 +12,9 @@ const TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_test_no
 const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
 const HISTORY_PATH = "/history";
-const TEST_HISTORY_URL = "https://codex-reset-observatory.vercel.app/history";
+const DEFAULT_OBSERVATORY_DOMAIN = "https://codex.gussuriworks.com";
+const LEGACY_OBSERVATORY_DOMAIN = "https://codex-reset-observatory.vercel.app";
+const TEST_HISTORY_URL = `${DEFAULT_OBSERVATORY_DOMAIN}${HISTORY_PATH}`;
 const TEST_NOTIFICATION_ID = "tibo-monitor-notification-test";
 let notificationIconDiagnosticsPromise = null;
 let notificationIconDiagnosticsUrl = null;
@@ -39,14 +41,44 @@ function setupReloadAlarm() {
   }
 }
 
+function migrateObservatoryDomain() {
+  return chrome.storage.local.get(["observatory_domain"]).then((data) => {
+    const current =
+      typeof data.observatory_domain === "string"
+        ? data.observatory_domain.replace(/\/+$/, "")
+        : "";
+
+    if (current === "" || current === LEGACY_OBSERVATORY_DOMAIN) {
+      return chrome.storage.local.set({
+        observatory_domain: DEFAULT_OBSERVATORY_DOMAIN,
+      });
+    }
+
+    return undefined;
+  });
+}
+
+function scheduleObservatoryDomainMigration() {
+  migrateObservatoryDomain().catch(() => {
+    // A settings migration failure must not affect monitoring startup.
+  });
+}
+
+scheduleObservatoryDomainMigration();
 setupReloadAlarm();
 
 if (typeof chrome !== "undefined" && chrome.runtime) {
   if (chrome.runtime.onInstalled) {
-    chrome.runtime.onInstalled.addListener(() => setupReloadAlarm());
+    chrome.runtime.onInstalled.addListener(() => {
+      setupReloadAlarm();
+      scheduleObservatoryDomainMigration();
+    });
   }
   if (chrome.runtime.onStartup) {
-    chrome.runtime.onStartup.addListener(() => setupReloadAlarm());
+    chrome.runtime.onStartup.addListener(() => {
+      setupReloadAlarm();
+      scheduleObservatoryDomainMigration();
+    });
   }
 }
 
@@ -218,7 +250,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function getConfig() {
   const data = await chrome.storage.local.get(["webhook_secret", "observatory_domain"]);
   const secret = data.webhook_secret || "";
-  const domain = data.observatory_domain || "https://codex-reset-observatory.vercel.app";
+  const domain = data.observatory_domain || DEFAULT_OBSERVATORY_DOMAIN;
   return { secret, domain: domain.replace(/\/+$/, "") };
 }
 
@@ -324,7 +356,8 @@ function isSafeNotificationUrl(value) {
       (url.protocol === "https:" &&
         (url.hostname === "x.com" || url.hostname === "twitter.com")) ||
       (url.protocol === "https:" &&
-        url.hostname === "codex-reset-observatory.vercel.app")
+        (url.hostname === "codex.gussuriworks.com" ||
+          url.hostname === "codex-reset-observatory.vercel.app"))
     );
   } catch {
     return false;
@@ -335,7 +368,7 @@ function getSafeHistoryUrl(domain) {
   const configured = `${domain}${HISTORY_PATH}`;
   return isSafeNotificationUrl(configured)
     ? configured
-    : `https://codex-reset-observatory.vercel.app${HISTORY_PATH}`;
+    : `${DEFAULT_OBSERVATORY_DOMAIN}${HISTORY_PATH}`;
 }
 
 function getRuntimeLastErrorMessage() {
@@ -735,7 +768,7 @@ async function notifyFormalAdoption(adoption, domain) {
 }
 
 async function handleTestFormalAdoptionNotification() {
-  let domain = "https://codex-reset-observatory.vercel.app";
+  let domain = DEFAULT_OBSERVATORY_DOMAIN;
   try {
     domain = (await getConfig()).domain;
   } catch {

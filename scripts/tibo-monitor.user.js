@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Codex Reset Observatory - Tibo Real-Time Monitor
-// @namespace    https://codex-reset-observatory.vercel.app/
+// @namespace    https://codex.gussuriworks.com/
 // @version      1.2.0
 // @description  Monitors Tibo (@thsottiaux) tweets on X in real-time and posts signals to Codex Reset Observatory Webhook.
 // @author       Antigravity AI / Codex Reset Observatory
@@ -12,6 +12,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @connect      codex.gussuriworks.com
 // @connect      codex-reset-observatory.vercel.app
 // @connect      localhost
 // ==UserScript==
@@ -32,7 +33,7 @@
   });
 
   GM_registerMenuCommand("🌐 Set Observatory Domain", function () {
-    const current = GM_getValue("observatory_domain", "https://codex-reset-observatory.vercel.app");
+    const current = GM_getValue("observatory_domain", "https://codex.gussuriworks.com");
     const input = prompt("Enter your Observatory domain URL:", current);
     if (input !== null) {
       GM_setValue("observatory_domain", input.trim());
@@ -41,7 +42,7 @@
   });
 
   // Local Configuration
-  const OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex-reset-observatory.vercel.app");
+  const OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex.gussuriworks.com");
   const QUEUE_KEY = "tibo_processed_tweet_ids";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);

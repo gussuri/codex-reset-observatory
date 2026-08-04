@@ -79,7 +79,7 @@ LIMIT 1;
 
 ## 5. 監視ヘルスチェックとアラート
 
-本番の監視ヘルスエンドポイントは `GET https://codex-reset-observatory.vercel.app/api/monitor/health` です。呼び出しには `Authorization: Bearer <CRON_SECRET>` が必要です。秘密値そのものをIssue、ログ、手順書、チャットへ貼り付けないでください。
+本番の監視ヘルスエンドポイントは `GET https://codex.gussuriworks.com/api/monitor/health` です。呼び出しには `Authorization: Bearer <CRON_SECRET>` が必要です。秘密値そのものをIssue、ログ、手順書、チャットへ貼り付けないでください。
 
 正常と判定されるには、`last_heartbeat_at` と `last_successful_parse_at` の両方が現在から15分以内であり、`last_scan_error` がnull、かつ `last_page_reload_status` が `success` またはnullである必要があります。タイムスタンプの欠落・形式不正、15分超過、スキャンエラー、またはそれ以外のページ再読み込みステータスは異常です。正常時だけHTTP 200になり、異常・設定不足・データベース読み取り失敗時はHTTP 503になります。応答には安全な状態と理由だけが含まれ、生のエラー本文は含まれません。
 
@@ -143,7 +143,7 @@ $body = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri "https://codex-reset-observatory.vercel.app/api/webhook/tibo" `
+  -Uri "https://codex.gussuriworks.com/api/webhook/tibo" `
   -Headers @{ Authorization = "Bearer $secret" } `
   -ContentType "application/json" `
   -Body $body

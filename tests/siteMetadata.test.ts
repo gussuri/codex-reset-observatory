@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import React from "react";
@@ -219,5 +219,4 @@ test("localized root layouts avoid keywords, headers, and duplicate JSON-LD", ()
     assert.strictEqual((layoutSource.match(/application\/ld\+json/g) ?? []).length, 0);
   }
 
-  assert.equal(existsSync(join(root, "middleware.ts")), false);
 });

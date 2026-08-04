@@ -4,7 +4,7 @@ Track and explain signals around Codex usage-limit resets.
 
 OpenAI Codex および ChatGPT Work の利用上限（レートリミット）に関するリセットシグナルを集め、リセット履歴やステータス情報とあわせて確率予測・可視化するダッシュボードです。
 
-[**Open the live observatory →**](https://codex-reset-observatory.vercel.app/en)
+[**Open the live observatory →**](https://codex.gussuriworks.com/en)
 
 ## 主な機能
 

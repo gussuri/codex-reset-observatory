@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const SITE_URL = "https://codex-reset-observatory.vercel.app";
+export const SITE_URL = "https://codex.gussuriworks.com";
 export const SITE_NAME = "Codex Reset Observatory";
 export const SITE_NAME_JA = "Codexリセット観測所";
 export const SITE_OG_IMAGE_URL = SITE_URL + "/og-image.png";

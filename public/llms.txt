@@ -6,10 +6,10 @@ It estimates whether a Codex usage limits reset is likely within the next 12, 24
 
 ## Key pages
 
-- Current forecast: https://codex-reset-observatory.vercel.app/en
-- FAQ: https://codex-reset-observatory.vercel.app/en/faq
-- Reset history: https://codex-reset-observatory.vercel.app/en/history
-- About: https://codex-reset-observatory.vercel.app/en/about
+- Current forecast: https://codex.gussuriworks.com/en
+- FAQ: https://codex.gussuriworks.com/en/faq
+- Reset history: https://codex.gussuriworks.com/en/history
+- About: https://codex.gussuriworks.com/en/about
 
 ## What this site provides
 

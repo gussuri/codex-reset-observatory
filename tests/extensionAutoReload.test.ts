@@ -21,6 +21,7 @@ function setupServiceWorkerContext(
     iconFetchStatus?: number;
     iconContentType?: string;
     iconEmpty?: boolean;
+    observatoryDomain?: string;
     fetchResponse?: {
       ok: boolean;
       status: number;
@@ -39,6 +40,10 @@ function setupServiceWorkerContext(
   let alarmListener: ((alarm: { name: string }) => void) | null = null;
   let messageListener: Function | null = null;
   let notificationClickListener: ((notificationId: string) => void) | null = null;
+
+  if (opts.observatoryDomain !== undefined) {
+    localStore.observatory_domain = opts.observatoryDomain;
+  }
 
   const mockFetchCalls: Array<{ url: string; body: any }> = [];
 
@@ -232,6 +237,9 @@ function setupServiceWorkerContext(
         await notificationClickListener(notificationId);
       }
     },
+    waitForStartup: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
   };
 }
 
@@ -241,6 +249,62 @@ test("REQUIREMENT 3: Extension setup registers a 10-minute page reload alarm", (
   assert.strictEqual(alarmsCreated.length, 1, "Exactly one alarm should be created at setup");
   assert.strictEqual(alarmsCreated[0].name, "tibo_page_reload_alarm");
   assert.strictEqual(alarmsCreated[0].alarmInfo.periodInMinutes, 10, "Alarm must run every 10 minutes");
+});
+
+test("service worker migrates only legacy or missing observatory domains", async () => {
+  const legacy = setupServiceWorkerContext([], {
+    observatoryDomain: "https://codex-reset-observatory.vercel.app/",
+  });
+  legacy.localStore.webhook_secret = "unchanged-secret";
+  await legacy.waitForStartup();
+  assert.strictEqual(legacy.localStore.observatory_domain, "https://codex.gussuriworks.com");
+  assert.strictEqual(legacy.localStore.webhook_secret, "unchanged-secret");
+
+  const missing = setupServiceWorkerContext([]);
+  await missing.waitForStartup();
+  assert.strictEqual(missing.localStore.observatory_domain, "https://codex.gussuriworks.com");
+
+  const custom = setupServiceWorkerContext([], {
+    observatoryDomain: "https://staging.example.test",
+  });
+  await custom.waitForStartup();
+  assert.strictEqual(custom.localStore.observatory_domain, "https://staging.example.test");
+});
+
+test("heartbeat and tweet webhook use the configured new observatory domain", async () => {
+  const context = setupServiceWorkerContext([], {
+    observatoryDomain: "https://codex.gussuriworks.com",
+  });
+  context.localStore.webhook_secret = "test-secret";
+
+  const heartbeat = await context.sendMessage({
+    action: "POST_HEARTBEAT",
+    payload: {
+      sessionId: "session_domain_migration",
+      lastSuccessfulParseAt: "2026-08-04T22:00:00.000Z",
+      lastSeenTweetId: "2084000000000000201",
+    },
+  });
+  assert.equal(heartbeat.success, true);
+  assert.equal(
+    context.mockFetchCalls[0].url,
+    "https://codex.gussuriworks.com/api/webhook/tibo/heartbeat",
+  );
+
+  const tweet = await context.sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2084000000000000201",
+      text: "I reset usage limits.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000201",
+      tweetCreatedAt: "2026-08-04T22:00:00.000Z",
+    },
+  });
+  assert.equal(tweet.success, true);
+  assert.equal(
+    context.mockFetchCalls[1].url,
+    "https://codex.gussuriworks.com/api/webhook/tibo",
+  );
 });
 
 test("REQUIREMENT 4: When no monitored tab is open, preserves last_page_reload_at and updates status to monitored_tab_missing", async () => {
@@ -563,7 +627,7 @@ test("notification self-test is local, repeatable, and opens the history page", 
 
   await clickNotification(first.notificationId);
   assert.deepEqual(openedTabs, [
-    { url: "https://codex-reset-observatory.vercel.app/history" },
+    { url: "https://codex.gussuriworks.com/history" },
   ]);
 
   const second = await sendMessage({

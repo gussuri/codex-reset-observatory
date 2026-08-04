@@ -17,14 +17,19 @@ jobs:
           echo "========================================="
           echo "GitHub Actions executed at: $(date -u)"
           # APP_URLはGitHub Secretsに登録されているため、出力時は自動的に *** にマスキングされます
-          echo "Calling API Endpoint: ${{ secrets.APP_URL }}/api/log-probability"
+          APP_URL="${{ secrets.APP_URL }}"
+          # Keep an old APP_URL secret from routing scheduled logs to the legacy host.
+          if [ -z "$APP_URL" ] || [ "$APP_URL" = "https://codex-reset-observatory.vercel.app" ]; then
+            APP_URL="https://codex.gussuriworks.com"
+          fi
+          echo "Calling API Endpoint: $APP_URL/api/log-probability"
           echo "========================================="
           
           # 一時ファイルにレスポンスを保存し、ステータスコードを取得
           RESPONSE_FILE=$(mktemp)
           HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ secrets.APP_URL }}/api/log-probability")
+            "$APP_URL/api/log-probability")
           
           echo "HTTP Status Code: $HTTP_STATUS"
           echo "-----------------------------------------"
