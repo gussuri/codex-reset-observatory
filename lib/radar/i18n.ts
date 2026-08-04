@@ -159,10 +159,10 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Scope",
     zh: "适用套餐",
   },
-    detectionTime: {
-    ja: "リセット検知時刻",
-    en: "Reset detection time",
-    zh: "重置检测时间",
+  detectionTime: {
+    ja: "予告・シグナル検知時刻",
+    en: "Notice or signal detected",
+    zh: "预告或信号检测时间",
   },
   resetTime: {
     ja: "リセット実施時刻",
@@ -210,9 +210,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "每周重置参考日期",
   },
   weeklyResetNote: {
-    ja: "任意リセットを使ったアカウントでは、次回定期リセット日がこちらに表示している日付とずれます。",
-    en: "If you used a Banked Reset, your next weekly reset date will differ from the reference date shown here.",
-    zh: "使用过手动重置的账号，下次定期重置日期可能与此处显示的日期有所偏差。",
+    ja: "過去の全体リセット時刻から7日後を計算した参考値です。各アカウントの実際の表示日時や利用枠とは異なる場合があります。",
+    en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
+    zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
+  },
+  weeklyResetReferenceBadge: {
+    ja: "参考値",
+    en: "Reference",
+    zh: "参考值",
   },
   recentResetEvents: {
     ja: "直近のリセット履歴",
@@ -223,6 +228,61 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "リセット履歴",
     en: "Reset history",
     zh: "重置历史",
+  },
+  confirmedGlobalResets: {
+    ja: "確認済みの全体リセット",
+    en: "Confirmed global resets",
+    zh: "已确认的全局重置",
+  },
+  bankedResetDistributions: {
+    ja: "任意リセットの配布記録",
+    en: "Banked Reset distributions",
+    zh: "手动重置发放记录",
+  },
+  sourceOriginalPost: {
+    ja: "元投稿",
+    en: "Original post",
+    zh: "原帖",
+  },
+  sourceProfile: {
+    ja: "投稿者プロフィール",
+    en: "Source profile",
+    zh: "发布者主页",
+  },
+  sourceOfficialStatus: {
+    ja: "OpenAI Status",
+    en: "OpenAI Status",
+    zh: "OpenAI Status",
+  },
+  sourceNotRecorded: {
+    ja: "出典未記録",
+    en: "Source not recorded",
+    zh: "未记录来源",
+  },
+  directAnswerResetToday: {
+    ja: "今日、全体リセットはありましたか？",
+    en: "Did Codex reset today?",
+    zh: "今天有全局重置吗？",
+  },
+  directAnswerResetTodayNo: {
+    ja: "本日確認された新しい全体リセットはありません。",
+    en: "No new global reset has been confirmed today.",
+    zh: "今天尚未确认有新的全局重置。",
+  },
+  directAnswerResetTodayYes: {
+    ja: "本日、全体リセットが確認されています。",
+    en: "A global reset has been confirmed today.",
+    zh: "今天已确认有全局重置。",
+  },
+  directAnswerNextReset: {
+    ja: "次のリセットはいつですか？",
+    en: "When is the next Codex reset?",
+    zh: "下一次 Codex 重置是什么时候？",
+  },
+  directAnswerNextResetText: {
+    ja: "公式な実施時刻は発表されていません。現在の24時間・48時間予測と週次参考日時を確認してください。",
+    en: "No official reset time has been announced. Check the 24-hour and 48-hour forecast below.",
+    zh: "官方尚未公布具体实施时间。请查看下方的24小时和48小时预测以及每周参考日期。",
   },
   noHistory: {
     ja: "直近履歴は取得できていません。",
@@ -1293,10 +1353,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Accounts that have not used a Banked Reset",
     zh: "未使用手动重置的账号",
   },
-  "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。": {
-    ja: "前回のリセットからこのタイミングまでに任意リセットを使用したアカウントは対象外で、使用したタイミングから1週間後にそれぞれリセットされます。",
-    en: "Accounts that used a Banked Reset after the previous weekly reset are excluded from this reset. Their next weekly reset will occur one week after the Banked Reset was used.",
-    zh: "从上次重置到此时使用过手动重置的账号不在此次重置范围内，将在使用手动重置时间的一周后分别重置。",
+  "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。": {
+    ja: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
+    en: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for an account may differ from this site’s shared reference date.",
+    zh: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
   },
   "予告": {
     ja: "予告",

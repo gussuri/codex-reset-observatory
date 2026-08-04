@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
+import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
 import {
   translateUI,
@@ -75,6 +75,7 @@ import { calculatePublishedProbability } from "./radar/publishedProbability";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
 export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
+export type { HistoryRecordKind, HistorySourceKind };
 export {
   probabilityToPercent,
   getExpectationLabel,
@@ -168,14 +169,12 @@ export function getRadarViewModel(
     locale,
   );
   const latestWindow =
-    getLatestWindowWithRegularReset(
-      observedLatestWindow ?? latestCompletedLocalWindow,
-      regularResetForecast,
-      locale
-    ) ?? latestCompletedLocalWindow;
+    (observedLatestWindow && getHistoryRecordKind(observedLatestWindow) !== "banked_distribution"
+      ? observedLatestWindow
+      : undefined) ?? latestCompletedLocalWindow;
   const activeWindow = getDisplayResetNotice(getActiveWindow(activeOfficialNotice, locale));
   const recentHistory = addPersonalResetEventsToHistory(
-    addRegularResetForecastToHistory(observedHistory, regularResetForecast, locale, limitHistory),
+    observedHistory,
     locale,
     limitHistory
   );
@@ -219,6 +218,7 @@ export function getRadarViewModel(
     ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
+      recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,
       title: translateDynamic(latestWindow?.title, locale),
       summary: latestWindow?.summary
         ? translateDynamic(latestWindow.summary, locale)
@@ -235,6 +235,8 @@ export function getRadarViewModel(
       windowLength: latestWindow?.window_human
         ? translateDynamic(latestWindow.window_human, locale)
         : formatWindowLength(latestWindow?.window_minutes, locale),
+      source: getEventSource(latestWindow ?? {}),
+      sourceKind: getHistorySourceKind(latestWindow ?? {}),
     },
     recentHistory,
   };
@@ -252,6 +254,9 @@ function getLatestRegularOrForcedResetAt(
   for (const item of combinedHistory) {
     const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
     const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
+    if (resetMethod === "任意リセット権1回配布") {
+      continue;
+    }
     const isForced = resetMethod === "強制リセット";
     const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
     const isGlobalScope = item.scope === "全有料プラン" || item.scope === "Codex / ChatGPT Work";
@@ -390,56 +395,6 @@ function getDisplayResetNotice(
   return officialWindow;
 }
 
-function addRegularResetForecastToHistory(
-  history: RadarViewModel["recentHistory"],
-  regularResetForecast: RadarViewModel["regularResetForecast"],
-  locale: Locale = "ja",
-  limit: boolean = true,
-) {
-  if (!regularResetForecast.expectedAt) {
-    return history;
-  }
-
-  const regularItems: RadarViewModel["recentHistory"] = [];
-
-  if (
-    regularResetForecast.lastCompletedAt &&
-    !hasHistoryResetAt(history, regularResetForecast.lastCompletedAt)
-  ) {
-    regularItems.push({
-      key: `regular-reset-completed-${regularResetForecast.lastCompletedAt}`,
-      title: translateDynamic("定期リセット", locale),
-      resetType: translateDynamic("定期リセット", locale),
-      resetTypes: [translateDynamic("定期リセット", locale)],
-      status: translateDynamic("終了", locale),
-      date: regularResetForecast.lastCompletedAt,
-      signalAt: null,
-      resetAt: regularResetForecast.lastCompletedAt,
-      signalLabel: "",
-      resetLabel: translateDynamic("実施", locale),
-      scope: translateDynamic("全有料プラン", locale),
-      windowLength: translateDynamic("定期実施", locale),
-      source: null,
-      details: {
-        cycleType: translateDynamic("定期リセット", locale),
-        reasonType: translateDynamic("通常更新", locale),
-        resetMethod: translateDynamic("強制リセット", locale),
-        scope: translateDynamic("全有料プラン", locale),
-        noticeToExecution: translateDynamic("定期実施", locale),
-        note: translateDynamic("1週間サイクルの定期リセットが実施されました。", locale),
-      },
-    });
-  }
-
-  const sortedHistory = [...regularItems, ...history].sort((a, b) => {
-    const aTime = getHistorySortTime(a);
-    const bTime = getHistorySortTime(b);
-    return bTime - aTime;
-  });
-
-  return limit ? sortedHistory.slice(0, HISTORY_LIMIT) : sortedHistory;
-}
-
 function addPersonalResetEventsToHistory(
   history: RadarViewModel["recentHistory"],
   _locale: Locale = "ja",
@@ -449,56 +404,17 @@ function addPersonalResetEventsToHistory(
   return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
-function getLatestWindowWithRegularReset(
-  latestWindow: WindowLike | undefined,
-  regularResetForecast: RadarViewModel["regularResetForecast"],
-  locale: Locale = "ja",
-): WindowLike | undefined {
-  if (!regularResetForecast.lastCompletedAt) {
-    return latestWindow;
-  }
-
-  const regularResetTime = new Date(regularResetForecast.lastCompletedAt).getTime();
-  const latestWindowTime = getWindowResetTime(latestWindow);
-
-  if (latestWindowTime >= regularResetTime) {
-    return latestWindow;
-  }
-
-  return {
-    id: `regular-reset-${regularResetForecast.lastCompletedAt}`,
-    title: translateDynamic("定期リセット", locale),
-    status: "closed",
-    opened_at: regularResetForecast.lastCompletedAt,
-    closed_at: regularResetForecast.lastCompletedAt,
-    completed_at: regularResetForecast.lastCompletedAt,
-    window_minutes: 0,
-    window_human: translateDynamic("定期実施", locale),
-    scope: translateDynamic("全有料プラン", locale),
-    summary: translateDynamic("1週間サイクルの定期リセットが実施されました。", locale),
-  };
-}
-
 function getLatestCompletedLocalWindow(data?: RadarData | null): WindowLike | undefined {
   const globalHistory = getCombinedResetHistory(data);
 
   return globalHistory
-    .filter((item) => getCompletedResetAt(item))
+    .filter((item) => getCompletedResetAt(item) && getHistoryRecordKind(item) === "confirmed_global")
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
       return bTime - aTime;
     })
     .at(0);
-}
-
-function hasHistoryResetAt(
-  history: RadarViewModel["recentHistory"],
-  resetAt: string,
-) {
-  const resetTime = getDateTime(resetAt);
-
-  return history.some((item) => getDateTime(item.resetAt) === resetTime);
 }
 
 function getHistorySortTime(
@@ -526,6 +442,64 @@ function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
 
 function getHistoryText(item: WindowLike & { kind?: string }) {
   return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
+}
+
+export function getHistoryRecordKind(item: WindowLike): HistoryRecordKind {
+  if (item.recordKind) {
+    return item.recordKind;
+  }
+
+  const resetMethod = item.details?.resetMethod ?? "";
+  const text = `${item.id ?? ""} ${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${resetMethod}`.toLowerCase();
+  if (
+    resetMethod === "任意リセット権1回配布" ||
+    text.includes("banked reset") ||
+    text.includes("manual reset") ||
+    text.includes("任意リセット") ||
+    text.includes("手动重置") ||
+    text.includes("配布") ||
+    text.includes("reset button")
+  ) {
+    return "banked_distribution";
+  }
+
+  if (item.id?.startsWith("regular-reset-")) {
+    return "reference";
+  }
+
+  return "confirmed_global";
+}
+
+export function getHistorySourceKind(item: WindowLike): HistorySourceKind {
+  if (item.sourceKind) {
+    return item.sourceKind;
+  }
+
+  const source = getEventSource(item);
+  if (!source) {
+    return "none";
+  }
+
+  try {
+    const url = new URL(source);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === "status.openai.com") {
+      return "official_status";
+    }
+    if ((hostname === "x.com" || hostname === "twitter.com") && /\/status\/\d+/i.test(url.pathname)) {
+      return "direct_post";
+    }
+    if (hostname === "x.com" || hostname === "twitter.com") {
+      const segments = url.pathname.split("/").filter(Boolean);
+      if (segments.length === 1) {
+        return "profile";
+      }
+    }
+  } catch {
+    return "none";
+  }
+
+  return "none";
 }
 
 function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Locale) {
@@ -867,9 +841,12 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         : item.closed_at ?? item.completed_at ?? item.opened_at ?? null;
       const key = item.id ?? item.guid ?? `${item.title}-${resetAt ?? item.date ?? ""}`;
       const source = getEventSource(item);
+      const recordKind = getHistoryRecordKind(item);
+      const sourceKind = getHistorySourceKind(item);
 
       return {
         key,
+        recordKind,
         title: translateDynamic(item.title, locale),
         resetType: getResetTypes(item, locale)[0],
         resetTypes: getResetTypes(item, locale),
@@ -878,7 +855,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         date: item.date ?? resetAt ?? item.opened_at,
         signalAt: item.opened_at ?? null,
         resetAt,
-        signalLabel: translateDynamic("検知", locale),
+        signalLabel: translateUI("detectionTime", locale),
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
         scope: translateDynamic(item.scope, locale),
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
@@ -886,6 +863,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
           ? translateDynamic(item.window_human, locale)
           : formatWindowLength(item.window_minutes, locale),
         source,
+        sourceKind,
         summary: item.summary ? translateDynamic(item.summary, locale) : null,
       };
     })
@@ -939,7 +917,7 @@ function getActiveWindow(
     return {
       active,
       kind: "official",
-      label: translateDynamic("予告中", locale),
+      label: translateUI("activeNoticeLabel", locale),
       summary,
       openedAt,
       expectedAt,
@@ -952,7 +930,7 @@ function getActiveWindow(
   return {
     active,
     kind: "none",
-    label: translateDynamic("予告なし", locale),
+    label: translateUI("noNoticeLabel", locale),
     summary: locale === "en"
       ? "At this moment, there are no official reset notices detected."
       : locale === "zh"
@@ -1015,18 +993,6 @@ function getRecommendedAction(
 
 function isRegularResetWindow(value: WindowLike | undefined) {
   return Boolean(value?.id?.startsWith("regular-reset-") || value?.title?.includes("定期"));
-}
-
-function getWindowResetTime(value: WindowLike | undefined) {
-  const resetAt =
-    value?.closed_at ?? value?.completed_at ?? value?.opened_at ?? value?.date ?? null;
-
-  if (!resetAt) {
-    return 0;
-  }
-
-  const time = new Date(resetAt).getTime();
-  return Number.isNaN(time) ? 0 : time;
 }
 
 function getCompletedResetAt(item: WindowEventLike) {

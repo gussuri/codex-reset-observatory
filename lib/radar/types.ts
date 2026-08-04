@@ -8,6 +8,17 @@ export type Locale = "ja" | "en" | "zh";
 
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
+export type HistoryRecordKind =
+  | "confirmed_global"
+  | "banked_distribution"
+  | "reference";
+
+export type HistorySourceKind =
+  | "direct_post"
+  | "profile"
+  | "official_status"
+  | "none";
+
 export type ResetHistoryDetails = {
   cycleType: string;
   reasonType: string;
@@ -34,6 +45,8 @@ export type WindowLike = {
   summary?: string;
   source?: string | null;
   source_url?: string | null;
+  sourceKind?: HistorySourceKind;
+  recordKind?: HistoryRecordKind;
   link?: string | null;
   sources?: Array<{
     type?: string;
@@ -243,6 +256,7 @@ export type RadarViewModel = {
   displayReasoningSummary: string | null;
   latestWindow: {
     kind: "observed" | "regular";
+    recordKind?: HistoryRecordKind;
     title: string;
     summary: string;
     scopeLabel?: string;
@@ -251,6 +265,8 @@ export type RadarViewModel = {
     closedAt?: string | null;
     windowLabel?: string;
     windowLength: string;
+    source?: string | null;
+    sourceKind?: HistorySourceKind;
   };
   recentHistory: Array<{
     key: string;
@@ -269,6 +285,8 @@ export type RadarViewModel = {
     windowLabel?: string;
     windowLength: string;
     source?: string | null;
+    sourceKind?: HistorySourceKind;
+    recordKind?: HistoryRecordKind;
     summary?: string | null;
   }>;
 };

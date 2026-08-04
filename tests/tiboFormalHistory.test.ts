@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
+import {
+  getHistoryRecordKind,
+  getHistorySourceKind,
+  getLocalRadarData,
+  getRadarViewModel,
+} from "../lib/radar";
 import {
   getLastGlobalResetAt,
   getRecent7DayResetCount,
@@ -428,4 +433,41 @@ test("rejected dynamic reset allows the latest reset to fall back to static hist
 test("the corrected static 2026-08-01 record points to the executed tweet", () => {
   const record = LOCAL_RESET_HISTORY.find((item) => item.id === "local-luna-100k-threads-efficiency-reset-2026-08-01");
   assert.equal(record?.source_url, "https://x.com/thsottiaux/status/2083395449814229287");
+});
+
+test("weekly reference dates stay out of observed history and latest reset selection", () => {
+  const calculationNow = new Date("2026-08-04T03:32:00.000Z");
+  const viewModel = getRadarViewModel(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    false,
+    undefined,
+    calculationNow,
+  );
+
+  assert.equal(viewModel.regularResetForecast.expectedAt, "2026-08-08T03:32:00.000Z");
+  assert.equal(viewModel.recentHistory.some((item) => item.recordKind === "reference"), false);
+  assert.equal(viewModel.recentHistory.some((item) => item.key.startsWith("regular-reset-")), false);
+  assert.notEqual(viewModel.latestWindow.title, "定期リセット");
+  assert.equal(viewModel.latestWindow.recordKind, "confirmed_global");
+});
+
+test("history records distinguish confirmed resets, banked distributions, and source kinds", () => {
+  const forced = LOCAL_RESET_HISTORY.find((item) => item.id === "local-codex-regular-reset-2026-06-25");
+  const banked = LOCAL_RESET_HISTORY.find((item) => item.id === "personal-reset-credit-2026-06-11");
+
+  assert.equal(forced ? getHistoryRecordKind(forced) : null, "confirmed_global");
+  assert.equal(banked ? getHistoryRecordKind(banked) : null, "banked_distribution");
+  assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux/status/123" }), "direct_post");
+  assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
+  assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");
+  assert.equal(getHistorySourceKind({}), "none");
+});
+
+test("localized active-window labels do not leak the Japanese no-notice label", () => {
+  const data = getLocalRadarData({ calculationNow: new Date("2026-08-04T03:32:00.000Z") });
+
+  assert.equal(getRadarViewModel(data, "ja", true).activeWindow.label, "予告なし");
+  assert.equal(getRadarViewModel(data, "en", true).activeWindow.label, "No notice");
+  assert.equal(getRadarViewModel(data, "zh", true).activeWindow.label, "无预告");
 });

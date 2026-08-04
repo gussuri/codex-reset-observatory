@@ -69,6 +69,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
     displayReasoningSummary: viewModel.displayReasoningSummary,
     latestWindow: {
       kind: viewModel.latestWindow.kind,
+      recordKind: viewModel.latestWindow.recordKind,
       title: viewModel.latestWindow.title,
       summary: viewModel.latestWindow.summary,
       scopeLabel: viewModel.latestWindow.scopeLabel,
@@ -77,9 +78,12 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       closedAt: viewModel.latestWindow.closedAt ?? null,
       windowLabel: viewModel.latestWindow.windowLabel,
       windowLength: viewModel.latestWindow.windowLength,
+      source: safeHttpUrl(viewModel.latestWindow.source),
+      sourceKind: viewModel.latestWindow.sourceKind,
     },
     recentHistory: viewModel.recentHistory.map((item) => ({
       key: item.key,
+      recordKind: item.recordKind,
       title: item.title,
       resetType: item.resetType,
       resetTypes: item.resetTypes ? [...item.resetTypes] : undefined,
@@ -105,6 +109,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       windowLabel: item.windowLabel,
       windowLength: item.windowLength,
       source: safeHttpUrl(item.source),
+      sourceKind: item.sourceKind,
       summary: item.summary ?? null,
     })),
   };
