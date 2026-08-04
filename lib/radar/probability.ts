@@ -1141,21 +1141,24 @@ export function getLocalProbabilityReason(
   activeOfficialNotice?: ActiveOfficialNotice | null,
   includeMomentumReason = true,
   now: Date = new Date(),
+  probability12h?: number,
 ): string | null {
   const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
     ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
     : activeOfficialNotice;
   const environment = resolvedSignalEvaluation.environment;
+  const hasProbability12h = typeof probability12h === "number" && Number.isFinite(probability12h);
 
   if (resolvedOfficialNotice) {
     return locale === "en"
-      ? "An official reset notice has been detected, indicating a very high probability within 24 hours."
+      ? "An official reset notice has been detected, indicating a very high probability within the next 12, 24, and 48 hours."
       : locale === "zh"
-        ? "有官方重置预告，预计 24 小时内执行的概率极高。"
+        ? "有官方重置预告，预计未来 12 小时、24 小时和 48 小时内执行的概率极高。"
         : "公式リセット予告があるため、通常より高めに見ています。";
   }
 
+  const p12 = probabilityToPercent(probability12h, locale);
   const p24 = probabilityToPercent(probability24h, locale);
   const p48 = probabilityToPercent(probability48h, locale);
   const issueAnomalies = environment.issue_or_limit_anomalies_24h ?? 0;
@@ -1307,11 +1310,20 @@ export function getLocalProbabilityReason(
 
 
   if (locale === "en") {
-    return `The current forecast is ${p24} within 24 hours and ${p48} within 48 hours. It starts with a baseline derived from past reset intervals and is adjusted using current observable signals. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
+    const horizonSummary = hasProbability12h
+      ? `${p12} within 12 hours, ${p24} within 24 hours, and ${p48} within 48 hours`
+      : `${p24} within 24 hours and ${p48} within 48 hours`;
+    return `The current forecast is ${horizonSummary}. It starts with a baseline derived from past reset intervals and is adjusted using current observable signals. ${lastResetLabel}. ${combinedSignalSummary}${boostText}${momentumText}`;
   } else if (locale === "zh") {
-    return `当前预测为 24 小时内 ${p24}、48 小时内 ${p48}。预测先根据过去的重置间隔计算基础概率，再根据当前观测信号进行调整。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
+    const horizonSummary = hasProbability12h
+      ? `12 小时内 ${p12}、24 小时内 ${p24}、48 小时内 ${p48}`
+      : `24 小时内 ${p24}、48 小时内 ${p48}`;
+    return `当前预测为 ${horizonSummary}。预测先根据过去的重置间隔计算基础概率，再根据当前观测信号进行调整。${lastResetLabel}，${combinedSignalSummary}${boostText}${momentumText}`;
   } else {
-    return `現在の見立ては24時間以内${p24}・48時間以内${p48}です。過去のリセット間隔から基礎確率を算出し、現在の観測シグナルで補正しています。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
+    const horizonSummary = hasProbability12h
+      ? `12時間以内${p12}・24時間以内${p24}・48時間以内${p48}`
+      : `24時間以内${p24}・48時間以内${p48}`;
+    return `現在の見立ては${horizonSummary}です。過去のリセット間隔から基礎確率を算出し、現在の観測シグナルで補正しています。${lastResetLabel}で、${combinedSignalSummary}${boostText}${momentumText}`;
   }
 }
 

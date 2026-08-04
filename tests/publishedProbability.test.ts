@@ -45,6 +45,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   const publishedDebug = debugInfo.publishedProbabilityModel as {
     version: string;
     source: string;
+    probability12h: number;
     probability24h: number;
     probability48h: number;
   };
@@ -53,17 +54,24 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.shadow);
   assert.equal(published.adoptedModel, "hazard-odds-v2-random-only");
   assert.equal(published.fallbackReason, null);
+  assert.equal(published.probability12h, 0.12531415896999543);
+  assert.equal(published.probability24h, 0.23935872212855733);
+  assert.equal(published.probability48h, 0.42025014832759205);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
+  assert.equal(viewModel.probability12h, published.probability12h);
+  assert.ok(published.probability12h <= published.probability24h);
   assert.equal(snapshot.viewModel.probability24h, published.probability24h);
   assert.equal(snapshot.viewModel.probability48h, published.probability48h);
+  assert.equal(snapshot.viewModel.probability12h, published.probability12h);
   assert.equal(publishedDebug.version, "hazard-odds-v2-random-only");
   assert.equal(publishedDebug.source, "shadow");
+  assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
   assert.match(html, new RegExp(probabilityToPercent(published.probability24h, "ja")));
   assert.match(html, new RegExp(probabilityToPercent(published.probability48h, "ja")));
- assert.ok(published.probability24h <= published.probability48h);
+  assert.ok(published.probability24h <= published.probability48h);
  });
 
 test("valid Shadow values are adopted at every confidence level", () => {
@@ -80,6 +88,7 @@ test("valid Shadow values are adopted at every confidence level", () => {
         level,
       },
       predictions: {
+        probability12h: 0.09,
         probability24h: 0.18,
         probability48h: 0.31,
       },
@@ -90,6 +99,7 @@ test("valid Shadow values are adopted at every confidence level", () => {
     assert.equal(selected.fallbackReason, null);
     assert.equal(selected.probability24h, 0.18);
     assert.equal(selected.probability48h, 0.31);
+    assert.equal(selected.probability12h, 0.09);
   }
 });
 
@@ -136,8 +146,11 @@ test("official notice keeps the existing 90% and 96% override in the public mode
   assert.equal(published.source, "shadow");
   assert.equal(published.probability24h, 0.9);
   assert.equal(published.probability48h, 0.96);
+  assert.equal(published.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
+  assert.ok(published.probability12h <= published.probability24h);
   assert.equal(snapshot.viewModel.probability24h, 0.9);
   assert.equal(snapshot.viewModel.probability48h, 0.96);
+  assert.equal(snapshot.viewModel.probability12h, published.probability12h);
 });
 
 test("invalid Shadow predictions fall back to the old heuristic model", () => {
@@ -147,10 +160,11 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
   assert.ok(validShadow);
 
   for (const predictions of [
-    { probability24h: Number.NaN, probability48h: 0.4 },
-    { probability24h: -0.01, probability48h: 0.4 },
-    { probability24h: 0.8, probability48h: 1.01 },
-    { probability24h: 0.8, probability48h: 0.3 },
+    { probability12h: 0.1, probability24h: Number.NaN, probability48h: 0.4 },
+    { probability12h: 0.1, probability24h: -0.01, probability48h: 0.4 },
+    { probability12h: 0.1, probability24h: 0.8, probability48h: 1.01 },
+    { probability12h: 0.7, probability24h: 0.8, probability48h: 0.3 },
+    { probability12h: 0.3, probability24h: 0.2, probability48h: 0.4 },
   ]) {
     const selected = selectPublishedProbability(primary, {
       ...validShadow,
@@ -162,6 +176,7 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
     assert.equal(selected.fallbackReason, "shadow_invalid_prediction");
     assert.equal(selected.probability24h, primary.probability24h);
     assert.equal(selected.probability48h, primary.probability48h);
+    assert.equal(selected.probability12h, 1 - Math.pow(1 - primary.probability24h, 12 / 24));
   }
 
   const exceptionFallback = selectPublishedProbability(primary, null, "shadow_exception");
@@ -188,6 +203,7 @@ test("public probability fields stay aligned in Japanese, English, and Chinese",
 
     assert.equal(snapshot.viewModel.probability24h, viewModel.probability24h);
     assert.equal(snapshot.viewModel.probability48h, viewModel.probability48h);
+    assert.equal(snapshot.viewModel.probability12h, viewModel.probability12h);
     assert.equal(snapshot.viewModel.expectation, viewModel.expectation);
     assert.equal("reasoningSummary" in snapshot.viewModel, false);
     assert.equal("action" in snapshot.viewModel, false);

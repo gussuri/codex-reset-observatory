@@ -27,6 +27,7 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);
+  assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability12h, shadow.predictions.probability12h);
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v2-random-only");
   assert.equal(calibrated.evaluationMode, "prospective");
@@ -47,6 +48,9 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
     assert.ok(forecast.weightedEventCount >= 0);
     assert.ok(forecast.weightedExposureDays >= 0);
     assert.ok(forecast.probability48h >= forecast.probability24h);
+    if (forecast.probability12h !== undefined) {
+      assert.ok(forecast.probability12h <= forecast.probability24h);
+    }
     assert.equal(forecast.targetDefinition, shadow.targetDefinition);
   }
 

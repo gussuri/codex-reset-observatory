@@ -80,6 +80,12 @@ export type ShadowProbabilityPair = {
   probability48h: number;
 };
 
+export type ShadowProbabilityHorizons = {
+  probability12h: number;
+  probability24h: number;
+  probability48h: number;
+};
+
 export type ShadowSignalMultipliers = {
   recentResetMomentum: ShadowProbabilityPair;
   regularResetProximity: ShadowProbabilityPair;
@@ -110,8 +116,8 @@ export type ShadowProbabilityResult = {
   modelVersion: string;
   calculatedAt: string;
   targetDefinition: string;
-  predictions: ShadowProbabilityPair;
-  baseline: ShadowProbabilityPair;
+  predictions: ShadowProbabilityHorizons;
+  baseline: ShadowProbabilityHorizons;
   confidence: {
     level: "low" | "medium" | "high";
     reason: string;
@@ -122,6 +128,7 @@ export type ShadowProbabilityResult = {
   multipliers: ShadowSignalMultipliers;
   officialNoticeOverride: {
     active: boolean;
+    probability12h: number | null;
     probability24h: number | null;
     probability48h: number | null;
   };
@@ -144,6 +151,11 @@ export type ShadowProbabilityModelOptions = {
 
 function clamp01(value: number) {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+export function derive12hFrom24hProbability(probability24h: number) {
+  const safe24h = clamp01(probability24h);
+  return clamp01(1 - Math.pow(1 - safe24h, 12 / 24));
 }
 
 function finiteNonNegative(value: number | undefined | null) {
@@ -666,10 +678,11 @@ export function calculateShadowProbabilityForModel(
   const ageHours = latestResetTime === null
     ? 0
     : Math.max(0, (now.getTime() - latestResetTime) / HOUR_MS);
-  const baseline = pair(
-    integrateHazardProbability(hazard, ageHours, 24),
-    integrateHazardProbability(hazard, ageHours, 48),
-  );
+  const baseline: ShadowProbabilityHorizons = {
+    probability12h: integrateHazardProbability(hazard, ageHours, 12),
+    probability24h: integrateHazardProbability(hazard, ageHours, 24),
+    probability48h: integrateHazardProbability(hazard, ageHours, 48),
+  };
   const inputs = getShadowSignalInputs(
     data,
     now,
@@ -679,13 +692,24 @@ export function calculateShadowProbabilityForModel(
     localObservationSignals,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs);
-  const adjusted = pair(
-    applyOddsMultiplier(baseline.probability24h, multipliers.combinedAfterCap.probability24h),
-    applyOddsMultiplier(baseline.probability48h, multipliers.combinedAfterCap.probability48h),
-  );
+  const adjusted: ShadowProbabilityHorizons = {
+    probability12h: applyOddsMultiplier(
+      baseline.probability12h,
+      multipliers.combinedAfterCap.probability24h,
+    ),
+    probability24h: applyOddsMultiplier(
+      baseline.probability24h,
+      multipliers.combinedAfterCap.probability24h,
+    ),
+    probability48h: applyOddsMultiplier(
+      baseline.probability48h,
+      multipliers.combinedAfterCap.probability48h,
+    ),
+  };
   const officialNoticeActive = Boolean(resolvedOfficialNotice);
   const officialNoticeOverride = {
     active: officialNoticeActive,
+    probability12h: officialNoticeActive ? derive12hFrom24hProbability(0.9) : null,
     probability24h: officialNoticeActive ? 0.9 : null,
     probability48h: officialNoticeActive ? 0.96 : null,
   };
@@ -703,7 +727,11 @@ export function calculateShadowProbabilityForModel(
     calculatedAt: now.toISOString(),
     targetDefinition: SHADOW_TARGET_DEFINITION,
     predictions: officialNoticeActive
-      ? pair(officialNoticeOverride.probability24h!, officialNoticeOverride.probability48h!)
+      ? {
+          probability12h: officialNoticeOverride.probability12h!,
+          probability24h: officialNoticeOverride.probability24h!,
+          probability48h: officialNoticeOverride.probability48h!,
+        }
       : adjusted,
     baseline,
     confidence: {

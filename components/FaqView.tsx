@@ -89,7 +89,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "When is the next Codex usage limits reset?",
-          answer: "OpenAI does not always publish an exact reset time. This site shows official notices and estimates whether a usage-limits reset looks likely within the next 24 or 48 hours.",
+          answer: "OpenAI does not always publish an exact reset time. This site shows official notices and estimates whether a usage-limits reset looks likely within the next 12, 24, or 48 hours.",
         },
         {
           question: "How does Codex reset work?",

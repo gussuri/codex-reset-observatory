@@ -162,6 +162,7 @@ export function getRadarViewModel(
     activeOfficialNotice,
     regularResetExpectedAt: regularResetForecast.expectedAt,
   });
+  const probability12h = probabilityCalculation.probability12h;
   const probability24h = probabilityCalculation.probability24h;
   const probability48h = probabilityCalculation.probability48h;
   const predictionLevel = getExpectationLabel(
@@ -186,6 +187,7 @@ export function getRadarViewModel(
       locale
     ),
     expectation: predictionLevel ?? getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale),
+    probability12h,
     probability24h,
     probability48h,
     action: getRecommendedAction(activeWindow, probability24h, locale),
@@ -206,6 +208,7 @@ export function getRadarViewModel(
       activeOfficialNotice,
       true,
       calculationNow,
+      probability12h,
     ),
     displayReasoningSummary: getDisplayProbabilityReason(
       source,
@@ -967,10 +970,10 @@ function getRecommendedAction(
 
   if (normalized >= RECOMMENDED_ACTION_THRESHOLDS.high) {
     return locale === "en"
-      ? "High probability within 24 hours. While not an official notice yet, checking the status before heavy tasks is recommended."
+      ? "High reset probability within the next 12 to 48 hours. While not an official notice yet, checking the status before heavy tasks is recommended."
       : locale === "zh"
-        ? "预计 24 小时内有极高重置可能。虽然尚未发布官方预告，但在执行繁重任务前确认最新状况会更为稳妥。"
-        : "24時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。";
+        ? "预计未来 12 至 48 小时内有较高重置可能。虽然尚未发布官方预告，但在执行繁重任务前确认最新状况会更为稳妥。"
+        : "12〜48時間以内の見込みが高い状態です。まだ公式予告ではありませんが、重い作業の前に最新状況を確認すると安心です。";
   }
 
   if (normalized >= RECOMMENDED_ACTION_THRESHOLDS.medium) {

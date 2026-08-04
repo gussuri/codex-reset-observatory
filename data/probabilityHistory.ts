@@ -1,6 +1,7 @@
 export type ProbabilityHistoryItem = {
   id: string;
   recordedAt: string;
+  probability12h?: number;
   probability24h: number;
   probability48h: number;
   expectation: "低" | "中" | "高" | "超高" | "不明";

@@ -23,6 +23,7 @@ import {
 } from "@/lib/radar/clientState";
 import type { HistorySourceKind, Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import { derive12hFrom24hProbability } from "@/lib/radar/shadowProbability";
 import {
   canStartRadarRefresh,
   getInitialRefreshPlan,
@@ -293,6 +294,11 @@ export function RadarDashboard({
   const isDataUnavailable = dashboardDataState === "unavailable";
   const shouldShowDataWarning =
     dashboardDataState === "degraded" || dashboardDataState === "unavailable";
+  const probability12h = isDataUnavailable
+    ? undefined
+    : Number.isFinite(viewModel.probability12h)
+      ? viewModel.probability12h
+      : derive12hFrom24hProbability(viewModel.probability24h ?? 0);
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
@@ -485,6 +491,7 @@ export function RadarDashboard({
 
             <ProbabilityMetrics
               locale={locale}
+              probability12h={probability12h}
               probability24h={probability24h}
               probability48h={probability48h}
             />

@@ -158,6 +158,7 @@ async function handleLogRequest(request: NextRequest) {
       action: "upserted",
       logged_hour: loggedHour.toISOString(),
       recorded_at: recordedAt,
+      probability_12h: viewModel.probability12h,
       probability_24h: viewModel.probability24h,
       probability_48h: viewModel.probability48h,
       expectation: expectationKey,

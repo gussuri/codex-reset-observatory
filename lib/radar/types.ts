@@ -155,6 +155,9 @@ export type RadarData = {
   };
   prediction?: {
     level?: ProbabilityLevel | string;
+    probability_12h?: number;
+    probability12h?: number;
+    probability_12_hours?: number;
     probability_24h?: number;
     probability24h?: number;
     probability_24_hours?: number;
@@ -179,6 +182,10 @@ export type RadarData = {
     should_notify?: boolean;
   };
   probabilities?: {
+    probability_12h?: number;
+    probability12h?: number;
+    within_12h?: number;
+    "12h"?: number;
     probability_24h?: number;
     probability24h?: number;
     probability_48h?: number;
@@ -224,6 +231,7 @@ export type RadarData = {
 export type RadarViewModel = {
   status: string;
   expectation: string;
+  probability12h?: number;
   probability24h?: number;
   probability48h?: number;
   action: string;
@@ -297,6 +305,7 @@ export type PublicRadarViewModel = Pick<
   RadarViewModel,
   | "status"
   | "expectation"
+  | "probability12h"
   | "probability24h"
   | "probability48h"
   | "lastUpdated"

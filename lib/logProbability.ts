@@ -28,6 +28,7 @@ export function hasOfficialNoticeForLog(
 export type ExperimentalProbabilityForecast = {
   modelVersion: string;
   generatedAt: string;
+  probability12h?: number;
   probability24h: number;
   probability48h: number;
   halfLifeDays: number | null;
@@ -35,6 +36,7 @@ export type ExperimentalProbabilityForecast = {
   completedIntervalCount: number;
   weightedEventCount: number;
   weightedExposureDays: number;
+  baseline12h?: number;
   baseline24h: number;
   baseline48h: number;
   combinedSignalMultiplier24h: number;
@@ -70,6 +72,7 @@ function toExperimentalProbabilityForecast(
   return {
     modelVersion: result.modelVersion,
     generatedAt: result.calculatedAt,
+    probability12h: result.predictions.probability12h,
     probability24h: result.predictions.probability24h,
     probability48h: result.predictions.probability48h,
     halfLifeDays,
@@ -77,6 +80,7 @@ function toExperimentalProbabilityForecast(
     completedIntervalCount: result.hazard.completedIntervalCount,
     weightedEventCount: result.hazard.weightedEventCount,
     weightedExposureDays: result.hazard.weightedExposureHours / 24,
+    baseline12h: result.baseline.probability12h,
     baseline24h: result.baseline.probability24h,
     baseline48h: result.baseline.probability48h,
     combinedSignalMultiplier24h: result.multipliers.combinedAfterCap.probability24h,
@@ -183,6 +187,7 @@ export function buildProbabilityDebugInfo(
           publishedProbabilityModel: {
             version: publishedProbability.adoptedModel,
             source: publishedProbability.source,
+            probability12h: publishedProbability.probability12h,
             probability24h: publishedProbability.probability24h,
             probability48h: publishedProbability.probability48h,
             fallbackReason: publishedProbability.fallbackReason,

@@ -243,10 +243,13 @@ test("the same hazard curve produces ordered continuous 24-hour and 48-hour prob
   ];
   const hazard = buildShadowHazard(events, new Date("2026-08-04T12:00:00.000Z"));
   const p24 = integrateHazardProbability(hazard, 0, 24);
+  const p12 = integrateHazardProbability(hazard, 0, 12);
   const p48 = integrateHazardProbability(hazard, 0, 48);
   const justBefore = integrateHazardProbability(hazard, 47.999, 24);
   const justAfter = integrateHazardProbability(hazard, 48.001, 24);
 
+  assert.ok(p12 >= 0 && p12 <= 1);
+  assert.ok(p12 <= p24);
   assert.ok(p24 >= 0 && p24 <= 1);
   assert.ok(p48 >= p24 && p48 <= 1);
   assert.ok(Math.abs(justAfter - justBefore) < 0.02);
@@ -344,6 +347,8 @@ test("shadow calculation uses official notice override without changing primary"
   assert.equal(primary.probability48h, 0.96);
   assert.equal(shadow.predictions.probability24h, 0.9);
   assert.equal(shadow.predictions.probability48h, 0.96);
+  assert.equal(shadow.predictions.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
+  assert.equal(shadow.officialNoticeOverride.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
   assert.equal(shadow.officialNoticeOverride.active, true);
 });
 
@@ -367,6 +372,7 @@ test("shadow calculation discovers the same active official notice when no overr
   assert.equal(result.officialNoticeOverride.active, true);
   assert.equal(result.predictions.probability24h, 0.9);
   assert.equal(result.predictions.probability48h, 0.96);
+  assert.equal(result.predictions.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
 });
 
 test("running shadow calculation leaves the current primary calculation unchanged", () => {

@@ -7,6 +7,7 @@ import type {
 import { getLocalProbabilityCalculation } from "./probability";
 import {
   calculateShadowProbability,
+  derive12hFrom24hProbability,
   type ShadowProbabilityResult,
 } from "./shadowProbability";
 import type { RadarData } from "./types";
@@ -17,6 +18,7 @@ export type PublishedProbabilityFallbackReason =
   | "shadow_invalid_prediction";
 
 export type PublishedProbabilityCalculation = {
+  probability12h: number;
   probability24h: number;
   probability48h: number;
   adoptedModel: string;
@@ -29,17 +31,22 @@ export type PublishedProbabilityCalculation = {
 export function isValidShadowPrediction(
   shadow: Pick<ShadowProbabilityResult, "modelVersion" | "predictions">,
 ) {
+  const probability12h = shadow.predictions?.probability12h;
   const probability24h = shadow.predictions?.probability24h;
   const probability48h = shadow.predictions?.probability48h;
 
   return (
     shadow.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION &&
+    Number.isFinite(probability12h) &&
     Number.isFinite(probability24h) &&
     Number.isFinite(probability48h) &&
+    probability12h >= 0 &&
+    probability12h <= 1 &&
     probability24h >= 0 &&
     probability24h <= 1 &&
     probability48h >= 0 &&
     probability48h <= 1 &&
+    probability12h <= probability24h &&
     probability24h <= probability48h
   );
 }
@@ -51,6 +58,7 @@ export function selectPublishedProbability(
 ): PublishedProbabilityCalculation {
   if (shadow && isValidShadowPrediction(shadow)) {
     return {
+      probability12h: shadow.predictions.probability12h,
       probability24h: shadow.predictions.probability24h,
       probability48h: shadow.predictions.probability48h,
       adoptedModel: shadow.modelVersion,
@@ -64,6 +72,7 @@ export function selectPublishedProbability(
   const resolvedFallbackReason = fallbackReason ?? "shadow_invalid_prediction";
 
   return {
+    probability12h: derive12hFrom24hProbability(primary.probability24h),
     probability24h: primary.probability24h,
     probability48h: primary.probability48h,
     adoptedModel: primary.modelVersion,

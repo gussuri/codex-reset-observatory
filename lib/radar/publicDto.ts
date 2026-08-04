@@ -39,6 +39,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
   return {
     status: viewModel.status,
     expectation: viewModel.expectation,
+    probability12h: viewModel.probability12h,
     probability24h: viewModel.probability24h,
     probability48h: viewModel.probability48h,
     lastUpdated: viewModel.lastUpdated ?? null,
