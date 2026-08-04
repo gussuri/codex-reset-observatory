@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     absolute: "关于 " + SITE_NAME,
   },
   description:
-    "了解 " + SITE_NAME + " 观测的内容、如何处理重置历史，以及为什么每周重置参考日期在手动重置后可能有所不同。",
+    "了解 " + SITE_NAME + " 观测的内容、如何处理重置历史，以及手动重置可能如何影响账号使用周期。",
   alternates: {
     canonical: siteUrl("/zh/about"),
     languages: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "关于 " + SITE_NAME,
     description:
-      "在本站简要了解 Codex 重置历史、每周循环重置参考日、手动重置以及随机重置期望度。",
+      "在本站简要了解 Codex 重置历史、手动重置以及随机重置期望度。",
     url: siteUrl("/zh/about"),
     siteName: SITE_NAME,
     type: "article",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "关于 " + SITE_NAME,
     description:
-      "本站简要了解 Codex 重置历史、每周循环重置参考日、手动重置以及随机重置期望度。",
+      "本站简要了解 Codex 重置历史、手动重置以及随机重置期望度。",
     images: [SITE_OG_IMAGE_URL],
   },
 };

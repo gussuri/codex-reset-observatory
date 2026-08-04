@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     absolute: "About " + SITE_NAME,
   },
   description:
-    "Learn what " + SITE_NAME + " tracks, how reset history is handled, and why weekly reset references may differ after a Banked Reset.",
+    "Learn what " + SITE_NAME + " tracks, how reset history is handled, and how Banked Resets can affect account-specific usage windows.",
   alternates: {
     canonical: siteUrl("/en/about"),
     languages: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About " + SITE_NAME,
     description:
-      "A short explanation of the reset history, weekly reset reference, Banked Resets, and unscheduled reset probability shown on this unofficial Codex reset site.",
+      "A short explanation of the reset history, Banked Resets, and unscheduled reset probability shown on this unofficial Codex reset site.",
     url: siteUrl("/en/about"),
     siteName: SITE_NAME,
     type: "article",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "About " + SITE_NAME,
     description:
-      "What this unofficial Codex reset site tracks and how to read its reset references.",
+      "What this unofficial Codex reset site tracks and how to read its reset information.",
     images: [SITE_OG_IMAGE_URL],
   },
 };

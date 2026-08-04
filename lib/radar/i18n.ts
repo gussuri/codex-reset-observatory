@@ -199,16 +199,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Note",
     zh: "补充",
   },
-  weeklyResetRef: {
-    ja: "1週間サイクルのリセット参考日",
-    en: "Weekly reset reference",
-    zh: "每周重置参考日期",
-  },
-  weeklyResetNote: {
-    ja: "過去の全体リセット時刻から7日後を計算した参考値です。各アカウントの実際の表示日時や利用枠とは異なる場合があります。",
-    en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
-    zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
-  },
   recentResetEvents: {
     ja: "直近のリセット履歴",
     en: "Recent reset events",
@@ -1349,9 +1339,9 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "这不是定期强制重置，而是发放了 1 次手动重置；使用后的额度周期和下次日期可能因账号而异。",
   },
   "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。": {
-    ja: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
-    en: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and the reset date shown for an account may differ from this site’s shared reference date.",
-    zh: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
+    ja: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって異なる場合があります。",
+    en: "Using a Banked Reset refreshes the applicable usage limit. The resulting usage window and reset date may differ by account.",
+    zh: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期可能因账号而异。",
   },
   "予告": {
     ja: "予告",

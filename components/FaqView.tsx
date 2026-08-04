@@ -70,7 +70,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "任意リセットを使うとどうなりますか？",
-          answer: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。",
+          answer: "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって異なる場合があります。",
         },
       ] as Array<FaqItem>,
     },
@@ -89,7 +89,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "When is the next Codex usage limits reset?",
-          answer: "OpenAI does not always publish an exact reset time. This site shows a weekly-cycle reference date when available and estimates whether an extra usage-limits reset looks likely within the next 24 or 48 hours.",
+          answer: "OpenAI does not always publish an exact reset time. This site shows official notices and estimates whether a usage-limits reset looks likely within the next 24 or 48 hours.",
         },
         {
           question: "How does Codex reset work?",
@@ -97,7 +97,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What is a Codex Banked Reset (Manual Reset)?",
-          answer: "A Banked Reset is an account-specific reset available in your account. Using it refreshes the applicable usage limit. The following usage window and reset date shown for your account may differ from this site’s shared reference date.",
+          answer: "A Banked Reset is an account-specific reset available in your account. Using it refreshes the applicable usage limit. The resulting usage window and reset date may differ by account.",
         },
         {
           question: "What is Codex usage limits reset?",
@@ -109,7 +109,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What does this site track?",
-          answer: "It tracks Codex usage-limits reset notices, reset history, weekly-cycle reference dates, and random reset probability based on public information, community activity, and OpenAI Status updates.",
+          answer: "It tracks Codex usage-limits reset notices, reset history, and random reset probability based on public information, community activity, and OpenAI Status updates.",
         },
         {
           id: "forecast-method",
@@ -154,7 +154,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "What happens if I use a Banked Reset?",
-          answer: "Using a Banked Reset refreshes the applicable usage limit. The following usage window and reset date shown for your account may differ from the shared reference date on this site.",
+          answer: "Using a Banked Reset refreshes the applicable usage limit. The resulting usage window and reset date may differ by account.",
         },
       ] as Array<FaqItem>,
     },
@@ -214,7 +214,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "使用手动重置后会发生什么？",
-          answer: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期，可能与本站的公共参考日期不同。",
+          answer: "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期可能因账号而异。",
         },
       ] as Array<FaqItem>,
     },

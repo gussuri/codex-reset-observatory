@@ -469,7 +469,7 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        <section className="grid items-start gap-5 lg:grid-cols-[1.12fr_0.88fr]">
+        <section className="grid gap-5">
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -514,67 +514,55 @@ export function RadarDashboard({
             </p>
           </article>
 
-          <div className="grid gap-5">
-            <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    {translateUI("latestReset", locale)}
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold text-slate-950 leading-tight break-words text-balance pb-0.5">
-                    {translateDynamic(viewModel.latestWindow.title, locale)}
-                  </h2>
+          <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-500">
+                      {translateUI("latestReset", locale)}
+                    </p>
+                    <h2 className="mt-1 break-words text-2xl font-semibold leading-tight text-balance">
+                      {translateDynamic(viewModel.latestWindow.title, locale)}
+                    </h2>
+                  </div>
+                  <Sparkles className="h-7 w-7 shrink-0 text-amber-600" />
                 </div>
-                <Sparkles className="h-7 w-7 text-amber-600" />
               </div>
 
-              <dl className="mt-5 space-y-4">
-                <InfoRow
-                  label={translateUI("resetTime", locale)}
-                  value={<LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />}
-                />
-                <InfoRow
-                  label={translateUI("source", locale)}
-                  value={
-                    viewModel.latestWindow.sourceKind &&
-                    viewModel.latestWindow.sourceKind !== "none" &&
-                    isSafeHttpUrl(viewModel.latestWindow.source) ? (
-                      <a
-                        className="inline-flex items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
-                        href={viewModel.latestWindow.source ?? undefined}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ) : (
-                      getSourceLabel("none", locale)
-                    )
-                  }
-                />
-              </dl>
-            </article>
-
-            <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    {translateUI("weeklyResetRef", locale)}
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-950 flex flex-wrap items-baseline gap-2">
-                    <LocalizedDateTime value={viewModel.regularResetForecast.expectedAt} locale={locale} />
-                    <span className="text-sm font-medium text-slate-500">
-                      ({viewModel.regularResetForecast.remaining})
-                    </span>
-                  </h2>
-                </div>
-                <p className="text-sm leading-6 sm:max-w-md sm:text-right text-slate-500">
-                  {translateUI("weeklyResetNote", locale)}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-500">
+                  {translateUI("resetTime", locale)}
                 </p>
+                <div className="mt-1 text-sm font-semibold leading-6 text-slate-900">
+                  <LocalizedDateTime value={viewModel.latestWindow.closedAt} locale={locale} />
+                </div>
               </div>
-            </section>
-          </div>
+
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-500">
+                  {translateUI("source", locale)}
+                </p>
+                <div className="mt-1 text-sm font-semibold leading-6 text-slate-900">
+                  {viewModel.latestWindow.sourceKind &&
+                  viewModel.latestWindow.sourceKind !== "none" &&
+                  isSafeHttpUrl(viewModel.latestWindow.source) ? (
+                    <a
+                      className="inline-flex min-h-8 w-fit items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
+                      href={viewModel.latestWindow.source ?? undefined}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {getSourceLabel(viewModel.latestWindow.sourceKind, locale)}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    getSourceLabel("none", locale)
+                  )}
+                </div>
+              </div>
+            </div>
+          </article>
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
@@ -725,17 +713,6 @@ export function RadarDashboard({
         </footer>
       </div>
     </main>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm font-semibold leading-6 text-slate-900 sm:max-w-xl">
-        {value}
-      </dd>
-    </div>
   );
 }
 

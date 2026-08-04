@@ -222,12 +222,12 @@ test("top latest reset card keeps only its title, execution time, and safe sourc
       React.createElement(RadarDashboard, { initialData: data, locale }),
     );
     const latestStart = html.indexOf(labels[locale].latest);
-    const weeklyStart = html.indexOf(translateUI("weeklyResetRef", locale));
-    const latestCard = html.slice(latestStart, weeklyStart);
+    const historyStart = html.indexOf(translateUI("resetHistory", locale));
+    const latestCard = html.slice(latestStart, historyStart);
     const latestWindow = data.viewModel.latestWindow;
 
     assert.ok(latestStart >= 0);
-    assert.ok(weeklyStart > latestStart);
+    assert.ok(historyStart > latestStart);
     assert.match(latestCard, new RegExp(escapeRegExp(escapeHtml(translateDynamic(latestWindow.title, locale)))));
     assert.match(latestCard, new RegExp(labels[locale].resetTime));
     assert.match(latestCard, new RegExp(labels[locale].source));
@@ -239,7 +239,18 @@ test("top latest reset card keeps only its title, execution time, and safe sourc
   }
 });
 
-test("top dashboard keeps the current status, latest reset, and weekly reference in DOM order", () => {
+test("top dashboard omits the weekly reference and keeps the simplified DOM order", () => {
+  const weeklyLabels = {
+    ja: "1週間サイクルのリセット参考日",
+    en: "Weekly reset reference",
+    zh: "每周重置参考日期",
+  } as const;
+  const weeklyNotes = {
+    ja: "過去の全体リセット時刻から7日後を計算した参考値です。各アカウントの実際の表示日時や利用枠とは異なる場合があります。",
+    en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
+    zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
+  } as const;
+
   for (const locale of ["ja", "en", "zh"] as const) {
     const data = toPublicRadarSnapshot(getLocalRadarData({}), locale);
     const html = renderToStaticMarkup(
@@ -247,15 +258,16 @@ test("top dashboard keeps the current status, latest reset, and weekly reference
     );
     const currentStatusStart = html.indexOf(translateUI("currentStatus", locale));
     const latestResetStart = html.indexOf(translateUI("latestReset", locale));
-    const weeklyResetStart = html.indexOf(translateUI("weeklyResetRef", locale));
+    const historyStart = html.indexOf(translateUI("resetHistory", locale));
+    const forecast = data.viewModel.regularResetForecast;
 
     assert.ok(currentStatusStart >= 0);
     assert.ok(latestResetStart > currentStatusStart);
-    assert.ok(weeklyResetStart > latestResetStart);
-    assert.equal(
-      (html.match(new RegExp(escapeRegExp(translateUI("weeklyResetRef", locale)), "g")) ?? []).length,
-      1,
-    );
+    assert.ok(historyStart > latestResetStart);
+    assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyLabels[locale])));
+    assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyNotes[locale])));
+    assert.doesNotMatch(html, new RegExp(escapeRegExp(forecast.date)));
+    assert.doesNotMatch(html, new RegExp(escapeRegExp(forecast.remaining)));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within48h", locale))));
   }
