@@ -1,0 +1,223 @@
+{
+  "schemaVersion": "prospective-probability-evaluation-v1",
+  "status": "insufficient_data",
+  "generatedAt": "2026-08-04T09:59:31.375Z",
+  "asOf": "2026-08-04T09:59:31.375Z",
+  "evaluationMode": "prospective",
+  "backfilled": false,
+  "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+  "targetDefinition": "Same random-reset target definition as hazard-odds-v2-random-only.",
+  "evaluationStartAt": null,
+  "comparison": {
+    "resolved24h": 0,
+    "resolved48h": 0,
+    "targetResetCount": 0,
+    "brierDifference24h": 0,
+    "brierDifference48h": 0,
+    "logLossDifference24h": 0,
+    "logLossDifference48h": 0
+  },
+  "models": {
+    "v2": {
+      "modelVersion": "hazard-odds-v2-random-only",
+      "metrics24h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      },
+      "metrics48h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      }
+    },
+    "v4": {
+      "modelVersion": "hazard-odds-v4-logit-calibrated-prequential-v1",
+      "metrics24h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      },
+      "metrics48h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      }
+    }
+  },
+  "gate": {
+    "autoPublish": false,
+    "thresholds": {
+      "targetResetCount": 5,
+      "resolvedDaily24h": 20,
+      "resolvedDaily48h": 15,
+      "maxLogLossWorsening": 0.05
+    },
+    "targetResetCount": 0,
+    "resolvedDaily24h": 0,
+    "resolvedDaily48h": 0,
+    "brier24hNotWorse": true,
+    "brier48hNotWorse": true,
+    "oneHorizonClearlyImproved": false,
+    "logLossNotExtremelyWorse": true
+  },
+  "notes": [
+    "This is a prospective evaluation of forecasts saved after the v4 deployment point.",
+    "Existing prediction_history rows are not backfilled or relabeled as v4 forecasts.",
+    "The primary comparison uses the first saved forecast per Asia/Tokyo calendar day.",
+    "Passing the gate never changes the public model automatically; manual review is required.",
+    "Data availability: No prediction_history rows contain both v2 and v4 experimental forecasts yet."
+  ]
+}
