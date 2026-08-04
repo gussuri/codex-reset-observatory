@@ -57,6 +57,8 @@ export type ExperimentalProbabilityForecast = {
   horizonCoherenceAdjusted?: boolean;
   fallbackUsed?: boolean;
   evaluationMode?: "prospective";
+  pointInTimeProjectionVersion?: string;
+  pointInTimeProjectionLimitations?: string;
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;
@@ -120,6 +122,8 @@ function toCalibratedExperimentalProbabilityForecast(
     horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
     fallbackUsed: result.fallbackUsed,
     evaluationMode: result.evaluationMode,
+    pointInTimeProjectionVersion: result.pointInTimeProjectionVersion,
+    pointInTimeProjectionLimitations: result.pointInTimeProjectionLimitations,
   };
 }
 

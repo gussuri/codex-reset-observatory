@@ -1,5 +1,7 @@
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import {
+  CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS,
+  CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
@@ -51,6 +53,8 @@ export type CalibratedShadowProbabilityResult = {
   horizonCoherenceAdjusted: boolean;
   fallbackUsed: boolean;
   evaluationMode: "prospective";
+  pointInTimeProjectionVersion: typeof CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION;
+  pointInTimeProjectionLimitations: typeof CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS;
   targetDefinition: string;
 };
 
@@ -213,7 +217,15 @@ function getCalibrationCacheKey(
     formalResets: (data?.formal_tibo_resets ?? []).map((signal) => [signal.tweet_id, signal.tweet_created_at, signal.detected_at, signal.verification_status]),
     activeSignals: (data?.active_tibo_signals ?? []).map((signal) => [signal.tweet_id, signal.tweet_created_at, signal.detected_at, signal.expires_at, signal.signal_type]),
     rejectedResets: (data?.rejected_tibo_resets ?? []).map((signal) => [signal.tweet_id, signal.tweet_created_at]),
-    statusHistory: (data?.openai_status_history ?? []).map((incident) => [incident.id, incident.createdAt, incident.updatedAt, incident.resolvedAt]),
+    statusHistory: (data?.openai_status_history ?? []).map((incident) => [
+      incident.id,
+      incident.createdAt,
+      incident.updatedAt,
+      incident.resolvedAt,
+      incident.status,
+      incident.impact,
+      incident.title,
+    ]),
     localSignals: localObservationSignals.map((signal) => [signal.id, signal.status, signal.observedAt, signal.resolvedAt, signal.expiresAt]),
   });
 }
@@ -248,6 +260,8 @@ export function calculateCalibratedShadowProbability(
     horizonCoherenceAdjusted: false,
     fallbackUsed: false,
     evaluationMode: "prospective",
+    pointInTimeProjectionVersion: CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION,
+    pointInTimeProjectionLimitations: CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS,
     targetDefinition: rawV2.targetDefinition,
   };
 

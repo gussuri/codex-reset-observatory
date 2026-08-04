@@ -23,11 +23,11 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
     "hazard-odds-v3-recency-bayes-h14-r2",
     "hazard-odds-v3-recency-bayes-h30-r2",
     "hazard-odds-v3-recency-bayes-h60-r2",
-    "hazard-odds-v4-logit-calibrated-prequential-v1",
+    "hazard-odds-v4-logit-calibrated-prequential-v2",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);
-  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v1"];
+  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v2-random-only");
   assert.equal(calibrated.evaluationMode, "prospective");
   assert.equal(typeof calibrated.alpha24h, "number");
@@ -36,6 +36,11 @@ test("internal forecast audit stores v2 and all fixed recency models without dup
   assert.equal(typeof calibrated.positiveCalibrationCount48h, "number");
   assert.equal(typeof calibrated.horizonCoherenceAdjusted, "boolean");
   assert.equal(typeof calibrated.fallbackUsed, "boolean");
+  assert.equal(calibrated.pointInTimeProjectionVersion, "status-conservative-v2");
+  assert.equal(
+    forecasts["hazard-odds-v4-logit-calibrated-prequential-v1"],
+    undefined,
+  );
   for (const forecast of Object.values(forecasts)) {
     assert.equal(forecast.generatedAt, now.toISOString());
     assert.ok(forecast.completedEventCount >= forecast.completedIntervalCount);

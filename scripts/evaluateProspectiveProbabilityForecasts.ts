@@ -3,12 +3,14 @@ import { basename, join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
+import { CALIBRATED_SHADOW_MODEL_VERSION } from "../data/shadowProbabilityConfig";
 import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
 import {
   evaluateProspectiveProbabilityForecasts,
+  PROSPECTIVE_V2_MODEL_VERSION,
   type ProspectiveForecastRow,
   type ProspectiveMetric,
   type ProspectiveProbabilityEvaluationReport,
@@ -139,8 +141,8 @@ async function loadPredictionHistoryRows(): Promise<PredictionHistoryLoadResult>
   }
   const rows = parsePredictionHistoryRows((data ?? []) as Array<PredictionHistoryRow>);
   const comparableRows = rows.filter((row) =>
-    row.forecasts["hazard-odds-v2-random-only"]
-    && row.forecasts["hazard-odds-v4-logit-calibrated-prequential-v1"],
+    row.forecasts[PROSPECTIVE_V2_MODEL_VERSION]
+    && row.forecasts[CALIBRATED_SHADOW_MODEL_VERSION],
   );
   return {
     rows,
@@ -197,6 +199,8 @@ function writeMarkdown(report: ProspectiveProbabilityEvaluationReport) {
     `- Evaluation mode: ${report.evaluationMode}`,
     `- Backfilled: ${report.backfilled}`,
     `- Evaluation start: ${report.evaluationStartAt ?? "not started"}`,
+    `- Active candidate model: ${report.activeCandidateModel}`,
+    `- Archived candidate models: ${report.archivedCandidateModels.join(", ") || "none"}`,
     `- As of: ${report.asOf}`,
     `- Source: ${report.source}`,
     `- Target definition: ${report.targetDefinition}`,

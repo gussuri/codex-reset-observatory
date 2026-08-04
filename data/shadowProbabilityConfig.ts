@@ -1,6 +1,15 @@
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
-export const CALIBRATED_SHADOW_MODEL_VERSION =
+export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
+export const CALIBRATED_SHADOW_MODEL_VERSION =
+  "hazard-odds-v4-logit-calibrated-prequential-v2";
+export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
+  CALIBRATED_SHADOW_MODEL_VERSION_V1,
+] as const;
+export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION =
+  "status-conservative-v2";
+export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS =
+  "Intermediate Status updates are unavailable; incidents updated after an origin are conservatively projected as investigating.";
 
 export const HAZARD_BIN_HOURS = 24;
 export const HAZARD_TAIL_START_DAYS = 7;

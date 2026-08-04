@@ -1,12 +1,16 @@
 {
   "schemaVersion": "prospective-probability-evaluation-v1",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-04T09:59:31.375Z",
-  "asOf": "2026-08-04T09:59:31.375Z",
+  "generatedAt": "2026-08-04T10:42:44.695Z",
+  "asOf": "2026-08-04T10:42:44.695Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
   "targetDefinition": "Same random-reset target definition as hazard-odds-v2-random-only.",
+  "activeCandidateModel": "hazard-odds-v4-logit-calibrated-prequential-v2",
+  "archivedCandidateModels": [
+    "hazard-odds-v4-logit-calibrated-prequential-v1"
+  ],
   "evaluationStartAt": null,
   "comparison": {
     "resolved24h": 0,
@@ -108,7 +112,7 @@
       }
     },
     "v4": {
-      "modelVersion": "hazard-odds-v4-logit-calibrated-prequential-v1",
+      "modelVersion": "hazard-odds-v4-logit-calibrated-prequential-v2",
       "metrics24h": {
         "count": 0,
         "positiveCount": 0,
@@ -214,9 +218,10 @@
     "logLossNotExtremelyWorse": true
   },
   "notes": [
-    "This is a prospective evaluation of forecasts saved after the v4 deployment point.",
+    "This is a prospective evaluation of forecasts saved after the active v4-v2 deployment point.",
     "Existing prediction_history rows are not backfilled or relabeled as v4 forecasts.",
-    "The primary comparison uses the first saved forecast per Asia/Tokyo calendar day.",
+    "Rows are filtered to the active v2 and v4 candidates before selecting the first saved forecast per Asia/Tokyo calendar day.",
+    "Archived candidate models are excluded from the active comparison: hazard-odds-v4-logit-calibrated-prequential-v1.",
     "Passing the gate never changes the public model automatically; manual review is required.",
     "Data availability: No prediction_history rows contain both v2 and v4 experimental forecasts yet."
   ]

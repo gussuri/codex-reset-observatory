@@ -1,11 +1,15 @@
 import {
   getActualWithinHorizon,
 } from "./prequentialCalibration";
+import {
+  CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS,
+  CALIBRATED_SHADOW_MODEL_VERSION,
+} from "@/data/shadowProbabilityConfig";
 import type { ShadowResetEvent } from "./shadowProbability";
 
 export const PROSPECTIVE_V2_MODEL_VERSION = "hazard-odds-v2-random-only";
-export const PROSPECTIVE_V4_MODEL_VERSION =
-  "hazard-odds-v4-logit-calibrated-prequential-v1";
+export const PROSPECTIVE_V4_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
+export const PROSPECTIVE_ARCHIVED_MODEL_VERSIONS = CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS;
 
 export const PROSPECTIVE_GATE_THRESHOLDS = {
   targetResetCount: 5,
@@ -68,6 +72,8 @@ export type ProspectiveProbabilityEvaluationReport = {
   backfilled: false;
   source: "prediction_history.debug_info.experimentalProbabilityForecasts";
   targetDefinition: string;
+  activeCandidateModel: typeof PROSPECTIVE_V4_MODEL_VERSION;
+  archivedCandidateModels: readonly string[];
   evaluationStartAt: string | null;
   comparison: {
     resolved24h: number;
@@ -134,6 +140,14 @@ export function selectDailyFirstForecasts(rows: Array<ProspectiveForecastRow>) {
     }
   }
   return Array.from(selected.values());
+}
+
+function getFirstComparableForecastAt(rows: Array<ProspectiveForecastRow>) {
+  return rows
+    .map((row) => ({ row, time: timestamp(row.generatedAt) }))
+    .filter((item): item is { row: ProspectiveForecastRow; time: number } => item.time !== null)
+    .sort((left, right) => left.time - right.time)
+    .at(0)?.row.generatedAt ?? null;
 }
 
 function clampProbability(value: number) {
@@ -268,16 +282,15 @@ export function evaluateProspectiveProbabilityForecasts(
   asOf: Date,
 ): ProspectiveProbabilityEvaluationReport {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
-  const dailyRows = selectDailyFirstForecasts(rows).filter((row) =>
+  const comparableRows = rows.filter((row) =>
     row.forecasts[PROSPECTIVE_V2_MODEL_VERSION]
     && row.forecasts[PROSPECTIVE_V4_MODEL_VERSION],
   );
+  const dailyRows = selectDailyFirstForecasts(comparableRows);
   const v2 = createModelEvaluation(dailyRows, PROSPECTIVE_V2_MODEL_VERSION, events, asOf);
   const v4 = createModelEvaluation(dailyRows, PROSPECTIVE_V4_MODEL_VERSION, events, asOf);
-  const evaluationStartTime = dailyRows
-    .map((row) => timestamp(row.generatedAt))
-    .filter((value): value is number => value !== null)
-    .sort((left, right) => left - right)[0] ?? null;
+  const evaluationStartAt = getFirstComparableForecastAt(comparableRows);
+  const evaluationStartTime = timestamp(evaluationStartAt);
   const targetResetCount = evaluationStartTime === null
     ? 0
     : new Set(
@@ -320,11 +333,6 @@ export function evaluateProspectiveProbabilityForecasts(
         : smallDifference
           ? "no_meaningful_difference"
           : "promising";
-  const evaluationStartAt = dailyRows
-    .slice()
-    .sort((left, right) => timestamp(left.generatedAt)! - timestamp(right.generatedAt)!)
-    .at(0)?.generatedAt ?? null;
-
   return {
     schemaVersion: "prospective-probability-evaluation-v1",
     status,
@@ -334,6 +342,8 @@ export function evaluateProspectiveProbabilityForecasts(
     backfilled: false,
     source: "prediction_history.debug_info.experimentalProbabilityForecasts",
     targetDefinition: "Same random-reset target definition as hazard-odds-v2-random-only.",
+    activeCandidateModel: PROSPECTIVE_V4_MODEL_VERSION,
+    archivedCandidateModels: PROSPECTIVE_ARCHIVED_MODEL_VERSIONS,
     evaluationStartAt,
     comparison: {
       resolved24h: resolvedDaily24h,
@@ -357,9 +367,10 @@ export function evaluateProspectiveProbabilityForecasts(
       logLossNotExtremelyWorse,
     },
     notes: [
-      "This is a prospective evaluation of forecasts saved after the v4 deployment point.",
+      "This is a prospective evaluation of forecasts saved after the active v4-v2 deployment point.",
       "Existing prediction_history rows are not backfilled or relabeled as v4 forecasts.",
-      "The primary comparison uses the first saved forecast per Asia/Tokyo calendar day.",
+      "Rows are filtered to the active v2 and v4 candidates before selecting the first saved forecast per Asia/Tokyo calendar day.",
+      `Archived candidate models are excluded from the active comparison: ${PROSPECTIVE_ARCHIVED_MODEL_VERSIONS.join(", ")}.`,
       "Passing the gate never changes the public model automatically; manual review is required.",
     ],
   };

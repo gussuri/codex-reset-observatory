@@ -7,7 +7,10 @@ import {
   enforceProbabilityHorizonCoherence,
   getPointInTimeRadarData,
 } from "../lib/radar/calibratedShadowProbability";
-import { SHADOW_PROBABILITY_MODEL_VERSION } from "../data/shadowProbabilityConfig";
+import {
+  CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION,
+  SHADOW_PROBABILITY_MODEL_VERSION,
+} from "../data/shadowProbabilityConfig";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 
 function historyEvent(id: string, completedAt: string) {
@@ -43,6 +46,7 @@ test("calibrated Shadow uses the v2 result and preserves audit metadata", () => 
   });
 
   assert.equal(result.modelVersion, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(result.pointInTimeProjectionVersion, CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION);
   assert.equal(result.rawModelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.calibrationSampleCount24h, 0);
@@ -182,6 +186,126 @@ test("status projection uses only observations known at the origin", () => {
   );
   assert.equal(resolved?.status, "resolved");
   assert.equal(resolved?.resolvedAt, "2026-08-02T12:00:00.000Z");
+});
+
+test("future monitoring and identified updates are conservatively projected", () => {
+  const origin = new Date("2026-08-01T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: new Date("2026-08-04T00:00:00.000Z") });
+  data.openai_status_history = [
+    {
+      id: "future-monitoring-update",
+      title: "A stronger future monitoring title",
+      status: "monitoring",
+      impact: "critical",
+      createdAt: "2026-07-31T10:00:00.000Z",
+      updatedAt: "2026-08-02T12:00:00.000Z",
+      resolvedAt: null,
+      source: "openai_status",
+      url: "https://status.openai.com/incidents/future-monitoring-update",
+    },
+    {
+      id: "future-identified-update",
+      title: "Another stronger future identified title",
+      status: "identified",
+      impact: "critical",
+      createdAt: "2026-07-31T11:00:00.000Z",
+      updatedAt: "2026-08-02T12:00:00.000Z",
+      resolvedAt: null,
+      source: "openai_status",
+      url: "https://status.openai.com/incidents/future-identified-update",
+    },
+  ];
+
+  const projected = getPointInTimeRadarData(data, origin)?.openai_status_history ?? [];
+  for (const incident of projected) {
+    assert.equal(incident.status, "investigating");
+    assert.equal(incident.impact, null);
+    assert.equal(incident.title, "OpenAI Status incident");
+    assert.equal(incident.updatedAt, incident.createdAt);
+    assert.equal(incident.resolvedAt, null);
+  }
+});
+
+test("keeps origin-known monitoring state and excludes incidents without origin evidence", () => {
+  const origin = new Date("2026-08-01T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: new Date("2026-08-04T00:00:00.000Z") });
+  data.openai_status_history = [
+    {
+      id: "known-monitoring",
+      title: "Known monitoring incident",
+      status: "monitoring",
+      impact: "major",
+      createdAt: "2026-07-31T10:00:00.000Z",
+      updatedAt: "2026-07-31T12:00:00.000Z",
+      resolvedAt: null,
+      source: "openai_status",
+      url: "https://status.openai.com/incidents/known-monitoring",
+    },
+    {
+      id: "missing-all-times",
+      title: "Undated incident",
+      status: "investigating",
+      impact: "critical",
+      createdAt: null,
+      updatedAt: null,
+      resolvedAt: null,
+      source: "openai_status",
+      url: "https://status.openai.com/incidents/missing-all-times",
+    },
+    {
+      id: "missing-created-with-update",
+      title: "Incident known from update",
+      status: "monitoring",
+      impact: "minor",
+      createdAt: null,
+      updatedAt: "2026-07-31T13:00:00.000Z",
+      resolvedAt: null,
+      source: "openai_status",
+      url: "https://status.openai.com/incidents/missing-created-with-update",
+    },
+  ];
+
+  const projected = getPointInTimeRadarData(data, origin)?.openai_status_history ?? [];
+  assert.deepEqual(projected.map((incident) => incident.id), [
+    "known-monitoring",
+    "missing-created-with-update",
+  ]);
+  assert.equal(projected[0]?.status, "monitoring");
+  assert.equal(projected[0]?.impact, "major");
+});
+
+test("future status and impact/title changes do not alter an earlier prediction", () => {
+  const origin = new Date("2026-08-01T00:00:00.000Z");
+  const baseData = getLocalRadarData({ calculationNow: new Date("2026-08-04T00:00:00.000Z") });
+  baseData.openai_status_history = [{
+    id: "mutable-incident",
+    title: "Codex incident",
+    status: "investigating",
+    impact: "minor",
+    createdAt: "2026-07-31T10:00:00.000Z",
+    updatedAt: "2026-07-31T10:30:00.000Z",
+    resolvedAt: null,
+    source: "openai_status",
+    url: "https://status.openai.com/incidents/mutable-incident",
+  }];
+  const futureData = structuredClone(baseData);
+  futureData.openai_status_history = [{
+    ...baseData.openai_status_history[0],
+    title: "Critical capacity errors after a future update",
+    status: "resolved",
+    impact: "critical",
+    updatedAt: "2026-08-02T12:00:00.000Z",
+    resolvedAt: "2026-08-02T12:00:00.000Z",
+  }];
+
+  const base = calculateCalibratedShadowProbability(getPointInTimeRadarData(baseData, origin), { now: origin });
+  const future = calculateCalibratedShadowProbability(getPointInTimeRadarData(futureData, origin), { now: origin });
+  assert.equal(future.rawProbability24h, base.rawProbability24h);
+  assert.equal(future.rawProbability48h, base.rawProbability48h);
+  assert.equal(future.alpha24h, base.alpha24h);
+  assert.equal(future.alpha48h, base.alpha48h);
+  assert.equal(future.probability24h, base.probability24h);
+  assert.equal(future.probability48h, base.probability48h);
 });
 
 test("adding a future Status incident does not change an earlier origin prediction", () => {

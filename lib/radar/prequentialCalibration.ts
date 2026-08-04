@@ -236,24 +236,22 @@ function isAvailableAt(value: string | null | undefined, originTime: number) {
   return parsed !== null && parsed <= originTime;
 }
 
-function getFirstKnownIncidentTime(
-  incident: OpenAIStatusHistoryItem,
-) {
-  return [incident.createdAt, incident.updatedAt, incident.resolvedAt]
-    .map((value) => value ? timestamp(value) : null)
-    .filter((value): value is number => value !== null)
-    .sort((left, right) => left - right)[0] ?? null;
-}
-
 function projectStatusIncidentToOrigin(
   incident: OpenAIStatusHistoryItem,
   originTime: number,
 ) {
-  const firstKnownTime = getFirstKnownIncidentTime(incident);
-  if (firstKnownTime === null || firstKnownTime > originTime) return null;
-
+  const createdAtTime = incident.createdAt ? timestamp(incident.createdAt) : null;
   const updatedAtTime = incident.updatedAt ? timestamp(incident.updatedAt) : null;
   const resolvedAtTime = incident.resolvedAt ? timestamp(incident.resolvedAt) : null;
+  const firstKnownTime = [createdAtTime, updatedAtTime, resolvedAtTime]
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right)[0] ?? null;
+
+  // A future creation timestamp is authoritative even if a malformed payload
+  // also contains an older update or resolution timestamp.
+  if (createdAtTime !== null && createdAtTime > originTime) return null;
+  if (firstKnownTime === null || firstKnownTime > originTime) return null;
+
   const currentStatus = incident.status.toLowerCase();
   const inferredResolvedTime = resolvedAtTime ?? (
     currentStatus === "resolved" ? updatedAtTime ?? timestamp(incident.createdAt ?? "") : null
@@ -261,7 +259,22 @@ function projectStatusIncidentToOrigin(
   const resolvedAtIsKnown = inferredResolvedTime !== null && inferredResolvedTime <= originTime;
   const updatedAtIsKnown = updatedAtTime !== null && updatedAtTime <= originTime;
   const statusWasUpdatedAfterOrigin = updatedAtTime !== null && updatedAtTime > originTime;
-  const status = currentStatus === "resolved" && (!resolvedAtIsKnown || statusWasUpdatedAfterOrigin)
+  const resolutionWasRecordedAfterOrigin = resolvedAtTime !== null && resolvedAtTime > originTime;
+
+  if (statusWasUpdatedAfterOrigin) {
+    // Statuspage gives us only the latest snapshot, not the intermediate
+    // update history. Do not carry future state, impact, or title backwards.
+    return {
+      ...incident,
+      title: "OpenAI Status incident",
+      status: "investigating",
+      impact: null,
+      updatedAt: incident.createdAt ?? null,
+      resolvedAt: null,
+    };
+  }
+
+  const status = currentStatus === "resolved" && (!resolvedAtIsKnown || resolutionWasRecordedAfterOrigin)
     ? "investigating"
     : incident.status;
 
