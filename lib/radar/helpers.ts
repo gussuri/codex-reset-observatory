@@ -4,6 +4,44 @@ import { translateUI, translateDynamic, translateExpectation } from "./i18n";
 
 export const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 export const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+export function formatElapsedResetDuration(
+  elapsedMs: number,
+  locale: Locale = "ja",
+) {
+  const totalHours =
+    Number.isFinite(elapsedMs) && elapsedMs >= 0
+      ? Math.floor(elapsedMs / HOUR_MS)
+      : 0;
+
+  if (totalHours < 1) {
+    return locale === "en"
+      ? "less than 1 hour"
+      : locale === "zh"
+        ? "不到1小时"
+        : "1時間未満";
+  }
+
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  if (locale === "en") {
+    const dayText = `${days} ${days === 1 ? "day" : "days"}`;
+    const hourText = `${hours} ${hours === 1 ? "hour" : "hours"}`;
+
+    if (days === 0) return hourText;
+    return hours === 0 ? dayText : `${dayText} and ${hourText}`;
+  }
+
+  if (locale === "zh") {
+    if (days === 0) return `${hours}小时`;
+    return hours === 0 ? `${days}天` : `${days}天${hours}小时`;
+  }
+
+  if (days === 0) return `${hours}時間`;
+  return hours === 0 ? `${days}日` : `${days}日${hours}時間`;
+}
 
 export function probabilityToPercent(value: number | undefined, locale: Locale = "ja") {
   if (typeof value !== "number" || Number.isNaN(value)) {

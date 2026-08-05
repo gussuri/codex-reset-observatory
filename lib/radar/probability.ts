@@ -22,13 +22,14 @@ import {
   probabilityToPercent,
   getExpectationKey,
   getExpectationLabel,
+  formatElapsedResetDuration,
 } from "./helpers";
 import {
   combineResetHistory,
   convertTiboResetSignalToHistoryEvent,
   isFormalTiboResetSignal,
 } from "./tiboHistory";
-import { isEligibleRandomResetEvent } from "./resetEligibility";
+import { isBroadResetScope, isEligibleRandomResetEvent } from "./resetEligibility";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -1072,6 +1073,49 @@ export function getLastGlobalResetAt(
   return latestOfficialAt;
 }
 
+function isEligibleElapsedResetEvent(
+  item: WindowEventLike,
+  completedAt: number | null,
+  nowTime: number,
+) {
+  if (item.recordKind !== "confirmed_global" && item.recordKind !== "banked_distribution") {
+    return false;
+  }
+
+  const cycleType = item.details?.cycleType;
+  if (cycleType !== "定期リセット" && cycleType !== "ランダムリセット") {
+    return false;
+  }
+
+  if (!isBroadResetScope(item)) {
+    return false;
+  }
+
+  return Number.isFinite(completedAt) && Number.isFinite(nowTime) && completedAt! <= nowTime;
+}
+
+export function getLastDisplayResetAt(
+  data?: RadarData | null,
+  now: Date = new Date(),
+) {
+  const combinedHistory = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+  );
+  const latestTime = combinedHistory
+    .map((item) => {
+      const completedAt = getCompletedResetTimestamp(item);
+      return isEligibleElapsedResetEvent(item, completedAt, now.getTime())
+        ? completedAt
+        : null;
+    })
+    .filter((time): time is number => time !== null)
+    .sort((left, right) => right - left)[0];
+
+  return latestTime === undefined ? null : new Date(latestTime);
+}
+
 export function getLocalExpectationLevel(
   data: RadarData | null,
   locale: Locale = "ja",
@@ -1139,23 +1183,19 @@ export function getLocalProbabilityReason(
   const communityMentions = environment.community_mentions_24h ?? 0;
   const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
-  const lastReset = resolvedSignalEvaluation.latestResetAt;
-  
   let lastResetLabel = "";
-  if (lastReset) {
-    const days = Math.floor(
-      Math.max(0, now.getTime() - lastReset.getTime()) / (24 * 60 * 60 * 1000),
+  const displayLastReset = getLastDisplayResetAt(data, now);
+  if (displayLastReset) {
+    const elapsedDuration = formatElapsedResetDuration(
+      Math.max(0, now.getTime() - displayLastReset.getTime()),
+      locale,
     );
     if (locale === "en") {
-      if (days === 1) {
-        lastResetLabel = "One day has passed since the last reset";
-      } else {
-        lastResetLabel = `${days} days have passed since the last reset`;
-      }
+      lastResetLabel = `It has been ${elapsedDuration} since the last reset`;
     } else if (locale === "zh") {
-      lastResetLabel = `自上次重置以来已过去 ${days} 天`;
+      lastResetLabel = `距离上次重置已过去${elapsedDuration}`;
     } else {
-      lastResetLabel = `直近のリセットから${days}日経過`;
+      lastResetLabel = `直近のリセットから${elapsedDuration}経過`;
     }
   } else {
     lastResetLabel = locale === "en" ? "unknown days have passed since the last reset" : locale === "zh" ? "自上次重置以来的天数未知" : "直近のリセットから経過日数不明";
@@ -1391,17 +1431,18 @@ export function getDisplayProbabilityReason(
     );
   }
 
-  const lastReset = resolvedSignalEvaluation.latestResetAt;
+  const lastReset = getLastDisplayResetAt(data, now);
   if (lastReset) {
-    const days = Math.floor(
-      Math.max(0, now.getTime() - lastReset.getTime()) / (24 * 60 * 60 * 1000),
+    const elapsedDuration = formatElapsedResetDuration(
+      Math.max(0, now.getTime() - lastReset.getTime()),
+      locale,
     );
     sentences.push(
       locale === "en"
-        ? `${days === 1 ? "One day has" : `${days} days have`} passed since the last reset.`
+        ? `It has been ${elapsedDuration} since the last reset.`
         : locale === "zh"
-          ? `自上次重置以来已过去 ${days} 天。`
-          : `直近のリセットから${days}日経過しています。`,
+          ? `距离上次重置已过去${elapsedDuration}。`
+          : `直近のリセットから${elapsedDuration}経過しています。`,
     );
   }
 
