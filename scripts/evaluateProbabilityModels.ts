@@ -6,6 +6,8 @@ import {
   LOCAL_RESET_HISTORY,
 } from "../data/resetHistory";
 import {
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
@@ -434,14 +436,21 @@ export function classifyModelResult(input: {
 }
 
 const MODEL_DEFINITIONS: Array<ProbabilityModelDefinition> = [
+  {
+    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    halfLifeDays: PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+    kind: "recency",
+  },
   { modelVersion: SHADOW_PROBABILITY_MODEL_VERSION, halfLifeDays: null, kind: "shadow" },
   { modelVersion: CONSTANT_HAZARD_MODEL_VERSION, halfLifeDays: null, kind: "constant_hazard" },
   { modelVersion: CALIBRATED_V2_MODEL_VERSION, halfLifeDays: null, kind: "prequential_calibrated" },
-  ...RECENCY_SHADOW_MODEL_CONFIG.map(({ modelVersion, halfLifeDays }) => ({
-    modelVersion,
-    halfLifeDays,
-    kind: "recency" as const,
-  })),
+  ...RECENCY_SHADOW_MODEL_CONFIG
+    .filter(({ modelVersion }) => modelVersion !== PUBLISHED_PROBABILITY_MODEL_VERSION)
+    .map(({ modelVersion, halfLifeDays }) => ({
+      modelVersion,
+      halfLifeDays,
+      kind: "recency" as const,
+    })),
 ];
 
 const BASE_MODEL_DEFINITIONS = MODEL_DEFINITIONS.filter(
@@ -602,7 +611,7 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
     lines.push(`- Non-overlapping 48h: ${formatMetric(model.nonOverlapping48h)}`);
     if (model.nonOverlapping48hDifferenceVsCurrent) {
       lines.push(
-        `- Non-overlapping 48h difference vs v2: Brier ${(model.nonOverlapping48hDifferenceVsCurrent.brier >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.brier.toFixed(4)}, logLoss ${(model.nonOverlapping48hDifferenceVsCurrent.logLoss >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.logLoss.toFixed(4)}`,
+        `- Non-overlapping 48h difference vs public model: Brier ${(model.nonOverlapping48hDifferenceVsCurrent.brier >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.brier.toFixed(4)}, logLoss ${(model.nonOverlapping48hDifferenceVsCurrent.logLoss >= 0 ? "+" : "") + model.nonOverlapping48hDifferenceVsCurrent.logLoss.toFixed(4)}`,
       );
     }
     lines.push("");
@@ -641,7 +650,7 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
     `- ${report.notes.join("\n- ")}`,
     "- Daily evaluation origins overlap, so daily metric differences are not independent.",
     "- The non-overlapping 48h section is a lower-sample reference analysis.",
-    "- The public model is hazard-odds-v3-random-inclusive; benchmark models are evaluation-only.",
+    `- The public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; ${SHADOW_PROBABILITY_MODEL_VERSION} remains the unweighted comparison baseline.`,
     "- Benchmark results do not change API responses, UI, DTOs, Supabase, or stored Shadow forecasts.",
     "- No automatic winner is selected from an inconclusive result.",
   );
@@ -666,7 +675,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     const data = getPointInTimeRadarData(sourceData, origin) ?? getLocalRadarData({ calculationNow: origin });
     const actual24h = getActualWithinHorizon(allEvents, recordedAt, 24);
     const actual48h = getActualWithinHorizon(allEvents, recordedAt, 48);
-    const previousV2Rows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.slice();
+    const previousBaseRows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.slice();
     const shadow = calculateShadowProbability(data, {
       now: origin,
       staticHistory: LOCAL_RESET_HISTORY,
@@ -686,8 +695,8 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
       });
     }
 
-    const currentV2Row = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.at(-1)!;
-    const calibrationAudit = calculatePrequentialLogitCalibration(currentV2Row, previousV2Rows);
+    const currentBaseRow = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION)!.at(-1)!;
+    const calibrationAudit = calculatePrequentialLogitCalibration(currentBaseRow, previousBaseRows);
     prequentialCalibrationAudits.push(calibrationAudit);
     rowsByModel.get(CALIBRATED_V2_MODEL_VERSION)!.push({
       recordedAt,
@@ -698,7 +707,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     });
   }
 
-  const currentRows = rowsByModel.get(SHADOW_PROBABILITY_MODEL_VERSION) ?? [];
+  const currentRows = rowsByModel.get(PUBLISHED_PROBABILITY_MODEL_VERSION) ?? [];
   const currentNonOverlappingRows = currentRows.filter((row) => nonOverlappingOriginSet.has(row.recordedAt));
   const current24h = calculateMetric(currentRows, "24h");
   const current48h = calculateMetric(currentRows, "48h");
@@ -709,7 +718,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     const metrics24h = calculateMetric(rows, "24h");
     const metrics48h = calculateMetric(rows, "48h");
     const nonOverlapping48h = calculateMetric(nonOverlappingRows, "48h");
-    if (model.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION) {
+    if (model.modelVersion === PUBLISHED_PROBABILITY_MODEL_VERSION) {
       return {
         modelVersion: model.modelVersion,
         halfLifeDays: model.halfLifeDays,
@@ -754,7 +763,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     };
   });
 
-  const currentModel = models.find((model) => model.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION)!;
+  const currentModel = models.find((model) => model.modelVersion === PUBLISHED_PROBABILITY_MODEL_VERSION)!;
   const constantHazardModel = models.find((model) => model.modelVersion === CONSTANT_HAZARD_MODEL_VERSION)!;
   const calibratedV2Model = models.find((model) => model.modelVersion === CALIBRATED_V2_MODEL_VERSION)!;
   const constantDirection = getBrierDirection(constantHazardModel.nonOverlapping48h, currentModel.nonOverlapping48h);
@@ -805,7 +814,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
       },
     },
     notes: [
-      "Models use the same target event definition and signal multiplier path as the current Shadow model.",
+      "Models use the same target event definition and signal multiplier path as the public probability model.",
       "The constant hazard benchmark uses the v2 global lambda and censored exposure without age bins.",
       "Prequential calibration uses only pastOrigin + horizon <= currentOrigin, a fixed Normal(0, 0.5^2) prior, and a minimum of 10 confirmed samples.",
       `The fixed bootstrap seed is ${BOOTSTRAP_SEED} with ${BLOCK_DAYS}-day blocks and ${BOOTSTRAP_ITERATIONS} iterations for overlapping daily comparisons.`,

@@ -1,4 +1,7 @@
-import { SHADOW_PROBABILITY_MODEL_VERSION } from "@/data/shadowProbabilityConfig";
+import {
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+} from "@/data/shadowProbabilityConfig";
 import type {
   ActiveOfficialNotice,
   LocalSignalEvaluation,
@@ -6,11 +9,11 @@ import type {
 } from "./probability";
 import { getLocalProbabilityCalculation } from "./probability";
 import {
-  calculateShadowProbability,
   derive12hFrom24hProbability,
   derive72hFrom48hProbability,
   type ShadowProbabilityResult,
 } from "./shadowProbability";
+import { calculateRecencyWeightedShadowProbability } from "./recencyWeightedProbability";
 import type { RadarData } from "./types";
 
 export type PublishedProbabilitySource = "shadow" | "heuristic-fallback";
@@ -39,7 +42,7 @@ export function isValidShadowPrediction(
   const probability72h = shadow.predictions?.probability72h;
 
   return (
-    shadow.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION &&
+    shadow.modelVersion === PUBLISHED_PROBABILITY_MODEL_VERSION &&
     Number.isFinite(probability12h) &&
     Number.isFinite(probability24h) &&
     Number.isFinite(probability48h) &&
@@ -112,14 +115,18 @@ export function calculatePublishedProbability(
     now?: Date;
     signalEvaluation?: LocalSignalEvaluation;
     activeOfficialNotice?: ActiveOfficialNotice | null;
-      regularResetExpectedAt?: string | null;
-    } = {},
+    regularResetExpectedAt?: string | null;
+  } = {},
   runtime: { logFallback?: boolean } = {},
 ): PublishedProbabilityCalculation {
   const primary = getLocalProbabilityCalculation(data, options);
 
   try {
-    const shadow = calculateShadowProbability(data, options);
+    const shadow = calculateRecencyWeightedShadowProbability(
+      data,
+      PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+      options,
+    );
     const selected = selectPublishedProbability(primary, shadow);
     if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
     return selected;

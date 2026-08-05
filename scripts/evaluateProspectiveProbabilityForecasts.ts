@@ -6,7 +6,7 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
-  SHADOW_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
   getShadowCompletedResetEvents,
@@ -242,7 +242,7 @@ function writeMarkdown(report: ProspectiveProbabilityEvaluationReport) {
     "## Notes",
     "",
     ...report.notes.map((note) => `- ${note}`),
-    `- The active public model is ${SHADOW_PROBABILITY_MODEL_VERSION}; this report retains the archived ${LEGACY_SHADOW_PROBABILITY_MODEL_VERSION} comparison.`,
+    `- The active public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; this report retains the archived ${LEGACY_SHADOW_PROBABILITY_MODEL_VERSION} comparison.`,
   ];
   return `${lines.join("\n")}\n`;
 }

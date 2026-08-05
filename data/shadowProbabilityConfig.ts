@@ -1,5 +1,7 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r2";
+export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
 export const CALIBRATED_SHADOW_MODEL_VERSION =
@@ -78,8 +80,8 @@ export const RECENCY_SHADOW_MODEL_CONFIG = [
     halfLifeDays: 14,
   },
   {
-    modelVersion: "hazard-odds-v3-recency-bayes-h30-r2",
-    halfLifeDays: 30,
+    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    halfLifeDays: PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   },
   {
     modelVersion: "hazard-odds-v3-recency-bayes-h60-r2",

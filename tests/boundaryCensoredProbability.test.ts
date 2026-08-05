@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getLocalRadarData } from "../lib/radar";
 import { calculateShadowProbability } from "../lib/radar/shadowProbability";
+import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 import type {
   BoundaryCensoredBoundary,
   BoundaryCensoredInterval,
@@ -17,6 +18,7 @@ import {
 } from "../lib/radar/boundaryCensoredProbability";
 import type { WindowEventLike } from "../lib/radar/types";
 import { evaluateBoundaryCensoredProbability } from "../scripts/evaluateBoundaryCensoredProbability";
+import { PUBLISHED_PROBABILITY_MODEL_VERSION } from "../data/shadowProbabilityConfig";
 
 function boundary(
   id: string,
@@ -254,7 +256,7 @@ test("candidate preserves the official notice override", () => {
   assert.equal(result.predictions.probability48h, 0.96);
 });
 
-test("candidate evaluation model stays separate from the public random-inclusive model", () => {
+test("candidate evaluation model stays separate from the public recency model", () => {
   const now = new Date("2026-08-04T00:00:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });
   const options = {
@@ -262,14 +264,14 @@ test("candidate evaluation model stays separate from the public random-inclusive
     staticHistory: [boundary("random", "2026-08-01T00:00:00.000Z", "ランダムリセット")],
     activeOfficialNotice: null,
   };
-  const publicResult = calculateShadowProbability(data, options);
+  const publicResult = calculatePublishedProbability(data, options, { logFallback: false });
   const candidateResult = calculateBoundaryCensoredProbability(data, options);
 
-  assert.equal(publicResult.modelVersion, "hazard-odds-v3-random-inclusive");
+  assert.equal(publicResult.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(candidateResult.modelVersion, BOUNDARY_CENSORED_MODEL_VERSION);
 });
 
-test("boundary-censored evaluation reports scored and censored horizons without changing the public model", () => {
+test("boundary-censored evaluation compares against the unweighted baseline", () => {
   const report = evaluateBoundaryCensoredProbability(new Date("2026-08-01T03:32:00.000Z"));
 
   assert.equal(report.evaluationMethod, "walk_forward_prequential");
