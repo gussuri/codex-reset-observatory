@@ -60,6 +60,22 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
   }
 }
 
+function getHistoryDisplayTitle(
+  item: PublicRadarSnapshot["viewModel"]["recentHistory"][number],
+  locale: Locale,
+) {
+  const title = translateDynamic(item.title, locale);
+  if (item.recordKind !== "reference") {
+    return title;
+  }
+
+  return locale === "en"
+    ? `${title} (reference record)`
+    : locale === "zh"
+      ? `${title}（参考记录）`
+      : `${title}（参考記録）`;
+}
+
 export function RadarDashboard({
   initialData,
   initialFetchedAt,
@@ -313,7 +329,9 @@ export function RadarDashboard({
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
   const visibleHistory = viewModel.recentHistory.filter(
-    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
+    (item) => item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "reference",
   );
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",
@@ -555,7 +573,7 @@ export function RadarDashboard({
                 >
                   <div>
                     <h3 className="ui-heading text-lg font-bold text-slate-950 sm:text-base sm:font-semibold">
-                      {translateDynamic(item.title, locale)}
+                      {getHistoryDisplayTitle(item, locale)}
                     </h3>
                     <ResetHistoryDetails
                       item={item}

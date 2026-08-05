@@ -435,7 +435,7 @@ test("the corrected static 2026-08-01 record points to the executed tweet", () =
   assert.equal(record?.source_url, "https://x.com/thsottiaux/status/2083395449814229287");
 });
 
-test("weekly reference dates stay out of observed history and latest reset selection", () => {
+test("weekly reference dates remain visible in history without becoming latest random resets", () => {
   const calculationNow = new Date("2026-08-04T03:32:00.000Z");
   const viewModel = getRadarViewModel(
     getLocalRadarData({ calculationNow }),
@@ -471,12 +471,20 @@ test("history records distinguish confirmed resets, banked distributions, and so
   assert.equal(reference25 ? getHistoryRecordKind(reference25) : null, "reference");
   assert.equal(reference07 ? getHistoryRecordKind(reference07) : null, "reference");
   assert.equal(reference18 ? getHistoryRecordKind(reference18) : null, "reference");
+  for (const record of [reference25, reference07, reference18]) {
+    assert.equal(record?.title, "定期リセット");
+    assert.equal(record?.details?.cycleType, "定期リセット");
+    assert.equal(record?.details?.reasonType, "定期更新");
+    assert.equal(record?.details?.resetMethod, "強制リセット");
+  }
+  assert.equal(reference18?.details?.scope, "全有料プラン");
   assert.equal(banked18 ? getHistoryRecordKind(banked18) : null, "banked_distribution");
   assert.equal(banked12 ? getHistoryRecordKind(banked12) : null, "banked_distribution");
   assert.equal(confirmed ? getHistoryRecordKind(confirmed) : null, "confirmed_global");
   assert.equal(getHistoryRecordKind({ title: "Unclassified event" }), "reference");
-  assert.equal(banked12?.details?.cycleType, "任意リセット配布");
-  assert.equal(banked12?.details?.reasonType, "仕様変更");
+  assert.equal(banked12?.details?.cycleType, "定期リセット");
+  assert.equal(banked12?.details?.reasonType, "定期更新");
+  assert.equal(banked12?.details?.resetMethod, "任意リセット権1回配布");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux/status/123" }), "direct_post");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
   assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");

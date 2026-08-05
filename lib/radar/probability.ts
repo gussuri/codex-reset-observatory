@@ -28,6 +28,7 @@ import {
   convertTiboResetSignalToHistoryEvent,
   isFormalTiboResetSignal,
 } from "./tiboHistory";
+import { isEligibleRandomResetEvent } from "./resetEligibility";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -588,20 +589,11 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
   );
   const historicalItems = [...staticHistory, ...dynamicHistory];
   const resetTimes = historicalItems
-    .filter((item) => {
-      if (item.recordKind !== "confirmed_global") {
-        return false;
-      }
-      if (item.details?.cycleType !== "ランダムリセット") {
-        return false;
-      }
-      if (item.details?.resetMethod === "任意リセット権1回配布") {
-        return false;
-      }
-
-      const time = getCompletedResetTimestamp(item);
-      return time !== null && time <= now.getTime();
-    })
+    .filter((item) => isEligibleRandomResetEvent(
+      item,
+      getCompletedResetTimestamp(item),
+      now.getTime(),
+    ))
     .map((item) => getCompletedResetTimestamp(item)!)
     .sort((left, right) => left - right);
 
@@ -984,12 +976,8 @@ export function getRecent7DayResetCount(
   );
 
   return combinedHistory.filter((item) => {
-    const resetMethod = item.details?.resetMethod;
-    if (resetMethod === "任意リセット権1回配布") {
-      return false;
-    }
     const time = getCompletedResetTimestamp(item);
-    return time !== null && time >= sevenDaysAgo && time <= nowTime;
+    return isEligibleRandomResetEvent(item, time, nowTime) && time! >= sevenDaysAgo;
   }).length;
 }
 
@@ -1073,32 +1061,15 @@ export function getLastGlobalResetAt(
     data?.rejected_tibo_resets ?? [],
   );
   const candidates = combinedHistory.map((item) => {
-    if (item.recordKind !== "confirmed_global") {
-      return null;
-    }
-    const resetMethod = item.details?.resetMethod;
-    if (resetMethod === "任意リセット権1回配布") {
-      return null;
-    }
     const time = getCompletedResetTimestamp(item);
-    return time !== null && time <= now.getTime()
-      ? new Date(time).toISOString()
+    return isEligibleRandomResetEvent(item, time, now.getTime())
+      ? new Date(time!).toISOString()
       : null;
   });
 
   const latestOfficialStr = getLatestIsoDate(candidates);
   const latestOfficialAt = latestOfficialStr ? new Date(latestOfficialStr) : null;
-  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
-
-  if (!latestOfficialAt) {
-    return latestExecutionAt;
-  }
-
-  if (!latestExecutionAt || latestOfficialAt >= latestExecutionAt) {
-    return latestOfficialAt;
-  }
-
-  return latestExecutionAt;
+  return latestOfficialAt;
 }
 
 export function getLocalExpectationLevel(

@@ -70,7 +70,7 @@ test("derives the 72-hour metric from a legacy snapshot without showing zero", (
   );
 
   assert.match(html, /aria-label="Within 72 hours"/);
-  assert.match(html, /aria-valuenow="56"/);
+  assert.match(html, /aria-valuenow="59"/);
   assert.doesNotMatch(html, /aria-label="Within 72 hours"[^>]*aria-valuenow="0"/);
 });
 

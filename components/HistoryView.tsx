@@ -111,7 +111,7 @@ function HistoryEventSection({
                 >
                   <div>
                     <h4 className="ui-heading text-lg font-semibold text-slate-950">
-                      {translateDynamic(item.title, locale)}
+                      {getHistoryDisplayTitle(item, locale)}
                     </h4>
                     <ResetHistoryDetails item={item} locale={locale} />
                   </div>
@@ -140,6 +140,19 @@ function HistoryEventSection({
       </div>
     </section>
   );
+}
+
+function getHistoryDisplayTitle(item: HistoryItem, locale: Locale) {
+  const title = translateDynamic(item.title, locale);
+  if (item.recordKind !== "reference") {
+    return title;
+  }
+
+  return locale === "en"
+    ? `${title} (reference record)`
+    : locale === "zh"
+      ? `${title}（参考记录）`
+      : `${title}（参考記録）`;
 }
 
 export function HistoryView({ data, locale }: HistoryViewProps) {
@@ -191,7 +204,9 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
   }[locale];
 
   const visibleItems = viewModel.recentHistory.filter(
-    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
+    (item) => item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "reference",
   );
 
   return (

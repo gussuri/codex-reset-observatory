@@ -69,7 +69,7 @@ export const SHADOW_SIGNAL_MULTIPLIER_CONFIG = {
 } as const;
 
 export const SHADOW_TARGET_DEFINITION =
-  "Completed random reset events after reset-history deduplication; excludes regular resets, manual reset-credit grants, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and explicitly narrow-scope records.";
+  "Completed broad-scope random reset events after reset-history deduplication; includes forced resets and Banked Reset distributions, while excluding regular resets, narrow-scope distributions, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and reference records.";
 
 export const RECENCY_SHADOW_MODEL_CONFIG = [
   {

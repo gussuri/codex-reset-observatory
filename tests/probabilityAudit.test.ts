@@ -95,8 +95,8 @@ test("strict history classification preserves the fixed public probability basel
     now,
   );
 
-  assert.equal(viewModel.probability24h, 0.24356292502906995);
-  assert.equal(viewModel.probability48h, 0.42249878025667253);
+  assert.equal(viewModel.probability24h, 0.26063284833834355);
+  assert.equal(viewModel.probability48h, 0.44994539803274325);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {
@@ -139,6 +139,58 @@ test("latest reset and seven-day count exclude future, pending, opened-only, and
   withLocalHistory(history, () => {
     const data = getLocalRadarData({ calculationNow: now });
     assert.equal(getLastGlobalResetAt(data, now)?.toISOString(), completedAt);
+    assert.equal(getRecent7DayResetCount(data, now), 1);
+  });
+});
+
+test("latest reset and seven-day count use only broad random reset targets", () => {
+  const now = new Date("2026-08-10T12:00:00.000Z");
+  const history = [
+    resetEvent("regular-forced", "2026-08-09T08:00:00.000Z", {
+      details: {
+        cycleType: "定期リセット",
+        reasonType: "定期更新",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: "0分（定期）",
+      },
+    }),
+    resetEvent("random-credit", "2026-08-09T09:00:00.000Z", {
+      recordKind: "banked_distribution",
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "ご祝儀リセット",
+        resetMethod: "任意リセット権1回配布",
+        scope: "全有料プラン",
+        noticeToExecution: "0分",
+      },
+    }),
+    resetEvent("regular-credit", "2026-08-09T10:00:00.000Z", {
+      recordKind: "banked_distribution",
+      details: {
+        cycleType: "定期リセット",
+        reasonType: "定期更新",
+        resetMethod: "任意リセット権1回配布",
+        scope: "全有料プラン",
+        noticeToExecution: "0分（定期）",
+      },
+    }),
+    resetEvent("narrow-credit", "2026-08-09T11:00:00.000Z", {
+      recordKind: "banked_distribution",
+      scope: "不具合対象ユーザー（約50万人）",
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "詫びリセット",
+        resetMethod: "任意リセット権1回配布",
+        scope: "不具合対象ユーザー（約50万人）",
+        noticeToExecution: "0分",
+      },
+    }),
+  ];
+
+  withLocalHistory(history, () => {
+    const data = getLocalRadarData({ calculationNow: now });
+    assert.equal(getLastGlobalResetAt(data, now)?.toISOString(), "2026-08-09T09:00:00.000Z");
     assert.equal(getRecent7DayResetCount(data, now), 1);
   });
 });

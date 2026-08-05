@@ -430,7 +430,11 @@ test("finds newer tweets after a processed id even when the feed is unsorted", (
   };
 
   assert.deepEqual(
-    getNewTweets([baseline, newest, middle], state).map((tweet) => tweet.id),
+    getNewTweets(
+      [baseline, newest, middle],
+      state,
+      new Date("2026-07-29T04:00:00.000Z"),
+    ).map((tweet) => tweet.id),
     [middle.id, newest.id],
   );
 });

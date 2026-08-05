@@ -10,7 +10,9 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
  * 全28件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
- * details.resetMethod 属性によって予測エンジンの起算点フィルター等に使用されます。
+ * details.cycleType distinguishes regular and random resets, while recordKind
+ * remains an independent record classification and resetMethod describes how
+ * the reset was delivered.
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
@@ -338,7 +340,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-codex-regular-reset-2026-07-07",
     "recordKind": "reference",
-    "title": "週間リセット参考日時",
+    "title": "定期リセット",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-07-07T09:30:00+09:00",
@@ -346,17 +348,17 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "completed_at": "2026-07-07T09:30:00+09:00",
     "window_minutes": 0,
     "window_human": "定期実施",
-    "scope": "共通参考日時",
-    "summary": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。",
+    "scope": "任意リセットを使っていないアカウント",
+    "summary": "通常の1週間サイクルのタイミングで、有料プランのCodex利用上限リセットが実施されました。ただし、任意リセットを使用したアカウントは対象外となります。",
     "source_url": null,
     "details": {
-      "cycleType": "参考日時",
-      "reasonType": "参考情報",
-      "resetMethod": "共通参考日時",
-      "scope": "共通参考日時",
-      "noticeToExecution": "不明",
+      "cycleType": "定期リセット",
+      "reasonType": "定期更新",
+      "resetMethod": "強制リセット",
+      "scope": "任意リセットを使っていないアカウント",
+      "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。"
+      "note": "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。"
     }
   },
   {
@@ -455,7 +457,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-codex-regular-reset-2026-06-25",
     "recordKind": "reference",
-    "title": "週間リセット参考日時",
+    "title": "定期リセット",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-06-25T07:01:00+09:00",
@@ -464,22 +466,22 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
-    "summary": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。",
+    "summary": "2026/06/25 07:01 JST に、通常の1週間サイクルとして全有料プランのCodex利用上限リセットが実施されました。",
     "source_url": null,
     "details": {
-      "cycleType": "参考日時",
-      "reasonType": "参考情報",
-      "resetMethod": "共通参考日時",
+      "cycleType": "定期リセット",
+      "reasonType": "定期更新",
+      "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "不明",
+      "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "出典のない共通参考日時です。実際の全体リセット実施を確認した記録ではありません。"
+      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
     }
   },
   {
     "id": "local-codex-rate-limit-reset-notice-2026-06-17",
     "recordKind": "reference",
-    "title": "週間リセット参考日時",
+    "title": "定期リセット",
     "kind": "window_closed",
     "status": "closed",
     "opened_at": "2026-06-18T07:00:00+09:00",
@@ -488,16 +490,16 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 0,
     "window_human": "定期実施",
     "scope": "全有料プラン",
-    "summary": "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。",
+    "summary": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。あわせて、Codexの信頼性に影響する不具合への補償として任意リセット1回分も配布されました。",
     "source_url": "https://x.com/thsottiaux/status/2066956441173323943",
     "details": {
-      "cycleType": "参考日時",
-      "reasonType": "参考情報",
-      "resetMethod": "共通参考日時",
-      "scope": "共通参考日時",
-      "noticeToExecution": "不明",
+      "cycleType": "定期リセット",
+      "reasonType": "定期更新",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "任意リセット権の配布は確認できますが、全体への強制リセット実施はこの記録では確認できないため、共通参考日時として扱います。"
+      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
     }
   },
   {
@@ -537,8 +539,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "summary": "個人の利用制限の更新として、任意リセットが配布されました。",
     "source_url": "https://x.com/thsottiaux",
     "details": {
-      "cycleType": "任意リセット配布",
-      "reasonType": "仕様変更",
+      "cycleType": "定期リセット",
+      "reasonType": "定期更新",
       "resetMethod": "任意リセット権1回配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",

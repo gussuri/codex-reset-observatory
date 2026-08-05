@@ -41,6 +41,7 @@ function resetEvent(
 ): WindowEventLike {
   return {
     id,
+    recordKind: "confirmed_global",
     title: id,
     kind: "reset_completed",
     status: "closed",
@@ -72,7 +73,7 @@ function event(id: string, resetAt: string): ShadowResetEvent {
   return { id, resetAt };
 }
 
-test("shadow event collection excludes future, pending, invalid, rejected, and optional-credit events", () => {
+test("shadow event collection excludes future, pending, invalid, rejected, and non-target records", () => {
   const now = new Date("2026-08-10T12:00:00.000Z");
   const rejectedUrl = "https://x.com/thsottiaux/status/999";
   const events = getShadowCompletedResetEvents(
@@ -117,7 +118,7 @@ test("shadow event collection excludes future, pending, invalid, rejected, and o
     ],
   );
 
-  assert.deepEqual(events.map((item) => item.id), ["valid"]);
+  assert.deepEqual(events.map((item) => item.id), ["optional", "valid"]);
 });
 
 test("shadow event collection deduplicates a static record and an accepted Tibo reset", () => {
@@ -142,7 +143,7 @@ test("shadow event collection deduplicates a static record and an accepted Tibo 
   assert.equal(events.length, 1);
 });
 
-test("shadow event collection keeps random completed resets but excludes regular resets and credit grants", () => {
+test("shadow event collection includes broad random distributions but excludes regular and narrow records", () => {
   const now = new Date("2026-08-10T00:00:00.000Z");
   const regular = resetEvent("regular", "2026-08-08T00:00:00.000Z", {
     details: {
@@ -163,9 +164,38 @@ test("shadow event collection keeps random completed resets but excludes regular
       noticeToExecution: "0分",
     },
   });
+  const regularCredit = resetEvent("regular-credit", "2026-08-09T13:00:00.000Z", {
+    details: {
+      cycleType: "定期リセット",
+      reasonType: "定期更新",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: "0分（定期）",
+    },
+  });
+  const narrowCredit = resetEvent("narrow-credit", "2026-08-09T14:00:00.000Z", {
+    scope: "不具合対象ユーザー（約50万人）",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "不具合対象ユーザー（約50万人）",
+      noticeToExecution: "0分",
+    },
+  });
+  const reference = resetEvent("reference", "2026-08-09T15:00:00.000Z", {
+    recordKind: "reference",
+  });
 
-  const events = getShadowCompletedResetEvents(null, now, [regular, random, credit]);
-  assert.deepEqual(events.map((item) => item.id), ["random"]);
+  const events = getShadowCompletedResetEvents(null, now, [
+    regular,
+    random,
+    credit,
+    regularCredit,
+    narrowCredit,
+    reference,
+  ]);
+  assert.deepEqual(events.map((item) => item.id), ["random", "credit"]);
 });
 
 test("hazard intervals ignore the period before the first event and use censored exposure after the last event", () => {

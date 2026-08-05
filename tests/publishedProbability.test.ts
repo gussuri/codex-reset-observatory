@@ -55,10 +55,10 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.shadow);
   assert.equal(published.adoptedModel, "hazard-odds-v2-random-only");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.12531415896999543);
-  assert.equal(published.probability24h, 0.23935872212855733);
-  assert.equal(published.probability48h, 0.42025014832759205);
-  assert.equal(published.probability72h, 0.5242166900463578);
+  assert.equal(published.probability12h, 0.13102489061598874);
+  assert.equal(published.probability24h, 0.2529165872411576);
+  assert.equal(published.probability48h, 0.44490264967436377);
+  assert.equal(published.probability72h, 0.557507536423617);
   assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);

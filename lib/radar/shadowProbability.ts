@@ -38,6 +38,7 @@ import {
 } from "./probability";
 import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory } from "./tiboHistory";
+import { isEligibleRandomResetEvent } from "./resetEligibility";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -179,33 +180,8 @@ function getTweetId(sourceUrl: string | null | undefined) {
   return sourceUrl?.match(/\/status\/(\d+)/i)?.[1] ?? null;
 }
 
-function isPredictableScope(item: WindowEventLike) {
-  const scope = item.scope ?? item.details?.scope ?? "";
-  if (!scope.trim()) return false;
-  const narrowScope = /特定|個人|一部|単一|specific|individual|subset|single/i.test(scope);
-  const globalScope = /全|all|every|global|codex\s*\/\s*chatgpt/i.test(scope);
-  return !narrowScope || globalScope;
-}
-
 function isShadowTargetReset(item: WindowEventLike, nowTime: number) {
-  const cycleType = item.details?.cycleType;
-  if (cycleType !== "ランダムリセット") {
-    return false;
-  }
-  if (item.details?.resetMethod === "任意リセット権1回配布") {
-    return false;
-  }
-  if (!isPredictableScope(item)) {
-    return false;
-  }
-  const resetAt = getCompletedResetTimestamp(item);
-  if (resetAt === null || resetAt > nowTime) {
-    return false;
-  }
-
-  // The public Shadow target is the random-reset process only. Explicitly
-  // narrow records are excluded because they are not the global target.
-  return true;
+  return isEligibleRandomResetEvent(item, getCompletedResetTimestamp(item), nowTime);
 }
 
 export function getShadowCompletedResetEvents(

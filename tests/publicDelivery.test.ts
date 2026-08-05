@@ -141,7 +141,7 @@ test("unavailable data keeps the existing public error warning", () => {
   assert.match(html, /ライブデータも保存済みデータも取得できません/);
 });
 
-test("history page combines confirmed events and banked distributions in one chronological list", () => {
+test("history page combines confirmed, banked, and regular reference records chronologically", () => {
   const data = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
   const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
 
@@ -149,9 +149,11 @@ test("history page combines confirmed events and banked distributions in one chr
   assert.doesNotMatch(html, /<h2[^>]*>Confirmed global resets|<h2[^>]*>Banked Reset distributions/);
   assert.doesNotMatch(html, /text-\[11px\]/);
   const visibleItems = data.viewModel.recentHistory.filter(
-    (item) => item.recordKind === "confirmed_global" || item.recordKind === "banked_distribution",
+    (item) => item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "reference",
   );
-  assert.ok(visibleItems.length >= 2);
+  assert.ok(visibleItems.length >= 3);
   const firstTitle = translateDynamic(visibleItems[0].title, "en");
   const secondTitle = translateDynamic(visibleItems[1].title, "en");
   for (const item of visibleItems) {
@@ -161,8 +163,8 @@ test("history page combines confirmed events and banked distributions in one chr
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
-  assert.doesNotMatch(html, /Source not recorded/);
-  assert.doesNotMatch(html, /Weekly reset reference/);
+  assert.match(html, /Source not recorded/);
+  assert.match(html, /Weekly reset \(reference record\)/);
   assert.doesNotMatch(html, /Unclassified history sentinel/);
 
   const unclassifiedData = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
@@ -179,15 +181,15 @@ test("history page combines confirmed events and banked distributions in one chr
   const localizedAssertions = {
     ja: {
       title: "リセット履歴",
-      reference: "週間リセット参考日時",
+    reference: "定期リセット（参考記録）",
     },
     en: {
       title: "Reset history",
-      reference: "Weekly reset reference time",
+      reference: "Weekly reset \(reference record\)",
     },
     zh: {
       title: "重置记录",
-      reference: "每周重置参考时间",
+      reference: "定期重置（参考记录）",
     },
   } as const;
 
@@ -198,7 +200,7 @@ test("history page combines confirmed events and banked distributions in one chr
     );
     assert.match(localizedHtml, new RegExp(`<h2[^>]*>${localizedAssertions[locale].title}<\\/h2>`));
     assert.doesNotMatch(localizedHtml, /text-\[11px\]/);
-    assert.doesNotMatch(localizedHtml, new RegExp(localizedAssertions[locale].reference));
+    assert.match(localizedHtml, new RegExp(escapeRegExp(localizedAssertions[locale].reference)));
 
     const description = {
       ja: "Codexの全体リセットと任意リセット配布を、新しい順にまとめています。",

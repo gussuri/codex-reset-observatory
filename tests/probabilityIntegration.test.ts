@@ -12,14 +12,15 @@ test("reset_executed resets days since last reset to 0 and updates effectiveLate
   const now = new Date("2026-07-18T15:00:00.000Z");
   const recentExecutionTime = now.toISOString();
   const mockRadarData = getLocalRadarData({
-    activeTiboSignals: [
+    formalTiboResets: [
       {
         tweet_id: "1111",
+        text: "All Codex limits have been reset.",
+        tweet_url: "https://x.com/thsottiaux/status/1111",
         signal_type: "reset_executed",
         confidence: 0.98,
         tweet_created_at: recentExecutionTime,
-        expires_at: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
-        verification_status: "auto_unverified",
+        verification_status: "confirmed",
       },
     ],
     calculationNow: now,
