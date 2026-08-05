@@ -38,6 +38,7 @@ import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
+import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
 function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
@@ -79,10 +80,12 @@ function getHistoryDisplayTitle(
 export function RadarDashboard({
   initialData,
   initialFetchedAt,
+  randomResetHeatmapEventTimes = [],
   locale = "ja",
 }: {
   initialData?: PublicRadarSnapshot | null;
   initialFetchedAt?: string | null;
+  randomResetHeatmapEventTimes?: string[];
   locale?: Locale;
 }) {
   const resolvedInitialFetchedAt = initialFetchedAt ?? initialData?.checkedAt ?? null;
@@ -637,6 +640,11 @@ export function RadarDashboard({
             </div>
           ) : null}
         </section>
+
+        <RandomResetTimeHeatmap
+          eventTimes={randomResetHeatmapEventTimes}
+          locale={locale}
+        />
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { RadarDashboard } from "@/components/RadarDashboard";
-import { fetchPublicRadarSnapshot } from "@/lib/radarFetch";
+import { fetchRadarPageData } from "@/lib/radarFetch";
 import {
   HOME_DESCRIPTION_JA,
   HOME_TITLE_JA,
@@ -41,12 +41,13 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const initialData = await fetchPublicRadarSnapshot("ja");
+  const pageData = await fetchRadarPageData("ja");
 
   return (
     <RadarDashboard
-      initialData={initialData}
-      initialFetchedAt={initialData.checkedAt}
+      initialData={pageData.initialData}
+      initialFetchedAt={pageData.initialData.checkedAt}
+      randomResetHeatmapEventTimes={pageData.randomResetHeatmapEventTimes}
       locale="ja"
     />
   );

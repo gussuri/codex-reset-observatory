@@ -25,6 +25,7 @@ import type {
 // 分割したモジュールから型やヘルパー、確率計算をインポート
 import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
+import { isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
   translateUI,
   translateDynamic,
@@ -1006,7 +1007,7 @@ function isRegularResetWindow(value: WindowLike | undefined) {
   return Boolean(value?.id?.startsWith("regular-reset-") || value?.title?.includes("定期"));
 }
 
-function getCompletedResetAt(item: WindowEventLike) {
+export function getCompletedResetAt(item: WindowEventLike) {
   if (isPendingResetNotice(item) || item.status === "active") {
     return null;
   }
@@ -1016,6 +1017,24 @@ function getCompletedResetAt(item: WindowEventLike) {
   }
 
   return item.kind === "reset_completed" ? item.opened_at ?? item.date ?? null : null;
+}
+
+export function getRandomResetHeatmapEventTimes(
+  data: RadarData | null | undefined,
+  now: Date = new Date(),
+) {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return [];
+
+  return getCombinedResetHistory(data).flatMap((item) => {
+    const completedAt = getCompletedResetAt(item);
+    const completedTime = completedAt ? new Date(completedAt).getTime() : null;
+    if (!isEligibleRandomResetEvent(item, completedTime, nowTime)) {
+      return [];
+    }
+
+    return [new Date(completedTime!).toISOString()];
+  });
 }
 
 function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike> {

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
 import { ProbabilityMetrics } from "../components/ProbabilityMetrics";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 
@@ -51,6 +51,36 @@ test("renders unknown probabilities without aria-valuenow and with localized val
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 4);
   assert.strictEqual((html.match(/aria-valuenow=/g) ?? []).length, 0);
   assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 4);
+});
+
+test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
+  const calculationNow = new Date("2026-08-06T00:00:00.000Z");
+  const internalData = getLocalRadarData({ calculationNow });
+  const eventTimes = getRandomResetHeatmapEventTimes(internalData, calculationNow);
+  const headings = {
+    ja: "過去のランダムリセット実施時刻",
+    en: "Past random reset times",
+    zh: "过去的随机重置执行时间",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(internalData, locale, { calculationNow });
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: snapshot,
+        randomResetHeatmapEventTimes: eventTimes,
+        locale,
+      }),
+    );
+    const historyIndex = html.indexOf(locale === "ja" ? "直近のリセット履歴" : locale === "en" ? "Recent reset events" : "最近的重置历史");
+    const heatmapIndex = html.indexOf(headings[locale]);
+
+    assert.ok(historyIndex >= 0);
+    assert.ok(heatmapIndex > historyIndex);
+    assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
+    assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
+    assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);
+  }
 });
 
 test("derives the 72-hour metric from a legacy snapshot without showing zero", () => {

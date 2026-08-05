@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { fetchOpenAIStatusSignals } from "@/lib/openaiStatus";
-import { getLocalRadarData } from "@/lib/radar";
+import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "@/lib/radar";
 import {
   combineDataSourceHealth,
   createRadarDataHealth,
@@ -399,4 +399,18 @@ export async function fetchPublicRadarSnapshot(
     limitHistory: options.limitHistory,
     calculationNow,
   });
+}
+
+export async function fetchRadarPageData(locale: Locale) {
+  const calculationNow = new Date();
+  const core = await fetchSharedRadarCore();
+
+  return {
+    initialData: toPublicRadarSnapshot(core.data, locale, {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      calculationNow,
+    }),
+    randomResetHeatmapEventTimes: getRandomResetHeatmapEventTimes(core.data, calculationNow),
+  };
 }
