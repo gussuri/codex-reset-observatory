@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   formatDateTimeInZone,
+  getBrowserTimeZone,
   getTimeZoneLabel,
   LocalizedDateTime,
 } from "../components/LocalizedDateTime";
@@ -79,19 +80,36 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
 });
 
-test("SSR datetime has a JST fallback without a duplicated timezone label", () => {
+test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {
+  const props = {
+    value: "2026-08-04T00:00:00.000Z",
+    locale: "ja" as const,
+  };
   const html = renderToStaticMarkup(
+    React.createElement(LocalizedDateTime, props),
+  );
+  const firstClientRender = renderToStaticMarkup(
     React.createElement(LocalizedDateTime, {
-      value: "2026-08-04T00:00:00.000Z",
-      locale: "ja",
+      ...props,
     }),
   );
 
   assert.match(html, /<time[^>]*dateTime="2026-08-04T00:00:00\.000Z"/);
-  assert.match(html, /JST/);
-  assert.doesNotMatch(html, /GMT\+9.*JST|JST.*GMT\+9/);
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /aria-hidden="true"/);
+  assert.match(html, /min-w-\[12rem\]/);
+  assert.doesNotMatch(html, /2026年8月4日|JST|GMT\+9/);
   assert.doesNotMatch(html, /Detecting time zone|タイムゾーンを検出中/);
   assert.doesNotMatch(html, /undefined|null|false/);
+  assert.equal(firstClientRender, html);
+});
+
+test("browser timezone detection uses IANA values and falls back to JST only on failure", () => {
+  assert.equal(getBrowserTimeZone(() => "America/New_York"), "America/New_York");
+  assert.equal(getBrowserTimeZone(() => ""), "Asia/Tokyo");
+  assert.equal(getBrowserTimeZone(() => {
+    throw new Error("timezone unavailable");
+  }), "Asia/Tokyo");
 });
 
 test("formats Tokyo time with one JST label in Japanese and Chinese", () => {

@@ -11,13 +11,13 @@ type LocalizedDateTimeProps = {
 };
 
 export function LocalizedDateTime({ value, locale = "ja", className }: LocalizedDateTimeProps) {
-  // JST is deterministic during SSR and the first hydration render. The
-  // browser timezone is applied only after hydration to avoid a mismatch.
-  const [timeZone, setTimeZone] = useState(DISPLAY_TIME_ZONE);
+  // Wait for the browser timezone so overseas visitors never see a JST date
+  // during SSR or the first hydration render.
+  const [timeZone, setTimeZone] = useState<string | null>(null);
   const date = useMemo(() => parseDate(value), [value]);
 
   useEffect(() => {
-    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || DISPLAY_TIME_ZONE);
+    setTimeZone(getBrowserTimeZone());
   }, []);
 
   if (!value) {
@@ -30,10 +30,28 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
   }
 
   const formatLocale = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
-  const local = formatDateTimeInZone(date, timeZone, formatLocale);
   const classes = ["inline-flex", "flex-col", className]
     .filter((item): item is string => Boolean(item))
     .join(" ");
+
+  if (!timeZone) {
+    return (
+      <span className={classes}>
+        <time
+          dateTime={date.toISOString()}
+          aria-busy="true"
+          className="block min-h-[1.25em] min-w-[12rem] font-bold leading-tight"
+        >
+          <span
+            aria-hidden="true"
+            className="block h-4 w-full rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+          />
+        </time>
+      </span>
+    );
+  }
+
+  const local = formatDateTimeInZone(date, timeZone, formatLocale);
 
   return (
     <span className={classes}>
@@ -45,6 +63,17 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
       </time>
     </span>
   );
+}
+
+export function getBrowserTimeZone(
+  detectTimeZone: () => string | undefined = () =>
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+) {
+  try {
+    return detectTimeZone() || DISPLAY_TIME_ZONE;
+  } catch {
+    return DISPLAY_TIME_ZONE;
+  }
 }
 
 function parseDate(value: string | null | undefined) {
