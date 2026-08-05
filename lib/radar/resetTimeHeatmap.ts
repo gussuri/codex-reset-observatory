@@ -1,9 +1,4 @@
-import { PUBLISHED_RECENCY_HALF_LIFE_DAYS } from "@/data/shadowProbabilityConfig";
 import { DISPLAY_TIME_ZONE } from "./helpers";
-import { getRecencyDecayWeight } from "./recencyWeightedProbability";
-
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
 
@@ -11,14 +6,11 @@ export type RandomResetTimeHeatmapBin = {
   startHour: number;
   endHour: number;
   rawCount: number;
-  weightedCount: number;
-  weightedShare: number;
 };
 
 export type RandomResetTimeHeatmap = {
   bins: RandomResetTimeHeatmapBin[];
   totalCount: number;
-  totalWeightedCount: number;
 };
 
 export function getHeatmapHour(value: string, timeZone: string) {
@@ -49,16 +41,13 @@ export function buildRandomResetTimeHeatmap(
     startHour: index * 2,
     endHour: (index + 1) * 2,
     rawCount: 0,
-    weightedCount: 0,
-    weightedShare: 0,
   }));
 
   if (!Number.isFinite(nowTime)) {
-    return { bins, totalCount: 0, totalWeightedCount: 0 };
+    return { bins, totalCount: 0 };
   }
 
   let totalCount = 0;
-  let totalWeightedCount = 0;
 
   for (const eventTime of eventTimes) {
     const eventTimestamp = new Date(eventTime).getTime();
@@ -67,24 +56,30 @@ export function buildRandomResetTimeHeatmap(
     const hour = getHeatmapHour(eventTime, timeZone);
     if (hour === null) continue;
 
-    const weight = getRecencyDecayWeight(
-      (nowTime - eventTimestamp) / DAY_MS,
-      PUBLISHED_RECENCY_HALF_LIFE_DAYS,
-    );
     const bin = bins[Math.floor(hour / 2)];
     bin.rawCount += 1;
-    bin.weightedCount += weight;
     totalCount += 1;
-    totalWeightedCount += weight;
   }
 
-  for (const bin of bins) {
-    bin.weightedShare = totalWeightedCount > 0
-      ? bin.weightedCount / totalWeightedCount
-      : 0;
+  return { bins, totalCount };
+}
+
+export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
+  if (!Number.isFinite(rawCount) || !Number.isFinite(maxRawCount) || rawCount <= 0 || maxRawCount <= 0) {
+    return 0;
   }
 
-  return { bins, totalCount, totalWeightedCount };
+  return Math.min(100, (rawCount / maxRawCount) * 100);
+}
+
+export function formatHeatmapBarLabel(
+  bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour" | "rawCount">,
+  locale: "ja" | "en" | "zh",
+) {
+  const range = formatHeatmapTimeRange(bin, locale);
+  if (locale === "en") return `${range}, ${bin.rawCount} records`;
+  if (locale === "zh") return `${range}，${bin.rawCount}条记录`;
+  return `${range}・${bin.rawCount}件`;
 }
 
 export function formatHeatmapTimeRange(

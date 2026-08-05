@@ -5,6 +5,8 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import {
   buildRandomResetTimeHeatmap,
+  formatHeatmapBarLabel,
+  getRawBarHeightPercent,
   getHeatmapHour,
 } from "../lib/radar/resetTimeHeatmap";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
@@ -102,7 +104,7 @@ test("uses the viewer IANA timezone and applies daylight saving time per event",
   assert.equal(losAngeles.bins[8].rawCount, 1);
 });
 
-test("weights recent events with the existing half-life decay and exposes composition share", () => {
+test("uses raw record counts for bar heights and keeps empty bins", () => {
   const eventTimes = [
     "2026-08-06T00:00:00.000Z",
     "2026-07-07T00:00:00.000Z",
@@ -112,17 +114,13 @@ test("weights recent events with the existing half-life decay and exposes compos
   const bin = heatmap.bins[0];
 
   assert.equal(bin.rawCount, 3);
-  assert.ok(Math.abs(bin.weightedCount - 1.75) < 1e-12);
-  assert.ok(Math.abs(bin.weightedShare - 1) < 1e-12);
   assert.equal(heatmap.totalCount, 3);
-  assert.ok(Math.abs(heatmap.totalWeightedCount - 1.75) < 1e-12);
   assert.equal(heatmap.bins.filter((item) => item.rawCount === 0).length, 11);
-
-  const distributed = buildRandomResetTimeHeatmap(
-    ["2026-08-06T00:00:00.000Z", "2026-07-07T04:00:00.000Z"],
-    "UTC",
-    NOW,
-  );
-  assert.ok(distributed.bins[0].weightedCount > distributed.bins[2].weightedCount);
-  assert.ok(distributed.bins[0].weightedShare > distributed.bins[2].weightedShare);
+  assert.equal(getRawBarHeightPercent(3, 6), 50);
+  assert.equal(getRawBarHeightPercent(6, 6), 100);
+  assert.equal(getRawBarHeightPercent(0, 6), 0);
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 records");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");
+  assert.equal(Object.hasOwn(bin, "weightedCount"), false);
 });

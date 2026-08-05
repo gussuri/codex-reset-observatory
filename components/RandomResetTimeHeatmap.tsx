@@ -4,47 +4,36 @@ import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@/lib/radar/types";
 import {
   buildRandomResetTimeHeatmap,
-  formatHeatmapTimeRange,
+  formatHeatmapBarLabel,
+  getRawBarHeightPercent,
 } from "@/lib/radar/resetTimeHeatmap";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット実施時刻",
-    description: "記録されたランダムリセットの実施・発表時刻を、現在のタイムゾーンで集計した参考分布です。最近の記録ほど重く反映しています。",
+    description: "過去のランダムリセットの実施・発表時刻を、現在のタイムゾーンで2時間ごとに集計しています。",
     note: "実際のシステム実行時刻ではなく、完了が確認・発表された時刻を含む場合があります。",
     timezone: "閲覧者のタイムゾーン",
     count: "対象件数",
-    low: "少ない",
-    high: "多い",
-    rawCount: "生の件数",
-    weightedShare: "重み付き構成比",
     empty: "対象となる記録はありません。",
     ariaBusy: "過去のランダムリセット時刻を読み込んでいます",
   },
   en: {
     heading: "Past random reset times",
-    description: "A reference distribution of recorded random reset completion and announcement times in your current time zone. Recent records receive more weight.",
+    description: "Past random reset completion and announcement times are grouped into two-hour intervals in your current time zone.",
     note: "Some records may reflect when completion was confirmed or announced rather than the exact backend execution time.",
     timezone: "Viewer time zone",
     count: "Recorded events",
-    low: "Less",
-    high: "More",
-    rawCount: "Raw count",
-    weightedShare: "Weighted share",
     empty: "No matching records are available.",
     ariaBusy: "Loading past random reset times",
   },
   zh: {
     heading: "过去的随机重置执行时间",
-    description: "按您当前时区汇总已记录的随机重置完成或公布时间，作为参考分布。较新的记录权重更高。",
+    description: "按您当前时区，将过去随机重置的执行和公布时间按每两小时汇总。",
     note: "部分记录反映的是确认完成或公布的时间，可能不是后端实际执行的精确时间。",
     timezone: "查看者时区",
     count: "记录数量",
-    low: "少",
-    high: "多",
-    rawCount: "原始数量",
-    weightedShare: "加权构成比",
     empty: "没有可用的匹配记录。",
     ariaBusy: "正在加载过去的随机重置时间",
   },
@@ -68,8 +57,8 @@ export function RandomResetTimeHeatmap({
     () => (timeZone ? buildRandomResetTimeHeatmap(eventTimes, timeZone) : null),
     [eventTimes, timeZone],
   );
-  const maxWeighted = heatmap
-    ? Math.max(...heatmap.bins.map((item) => item.weightedCount))
+  const maxRawCount = heatmap
+    ? Math.max(...heatmap.bins.map((item) => item.rawCount))
     : 0;
 
   return (
@@ -112,43 +101,33 @@ export function RandomResetTimeHeatmap({
         <>
           <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
             {heatmap.bins.map((bin) => {
-              const intensity = maxWeighted > 0 ? bin.weightedCount / maxWeighted : 0;
-              const share = `${(bin.weightedShare * 100).toFixed(1)}%`;
-              const range = formatHeatmapTimeRange(bin, locale);
-              const label = locale === "en"
-                ? `${range}, raw count ${bin.rawCount}, weighted share ${share}`
-                : locale === "zh"
-                  ? `${range}，原始数量${bin.rawCount}，加权构成比${share}`
-                  : `${range}、${content.rawCount}${bin.rawCount}件、${content.weightedShare}${share}`;
+              const label = formatHeatmapBarLabel(bin, locale);
+              const barHeight = getRawBarHeightPercent(bin.rawCount, maxRawCount);
 
               return (
-                <div className="min-w-0" key={bin.startHour} role="listitem">
-                  <div className="mb-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                    {String(bin.startHour).padStart(2, "0")}
+                <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
+                  <div className="mb-1 h-4 text-[0.65rem] font-semibold tabular-nums text-slate-700">
+                    {bin.rawCount}
                   </div>
                   <div
                     aria-label={label}
-                    className={`flex aspect-[1.35] min-w-0 items-center justify-center rounded border border-teal-900/10 px-0.5 text-[0.65rem] font-semibold tabular-nums outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 ${intensity >= 0.55 ? "text-white" : "text-teal-950"}`}
+                    className="flex h-28 min-w-0 items-end justify-center rounded bg-teal-50 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
                     role="img"
-                    style={{ backgroundColor: `rgba(13, 148, 136, ${0.12 + intensity * 0.78})` }}
                     tabIndex={0}
                     title={label}
                   >
-                    {bin.rawCount}
+                    <span
+                      aria-hidden="true"
+                      className="w-3/4 rounded-t bg-teal-600 text-center text-[0.65rem] font-semibold tabular-nums text-white"
+                      style={{ height: `${barHeight}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
+                    {String(bin.startHour).padStart(2, "0")}
                   </div>
                 </div>
               );
             })}
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-teal-100" />
-              {content.low}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              {content.high}
-              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-teal-700" />
-            </span>
           </div>
         </>
       )}
