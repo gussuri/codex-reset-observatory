@@ -5,6 +5,7 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import {
   buildRandomResetTimeHeatmap,
+  filterHeatmapEventTimes,
   formatHeatmapAxisLabel,
   formatHeatmapBarLabel,
   getRawBarHeightPercent,
@@ -121,10 +122,27 @@ test("uses raw record counts for bar heights and keeps empty bins", () => {
   assert.equal(getRawBarHeightPercent(6, 6), 100);
   assert.ok(getRawBarHeightPercent(6, 7) < 100);
   assert.equal(getRawBarHeightPercent(0, 6), 0);
-  assert.equal(formatHeatmapAxisLabel(heatmap.bins[0]), "00–02");
-  assert.equal(formatHeatmapAxisLabel(heatmap.bins[1]), "02–04");
+  assert.equal(formatHeatmapAxisLabel(heatmap.bins[0]), "0-2");
+  assert.equal(formatHeatmapAxisLabel(heatmap.bins[1]), "2-4");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 records");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");
   assert.equal(Object.hasOwn(bin, "weightedCount"), false);
+});
+
+test("filters the chart between all records and the last 30 days", () => {
+  const now = new Date("2026-08-06T00:00:00.000Z");
+  const eventTimes = [
+    "2026-08-05T00:00:00.000Z",
+    "2026-07-07T00:00:00.000Z",
+    "2026-07-06T23:59:59.000Z",
+    "2026-08-07T00:00:00.000Z",
+    "not-a-date",
+  ];
+
+  assert.equal(filterHeatmapEventTimes(eventTimes, "all", now).length, 3);
+  assert.deepEqual(filterHeatmapEventTimes(eventTimes, "lastMonth", now), [
+    "2026-08-05T00:00:00.000Z",
+    "2026-07-07T00:00:00.000Z",
+  ]);
 });

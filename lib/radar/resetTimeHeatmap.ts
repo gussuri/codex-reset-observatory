@@ -1,6 +1,9 @@
 import { DISPLAY_TIME_ZONE } from "./helpers";
 
 export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
+export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
+
+export type RandomResetTimeHeatmapRange = "all" | "lastMonth";
 
 export type RandomResetTimeHeatmapBin = {
   startHour: number;
@@ -64,6 +67,25 @@ export function buildRandomResetTimeHeatmap(
   return { bins, totalCount };
 }
 
+export function filterHeatmapEventTimes(
+  eventTimes: string[],
+  range: RandomResetTimeHeatmapRange,
+  now: Date | number = Date.now(),
+) {
+  const nowTime = typeof now === "number" ? now : now.getTime();
+  if (!Number.isFinite(nowTime)) return [];
+
+  const startTime =
+    range === "lastMonth"
+      ? nowTime - RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS * 24 * 60 * 60 * 1000
+      : Number.NEGATIVE_INFINITY;
+
+  return eventTimes.filter((eventTime) => {
+    const timestamp = new Date(eventTime).getTime();
+    return Number.isFinite(timestamp) && timestamp >= startTime && timestamp <= nowTime;
+  });
+}
+
 export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
   if (!Number.isFinite(rawCount) || !Number.isFinite(maxRawCount) || rawCount <= 0 || maxRawCount <= 0) {
     return 0;
@@ -75,7 +97,7 @@ export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
 export function formatHeatmapAxisLabel(
   bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour">,
 ) {
-  return `${String(bin.startHour).padStart(2, "0")}–${String(bin.endHour).padStart(2, "0")}`;
+  return `${bin.startHour}-${bin.endHour}`;
 }
 
 export function formatHeatmapBarLabel(

@@ -4,17 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@/lib/radar/types";
 import {
   buildRandomResetTimeHeatmap,
+  filterHeatmapEventTimes,
   formatHeatmapBarLabel,
   formatHeatmapAxisLabel,
   getRawBarHeightPercent,
 } from "@/lib/radar/resetTimeHeatmap";
+import type { RandomResetTimeHeatmapRange } from "@/lib/radar/resetTimeHeatmap";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット時刻",
     description: "過去のランダムリセット時刻を2時間ごとに集計しています。",
-    timezone: "閲覧者のタイムゾーン",
+    timezone: "タイムゾーン",
+    timeAxis: "時刻",
+    period: "集計期間",
+    allPeriod: "全期間",
+    lastMonth: "直近1か月",
     count: "対象件数",
     empty: "対象となる記録はありません。",
     ariaBusy: "過去のランダムリセット時刻を読み込んでいます",
@@ -22,7 +28,11 @@ const CONTENT = {
   en: {
     heading: "Past random reset times",
     description: "Past random reset times are grouped into two-hour intervals.",
-    timezone: "Viewer time zone",
+    timezone: "Time zone",
+    timeAxis: "Time",
+    period: "Time range",
+    allPeriod: "All time",
+    lastMonth: "Last month",
     count: "Recorded events",
     empty: "No matching records are available.",
     ariaBusy: "Loading past random reset times",
@@ -30,7 +40,11 @@ const CONTENT = {
   zh: {
     heading: "过去的随机重置时刻",
     description: "过去的随机重置时刻按每两小时汇总。",
-    timezone: "查看者时区",
+    timezone: "时区",
+    timeAxis: "时间",
+    period: "统计期间",
+    allPeriod: "全部期间",
+    lastMonth: "最近1个月",
     count: "记录数量",
     empty: "没有可用的匹配记录。",
     ariaBusy: "正在加载过去的随机重置时间",
@@ -45,6 +59,7 @@ export function RandomResetTimeHeatmap({
   locale: Locale;
 }) {
   const [timeZone, setTimeZone] = useState<string | null>(null);
+  const [range, setRange] = useState<RandomResetTimeHeatmapRange>("all");
   const content = CONTENT[locale];
 
   useEffect(() => {
@@ -52,8 +67,13 @@ export function RandomResetTimeHeatmap({
   }, []);
 
   const heatmap = useMemo(
-    () => (timeZone ? buildRandomResetTimeHeatmap(eventTimes, timeZone) : null),
-    [eventTimes, timeZone],
+    () => {
+      if (!timeZone) return null;
+      const now = Date.now();
+      const visibleEventTimes = filterHeatmapEventTimes(eventTimes, range, now);
+      return buildRandomResetTimeHeatmap(visibleEventTimes, timeZone, now);
+    },
+    [eventTimes, range, timeZone],
   );
   const maxRawCount = heatmap
     ? Math.max(...heatmap.bins.map((item) => item.rawCount))
@@ -73,13 +93,33 @@ export function RandomResetTimeHeatmap({
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{content.description}</p>
         </div>
-        <div className="shrink-0 text-right text-xs leading-5 text-slate-500">
+        <div className="flex max-w-full shrink-0 flex-col items-end gap-2 text-right text-xs leading-5 text-slate-500">
           <p>{content.count}: n={heatmap?.totalCount ?? "…"}</p>
           {timeZone ? (
             <p>
               {content.timezone}: {timeZone} ({getTimeZoneLabel(new Date(), timeZone)})
             </p>
           ) : null}
+          <div className="flex max-w-full flex-wrap justify-end gap-1" role="group" aria-label={content.period}>
+            {([
+              ["all", content.allPeriod],
+              ["lastMonth", content.lastMonth],
+            ] as const).map(([value, label]) => (
+              <button
+                aria-pressed={range === value}
+                className={`rounded border px-2 py-1 font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  range === value
+                    ? "border-teal-600 bg-teal-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700"
+                }`}
+                key={value}
+                onClick={() => setRange(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -98,26 +138,33 @@ export function RandomResetTimeHeatmap({
         <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
       ) : (
         <>
-          <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
+          <p className="mt-5 text-xs font-medium text-slate-500">{content.timeAxis}</p>
+          <div className="mt-2 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
             {heatmap.bins.map((bin) => {
               const label = formatHeatmapBarLabel(bin, locale);
               const barHeight = getRawBarHeightPercent(bin.rawCount, barScaleMax);
 
               return (
                 <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
-                  <div className="mb-1 h-4 text-[0.65rem] font-semibold tabular-nums text-slate-700">
-                    {bin.rawCount}
-                  </div>
                   <div
                     aria-label={label}
-                    className="flex h-28 min-w-0 items-end justify-center px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+                    className="relative h-28 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
                     role="img"
                     tabIndex={0}
                     title={label}
                   >
+                    {bin.rawCount > 0 ? (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-x-0 text-[0.65rem] font-semibold tabular-nums text-slate-700"
+                        style={{ bottom: `calc(${barHeight}% + 0.25rem)` }}
+                      >
+                        {bin.rawCount}
+                      </span>
+                    ) : null}
                     <span
                       aria-hidden="true"
-                      className="w-3/4 rounded-t bg-teal-600 text-center text-[0.65rem] font-semibold tabular-nums text-white"
+                      className="absolute inset-x-1 bottom-0 rounded-t bg-teal-600"
                       style={{ height: `${barHeight}%` }}
                     />
                   </div>

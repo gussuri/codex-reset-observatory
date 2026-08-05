@@ -83,6 +83,10 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.ok(historyIndex >= 0);
     assert.ok(heatmapIndex > historyIndex);
     assert.ok(html.includes(descriptions[locale]));
+    assert.match(html, new RegExp(locale === "ja" ? "時刻" : locale === "en" ? "Time" : "时间"));
+    assert.match(html, new RegExp(locale === "ja" ? "全期間" : locale === "en" ? "All time" : "全部期间"));
+    assert.match(html, new RegExp(locale === "ja" ? "直近1か月" : locale === "en" ? "Last month" : "最近1个月"));
+    assert.doesNotMatch(html, /閲覧者のタイムゾーン|Viewer time zone|查看者时区/);
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
     assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
     assert.doesNotMatch(html, /少ない|多い|Raw count|Weighted share|加权构成比/);
