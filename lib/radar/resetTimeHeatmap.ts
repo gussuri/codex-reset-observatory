@@ -72,6 +72,12 @@ export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
   return Math.min(100, (rawCount / maxRawCount) * 100);
 }
 
+export function formatHeatmapAxisLabel(
+  bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour">,
+) {
+  return `${String(bin.startHour).padStart(2, "0")}–${String(bin.endHour).padStart(2, "0")}`;
+}
+
 export function formatHeatmapBarLabel(
   bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour" | "rawCount">,
   locale: "ja" | "en" | "zh",

@@ -5,6 +5,7 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import {
   buildRandomResetTimeHeatmap,
+  formatHeatmapAxisLabel,
   formatHeatmapBarLabel,
   getRawBarHeightPercent,
   getHeatmapHour,
@@ -118,7 +119,10 @@ test("uses raw record counts for bar heights and keeps empty bins", () => {
   assert.equal(heatmap.bins.filter((item) => item.rawCount === 0).length, 11);
   assert.equal(getRawBarHeightPercent(3, 6), 50);
   assert.equal(getRawBarHeightPercent(6, 6), 100);
+  assert.ok(getRawBarHeightPercent(6, 7) < 100);
   assert.equal(getRawBarHeightPercent(0, 6), 0);
+  assert.equal(formatHeatmapAxisLabel(heatmap.bins[0]), "00–02");
+  assert.equal(formatHeatmapAxisLabel(heatmap.bins[1]), "02–04");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 records");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");

@@ -5,6 +5,7 @@ import type { Locale } from "@/lib/radar/types";
 import {
   buildRandomResetTimeHeatmap,
   formatHeatmapBarLabel,
+  formatHeatmapAxisLabel,
   getRawBarHeightPercent,
 } from "@/lib/radar/resetTimeHeatmap";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
@@ -12,8 +13,7 @@ import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット時刻",
-    description: "過去のランダムリセット時刻を、現在のタイムゾーンで2時間ごとに集計しています。",
-    note: "実際のシステム実行時刻ではなく、完了が確認・発表された時刻を含む場合があります。",
+    description: "過去のランダムリセット時刻を2時間ごとに集計しています。",
     timezone: "閲覧者のタイムゾーン",
     count: "対象件数",
     empty: "対象となる記録はありません。",
@@ -21,8 +21,7 @@ const CONTENT = {
   },
   en: {
     heading: "Past random reset times",
-    description: "Past random reset times are grouped into two-hour intervals in your current time zone.",
-    note: "Some records may reflect when completion was confirmed or announced rather than the exact backend execution time.",
+    description: "Past random reset times are grouped into two-hour intervals.",
     timezone: "Viewer time zone",
     count: "Recorded events",
     empty: "No matching records are available.",
@@ -30,8 +29,7 @@ const CONTENT = {
   },
   zh: {
     heading: "过去的随机重置时刻",
-    description: "按您当前时区，将过去的随机重置时刻按每两小时汇总。",
-    note: "部分记录反映的是确认完成或公布的时间，可能不是后端实际执行的精确时间。",
+    description: "过去的随机重置时刻按每两小时汇总。",
     timezone: "查看者时区",
     count: "记录数量",
     empty: "没有可用的匹配记录。",
@@ -60,6 +58,7 @@ export function RandomResetTimeHeatmap({
   const maxRawCount = heatmap
     ? Math.max(...heatmap.bins.map((item) => item.rawCount))
     : 0;
+  const barScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
 
   return (
     <section
@@ -102,7 +101,7 @@ export function RandomResetTimeHeatmap({
           <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
             {heatmap.bins.map((bin) => {
               const label = formatHeatmapBarLabel(bin, locale);
-              const barHeight = getRawBarHeightPercent(bin.rawCount, maxRawCount);
+              const barHeight = getRawBarHeightPercent(bin.rawCount, barScaleMax);
 
               return (
                 <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
@@ -123,7 +122,7 @@ export function RandomResetTimeHeatmap({
                     />
                   </div>
                   <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                    {String(bin.startHour).padStart(2, "0")}
+                    {formatHeatmapAxisLabel(bin)}
                   </div>
                 </div>
               );
@@ -132,7 +131,6 @@ export function RandomResetTimeHeatmap({
         </>
       )}
 
-      <p className="mt-4 text-xs leading-5 text-slate-500">{content.note}</p>
     </section>
   );
 }

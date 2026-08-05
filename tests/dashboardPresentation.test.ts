@@ -62,6 +62,11 @@ test("renders the random reset time heatmap after history with a timezone-free S
     en: "Past random reset times",
     zh: "过去的随机重置时刻",
   } as const;
+  const descriptions = {
+    ja: "過去のランダムリセット時刻を2時間ごとに集計しています。",
+    en: "Past random reset times are grouped into two-hour intervals.",
+    zh: "过去的随机重置时刻按每两小时汇总。",
+  } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(internalData, locale, { calculationNow });
@@ -77,9 +82,11 @@ test("renders the random reset time heatmap after history with a timezone-free S
 
     assert.ok(historyIndex >= 0);
     assert.ok(heatmapIndex > historyIndex);
+    assert.ok(html.includes(descriptions[locale]));
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
     assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
     assert.doesNotMatch(html, /少ない|多い|Raw count|Weighted share|加权构成比/);
+    assert.doesNotMatch(html, /実際のシステム実行時刻|Some records may reflect|部分记录反映/);
     assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);
   }
 });
