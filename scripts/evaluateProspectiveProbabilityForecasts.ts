@@ -3,7 +3,11 @@ import { basename, join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { CALIBRATED_SHADOW_MODEL_VERSION } from "../data/shadowProbabilityConfig";
+import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  SHADOW_PROBABILITY_MODEL_VERSION,
+} from "../data/shadowProbabilityConfig";
 import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
@@ -93,8 +97,8 @@ function toForecastRow(row: PredictionHistoryRow): ProspectiveForecastRow | null
     }),
   ) as ProspectiveForecastRow["forecasts"];
 
-  const generatedAt = typeof forecasts["hazard-odds-v2-random-only"]?.generatedAt === "string"
-    ? forecasts["hazard-odds-v2-random-only"].generatedAt
+  const generatedAt = typeof forecasts[LEGACY_SHADOW_PROBABILITY_MODEL_VERSION]?.generatedAt === "string"
+    ? forecasts[LEGACY_SHADOW_PROBABILITY_MODEL_VERSION].generatedAt
     : typeof debugRecord?.calculated_at === "string"
       ? debugRecord.calculated_at
       : row.logged_hour ?? null;
@@ -238,7 +242,7 @@ function writeMarkdown(report: ProspectiveProbabilityEvaluationReport) {
     "## Notes",
     "",
     ...report.notes.map((note) => `- ${note}`),
-    "- The public model remains hazard-odds-v2-random-only.",
+    `- The active public model is ${SHADOW_PROBABILITY_MODEL_VERSION}; this report retains the archived ${LEGACY_SHADOW_PROBABILITY_MODEL_VERSION} comparison.`,
   ];
   return `${lines.join("\n")}\n`;
 }

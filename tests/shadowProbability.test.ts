@@ -484,7 +484,7 @@ test("shadow internals do not cross the public DTO boundary", () => {
   const publicSnapshot = toPublicRadarSnapshot(internal, "en", { calculationNow: now });
   const serialized = JSON.stringify(publicSnapshot);
 
-  assert.doesNotMatch(serialized, /hazard-odds-v2-random-only|posteriorLambdaPerHour|shadowProbabilityModel|combinedAfterCap/);
+  assert.doesNotMatch(serialized, /hazard-odds-v3-random-inclusive|hazard-odds-v2-random-only|posteriorLambdaPerHour|shadowProbabilityModel|combinedAfterCap/);
 });
 
 test("shadow result has no post content or secret-like fields", () => {

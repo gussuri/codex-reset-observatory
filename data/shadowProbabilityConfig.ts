@@ -1,4 +1,5 @@
-export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
+export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
+export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
 export const CALIBRATED_SHADOW_MODEL_VERSION =

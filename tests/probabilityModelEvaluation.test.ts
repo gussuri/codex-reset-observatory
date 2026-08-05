@@ -29,6 +29,7 @@ import {
 } from "../lib/radar/shadowProbability";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { SHADOW_PROBABILITY_MODEL_VERSION } from "../data/shadowProbabilityConfig";
 
 function event(id: string, resetAt: string): ShadowResetEvent {
   return { id, resetAt };
@@ -273,13 +274,15 @@ test("event contribution counts the origins made positive by each event", () => 
   ]);
 });
 
-test("benchmark models remain evaluation-only and public model stays v2", () => {
+test("benchmark models remain evaluation-only and the inclusive model is public", () => {
   const report: ProbabilityModelEvaluationReport = evaluateProbabilityModels(
     new Date("2026-08-01T03:32:00.000Z"),
   );
   assert.ok(report.models.some((model) => model.modelVersion === CONSTANT_HAZARD_MODEL_VERSION));
   assert.ok(report.models.some((model) => model.modelVersion === CALIBRATED_V2_MODEL_VERSION));
-  assert.equal(report.models[0].modelVersion, "hazard-odds-v2-random-only");
+  assert.equal(report.models[0].modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
+  assert.equal(report.eventCount, 23);
+  assert.match(report.targetDefinition, /Banked Reset distributions/);
 
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({ calculationNow: new Date("2026-08-01T03:32:00.000Z") }),

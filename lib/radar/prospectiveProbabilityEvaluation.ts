@@ -4,10 +4,13 @@ import {
 import {
   CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS,
   CALIBRATED_SHADOW_MODEL_VERSION,
+  LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type { ShadowResetEvent } from "./shadowProbability";
 
-export const PROSPECTIVE_V2_MODEL_VERSION = "hazard-odds-v2-random-only";
+export const PROSPECTIVE_V2_MODEL_VERSION = LEGACY_SHADOW_PROBABILITY_MODEL_VERSION;
+export const PROSPECTIVE_ACTIVE_MODEL_VERSION = SHADOW_PROBABILITY_MODEL_VERSION;
 export const PROSPECTIVE_V4_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
 export const PROSPECTIVE_ARCHIVED_MODEL_VERSIONS = CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS;
 
@@ -341,7 +344,7 @@ export function evaluateProspectiveProbabilityForecasts(
     evaluationMode: "prospective",
     backfilled: false,
     source: "prediction_history.debug_info.experimentalProbabilityForecasts",
-    targetDefinition: "Same random-reset target definition as hazard-odds-v2-random-only.",
+    targetDefinition: `Same random-reset target definition as ${PROSPECTIVE_ACTIVE_MODEL_VERSION}; this archived comparison reads ${PROSPECTIVE_V2_MODEL_VERSION} rows where available.`,
     activeCandidateModel: PROSPECTIVE_V4_MODEL_VERSION,
     archivedCandidateModels: PROSPECTIVE_ARCHIVED_MODEL_VERSIONS,
     evaluationStartAt,

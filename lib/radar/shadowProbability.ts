@@ -414,7 +414,7 @@ function multiplyPairs(values: Array<ShadowProbabilityPair>) {
 }
 
 export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): ShadowSignalMultipliers {
-  // hazard-odds-v2-random-only estimates the random-reset process. Recent
+  // hazard-odds-v3-random-inclusive estimates the random-reset process. Recent
   // reset frequency and regular-reset proximity remain in the input shape for
   // audit compatibility, but must not change the public random-reset odds.
   const recentResetMultiplier = 1;

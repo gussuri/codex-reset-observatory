@@ -41,6 +41,8 @@ const LOG_LOSS_EPSILON = 1e-12;
 
 export const CONSTANT_HAZARD_MODEL_VERSION = "benchmark-constant-hazard-v1";
 export const CALIBRATED_V2_MODEL_VERSION = "benchmark-v2-logit-calibrated-prequential-v1";
+export const PROBABILITY_MODEL_EVALUATION_REPORT_BASENAME =
+  "probability-model-evaluation-random-inclusive";
 
 export type EvaluationRow = {
   recordedAt: string;
@@ -639,7 +641,7 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
     `- ${report.notes.join("\n- ")}`,
     "- Daily evaluation origins overlap, so daily metric differences are not independent.",
     "- The non-overlapping 48h section is a lower-sample reference analysis.",
-    "- The public model remains hazard-odds-v2-random-only; benchmark models are evaluation-only.",
+    "- The public model is hazard-odds-v3-random-inclusive; benchmark models are evaluation-only.",
     "- Benchmark results do not change API responses, UI, DTOs, Supabase, or stored Shadow forecasts.",
     "- No automatic winner is selected from an inconclusive result.",
   );
@@ -820,12 +822,12 @@ export function writeProbabilityModelEvaluationReports(
 ) {
   mkdirSync(reportsDirectory, { recursive: true });
   writeFileSync(
-    join(reportsDirectory, "probability-model-evaluation.json"),
+    join(reportsDirectory, `${PROBABILITY_MODEL_EVALUATION_REPORT_BASENAME}.json`),
     `${JSON.stringify(report, null, 2)}\n`,
     "utf8",
   );
   writeFileSync(
-    join(reportsDirectory, "probability-model-evaluation.md"),
+    join(reportsDirectory, `${PROBABILITY_MODEL_EVALUATION_REPORT_BASENAME}.md`),
     writeMarkdown(report),
     "utf8",
   );

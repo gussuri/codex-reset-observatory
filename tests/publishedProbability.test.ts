@@ -11,6 +11,11 @@ import {
   calculatePublishedProbability,
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
+import {
+  LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  SHADOW_PROBABILITY_MODEL_VERSION,
+} from "../data/shadowProbabilityConfig";
+import { getShadowCompletedResetEvents } from "../lib/radar/shadowProbability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -53,7 +58,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
 
   assert.equal(published.source, "shadow");
   assert.ok(published.shadow);
-  assert.equal(published.adoptedModel, "hazard-odds-v2-random-only");
+  assert.equal(published.adoptedModel, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.equal(published.probability12h, 0.13102489061598874);
   assert.equal(published.probability24h, 0.2529165872411576);
@@ -69,7 +74,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(snapshot.viewModel.probability48h, published.probability48h);
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
   assert.equal(snapshot.viewModel.probability72h, published.probability72h);
-  assert.equal(publishedDebug.version, "hazard-odds-v2-random-only");
+  assert.equal(publishedDebug.version, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(publishedDebug.source, "shadow");
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
@@ -80,6 +85,38 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.probability24h <= published.probability48h);
   assert.ok(published.probability48h <= published.probability72h);
  });
+
+test("the published model uses broad random distributions and excludes regular or narrow records", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const events = getShadowCompletedResetEvents(data, NOW);
+  const eventIds = new Set(events.map((event) => event.id));
+  const published = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
+
+  assert.equal(published.adoptedModel, "hazard-odds-v3-random-inclusive");
+  assert.equal(published.adoptedModel, SHADOW_PROBABILITY_MODEL_VERSION);
+  assert.notEqual(published.adoptedModel, LEGACY_SHADOW_PROBABILITY_MODEL_VERSION);
+  assert.equal(events.length, 23);
+  assert.ok(eventIds.has("personal-compensation-reset-credit-2026-06-18"));
+  assert.ok(eventIds.has("personal-codex-reset-button-aie-2026-07-02"));
+  assert.ok(eventIds.has("personal-tibo-7m-users-banked-reset-2026-07-14"));
+  assert.ok(!eventIds.has("personal-reset-credit-2026-06-11"));
+  assert.ok(!eventIds.has("personal-tibo-500k-compensation-reset-2026-07-13"));
+  assert.equal(published.shadow?.hazard.completedEventCount, events.length);
+});
+
+test("the inclusive public model keeps the fixed-time forecast near the reviewed values", () => {
+  const fixedNow = new Date("2026-08-04T03:32:00.000Z");
+  const data = getLocalRadarData({ calculationNow: fixedNow });
+  const published = calculatePublishedProbability(data, { now: fixedNow }, { logFallback: false });
+
+  assert.equal(published.adoptedModel, SHADOW_PROBABILITY_MODEL_VERSION);
+  assert.equal(published.source, "shadow");
+  assert.equal(published.fallbackReason, null);
+  assert.equal(published.probability12h, 0.1401353875977588);
+  assert.equal(published.probability24h, 0.26063284833834355);
+  assert.equal(published.probability48h, 0.44994539803274325);
+  assert.equal(published.probability72h, 0.556084765239755);
+});
 
 test("valid Shadow values are adopted at every confidence level", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
@@ -103,7 +140,7 @@ test("valid Shadow values are adopted at every confidence level", () => {
     });
 
     assert.equal(selected.source, "shadow");
-    assert.equal(selected.adoptedModel, "hazard-odds-v2-random-only");
+    assert.equal(selected.adoptedModel, SHADOW_PROBABILITY_MODEL_VERSION);
     assert.equal(selected.fallbackReason, null);
     assert.equal(selected.probability24h, 0.18);
     assert.equal(selected.probability48h, 0.31);
@@ -222,6 +259,6 @@ test("public probability fields stay aligned in Japanese, English, and Chinese",
     assert.equal(snapshot.viewModel.expectation, viewModel.expectation);
     assert.equal("reasoningSummary" in snapshot.viewModel, false);
     assert.equal("action" in snapshot.viewModel, false);
-    assert.doesNotMatch(JSON.stringify(snapshot), /hazard-odds-v2-random-only|publishedProbabilityModel|基礎確率|観測シグナルで補正/);
+    assert.doesNotMatch(JSON.stringify(snapshot), /hazard-odds-v3-random-inclusive|hazard-odds-v2-random-only|publishedProbabilityModel|基礎確率|観測シグナルで補正/);
   }
 });
