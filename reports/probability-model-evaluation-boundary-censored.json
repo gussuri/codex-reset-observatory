@@ -1,0 +1,360 @@
+{
+  "schemaVersion": "boundary-censored-evaluation-v1",
+  "evaluationMethod": "walk_forward_prequential",
+  "asOf": "2026-08-01T03:32:00.000Z",
+  "generatedAt": "2026-08-01T03:32:00.000Z",
+  "currentModelVersion": "hazard-odds-v3-random-inclusive",
+  "candidateModelVersion": "hazard-odds-v3-random-boundary-censored",
+  "targetDefinition": "The current random-inclusive target definition is used for events; regular boundaries are not target events.",
+  "eventCount": 23,
+  "boundaryCount": 26,
+  "acceptedRegularBoundaries": [
+    {
+      "id": "local-codex-regular-reset-2026-06-25",
+      "resetAt": "2026-06-24T22:01:00.000Z",
+      "recordKind": "reference",
+      "scope": "全有料プラン",
+      "included": true,
+      "reason": "accepted"
+    },
+    {
+      "id": "local-codex-rate-limit-reset-notice-2026-06-17",
+      "resetAt": "2026-06-17T22:00:00.000Z",
+      "recordKind": "reference",
+      "scope": "全有料プラン",
+      "included": true,
+      "reason": "accepted"
+    },
+    {
+      "id": "personal-reset-credit-2026-06-11",
+      "resetAt": "2026-06-12T00:11:00.000Z",
+      "recordKind": "banked_distribution",
+      "scope": "全有料プラン",
+      "included": true,
+      "reason": "accepted"
+    }
+  ],
+  "excludedRegularBoundaries": [
+    {
+      "id": "local-codex-regular-reset-2026-07-07",
+      "resetAt": "2026-07-07T00:30:00.000Z",
+      "recordKind": "reference",
+      "scope": "任意リセットを使っていないアカウント",
+      "included": false,
+      "reason": "not_broad_scope"
+    }
+  ],
+  "intervalSummary": {
+    "currentCompletedEventIntervalCount": 22,
+    "currentTotalExposureDays": 76.40347222222222,
+    "candidateCompletedEventIntervalCount": 22,
+    "candidateCensoredIntervalCount": 2,
+    "candidateTotalExposureDays": 76.40347222222222,
+    "candidateCurrentRightCensoredHours": 0
+  },
+  "originCount": 42,
+  "origins": [
+    "2026-06-18T15:00:00.000Z",
+    "2026-06-19T15:00:00.000Z",
+    "2026-06-20T15:00:00.000Z",
+    "2026-06-21T15:00:00.000Z",
+    "2026-06-22T15:00:00.000Z",
+    "2026-06-23T15:00:00.000Z",
+    "2026-06-24T15:00:00.000Z",
+    "2026-06-25T15:00:00.000Z",
+    "2026-06-26T15:00:00.000Z",
+    "2026-06-27T15:00:00.000Z",
+    "2026-06-28T15:00:00.000Z",
+    "2026-06-29T15:00:00.000Z",
+    "2026-06-30T15:00:00.000Z",
+    "2026-07-01T15:00:00.000Z",
+    "2026-07-02T15:00:00.000Z",
+    "2026-07-03T15:00:00.000Z",
+    "2026-07-04T15:00:00.000Z",
+    "2026-07-05T15:00:00.000Z",
+    "2026-07-06T15:00:00.000Z",
+    "2026-07-07T15:00:00.000Z",
+    "2026-07-08T15:00:00.000Z",
+    "2026-07-09T15:00:00.000Z",
+    "2026-07-10T15:00:00.000Z",
+    "2026-07-11T15:00:00.000Z",
+    "2026-07-12T15:00:00.000Z",
+    "2026-07-13T15:00:00.000Z",
+    "2026-07-14T15:00:00.000Z",
+    "2026-07-15T15:00:00.000Z",
+    "2026-07-16T15:00:00.000Z",
+    "2026-07-17T15:00:00.000Z",
+    "2026-07-18T15:00:00.000Z",
+    "2026-07-19T15:00:00.000Z",
+    "2026-07-20T15:00:00.000Z",
+    "2026-07-21T15:00:00.000Z",
+    "2026-07-22T15:00:00.000Z",
+    "2026-07-23T15:00:00.000Z",
+    "2026-07-24T15:00:00.000Z",
+    "2026-07-25T15:00:00.000Z",
+    "2026-07-26T15:00:00.000Z",
+    "2026-07-27T15:00:00.000Z",
+    "2026-07-28T15:00:00.000Z",
+    "2026-07-29T15:00:00.000Z"
+  ],
+  "models": {
+    "current": {
+      "modelVersion": "hazard-odds-v3-random-inclusive",
+      "classification": "baseline",
+      "metrics24h": {
+        "scoredCount": 41,
+        "censoredCount": 1,
+        "metric": {
+          "count": 41,
+          "actualRate": 0.36585365853658536,
+          "averagePrediction": 0.18652057896486515,
+          "brier": 0.2615410830248562,
+          "logLoss": 0.7424267723142238,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "lower": 0,
+              "upper": 0.2,
+              "count": 27,
+              "averagePrediction": 0.15018072649660535,
+              "actualRate": 0.2962962962962963
+            },
+            {
+              "range": "20-40%",
+              "lower": 0.2,
+              "upper": 0.4,
+              "count": 14,
+              "averagePrediction": 0.25660458015365195,
+              "actualRate": 0.5
+            },
+            {
+              "range": "40-60%",
+              "lower": 0.4,
+              "upper": 0.6000000000000001,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "lower": 0.6,
+              "upper": 0.8,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "lower": 0.8,
+              "upper": 1,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ]
+        }
+      },
+      "metrics48h": {
+        "scoredCount": 40,
+        "censoredCount": 2,
+        "metric": {
+          "count": 40,
+          "actualRate": 0.6,
+          "averagePrediction": 0.33050151897850244,
+          "brier": 0.31099635023280914,
+          "logLoss": 0.8263089363692819,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "lower": 0,
+              "upper": 0.2,
+              "count": 2,
+              "averagePrediction": 0.1932580892594301,
+              "actualRate": 0.5
+            },
+            {
+              "range": "20-40%",
+              "lower": 0.2,
+              "upper": 0.4,
+              "count": 29,
+              "averagePrediction": 0.30763306479871355,
+              "actualRate": 0.6206896551724138
+            },
+            {
+              "range": "40-60%",
+              "lower": 0.4,
+              "upper": 0.6000000000000001,
+              "count": 9,
+              "averagePrediction": 0.4346873001620605,
+              "actualRate": 0.5555555555555556
+            },
+            {
+              "range": "60-80%",
+              "lower": 0.6,
+              "upper": 0.8,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "lower": 0.8,
+              "upper": 1,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ]
+        }
+      },
+      "differenceVsCurrent": null
+    },
+    "candidate": {
+      "modelVersion": "hazard-odds-v3-random-boundary-censored",
+      "classification": "worse",
+      "metrics24h": {
+        "scoredCount": 41,
+        "censoredCount": 1,
+        "metric": {
+          "count": 41,
+          "actualRate": 0.36585365853658536,
+          "averagePrediction": 0.1812175510646966,
+          "brier": 0.2651173528693698,
+          "logLoss": 0.757028124503155,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "lower": 0,
+              "upper": 0.2,
+              "count": 25,
+              "averagePrediction": 0.14294113826978047,
+              "actualRate": 0.28
+            },
+            {
+              "range": "20-40%",
+              "lower": 0.2,
+              "upper": 0.4,
+              "count": 16,
+              "averagePrediction": 0.24102444605675327,
+              "actualRate": 0.5
+            },
+            {
+              "range": "40-60%",
+              "lower": 0.4,
+              "upper": 0.6000000000000001,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "lower": 0.6,
+              "upper": 0.8,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "lower": 0.8,
+              "upper": 1,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ]
+        }
+      },
+      "metrics48h": {
+        "scoredCount": 40,
+        "censoredCount": 2,
+        "metric": {
+          "count": 40,
+          "actualRate": 0.6,
+          "averagePrediction": 0.32850966648798574,
+          "brier": 0.3170355561379352,
+          "logLoss": 0.8435346704786205,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "lower": 0,
+              "upper": 0.2,
+              "count": 3,
+              "averagePrediction": 0.1821490693220487,
+              "actualRate": 0.6666666666666666
+            },
+            {
+              "range": "20-40%",
+              "lower": 0.2,
+              "upper": 0.4,
+              "count": 27,
+              "averagePrediction": 0.3082616888447645,
+              "actualRate": 0.5925925925925926
+            },
+            {
+              "range": "40-60%",
+              "lower": 0.4,
+              "upper": 0.6000000000000001,
+              "count": 10,
+              "averagePrediction": 0.4270873852744642,
+              "actualRate": 0.6
+            },
+            {
+              "range": "60-80%",
+              "lower": 0.6,
+              "upper": 0.8,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "lower": 0.8,
+              "upper": 1,
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ]
+        }
+      },
+      "differenceVsCurrent": {
+        "brier24h": 0.0035762698445136465,
+        "brier48h": 0.006039205905126077,
+        "logLoss24h": 0.014601352188931216,
+        "logLoss48h": 0.017225734109338586
+      }
+    }
+  },
+  "fixedTimeComparison": {
+    "at": "2026-08-01T03:32:00.000Z",
+    "lastRandomResetAt": "2026-08-01T03:32:00.000Z",
+    "lastBoundaryAt": "2026-08-01T03:32:00.000Z",
+    "currentAgeHours": 0,
+    "candidateAgeHours": 0,
+    "current": {
+      "probability12h": 0.08478391406648278,
+      "probability24h": 0.16237951604853285,
+      "probability48h": 0.44578617045591895,
+      "probability72h": 0.5647782596007631
+    },
+    "candidate": {
+      "probability12h": 0.08103393039948203,
+      "probability24h": 0.155501362922976,
+      "probability48h": 0.4285095901119004,
+      "probability72h": 0.5611842117776058
+    },
+    "difference": {
+      "probability12h": -0.0037499836670007447,
+      "probability24h": -0.006878153125556841,
+      "probability48h": -0.017276580344018577,
+      "probability72h": -0.003594047823157309
+    }
+  },
+  "notes": [
+    "The candidate treats each accepted broad regular reset as a boundary and right-censors the interval at that boundary without incrementing random event count.",
+    "A regular boundary inside a scored horizon is censored rather than scored as a simple negative; current and candidate use the same scored origins.",
+    "The model calculations use only history available at each origin; future records are used only to create censor-aware evaluation labels.",
+    "The public model remains hazard-odds-v3-random-inclusive and is not switched by this evaluation."
+  ]
+}
