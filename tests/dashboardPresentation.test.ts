@@ -58,9 +58,9 @@ test("renders the random reset time heatmap after history with a timezone-free S
   const internalData = getLocalRadarData({ calculationNow });
   const eventTimes = getRandomResetHeatmapEventTimes(internalData, calculationNow);
   const headings = {
-    ja: "過去のランダムリセット実施時刻",
+    ja: "過去のランダムリセット時刻",
     en: "Past random reset times",
-    zh: "过去的随机重置执行时间",
+    zh: "过去的随机重置时刻",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {

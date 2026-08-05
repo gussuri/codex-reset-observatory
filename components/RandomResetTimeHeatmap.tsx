@@ -11,8 +11,8 @@ import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 
 const CONTENT = {
   ja: {
-    heading: "過去のランダムリセット実施時刻",
-    description: "過去のランダムリセットの実施・発表時刻を、現在のタイムゾーンで2時間ごとに集計しています。",
+    heading: "過去のランダムリセット時刻",
+    description: "過去のランダムリセット時刻を、現在のタイムゾーンで2時間ごとに集計しています。",
     note: "実際のシステム実行時刻ではなく、完了が確認・発表された時刻を含む場合があります。",
     timezone: "閲覧者のタイムゾーン",
     count: "対象件数",
@@ -21,7 +21,7 @@ const CONTENT = {
   },
   en: {
     heading: "Past random reset times",
-    description: "Past random reset completion and announcement times are grouped into two-hour intervals in your current time zone.",
+    description: "Past random reset times are grouped into two-hour intervals in your current time zone.",
     note: "Some records may reflect when completion was confirmed or announced rather than the exact backend execution time.",
     timezone: "Viewer time zone",
     count: "Recorded events",
@@ -29,8 +29,8 @@ const CONTENT = {
     ariaBusy: "Loading past random reset times",
   },
   zh: {
-    heading: "过去的随机重置执行时间",
-    description: "按您当前时区，将过去随机重置的执行和公布时间按每两小时汇总。",
+    heading: "过去的随机重置时刻",
+    description: "按您当前时区，将过去的随机重置时刻按每两小时汇总。",
     note: "部分记录反映的是确认完成或公布的时间，可能不是后端实际执行的精确时间。",
     timezone: "查看者时区",
     count: "记录数量",
@@ -111,7 +111,7 @@ export function RandomResetTimeHeatmap({
                   </div>
                   <div
                     aria-label={label}
-                    className="flex h-28 min-w-0 items-end justify-center rounded bg-teal-50 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+                    className="flex h-28 min-w-0 items-end justify-center px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
                     role="img"
                     tabIndex={0}
                     title={label}
