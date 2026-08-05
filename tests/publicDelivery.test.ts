@@ -5,7 +5,11 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { LocalizedDateTime } from "../components/LocalizedDateTime";
+import {
+  formatDateTimeInZone,
+  getTimeZoneLabel,
+  LocalizedDateTime,
+} from "../components/LocalizedDateTime";
 import { HistoryView } from "../components/HistoryView";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
@@ -75,7 +79,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
 });
 
-test("SSR datetime has a JST fallback and never renders a timezone detector", () => {
+test("SSR datetime has a JST fallback without a duplicated timezone label", () => {
   const html = renderToStaticMarkup(
     React.createElement(LocalizedDateTime, {
       value: "2026-08-04T00:00:00.000Z",
@@ -85,8 +89,91 @@ test("SSR datetime has a JST fallback and never renders a timezone detector", ()
 
   assert.match(html, /<time[^>]*dateTime="2026-08-04T00:00:00\.000Z"/);
   assert.match(html, /JST/);
+  assert.doesNotMatch(html, /GMT\+9.*JST|JST.*GMT\+9/);
   assert.doesNotMatch(html, /Detecting time zone|タイムゾーンを検出中/);
   assert.doesNotMatch(html, /undefined|null|false/);
+});
+
+test("formats Tokyo time with one JST label in Japanese and Chinese", () => {
+  const date = new Date("2026-08-01T03:32:00.000Z");
+
+  const japanese = formatDateTimeInZone(date, "Asia/Tokyo", "ja-JP");
+  const chinese = formatDateTimeInZone(date, "Asia/Tokyo", "zh-CN");
+
+  assert.equal(japanese, "2026年8月1日 12:32 JST");
+  assert.equal(chinese, "2026年8月1日 12:32 JST");
+  assert.equal((chinese.match(/JST/g) ?? []).length, 1);
+  assert.doesNotMatch(chinese, /GMT\+9/);
+});
+
+test("uses IANA zone identity for Seoul instead of the shared UTC+9 offset", () => {
+  const value = formatDateTimeInZone(
+    new Date("2026-08-01T03:32:00.000Z"),
+    "Asia/Seoul",
+    "en-US",
+  );
+
+  assert.match(value, /Aug 1, 2026, 12:32 PM KST$/);
+  assert.doesNotMatch(value, /JST/);
+  assert.equal(getTimeZoneLabel(new Date("2026-08-01T03:32:00.000Z"), "Asia/Seoul"), "KST");
+});
+
+test("uses UTC for the explicit UTC IANA zones", () => {
+  const date = new Date("2026-08-01T03:32:00.000Z");
+
+  assert.equal(getTimeZoneLabel(date, "UTC"), "UTC");
+  assert.equal(getTimeZoneLabel(date, "Etc/UTC"), "UTC");
+  assert.match(formatDateTimeInZone(date, "UTC", "en-US"), /UTC$/);
+});
+
+test("uses seasonal abbreviations for New York and Los Angeles", () => {
+  const newYorkSummer = formatDateTimeInZone(
+    new Date("2026-08-01T16:32:00.000Z"),
+    "America/New_York",
+    "en-US",
+  );
+  const newYorkWinter = formatDateTimeInZone(
+    new Date("2026-01-01T17:32:00.000Z"),
+    "America/New_York",
+    "en-US",
+  );
+  const losAngelesSummer = formatDateTimeInZone(
+    new Date("2026-08-01T19:32:00.000Z"),
+    "America/Los_Angeles",
+    "en-US",
+  );
+  const losAngelesWinter = formatDateTimeInZone(
+    new Date("2026-01-01T20:32:00.000Z"),
+    "America/Los_Angeles",
+    "en-US",
+  );
+
+  assert.match(newYorkSummer, /Aug 1, 2026, 12:32 PM EDT$/);
+  assert.match(newYorkWinter, /Jan 1, 2026, 12:32 PM EST$/);
+  assert.match(losAngelesSummer, /Aug 1, 2026, 12:32 PM PDT$/);
+  assert.match(losAngelesWinter, /Jan 1, 2026, 12:32 PM PST$/);
+});
+
+test("formats the same ISO instant in the local zone and changes the calendar date when needed", () => {
+  const value = "2026-08-01T03:32:00.000Z";
+  const tokyo = formatDateTimeInZone(new Date(value), "Asia/Tokyo", "en-US");
+  const newYork = formatDateTimeInZone(new Date(value), "America/New_York", "en-US");
+
+  assert.match(tokyo, /Aug 1, 2026, 12:32 PM JST$/);
+  assert.match(newYork, /Jul 31, 2026, 11:32 PM EDT$/);
+  assert.notEqual(tokyo, newYork);
+});
+
+test("preserves unknown and invalid datetime fallback text", () => {
+  const unknown = renderToStaticMarkup(
+    React.createElement(LocalizedDateTime, { value: null, locale: "en" }),
+  );
+  const invalid = renderToStaticMarkup(
+    React.createElement(LocalizedDateTime, { value: "not-a-date", locale: "zh" }),
+  );
+
+  assert.equal(unknown, "<span>Unknown</span>");
+  assert.equal(invalid, "<span>not-a-date</span>");
 });
 
 test("date class composition omits an absent className", () => {

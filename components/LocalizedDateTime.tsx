@@ -56,21 +56,48 @@ function parseDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
+export function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
+  const safeTimeZone = getSafeTimeZone(timeZone);
   const formatted = new Intl.DateTimeFormat(localeStr, {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-    timeZone,
-    timeZoneName: "short",
+    hour12: localeStr === "en-US",
+    timeZone: safeTimeZone,
   }).format(date);
 
-  if (timeZone === DISPLAY_TIME_ZONE && !/\bJST\b/.test(formatted)) {
-    return `${formatted} JST`;
+  return `${formatted} ${getTimeZoneLabel(date, safeTimeZone)}`;
+}
+
+export function getTimeZoneLabel(date: Date, timeZone: string) {
+  const safeTimeZone = getSafeTimeZone(timeZone);
+
+  if (safeTimeZone === DISPLAY_TIME_ZONE) {
+    return "JST";
   }
 
-  return formatted;
+  if (safeTimeZone === "Asia/Seoul") {
+    return "KST";
+  }
+
+  if (safeTimeZone === "UTC" || safeTimeZone === "Etc/UTC") {
+    return "UTC";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: safeTimeZone,
+    timeZoneName: "short",
+  }).formatToParts(date);
+  return parts.find((part) => part.type === "timeZoneName")?.value ?? safeTimeZone;
+}
+
+function getSafeTimeZone(timeZone: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format();
+    return timeZone;
+  } catch {
+    return DISPLAY_TIME_ZONE;
+  }
 }
