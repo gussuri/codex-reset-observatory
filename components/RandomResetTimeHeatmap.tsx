@@ -143,9 +143,21 @@ export function RandomResetTimeHeatmap({
 
       {!heatmap ? (
         <div className="mt-5 space-y-5" role="status" aria-label={content.ariaBusy}>
-          <div className="mx-auto w-full max-w-2xl">
-            <div className="grid grid-cols-12 gap-1" aria-hidden="true">
-              {Array.from({ length: 12 }, (_, index) => (
+          <div className="grid grid-cols-12 gap-1" aria-hidden="true">
+            {Array.from({ length: 12 }, (_, index) => (
+              <span
+                className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+                key={index}
+              />
+            ))}
+          </div>
+          <div className="border-t border-slate-100 pt-5">
+            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+              {content.weekdayHeading}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
+            <div className="mt-4 grid grid-cols-7 gap-1" aria-hidden="true">
+              {Array.from({ length: 7 }, (_, index) => (
                 <span
                   className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
                   key={index}
@@ -153,70 +165,54 @@ export function RandomResetTimeHeatmap({
               ))}
             </div>
           </div>
-          <div className="border-t border-slate-100 pt-5">
-            <h3 className="text-base font-semibold text-slate-900">{content.weekdayHeading}</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
-            <div className="mx-auto mt-4 w-full max-w-md">
-              <div className="grid grid-cols-7 gap-1" aria-hidden="true">
-                {Array.from({ length: 7 }, (_, index) => (
-                  <span
-                    className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
-                    key={index}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       ) : timeHeatmap?.totalCount === 0 ? (
         <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
       ) : (
         <>
-          <div className="mx-auto mt-5 w-full max-w-2xl">
-            <div className="grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
-              {(timeHeatmap?.bins ?? []).map((bin) => {
-                const label = formatHeatmapBarLabel(bin, locale);
-                const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
+          <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
+            {(timeHeatmap?.bins ?? []).map((bin) => {
+              const label = formatHeatmapBarLabel(bin, locale);
+              const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
+
+              return (
+                <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
+                  <ResetCountBar
+                    ariaLabel={label}
+                    barHeight={barHeight}
+                    rawCount={bin.rawCount}
+                  />
+                  <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
+                    {formatHeatmapAxisLabel(bin)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
+          <div className="mt-6 border-t border-slate-100 pt-5">
+            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+              {content.weekdayHeading}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
+            <div className="mt-4 grid grid-cols-7 gap-1.5" role="list" aria-label={content.weekdayHeading}>
+              {weekdayDistribution?.bins.map((bin) => {
+                const label = formatHeatmapWeekdayBarLabel(bin, locale);
+                const barHeight = getRawBarHeightPercent(bin.rawCount, weekdayBarScaleMax);
 
                 return (
-                  <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
+                  <div className="min-w-0 text-center" key={bin.weekday} role="listitem">
                     <ResetCountBar
                       ariaLabel={label}
                       barHeight={barHeight}
                       rawCount={bin.rawCount}
                     />
                     <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                      {formatHeatmapAxisLabel(bin)}
+                      {formatHeatmapWeekdayLabel(bin.weekday, locale)}
                     </div>
                   </div>
                 );
               })}
-            </div>
-            <p className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
-          </div>
-          <div className="mt-6 border-t border-slate-100 pt-5">
-            <h3 className="text-base font-semibold text-slate-900">{content.weekdayHeading}</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
-            <div className="mx-auto mt-4 w-full max-w-md">
-              <div className="grid grid-cols-7 gap-1.5" role="list" aria-label={content.weekdayHeading}>
-                {weekdayDistribution?.bins.map((bin) => {
-                  const label = formatHeatmapWeekdayBarLabel(bin, locale);
-                  const barHeight = getRawBarHeightPercent(bin.rawCount, weekdayBarScaleMax);
-
-                  return (
-                    <div className="min-w-0 text-center" key={bin.weekday} role="listitem">
-                      <ResetCountBar
-                        ariaLabel={label}
-                        barHeight={barHeight}
-                        rawCount={bin.rawCount}
-                      />
-                      <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                        {formatHeatmapWeekdayLabel(bin.weekday, locale)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </div>
         </>
