@@ -567,7 +567,7 @@ export function RadarDashboard({
                   />
                 </h2>
               </div>
-              <p className="text-sm leading-6 text-slate-500 sm:max-w-md sm:text-right">
+              <p className="text-balance text-sm leading-6 text-slate-500 sm:max-w-lg sm:text-right">
                 {translateUI("regularResetReferenceNote", locale)}
               </p>
             </div>
