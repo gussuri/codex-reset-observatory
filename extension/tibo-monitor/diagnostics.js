@@ -19,6 +19,8 @@
     "tibo_status_url_missing",
     "tweet_datetime_missing",
     "no_parse_success",
+    "monitored_tab_missing",
+    "timeline_stalled",
     "scan_error",
   ]);
 
@@ -92,6 +94,10 @@
     return /^[-A-Za-z0-9_.]+$/.test(sanitized) ? sanitized : "v1";
   }
 
+  function sanitizeSourceTimeline(value) {
+    return value === "profile" || value === "with_replies" ? value : null;
+  }
+
   function sanitizePageReloadStatus(value) {
     return value === "success" || value === "monitored_tab_missing" || value === "error"
       ? value
@@ -127,6 +133,7 @@
       counts: SUMMARY_FINGERPRINT_FIELDS.map((field) => normalizeCount(summary[field])),
       currentUrl,
       selectorVersion,
+      sourceTimeline: sanitizeSourceTimeline(summary.sourceTimeline),
     });
   }
 
@@ -154,10 +161,11 @@
       currentUrl,
       selectorVersion: sanitizeSelectorVersion(source.selectorVersion),
       scanTimestamp,
+      sourceTimeline: sanitizeSourceTimeline(source.sourceTimeline),
     };
   }
 
-  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp) {
+  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp, sourceTimeline) {
     const list = Array.isArray(records) ? records : [];
     return {
       articleCount: list.length,
@@ -172,6 +180,7 @@
       currentUrl: sanitizeCurrentUrl(currentUrl),
       selectorVersion: truncate(selectorVersion || "unknown", 100),
       scanTimestamp: truncate(scanTimestamp || new Date().toISOString(), 40),
+      sourceTimeline: sanitizeSourceTimeline(sourceTimeline),
     };
   }
 
@@ -277,9 +286,13 @@
       }
       result.summary.selectorVersion = truncate(source.summary.selectorVersion || "unknown", 100);
       result.summary.scanTimestamp = truncate(source.summary.scanTimestamp || "", 40);
+      result.summary.sourceTimeline = sanitizeSourceTimeline(source.summary.sourceTimeline);
     }
     if (typeof source.currentUrl !== "undefined") {
       result.currentUrl = sanitizeCurrentUrl(source.currentUrl);
+    }
+    if (typeof source.sourceTimeline !== "undefined") {
+      result.sourceTimeline = sanitizeSourceTimeline(source.sourceTimeline);
     }
     if (typeof source.reasonCode !== "undefined") {
       result.reasonCode = truncate(source.reasonCode, 100).replace(/[^a-z0-9_.-]/gi, "_");
@@ -395,6 +408,7 @@
     sanitizeTimestamp,
     sanitizeOpaqueId,
     sanitizeSelectorVersion,
+    sanitizeSourceTimeline,
     sanitizePageReloadStatus,
     sanitizeScanSummary,
     getDiagnosticFingerprint,

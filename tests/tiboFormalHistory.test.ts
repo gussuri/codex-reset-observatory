@@ -99,6 +99,12 @@ test("Gemini reset_executed is eligible for formal history", () => {
   assert.equal(isFormalTiboResetSignal(resetSignal()), true);
 });
 
+test("reply reset signals remain stored but are excluded from formal reset history", () => {
+  const combined = combineResetHistory([], [resetSignal({ is_reply: true })]);
+  assert.deepEqual(combined, []);
+  assert.equal(isFormalTiboResetSignal(resetSignal({ is_reply: true })), false);
+});
+
 test("rule_fallback reset_executed is eligible for formal history", () => {
   assert.equal(
     isFormalTiboResetSignal(

@@ -39,6 +39,10 @@ export type FormalTiboResetSignal = {
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
   expires_at?: string | null;
+  is_reply?: boolean | null;
+  reply_to_handles?: string[] | null;
+  reply_context_text?: string | null;
+  source_timeline?: "profile" | "with_replies" | null;
   related_notice?: TiboNoticeSignal | null;
 };
 
@@ -97,6 +101,7 @@ function formatNoticeToExecution(minutes: number) {
 }
 
 export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
+  if (signal.is_reply === true) return false;
   if (signal.signal_type !== "reset_executed") return false;
   if ((signal.confidence ?? 0) < FORMAL_RESET_CONFIDENCE) return false;
   if (signal.verification_status === "rejected") return false;
@@ -261,7 +266,7 @@ export function combineResetHistory(
   rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
 ) {
   const dynamicItems = formalTiboResets
-    .filter(isFormalTiboResetSignal)
+    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal))
     .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
   const filteredStaticHistory = staticHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];

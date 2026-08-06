@@ -15,6 +15,7 @@ import {
   isNewFormalAdoption,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
+import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -86,8 +87,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const replyMetadataResult = parseTiboReplyMetadata(body);
+    if (!replyMetadataResult.ok) {
+      return NextResponse.json({ error: "Invalid reply metadata" }, { status: 400 });
+    }
+    const replyMetadata = replyMetadataResult.value;
+
     // 3. Existing Rule Classification
-    const ruleResult = classifyTiboTweet(text, tweetUrl);
+    const ruleResult = classifyTiboTweet(text, tweetUrl, replyMetadata);
 
     // 4. Gemini Classification (Optional based on GEMINI_CLASSIFICATION_MODE)
     const mode = normalizeTiboClassificationMode(process.env.GEMINI_CLASSIFICATION_MODE);
@@ -95,7 +102,10 @@ export async function POST(req: NextRequest) {
     let aiResult = null;
     if (shouldRunGeminiClassification(mode)) {
       try {
-        aiResult = await classifyWithGemini({ text, tweetCreatedAt }, { mode });
+        aiResult = await classifyWithGemini(
+          { text, tweetCreatedAt, ...replyMetadata },
+          { mode },
+        );
       } catch {
         // Keep the webhook successful and let primary mode select the rule fallback.
         console.warn("[Webhook Warning] Gemini classification failed; using the rule fallback.");
@@ -134,6 +144,9 @@ export async function POST(req: NextRequest) {
       verification_status: "auto_unverified" as const,
       classification_reason: selectedClassification.reason,
       is_reply: ruleResult.isReply,
+      reply_to_handles: replyMetadata.replyToHandles ?? null,
+      reply_context_text: replyMetadata.replyContextText ?? null,
+      source_timeline: replyMetadata.sourceTimeline ?? null,
       is_quote: ruleResult.isQuote,
 
       // Audit columns
@@ -200,6 +213,7 @@ export async function POST(req: NextRequest) {
       ai_reset_type_ja: persistedPayload.ai_reset_type_ja,
       ai_notice_to_execution: persistedPayload.ai_notice_to_execution,
       expires_at: persistedPayload.expires_at,
+      is_reply: persistedPayload.is_reply,
     };
     const newlyAdopted = isNewFormalAdoption(formalCandidate, existingSignal);
 

@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert";
-import { classifyWithGemini, GeminiClassificationOutput } from "../lib/radar/geminiClassification";
+import {
+  buildGeminiPrompt,
+  classifyWithGemini,
+  GeminiClassificationOutput,
+} from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
 import {
   buildTiboClassificationResponse,
@@ -17,6 +21,24 @@ test("1. GEMINI_CLASSIFICATION_MODE=off skips Gemini API call", async () => {
   assert.strictEqual(result.status, "skipped");
   assert.strictEqual(result.signalType, null);
   assert.strictEqual(result.classifiedAt, null);
+});
+
+test("Gemini prompt receives structured reply metadata without treating reply status as evidence", () => {
+  const prompt = buildGeminiPrompt({
+    text: "Maybe :) ",
+    tweetCreatedAt: "2026-08-05T00:00:00.000Z",
+    isReply: true,
+    replyToHandles: ["@alice"],
+    replyContextText: "A reset is coming soon.",
+    sourceTimeline: "with_replies",
+  });
+
+  assert.match(prompt, /Post type: reply/);
+  assert.match(prompt, /Replying to: @alice/);
+  assert.match(prompt, /Parent context shown in the same article: A reset is coming soon\./);
+  assert.match(prompt, /Source timeline: with_replies/);
+  assert.match(prompt, /Tibo's own text: Maybe :\)/);
+  assert.match(prompt, /reply status alone must not raise/i);
 });
 
 test("2. GEMINI_MODEL or GEMINI_API_KEY missing returns model_not_configured without calling API", async () => {

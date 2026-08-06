@@ -12,6 +12,10 @@ export type ClassificationResult = {
   isQuote: boolean;
 };
 
+export type TiboReplyClassificationMetadata = {
+  isReply?: boolean;
+};
+
 /**
  * Tibo氏のポストテキストを分類・解析し、シグナル種別・信頼度スコアを算出する
  * Supabase実データ分析に基づく高精度ルールエンジン
@@ -19,12 +23,14 @@ export type ClassificationResult = {
 export function classifyTiboTweet(
   text: string,
   url: string = "",
+  metadata?: TiboReplyClassificationMetadata,
 ): ClassificationResult {
   const normalized = text.toLowerCase();
 
-  const isReply =
-    url.includes("/status/") &&
-    (text.startsWith("@") || normalized.includes("reply"));
+  const isReply = typeof metadata?.isReply === "boolean"
+    ? metadata.isReply
+    : url.includes("/status/") &&
+      (text.startsWith("@") || normalized.includes("reply"));
   const isQuote = normalized.includes("quote") || false;
 
   // 1. 否定・過去・昔話回想パターンの先頭評価 (Negative / Past / Retrospective Exclusion -> irrelevant)

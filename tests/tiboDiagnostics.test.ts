@@ -19,6 +19,7 @@ type Diagnostics = {
     currentUrl: string,
     selectorVersion: string,
     scanTimestamp: string,
+    sourceTimeline?: "profile" | "with_replies",
   ) => Record<string, unknown>;
   getScanFailureReason: (summary: Record<string, unknown>) => string | null;
   sanitizeDiagnosticText: (value: unknown, maxChars?: number) => string;
@@ -36,6 +37,7 @@ type Diagnostics = {
   getDiagnosticLogs: (storage: StorageLike) => Promise<unknown[]>;
   clearDiagnosticLogs: (storage: StorageLike) => Promise<void>;
   serializeDiagnosticLogs: (logs: unknown[]) => string;
+  getDiagnosticFingerprint: (entry: Record<string, unknown>) => string;
 };
 
 type StorageLike = {
@@ -150,6 +152,31 @@ test("summarizes empty, incomplete, mismatched, translated, and successful scans
   );
   assert.equal(successful.parseSuccessCount, 1);
   assert.equal(diagnostics.getScanFailureReason(successful), null);
+});
+
+test("diagnostic summaries distinguish profile and with-replies timelines", () => {
+  const diagnostics = loadDiagnostics();
+  const profile = diagnostics.buildScanSummary(
+    [],
+    "https://x.com/thsottiaux",
+    "v1.5-diagnostics",
+    "2026-08-02T00:00:00.000Z",
+    "profile",
+  );
+  const replies = diagnostics.buildScanSummary(
+    [],
+    "https://x.com/thsottiaux/with_replies",
+    "v1.5-diagnostics",
+    "2026-08-02T00:00:00.000Z",
+    "with_replies",
+  );
+
+  assert.equal(profile.sourceTimeline, "profile");
+  assert.equal(replies.sourceTimeline, "with_replies");
+  assert.notEqual(
+    diagnostics.getDiagnosticFingerprint({ summary: profile, reasonCode: "article_missing" }),
+    diagnostics.getDiagnosticFingerprint({ summary: replies, reasonCode: "article_missing" }),
+  );
 });
 
 test("sanitizes DOM snapshots, URLs, secrets, and applies the character limit", () => {

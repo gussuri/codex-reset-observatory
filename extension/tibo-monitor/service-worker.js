@@ -3,7 +3,7 @@
  * Serialized Deduplication & Webhook Dispatcher
  */
 
-importScripts("diagnostics.js");
+importScripts("diagnostics.js", "scan-utils.js");
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
 const FORMAL_ADOPTION_NOTIFIED_KEY = "tibo_formal_adoption_notified_ids";
@@ -129,16 +129,59 @@ if (
   });
 }
 
+function getMonitoredTimeline(urlStr) {
+  return TiboMonitorScan.getTimelineSource(urlStr);
+}
+
 function isProfileTabUrl(urlStr) {
-  if (!urlStr) return false;
+  return getMonitoredTimeline(urlStr) === "profile";
+}
+
+function getTimelineReloadKey(timeline) {
+  return timeline === "with_replies"
+    ? "tibo_last_with_replies_reload"
+    : "tibo_last_profile_reload";
+}
+
+async function reloadTimeline(timeline, tabs, now) {
+  const key = getTimelineReloadKey(timeline);
+  const tab = tabs[0];
+
+  if (!tab) {
+    await chrome.storage.local.set({
+      [`${key}_status`]: "monitored_tab_missing",
+      [`${key}_error`]: null,
+    });
+    await saveServiceDiagnostic({
+      reasonCode: "monitored_tab_missing",
+      sourceTimeline: timeline,
+      messages: [`The ${timeline} monitoring tab is not open.`],
+    });
+    return { timeline, status: "monitored_tab_missing", success: false, tabId: null };
+  }
+
   try {
-    const url = new URL(urlStr);
-    const host = url.hostname.toLowerCase();
-    if (host !== "x.com" && host !== "twitter.com") return false;
-    const pathname = url.pathname;
-    return pathname === "/thsottiaux" || pathname === "/thsottiaux/";
-  } catch {
-    return false;
+    await chrome.tabs.reload(tab.id);
+    await chrome.storage.local.set({
+      [`${key}_at`]: now,
+      [`${key}_status`]: "success",
+      [`${key}_error`]: null,
+      [`${key}_tab_id`]: tab.id,
+    });
+    console.log(`[Service Worker] Successfully reloaded ${timeline} tab ${tab.id} at ${now}.`);
+    return { timeline, status: "success", success: true, tabId: tab.id };
+  } catch (error) {
+    await chrome.storage.local.set({
+      [`${key}_status`]: "error",
+      [`${key}_error`]: "page_reload_error",
+    });
+    await saveServiceDiagnostic({
+      reasonCode: "page_reload_error",
+      sourceTimeline: timeline,
+      messages: [`The ${timeline} monitoring tab could not be reloaded.`],
+      error: error?.message || String(error),
+    });
+    return { timeline, status: "error", success: false, tabId: tab.id };
   }
 }
 
@@ -157,47 +200,63 @@ async function handleReloadAlarm() {
       ],
     });
 
-    // Filter strictly for profile tabs (/thsottiaux or /thsottiaux/)
-    const profileTabs = (candidateTabs || []).filter((tab) => isProfileTabUrl(tab.url));
+    const profileTabs = (candidateTabs || []).filter(
+      (tab) => getMonitoredTimeline(tab.url) === "profile",
+    );
+    const repliesTabs = (candidateTabs || []).filter(
+      (tab) => getMonitoredTimeline(tab.url) === "with_replies",
+    );
 
-    if (profileTabs.length === 0) {
-      console.log("[Service Worker] Monitored profile tab missing. Preserving last_page_reload_at, saving status monitored_tab_missing.");
-      // DO NOT overwrite tibo_last_page_reload_at on missing
+    const results = [
+      await reloadTimeline("profile", profileTabs, now),
+      await reloadTimeline("with_replies", repliesTabs, now),
+    ];
+    const successful = results.find((result) => result.success);
+    const hasError = results.some((result) => result.status === "error");
+
+    if (!successful && !hasError) {
+      console.log("[Service Worker] Monitored profile and replies tabs are missing. Preserving last_page_reload_at.");
       await chrome.storage.local.set({
         tibo_last_page_reload_status: "monitored_tab_missing",
         tibo_last_page_reload_error: null,
       });
-      return { success: true, status: "monitored_tab_missing" };
+      return { success: true, status: "monitored_tab_missing", results };
     }
 
-    // Select exactly 1 profile tab if multiple exist
-    const targetTab = profileTabs[0];
-    await chrome.tabs.reload(targetTab.id);
+    if (!successful) {
+      await chrome.storage.local.set({
+        tibo_last_page_reload_status: "error",
+        tibo_last_page_reload_error: "page_reload_error",
+      });
+      return { success: false, status: "error", results };
+    }
 
-    console.log(`[Service Worker] Successfully reloaded profile tab ${targetTab.id} at ${now}.`);
-    // Update last_page_reload_at ONLY on success
     await chrome.storage.local.set({
       tibo_last_page_reload_at: now,
       tibo_last_page_reload_status: "success",
       tibo_last_page_reload_error: null,
-      tibo_reloaded_tab_id: targetTab.id,
+      tibo_reloaded_tab_id: successful.tabId,
     });
 
-    return { success: true, status: "success", tabId: targetTab.id, reloadedAt: now };
+    return {
+      success: true,
+      status: "success",
+      tabId: successful.tabId,
+      reloadedAt: now,
+      results,
+    };
   } catch (err) {
-    const errorMsg = err.message || String(err);
     console.error("[Service Worker] Page reload error:", err);
-    // DO NOT overwrite tibo_last_page_reload_at on error. Keep only a safe code in sync data.
     await chrome.storage.local.set({
       tibo_last_page_reload_status: "error",
       tibo_last_page_reload_error: "page_reload_error",
     });
     await saveServiceDiagnostic({
       reasonCode: "page_reload_error",
-      messages: ["The monitored profile tab could not be reloaded."],
-      error: errorMsg,
+      messages: ["The monitored timeline tabs could not be reloaded."],
+      error: err?.message || String(err),
     });
-    return { success: false, error: errorMsg };
+    return { success: false, error: "page_reload_error" };
   }
 }
 

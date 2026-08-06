@@ -376,6 +376,35 @@ test("REQUIREMENT 5 & 6: Strictly matches profile tabs and reloads exactly 1 pro
   assert.ok(localStore["tibo_last_page_reload_at"], "tibo_last_page_reload_at must be updated on success");
 });
 
+test("reloads at most one profile tab and one with-replies tab", async () => {
+  const tabs = [
+    { id: 301, url: "https://x.com/thsottiaux" },
+    { id: 302, url: "https://x.com/thsottiaux/with_replies" },
+    { id: 303, url: "https://twitter.com/thsottiaux/with_replies/" },
+    { id: 304, url: "https://x.com/thsottiaux/status/123" },
+  ];
+  const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext(tabs);
+
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.deepEqual(reloadedTabIds, [301, 302]);
+  assert.equal(localStore.tibo_last_profile_reload_status, "success");
+  assert.equal(localStore.tibo_last_with_replies_reload_status, "success");
+  assert.equal(localStore.tibo_last_page_reload_status, "success");
+});
+
+test("a missing timeline does not fail the other timeline reload", async () => {
+  const tabs = [{ id: 305, url: "https://x.com/thsottiaux/with_replies" }];
+  const { fireAlarm, localStore, reloadedTabIds } = setupServiceWorkerContext(tabs);
+
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.deepEqual(reloadedTabIds, [305]);
+  assert.equal(localStore.tibo_last_profile_reload_status, "monitored_tab_missing");
+  assert.equal(localStore.tibo_last_with_replies_reload_status, "success");
+  assert.equal(localStore.tibo_last_page_reload_status, "success");
+});
+
 test("REQUIREMENT 2 & 3: Heartbeat API & Service Worker include 3 page reload fields (at, status, error)", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext();
 

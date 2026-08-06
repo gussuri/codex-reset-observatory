@@ -41,6 +41,10 @@ test("formal adoption rejects ineligible or unavailable candidates", () => {
   );
   assert.equal(isNewFormalAdoption(candidate(), null, false), false);
   assert.equal(
+    isNewFormalAdoption(candidate({ is_reply: true }), null),
+    false,
+  );
+  assert.equal(
     isNewFormalAdoption(
       candidate({ tweet_id: "2083395449814229287", tweet_url: "https://x.com/thsottiaux/status/2083395449814229287" }),
       null,

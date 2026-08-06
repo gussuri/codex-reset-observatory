@@ -2,6 +2,22 @@ import test from "node:test";
 import assert from "node:assert";
 import { classifyTiboTweet } from "../lib/radar/classification";
 
+test("explicit reply metadata takes priority over legacy text heuristics", () => {
+  const url = "https://x.com/thsottiaux/status/12345";
+  assert.equal(
+    classifyTiboTweet("@alice thanks for the update", url, { isReply: false }).isReply,
+    false,
+  );
+  assert.equal(
+    classifyTiboTweet("A neutral standalone post", url, { isReply: true }).isReply,
+    true,
+  );
+  assert.equal(
+    classifyTiboTweet("@alice thanks for the update", url).isReply,
+    true,
+  );
+});
+
 test("classifyTiboTweet correctly classifies official notices", () => {
   const result = classifyTiboTweet("Codex limits will reset in 2 hours! Get ready.", "https://x.com/thsottiaux/status/12345");
   assert.strictEqual(result.signalType, "official_notice");

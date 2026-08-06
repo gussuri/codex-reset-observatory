@@ -23,19 +23,21 @@ function restoreEnvironment(previous: Partial<Record<(typeof ENV_KEYS)[number], 
   }
 }
 
-function buildRequest() {
+function buildRequest(overrides: Record<string, unknown> = {}) {
+  const body = {
+    tweetId: "2084000000000000200",
+    text: "I reset usage limits for Codex.",
+    tweetUrl: "https://x.com/thsottiaux/status/2084000000000000200",
+    tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    ...overrides,
+  };
   return new NextRequest("http://localhost/api/webhook/tibo", {
     method: "POST",
     headers: {
       authorization: "Bearer test-webhook-secret",
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      tweetId: "2084000000000000200",
-      text: "I reset usage limits for Codex.",
-      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000200",
-      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
-    }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -75,6 +77,55 @@ test("Tibo state SELECT failure fails closed before upsert or formal adoption", 
   } finally {
     globalThis.fetch = originalFetch;
     console.info = originalInfo;
+    restoreEnvironment(previous);
+  }
+});
+
+test("new reply metadata is validated and persisted while old payload fields remain compatible", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const fetchMethods: string[] = [];
+  const requestBodies: unknown[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  globalThis.fetch = async (input, init) => {
+    fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    if (fetchMethods.length === 1) {
+      return new Response(JSON.stringify({ data: null, error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(
+      buildRequest({
+        isReply: true,
+        replyToHandles: ["alice"],
+        replyContextText: "A reset is coming soon.",
+        sourceTimeline: "with_replies",
+      }),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(fetchMethods, ["GET", "POST"]);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.is_reply, true);
+    assert.deepEqual(upsertBody.reply_to_handles, ["@alice"]);
+    assert.equal(upsertBody.reply_context_text, "A reset is coming soon.");
+    assert.equal(upsertBody.source_timeline, "with_replies");
+  } finally {
+    globalThis.fetch = originalFetch;
     restoreEnvironment(previous);
   }
 });

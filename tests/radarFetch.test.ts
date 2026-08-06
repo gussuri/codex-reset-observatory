@@ -45,7 +45,7 @@ test("active Tibo filters are applied before ordering and limit", () => {
       return builder;
     },
     or: () => {
-      calls.push("or:verification_status");
+      calls.push(calls.some((call) => call === "or:verification_status") ? "or:is_reply" : "or:verification_status");
       return builder;
     },
     in: (_column: string, values: string[]) => {
@@ -70,6 +70,7 @@ test("active Tibo filters are applied before ordering and limit", () => {
     "not:expires_at.is.null",
     "gt:expires_at",
     "or:verification_status",
+    "or:is_reply",
     `in:signal_type:${ACTIVE_TIBO_SIGNAL_TYPES.join(",")}`,
     "order",
     "limit",

@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.5-diagnostics";
+  const SELECTOR_VERSION = "v1.6-replies";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -31,6 +31,14 @@
   let extensionContextInvalidated = false;
   const intervalIds = [];
   let mutationObserver = null;
+
+  function getSourceTimeline() {
+    const detected = TiboMonitorScan.getTimelineSource(window.location.href);
+    if (detected) return detected;
+    return /\/notifications(?:\/|$)/i.test(window.location.pathname)
+      ? "profile"
+      : null;
+  }
 
   function handleExtensionError(error, operation) {
     if (TiboExtensionRuntime.isExtensionContextInvalidated(error)) {
@@ -297,7 +305,15 @@
 
         // Add to inFlight Set and delegate deduplication to Service Worker
         inFlightTweetIds.add(tweetId);
-        sendWebhook(tweetId, text, tweetUrl, createdAt);
+        const replyMetadata = TiboMonitorScan.extractReplyMetadata(article);
+        sendWebhook(
+          tweetId,
+          text,
+          tweetUrl,
+          createdAt,
+          replyMetadata,
+          getSourceTimeline(),
+        );
       }
     } catch (err) {
       lastScanError = "scan_exception";
@@ -311,6 +327,7 @@
       window.location.href,
       SELECTOR_VERSION,
       scanTimestamp,
+      getSourceTimeline(),
     );
     lastScanSummary = summary;
 
@@ -332,8 +349,26 @@
     }
   }
 
-  function sendWebhook(tweetId, text, tweetUrl, tweetCreatedAt) {
-    const payload = { tweetId, text, tweetUrl, tweetCreatedAt };
+  function sendWebhook(
+    tweetId,
+    text,
+    tweetUrl,
+    tweetCreatedAt,
+    replyMetadata,
+    sourceTimeline,
+  ) {
+    const payload = {
+      tweetId,
+      text,
+      tweetUrl,
+      tweetCreatedAt,
+      isReply: replyMetadata?.isReply === true,
+      replyToHandles: Array.isArray(replyMetadata?.replyToHandles)
+        ? replyMetadata.replyToHandles
+        : [],
+      replyContextText: replyMetadata?.replyContextText || null,
+      sourceTimeline: sourceTimeline || null,
+    };
 
     try {
       chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {

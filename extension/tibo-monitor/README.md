@@ -43,7 +43,14 @@ X (旧Twitter) 上で Tibo 氏（`@thsottiaux`）の投稿をリアルタイム�
 
 ## 🧪 3. 動作確認方法
 
-1. X（旧Twitter）で `@thsottiaux` のプロフィールページ（`https://x.com/thsottiaux`）または通知ページ（`https://x.com/notifications`）を開きます。
+1. X（旧Twitter）で `@thsottiaux` のプロフィールページ（`https://x.com/thsottiaux`）と、返信ページ（`https://x.com/thsottiaux/with_replies`）を開きます。通常投稿だけを監視する場合はプロフィールだけでも動作します。通知ページ（`https://x.com/notifications`）も補助的なスキャン対象です。
 2. F12 キーを押して Chrome デベロッパー ツール（コンソール）を開きます。
 3. `[Tibo Extension] Content script initialized with Translation Guard & Strict Storage-First InFlight Removal.` というログが表示されていることを確認します。
 4. 5分ごとに `[Tibo Extension] Heartbeat sent successfully by leader tab.` が出力され、新しい投稿が検知されると自動的に Webhook 送信が行われます。
+
+## 💬 4. 返信タブの運用
+
+- Service Workerは約10分ごとにプロフィールと返信のタブを最大1つずつ再読み込みします。拡張機能がタブを自動で作成・閉じることはありません。
+- 片方のタブを閉じても、もう片方の監視は継続します。返信タブがない、またはスキャンが停滞している場合は、オプション画面のローカル診断ログで `sourceTimeline=with_replies` と `monitored_tab_missing` / `timeline_stalled` を確認します。
+- 返信先ハンドルや親文脈は、同じ投稿記事内にXが明示的に表示した情報だけを保存します。親投稿を開く追加取得は行いません。
+- 返信は収集・保存・分類しますが、返信であることだけでリセット予告・実施シグナルを強めず、正式履歴や公開確率へ自動反映しません。
