@@ -173,12 +173,12 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const probabilityIndex = html.indexOf("24時間以内");
   const noticeIndex = html.indexOf("公式予告：なし");
   const outlookIndex = html.indexOf("現在の見立て");
-  const disclaimerIndex = html.indexOf("非公式の予測です");
-  const outlookText = html.slice(outlookIndex, disclaimerIndex);
+  const historyIndex = html.indexOf("リセット履歴", outlookIndex);
+  const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
   assert.ok(noticeIndex >= 0 && noticeIndex < outlookIndex);
-  assert.ok(outlookIndex >= 0 && outlookIndex < disclaimerIndex);
+  assert.ok(outlookIndex >= 0);
   assert.match(html, /公式予告：なし/);
   assert.match(html, /現在の見立て/);
   assert.match(
@@ -192,7 +192,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.doesNotMatch(outlookText, /観測シグナルで補正/);
   assert.doesNotMatch(outlookText, /。 /);
   assert.doesNotMatch(outlookText, /\d+%/);
-  assert.match(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
+  assert.doesNotMatch(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
   assert.doesNotMatch(html, /今日、全体リセットはありましたか？|次のリセットはいつですか？|予測のしくみを見る →/);
   assert.doesNotMatch(html, /border-amber-300 bg-amber-50/);
 });
@@ -256,8 +256,11 @@ test("keeps dashboard labels localized without extra direct-answer links", () =>
     assert.doesNotMatch(html, /When is the next Codex reset\?|下一次 Codex 重置是什么时候？|予測のしくみを見る →|How the forecast works →|查看预测方式 →/);
     const outlookLabel = item.locale === "ja" ? "現在の見立て" : item.locale === "en" ? "Current outlook" : "当前判断";
     const outlookIndex = html.indexOf(outlookLabel);
-    const disclaimerIndex = html.indexOf(item.locale === "ja" ? "非公式の予測です" : item.locale === "en" ? "This is an unofficial forecast" : "本预测并非官方信息");
-    const outlookText = html.slice(outlookIndex, disclaimerIndex);
+    const historyLabel = item.locale === "ja" ? "リセット履歴" : item.locale === "en" ? "Reset history" : "重置历史";
+    const historyIndex = html.indexOf(historyLabel, outlookIndex);
+    const outlookText = html.slice(outlookIndex, historyIndex);
+    assert.ok(outlookIndex >= 0);
+    assert.doesNotMatch(html, /非公式の予測です|This is an unofficial forecast|本预测并非官方信息/);
     assert.doesNotMatch(outlookText, /。 /);
     if (item.locale === "en") {
       assert.doesNotMatch(outlookText, / {2,}/);

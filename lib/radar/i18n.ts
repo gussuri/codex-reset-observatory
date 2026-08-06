@@ -175,9 +175,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "剩余时间",
   },
   regularResetReferenceNote: {
-    ja: "直近の対象リセットから7日後を参考日時として表示しています。",
-    en: "This reference time is shown as seven days after the latest eligible reset.",
-    zh: "此参考时间按最近一次符合条件的重置时间加7天显示。",
+    ja: "任意リセットを使用すると、次回の定期リセットは使用時刻から1週間後になります。その場合、この参考日時とは異なります。",
+    en: "If you use a Banked Reset, your next regular reset will be one week after the time you use it, so it may differ from this reference time.",
+    zh: "如果使用手动重置，下一次定期重置将从使用时间起算一周，因此可能与此参考时间不同。",
   },
   scope: {
     ja: "対象プラン",

@@ -213,7 +213,6 @@ test("dashboard renders the translated reset history label", () => {
 
   assert.match(html, /Reset history/);
   assert.doesNotMatch(html, />resetHistory</);
-  assert.doesNotMatch(html, /Global reset|Banked Reset/);
 });
 
 test("stale fallback data renders normally without a public warning in every locale", () => {
@@ -364,9 +363,9 @@ test("shows the next regular reset reference only within 72 hours", () => {
     zh: "下次定期重置参考日期",
   } as const;
   const notes = {
-    ja: "直近の対象リセットから7日後を参考日時として表示しています。",
-    en: "This reference time is shown as seven days after the latest eligible reset.",
-    zh: "此参考时间按最近一次符合条件的重置时间加7天显示。",
+    ja: "任意リセットを使用すると、次回の定期リセットは使用時刻から1週間後になります。その場合、この参考日時とは異なります。",
+    en: "If you use a Banked Reset, your next regular reset will be one week after the time you use it, so it may differ from this reference time.",
+    zh: "如果使用手动重置，下一次定期重置将从使用时间起算一周，因此可能与此参考时间不同。",
   } as const;
   const remaining = {
     ja: "残り3日",
