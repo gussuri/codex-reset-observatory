@@ -554,6 +554,40 @@ export function RadarDashboard({
 
         </section>
 
+        {!isDataUnavailable &&
+        viewModel.regularResetForecast.isNoticeWindow &&
+        viewModel.regularResetForecast.expectedAt ? (
+          <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
+            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+              {translateUI("nextRegularResetReference", locale)}
+            </h2>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md bg-slate-50 p-3">
+                <dt className="text-xs font-semibold text-slate-500">
+                  {translateUI("regularResetReferenceDateTime", locale)}
+                </dt>
+                <dd className="mt-1 text-lg font-semibold text-slate-950">
+                  <LocalizedDateTime
+                    value={viewModel.regularResetForecast.expectedAt}
+                    locale={locale}
+                  />
+                </dd>
+              </div>
+              <div className="rounded-md bg-slate-50 p-3">
+                <dt className="text-xs font-semibold text-slate-500">
+                  {translateUI("regularResetRemainingTime", locale)}
+                </dt>
+                <dd className="mt-1 text-lg font-semibold text-slate-950">
+                  {viewModel.regularResetForecast.remaining}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              {translateUI("regularResetReferenceNote", locale)}
+            </p>
+          </section>
+        ) : null}
+
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>

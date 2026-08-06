@@ -25,7 +25,7 @@ import type {
 // 分割したモジュールから型やヘルパー、確率計算をインポート
 import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
-import { isEligibleRandomResetEvent } from "./radar/resetEligibility";
+import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
   translateUI,
   translateDynamic,
@@ -44,6 +44,7 @@ import {
   translateAction,
   isSafeHttpUrl,
   formatDate,
+  formatElapsedResetDuration,
   getCalendarDayDelta,
   getTimeZoneDay,
   formatWindowLength,
@@ -256,38 +257,45 @@ function getLatestRegularOrForcedResetAt(
   let latestTime = 0;
   let latestDateStr: string | null = null;
 
-  // 1. 全体履歴を走査 (getCombinedResetHistory)
+  const nowTime = now.getTime();
+
+  // 全体履歴から、周期の基準にできる完了済みイベントだけを拾う。
   const combinedHistory = getCombinedResetHistory(data);
   for (const item of combinedHistory) {
-    if (getHistoryRecordKind(item) !== "confirmed_global") {
+    if (item.status?.toLowerCase() === "rejected" || !isBroadResetScope(item)) {
       continue;
     }
 
-    const resetMethod = item.details?.resetMethod || (item as any).resetMethod;
-    const cycleType = item.details?.cycleType || (item as any).cycleType || (item as any).resetType;
-    if (resetMethod === "任意リセット権1回配布") {
+    const legacyItem = item as WindowEventLike & {
+      cycleType?: string;
+      resetMethod?: string;
+      resetType?: string;
+    };
+    const resetMethod = item.details?.resetMethod ?? legacyItem.resetMethod ?? "";
+    const cycleType =
+      item.details?.cycleType ??
+      legacyItem.cycleType ??
+      legacyItem.resetType ??
+      (item.title?.includes("定期リセット") ? "定期リセット" : "");
+    if (resetMethod !== "強制リセット" && cycleType !== "定期リセット") {
       continue;
     }
-    const isForced = resetMethod === "強制リセット";
-    const isRegular = cycleType === "定期リセット" || item.title?.includes("定期リセット");
-    const isGlobalScope = item.scope === "全有料プラン" || item.scope === "Codex / ChatGPT Work";
 
-    if ((isForced || isRegular) && isGlobalScope) {
-      const completedTime = getCompletedResetTimestamp(item);
-      const dateStr = completedTime === null
-        ? null
-        : item.closed_at ?? item.completed_at ?? null;
-      if (dateStr && completedTime !== null) {
-        const time = completedTime;
-        if (
-          !Number.isNaN(time) &&
-          time <= now.getTime() &&
-          time > latestTime
-        ) {
-          latestTime = time;
-          latestDateStr = dateStr;
-        }
-      }
+    const completedTime = getCompletedResetTimestamp(item);
+    const dateStr = item.closed_at ?? item.completed_at ?? null;
+    if (
+      !dateStr ||
+      completedTime === null ||
+      !Number.isFinite(completedTime) ||
+      !Number.isFinite(nowTime) ||
+      completedTime > nowTime
+    ) {
+      continue;
+    }
+
+    if (completedTime > latestTime) {
+      latestTime = completedTime;
+      latestDateStr = dateStr;
     }
   }
 
@@ -310,9 +318,9 @@ function getRegularResetForecast(
   const lastCompletedAt = autoLatestResetAt;
   const current = now;
 
-  // 2. 次回定期リセット予想日: 検出された基準リセット時刻からちょうど7日後
+  // 基準イベントから7日後を起点にし、過ぎていれば7日ずつ次へ進める。
   const nextRegularReset = autoLatestResetAt
-    ? new Date(new Date(autoLatestResetAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+    ? rollResetDateForward(new Date(autoLatestResetAt), current)
     : null;
 
   if (!nextRegularReset) {
@@ -330,14 +338,13 @@ function getRegularResetForecast(
 
   const remainingDays = getCalendarDayDelta(nextRegularReset, current);
 
-  let remainingText = "";
-  if (remainingDays > 0) {
-    remainingText = locale === "en" ? `${remainingDays} day${remainingDays !== 1 ? "s" : ""} remaining` : locale === "zh" ? `剩余 ${remainingDays} 天` : `残り${remainingDays}日`;
-  } else if (remainingDays === 0) {
-    remainingText = locale === "en" ? "0 days remaining" : locale === "zh" ? "剩余 0 天" : "残り0日";
-  } else {
-    remainingText = locale === "en" ? "Past expected date" : locale === "zh" ? "已超过预计日期" : "予想日を過ぎています";
-  }
+  const remainingMs = Math.max(0, nextRegularReset.getTime() - current.getTime());
+  const remainingDuration = formatElapsedResetDuration(remainingMs, locale);
+  const remainingText = locale === "en"
+    ? `${remainingDuration} remaining`
+    : locale === "zh"
+      ? `剩余${remainingDuration}`
+      : `残り${remainingDuration}`;
 
   const bcp47 = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
   const formattedDate = new Intl.DateTimeFormat(bcp47, {
@@ -355,7 +362,7 @@ function getRegularResetForecast(
     expectedAt: nextRegularReset.toISOString(),
     lastCompletedAt,
     remainingDays,
-    isNoticeWindow: remainingDays >= 0 && remainingDays <= 3,
+    isNoticeWindow: remainingMs <= 72 * 60 * 60 * 1000,
   };
 }
 

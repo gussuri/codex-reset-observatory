@@ -159,6 +159,26 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Latest reset",
     zh: "最新重置",
   },
+  nextRegularResetReference: {
+    ja: "次回定期リセット参考日",
+    en: "Next regular reset reference",
+    zh: "下次定期重置参考日期",
+  },
+  regularResetReferenceDateTime: {
+    ja: "参考日時",
+    en: "Reference date and time",
+    zh: "参考日期和时间",
+  },
+  regularResetRemainingTime: {
+    ja: "残り時間",
+    en: "Time remaining",
+    zh: "剩余时间",
+  },
+  regularResetReferenceNote: {
+    ja: "直近の対象リセットから7日後を参考日時として表示しています。",
+    en: "This reference time is shown as seven days after the latest eligible reset.",
+    zh: "此参考时间按最近一次符合条件的重置时间加7天显示。",
+  },
   scope: {
     ja: "対象プラン",
     en: "Scope",

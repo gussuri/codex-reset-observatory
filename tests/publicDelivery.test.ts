@@ -327,9 +327,14 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
     zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
   } as const;
+  const calculationNow = new Date("2026-08-04T03:32:00.000Z");
 
   for (const locale of ["ja", "en", "zh"] as const) {
-    const data = toPublicRadarSnapshot(getLocalRadarData({}), locale);
+    const data = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow },
+    );
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, { initialData: data, locale }),
     );
@@ -348,6 +353,42 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within48h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within72h", locale))));
+  }
+});
+
+test("shows the next regular reset reference only within 72 hours", () => {
+  const calculationNow = new Date("2026-08-05T03:32:00.000Z");
+  const labels = {
+    ja: "次回定期リセット参考日",
+    en: "Next regular reset reference",
+    zh: "下次定期重置参考日期",
+  } as const;
+  const notes = {
+    ja: "直近の対象リセットから7日後を参考日時として表示しています。",
+    en: "This reference time is shown as seven days after the latest eligible reset.",
+    zh: "此参考时间按最近一次符合条件的重置时间加7天显示。",
+  } as const;
+  const remaining = {
+    ja: "残り3日",
+    en: "3 days remaining",
+    zh: "剩余3天",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const data = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow },
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: data, locale }),
+    );
+
+    assert.equal(data.viewModel.regularResetForecast.isNoticeWindow, true);
+    assert.match(html, new RegExp(escapeRegExp(labels[locale])));
+    assert.match(html, new RegExp(escapeRegExp(notes[locale])));
+    assert.match(html, new RegExp(escapeRegExp(remaining[locale])));
+    assert.match(html, /dateTime="2026-08-08T03:32:00\.000Z"/);
   }
 });
 

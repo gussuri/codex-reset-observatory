@@ -20,6 +20,7 @@ import {
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
+import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
 
 function resetSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
   return {
@@ -38,6 +39,47 @@ function resetSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTibo
     expires_at: "2026-08-01T10:00:00.000Z",
     ...overrides,
   };
+}
+
+function regularForecastEvent(
+  id: string,
+  completedAt: string,
+  options: {
+    recordKind?: HistoryRecordKind;
+    cycleType: "定期リセット" | "ランダムリセット";
+    resetMethod: "強制リセット" | "任意リセット権1回配布";
+    scope?: string;
+    status?: string;
+  },
+): WindowEventLike {
+  const scope = options.scope ?? "全有料プラン";
+  return {
+    id,
+    recordKind: options.recordKind ?? "confirmed_global",
+    title: options.cycleType,
+    kind: "reset_completed",
+    status: options.status ?? "closed",
+    opened_at: completedAt,
+    closed_at: completedAt,
+    completed_at: completedAt,
+    scope,
+    details: {
+      cycleType: options.cycleType,
+      reasonType: options.cycleType === "定期リセット" ? "定期更新" : "詫びリセット",
+      resetMethod: options.resetMethod,
+      scope,
+      noticeToExecution: "0分",
+    },
+  };
+}
+
+function withLocalHistory<T>(history: WindowEventLike[], callback: () => T) {
+  const original = LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...history);
+  try {
+    return callback();
+  } finally {
+    LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...original);
+  }
 }
 
 function noticeSignal(overrides: Partial<TiboNoticeSignal> = {}): TiboNoticeSignal {
@@ -387,6 +429,80 @@ test("formal reset updates latest reset time and regular forecast anchor", () =>
   assert.equal(
     viewModel.regularResetForecast.expectedAt,
     new Date(new Date(signal.tweet_created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  );
+});
+
+test("regular forecast accepts broad forced or regular records, including reference banked resets", () => {
+  const calculationNow = new Date("2026-08-08T00:00:00.000Z");
+
+  withLocalHistory(
+    [
+      regularForecastEvent("random-forced", "2026-08-01T00:00:00.000Z", {
+        cycleType: "ランダムリセット",
+        resetMethod: "強制リセット",
+      }),
+      regularForecastEvent("regular-reference-banked", "2026-08-02T00:00:00.000Z", {
+        recordKind: "reference",
+        cycleType: "定期リセット",
+        resetMethod: "任意リセット権1回配布",
+      }),
+      regularForecastEvent("random-banked", "2026-08-07T00:00:00.000Z", {
+        cycleType: "ランダムリセット",
+        resetMethod: "任意リセット権1回配布",
+      }),
+      regularForecastEvent("regular-narrow", "2026-08-07T12:00:00.000Z", {
+        cycleType: "定期リセット",
+        resetMethod: "強制リセット",
+        scope: "不具合対象ユーザー（約50万人）",
+      }),
+      regularForecastEvent("regular-pending", "2026-08-07T18:00:00.000Z", {
+        cycleType: "定期リセット",
+        resetMethod: "強制リセット",
+        status: "pending",
+      }),
+      regularForecastEvent("regular-rejected", "2026-08-07T20:00:00.000Z", {
+        cycleType: "定期リセット",
+        resetMethod: "強制リセット",
+        status: "rejected",
+      }),
+    ],
+    () => {
+      const forecast = getRadarViewModel(
+        getLocalRadarData({ calculationNow }),
+        "ja",
+        false,
+        undefined,
+        calculationNow,
+      ).regularResetForecast;
+
+      assert.equal(forecast.lastCompletedAt, "2026-08-02T00:00:00.000Z");
+      assert.equal(forecast.expectedAt, "2026-08-09T00:00:00.000Z");
+    },
+  );
+});
+
+test("regular forecast advances by seven-day steps after the expected date", () => {
+  const calculationNow = new Date("2026-07-22T00:00:00.000Z");
+
+  withLocalHistory(
+    [
+      regularForecastEvent("regular-forced", "2026-07-01T00:00:00.000Z", {
+        cycleType: "定期リセット",
+        resetMethod: "強制リセット",
+      }),
+    ],
+    () => {
+      const forecast = getRadarViewModel(
+        getLocalRadarData({ calculationNow }),
+        "ja",
+        false,
+        undefined,
+        calculationNow,
+      ).regularResetForecast;
+
+      assert.equal(forecast.expectedAt, "2026-07-29T00:00:00.000Z");
+      assert.equal(forecast.isNoticeWindow, false);
+    },
   );
 });
 
