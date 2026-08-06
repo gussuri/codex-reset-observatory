@@ -554,32 +554,32 @@ export function RadarDashboard({
         {!isDataUnavailable &&
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
-          <section className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+          <section className="rounded-md border border-slate-200/80 bg-white/70 px-4 py-3 shadow-sm">
+            <h2 className="text-base font-medium leading-tight text-slate-700 sm:text-lg">
               {translateUI("nextRegularResetReference", locale)}
             </h2>
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md bg-slate-50 p-3">
-                <dt className="text-xs font-semibold text-slate-500">
+            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded bg-slate-50/70 px-3 py-2">
+                <dt className="text-[11px] font-semibold text-slate-500">
                   {translateUI("regularResetReferenceDateTime", locale)}
                 </dt>
-                <dd className="mt-1 text-lg font-semibold text-slate-950">
+                <dd className="mt-0.5 text-base font-semibold text-slate-950">
                   <LocalizedDateTime
                     value={viewModel.regularResetForecast.expectedAt}
                     locale={locale}
                   />
                 </dd>
               </div>
-              <div className="rounded-md bg-slate-50 p-3">
-                <dt className="text-xs font-semibold text-slate-500">
+              <div className="rounded bg-slate-50/70 px-3 py-2">
+                <dt className="text-[11px] font-semibold text-slate-500">
                   {translateUI("regularResetRemainingTime", locale)}
                 </dt>
-                <dd className="mt-1 text-lg font-semibold text-slate-950">
+                <dd className="mt-0.5 text-base font-semibold text-slate-950">
                   {viewModel.regularResetForecast.remaining}
                 </dd>
               </div>
             </dl>
-            <p className="mt-4 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-xs leading-5 text-slate-500">
               {translateUI("regularResetReferenceNote", locale)}
             </p>
           </section>
