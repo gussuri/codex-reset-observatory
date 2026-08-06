@@ -5,11 +5,15 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import {
   buildRandomResetTimeHeatmap,
+  buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
   formatHeatmapAxisLabel,
   formatHeatmapBarLabel,
+  formatHeatmapWeekdayBarLabel,
+  formatHeatmapWeekdayLabel,
   getRawBarHeightPercent,
   getHeatmapHour,
+  getHeatmapWeekday,
 } from "../lib/radar/resetTimeHeatmap";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
 
@@ -104,6 +108,27 @@ test("uses the viewer IANA timezone and applies daylight saving time per event",
   const losAngeles = buildRandomResetTimeHeatmap([instant], "America/Los_Angeles", NOW);
   assert.equal(tokyo.bins[4].rawCount, 1);
   assert.equal(losAngeles.bins[8].rawCount, 1);
+});
+
+test("groups reset records by the viewer's local weekday", () => {
+  const sunday = "2026-08-02T00:30:00.000Z";
+  assert.equal(getHeatmapWeekday(sunday, "Asia/Tokyo"), 0);
+  assert.equal(getHeatmapWeekday(sunday, "America/Los_Angeles"), 6);
+
+  const distribution = buildRandomResetWeekdayDistribution(
+    [sunday, "2026-08-03T00:30:00.000Z", "2026-08-04T00:30:00.000Z"],
+    "Asia/Tokyo",
+    NOW,
+  );
+  assert.equal(distribution.bins.length, 7);
+  assert.equal(distribution.totalCount, 3);
+  assert.equal(distribution.bins[0].rawCount, 1);
+  assert.equal(distribution.bins[1].rawCount, 1);
+  assert.equal(distribution.bins[2].rawCount, 1);
+  assert.equal(formatHeatmapWeekdayLabel(0, "ja"), "日");
+  assert.equal(formatHeatmapWeekdayLabel(1, "en"), "Mon");
+  assert.equal(formatHeatmapWeekdayLabel(2, "zh"), "周二");
+  assert.equal(formatHeatmapWeekdayBarLabel(distribution.bins[0], "ja"), "日曜日・1件");
 });
 
 test("uses raw record counts for bar heights and keeps empty bins", () => {

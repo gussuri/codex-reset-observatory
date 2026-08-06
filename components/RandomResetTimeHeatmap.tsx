@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@/lib/radar/types";
 import {
   buildRandomResetTimeHeatmap,
+  buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
   formatHeatmapAxisLabel,
+  formatHeatmapWeekdayBarLabel,
+  formatHeatmapWeekdayLabel,
   getRawBarHeightPercent,
 } from "@/lib/radar/resetTimeHeatmap";
 import type { RandomResetTimeHeatmapRange } from "@/lib/radar/resetTimeHeatmap";
@@ -21,9 +24,11 @@ const CONTENT = {
     period: "集計期間",
     allPeriod: "全期間",
     lastMonth: "直近1か月",
+    weekdayHeading: "過去のランダムリセット曜日",
+    weekdayDescription: "過去のランダムリセットが実施された曜日を集計しています。",
     count: "対象件数",
     empty: "対象となる記録はありません。",
-    ariaBusy: "過去のランダムリセット時刻を読み込んでいます",
+    ariaBusy: "過去のランダムリセット時刻と曜日を読み込んでいます",
   },
   en: {
     heading: "Past random reset times",
@@ -33,9 +38,11 @@ const CONTENT = {
     period: "Time range",
     allPeriod: "All time",
     lastMonth: "Last month",
+    weekdayHeading: "Past random reset weekdays",
+    weekdayDescription: "Past random reset records are grouped by day of the week.",
     count: "Recorded events",
     empty: "No matching records are available.",
-    ariaBusy: "Loading past random reset times",
+    ariaBusy: "Loading past random reset times and weekdays",
   },
   zh: {
     heading: "过去的随机重置时刻",
@@ -45,9 +52,11 @@ const CONTENT = {
     period: "统计期间",
     allPeriod: "全部期间",
     lastMonth: "最近1个月",
+    weekdayHeading: "过去的随机重置星期几",
+    weekdayDescription: "按星期几汇总过去的随机重置记录。",
     count: "记录数量",
     empty: "没有可用的匹配记录。",
-    ariaBusy: "正在加载过去的随机重置时间",
+    ariaBusy: "正在加载过去的随机重置时刻和星期",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -59,7 +68,7 @@ export function RandomResetTimeHeatmap({
   locale: Locale;
 }) {
   const [timeZone, setTimeZone] = useState<string | null>(null);
-  const [range, setRange] = useState<RandomResetTimeHeatmapRange>("all");
+  const [range, setRange] = useState<RandomResetTimeHeatmapRange>("lastMonth");
   const content = CONTENT[locale];
 
   useEffect(() => {
@@ -71,14 +80,23 @@ export function RandomResetTimeHeatmap({
       if (!timeZone) return null;
       const now = Date.now();
       const visibleEventTimes = filterHeatmapEventTimes(eventTimes, range, now);
-      return buildRandomResetTimeHeatmap(visibleEventTimes, timeZone, now);
+      return {
+        time: buildRandomResetTimeHeatmap(visibleEventTimes, timeZone, now),
+        weekday: buildRandomResetWeekdayDistribution(visibleEventTimes, timeZone, now),
+      };
     },
     [eventTimes, range, timeZone],
   );
-  const maxRawCount = heatmap
-    ? Math.max(...heatmap.bins.map((item) => item.rawCount))
+  const timeHeatmap = heatmap?.time ?? null;
+  const weekdayDistribution = heatmap?.weekday ?? null;
+  const maxRawCount = timeHeatmap
+    ? Math.max(...timeHeatmap.bins.map((item) => item.rawCount))
     : 0;
-  const barScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
+  const weekdayMaxRawCount = weekdayDistribution
+    ? Math.max(...weekdayDistribution.bins.map((item) => item.rawCount))
+    : 0;
+  const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
+  const weekdayBarScaleMax = weekdayMaxRawCount > 0 ? weekdayMaxRawCount + 1 : 0;
 
   return (
     <section
@@ -94,7 +112,7 @@ export function RandomResetTimeHeatmap({
           <p className="mt-2 text-sm leading-6 text-slate-600">{content.description}</p>
         </div>
         <div className="flex max-w-full shrink-0 flex-col items-end gap-2 text-right text-xs leading-5 text-slate-500">
-          <p>{content.count}: n={heatmap?.totalCount ?? "…"}</p>
+          <p>{content.count}: n={timeHeatmap?.totalCount ?? "…"}</p>
           {timeZone ? (
             <p>
               {content.timezone}: {timeZone} ({getTimeZoneLabel(new Date(), timeZone)})
@@ -124,7 +142,7 @@ export function RandomResetTimeHeatmap({
       </div>
 
       {!heatmap ? (
-        <div className="mt-5" role="status" aria-label={content.ariaBusy}>
+        <div className="mt-5 space-y-5" role="status" aria-label={content.ariaBusy}>
           <div className="grid grid-cols-12 gap-1" aria-hidden="true">
             {Array.from({ length: 12 }, (_, index) => (
               <span
@@ -133,41 +151,35 @@ export function RandomResetTimeHeatmap({
               />
             ))}
           </div>
+          <div className="border-t border-slate-100 pt-5">
+            <h3 className="text-base font-semibold text-slate-900">{content.weekdayHeading}</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
+            <div className="mt-4 grid grid-cols-7 gap-1" aria-hidden="true">
+              {Array.from({ length: 7 }, (_, index) => (
+                <span
+                  className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+                  key={index}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-      ) : heatmap.totalCount === 0 ? (
+      ) : timeHeatmap?.totalCount === 0 ? (
         <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
       ) : (
         <>
-          <p className="mt-5 text-xs font-medium text-slate-500">{content.timeAxis}</p>
-          <div className="mt-2 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
-            {heatmap.bins.map((bin) => {
+          <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
+            {(timeHeatmap?.bins ?? []).map((bin) => {
               const label = formatHeatmapBarLabel(bin, locale);
-              const barHeight = getRawBarHeightPercent(bin.rawCount, barScaleMax);
+              const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
 
               return (
                 <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
-                  <div
-                    aria-label={label}
-                    className="relative h-28 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
-                    role="img"
-                    tabIndex={0}
-                    title={label}
-                  >
-                    {bin.rawCount > 0 ? (
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-x-0 text-[0.65rem] font-semibold tabular-nums text-slate-700"
-                        style={{ bottom: `calc(${barHeight}% + 0.25rem)` }}
-                      >
-                        {bin.rawCount}
-                      </span>
-                    ) : null}
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-1 bottom-0 rounded-t bg-teal-600"
-                      style={{ height: `${barHeight}%` }}
-                    />
-                  </div>
+                  <ResetCountBar
+                    ariaLabel={label}
+                    barHeight={barHeight}
+                    rawCount={bin.rawCount}
+                  />
                   <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
                     {formatHeatmapAxisLabel(bin)}
                   </div>
@@ -175,9 +187,67 @@ export function RandomResetTimeHeatmap({
               );
             })}
           </div>
+          <p className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
+          <div className="mt-6 border-t border-slate-100 pt-5">
+            <h3 className="text-base font-semibold text-slate-900">{content.weekdayHeading}</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
+            <div className="mt-4 grid grid-cols-7 gap-1.5" role="list" aria-label={content.weekdayHeading}>
+              {weekdayDistribution?.bins.map((bin) => {
+                const label = formatHeatmapWeekdayBarLabel(bin, locale);
+                const barHeight = getRawBarHeightPercent(bin.rawCount, weekdayBarScaleMax);
+
+                return (
+                  <div className="min-w-0 text-center" key={bin.weekday} role="listitem">
+                    <ResetCountBar
+                      ariaLabel={label}
+                      barHeight={barHeight}
+                      rawCount={bin.rawCount}
+                    />
+                    <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
+                      {formatHeatmapWeekdayLabel(bin.weekday, locale)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
-
     </section>
+  );
+}
+
+function ResetCountBar({
+  ariaLabel,
+  barHeight,
+  rawCount,
+}: {
+  ariaLabel: string;
+  barHeight: number;
+  rawCount: number;
+}) {
+  return (
+    <div
+      aria-label={ariaLabel}
+      className="relative h-28 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+      role="img"
+      tabIndex={0}
+      title={ariaLabel}
+    >
+      {rawCount > 0 ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 text-[0.65rem] font-semibold tabular-nums text-slate-700"
+          style={{ bottom: `calc(${barHeight}% + 0.25rem)` }}
+        >
+          {rawCount}
+        </span>
+      ) : null}
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-1 bottom-0 rounded-t bg-teal-600"
+        style={{ height: `${barHeight}%` }}
+      />
+    </div>
   );
 }

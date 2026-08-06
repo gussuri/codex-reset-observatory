@@ -2,6 +2,7 @@ import { DISPLAY_TIME_ZONE } from "./helpers";
 
 export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
 export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
+export const RANDOM_RESET_WEEKDAY_BIN_COUNT = 7;
 
 export type RandomResetTimeHeatmapRange = "all" | "lastMonth";
 
@@ -13,6 +14,16 @@ export type RandomResetTimeHeatmapBin = {
 
 export type RandomResetTimeHeatmap = {
   bins: RandomResetTimeHeatmapBin[];
+  totalCount: number;
+};
+
+export type RandomResetWeekdayBin = {
+  weekday: number;
+  rawCount: number;
+};
+
+export type RandomResetWeekdayDistribution = {
+  bins: RandomResetWeekdayBin[];
   totalCount: number;
 };
 
@@ -67,6 +78,50 @@ export function buildRandomResetTimeHeatmap(
   return { bins, totalCount };
 }
 
+export function getHeatmapWeekday(value: string, timeZone: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: getSafeTimeZone(timeZone),
+    weekday: "short",
+  }).format(date);
+  const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekday);
+
+  return weekdayIndex >= 0 ? weekdayIndex : null;
+}
+
+export function buildRandomResetWeekdayDistribution(
+  eventTimes: string[],
+  timeZone: string,
+  now: Date | number = Date.now(),
+): RandomResetWeekdayDistribution {
+  const nowTime = typeof now === "number" ? now : now.getTime();
+  const bins = Array.from({ length: RANDOM_RESET_WEEKDAY_BIN_COUNT }, (_, weekday) => ({
+    weekday,
+    rawCount: 0,
+  }));
+
+  if (!Number.isFinite(nowTime)) {
+    return { bins, totalCount: 0 };
+  }
+
+  let totalCount = 0;
+
+  for (const eventTime of eventTimes) {
+    const eventTimestamp = new Date(eventTime).getTime();
+    if (!Number.isFinite(eventTimestamp) || eventTimestamp > nowTime) continue;
+
+    const weekday = getHeatmapWeekday(eventTime, timeZone);
+    if (weekday === null) continue;
+
+    bins[weekday].rawCount += 1;
+    totalCount += 1;
+  }
+
+  return { bins, totalCount };
+}
+
 export function filterHeatmapEventTimes(
   eventTimes: string[],
   range: RandomResetTimeHeatmapRange,
@@ -98,6 +153,27 @@ export function formatHeatmapAxisLabel(
   bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour">,
 ) {
   return `${bin.startHour}-${bin.endHour}`;
+}
+
+export function formatHeatmapWeekdayLabel(weekday: number, locale: "ja" | "en" | "zh") {
+  const labels = {
+    ja: ["日", "月", "火", "水", "木", "金", "土"],
+    en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    zh: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
+  } as const;
+
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return "?";
+  return labels[locale][weekday];
+}
+
+export function formatHeatmapWeekdayBarLabel(
+  bin: Pick<RandomResetWeekdayBin, "weekday" | "rawCount">,
+  locale: "ja" | "en" | "zh",
+) {
+  const label = formatHeatmapWeekdayLabel(bin.weekday, locale);
+  if (locale === "en") return `${label}, ${bin.rawCount} records`;
+  if (locale === "zh") return `${label}，${bin.rawCount}条记录`;
+  return `${label}曜日・${bin.rawCount}件`;
 }
 
 export function formatHeatmapBarLabel(
