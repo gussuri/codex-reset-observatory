@@ -554,19 +554,23 @@ export function RadarDashboard({
         {!isDataUnavailable &&
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
-          <section className="rounded-md border border-slate-200/80 bg-white/70 px-4 py-3 shadow-sm">
-            <h2 className="text-lg font-semibold leading-tight text-slate-800 sm:text-xl">
-              {translateUI("nextRegularResetReference", locale)}
-            </h2>
-            <p className="mt-2 text-lg font-semibold text-slate-950 sm:text-xl">
-              <LocalizedDateTime
-                value={viewModel.regularResetForecast.expectedAt}
-                locale={locale}
-              />
-            </p>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              {translateUI("regularResetReferenceNote", locale)}
-            </p>
+          <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  {translateUI("nextRegularResetReference", locale)}
+                </p>
+                <h2 className="mt-1 flex flex-wrap items-baseline text-lg font-semibold text-slate-950 sm:text-xl">
+                  <LocalizedDateTime
+                    value={viewModel.regularResetForecast.expectedAt}
+                    locale={locale}
+                  />
+                </h2>
+              </div>
+              <p className="text-sm leading-6 text-slate-500 sm:max-w-md sm:text-right">
+                {translateUI("regularResetReferenceNote", locale)}
+              </p>
+            </div>
           </section>
         ) : null}
 
