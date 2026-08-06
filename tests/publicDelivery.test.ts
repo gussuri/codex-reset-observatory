@@ -367,11 +367,6 @@ test("shows the next regular reset reference only within 72 hours", () => {
     en: "If you use a Banked Reset, your next regular reset will be one week after the time you use it, so it may differ from this reference time.",
     zh: "如果使用手动重置，下一次定期重置将从使用时间起算一周，因此可能与此参考时间不同。",
   } as const;
-  const remaining = {
-    ja: "残り3日",
-    en: "3 days remaining",
-    zh: "剩余3天",
-  } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const data = toPublicRadarSnapshot(
       getLocalRadarData({ calculationNow }),
@@ -385,8 +380,8 @@ test("shows the next regular reset reference only within 72 hours", () => {
     assert.equal(data.viewModel.regularResetForecast.isNoticeWindow, true);
     assert.match(html, new RegExp(escapeRegExp(labels[locale])));
     assert.match(html, new RegExp(escapeRegExp(notes[locale])));
-    assert.match(html, new RegExp(escapeRegExp(`(${remaining[locale]})`)));
     assert.doesNotMatch(html, /<dt[^>]*>参考日時<\/dt>|<dt[^>]*>Reference date and time<\/dt>|<dt[^>]*>参考日期和时间<\/dt>/);
+    assert.doesNotMatch(html, /残り3日|3 days remaining|剩余3天/);
     assert.match(html, /dateTime="2026-08-08T03:32:00\.000Z"/);
   }
 });

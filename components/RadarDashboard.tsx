@@ -555,23 +555,22 @@ export function RadarDashboard({
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
           <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <p className="text-sm font-medium text-slate-500">
-                {translateUI("nextRegularResetReference", locale)}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  {translateUI("nextRegularResetReference", locale)}
+                </p>
+                <h2 className="mt-1 flex flex-wrap items-baseline text-lg font-semibold text-slate-950 sm:text-xl">
+                  <LocalizedDateTime
+                    value={viewModel.regularResetForecast.expectedAt}
+                    locale={locale}
+                  />
+                </h2>
+              </div>
+              <p className="text-sm leading-6 text-slate-500 sm:max-w-md sm:text-right">
+                {translateUI("regularResetReferenceNote", locale)}
               </p>
-              <h2 className="flex flex-wrap items-baseline text-lg font-semibold text-slate-950 sm:text-xl">
-                <LocalizedDateTime
-                  value={viewModel.regularResetForecast.expectedAt}
-                  locale={locale}
-                />
-                <span className="ml-2 text-sm font-medium text-slate-500 sm:text-base">
-                  ({viewModel.regularResetForecast.remaining})
-                </span>
-              </h2>
             </div>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              {translateUI("regularResetReferenceNote", locale)}
-            </p>
           </section>
         ) : null}
 
