@@ -555,31 +555,16 @@ export function RadarDashboard({
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
           <section className="rounded-md border border-slate-200/80 bg-white/70 px-4 py-3 shadow-sm">
-            <h2 className="text-base font-medium leading-tight text-slate-700 sm:text-lg">
+            <h2 className="text-lg font-semibold leading-tight text-slate-800 sm:text-xl">
               {translateUI("nextRegularResetReference", locale)}
             </h2>
-            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded bg-slate-50/70 px-3 py-2">
-                <dt className="text-[11px] font-semibold text-slate-500">
-                  {translateUI("regularResetReferenceDateTime", locale)}
-                </dt>
-                <dd className="mt-0.5 text-base font-semibold text-slate-950">
-                  <LocalizedDateTime
-                    value={viewModel.regularResetForecast.expectedAt}
-                    locale={locale}
-                  />
-                </dd>
-              </div>
-              <div className="rounded bg-slate-50/70 px-3 py-2">
-                <dt className="text-[11px] font-semibold text-slate-500">
-                  {translateUI("regularResetRemainingTime", locale)}
-                </dt>
-                <dd className="mt-0.5 text-base font-semibold text-slate-950">
-                  {viewModel.regularResetForecast.remaining}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-2 text-lg font-semibold text-slate-950 sm:text-xl">
+              <LocalizedDateTime
+                value={viewModel.regularResetForecast.expectedAt}
+                locale={locale}
+              />
+            </p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
               {translateUI("regularResetReferenceNote", locale)}
             </p>
           </section>
