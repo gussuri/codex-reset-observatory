@@ -260,6 +260,8 @@ test("keeps the normal dashboard focused on the current outlook", () => {
     html,
     /現在、目立った観測変化はありません。/,
   );
+  assert.match(html, /radar-grid relative hidden h-11 w-11/);
+  assert.match(html, /mt-2 hidden max-w-2xl text-xs leading-5/);
   assert.doesNotMatch(outlookText, /直近のリセットから2日20時間経過しています。/);
   assert.doesNotMatch(outlookText, /公式予告や発生中のCodex関連障害はありません。/);
   assert.doesNotMatch(outlookText, /直近7日間でリセットが3回/);

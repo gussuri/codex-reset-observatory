@@ -456,9 +456,9 @@ export function RadarDashboard({
   return (
     <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-5 lg:px-8" lang={locale}>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-        <header className="flex flex-col gap-3 rounded-lg border border-slate-200/80 bg-white/82 p-3 shadow-sm backdrop-blur sm:gap-4 sm:p-5 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-white/82 p-3 shadow-sm backdrop-blur sm:gap-4 sm:p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
-            <div className="radar-grid relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 sm:h-16 sm:w-16">
+            <div className="radar-grid relative hidden h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 sm:block sm:h-16 sm:w-16">
               <div className="absolute inset-2 rounded-full border border-slate-300" />
               <div className="radar-sweep absolute inset-2 rounded-full" />
               <Radio className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-teal-700" />
@@ -470,7 +470,7 @@ export function RadarDashboard({
               <h1 className="mt-0.5 whitespace-nowrap text-[1.15rem] font-semibold leading-tight tracking-normal text-slate-950 sm:mt-1 sm:text-4xl">
                 {locale === "ja" ? SITE_NAME_JA : locale === "zh" ? "Codex 重置观测站" : SITE_NAME}
               </h1>
-              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-600 sm:mt-3 sm:text-sm sm:leading-6">
+              <p className="mt-2 hidden max-w-2xl text-xs leading-5 text-slate-600 sm:mt-3 sm:block sm:text-sm sm:leading-6">
                 {translateUI("description", locale)}
               </p>
             </div>
