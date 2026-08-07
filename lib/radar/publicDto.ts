@@ -1,4 +1,5 @@
 import { getRadarViewModel } from "@/lib/radar";
+import { translateTiboPostText } from "./i18n";
 import type {
   Locale,
   PublicDataHealth,
@@ -47,6 +48,7 @@ function normalizePublicPostText(value: string | null | undefined) {
 export function toPublicTiboActivity(
   internal: RadarData,
   now: Date = new Date(),
+  locale: Locale = "ja",
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
@@ -79,7 +81,7 @@ export function toPublicTiboActivity(
 
   return {
     classification: latest.signal_type as PublicTiboActivity["classification"],
-    text: normalizePublicPostText(latest.text),
+    text: normalizePublicPostText(translateTiboPostText(latest.text, locale)),
     createdAt: latest.tweet_created_at,
     sourceUrl: safeHttpUrl(latest.tweet_url),
   };
@@ -218,6 +220,6 @@ export function toPublicRadarSnapshot(
     updatedAt: internal.updated_at ?? null,
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
-    latestTiboActivity: toPublicTiboActivity(internal, calculationNow),
+    latestTiboActivity: toPublicTiboActivity(internal, calculationNow, locale),
   };
 }

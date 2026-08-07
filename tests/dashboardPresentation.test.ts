@@ -77,12 +77,16 @@ test("dashboard shows the latest Tibo activity below history for the experiment"
   const historyIndex = html.indexOf("Recent reset events");
   const heatmapIndex = html.indexOf("Past random reset times");
   assert.ok(activityIndex > historyIndex && activityIndex > heatmapIndex);
-  assert.match(html, /Latest post/);
+  assert.doesNotMatch(html, /Latest post/);
   assert.match(html, /A reset hint from Tibo/);
   assert.match(html, /Automated observation/);
   assert.match(html, /Reset hint/);
   assert.match(html, /href="https:\/\/x\.com\/thsottiaux\/status\/123"/);
   assert.doesNotMatch(html, /private-tweet-id|private internal reason|classification_reason/);
+
+  const postIndex = html.indexOf("A reset hint from Tibo");
+  const classificationIndex = html.indexOf("Automated observation");
+  assert.ok(postIndex >= 0 && postIndex < classificationIndex);
 });
 
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {

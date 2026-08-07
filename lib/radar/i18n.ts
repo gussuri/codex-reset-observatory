@@ -164,11 +164,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Latest Tibo activity",
     zh: "Tibo 最新动态",
   },
-  tiboLatestPost: {
-    ja: "最新の投稿",
-    en: "Latest post",
-    zh: "最新帖子",
-  },
   tiboAutoClassification: {
     ja: "自動観測分類",
     en: "Automated observation",
@@ -1539,6 +1534,39 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
   }
 
   return result;
+}
+
+const TIBO_POST_TRANSLATIONS: Array<{
+  sourcePrefix: string;
+  ja: string;
+  zh: string;
+}> = [
+  {
+    sourcePrefix:
+      "You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it.",
+    ja: "GPT-5.6 Sol搭載のCodexなら、どんな無茶なことでも頼めます。何週間もかかりそうな作業でも、5分間話すだけで進めてくれます。冷蔵庫から何か取ってきたり、犬を撫でたりして戻ってくると…",
+    zh: "使用 GPT-5.6 Sol 的 Codex，你可以让它完成各种疯狂的事情。只需和它连续交流5分钟，那些看起来需要几周才能完成的工作也能推进；你去冰箱拿点东西、摸摸狗，再回来时，它已经……",
+  },
+];
+
+export function translateTiboPostText(
+  value: string | undefined,
+  locale: Locale,
+): string {
+  if (!value) return "";
+
+  const normalized = value.replace(/\s+/g, " ").trim().normalize("NFC");
+  const dynamicallyTranslated = translateDynamic(normalized, locale);
+  if (dynamicallyTranslated !== normalized) {
+    return dynamicallyTranslated;
+  }
+
+  if (locale === "en") return normalized;
+
+  const knownPost = TIBO_POST_TRANSLATIONS.find(({ sourcePrefix }) =>
+    normalized.startsWith(sourcePrefix),
+  );
+  return knownPost?.[locale] ?? normalized;
 }
 
 export function translateExpectation(value: string, locale: Locale): string {

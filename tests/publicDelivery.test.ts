@@ -171,6 +171,33 @@ test("public Tibo activity uses the newest stored post even when it is irrelevan
   });
 });
 
+test("public Tibo activity translates known post text for each page locale", () => {
+  const calculationNow = new Date("2026-08-07T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "localized-tibo-post",
+        signal_type: "irrelevant",
+        text: "You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it. I talk to it for 5 minutes straight with things that just seem to require weeks of work, get up to get something in the fridge, pet the dog, come back and...",
+        tweet_url: "https://x.com/thsottiaux/status/localized-tibo-post",
+        tweet_created_at: "2026-08-06T23:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const ja = toPublicRadarSnapshot(internal, "ja", { calculationNow });
+  const en = toPublicRadarSnapshot(internal, "en", { calculationNow });
+  const zh = toPublicRadarSnapshot(internal, "zh", { calculationNow });
+
+  assert.match(ja.latestTiboActivity?.text ?? "", /GPT-5\.6 Sol搭載のCodexなら/);
+  assert.match(zh.latestTiboActivity?.text ?? "", /使用 GPT-5\.6 Sol 的 Codex/);
+  assert.match(en.latestTiboActivity?.text ?? "", /You can just ask Codex with GPT-5\.6 Sol/);
+  assert.notEqual(ja.latestTiboActivity?.text, en.latestTiboActivity?.text);
+  assert.notEqual(zh.latestTiboActivity?.text, en.latestTiboActivity?.text);
+});
+
 test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {
   const props = {
     value: "2026-08-04T00:00:00.000Z",
