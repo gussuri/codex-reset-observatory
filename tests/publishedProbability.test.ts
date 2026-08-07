@@ -4,7 +4,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { RadarDashboard } from "../components/RadarDashboard";
-import { getLocalRadarData, getRadarViewModel, probabilityToPercent } from "../lib/radar";
+import { formatProbabilityDisplay } from "../components/ProbabilityMetrics";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { buildProbabilityDebugInfo } from "../lib/logProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import {
@@ -96,8 +97,8 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
   assert.equal(publishedDebug.probability72h, snapshot.viewModel.probability72h);
-  assert.match(html, new RegExp(probabilityToPercent(published.probability24h, "ja")));
-  assert.match(html, new RegExp(probabilityToPercent(published.probability48h, "ja")));
+  assert.match(html, new RegExp(formatProbabilityDisplay(published.probability24h, "ja")));
+  assert.match(html, new RegExp(formatProbabilityDisplay(published.probability48h, "ja")));
   assert.ok(published.probability24h <= published.probability48h);
   assert.ok(published.probability48h <= published.probability72h);
  });

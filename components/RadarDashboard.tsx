@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  AlertTriangle,
   Bell,
+  Clock3,
   ExternalLink,
   Gauge,
   History,
   Radio,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,6 +40,7 @@ import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { TiboActivityCard } from "@/components/TiboActivityCard";
+import { formatElapsedResetDuration } from "@/lib/radar/helpers";
 
 function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
   if (!signalAt || !resetAt) return false;
@@ -72,6 +76,94 @@ function getHistoryDisplayTitle(
     : locale === "zh"
       ? `${title}（参考记录）`
       : `${title}（参考記録）`;
+}
+
+type IncidentStatus = "active" | "none" | "unknown";
+
+function getIncidentStatusFromReason(
+  reason: string | null | undefined,
+  locale: Locale,
+): IncidentStatus {
+  if (!reason) return "unknown";
+
+  const activePhrase = locale === "en"
+    ? "A Codex-related incident is currently active"
+    : locale === "zh"
+      ? "当前有 Codex 相关故障正在发生"
+      : "現在、Codex関連の障害が発生しており";
+
+  // The display summary already uses the evaluated incident state. Reuse its
+  // localized wording here instead of introducing a second incident query.
+  return reason.includes(activePhrase) ? "active" : "none";
+}
+
+function getElapsedSinceLastReset(
+  sourceResetAt: string | null | undefined,
+  fetchedAt: string | null | undefined,
+  locale: Locale,
+) {
+  const resetTime = sourceResetAt ? Date.parse(sourceResetAt) : Number.NaN;
+  const observedTime = fetchedAt ? Date.parse(fetchedAt) : Number.NaN;
+  if (!Number.isFinite(resetTime) || !Number.isFinite(observedTime) || observedTime < resetTime) {
+    return translateUI("unknownProbability", locale);
+  }
+
+  return formatElapsedResetDuration(observedTime - resetTime, locale);
+}
+
+function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
+  if (status === "active") return translateUI("activeCodexIncident", locale);
+  if (status === "none") return translateUI("noCodexIncident", locale);
+  return translateUI("unknownProbability", locale);
+}
+
+function getCompactOutlookReason(
+  reason: string | null | undefined,
+  locale: Locale,
+) {
+  if (!reason) return null;
+
+  const redundantSentences = locale === "en"
+    ? [
+        /It has been .+? since the last reset\.\s*/,
+        /There is currently no official notice or active Codex-related incident\.\s*/,
+      ]
+    : locale === "zh"
+      ? [
+          /距离上次重置已过去.+?。\s*/,
+          /目前没有官方预告，也没有正在发生的 Codex 相关故障。\s*/,
+        ]
+      : [
+          /直近のリセットから.+?経過しています。\s*/,
+          /現在、公式予告や発生中のCodex関連障害はありません。\s*/,
+        ];
+
+  const compactReason = redundantSentences.reduce(
+    (current, sentence) => current.replace(sentence, ""),
+    reason,
+  ).trim();
+
+  return compactReason || translateUI("noObservedChange", locale);
+}
+
+function ObservationStatusItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md bg-slate-50/80 px-3 py-2">
+      <dt className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <span className="truncate">{label}</span>
+      </dt>
+      <dd className="mt-0.5 truncate text-sm font-semibold text-slate-800">{value}</dd>
+    </div>
+  );
 }
 
 export function RadarDashboard({
@@ -316,6 +408,24 @@ export function RadarDashboard({
   const probability24h = isDataUnavailable ? undefined : viewModel.probability24h;
   const probability48h = isDataUnavailable ? undefined : viewModel.probability48h;
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const officialNoticeValue = isDataUnavailable
+    ? translateUI("unknownProbability", locale)
+    : viewModel.activeWindow.active && hasOfficialNotice
+      ? translateUI("activeNoticeLabel", locale)
+      : translateUI("noOfficialNotice", locale);
+  const incidentStatus = isDataUnavailable
+    ? "unknown" as const
+    : getIncidentStatusFromReason(viewModel.displayReasoningSummary, locale);
+  const elapsedSinceLastReset = isDataUnavailable
+    ? translateUI("unknownProbability", locale)
+    : getElapsedSinceLastReset(
+        viewModel.regularResetForecast.sourceResetAt,
+        state.fetchedAt,
+        locale,
+      );
+  const compactOutlookReason = isDataUnavailable
+    ? null
+    : getCompactOutlookReason(viewModel.displayReasoningSummary, locale);
   const visibleHistory = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" ||
       item.recordKind === "banked_distribution" ||
@@ -511,23 +621,27 @@ export function RadarDashboard({
               probability48h={probability48h}
             />
 
-            {!isDataUnavailable && !hasOfficialNotice ? (
-              <div
-                role="status"
-                className="mt-4 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600"
-              >
-                <Bell className="h-4 w-4 text-slate-500" />
-                <span className="font-medium">
-                  {translateUI("officialNoticeStatus", locale)}
-                  {locale === "en" ? ": " : "："}
-                  {translateUI("noOfficialNotice", locale)}
-                </span>
-              </div>
-            ) : null}
+            <dl className="mt-3 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
+              <ObservationStatusItem
+                icon={Bell}
+                label={translateUI("officialNoticeStatus", locale)}
+                value={officialNoticeValue}
+              />
+              <ObservationStatusItem
+                icon={AlertTriangle}
+                label={translateUI("codexIncidentStatus", locale)}
+                value={getIncidentStatusLabel(incidentStatus, locale)}
+              />
+              <ObservationStatusItem
+                icon={Clock3}
+                label={translateUI("elapsedSinceResetShort", locale)}
+                value={elapsedSinceLastReset}
+              />
+            </dl>
 
-            <dl className="mt-5 space-y-4">
-              {!isDataUnavailable && viewModel.displayReasoningSummary ? (
-                <RecommendationRow reason={viewModel.displayReasoningSummary} locale={locale} />
+            <dl className="mt-4 space-y-3">
+              {!isDataUnavailable && compactOutlookReason ? (
+                <RecommendationRow reason={compactOutlookReason} locale={locale} />
               ) : null}
             </dl>
           </article>

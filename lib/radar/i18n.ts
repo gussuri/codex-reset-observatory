@@ -84,6 +84,31 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "None",
     zh: "无",
   },
+  codexIncidentStatus: {
+    ja: "Codex関連障害",
+    en: "Codex incidents",
+    zh: "Codex 相关故障",
+  },
+  noCodexIncident: {
+    ja: "なし",
+    en: "None",
+    zh: "无",
+  },
+  activeCodexIncident: {
+    ja: "あり",
+    en: "Active",
+    zh: "有",
+  },
+  noObservedChange: {
+    ja: "現在、目立った観測変化はありません。",
+    en: "No notable changes are currently observed.",
+    zh: "目前未观察到明显变化。",
+  },
+  elapsedSinceResetShort: {
+    ja: "前回から",
+    en: "Since last reset",
+    zh: "距上次重置",
+  },
   checkAction: {
     ja: "要確認",
     en: "Pending confirmation",
@@ -101,7 +126,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   currentStatus: {
     ja: "現在の状況",
-    en: "Current outlook",
+    en: "Current status",
     zh: "当前状况",
   },
   randomReset: {

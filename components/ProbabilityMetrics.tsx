@@ -1,5 +1,6 @@
 import React from "react";
 import { probabilityToPercent } from "@/lib/radar";
+import { normalizeProbability } from "@/lib/radar/helpers";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 
@@ -13,23 +14,40 @@ export function ProbabilityMetrics({
   probability48h: number | undefined;
 }) {
   return (
-    <dl className="mt-5 grid w-full grid-cols-2 gap-3 lg:mx-auto lg:max-w-3xl">
+    <dl className="mt-4 grid w-full grid-cols-2 gap-3">
       <Metric
         horizon="24h"
         label={translateUI("within24h", locale)}
         locale={locale}
         probability={probability24h}
-        value={probabilityToPercent(probability24h, locale)}
+        value={formatProbabilityDisplay(probability24h, locale)}
       />
       <Metric
         horizon="48h"
         label={translateUI("within48h", locale)}
         locale={locale}
         probability={probability48h}
-        value={probabilityToPercent(probability48h, locale)}
+        value={formatProbabilityDisplay(probability48h, locale)}
       />
     </dl>
   );
+}
+
+export function formatProbabilityDisplay(
+  probability: number | undefined,
+  locale: Locale,
+) {
+  if (typeof probability !== "number" || !Number.isFinite(probability)) {
+    return translateUI("unknownProbability", locale);
+  }
+
+  const bcp47 = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
+  const normalized = Math.min(1, Math.max(0, normalizeProbability(probability)));
+  return new Intl.NumberFormat(bcp47, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(normalized);
 }
 
 function Metric({

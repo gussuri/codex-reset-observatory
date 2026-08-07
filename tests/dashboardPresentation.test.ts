@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
-import { ProbabilityMetrics } from "../components/ProbabilityMetrics";
+import { formatProbabilityDisplay, ProbabilityMetrics } from "../components/ProbabilityMetrics";
 import { TiboActivityCard } from "../components/TiboActivityCard";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -22,7 +22,7 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
     }),
   );
 
-  assert.match(html, /^<dl class="mt-5 grid w-full grid-cols-2 gap-3 lg:mx-auto lg:max-w-3xl">/);
+  assert.match(html, /^<dl class="mt-4 grid w-full grid-cols-2 gap-3">/);
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
   assert.match(html, /aria-label="Within 24h"/);
   assert.match(html, /aria-label="Within 48h"/);
@@ -30,8 +30,16 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
   assert.doesNotMatch(html, /aria-label="Within 72 hours"/);
   assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 2);
   assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
+  assert.match(html, />23\.0%</);
+  assert.match(html, />76\.5%</);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
+});
+
+test("formats probability cards with one localized decimal place", () => {
+  assert.equal(formatProbabilityDisplay(0.213, "ja"), "21.3%");
+  assert.equal(formatProbabilityDisplay(0.765, "en"), "76.5%");
+  assert.equal(formatProbabilityDisplay(0.405, "zh"), "40.5%");
 });
 
 test("renders unknown probabilities without aria-valuenow and with localized value text", () => {
@@ -225,20 +233,28 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   );
 
   const probabilityIndex = html.indexOf("24時間以内");
-  const noticeIndex = html.indexOf("公式予告：なし");
+  const noticeIndex = html.indexOf("公式予告");
+  const incidentIndex = html.indexOf("Codex関連障害");
+  const elapsedIndex = html.indexOf("前回から");
   const outlookIndex = html.indexOf("現在の見立て");
   const historyIndex = html.indexOf("リセット履歴", outlookIndex);
   const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
-  assert.ok(noticeIndex >= 0 && noticeIndex < outlookIndex);
+  assert.ok(noticeIndex >= 0 && noticeIndex < incidentIndex);
+  assert.ok(incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);
-  assert.match(html, /公式予告：なし/);
+  assert.match(html, /公式予告[\s\S]*なし/);
+  assert.match(html, /Codex関連障害[\s\S]*なし/);
+  assert.match(html, /前回から[\s\S]*2日20時間/);
   assert.match(html, /現在の見立て/);
+  assert.match(html, /現在、目立った観測変化はありません。/);
   assert.match(
     html,
-    /直近のリセットから2日20時間経過しています。現在、公式予告や発生中のCodex関連障害はありません。/,
+    /現在、目立った観測変化はありません。/,
   );
+  assert.doesNotMatch(outlookText, /直近のリセットから2日20時間経過しています。/);
+  assert.doesNotMatch(outlookText, /公式予告や発生中のCodex関連障害はありません。/);
   assert.doesNotMatch(outlookText, /直近7日間でリセットが3回/);
   assert.doesNotMatch(outlookText, /現在の見立ては24時間以内/);
   assert.doesNotMatch(outlookText, /現在の可能性/);
@@ -249,6 +265,45 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.doesNotMatch(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
   assert.doesNotMatch(html, /今日、全体リセットはありましたか？|次のリセットはいつですか？|予測のしくみを見る →/);
   assert.doesNotMatch(html, /border-amber-300 bg-amber-50/);
+});
+
+test("observation status row reflects an active Codex incident without changing the calculation", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      openAIStatus: {
+        updatedAt: "2026-08-03T23:00:00.000Z",
+        statusIncidents24h: 1,
+        activeCodexIncidents: 1,
+        recentCodexIncidents: 1,
+        affectedCodexComponents: 0,
+        suppressCodexIncidents: false,
+        latestCodexIncidentName: "Codex incident",
+        history: [
+          {
+            id: "dashboard-active-incident",
+            title: "Codex incident",
+            status: "investigating",
+            impact: "minor",
+            createdAt: "2026-08-03T22:00:00.000Z",
+            updatedAt: "2026-08-03T23:00:00.000Z",
+            resolvedAt: null,
+            source: "openai_status",
+            url: "https://status.openai.com/incidents/dashboard-active-incident",
+          },
+        ],
+      },
+    }),
+    "en",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+  );
+
+  assert.match(html, /Codex incidents[\s\S]*Active/);
+  assert.match(html, /A Codex-related incident is currently active/);
 });
 
 test("keeps the large official notice card above the probability card", (t: TestContext) => {
@@ -285,15 +340,16 @@ test("keeps the large official notice card above the probability card", (t: Test
   assert.ok(noticeIndex >= 0 && noticeIndex < probabilityIndex);
   assert.match(html, /Notice posted/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
+  assert.match(html, /Official notice[\s\S]*Notice available/);
   assert.doesNotMatch(html, /Official notice: None/);
   assert.doesNotMatch(html, /border-slate-50/);
 });
 
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式予告：なし", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
-    { locale: "en" as const, notice: "Official notice: None", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
-    { locale: "zh" as const, notice: "官方预告：无", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
+    { locale: "ja" as const, notice: "公式予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official notice", noticeValue: "None", incident: "Codex incidents", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方预告", noticeValue: "无", incident: "Codex 相关故障", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {
@@ -305,6 +361,8 @@ test("keeps dashboard labels localized without extra direct-answer links", () =>
     );
 
     assert.match(html, new RegExp(item.notice));
+    assert.match(html, new RegExp(item.noticeValue));
+    assert.match(html, new RegExp(item.incident));
     assert.match(html, new RegExp(item.description));
     assert.doesNotMatch(html, new RegExp(item.directAnswer));
     assert.doesNotMatch(html, /When is the next Codex reset\?|下一次 Codex 重置是什么时候？|予測のしくみを見る →|How the forecast works →|查看预测方式 →/);
