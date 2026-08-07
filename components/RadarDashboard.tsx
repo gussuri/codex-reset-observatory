@@ -118,14 +118,17 @@ function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
   return translateUI("unknownProbability", locale);
 }
 
+type ResetTeaserStatus = "strong" | "weak" | "none" | "unknown";
+
 function getResetTeaserStatus(
   activity: PublicRadarSnapshot["latestTiboActivity"] | null | undefined,
-): IncidentStatus {
-  return activity?.classification === "teaser" ? "active" : "none";
+): ResetTeaserStatus {
+  return activity?.teaserStrength ?? "unknown";
 }
 
-function getResetTeaserStatusLabel(status: IncidentStatus, locale: Locale) {
-  if (status === "active") return translateUI("activeResetTeaser", locale);
+function getResetTeaserStatusLabel(status: ResetTeaserStatus, locale: Locale) {
+  if (status === "strong") return translateUI("activeResetTeaser", locale);
+  if (status === "weak") return translateUI("weakResetTeaser", locale);
   if (status === "none") return translateUI("noResetTeaser", locale);
   return translateUI("unknownProbability", locale);
 }

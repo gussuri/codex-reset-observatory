@@ -1,5 +1,6 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
+import { isTeaserStrength } from "./teaserStrength";
 import type {
   Locale,
   PublicDataHealth,
@@ -93,6 +94,9 @@ export function toPublicTiboActivity(
 
   return {
     classification: latest.signal_type as PublicTiboActivity["classification"],
+    teaserStrength: isTeaserStrength(latest.teaser_strength)
+      ? latest.teaser_strength
+      : null,
     text: normalizePublicPostText(getLocalizedTiboPostText(latest, locale)),
     createdAt: latest.tweet_created_at,
     sourceUrl: safeHttpUrl(latest.tweet_url),

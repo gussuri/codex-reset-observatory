@@ -107,6 +107,7 @@ test("uses clear Japanese labels for the Tibo post card and unrelated classifica
       locale: "ja",
       activity: {
         classification: "irrelevant",
+        teaserStrength: null,
         text: "リセットとは関係のない投稿です。",
         createdAt: "2026-08-07T05:23:00.000Z",
         sourceUrl: "https://x.com/thsottiaux/status/123",
@@ -333,6 +334,7 @@ test("observation status row reflects an active reset teaser from the latest Tib
           tweet_created_at: "2026-08-03T23:00:00.000Z",
           expires_at: "2026-08-05T23:00:00.000Z",
           verification_status: "auto_unverified",
+          teaser_strength: "strong",
         },
       ],
     }),
@@ -344,6 +346,95 @@ test("observation status row reflects an active reset teaser from the latest Tib
   );
 
   assert.match(html, /リセット匂わせ投稿[\s\S]*あり/);
+});
+
+test("the existing reset teaser status row displays weak and none without adding another status", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const weakSnapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [
+        {
+          tweet_id: "dashboard-weak-teaser",
+          signal_type: "irrelevant",
+          text: "I occasionally do oblige for solid feedback.",
+          tweet_url: "https://x.com/thsottiaux/status/dashboard-weak-teaser",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T23:00:00.000Z",
+          verification_status: "auto_unverified",
+          teaser_strength: "weak",
+        },
+      ],
+    }),
+    "ja",
+    { calculationNow },
+  );
+  const noneSnapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [
+        {
+          tweet_id: "dashboard-none-teaser",
+          signal_type: "irrelevant",
+          text: "No reset tonight.",
+          tweet_url: "https://x.com/thsottiaux/status/dashboard-none-teaser",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T23:00:00.000Z",
+          verification_status: "auto_unverified",
+          teaser_strength: "none",
+        },
+      ],
+    }),
+    "ja",
+    { calculationNow },
+  );
+
+  const weakHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: weakSnapshot, locale: "ja" }),
+  );
+  const noneHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: noneSnapshot, locale: "ja" }),
+  );
+
+  assert.match(weakHtml, /リセット匂わせ投稿[\s\S]*あり（弱）/);
+  assert.equal((weakHtml.match(/リセット匂わせ投稿/g) ?? []).length, 1);
+  assert.match(noneHtml, /リセット匂わせ投稿[\s\S]*なし/);
+  assert.doesNotMatch(noneHtml, /リセットへの前向き発言/);
+});
+
+test("teaser strength labels stay natural in English and Simplified Chinese", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "localized-weak-teaser",
+        signal_type: "irrelevant",
+        text: "I occasionally do oblige for solid feedback.",
+        tweet_url: "https://x.com/thsottiaux/status/localized-weak-teaser",
+        tweet_created_at: "2026-08-03T23:00:00.000Z",
+        expires_at: "2026-08-05T23:00:00.000Z",
+        verification_status: "auto_unverified",
+        teaser_strength: "weak",
+      },
+    ],
+  });
+
+  const englishHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(internal, "en", { calculationNow }),
+      locale: "en",
+    }),
+  );
+  const chineseHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(internal, "zh", { calculationNow }),
+      locale: "zh",
+    }),
+  );
+
+  assert.match(englishHtml, /Reset teaser[\s\S]*Present \(weak\)/);
+  assert.match(chineseHtml, /重置暗示帖[\s\S]*有（较弱）/);
 });
 
 test("keeps the large official notice card above the probability card", (t: TestContext) => {

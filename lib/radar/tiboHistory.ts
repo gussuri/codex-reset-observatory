@@ -1,4 +1,5 @@
 import type { WindowEventLike } from "./types";
+import type { TeaserStrength } from "./teaserStrength";
 
 export type TiboSignalType =
   | "official_notice"
@@ -38,6 +39,10 @@ export type FormalTiboResetSignal = {
   ai_classification_status?: string | null;
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
+  ai_teaser_strength?: TeaserStrength | null;
+  ai_teaser_strength_confidence?: number | null;
+  ai_teaser_strength_evidence_quote?: string | null;
+  ai_teaser_strength_reason_ja?: string | null;
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
   expires_at?: string | null;

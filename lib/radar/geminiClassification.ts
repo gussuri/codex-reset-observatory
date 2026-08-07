@@ -1,4 +1,8 @@
 import https from "node:https";
+import {
+  parseTeaserStrengthAssessment,
+  type TeaserStrength,
+} from "./teaserStrength";
 
 export type GeminiClassificationInput = {
   text: string;
@@ -28,6 +32,10 @@ export type GeminiClassificationOutput = {
   reasonJa: string | null;
   resetTypeJa: "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット" | null;
   noticeToExecution: string | null;
+  teaserStrength?: TeaserStrength | null;
+  teaserStrengthConfidence?: number | null;
+  teaserStrengthEvidenceQuote?: string | null;
+  teaserStrengthReasonJa?: string | null;
   model: string | null;
   status: GeminiClassificationStatus;
   classifiedAt: string | null;
@@ -52,6 +60,12 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
 
 Reply status alone is never evidence for teaser or official_notice. A short reply without visible context, such as "done", "yes", or "maybe :) ", should usually be irrelevant with low confidence. Use visible parent context only to clarify what the reply means.
 
+Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
+- "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset.
+- "weak": Tibo explicitly states present-tense, first-person discretion or willingness to perform a reset under conditions, such as sometimes responding to reset requests or occasionally obliging for strong feedback. Do not use weak for abstract signs, historical/general discussion, UI jokes, completed resets, or a reset word alone.
+- "none": no current personal willingness or near-future indication, including completed, historical, negative, UI, general, or unrelated posts.
+If the auxiliary signal cannot be determined, use null rather than guessing "none".
+
 Respond ONLY with a JSON object strictly matching this schema:
 {
   "signalType": "reset_executed" | "official_notice" | "teaser" | "irrelevant",
@@ -60,7 +74,11 @@ Respond ONLY with a JSON object strictly matching this schema:
   "evidenceQuote": string | null (Exact substring from the tweet text acting as primary evidence, or null),
   "reasonJa": string (Japanese explanation, max 300 characters),
   "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット" | null,
-  "noticeToExecution": string | null (Extracted timeframe expression, or null)
+  "noticeToExecution": string | null (Extracted timeframe expression, or null),
+  "teaserStrength": "strong" | "weak" | "none" | null,
+  "teaserStrengthConfidence": number (between 0.0 and 1.0) | null,
+  "teaserStrengthEvidenceQuote": string | null (Short exact contiguous substring from the tweet text, or null),
+  "teaserStrengthReasonJa": string | null (Short Japanese reason, or null)
 }
 `;
 
@@ -113,6 +131,10 @@ export async function classifyWithGemini(
     reasonJa: null,
     resetTypeJa: null,
     noticeToExecution: null,
+    teaserStrength: null,
+    teaserStrengthConfidence: null,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
     model: model || null,
     status,
     classifiedAt: status === "skipped" ? null : nowIso,
@@ -232,6 +254,7 @@ export async function classifyWithGemini(
     const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
     const allowedResetTypes = ["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"];
     const resetTypeJa = allowedResetTypes.includes(parsed.resetTypeJa) ? parsed.resetTypeJa : null;
+    const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
 
     return {
       signalType: parsed.signalType,
@@ -241,6 +264,7 @@ export async function classifyWithGemini(
       reasonJa,
       resetTypeJa,
       noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
+      ...teaserStrengthAssessment,
       model,
       status: "success",
       classifiedAt: nowIso,

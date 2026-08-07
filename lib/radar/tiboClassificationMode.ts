@@ -3,6 +3,7 @@ import type {
   GeminiClassificationOutput,
   GeminiClassificationStatus,
 } from "./geminiClassification";
+import type { TeaserStrength } from "./teaserStrength";
 
 export type TiboClassificationMode = "off" | "shadow" | "primary" | "hybrid";
 
@@ -22,6 +23,7 @@ export type TiboClassificationResponse = {
   aiStatus: GeminiClassificationStatus;
   ruleSignalType: ClassificationResult["signalType"];
   aiSignalType: GeminiClassificationOutput["signalType"];
+  teaserStrength: TeaserStrength | null;
 };
 
 export function normalizeTiboClassificationMode(value?: string): TiboClassificationMode {
@@ -113,5 +115,6 @@ export function buildTiboClassificationResponse(
     aiStatus: aiResult?.status ?? "skipped",
     ruleSignalType: ruleResult.signalType,
     aiSignalType: aiResult?.signalType ?? null,
+    teaserStrength: aiResult?.teaserStrength ?? null,
   };
 }

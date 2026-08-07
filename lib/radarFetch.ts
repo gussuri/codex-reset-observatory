@@ -97,7 +97,15 @@ async function fetchRawTiboSignals(expiryBoundaryIso: string): Promise<DataFetch
     if (error) {
       console.error("Active Tibo signals query failed", error);
     }
-    return { data: data ? (data as ActiveTiboSignal[]) : [], health };
+    const activeSignals = data
+      ? (data as Array<ActiveTiboSignal & { ai_teaser_strength?: ActiveTiboSignal["teaser_strength"] }>).map(
+          (signal) => ({
+            ...signal,
+            teaser_strength: signal.teaser_strength ?? signal.ai_teaser_strength ?? null,
+          }),
+        )
+      : [];
+    return { data: activeSignals, health };
   } catch (error) {
     console.error("Failed to load active Tibo signals", error);
     return { data: [], health: { state: "degraded", detail: "request_failed" } };
@@ -114,7 +122,7 @@ const getCachedTiboSignals = unstable_cache(
   }
 );
 
-function isMissingTiboTranslationColumnError(error: unknown) {
+function isMissingTiboOptionalColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const value = error as { code?: unknown; message?: unknown; details?: unknown };
   const code = typeof value.code === "string" ? value.code : "";
@@ -123,7 +131,7 @@ function isMissingTiboTranslationColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /translated_text_(ja|zh)/i.test(message) &&
+    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?)/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -158,10 +166,10 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
       error: unknown | null;
     };
     let result = (await queryTiboHistory(
-      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,translated_text_ja,translated_text_zh,is_reply",
+      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,translated_text_ja,translated_text_zh,is_reply",
     )) as TiboHistoryQueryResult;
 
-    if (result.error && isMissingTiboTranslationColumnError(result.error)) {
+    if (result.error && isMissingTiboOptionalColumnError(result.error)) {
       result = (await queryTiboHistory(
         "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,is_reply",
       )) as TiboHistoryQueryResult;
@@ -283,6 +291,7 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     verification_status: signal.verification_status,
     translated_text_ja: signal.translated_text_ja ?? null,
     translated_text_zh: signal.translated_text_zh ?? null,
+    teaser_strength: signal.ai_teaser_strength ?? null,
     is_reply: signal.is_reply ?? undefined,
   }));
   const rejectedResets = signals

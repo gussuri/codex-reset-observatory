@@ -1,0 +1,166 @@
+run,source,tweet_id,tweet_created_at,tweet_url,text,expected,prediction,confidence,evidence_quote,evidence_valid,reason_ja,status,model,latency_ms,http_status
+1,supabase,2085221386713198988,2026-08-06T04:28:14+00:00,https://x.com/thsottiaux/status/2085221386713198988,I asked Codex to pull up some stats and I receive on average one DM or email every 6 or so minutes to ask for a reset. I occasionally do oblige if it comes with really solid feedback or banter.,weak,weak,0.9,I occasionally do oblige if it comes with really solid feedback or banter.,true,著者が条件付きでリセットを行う現在の意志を第一人称で明確に述べているため。,success,gemini-3.5-flash-lite,921,200
+1,supabase,2081899343091843463,2026-07-28T00:27:37+00:00,https://x.com/thsottiaux/status/2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
+
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",strong,strong,0.95,see you in a few hours when I’m back at the laptop!,true,数時間後にラップトップに戻るという明確な今後の行動予告と、リセットの意向を示しているため。,success,gemini-3.5-flash-lite,876,200
+1,supabase,2083053369351090254,2026-07-31T04:53:19+00:00,https://x.com/thsottiaux/status/2083053369351090254,"The day we develop really good models. There will be signs.
+
+Reliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.
+
+These kinds of things.",none,none,1,,true,今後のトボ自身によるリセットの予告や条件付きの意思表示ではなく、AIモデル発達の一般的な兆候について述べているため。,success,gemini-3.5-flash-lite,1023,200
+1,supabase,2083556636455752050,2026-08-01T14:13:07+00:00,https://x.com/thsottiaux/status/2083556636455752050,"The week was for efficiency. The weekend is for 10 major breakthroughs in science.
+
+There will be signs.",none,none,1,,true,今後のリセットに関する具体的な示唆や自身の決定への言及はなく、抽象的な表現に留まっているため。,success,gemini-3.5-flash-lite,825,200
+1,supabase,2082326593532473523,2026-07-29T04:45:22+00:00,https://x.com/thsottiaux/status/2082326593532473523,One day we created the reset button and the rest is history.,none,none,1,One day we created the reset button,true,リSETボタンを作った過去の事実についての言及であり、今後のリセットを示唆するものではないため。,success,gemini-3.5-flash-lite,1026,200
+1,supabase,2083378916203343920,2026-08-01T02:26:55+00:00,https://x.com/thsottiaux/status/2083378916203343920,"And yet, I don't see a reset button there.",none,none,1,I don't see a reset button there.,true,リセットボタンのUIや機能への言及であり、今後のリセットを暗示するものではないため。,success,gemini-3.5-flash-lite,900,200
+1,supabase,2081940052154933696,2026-07-28T03:09:23+00:00,https://x.com/thsottiaux/status/2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,none,none,1,The usage limits have been reset,true,すでにリセットが完了した事象についての報告であり、将来のリセットを暗示するものではないため。,success,gemini-3.5-flash-lite,861,200
+1,supabase,2082317452755751098,2026-07-29T04:09:02+00:00,https://x.com/thsottiaux/status/2082317452755751098,"Hello people of Sol! I've reset usage limits for all ChatGPT Work and Codex users. Together with that, a quick update on GPT-5.6 Sol usage limits.
+
+Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",none,none,1,I've reset usage limits for all ChatGPT Work and Codex users.,true,すでに実行されたリセットの報告であるため、将来のリセットのヒントには該当しません。,success,gemini-3.5-flash-lite,969,200
+1,supabase,2083395449814229287,2026-08-01T03:32:37+00:00,https://x.com/thsottiaux/status/2083395449814229287,"To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.
+
+Enjoy.",none,none,1,I have reset usage limits for Codex and ChatGPT Work.,true,すでにリセットが完了したことを報告しているため、未来のリセットを示唆するものではありません。,success,gemini-3.5-flash-lite,994,200
+1,supabase,2085597685948813610,2026-08-07T05:23:31+00:00,https://x.com/thsottiaux/status/2085597685948813610,"You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it.
+
+I talk to it for 5 minutes straight with things that just seem to require weeks of work, get up to get something in the fridge, pet the dog, come back and ... it's done.",none,none,1,,true,AIの能力について語っているだけで、リセットに関する言及やヒントは一切含まれていないため。,success,gemini-3.5-flash-lite,812,200
+1,supabase,2085610231707623750,2026-08-07T06:13:22+00:00,https://x.com/thsottiaux/status/2085610231707623750,"Free users of ChatGPT now have unlimited text chats, powered by GPT-5.6 Luna",none,none,1,,true,ChatGPTの無料ユーザー向けの新機能に関する一般的な告知であり、リセットに関する言及はありません。,success,gemini-3.5-flash-lite,1038,200
+1,supabase,2085432978856083964,2026-08-06T18:29:02+00:00,https://x.com/thsottiaux/status/2085432978856083964,"Agent Plugins. A standard for (most) of your agents out there, including Codex and ChatGPT.",none,none,1,,true,リセットに関する言及はなく、エージェントプラグインについての一般的な紹介であるため。,success,gemini-3.5-flash-lite,837,200
+1,supabase,2085246081609171296,2026-08-06T06:06:22+00:00,https://x.com/thsottiaux/status/2085246081609171296,Cool analysis,none,none,1,,true,リセットに関する言及が一切含まれていないため。,success,gemini-3.5-flash-lite,891,200
+1,supabase,2084196918071357707,2026-08-03T08:37:22+00:00,https://x.com/thsottiaux/status/2084196918071357707,"Crazy thing about OpenAI is you just open your laptop, codex a PR into existence and ship an improvement to 1B users. Just like that.",none,none,1,,true,リセットに関する言及がなく、OpenAIや製品に関する一般的な感想であるため。,success,gemini-3.5-flash-lite,934,200
+1,supabase,2083699879650463756,2026-08-01T23:42:19+00:00,https://x.com/thsottiaux/status/2083699879650463756,"Fun fact, users use /fast less during the weekend. The weekend is for relaxation, even for the model.",none,none,1,,true,週末の利用動向に関する一般的な事実述べるのみであり、リセットの予告や示唆は含まれていないため。,success,gemini-3.5-flash-lite,870,200
+1,supabase,2082655731204096275,2026-07-30T02:33:14+00:00,https://x.com/thsottiaux/status/2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,none,none,0.95,,true,明日のアップデートや機能追加への言及はあるものの、リセットに関する言及や示唆は含まれていないため。,success,gemini-3.5-flash-lite,969,200
+1,supabase,2082637967852806207,2026-07-30T01:22:39+00:00,https://x.com/thsottiaux/status/2082637967852806207,"Terrific work by
+@ilanbigio
+ and
+@sandersted
+ on the investigation and post. Seems like it was a lot of fun.
+
+Take care of your harnesses out there, your model will thank you.",none,none,1,,true,リセットに関する言及や予告が含まれていないため。,success,gemini-3.5-flash-lite,791,200
+1,supabase,2082241164850364555,2026-07-28T23:05:54+00:00,https://x.com/thsottiaux/status/2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",none,none,1,,true,オープンソースのツールやSDKのリリースに関する内容であり、リセットに関する言及が一切含まれていないため。,success,gemini-3.5-flash-lite,829,200
+1,user_provided,user-provided-no-reset-tonight,,,No reset tonight.,none,none,1,No reset tonight.,true,今夜はリセットしないと明確に否定しているため、将来のリセットの示唆には該当しません。,success,gemini-3.5-flash-lite,864,200
+1,synthetic,synthetic-strong-01,,,I might reset everyone's limits in a few hours. Stay tuned.,strong,strong,0.95,I might reset everyone's limits in a few hours.,true,数時間後に制限をリセットする可能性があると明確に示唆しており、近い将来の実行予定や待機を促す内容が含まれているため。,success,gemini-3.5-flash-lite,976,200
+1,synthetic,synthetic-strong-02,,,"Hold tight, I'll reset Codex tonight when I'm back at my laptop.",strong,strong,0.95,I'll reset Codex tonight when I'm back at my laptop.,true,今夜ノートPCに戻った際にCodexをリセットすると明言しており、近いうちにリセットが行われる強い示唆が含まれているため。,success,gemini-3.5-flash-lite,983,200
+1,synthetic,synthetic-strong-03,,,Thinking about pushing the reset button this evening. I'll let you know.,strong,strong,0.95,Thinking about pushing the reset button this evening.,true,今夜リセットボタンを押すことを考えており、近い将来のリセットを示唆する明確な言及があるため。,success,gemini-3.5-flash-lite,854,200
+1,synthetic,synthetic-strong-04,,,I'll reset all paid users tomorrow morning.,strong,strong,1,I'll reset all paid users tomorrow morning.,true,翌朝に全有料ユーザーのリセットを行うという明確かつ近未来の意図が示されているため。,success,gemini-3.5-flash-lite,933,200
+1,synthetic,synthetic-weak-01,,,I sometimes reset limits when people send really good feedback.,weak,weak,0.9,I sometimes reset limits when people send really good feedback.,true,著者が現在の意思や条件付きの許容としてリセットを行う可能性について言及しているため。,success,gemini-3.5-flash-lite,1013,200
+1,synthetic,synthetic-weak-02,,,"If the feedback keeps coming, I may reset a few accounts.",weak,weak,0.9,I may reset a few accounts.,true,著者が現在の自分の意志や条件付きの意図としてリセットの可能性に言及しているため、weakと判定します。,success,gemini-3.5-flash-lite,1032,200
+1,synthetic,synthetic-weak-03,,,I can occasionally reset limits for people who bring great banter.,weak,weak,0.9,I can occasionally reset limits for people who bring great banter.,true,著者が現在の意志として、条件付きでリセットを行う可能性があることを自ら述べているため。,success,gemini-3.5-flash-lite,1023,200
+1,synthetic,synthetic-weak-04,,,"Maybe I'll press that reset button if this keeps up, but no promises.",weak,weak,0.9,Maybe I'll press that reset button if this keeps up,true,著者が条件付きで将来リセットを実行する可能性に言及しているため弱いです。,success,gemini-3.5-flash-lite,875,200
+1,synthetic,synthetic-weak-05,,,I do listen when users ask nicely; a reset is not out of the question.,weak,weak,0.9,a reset is not out of the question,true,著者が現在の意思として条件付きでのリセットの可能性に言及しているため。,success,gemini-3.5-flash-lite,831,200
+1,synthetic,synthetic-weak-06,,,"When the feedback is solid, I sometimes help by resetting limits.",weak,weak,0.9,I sometimes help by resetting limits.,true,作者自身の現在形の裁量や条件付きの許可を示しているため、weakに該当します。,success,gemini-3.5-flash-lite,958,200
+1,synthetic,synthetic-weak-07,,,"I might give the reset button a push at some point, but there is no timing yet.",weak,weak,0.9,I might give the reset button a push at some point,true,作者自身の意志や裁量で将来リセットする可能性があることに言及しているが、具体的な時期や強い切迫感はないためweakとなる。,success,gemini-3.5-flash-lite,965,200
+1,synthetic,synthetic-weak-08,,,Requests like these sometimes convince me to reset limits.,weak,weak,0.9,Requests like these sometimes convince me to reset limits.,true,著者が条件次第で制限をリセットする可能性を現在形の一人称で示しているため。,success,gemini-3.5-flash-lite,866,200
+1,synthetic,synthetic-weak-09,,,I have the discretion to reset limits for good feedback.,weak,weak,0.9,I have the discretion to reset limits for good feedback.,true,著者が良好なフィードバックに対して制限をリセットする裁量を持っていると1人称で述べているため。,success,gemini-3.5-flash-lite,833,200
+1,synthetic,synthetic-none-01,,,One day we created the reset button and the rest is history.,none,none,1,,true,過去の出来事についての回想であり、今後のリセットを示唆する内容ではないため。,success,gemini-3.5-flash-lite,831,200
+1,synthetic,synthetic-none-02,,,The reset button is just a UI control; I don't see it there.,none,none,1,The reset button is just a UI control,true,リセットボタンのUI機能についての言及であり、将来のリセットを示唆するものではないため。,success,gemini-3.5-flash-lite,1012,200
+1,synthetic,synthetic-none-03,,,"We reset limits yesterday, and the incident is over.",none,none,1,"We reset limits yesterday, and the incident is over.",true,昨時点でリセットが完了しているため、将来のリセットを示唆する内容ではありません。,success,gemini-3.5-flash-lite,1035,200
+2,supabase,2085221386713198988,2026-08-06T04:28:14+00:00,https://x.com/thsottiaux/status/2085221386713198988,I asked Codex to pull up some stats and I receive on average one DM or email every 6 or so minutes to ask for a reset. I occasionally do oblige if it comes with really solid feedback or banter.,weak,weak,0.9,I occasionally do oblige if it comes with really solid feedback or banter.,true,著者が条件付きでリセットを行う現在の意志を第一人称で明示しているため。,success,gemini-3.5-flash-lite,1013,200
+2,supabase,2081899343091843463,2026-07-28T00:27:37+00:00,https://x.com/thsottiaux/status/2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
+
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",strong,strong,0.95,see you in a few hours when I’m back at the laptop!,true,数時間後にPCに戻るという発言やリセットの示唆が含まれており、近い将来のリセットの強い予告となっているため。,success,gemini-3.5-flash-lite,956,200
+2,supabase,2083053369351090254,2026-07-31T04:53:19+00:00,https://x.com/thsottiaux/status/2083053369351090254,"The day we develop really good models. There will be signs.
+
+Reliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.
+
+These kinds of things.",none,none,1,,true,未来のリセットの予告ではなく、AIモデルの進化に関する一般的な兆候を述べているだけであるため。,success,gemini-3.5-flash-lite,1031,200
+2,supabase,2083556636455752050,2026-08-01T14:13:07+00:00,https://x.com/thsottiaux/status/2083556636455752050,"The week was for efficiency. The weekend is for 10 major breakthroughs in science.
+
+There will be signs.",none,none,1,,true,今後のリセットに関する具体的な示唆はなく、抽象的な表現に留まっているため。,success,gemini-3.5-flash-lite,925,200
+2,supabase,2082326593532473523,2026-07-29T04:45:22+00:00,https://x.com/thsottiaux/status/2082326593532473523,One day we created the reset button and the rest is history.,none,none,1,One day we created the reset button,true,過去の機能作成に関する言及であり、今後のリセットを示唆するものではないため。,success,gemini-3.5-flash-lite,936,200
+2,supabase,2083378916203343920,2026-08-01T02:26:55+00:00,https://x.com/thsottiaux/status/2083378916203343920,"And yet, I don't see a reset button there.",none,none,1,I don't see a reset button there.,true,リセットボタンのUIや機能への言及であり、将来のリセットを暗示するものではないため。,success,gemini-3.5-flash-lite,853,200
+2,supabase,2081940052154933696,2026-07-28T03:09:23+00:00,https://x.com/thsottiaux/status/2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,none,none,1,The usage limits have been reset,true,すでにリセットが完了した事象を報告しているため、未来のリセットに関するヒントには該当しません。,success,gemini-3.5-flash-lite,870,200
+2,supabase,2082317452755751098,2026-07-29T04:09:02+00:00,https://x.com/thsottiaux/status/2082317452755751098,"Hello people of Sol! I've reset usage limits for all ChatGPT Work and Codex users. Together with that, a quick update on GPT-5.6 Sol usage limits.
+
+Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",none,none,1,,true,すでに利用制限のリセットが完了したことを報告しているため、将来のリセットを匂わせるものではなく、noneに該当します。,success,gemini-3.5-flash-lite,859,200
+2,supabase,2083395449814229287,2026-08-01T03:32:37+00:00,https://x.com/thsottiaux/status/2083395449814229287,"To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.
+
+Enjoy.",none,none,1,I have reset usage limits for Codex and ChatGPT Work.,true,すでにリセットが完了したことを報告しているため、未来のリセットを示唆するものではありません。,success,gemini-3.5-flash-lite,987,200
+2,supabase,2085597685948813610,2026-08-07T05:23:31+00:00,https://x.com/thsottiaux/status/2085597685948813610,"You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it.
+
+I talk to it for 5 minutes straight with things that just seem to require weeks of work, get up to get something in the fridge, pet the dog, come back and ... it's done.",none,none,1,,true,AIの能力についての感想であり、リセットに関する言及や暗示は含まれていないため。,success,gemini-3.5-flash-lite,873,200
+2,supabase,2085610231707623750,2026-08-07T06:13:22+00:00,https://x.com/thsottiaux/status/2085610231707623750,"Free users of ChatGPT now have unlimited text chats, powered by GPT-5.6 Luna",none,none,1,,true,ChatGPTのアップデートに関するニュースや機能紹介であり、リセットに関する言及や暗示は含まれていないため。,success,gemini-3.5-flash-lite,860,200
+2,supabase,2085432978856083964,2026-08-06T18:29:02+00:00,https://x.com/thsottiaux/status/2085432978856083964,"Agent Plugins. A standard for (most) of your agents out there, including Codex and ChatGPT.",none,none,1,,true,エージェントプラグインに関する一般的な言及であり、リセットの予告や示唆は含まれていないため。,success,gemini-3.5-flash-lite,859,200
+2,supabase,2085246081609171296,2026-08-06T06:06:22+00:00,https://x.com/thsottiaux/status/2085246081609171296,Cool analysis,none,none,1,,true,リセットに関する言及が一切含まれていないため。,success,gemini-3.5-flash-lite,776,200
+2,supabase,2084196918071357707,2026-08-03T08:37:22+00:00,https://x.com/thsottiaux/status/2084196918071357707,"Crazy thing about OpenAI is you just open your laptop, codex a PR into existence and ship an improvement to 1B users. Just like that.",none,none,1,,true,リセットに関する言及はなく、OpenAIとコードのデプロイについて述べているため。,success,gemini-3.5-flash-lite,857,200
+2,supabase,2083699879650463756,2026-08-01T23:42:19+00:00,https://x.com/thsottiaux/status/2083699879650463756,"Fun fact, users use /fast less during the weekend. The weekend is for relaxation, even for the model.",none,none,1,,true,週末の利用動向に関する一般的な事実述べているのみで、今後のリセットを示唆する内容は含まれていないため。,success,gemini-3.5-flash-lite,968,200
+2,supabase,2082655731204096275,2026-07-30T02:33:14+00:00,https://x.com/thsottiaux/status/2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,none,none,1,,true,新機能のリリースや今後の取り組みについての言及であり、リセットに関する示唆は含まれていないため。,success,gemini-3.5-flash-lite,759,200
+2,supabase,2082637967852806207,2026-07-30T01:22:39+00:00,https://x.com/thsottiaux/status/2082637967852806207,"Terrific work by
+@ilanbigio
+ and
+@sandersted
+ on the investigation and post. Seems like it was a lot of fun.
+
+Take care of your harnesses out there, your model will thank you.",none,none,1,,true,リセットに関する言及や予告が含まれていないため。,success,gemini-3.5-flash-lite,870,200
+2,supabase,2082241164850364555,2026-07-28T23:05:54+00:00,https://x.com/thsottiaux/status/2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",none,none,1,,true,オープンソースのツールリリースに関するお知らせであり、リセットに関する言及は一切含まれていないため。,success,gemini-3.5-flash-lite,964,200
+2,user_provided,user-provided-no-reset-tonight,,,No reset tonight.,none,none,1,No reset tonight.,true,今夜はリセットしないと明確に否定しているため、将来のリセットの示唆には該当しません。,success,gemini-3.5-flash-lite,860,200
+2,synthetic,synthetic-strong-01,,,I might reset everyone's limits in a few hours. Stay tuned.,strong,strong,0.95,I might reset everyone's limits in a few hours.,true,数時間後に全員のリセットを行う可能性があることを具体的に示唆しており、強いリセットのヒントになっているため。,success,gemini-3.5-flash-lite,872,200
+2,synthetic,synthetic-strong-02,,,"Hold tight, I'll reset Codex tonight when I'm back at my laptop.",strong,strong,1,I'll reset Codex tonight,true,今夜コードックスをリセットすると明言しており、近い将来のリセットを示唆する明確な強いヒントが含まれているため。,success,gemini-3.5-flash-lite,961,200
+2,synthetic,synthetic-strong-03,,,Thinking about pushing the reset button this evening. I'll let you know.,strong,strong,0.95,Thinking about pushing the reset button this evening.,true,今夕にリセットボタンを押すことを考えており、近い将来の実行を示唆する明確なヒントが含まれているため。,success,gemini-3.5-flash-lite,882,200
+2,synthetic,synthetic-strong-04,,,I'll reset all paid users tomorrow morning.,strong,strong,1,I'll reset all paid users tomorrow morning.,true,翌朝に全有料ユーザーのリセットを行うという明確かつ近未来の意図が示されているため。,success,gemini-3.5-flash-lite,964,200
+2,synthetic,synthetic-weak-01,,,I sometimes reset limits when people send really good feedback.,weak,weak,0.9,I sometimes reset limits when people send really good feedback.,true,著者が自分の判断や条件付きでリセットを行う可能性があると現在の意志として述べているため。,success,gemini-3.5-flash-lite,858,200
+2,synthetic,synthetic-weak-02,,,"If the feedback keeps coming, I may reset a few accounts.",weak,weak,0.9,I may reset a few accounts.,true,著者が現在の意志として条件付きでリセットを行う可能性があると述べているため。,success,gemini-3.5-flash-lite,875,200
+2,synthetic,synthetic-weak-03,,,I can occasionally reset limits for people who bring great banter.,weak,weak,0.9,I can occasionally reset limits for people who bring great banter.,true,著者が現在の意志として条件付きでリセットを行う裁量があることを示しているため、weakに該当します。,success,gemini-3.5-flash-lite,864,200
+2,synthetic,synthetic-weak-04,,,"Maybe I'll press that reset button if this keeps up, but no promises.",weak,weak,0.9,Maybe I'll press that reset button,true,著者が条件付きのリセットの意志を第一人称で示しているため。,success,gemini-3.5-flash-lite,869,200
+2,synthetic,synthetic-weak-05,,,I do listen when users ask nicely; a reset is not out of the question.,weak,weak,0.9,a reset is not out of the question,true,著者が現在の意思や条件付きでリセットを行う可能性があることを示しているため、weakと判定します。,success,gemini-3.5-flash-lite,1082,200
+2,synthetic,synthetic-weak-06,,,"When the feedback is solid, I sometimes help by resetting limits.",weak,weak,0.95,I sometimes help by resetting limits.,true,著者が条件次第でリセットを行う意志を現在の主観で述べているため。,success,gemini-3.5-flash-lite,963,200
+2,synthetic,synthetic-weak-07,,,"I might give the reset button a push at some point, but there is no timing yet.",weak,weak,0.85,I might give the reset button a push at some point,true,著者が自分の意志で将来的にリセットする可能性について第一人称で述べているため。,success,gemini-3.5-flash-lite,876,200
+2,synthetic,synthetic-weak-08,,,Requests like these sometimes convince me to reset limits.,weak,weak,0.9,Requests like these sometimes convince me to reset limits.,true,著者が条件次第で制限をリセットする可能性を現在形の一人称で示しているため。,success,gemini-3.5-flash-lite,942,200
+2,synthetic,synthetic-weak-09,,,I have the discretion to reset limits for good feedback.,weak,weak,0.9,I have the discretion to reset limits for good feedback.,true,著者が良好なフィードバックに対して自身の裁量でリセットを行う可能性があると明示しているため。,success,gemini-3.5-flash-lite,960,200
+2,synthetic,synthetic-none-01,,,One day we created the reset button and the rest is history.,none,none,1,,true,過去の出来事についての回想であり、今後のリセットを示唆する内容ではないため。,success,gemini-3.5-flash-lite,966,200
+2,synthetic,synthetic-none-02,,,The reset button is just a UI control; I don't see it there.,none,none,1,The reset button is just a UI control,true,リセットボタンのUI機能についての言及であり、将来のリセットを示唆するものではないため。,success,gemini-3.5-flash-lite,861,200
+2,synthetic,synthetic-none-03,,,"We reset limits yesterday, and the incident is over.",none,none,1,"We reset limits yesterday, and the incident is over.",true,昨時点でリセットが完了しており、すでに過去の出来事であるため将来のリセットのヒントには該当しません。,success,gemini-3.5-flash-lite,878,200
+3,supabase,2085221386713198988,2026-08-06T04:28:14+00:00,https://x.com/thsottiaux/status/2085221386713198988,I asked Codex to pull up some stats and I receive on average one DM or email every 6 or so minutes to ask for a reset. I occasionally do oblige if it comes with really solid feedback or banter.,weak,weak,0.9,I occasionally do oblige if it comes with really solid feedback or banter.,true,著者が条件付きでリセットを行う現在の意志を第一人称で明示しているため、weakと判定します。,success,gemini-3.5-flash-lite,958,200
+3,supabase,2081899343091843463,2026-07-28T00:27:37+00:00,https://x.com/thsottiaux/status/2081899343091843463,"We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.
+
+Hold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",strong,strong,0.95,see you in a few hours when I’m back at the laptop!,true,数時間後にPCに戻ってくると明言されており、間近に行動を起こすことが示唆されているため。,success,gemini-3.5-flash-lite,949,200
+3,supabase,2083053369351090254,2026-07-31T04:53:19+00:00,https://x.com/thsottiaux/status/2083053369351090254,"The day we develop really good models. There will be signs.
+
+Reliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.
+
+These kinds of things.",none,none,1,,true,AIモデルの進化や将来の兆候に関する一般的な考察であり、著者自身による今後のリセットの予告や条件付きの意思表示ではないため。,success,gemini-3.5-flash-lite,878,200
+3,supabase,2083556636455752050,2026-08-01T14:13:07+00:00,https://x.com/thsottiaux/status/2083556636455752050,"The week was for efficiency. The weekend is for 10 major breakthroughs in science.
+
+There will be signs.",none,none,1,,true,抽象的な予告表現であり、著者の具体的なリセット意図や実行の意思表示が示されていないため。,success,gemini-3.5-flash-lite,1155,200
+3,supabase,2082326593532473523,2026-07-29T04:45:22+00:00,https://x.com/thsottiaux/status/2082326593532473523,One day we created the reset button and the rest is history.,none,none,1,One day we created the reset button,true,リSETボタンを作った過去の事実についての言及であり、今後のリセットを示唆するものではないため。,success,gemini-3.5-flash-lite,874,200
+3,supabase,2083378916203343920,2026-08-01T02:26:55+00:00,https://x.com/thsottiaux/status/2083378916203343920,"And yet, I don't see a reset button there.",none,none,1,I don't see a reset button there.,true,リセットボタンのUIや機能に言及しているだけで、将来のリセットを示唆する内容ではないため。,success,gemini-3.5-flash-lite,850,200
+3,supabase,2081940052154933696,2026-07-28T03:09:23+00:00,https://x.com/thsottiaux/status/2081940052154933696,Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!,none,none,1,The usage limits have been reset,true,すでにリセットが完了した事象を報告しているため、未来のリセットに関するヒントには該当しません。,success,gemini-3.5-flash-lite,875,200
+3,supabase,2082317452755751098,2026-07-29T04:09:02+00:00,https://x.com/thsottiaux/status/2082317452755751098,"Hello people of Sol! I've reset usage limits for all ChatGPT Work and Codex users. Together with that, a quick update on GPT-5.6 Sol usage limits.
+
+Over the past few weeks, many of you have told us that Sol was using your Codex limits faster than expected. To be clear, we have",none,none,1,I've reset usage limits for all ChatGPT Work and Codex users.,true,すでにリセットが完了したことを報告しているため、未来のリセットを示唆するヒントには該当しません。,success,gemini-3.5-flash-lite,857,200
+3,supabase,2083395449814229287,2026-08-01T03:32:37+00:00,https://x.com/thsottiaux/status/2083395449814229287,"To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.
+
+Enjoy.",none,none,1,I have reset usage limits for Codex and ChatGPT Work.,true,すでにリセットが完了しているため、未来のリセットを示唆するヒントには該当せず、noneとなります。,success,gemini-3.5-flash-lite,959,200
+3,supabase,2085597685948813610,2026-08-07T05:23:31+00:00,https://x.com/thsottiaux/status/2085597685948813610,"You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it.
+
+I talk to it for 5 minutes straight with things that just seem to require weeks of work, get up to get something in the fridge, pet the dog, come back and ... it's done.",none,none,1,,true,AIの能力についての感想であり、将来のリセットに関する言及やヒントは一切含まれていないため。,success,gemini-3.5-flash-lite,872,200
+3,supabase,2085610231707623750,2026-08-07T06:13:22+00:00,https://x.com/thsottiaux/status/2085610231707623750,"Free users of ChatGPT now have unlimited text chats, powered by GPT-5.6 Luna",none,none,1,,true,ChatGPTの新機能に関する一般的なニュースや情報提供であり、将来のリセットを示唆する内容ではないため。,success,gemini-3.5-flash-lite,752,200
+3,supabase,2085432978856083964,2026-08-06T18:29:02+00:00,https://x.com/thsottiaux/status/2085432978856083964,"Agent Plugins. A standard for (most) of your agents out there, including Codex and ChatGPT.",none,none,1,,true,エージェントプラグインに関する一般的な言及であり、リセットに関する内容は含まれていないため。,success,gemini-3.5-flash-lite,1056,200
+3,supabase,2085246081609171296,2026-08-06T06:06:22+00:00,https://x.com/thsottiaux/status/2085246081609171296,Cool analysis,none,none,1,,true,リセットに関する言及が一切含まれていないため。,success,gemini-3.5-flash-lite,992,200
+3,supabase,2084196918071357707,2026-08-03T08:37:22+00:00,https://x.com/thsottiaux/status/2084196918071357707,"Crazy thing about OpenAI is you just open your laptop, codex a PR into existence and ship an improvement to 1B users. Just like that.",none,none,1,,true,リセットに関する言及がなく、OpenAIやプロダクト開発に関する一般的な感想であるため。,success,gemini-3.5-flash-lite,961,200
+3,supabase,2083699879650463756,2026-08-01T23:42:19+00:00,https://x.com/thsottiaux/status/2083699879650463756,"Fun fact, users use /fast less during the weekend. The weekend is for relaxation, even for the model.",none,none,1,,true,週末の利用動向に関する一般的な事実述べるのみで、リセットの予告や示唆は含まれていないため。,success,gemini-3.5-flash-lite,964,200
+3,supabase,2082655731204096275,2026-07-30T02:33:14+00:00,https://x.com/thsottiaux/status/2082655731204096275,This week is all about intelligence too cheap to meter. Tomorrow we ship again.,none,none,1,,true,リセットに関する言及はなく、単なる新機能やアップデートの告知であるため。,success,gemini-3.5-flash-lite,1000,200
+3,supabase,2082637967852806207,2026-07-30T01:22:39+00:00,https://x.com/thsottiaux/status/2082637967852806207,"Terrific work by
+@ilanbigio
+ and
+@sandersted
+ on the investigation and post. Seems like it was a lot of fun.
+
+Take care of your harnesses out there, your model will thank you.",none,none,1,,true,リセットに関する言及や予告が含まれていないため。,success,gemini-3.5-flash-lite,910,200
+3,supabase,2082241164850364555,2026-07-28T23:05:54+00:00,https://x.com/thsottiaux/status/2082241164850364555,"More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",none,none,1,,true,オープンソースのCLIとTypeScript SDKのリリースに関する発表であり、リセットに関する言及は一切含まれていないため。,success,gemini-3.5-flash-lite,1034,200
+3,user_provided,user-provided-no-reset-tonight,,,No reset tonight.,none,none,1,No reset tonight.,true,今夜はリセットしないと明確に否定しているため、将来のリセットの示唆には該当しない。,success,gemini-3.5-flash-lite,866,200
+3,synthetic,synthetic-strong-01,,,I might reset everyone's limits in a few hours. Stay tuned.,strong,strong,0.95,I might reset everyone's limits in a few hours.,true,数時間後に制限をリセットする可能性があると具体的に示唆しており、近い将来のアクションへの期待を持たせているため。,success,gemini-3.5-flash-lite,881,200
+3,synthetic,synthetic-strong-02,,,"Hold tight, I'll reset Codex tonight when I'm back at my laptop.",strong,strong,1,I'll reset Codex tonight when I'm back at my laptop.,true,今夜ノートPCに戻った際にCodexをリセットすると明言しており、近いうちにリセットが行われることが明確に示されているため。,success,gemini-3.5-flash-lite,1114,200
+3,synthetic,synthetic-strong-03,,,Thinking about pushing the reset button this evening. I'll let you know.,strong,strong,0.95,Thinking about pushing the reset button this evening.,true,今夕にリセットボタンを押すことを考えており、近い将来の実行を示唆する明確なヒントが含まれているため。,success,gemini-3.5-flash-lite,1307,200
+3,synthetic,synthetic-strong-04,,,I'll reset all paid users tomorrow morning.,strong,strong,1,I'll reset all paid users tomorrow morning.,true,翌朝に全有料ユーザーのリセットを行うという明確かつ具体的な近未来の予定が示されているため。,success,gemini-3.5-flash-lite,963,200
+3,synthetic,synthetic-weak-01,,,I sometimes reset limits when people send really good feedback.,weak,weak,0.9,I sometimes reset limits when people send really good feedback.,true,著者が現在の意思や条件付きの許容としてリセットを行う可能性について述べているため。,success,gemini-3.5-flash-lite,871,200
+3,synthetic,synthetic-weak-02,,,"If the feedback keeps coming, I may reset a few accounts.",weak,weak,0.9,I may reset a few accounts.,true,著者が現在の条件（フィードバック）に応じてアカウントをリセットする可能性について、一人称の主体的な意志を述べているため。,success,gemini-3.5-flash-lite,976,200
+3,synthetic,synthetic-weak-03,,,I can occasionally reset limits for people who bring great banter.,weak,weak,0.9,I can occasionally reset limits for people who bring great banter.,true,著者が現在の意志として条件付きでリセットを行う裁量があることを明示しているため。,success,gemini-3.5-flash-lite,846,200
+3,synthetic,synthetic-weak-04,,,"Maybe I'll press that reset button if this keeps up, but no promises.",weak,weak,0.9,"Maybe I'll press that reset button if this keeps up, but no promises.",true,著者が条件付きで将来のリセットを行う可能性があることを第一人称で示しているため。,success,gemini-3.5-flash-lite,995,200
+3,synthetic,synthetic-weak-05,,,I do listen when users ask nicely; a reset is not out of the question.,weak,weak,0.9,a reset is not out of the question,true,著者が現在の意思として条件付きでリセットの可能性に言及しているため。,success,gemini-3.5-flash-lite,932,200
+3,synthetic,synthetic-weak-06,,,"When the feedback is solid, I sometimes help by resetting limits.",weak,weak,0.9,I sometimes help by resetting limits.,true,作者自身の現在形の裁量や条件付きの意思を示しているため、weakに該当します。,success,gemini-3.5-flash-lite,1174,200
+3,synthetic,synthetic-weak-07,,,"I might give the reset button a push at some point, but there is no timing yet.",weak,weak,0.85,I might give the reset button a push at some point,true,筆者自身が将来的なリセットを行う可能性について条件付き・または曖昧に言及しているため。,success,gemini-3.5-flash-lite,886,200
+3,synthetic,synthetic-weak-08,,,Requests like these sometimes convince me to reset limits.,weak,weak,0.9,Requests like these sometimes convince me to reset limits.,true,作者が条件次第で制限をリセットする可能性について、一人称の現在形で自らの裁量を示しているため。,success,gemini-3.5-flash-lite,940,200
+3,synthetic,synthetic-weak-09,,,I have the discretion to reset limits for good feedback.,weak,weak,0.9,I have the discretion to reset limits for good feedback.,true,著者が良好なフィードバックに対して自身の裁量で制限をリセットする可能性について言及しているため。,success,gemini-3.5-flash-lite,913,200
+3,synthetic,synthetic-none-01,,,One day we created the reset button and the rest is history.,none,none,1,,true,過去の出来事や機能の回想について述べており、今後のリセットを暗示する内容ではないため。,success,gemini-3.5-flash-lite,1154,200
+3,synthetic,synthetic-none-02,,,The reset button is just a UI control; I don't see it there.,none,none,1,The reset button is just a UI control,true,リセットボタンというUI要素への言及であり、今後のリセットを示唆する内容ではないため。,success,gemini-3.5-flash-lite,866,200
+3,synthetic,synthetic-none-03,,,"We reset limits yesterday, and the incident is over.",none,none,1,"We reset limits yesterday, and the incident is over.",true,昨時点でリセットが完了しているため、将来のリセットを示唆する内容ではありません。,success,gemini-3.5-flash-lite,733,200

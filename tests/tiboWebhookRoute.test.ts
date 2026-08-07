@@ -129,6 +129,8 @@ test("new reply metadata is validated and persisted while old payload fields rem
     assert.deepEqual(upsertBody.reply_to_handles, ["@alice"]);
     assert.equal(upsertBody.reply_context_text, "A reset is coming soon.");
     assert.equal(upsertBody.source_timeline, "with_replies");
+    assert.equal(upsertBody.ai_teaser_strength, null);
+    assert.equal(upsertBody.ai_teaser_strength_confidence, null);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment(previous);
@@ -200,6 +202,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");
     const responseBody = await response.json();
     assert.equal(responseBody.success, true);
+    assert.equal(responseBody.teaserStrength, null);
     assert.equal("translated_text_ja" in responseBody, false);
   } finally {
     globalThis.fetch = originalFetch;

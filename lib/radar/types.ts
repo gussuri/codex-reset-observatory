@@ -3,6 +3,7 @@ import type {
   FormalTiboResetSignal,
   RejectedTiboResetSignal,
 } from "./tiboHistory";
+import type { TeaserStrength } from "./teaserStrength";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -86,12 +87,14 @@ export type ActiveTiboSignal = {
   classification_reason?: string;
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
+  teaser_strength?: TeaserStrength | null;
   is_reply?: boolean;
   is_quote?: boolean;
 };
 
 export type PublicTiboActivity = {
   classification: "official_notice" | "reset_executed" | "teaser" | "irrelevant";
+  teaserStrength: TeaserStrength | null;
   text: string | null;
   createdAt: string;
   sourceUrl: string | null;

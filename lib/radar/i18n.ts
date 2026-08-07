@@ -121,8 +121,13 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   activeResetTeaser: {
     ja: "あり",
-    en: "Active",
+    en: "Present",
     zh: "有",
+  },
+  weakResetTeaser: {
+    ja: "あり（弱）",
+    en: "Present (weak)",
+    zh: "有（较弱）",
   },
   checkAction: {
     ja: "要確認",

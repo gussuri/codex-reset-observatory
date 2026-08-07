@@ -104,6 +104,7 @@ test("public Tibo activity exposes the post projection and classification", () =
 
   assert.deepEqual(snapshot.latestTiboActivity, {
     classification: "teaser",
+    teaserStrength: null,
     text: "There will be signs... Resets soon.",
     createdAt: "2026-08-03T23:00:00.000Z",
     sourceUrl: "https://x.com/thsottiaux/status/123",
@@ -112,6 +113,53 @@ test("public Tibo activity exposes the post projection and classification", () =
     serialized,
     /private-tweet-id|private internal reason|confidence|classification_reason/,
   );
+});
+
+test("public Tibo activity exposes only the UI teaser strength, not its audit details", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "weak-teaser-tweet",
+        signal_type: "irrelevant",
+        text: "I occasionally do oblige for really solid feedback.",
+        tweet_url: "https://x.com/thsottiaux/status/124",
+        tweet_created_at: "2026-08-03T23:00:00.000Z",
+        verification_status: "auto_unverified",
+        teaser_strength: "weak",
+      },
+    ],
+  });
+
+  const snapshot = toPublicRadarSnapshot(internal, "en", { calculationNow });
+  const serialized = JSON.stringify(snapshot);
+
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "weak");
+  assert.doesNotMatch(serialized, /teaserStrengthConfidence|teaserStrengthEvidenceQuote|teaserStrengthReasonJa/);
+});
+
+test("missing teaser strength stays unknown instead of becoming none", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [
+        {
+          tweet_id: "unclassified-tweet",
+          signal_type: "teaser",
+          text: "An older classifier result.",
+          tweet_url: "https://x.com/thsottiaux/status/125",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          verification_status: "auto_unverified",
+        },
+      ],
+    }),
+    "en",
+    { calculationNow },
+  );
+
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, null);
 });
 
 test("public Tibo activity can use a recent signal after its active expiry", () => {
@@ -165,6 +213,7 @@ test("public Tibo activity uses the newest stored post even when it is irrelevan
 
   assert.deepEqual(snapshot.latestTiboActivity, {
     classification: "irrelevant",
+    teaserStrength: null,
     text: "A newer Tibo post unrelated to resets.",
     createdAt: "2026-08-06T23:00:00.000Z",
     sourceUrl: "https://x.com/thsottiaux/status/789",

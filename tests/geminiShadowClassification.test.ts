@@ -11,6 +11,7 @@ import {
   selectTiboClassification,
   shouldRunGeminiClassification,
 } from "../lib/radar/tiboClassificationMode";
+import { parseTeaserStrengthAssessment } from "../lib/radar/teaserStrength";
 
 test("1. GEMINI_CLASSIFICATION_MODE=off skips Gemini API call", async () => {
   const result = await classifyWithGemini(
@@ -196,6 +197,45 @@ test("8. Hybrid mode is an alias for primary and the webhook response exposes fi
     aiStatus: "success",
     ruleSignalType: "irrelevant",
     aiSignalType: "teaser",
+    teaserStrength: null,
+  });
+});
+
+test("teaser strength parsing keeps the auxiliary value separate from signal type", () => {
+  const text = "I occasionally do oblige for really solid feedback.";
+  const parsed = parseTeaserStrengthAssessment(
+    {
+      teaserStrength: "weak",
+      teaserStrengthConfidence: 0.91,
+      teaserStrengthEvidenceQuote: "I occasionally do oblige",
+      teaserStrengthReasonJa: "現在の裁量的な意思を示しています。",
+    },
+    text,
+  );
+
+  assert.deepStrictEqual(parsed, {
+    teaserStrength: "weak",
+    teaserStrengthConfidence: 0.91,
+    teaserStrengthEvidenceQuote: "I occasionally do oblige",
+    teaserStrengthReasonJa: "現在の裁量的な意思を示しています。",
+  });
+});
+
+test("missing or invalid teaser strength remains unknown instead of being coerced to none", () => {
+  const parsed = parseTeaserStrengthAssessment(
+    {
+      teaserStrength: "maybe",
+      teaserStrengthConfidence: 2,
+      teaserStrengthEvidenceQuote: "invented evidence",
+    },
+    "A normal post.",
+  );
+
+  assert.deepStrictEqual(parsed, {
+    teaserStrength: null,
+    teaserStrengthConfidence: null,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
   });
 });
 

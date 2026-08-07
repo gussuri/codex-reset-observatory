@@ -103,6 +103,32 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.probability48h <= published.probability72h);
  });
 
+test("teaser strength is UI-only and does not change published probability", () => {
+  const base = getLocalRadarData({ calculationNow: NOW });
+  const withStrongTeaser = getLocalRadarData({
+    calculationNow: NOW,
+    recentTiboSignals: [
+      {
+        tweet_id: "ui-only-strong-teaser",
+        signal_type: "irrelevant",
+        text: "I might reset later.",
+        tweet_url: "https://x.com/thsottiaux/status/ui-only-strong-teaser",
+        tweet_created_at: "2026-08-03T23:00:00.000Z",
+        verification_status: "auto_unverified",
+        teaser_strength: "strong",
+      },
+    ],
+  });
+
+  const baseProbability = calculatePublishedProbability(base, { now: NOW });
+  const uiOnlyProbability = calculatePublishedProbability(withStrongTeaser, { now: NOW });
+
+  assert.equal(uiOnlyProbability.probability12h, baseProbability.probability12h);
+  assert.equal(uiOnlyProbability.probability24h, baseProbability.probability24h);
+  assert.equal(uiOnlyProbability.probability48h, baseProbability.probability48h);
+  assert.equal(uiOnlyProbability.probability72h, baseProbability.probability72h);
+});
+
 test("the published model uses broad random distributions and excludes regular or narrow records", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const events = getShadowCompletedResetEvents(data, NOW);

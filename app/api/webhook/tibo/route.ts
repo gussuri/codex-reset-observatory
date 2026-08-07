@@ -18,7 +18,7 @@ import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
 
-function isMissingTranslationColumnError(error: unknown) {
+function isMissingTiboOptionalColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const value = error as { code?: unknown; message?: unknown; details?: unknown };
   const code = typeof value.code === "string" ? value.code : "";
@@ -27,7 +27,7 @@ function isMissingTranslationColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /translated_text_(ja|zh)/i.test(message) &&
+    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?)/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -140,6 +140,10 @@ export async function POST(req: NextRequest) {
           reasonJa: null,
           resetTypeJa: null,
           noticeToExecution: null,
+          teaserStrength: null,
+          teaserStrengthConfidence: null,
+          teaserStrengthEvidenceQuote: null,
+          teaserStrengthReasonJa: null,
           model: process.env.GEMINI_MODEL || null,
           status: "api_error" as const,
           classifiedAt: new Date().toISOString(),
@@ -182,6 +186,10 @@ export async function POST(req: NextRequest) {
       ai_reason_ja: aiResult?.reasonJa || null,
       ai_reset_type_ja: aiResult?.resetTypeJa || null,
       ai_notice_to_execution: aiResult?.noticeToExecution || null,
+      ai_teaser_strength: aiResult?.teaserStrength || null,
+      ai_teaser_strength_confidence: aiResult?.teaserStrengthConfidence ?? null,
+      ai_teaser_strength_evidence_quote: aiResult?.teaserStrengthEvidenceQuote || null,
+      ai_teaser_strength_reason_ja: aiResult?.teaserStrengthReasonJa || null,
       ai_model: aiResult?.model || null,
       ai_classification_status: aiResult?.status || "skipped",
       ai_classified_at: aiResult?.classifiedAt || null,
@@ -195,7 +203,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source,translated_text_ja,translated_text_zh")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -203,7 +211,7 @@ export async function POST(req: NextRequest) {
         // The translation migration may be applied after the application is
         // deployed. Keep the existing state lookup usable during that window,
         // while all real lookup failures remain fail-closed.
-        if (isMissingTranslationColumnError(lookupError)) {
+        if (isMissingTiboOptionalColumnError(lookupError)) {
           const legacyLookup = await supabase
             .from("tibo_signals")
             .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source")
@@ -296,10 +304,14 @@ export async function POST(req: NextRequest) {
       .from("tibo_signals")
       .upsert(persistedPayload, { onConflict: "tweet_id" });
 
-    if (upsertResult.error && isMissingTranslationColumnError(upsertResult.error)) {
+    if (upsertResult.error && isMissingTiboOptionalColumnError(upsertResult.error)) {
       const {
         translated_text_ja: _translatedTextJa,
         translated_text_zh: _translatedTextZh,
+        ai_teaser_strength: _aiTeaserStrength,
+        ai_teaser_strength_confidence: _aiTeaserStrengthConfidence,
+        ai_teaser_strength_evidence_quote: _aiTeaserStrengthEvidenceQuote,
+        ai_teaser_strength_reason_ja: _aiTeaserStrengthReasonJa,
         ...legacyPayload
       } = persistedPayload;
       upsertResult = await supabase
