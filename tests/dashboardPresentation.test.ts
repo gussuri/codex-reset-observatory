@@ -21,7 +21,7 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
     }),
   );
 
-  assert.match(html, /^<dl class="mt-5 grid grid-cols-2 gap-3">/);
+  assert.match(html, /^<dl class="mt-5 grid w-full grid-cols-2 gap-3 lg:mx-auto lg:max-w-3xl">/);
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
   assert.match(html, /aria-label="Within 24h"/);
   assert.match(html, /aria-label="Within 48h"/);

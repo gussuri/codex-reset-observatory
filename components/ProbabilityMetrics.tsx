@@ -13,7 +13,7 @@ export function ProbabilityMetrics({
   probability48h: number | undefined;
 }) {
   return (
-    <dl className="mt-5 grid grid-cols-2 gap-3">
+    <dl className="mt-5 grid w-full grid-cols-2 gap-3 lg:mx-auto lg:max-w-3xl">
       <Metric
         horizon="24h"
         label={translateUI("within24h", locale)}
