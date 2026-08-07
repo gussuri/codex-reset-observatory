@@ -124,6 +124,24 @@ test("uses clear Japanese labels for the Tibo post card and unrelated classifica
   assert.doesNotMatch(html, /Tibo氏の最新動向|>その他</);
 });
 
+test("uses the UI teaser strength for card classification without changing signal type", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TiboActivityCard, {
+      locale: "ja",
+      activity: {
+        classification: "irrelevant",
+        teaserStrength: "weak",
+        text: "I feel Theo is in need of a reset",
+        createdAt: "2026-08-07T21:46:56.000Z",
+        sourceUrl: "https://x.com/thsottiaux/status/2085845171363791135",
+      },
+    }),
+  );
+
+  assert.match(html, /弱いリセット匂わせ/);
+  assert.doesNotMatch(html, /リセットとは無関係/);
+});
+
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
   const calculationNow = new Date("2026-08-06T00:00:00.000Z");
   const internalData = getLocalRadarData({ calculationNow });

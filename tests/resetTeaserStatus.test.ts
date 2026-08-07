@@ -39,6 +39,20 @@ function formalReset(tweetCreatedAt: string) {
   };
 }
 
+function activitySignal(
+  id: string,
+  createdAt: string,
+  teaserStrength: TeaserSignal["teaser_strength"],
+  options: Partial<TeaserSignal> = {},
+) {
+  return signal(id, createdAt, teaserStrength, {
+    text: `${id} post text`,
+    tweet_url: `https://x.com/thsottiaux/status/${id}`,
+    expires_at: "2026-08-05T00:00:00.000Z",
+    ...options,
+  });
+}
+
 test("aggregates strong over a newer none within the 48-hour window", () => {
   assert.equal(
     aggregateResetTeaserStatus([
@@ -183,8 +197,78 @@ test("keeps the latest post projection separate from the aggregated teaser statu
     { calculationNow: NOW },
   );
 
-  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "none");
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "strong");
+  assert.equal(snapshot.latestTiboActivity?.text, "A strong reset hint.");
   assert.equal(snapshot.resetTeaserStatus, "strong");
+});
+
+test("uses the newest related post while keeping status aggregation independent", () => {
+  const snapshotFor = (signals: TeaserSignal[]) =>
+    toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow: NOW, recentTiboSignals: signals }),
+      "en",
+      { calculationNow: NOW },
+    );
+
+  const olderStrongNewerNone = snapshotFor([
+    activitySignal("strong", "2026-08-03T21:00:00.000Z", "strong"),
+    activitySignal("none", "2026-08-03T23:00:00.000Z", "none"),
+  ]);
+  assert.equal(olderStrongNewerNone.latestTiboActivity?.text, "strong post text");
+  assert.equal(olderStrongNewerNone.resetTeaserStatus, "strong");
+
+  const olderWeakNewerNone = snapshotFor([
+    activitySignal("weak", "2026-08-03T21:00:00.000Z", "weak"),
+    activitySignal("none", "2026-08-03T23:00:00.000Z", "none"),
+  ]);
+  assert.equal(olderWeakNewerNone.latestTiboActivity?.text, "weak post text");
+  assert.equal(olderWeakNewerNone.resetTeaserStatus, "weak");
+
+  const olderStrongNewerWeak = snapshotFor([
+    activitySignal("strong", "2026-08-03T21:00:00.000Z", "strong"),
+    activitySignal("weak", "2026-08-03T23:00:00.000Z", "weak"),
+  ]);
+  assert.equal(olderStrongNewerWeak.latestTiboActivity?.text, "weak post text");
+  assert.equal(olderStrongNewerWeak.resetTeaserStatus, "strong");
+
+  const newerNotice = snapshotFor([
+    activitySignal("weak", "2026-08-03T21:00:00.000Z", "weak"),
+    activitySignal("notice", "2026-08-03T23:00:00.000Z", null, {
+      signal_type: "official_notice",
+      expires_at: "2026-08-05T01:00:00.000Z",
+    }),
+  ]);
+  assert.equal(newerNotice.latestTiboActivity?.text, "notice post text");
+  assert.equal(newerNotice.latestTiboActivity?.classification, "official_notice");
+});
+
+test("falls back to the latest normal post when no related post is valid", () => {
+  const snapshotFor = (signals: TeaserSignal[]) =>
+    toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow: NOW, recentTiboSignals: signals }),
+      "en",
+      { calculationNow: NOW },
+    );
+
+  const noRelated = snapshotFor([
+    activitySignal("old-strong", "2026-08-01T23:59:59.000Z", "strong"),
+    activitySignal("new-none", "2026-08-03T23:30:00.000Z", "none"),
+  ]);
+  assert.equal(noRelated.latestTiboActivity?.text, "new-none post text");
+
+  const beforeReset = snapshotFor([
+    activitySignal("before-reset", "2026-08-01T02:00:00.000Z", "strong"),
+    activitySignal("after-reset-none", "2026-08-03T23:30:00.000Z", "none"),
+  ]);
+  assert.equal(beforeReset.latestTiboActivity?.text, "after-reset-none post text");
+
+  const rejected = snapshotFor([
+    activitySignal("rejected-strong", "2026-08-03T21:00:00.000Z", "strong", {
+      verification_status: "rejected",
+    }),
+    activitySignal("accepted-none", "2026-08-03T23:30:00.000Z", "none"),
+  ]);
+  assert.equal(rejected.latestTiboActivity?.text, "accepted-none post text");
 });
 
 test("changing teaser strength only changes the UI status, not published probabilities", () => {

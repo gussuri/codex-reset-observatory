@@ -3,6 +3,7 @@ import { translateTiboPostText } from "./i18n";
 import { getLastGlobalResetAt } from "./probability";
 import {
   aggregateResetTeaserStatus,
+  getUiResetTeaserSignals,
   isTeaserStrength,
 } from "./teaserStrength";
 import type {
@@ -58,6 +59,26 @@ function getLocalizedTiboPostText(
   return translateTiboPostText(signal.text, locale);
 }
 
+function isCurrentOfficialNotice(
+  signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
+  latestResetAt: string | null,
+  nowTime: number,
+) {
+  if (signal.signal_type !== "official_notice" || signal.is_reply === true) return false;
+  if (signal.verification_status === "rejected") return false;
+
+  const createdTime = Date.parse(signal.tweet_created_at);
+  const expiresTime = Date.parse(signal.expires_at ?? "");
+  const latestResetTime = latestResetAt ? Date.parse(latestResetAt) : Number.NaN;
+  return (
+    Number.isFinite(createdTime) &&
+    createdTime <= nowTime &&
+    Number.isFinite(expiresTime) &&
+    expiresTime > nowTime &&
+    (!Number.isFinite(latestResetTime) || createdTime > latestResetTime)
+  );
+}
+
 /**
  * Projects the newest stored Tibo signal to the small public activity card.
  * Audit fields and the raw tweet identifier never cross the public boundary.
@@ -66,12 +87,14 @@ export function toPublicTiboActivity(
   internal: RadarData,
   now: Date = new Date(),
   locale: Locale = "ja",
+  latestResetAt: string | null = getLastGlobalResetAt(internal, now)?.toISOString() ?? null,
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
   const recentSignals = internal.recent_tibo_signals;
-  const candidates = (recentSignals ?? internal.active_tibo_signals ?? [])
+  const sourceSignals = recentSignals ?? internal.active_tibo_signals ?? [];
+  const candidates = sourceSignals
     .filter((signal) => {
       if (signal.is_reply === true) return false;
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
@@ -94,7 +117,21 @@ export function toPublicTiboActivity(
         Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
     );
 
-  const latest = candidates[0];
+  const eligibleTeaserSignals = getUiResetTeaserSignals(
+    sourceSignals,
+    latestResetAt,
+    now,
+  ).filter((signal) => signal.teaser_strength === "strong" || signal.teaser_strength === "weak");
+  const relatedCandidates = sourceSignals.filter((signal) =>
+    signal.is_reply !== true &&
+    (eligibleTeaserSignals.includes(signal) ||
+      isCurrentOfficialNotice(signal, latestResetAt, nowTime)),
+  ).sort(
+    (left, right) =>
+      Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
+  );
+
+  const latest = relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
 
   return {
@@ -247,6 +284,11 @@ export function toPublicRadarSnapshot(
       latestResetAt,
       calculationNow,
     ),
-    latestTiboActivity: toPublicTiboActivity(internal, calculationNow, locale),
+    latestTiboActivity: toPublicTiboActivity(
+      internal,
+      calculationNow,
+      locale,
+      latestResetAt,
+    ),
   };
 }

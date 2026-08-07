@@ -8,6 +8,7 @@ const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 export type ResetTeaserSignal = {
   tweet_created_at: string;
   teaser_strength?: TeaserStrength | null;
+  signal_type?: string | null;
   verification_status?: string | null;
   is_reply?: boolean | null;
   expires_at?: string | null;
@@ -30,6 +31,34 @@ function getTimestamp(value: string | Date | null | undefined) {
 }
 
 /**
+ * Returns the posts eligible for the UI-only 48-hour teaser aggregation.
+ * Expiration is intentionally not part of this filter; the UI window is
+ * separate from the active-signal expiry used by probability calculations.
+ */
+export function getUiResetTeaserSignals(
+  signals: readonly ResetTeaserSignal[] | null | undefined,
+  latestResetAt: string | Date | null | undefined,
+  now: Date = new Date(),
+) {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return [];
+
+  const latestResetTime = getTimestamp(latestResetAt);
+  const cutoffTime = nowTime - RESET_TEASER_LOOKBACK_MS;
+
+  return (signals ?? []).filter((signal) => {
+    const createdTime = getTimestamp(signal.tweet_created_at);
+    return Boolean(
+      createdTime !== null &&
+        createdTime <= nowTime &&
+        createdTime >= cutoffTime &&
+        (latestResetTime === null || createdTime > latestResetTime) &&
+        signal.verification_status !== "rejected",
+    );
+  });
+}
+
+/**
  * Aggregates the UI-only teaser state without changing the meaning of any
  * active signal, expiry, or probability input.
  */
@@ -38,27 +67,12 @@ export function aggregateResetTeaserStatus(
   latestResetAt: string | Date | null | undefined,
   now: Date = new Date(),
 ): ResetTeaserStatus {
-  const nowTime = now.getTime();
-  if (!Number.isFinite(nowTime)) return "none";
-
-  const latestResetTime = getTimestamp(latestResetAt);
-  const cutoffTime = nowTime - RESET_TEASER_LOOKBACK_MS;
+  const eligibleSignals = getUiResetTeaserSignals(signals, latestResetAt, now);
   let hasEligiblePost = false;
   let hasWeak = false;
   let hasNone = false;
 
-  for (const signal of signals ?? []) {
-    const createdTime = getTimestamp(signal.tweet_created_at);
-    if (
-      createdTime === null ||
-      createdTime > nowTime ||
-      createdTime < cutoffTime ||
-      (latestResetTime !== null && createdTime <= latestResetTime) ||
-      signal.verification_status === "rejected"
-    ) {
-      continue;
-    }
-
+  for (const signal of eligibleSignals) {
     hasEligiblePost = true;
     if (signal.teaser_strength === "strong") return "strong";
     if (signal.teaser_strength === "weak") {

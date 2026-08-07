@@ -4,11 +4,19 @@ import { translateUI } from "@/lib/radar/i18n";
 import type { Locale, PublicTiboActivity } from "@/lib/radar/types";
 
 function getClassificationKey(
-  classification: PublicTiboActivity["classification"],
+  activity: PublicTiboActivity,
 ) {
-  switch (classification) {
-    case "official_notice":
-      return "tiboClassificationOfficialNotice";
+  if (activity.classification === "official_notice") {
+    return "tiboClassificationOfficialNotice";
+  }
+  if (activity.teaserStrength === "strong") {
+    return "tiboClassificationStrongTeaser";
+  }
+  if (activity.teaserStrength === "weak") {
+    return "tiboClassificationWeakTeaser";
+  }
+
+  switch (activity.classification) {
     case "reset_executed":
       return "tiboClassificationResetExecuted";
     case "teaser":
@@ -70,7 +78,7 @@ export function TiboActivityCard({
               {translateUI("tiboAutoClassification", locale)}
             </dt>
             <dd className="mt-1 text-base font-semibold text-slate-950">
-              {translateUI(getClassificationKey(activity.classification), locale)}
+              {translateUI(getClassificationKey(activity), locale)}
             </dd>
           </div>
           <div>

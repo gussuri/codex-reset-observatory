@@ -244,6 +244,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset hint",
     zh: "重置提示",
   },
+  tiboClassificationStrongTeaser: {
+    ja: "リセット匂わせ",
+    en: "Reset hint",
+    zh: "重置暗示",
+  },
+  tiboClassificationWeakTeaser: {
+    ja: "弱いリセット匂わせ",
+    en: "Weak reset hint",
+    zh: "较弱的重置暗示",
+  },
   tiboClassificationIrrelevant: {
     ja: "リセットとは無関係",
     en: "Unrelated to resets",
