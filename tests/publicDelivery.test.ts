@@ -80,7 +80,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
 });
 
-test("public Tibo activity exposes only a short post projection and classification", () => {
+test("public Tibo activity exposes the post projection and classification", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const internal = getLocalRadarData({
     calculationNow,
@@ -196,6 +196,36 @@ test("public Tibo activity translates known post text for each page locale", () 
   assert.match(en.latestTiboActivity?.text ?? "", /You can just ask Codex with GPT-5\.6 Sol/);
   assert.notEqual(ja.latestTiboActivity?.text, en.latestTiboActivity?.text);
   assert.notEqual(zh.latestTiboActivity?.text, en.latestTiboActivity?.text);
+});
+
+test("public Tibo activity uses stored translations and keeps the full post text", () => {
+  const calculationNow = new Date("2026-08-07T00:00:00.000Z");
+  const longPost = `First paragraph of the Tibo post.\n\nSecond paragraph with details ${"x".repeat(260)}`;
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "translated-tibo-post",
+        signal_type: "official_notice",
+        text: longPost,
+        translated_text_ja: "Tibo投稿の日本語訳です。\n\n詳細を含みます。",
+        translated_text_zh: "这是 Tibo 帖子的简体中文翻译。\n\n包含详细信息。",
+        tweet_url: "https://x.com/thsottiaux/status/translated-tibo-post",
+        tweet_created_at: "2026-08-06T23:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const ja = toPublicRadarSnapshot(internal, "ja", { calculationNow });
+  const zh = toPublicRadarSnapshot(internal, "zh", { calculationNow });
+  const en = toPublicRadarSnapshot(internal, "en", { calculationNow });
+
+  assert.equal(ja.latestTiboActivity?.text, "Tibo投稿の日本語訳です。\n\n詳細を含みます。");
+  assert.equal(zh.latestTiboActivity?.text, "这是 Tibo 帖子的简体中文翻译。\n\n包含详细信息。");
+  assert.equal(en.latestTiboActivity?.text, longPost);
+  assert.equal(en.latestTiboActivity?.text?.includes("x".repeat(260)), true);
+  assert.equal(en.latestTiboActivity?.text?.includes("\n\n"), true);
 });
 
 test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {

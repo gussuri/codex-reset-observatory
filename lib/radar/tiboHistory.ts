@@ -38,6 +38,8 @@ export type FormalTiboResetSignal = {
   ai_classification_status?: string | null;
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
+  translated_text_ja?: string | null;
+  translated_text_zh?: string | null;
   expires_at?: string | null;
   is_reply?: boolean | null;
   reply_to_handles?: string[] | null;

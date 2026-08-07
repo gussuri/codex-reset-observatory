@@ -114,6 +114,22 @@ const getCachedTiboSignals = unstable_cache(
   }
 );
 
+function isMissingTiboTranslationColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown; details?: unknown };
+  const code = typeof value.code === "string" ? value.code : "";
+  const message = [value.message, value.details]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ");
+
+  return (
+    /translated_text_(ja|zh)/i.test(message) &&
+    (code === "PGRST204" ||
+      code === "42703" ||
+      /column|schema cache|does not exist/i.test(message))
+  );
+}
+
 async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -130,14 +146,28 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const { data, error } = await supabase
-      .from("tibo_signals")
-      .select(
+    const queryTiboHistory = (fields: string) =>
+      supabase
+        .from("tibo_signals")
+        .select(fields)
+        .or("is_reply.is.null,is_reply.eq.false")
+        .order("tweet_created_at", { ascending: false })
+        .limit(1000);
+    type TiboHistoryQueryResult = {
+      data: Array<FormalTiboResetSignal> | null;
+      error: unknown | null;
+    };
+    let result = (await queryTiboHistory(
+      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,translated_text_ja,translated_text_zh,is_reply",
+    )) as TiboHistoryQueryResult;
+
+    if (result.error && isMissingTiboTranslationColumnError(result.error)) {
+      result = (await queryTiboHistory(
         "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,is_reply",
-      )
-      .or("is_reply.is.null,is_reply.eq.false")
-      .order("tweet_created_at", { ascending: false })
-      .limit(1000);
+      )) as TiboHistoryQueryResult;
+    }
+
+    const { data, error } = result;
 
     const health = getDatabaseReadHealth(configuration, {
       hasData: data !== null,
@@ -147,7 +177,7 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
       console.error("Tibo reset history query failed", error);
     }
     return {
-      data: data ? (data as Array<FormalTiboResetSignal>) : [],
+      data: data ?? [],
       health,
     };
   } catch (error) {
@@ -251,6 +281,8 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     detected_at: signal.detected_at ?? undefined,
     expires_at: signal.expires_at ?? undefined,
     verification_status: signal.verification_status,
+    translated_text_ja: signal.translated_text_ja ?? null,
+    translated_text_zh: signal.translated_text_zh ?? null,
     is_reply: signal.is_reply ?? undefined,
   }));
   const rejectedResets = signals

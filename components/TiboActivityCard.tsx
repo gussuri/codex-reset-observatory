@@ -40,7 +40,7 @@ export function TiboActivityCard({
         <MessageCircle className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
       </div>
 
-      <p className="mt-4 min-w-0 break-words text-base leading-7 text-slate-700 sm:text-lg sm:leading-8">
+      <p className="mt-4 min-w-0 whitespace-pre-wrap break-words text-base leading-7 text-slate-700 sm:text-lg sm:leading-8">
         {activity.text ?? translateUI("tiboNoPostText", locale)}
       </p>
 

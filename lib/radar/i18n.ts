@@ -1555,16 +1555,17 @@ export function translateTiboPostText(
 ): string {
   if (!value) return "";
 
-  const normalized = value.replace(/\s+/g, " ").trim().normalize("NFC");
-  const dynamicallyTranslated = translateDynamic(normalized, locale);
-  if (dynamicallyTranslated !== normalized) {
+  const normalized = value.replace(/\r\n?/g, "\n").trim().normalize("NFC");
+  const compact = normalized.replace(/\s+/g, " ");
+  const dynamicallyTranslated = translateDynamic(compact, locale);
+  if (dynamicallyTranslated !== compact) {
     return dynamicallyTranslated;
   }
 
   if (locale === "en") return normalized;
 
   const knownPost = TIBO_POST_TRANSLATIONS.find(({ sourcePrefix }) =>
-    normalized.startsWith(sourcePrefix),
+    compact.startsWith(sourcePrefix),
   );
   return knownPost?.[locale] ?? normalized;
 }

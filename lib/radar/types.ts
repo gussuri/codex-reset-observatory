@@ -84,6 +84,8 @@ export type ActiveTiboSignal = {
   verification_status?: "auto_unverified" | "confirmed" | "rejected";
   confidence?: number;
   classification_reason?: string;
+  translated_text_ja?: string | null;
+  translated_text_zh?: string | null;
   is_reply?: boolean;
   is_quote?: boolean;
 };

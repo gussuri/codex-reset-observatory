@@ -36,9 +36,21 @@ const PUBLIC_TIBO_CLASSIFICATIONS = new Set<PublicTiboActivity["classification"]
 ]);
 
 function normalizePublicPostText(value: string | null | undefined) {
-  const normalized = value?.replace(/\s+/g, " ").trim();
-  if (!normalized) return null;
-  return normalized.length > 240 ? `${normalized.slice(0, 237)}...` : normalized;
+  const normalized = value?.replace(/\r\n?/g, "\n").trim();
+  return normalized || null;
+}
+
+function getLocalizedTiboPostText(
+  signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
+  locale: Locale,
+) {
+  const storedTranslation =
+    locale === "ja" ? signal.translated_text_ja : locale === "zh" ? signal.translated_text_zh : null;
+  if (typeof storedTranslation === "string" && storedTranslation.trim()) {
+    return storedTranslation;
+  }
+
+  return translateTiboPostText(signal.text, locale);
 }
 
 /**
@@ -81,7 +93,7 @@ export function toPublicTiboActivity(
 
   return {
     classification: latest.signal_type as PublicTiboActivity["classification"],
-    text: normalizePublicPostText(translateTiboPostText(latest.text, locale)),
+    text: normalizePublicPostText(getLocalizedTiboPostText(latest, locale)),
     createdAt: latest.tweet_created_at,
     sourceUrl: safeHttpUrl(latest.tweet_url),
   };

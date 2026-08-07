@@ -16,6 +16,29 @@ import {
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
+import { translateWithGemini } from "@/lib/radar/geminiTranslation";
+
+function isMissingTranslationColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown; details?: unknown };
+  const code = typeof value.code === "string" ? value.code : "";
+  const message = [value.message, value.details]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ");
+
+  return (
+    /translated_text_(ja|zh)/i.test(message) &&
+    (code === "PGRST204" ||
+      code === "42703" ||
+      /column|schema cache|does not exist/i.test(message))
+  );
+}
+
+function normalizeStoredTranslation(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+  return normalized && normalized.length <= 6000 ? normalized : null;
+}
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -172,21 +195,43 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source,translated_text_ja,translated_text_zh")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
       if (lookupError) {
-        console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
-          reason: "lookup_failed",
-        });
-        return NextResponse.json(
-          { error: "Tibo state lookup unavailable" },
-          { status: 503 },
-        );
+        // The translation migration may be applied after the application is
+        // deployed. Keep the existing state lookup usable during that window,
+        // while all real lookup failures remain fail-closed.
+        if (isMissingTranslationColumnError(lookupError)) {
+          const legacyLookup = await supabase
+            .from("tibo_signals")
+            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source")
+            .eq("tweet_id", tweetId)
+            .maybeSingle();
+          if (legacyLookup.error) {
+            console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
+              reason: "lookup_failed",
+            });
+            return NextResponse.json(
+              { error: "Tibo state lookup unavailable" },
+              { status: 503 },
+            );
+          }
+          existingSignal = legacyLookup.data as Partial<FormalTiboResetSignal> | null;
+        } else {
+          console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
+            reason: "lookup_failed",
+          });
+          return NextResponse.json(
+            { error: "Tibo state lookup unavailable" },
+            { status: 503 },
+          );
+        }
       } else {
         existingSignal = data as Partial<FormalTiboResetSignal> | null;
       }
+
     } catch {
       console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
         reason: "lookup_failed",
@@ -197,7 +242,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const persistedPayload = preserveTiboWebhookState(payload, existingSignal, receivedAt);
+    const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja);
+    const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh);
+    let translationResult: Awaited<ReturnType<typeof translateWithGemini>> | null = null;
+
+    if (!existingTranslationJa || !existingTranslationZh) {
+      translationResult = await translateWithGemini({
+        text: text.trim(),
+        tweetCreatedAt: createdDate.toISOString(),
+      });
+      if (
+        translationResult.status !== "success" &&
+        translationResult.status !== "skipped" &&
+        translationResult.status !== "model_not_configured"
+      ) {
+        console.warn("[Webhook Warning] Tibo translation unavailable", {
+          reason: translationResult.status,
+        });
+      }
+    }
+
+    const payloadWithTranslations = {
+      ...payload,
+      translated_text_ja: translationResult?.textJa ?? existingTranslationJa,
+      translated_text_zh: translationResult?.textZh ?? existingTranslationZh,
+    };
+    const persistedPayload = preserveTiboWebhookState(
+      payloadWithTranslations,
+      existingSignal,
+      receivedAt,
+    );
 
     const formalCandidate: FormalTiboResetSignal = {
       tweet_id: persistedPayload.tweet_id,
@@ -218,12 +292,25 @@ export async function POST(req: NextRequest) {
     const newlyAdopted = isNewFormalAdoption(formalCandidate, existingSignal);
 
     // 8. Supabase Upsert
-    const { error } = await supabase
+    let upsertResult = await supabase
       .from("tibo_signals")
       .upsert(persistedPayload, { onConflict: "tweet_id" });
 
-    if (error) {
-      console.error("[Webhook Error] Supabase upsert failed:", error);
+    if (upsertResult.error && isMissingTranslationColumnError(upsertResult.error)) {
+      const {
+        translated_text_ja: _translatedTextJa,
+        translated_text_zh: _translatedTextZh,
+        ...legacyPayload
+      } = persistedPayload;
+      upsertResult = await supabase
+        .from("tibo_signals")
+        .upsert(legacyPayload, { onConflict: "tweet_id" });
+    }
+
+    if (upsertResult.error) {
+      console.error("[Webhook Error] Supabase upsert failed", {
+        reason: "database_error",
+      });
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
