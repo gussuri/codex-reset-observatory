@@ -47,6 +47,43 @@ test("renders unknown probabilities without aria-valuenow and with localized val
   assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 2);
 });
 
+test("dashboard shows the latest Tibo activity above history without audit details", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      activeTiboSignals: [
+        {
+          tweet_id: "private-tweet-id",
+          signal_type: "teaser",
+          text: "A reset hint from Tibo",
+          tweet_url: "https://x.com/thsottiaux/status/123",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T00:00:00.000Z",
+          verification_status: "auto_unverified",
+          confidence: 0.87,
+          classification_reason: "private internal reason",
+        },
+      ],
+    }),
+    "en",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+  );
+
+  const activityIndex = html.indexOf("Latest Tibo activity");
+  const historyIndex = html.indexOf("Recent reset events");
+  assert.ok(activityIndex >= 0 && activityIndex < historyIndex);
+  assert.match(html, /Latest post/);
+  assert.match(html, /A reset hint from Tibo/);
+  assert.match(html, /Automated observation/);
+  assert.match(html, /Reset hint/);
+  assert.match(html, /href="https:\/\/x\.com\/thsottiaux\/status\/123"/);
+  assert.doesNotMatch(html, /private-tweet-id|private internal reason|classification_reason/);
+});
+
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
   const calculationNow = new Date("2026-08-06T00:00:00.000Z");
   const internalData = getLocalRadarData({ calculationNow });

@@ -4,6 +4,7 @@ import type {
   PublicDataHealth,
   PublicRadarSnapshot,
   PublicRadarViewModel,
+  PublicTiboActivity,
   RadarData,
   RadarDataHealth,
 } from "./types";
@@ -24,6 +25,62 @@ function safeHttpUrl(value: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+const PUBLIC_TIBO_CLASSIFICATIONS = new Set<PublicTiboActivity["classification"]>([
+  "official_notice",
+  "reset_executed",
+  "teaser",
+]);
+
+function normalizePublicPostText(value: string | null | undefined) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.length > 240 ? `${normalized.slice(0, 237)}...` : normalized;
+}
+
+/**
+ * Projects the newest active Tibo signal to the small public activity card.
+ * Audit fields and the raw tweet identifier never cross the public boundary.
+ */
+export function toPublicTiboActivity(
+  internal: RadarData,
+  now: Date = new Date(),
+): PublicTiboActivity | null {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return null;
+
+  const candidates = (internal.active_tibo_signals ?? [])
+    .filter((signal) => {
+      if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
+        return false;
+      }
+      if (signal.verification_status === "rejected") return false;
+
+      const createdAt = Date.parse(signal.tweet_created_at);
+      if (!Number.isFinite(createdAt) || createdAt > nowTime) return false;
+
+      if (signal.expires_at) {
+        const expiresAt = Date.parse(signal.expires_at);
+        if (Number.isFinite(expiresAt) && expiresAt <= nowTime) return false;
+      }
+
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
+    );
+
+  const latest = candidates[0];
+  if (!latest) return null;
+
+  return {
+    classification: latest.signal_type as PublicTiboActivity["classification"],
+    text: normalizePublicPostText(latest.text),
+    createdAt: latest.tweet_created_at,
+    sourceUrl: safeHttpUrl(latest.tweet_url),
+  };
 }
 
 function copySourceHealth(
@@ -159,5 +216,6 @@ export function toPublicRadarSnapshot(
     updatedAt: internal.updated_at ?? null,
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
+    latestTiboActivity: toPublicTiboActivity(internal, calculationNow),
   };
 }

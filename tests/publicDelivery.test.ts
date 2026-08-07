@@ -80,6 +80,40 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
 });
 
+test("public Tibo activity exposes only a short post projection and classification", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [
+      {
+        tweet_id: "private-tweet-id",
+        signal_type: "teaser",
+        text: "There will be signs... Resets soon.",
+        tweet_url: "https://x.com/thsottiaux/status/123",
+        tweet_created_at: "2026-08-03T23:00:00.000Z",
+        expires_at: "2026-08-05T00:00:00.000Z",
+        verification_status: "auto_unverified",
+        confidence: 0.87,
+        classification_reason: "private internal reason",
+      },
+    ],
+  });
+
+  const snapshot = toPublicRadarSnapshot(internal, "en", { calculationNow });
+  const serialized = JSON.stringify(snapshot);
+
+  assert.deepEqual(snapshot.latestTiboActivity, {
+    classification: "teaser",
+    text: "There will be signs... Resets soon.",
+    createdAt: "2026-08-03T23:00:00.000Z",
+    sourceUrl: "https://x.com/thsottiaux/status/123",
+  });
+  assert.doesNotMatch(
+    serialized,
+    /private-tweet-id|private internal reason|confidence|classification_reason/,
+  );
+});
+
 test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {
   const props = {
     value: "2026-08-04T00:00:00.000Z",

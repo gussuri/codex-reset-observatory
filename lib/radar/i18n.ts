@@ -159,6 +159,51 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Latest reset",
     zh: "最新重置",
   },
+  tiboLatestActivity: {
+    ja: "Tibo氏の最新動向",
+    en: "Latest Tibo activity",
+    zh: "Tibo 最新动态",
+  },
+  tiboLatestPost: {
+    ja: "最新の投稿",
+    en: "Latest post",
+    zh: "最新帖子",
+  },
+  tiboAutoClassification: {
+    ja: "自動観測分類",
+    en: "Automated observation",
+    zh: "自动观测分类",
+  },
+  tiboPostDate: {
+    ja: "投稿時刻",
+    en: "Posted",
+    zh: "发布时间",
+  },
+  tiboViewPost: {
+    ja: "投稿を見る",
+    en: "View post",
+    zh: "查看帖子",
+  },
+  tiboNoPostText: {
+    ja: "投稿本文は取得できませんでした。",
+    en: "Post text is unavailable.",
+    zh: "无法获取帖子正文。",
+  },
+  tiboClassificationOfficialNotice: {
+    ja: "リセット予告",
+    en: "Reset notice",
+    zh: "重置预告",
+  },
+  tiboClassificationResetExecuted: {
+    ja: "リセット実施",
+    en: "Reset executed",
+    zh: "已执行重置",
+  },
+  tiboClassificationTeaser: {
+    ja: "リセット示唆",
+    en: "Reset hint",
+    zh: "重置提示",
+  },
   nextRegularResetReference: {
     ja: "次回定期リセット参考日",
     en: "Next regular reset reference",

@@ -88,6 +88,13 @@ export type ActiveTiboSignal = {
   is_quote?: boolean;
 };
 
+export type PublicTiboActivity = {
+  classification: "official_notice" | "reset_executed" | "teaser";
+  text: string | null;
+  createdAt: string;
+  sourceUrl: string | null;
+};
+
 export type DataSourceState = "ok" | "degraded" | "misconfigured";
 
 export type DataSourceDetail =
@@ -340,6 +347,7 @@ export type PublicRadarSnapshot = {
   updatedAt: string | null;
   dataHealth: PublicDataHealth;
   viewModel: PublicRadarViewModel;
+  latestTiboActivity?: PublicTiboActivity | null;
 };
 
 export type CachedRadarData = {

@@ -36,6 +36,7 @@ import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
+import { TiboActivityCard } from "@/components/TiboActivityCard";
 
 function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
   if (!signalAt || !resetAt) return false;
@@ -554,6 +555,13 @@ export function RadarDashboard({
               </p>
             </div>
           </section>
+        ) : null}
+
+        {state.data?.latestTiboActivity ? (
+          <TiboActivityCard
+            activity={state.data.latestTiboActivity}
+            locale={locale}
+          />
         ) : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
