@@ -233,20 +233,22 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   );
 
   const probabilityIndex = html.indexOf("24時間以内");
-  const noticeIndex = html.indexOf("公式予告");
+  const noticeIndex = html.indexOf("公式リセット予告");
   const incidentIndex = html.indexOf("Codex関連障害");
-  const elapsedIndex = html.indexOf("前回から");
+  const elapsedIndex = html.indexOf("前回のリセットから");
+  const teaserIndex = html.indexOf("リセット匂わせ投稿");
   const outlookIndex = html.indexOf("現在の見立て");
   const historyIndex = html.indexOf("リセット履歴", outlookIndex);
   const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
   assert.ok(noticeIndex >= 0 && noticeIndex < incidentIndex);
-  assert.ok(incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
+  assert.ok(incidentIndex < elapsedIndex && elapsedIndex < teaserIndex && teaserIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);
-  assert.match(html, /公式予告[\s\S]*なし/);
+  assert.match(html, /公式リセット予告[\s\S]*なし/);
   assert.match(html, /Codex関連障害[\s\S]*なし/);
-  assert.match(html, /前回から[\s\S]*2日20時間/);
+  assert.match(html, /前回のリセットから[\s\S]*2日20時間/);
+  assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /現在の見立て/);
   assert.match(html, /現在、目立った観測変化はありません。/);
   assert.match(
@@ -306,6 +308,33 @@ test("observation status row reflects an active Codex incident without changing 
   assert.match(html, /A Codex-related incident is currently active/);
 });
 
+test("observation status row reflects an active reset teaser from the latest Tibo activity", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      activeTiboSignals: [
+        {
+          tweet_id: "dashboard-active-teaser",
+          signal_type: "teaser",
+          text: "There will be signs... Resets",
+          tweet_url: "https://x.com/thsottiaux/status/dashboard-active-teaser",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T23:00:00.000Z",
+          verification_status: "auto_unverified",
+        },
+      ],
+    }),
+    "ja",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "ja" }),
+  );
+
+  assert.match(html, /リセット匂わせ投稿[\s\S]*あり/);
+});
+
 test("keeps the large official notice card above the probability card", (t: TestContext) => {
   t.mock.timers.enable({
     apis: ["Date"],
@@ -340,16 +369,16 @@ test("keeps the large official notice card above the probability card", (t: Test
   assert.ok(noticeIndex >= 0 && noticeIndex < probabilityIndex);
   assert.match(html, /Notice posted/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
-  assert.match(html, /Official notice[\s\S]*Notice available/);
+  assert.match(html, /Official reset notice[\s\S]*Notice available/);
   assert.doesNotMatch(html, /Official notice: None/);
   assert.doesNotMatch(html, /border-slate-50/);
 });
 
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
-    { locale: "en" as const, notice: "Official notice", noticeValue: "None", incident: "Codex incidents", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
-    { locale: "zh" as const, notice: "官方预告", noticeValue: "无", incident: "Codex 相关故障", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
+    { locale: "ja" as const, notice: "公式リセット予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official reset notice", noticeValue: "None", incident: "Codex incidents", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方重置预告", noticeValue: "无", incident: "Codex 相关故障", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {

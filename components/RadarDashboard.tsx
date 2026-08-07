@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Gauge,
   History,
+  MessageCircle,
   Radio,
   type LucideIcon,
 } from "lucide-react";
@@ -117,6 +118,18 @@ function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
   return translateUI("unknownProbability", locale);
 }
 
+function getResetTeaserStatus(
+  activity: PublicRadarSnapshot["latestTiboActivity"] | null | undefined,
+): IncidentStatus {
+  return activity?.classification === "teaser" ? "active" : "none";
+}
+
+function getResetTeaserStatusLabel(status: IncidentStatus, locale: Locale) {
+  if (status === "active") return translateUI("activeResetTeaser", locale);
+  if (status === "none") return translateUI("noResetTeaser", locale);
+  return translateUI("unknownProbability", locale);
+}
+
 function getCompactOutlookReason(
   reason: string | null | undefined,
   locale: Locale,
@@ -156,12 +169,12 @@ function ObservationStatusItem({
   value: string;
 }) {
   return (
-    <div className="min-w-0 rounded-md bg-slate-50/80 px-3 py-2">
-      <dt className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-        <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+    <div className="min-w-0 rounded-md bg-slate-50/80 px-3 py-2.5">
+      <dt className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+        <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
         <span className="truncate">{label}</span>
       </dt>
-      <dd className="mt-0.5 truncate text-sm font-semibold text-slate-800">{value}</dd>
+      <dd className="mt-1 truncate text-base font-semibold text-slate-800">{value}</dd>
     </div>
   );
 }
@@ -416,6 +429,9 @@ export function RadarDashboard({
   const incidentStatus = isDataUnavailable
     ? "unknown" as const
     : getIncidentStatusFromReason(viewModel.displayReasoningSummary, locale);
+  const resetTeaserStatus = isDataUnavailable
+    ? "unknown" as const
+    : getResetTeaserStatus(state.data?.latestTiboActivity);
   const elapsedSinceLastReset = isDataUnavailable
     ? translateUI("unknownProbability", locale)
     : getElapsedSinceLastReset(
@@ -615,29 +631,37 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <ProbabilityMetrics
-              locale={locale}
-              probability24h={probability24h}
-              probability48h={probability48h}
-            />
+            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(15rem,0.75fr)]">
+              <ProbabilityMetrics
+                className="grid w-full grid-cols-2 gap-3"
+                locale={locale}
+                probability24h={probability24h}
+                probability48h={probability48h}
+              />
 
-            <dl className="mt-3 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
-              <ObservationStatusItem
-                icon={Bell}
-                label={translateUI("officialNoticeStatus", locale)}
-                value={officialNoticeValue}
-              />
-              <ObservationStatusItem
-                icon={AlertTriangle}
-                label={translateUI("codexIncidentStatus", locale)}
-                value={getIncidentStatusLabel(incidentStatus, locale)}
-              />
-              <ObservationStatusItem
-                icon={Clock3}
-                label={translateUI("elapsedSinceResetShort", locale)}
-                value={elapsedSinceLastReset}
-              />
-            </dl>
+              <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <ObservationStatusItem
+                  icon={Bell}
+                  label={translateUI("officialNoticeStatus", locale)}
+                  value={officialNoticeValue}
+                />
+                <ObservationStatusItem
+                  icon={AlertTriangle}
+                  label={translateUI("codexIncidentStatus", locale)}
+                  value={getIncidentStatusLabel(incidentStatus, locale)}
+                />
+                <ObservationStatusItem
+                  icon={Clock3}
+                  label={translateUI("elapsedSinceResetShort", locale)}
+                  value={elapsedSinceLastReset}
+                />
+                <ObservationStatusItem
+                  icon={MessageCircle}
+                  label={translateUI("resetTeaserStatus", locale)}
+                  value={getResetTeaserStatusLabel(resetTeaserStatus, locale)}
+                />
+              </dl>
+            </div>
 
             <dl className="mt-4 space-y-3">
               {!isDataUnavailable && compactOutlookReason ? (

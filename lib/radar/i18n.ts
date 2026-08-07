@@ -75,9 +75,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "无预告",
   },
   officialNoticeStatus: {
-    ja: "公式予告",
-    en: "Official notice",
-    zh: "官方预告",
+    ja: "公式リセット予告",
+    en: "Official reset notice",
+    zh: "官方重置预告",
   },
   noOfficialNotice: {
     ja: "なし",
@@ -105,9 +105,24 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "目前未观察到明显变化。",
   },
   elapsedSinceResetShort: {
-    ja: "前回から",
+    ja: "前回のリセットから",
     en: "Since last reset",
     zh: "距上次重置",
+  },
+  resetTeaserStatus: {
+    ja: "リセット匂わせ投稿",
+    en: "Reset teaser",
+    zh: "重置暗示帖",
+  },
+  noResetTeaser: {
+    ja: "なし",
+    en: "None",
+    zh: "无",
+  },
+  activeResetTeaser: {
+    ja: "あり",
+    en: "Active",
+    zh: "有",
   },
   checkAction: {
     ja: "要確認",

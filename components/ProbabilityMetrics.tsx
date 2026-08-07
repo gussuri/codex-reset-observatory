@@ -5,16 +5,18 @@ import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 
 export function ProbabilityMetrics({
+  className = "mt-4 grid w-full grid-cols-2 gap-3",
   locale,
   probability24h,
   probability48h,
 }: {
+  className?: string;
   locale: Locale;
   probability24h: number | undefined;
   probability48h: number | undefined;
 }) {
   return (
-    <dl className="mt-4 grid w-full grid-cols-2 gap-3">
+    <dl className={className}>
       <Metric
         horizon="24h"
         label={translateUI("within24h", locale)}
