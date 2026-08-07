@@ -209,6 +209,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Latest Tibo post",
     zh: "Tibo 最新帖子",
   },
+  tiboRelatedActivity: {
+    ja: "関連するTibo投稿",
+    en: "Related Tibo post",
+    zh: "相关的 Tibo 帖子",
+  },
   tiboAutoClassification: {
     ja: "自動観測分類",
     en: "Automated observation",

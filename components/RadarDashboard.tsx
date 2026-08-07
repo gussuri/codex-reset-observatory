@@ -435,6 +435,18 @@ export function RadarDashboard({
   const resetTeaserStatus = isDataUnavailable
     ? "unknown" as const
     : getResetTeaserStatus(state.data?.resetTeaserStatus);
+  const shouldPlaceTiboAbove = !isDataUnavailable && (
+    hasOfficialNotice ||
+    resetTeaserStatus === "strong" ||
+    resetTeaserStatus === "weak"
+  );
+  const tiboActivityCard = state.data?.latestTiboActivity ? (
+    <TiboActivityCard
+      activity={state.data.latestTiboActivity}
+      locale={locale}
+      variant={shouldPlaceTiboAbove ? "related" : "latest"}
+    />
+  ) : null;
   const elapsedSinceLastReset = isDataUnavailable
     ? translateUI("unknownProbability", locale)
     : getElapsedSinceLastReset(
@@ -619,6 +631,8 @@ export function RadarDashboard({
           </section>
         ) : null}
 
+        {hasOfficialNotice && shouldPlaceTiboAbove ? tiboActivityCard : null}
+
         <section>
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -674,6 +688,8 @@ export function RadarDashboard({
           </article>
 
         </section>
+
+        {!hasOfficialNotice && shouldPlaceTiboAbove ? tiboActivityCard : null}
 
         {!isDataUnavailable &&
         viewModel.regularResetForecast.isNoticeWindow &&
@@ -795,12 +811,7 @@ export function RadarDashboard({
           locale={locale}
         />
 
-        {state.data?.latestTiboActivity ? (
-          <TiboActivityCard
-            activity={state.data.latestTiboActivity}
-            locale={locale}
-          />
-        ) : null}
+        {!shouldPlaceTiboAbove ? tiboActivityCard : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">

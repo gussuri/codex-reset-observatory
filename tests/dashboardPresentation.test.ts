@@ -142,6 +142,143 @@ test("uses the UI teaser strength for card classification without changing signa
   assert.doesNotMatch(html, /リセットとは無関係/);
 });
 
+test("renders a related Tibo heading when the card uses the related variant", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TiboActivityCard, {
+      locale: "en",
+      variant: "related",
+      activity: {
+        classification: "official_notice",
+        teaserStrength: null,
+        text: "A current notice",
+        createdAt: "2026-08-07T21:46:56.000Z",
+        sourceUrl: "https://x.com/thsottiaux/status/related-variant",
+      },
+    }),
+  );
+
+  assert.match(html, /Related Tibo post/);
+  assert.doesNotMatch(html, /Latest Tibo post/);
+});
+
+test("places a related Tibo card directly below an active official notice", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      activeTiboSignals: [
+        {
+          tweet_id: "presentation-related-official",
+          signal_type: "official_notice",
+          text: "A reset notice from Tibo",
+          tweet_url: "https://x.com/thsottiaux/status/presentation-related-official",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T00:00:00.000Z",
+          confidence: 0.96,
+          verification_status: "auto_unverified",
+        },
+        {
+          tweet_id: "presentation-related-weak",
+          signal_type: "irrelevant",
+          text: "I might reset limits for good feedback.",
+          tweet_url: "https://x.com/thsottiaux/status/presentation-related-weak",
+          tweet_created_at: "2026-08-03T22:00:00.000Z",
+          expires_at: "2026-08-05T00:00:00.000Z",
+          verification_status: "auto_unverified",
+          teaser_strength: "weak",
+        },
+      ],
+    }),
+    "en",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+  );
+
+  const noticeIndex = html.indexOf("Notice posted");
+  const relatedIndex = html.indexOf("Related Tibo post");
+  const outlookIndex = html.indexOf("Current outlook");
+
+  assert.ok(noticeIndex >= 0 && noticeIndex < relatedIndex);
+  assert.ok(relatedIndex < outlookIndex);
+  assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /Latest Tibo post/);
+});
+
+test("places strong and weak related cards below current outlook, while none and unknown stay below history", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const cases = [
+    { strength: "strong" as const, text: "I feel like a reset soon." },
+    { strength: "weak" as const, text: "I might reset limits for good feedback." },
+  ];
+
+  for (const item of cases) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow,
+        recentTiboSignals: [
+          {
+            tweet_id: `presentation-${item.strength}`,
+            signal_type: "irrelevant",
+            text: item.text,
+            tweet_url: `https://x.com/thsottiaux/status/presentation-${item.strength}`,
+            tweet_created_at: "2026-08-03T23:00:00.000Z",
+            expires_at: "2026-08-05T00:00:00.000Z",
+            verification_status: "auto_unverified",
+            teaser_strength: item.strength,
+          },
+        ],
+      }),
+      "en",
+      { calculationNow },
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+    );
+    const outlookIndex = html.indexOf("Current outlook");
+    const relatedIndex = html.indexOf("Related Tibo post");
+    const historyIndex = html.indexOf("Recent reset events");
+
+    assert.ok(outlookIndex >= 0 && outlookIndex < relatedIndex);
+    assert.ok(relatedIndex < historyIndex);
+    assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /Latest Tibo post/);
+  }
+
+  for (const strength of ["none", null] as const) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow,
+        recentTiboSignals: [
+          {
+            tweet_id: `presentation-${strength ?? "unknown"}`,
+            signal_type: "irrelevant",
+            text: "An unrelated Tibo post.",
+            tweet_url: `https://x.com/thsottiaux/status/presentation-${strength ?? "unknown"}`,
+            tweet_created_at: "2026-08-03T23:00:00.000Z",
+            expires_at: "2026-08-05T00:00:00.000Z",
+            verification_status: "auto_unverified",
+            teaser_strength: strength,
+          },
+        ],
+      }),
+      "en",
+      { calculationNow },
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+    );
+    const activityIndex = html.indexOf("Latest Tibo post");
+    const historyIndex = html.indexOf("Recent reset events");
+    const heatmapIndex = html.indexOf("Past random reset times");
+
+    assert.ok(activityIndex > historyIndex && activityIndex > heatmapIndex);
+    assert.equal((html.match(/Latest Tibo post/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /Related Tibo post/);
+  }
+});
+
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
   const calculationNow = new Date("2026-08-06T00:00:00.000Z");
   const internalData = getLocalRadarData({ calculationNow });

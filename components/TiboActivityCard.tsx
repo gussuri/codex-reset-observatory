@@ -35,9 +35,11 @@ function getQuoteMarks(locale: Locale) {
 export function TiboActivityCard({
   activity,
   locale,
+  variant = "latest",
 }: {
   activity: PublicTiboActivity;
   locale: Locale;
+  variant?: "related" | "latest";
 }) {
   const quoteMarks = getQuoteMarks(locale);
 
@@ -51,7 +53,10 @@ export function TiboActivityCard({
           id="tibo-activity-heading"
           className="min-w-0 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl"
         >
-          {translateUI("tiboLatestActivity", locale)}
+          {translateUI(
+            variant === "related" ? "tiboRelatedActivity" : "tiboLatestActivity",
+            locale,
+          )}
         </h2>
         <MessageCircle className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
       </div>
