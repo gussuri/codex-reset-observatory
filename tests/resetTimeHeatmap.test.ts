@@ -7,10 +7,10 @@ import {
   buildRandomResetTimeHeatmap,
   buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
-  formatHeatmapAxisLabel,
   formatHeatmapBarLabel,
   formatHeatmapWeekdayBarLabel,
   formatHeatmapWeekdayLabel,
+  getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   getHeatmapHour,
   getHeatmapWeekday,
@@ -147,8 +147,7 @@ test("uses raw record counts for bar heights and keeps empty bins", () => {
   assert.equal(getRawBarHeightPercent(6, 6), 100);
   assert.ok(getRawBarHeightPercent(6, 7) < 100);
   assert.equal(getRawBarHeightPercent(0, 6), 0);
-  assert.equal(formatHeatmapAxisLabel(heatmap.bins[0]), "0-2");
-  assert.equal(formatHeatmapAxisLabel(heatmap.bins[1]), "2-4");
+  assert.deepEqual(getHeatmapTimeAxisTicks(), [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]);
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 records");
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");

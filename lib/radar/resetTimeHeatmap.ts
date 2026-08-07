@@ -149,10 +149,11 @@ export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
   return Math.min(100, (rawCount / maxRawCount) * 100);
 }
 
-export function formatHeatmapAxisLabel(
-  bin: Pick<RandomResetTimeHeatmapBin, "startHour" | "endHour">,
-) {
-  return `${bin.startHour}-${bin.endHour}`;
+export function getHeatmapTimeAxisTicks() {
+  return Array.from(
+    { length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT + 1 },
+    (_, index) => index * 2,
+  );
 }
 
 export function formatHeatmapWeekdayLabel(weekday: number, locale: "ja" | "en" | "zh") {

@@ -7,9 +7,9 @@ import {
   buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
-  formatHeatmapAxisLabel,
   formatHeatmapWeekdayBarLabel,
   formatHeatmapWeekdayLabel,
+  getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
 } from "@/lib/radar/resetTimeHeatmap";
 import type { RandomResetTimeHeatmapRange } from "@/lib/radar/resetTimeHeatmap";
@@ -97,6 +97,7 @@ export function RandomResetTimeHeatmap({
     : 0;
   const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
   const weekdayBarScaleMax = weekdayMaxRawCount > 0 ? weekdayMaxRawCount + 1 : 0;
+  const timeAxisTicks = getHeatmapTimeAxisTicks();
 
   return (
     <section
@@ -170,24 +171,49 @@ export function RandomResetTimeHeatmap({
         <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
       ) : (
         <>
-          <div className="mt-5 grid grid-cols-12 gap-1.5" role="list" aria-label={content.heading}>
-            {(timeHeatmap?.bins ?? []).map((bin) => {
-              const label = formatHeatmapBarLabel(bin, locale);
-              const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
+          <div className="mt-5" aria-label={content.timeAxis}>
+            <div className="grid h-28 grid-cols-12" role="list" aria-label={content.heading}>
+              {(timeHeatmap?.bins ?? []).map((bin) => {
+                const label = formatHeatmapBarLabel(bin, locale);
+                const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
 
-              return (
-                <div className="min-w-0 text-center" key={bin.startHour} role="listitem">
-                  <ResetCountBar
-                    ariaLabel={label}
-                    barHeight={barHeight}
-                    rawCount={bin.rawCount}
-                  />
-                  <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                    {formatHeatmapAxisLabel(bin)}
+                return (
+                  <div className="min-w-0 px-1" key={bin.startHour} role="listitem">
+                    <ResetCountBar
+                      ariaLabel={label}
+                      barHeight={barHeight}
+                      rawCount={bin.rawCount}
+                    />
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <div className="relative h-7 border-t border-slate-200">
+              {timeAxisTicks.map((hour, index) => {
+                const isFirst = index === 0;
+                const isLast = index === timeAxisTicks.length - 1;
+                const position = isFirst
+                  ? "left-0 items-start"
+                  : isLast
+                    ? "right-0 items-end"
+                    : "-translate-x-1/2 items-center";
+
+                return (
+                  <span
+                    className={`absolute top-0 flex flex-col gap-0.5 text-[0.65rem] font-medium tabular-nums text-slate-500 ${position}`}
+                    key={hour}
+                    style={
+                      isFirst || isLast
+                        ? undefined
+                        : { left: `${(index / (timeAxisTicks.length - 1)) * 100}%` }
+                    }
+                  >
+                    <span aria-hidden="true" className="h-1.5 border-l border-slate-300" />
+                    <span>{hour}</span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
           <p className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
           <div className="mt-6 border-t border-slate-100 pt-5">
