@@ -18,6 +18,12 @@ function getClassificationKey(
   }
 }
 
+function getQuoteMarks(locale: Locale) {
+  return locale === "en"
+    ? { opening: "“", closing: "”" }
+    : { opening: "「", closing: "」" };
+}
+
 export function TiboActivityCard({
   activity,
   locale,
@@ -25,6 +31,8 @@ export function TiboActivityCard({
   activity: PublicTiboActivity;
   locale: Locale;
 }) {
+  const quoteMarks = getQuoteMarks(locale);
+
   return (
     <section
       aria-labelledby="tibo-activity-heading"
@@ -40,9 +48,21 @@ export function TiboActivityCard({
         <MessageCircle className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
       </div>
 
-      <p className="mt-4 min-w-0 whitespace-pre-wrap break-words text-base leading-7 text-slate-700 sm:text-lg sm:leading-8">
-        {activity.text ?? translateUI("tiboNoPostText", locale)}
-      </p>
+      {activity.text ? (
+        <blockquote className="mt-4 min-w-0 border-l-4 border-teal-200 bg-slate-50/80 px-4 py-3 text-base leading-7 text-slate-700 sm:px-5 sm:py-4 sm:text-lg sm:leading-8">
+          <span aria-hidden="true" className="mr-1 text-xl font-semibold text-teal-700">
+            {quoteMarks.opening}
+          </span>
+          <span className="whitespace-pre-wrap break-words">{activity.text}</span>
+          <span aria-hidden="true" className="ml-1 text-xl font-semibold text-teal-700">
+            {quoteMarks.closing}
+          </span>
+        </blockquote>
+      ) : (
+        <p className="mt-4 min-w-0 text-base leading-7 text-slate-700 sm:text-lg sm:leading-8">
+          {translateUI("tiboNoPostText", locale)}
+        </p>
+      )}
 
       <dl className="mt-5 grid gap-4 border-t border-slate-200 pt-4 text-sm sm:grid-cols-3 sm:items-start">
           <div>

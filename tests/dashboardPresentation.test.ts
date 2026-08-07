@@ -115,6 +115,10 @@ test("uses clear Japanese labels for the Tibo post card and unrelated classifica
   );
 
   assert.match(html, /Tiboの最新投稿/);
+  assert.match(html, /<blockquote[^>]*>/);
+  assert.match(html, /aria-hidden="true"[^>]*>「<\/span>/);
+  assert.match(html, />リセットとは関係のない投稿です。<\/span>/);
+  assert.match(html, /aria-hidden="true"[^>]*>」<\/span>/);
   assert.match(html, /リセットとは無関係/);
   assert.doesNotMatch(html, /Tibo氏の最新動向|>その他</);
 });
