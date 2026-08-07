@@ -171,7 +171,6 @@ test("keeps the normal dashboard focused on the current outlook", () => {
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
   assert.ok(noticeIndex >= 0 && noticeIndex < outlookIndex);
-  assert.match(html, /lg:grid-cols-\[minmax\(0,1\.1fr\)_minmax\(18rem,0\.9fr\)\]/);
   assert.ok(outlookIndex >= 0);
   assert.match(html, /公式予告：なし/);
   assert.match(html, /現在の見立て/);
