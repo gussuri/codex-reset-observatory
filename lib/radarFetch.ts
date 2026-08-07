@@ -340,7 +340,7 @@ const getCachedRadarCore = unstable_cache(
       generatedAt: data.checked_at ?? new Date().toISOString(),
     };
   },
-  ["radar-core-cache-v1"],
+  ["radar-core-cache-v2"],
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
