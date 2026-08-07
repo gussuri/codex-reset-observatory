@@ -242,13 +242,14 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
-  assert.ok(noticeIndex >= 0 && noticeIndex < incidentIndex);
-  assert.ok(incidentIndex < elapsedIndex && elapsedIndex < teaserIndex && teaserIndex < outlookIndex);
+  assert.ok(noticeIndex >= 0 && noticeIndex < teaserIndex);
+  assert.ok(teaserIndex < incidentIndex && incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);
   assert.match(html, /公式リセット予告[\s\S]*なし/);
   assert.match(html, /Codex関連障害[\s\S]*なし/);
   assert.match(html, /前回のリセットから[\s\S]*2日20時間/);
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
+  assert.match(html, /<dl class="grid gap-2 sm:grid-cols-2 lg:grid-cols-2">/);
   assert.match(html, /現在の見立て/);
   assert.match(html, /現在、目立った観測変化はありません。/);
   assert.match(

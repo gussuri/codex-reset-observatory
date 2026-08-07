@@ -631,7 +631,7 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(15rem,0.75fr)]">
+            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(20rem,1fr)]">
               <ProbabilityMetrics
                 className="grid w-full grid-cols-2 gap-3"
                 locale={locale}
@@ -639,11 +639,16 @@ export function RadarDashboard({
                 probability48h={probability48h}
               />
 
-              <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-2">
                 <ObservationStatusItem
                   icon={Bell}
                   label={translateUI("officialNoticeStatus", locale)}
                   value={officialNoticeValue}
+                />
+                <ObservationStatusItem
+                  icon={MessageCircle}
+                  label={translateUI("resetTeaserStatus", locale)}
+                  value={getResetTeaserStatusLabel(resetTeaserStatus, locale)}
                 />
                 <ObservationStatusItem
                   icon={AlertTriangle}
@@ -654,11 +659,6 @@ export function RadarDashboard({
                   icon={Clock3}
                   label={translateUI("elapsedSinceResetShort", locale)}
                   value={elapsedSinceLastReset}
-                />
-                <ObservationStatusItem
-                  icon={MessageCircle}
-                  label={translateUI("resetTeaserStatus", locale)}
-                  value={getResetTeaserStatusLabel(resetTeaserStatus, locale)}
                 />
               </dl>
             </div>
