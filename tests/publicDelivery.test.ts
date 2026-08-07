@@ -511,9 +511,9 @@ test("shows the next regular reset reference only within 72 hours", () => {
     zh: "下次定期重置参考日期",
   } as const;
   const notes = {
-    ja: "任意リセットを使用すると、次回の定期リセットは使用時刻から1週間後になります。その場合、この参考日時とは異なります。",
-    en: "If you use a Banked Reset, your next regular reset will be one week after the time you use it, so it may differ from this reference time.",
-    zh: "如果使用手动重置，下一次定期重置将从使用时间起算一周，因此可能与此参考时间不同。",
+    ja: "任意リセット後は、次回定期リセットが1週間後になり、参考日時と異なる場合があります。",
+    en: "After a Banked Reset, the next regular reset is one week later and may differ from this reference time.",
+    zh: "使用手动重置后，下次定期重置按一周后计算，可能与此参考时间不同。",
   } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const data = toPublicRadarSnapshot(
