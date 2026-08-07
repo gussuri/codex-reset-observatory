@@ -158,7 +158,7 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
 
 const getCachedTiboHistorySignals = unstable_cache(
   fetchRawTiboHistorySignals,
-  ["tibo-history-signals-cache"],
+  ["tibo-history-signals-cache-v2"],
   {
     revalidate: 60,
     tags: ["radar-data"],
