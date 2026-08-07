@@ -47,8 +47,8 @@ export function formatProbabilityDisplay(
   const normalized = Math.min(1, Math.max(0, normalizeProbability(probability)));
   return new Intl.NumberFormat(bcp47, {
     style: "percent",
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(normalized);
 }
 
@@ -72,10 +72,12 @@ function Metric({
   const isKnown = percent !== undefined;
 
   return (
-    <div className={`h-full rounded-lg border p-5 ${tone.card} ${className ?? ""}`}>
-      <dt className={`text-base font-medium ${tone.label}`}>{label}</dt>
-      <dd className={`mt-3 text-4xl font-semibold ${tone.value}`}>{value}</dd>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/75">
+    <div className={`h-full rounded-lg border p-4 lg:p-5 ${tone.card} ${className ?? ""}`}>
+      <dt className={`text-sm font-medium lg:text-base ${tone.label}`}>{label}</dt>
+      <dd className={`mt-2 text-3xl font-semibold lg:mt-3 lg:text-4xl ${tone.value}`}>
+        {value}
+      </dd>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/75 lg:mt-4">
         <div
           aria-label={label}
           aria-valuemax={100}

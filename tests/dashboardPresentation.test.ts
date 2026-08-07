@@ -30,19 +30,19 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
   assert.doesNotMatch(html, /aria-label="Within 72 hours"/);
   assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 2);
   assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
-  assert.match(html, />23\.0%</);
-  assert.match(html, />76\.5%</);
-  assert.match(html, /rounded-lg border p-5/);
-  assert.match(html, /text-base font-medium/);
-  assert.match(html, /text-4xl font-semibold/);
+  assert.match(html, />23%</);
+  assert.match(html, />77%</);
+  assert.match(html, /rounded-lg border p-4 lg:p-5/);
+  assert.match(html, /text-sm font-medium lg:text-base/);
+  assert.match(html, /mt-2 text-3xl font-semibold lg:mt-3 lg:text-4xl/);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
 });
 
-test("formats probability cards with one localized decimal place", () => {
-  assert.equal(formatProbabilityDisplay(0.213, "ja"), "21.3%");
-  assert.equal(formatProbabilityDisplay(0.765, "en"), "76.5%");
-  assert.equal(formatProbabilityDisplay(0.405, "zh"), "40.5%");
+test("formats probability cards as localized whole percentages", () => {
+  assert.equal(formatProbabilityDisplay(0.213, "ja"), "21%");
+  assert.equal(formatProbabilityDisplay(0.765, "en"), "77%");
+  assert.equal(formatProbabilityDisplay(0.405, "zh"), "41%");
 });
 
 test("renders unknown probabilities without aria-valuenow and with localized value text", () => {
