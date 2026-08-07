@@ -160,9 +160,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "最新重置",
   },
   tiboLatestActivity: {
-    ja: "Tibo氏の最新動向",
-    en: "Latest Tibo activity",
-    zh: "Tibo 最新动态",
+    ja: "Tiboの最新投稿",
+    en: "Latest Tibo post",
+    zh: "Tibo 最新帖子",
   },
   tiboAutoClassification: {
     ja: "自動観測分類",
@@ -200,9 +200,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "重置提示",
   },
   tiboClassificationIrrelevant: {
-    ja: "その他",
-    en: "Other",
-    zh: "其他",
+    ja: "リセットとは無関係",
+    en: "Unrelated to resets",
+    zh: "与重置无关",
   },
   nextRegularResetReference: {
     ja: "次回定期リセット参考日",

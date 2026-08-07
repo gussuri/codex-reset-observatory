@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
 import { ProbabilityMetrics } from "../components/ProbabilityMetrics";
+import { TiboActivityCard } from "../components/TiboActivityCard";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
@@ -73,7 +74,7 @@ test("dashboard shows the latest Tibo activity below history for the experiment"
     React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
   );
 
-  const activityIndex = html.indexOf("Latest Tibo activity");
+  const activityIndex = html.indexOf("Latest Tibo post");
   const historyIndex = html.indexOf("Recent reset events");
   const heatmapIndex = html.indexOf("Past random reset times");
   assert.ok(activityIndex > historyIndex && activityIndex > heatmapIndex);
@@ -87,6 +88,24 @@ test("dashboard shows the latest Tibo activity below history for the experiment"
   const postIndex = html.indexOf("A reset hint from Tibo");
   const classificationIndex = html.indexOf("Automated observation");
   assert.ok(postIndex >= 0 && postIndex < classificationIndex);
+});
+
+test("uses clear Japanese labels for the Tibo post card and unrelated classification", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TiboActivityCard, {
+      locale: "ja",
+      activity: {
+        classification: "irrelevant",
+        text: "リセットとは関係のない投稿です。",
+        createdAt: "2026-08-07T05:23:00.000Z",
+        sourceUrl: "https://x.com/thsottiaux/status/123",
+      },
+    }),
+  );
+
+  assert.match(html, /Tiboの最新投稿/);
+  assert.match(html, /リセットとは無関係/);
+  assert.doesNotMatch(html, /Tibo氏の最新動向|>その他</);
 });
 
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
