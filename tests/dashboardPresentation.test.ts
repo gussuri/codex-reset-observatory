@@ -32,7 +32,7 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
   assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
   assert.match(html, />23%</);
   assert.match(html, />77%</);
-  assert.match(html, /rounded-lg border p-4 pl-5 lg:p-5 lg:pl-6/);
+  assert.match(html, /rounded-lg border p-4 pl-6 lg:p-5 lg:pl-7/);
   assert.match(html, /text-sm font-medium lg:text-base/);
   assert.match(html, /mt-2 text-3xl font-semibold lg:mt-3 lg:text-4xl/);
   assert.match(html, /aria-valuenow="23"/);

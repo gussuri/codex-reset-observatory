@@ -72,7 +72,7 @@ function Metric({
   const isKnown = percent !== undefined;
 
   return (
-    <div className={`h-full rounded-lg border p-4 pl-5 lg:p-5 lg:pl-6 ${tone.card} ${className ?? ""}`}>
+    <div className={`h-full rounded-lg border p-4 pl-6 lg:p-5 lg:pl-7 ${tone.card} ${className ?? ""}`}>
       <dt className={`text-sm font-medium lg:text-base ${tone.label}`}>{label}</dt>
       <dd className={`mt-2 text-3xl font-semibold lg:mt-3 lg:text-4xl ${tone.value}`}>
         {value}
