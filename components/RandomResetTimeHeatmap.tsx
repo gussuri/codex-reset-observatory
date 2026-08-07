@@ -267,7 +267,7 @@ function ResetCountBar({
       {rawCount > 0 ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 text-[0.65rem] font-semibold tabular-nums text-slate-700"
+          className="pointer-events-none absolute inset-x-0 text-center text-[0.65rem] font-semibold tabular-nums text-slate-700"
           style={{ bottom: `calc(${barHeight}% + 0.25rem)` }}
         >
           {rawCount}
