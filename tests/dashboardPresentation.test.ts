@@ -12,45 +12,39 @@ import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/ra
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
-test("renders four named probability progressbars in a definition list", () => {
+test("renders only the 24-hour and 48-hour probability progressbars", () => {
   const html = renderToStaticMarkup(
     React.createElement(ProbabilityMetrics, {
       locale: "en",
-      probability12h: 0.11,
       probability24h: 0.23,
       probability48h: 0.765,
-      probability72h: 0.91,
     }),
   );
 
-  assert.match(html, /^<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">/);
-  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 4);
-  assert.match(html, /aria-label="Within 12 hours"/);
+  assert.match(html, /^<dl class="mt-5 grid grid-cols-2 gap-3">/);
+  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
   assert.match(html, /aria-label="Within 24h"/);
   assert.match(html, /aria-label="Within 48h"/);
-  assert.match(html, /aria-label="Within 72 hours"/);
-  assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 4);
-  assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 4);
-  assert.match(html, /aria-valuenow="11"/);
+  assert.doesNotMatch(html, /aria-label="Within 12 hours"/);
+  assert.doesNotMatch(html, /aria-label="Within 72 hours"/);
+  assert.strictEqual((html.match(/aria-valuemin="0"/g) ?? []).length, 2);
+  assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
-  assert.match(html, /aria-valuenow="91"/);
 });
 
 test("renders unknown probabilities without aria-valuenow and with localized value text", () => {
   const html = renderToStaticMarkup(
     React.createElement(ProbabilityMetrics, {
       locale: "en",
-      probability12h: undefined,
       probability24h: undefined,
       probability48h: undefined,
-      probability72h: undefined,
     }),
   );
 
-  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 4);
+  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
   assert.strictEqual((html.match(/aria-valuenow=/g) ?? []).length, 0);
-  assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 4);
+  assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 2);
 });
 
 test("renders the random reset time heatmap after history with a timezone-free SSR skeleton", () => {
@@ -104,15 +98,13 @@ test("renders the random reset time heatmap after history with a timezone-free S
   }
 });
 
-test("derives the 72-hour metric from a legacy snapshot without showing zero", () => {
+test("does not render the omitted 12-hour and 72-hour metrics", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({ calculationNow }),
     "en",
     { calculationNow },
   );
-  delete snapshot.viewModel.probability72h;
-
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
       initialData: snapshot,
@@ -120,9 +112,10 @@ test("derives the 72-hour metric from a legacy snapshot without showing zero", (
     }),
   );
 
-  assert.match(html, /aria-label="Within 72 hours"/);
-  assert.match(html, /aria-valuenow="58"/);
-  assert.doesNotMatch(html, /aria-label="Within 72 hours"[^>]*aria-valuenow="0"/);
+  assert.match(html, /aria-label="Within 24h"/);
+  assert.match(html, /aria-label="Within 48h"/);
+  assert.doesNotMatch(html, /Within 12 hours|Within 72 hours/);
+  assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
 });
 
 test("labels a dynamic notice by its post time when no execution time is scheduled", (t: TestContext) => {

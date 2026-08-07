@@ -5,26 +5,15 @@ import { translateUI } from "@/lib/radar/i18n";
 
 export function ProbabilityMetrics({
   locale,
-  probability12h,
   probability24h,
   probability48h,
-  probability72h,
 }: {
   locale: Locale;
-  probability12h: number | undefined;
   probability24h: number | undefined;
   probability48h: number | undefined;
-  probability72h: number | undefined;
 }) {
   return (
-    <dl className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-      <Metric
-        horizon="12h"
-        label={translateUI("within12h", locale)}
-        locale={locale}
-        probability={probability12h}
-        value={probabilityToPercent(probability12h, locale)}
-      />
+    <dl className="mt-5 grid grid-cols-2 gap-3">
       <Metric
         horizon="24h"
         label={translateUI("within24h", locale)}
@@ -39,13 +28,6 @@ export function ProbabilityMetrics({
         probability={probability48h}
         value={probabilityToPercent(probability48h, locale)}
       />
-      <Metric
-        horizon="72h"
-        label={translateUI("within72h", locale)}
-        locale={locale}
-        probability={probability72h}
-        value={probabilityToPercent(probability72h, locale)}
-      />
     </dl>
   );
 }
@@ -59,7 +41,7 @@ function Metric({
   value,
 }: {
   className?: string;
-  horizon: "12h" | "24h" | "48h" | "72h";
+  horizon: "24h" | "48h";
   label: string;
   locale: Locale;
   probability: number | undefined;
@@ -100,24 +82,6 @@ function getProbabilityTone(
       card: "border-slate-200 bg-slate-50",
       label: "text-slate-500",
       value: "text-slate-950",
-    };
-  }
-
-  if (horizon === "12h") {
-    return {
-      bar: "bg-teal-500",
-      card: "border-teal-200 bg-teal-50",
-      label: "text-teal-700",
-      value: "text-teal-950",
-    };
-  }
-
-  if (horizon === "72h") {
-    return {
-      bar: "bg-violet-500",
-      card: "border-violet-200 bg-violet-50",
-      label: "text-violet-700",
-      value: "text-violet-950",
     };
   }
 
