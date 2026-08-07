@@ -32,6 +32,9 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
   assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
   assert.match(html, />23\.0%</);
   assert.match(html, />76\.5%</);
+  assert.match(html, /rounded-lg border p-5/);
+  assert.match(html, /text-base font-medium/);
+  assert.match(html, /text-4xl font-semibold/);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
 });
@@ -242,6 +245,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
+  assert.match(html, /lg:grid-cols-\[minmax\(0,1\.4fr\)_minmax\(20rem,1fr\)\]/);
   assert.ok(noticeIndex >= 0 && noticeIndex < teaserIndex);
   assert.ok(teaserIndex < incidentIndex && incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);

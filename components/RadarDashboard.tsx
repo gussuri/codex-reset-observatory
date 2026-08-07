@@ -631,7 +631,7 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(20rem,1fr)]">
+            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,1fr)]">
               <ProbabilityMetrics
                 className="grid w-full grid-cols-2 gap-3"
                 locale={locale}

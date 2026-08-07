@@ -72,10 +72,10 @@ function Metric({
   const isKnown = percent !== undefined;
 
   return (
-    <div className={`h-full rounded-lg border p-4 ${tone.card} ${className ?? ""}`}>
-      <dt className={`text-sm font-medium ${tone.label}`}>{label}</dt>
-      <dd className={`mt-2 text-3xl font-semibold ${tone.value}`}>{value}</dd>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/75">
+    <div className={`h-full rounded-lg border p-5 ${tone.card} ${className ?? ""}`}>
+      <dt className={`text-base font-medium ${tone.label}`}>{label}</dt>
+      <dd className={`mt-3 text-4xl font-semibold ${tone.value}`}>{value}</dd>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/75">
         <div
           aria-label={label}
           aria-valuemax={100}
