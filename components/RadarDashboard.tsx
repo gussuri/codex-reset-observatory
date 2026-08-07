@@ -504,31 +504,35 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <ProbabilityMetrics
-              locale={locale}
-              probability24h={probability24h}
-              probability48h={probability48h}
-            />
+            <div className="lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)] lg:items-start lg:gap-6">
+              <div className="min-w-0">
+                <ProbabilityMetrics
+                  locale={locale}
+                  probability24h={probability24h}
+                  probability48h={probability48h}
+                />
 
-            {!isDataUnavailable && !hasOfficialNotice ? (
-              <div
-                role="status"
-                className="mt-4 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600"
-              >
-                <Bell className="h-4 w-4 text-slate-500" />
-                <span className="font-medium">
-                  {translateUI("officialNoticeStatus", locale)}
-                  {locale === "en" ? ": " : "："}
-                  {translateUI("noOfficialNotice", locale)}
-                </span>
+                {!isDataUnavailable && !hasOfficialNotice ? (
+                  <div
+                    role="status"
+                    className="mt-4 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                  >
+                    <Bell className="h-4 w-4 text-slate-500" />
+                    <span className="font-medium">
+                      {translateUI("officialNoticeStatus", locale)}
+                      {locale === "en" ? ": " : "："}
+                      {translateUI("noOfficialNotice", locale)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
 
-            <dl className="mt-5 space-y-4">
               {!isDataUnavailable && viewModel.displayReasoningSummary ? (
-                <RecommendationRow reason={viewModel.displayReasoningSummary} locale={locale} />
+                <dl className="mt-5 space-y-4 lg:mt-0">
+                  <RecommendationRow reason={viewModel.displayReasoningSummary} locale={locale} />
+                </dl>
               ) : null}
-            </dl>
+            </div>
           </article>
 
         </section>
