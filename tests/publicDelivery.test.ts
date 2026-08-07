@@ -114,6 +114,29 @@ test("public Tibo activity exposes only a short post projection and classificati
   );
 });
 
+test("public Tibo activity can use a recent signal after its active expiry", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "expired-active-tweet",
+        signal_type: "reset_executed",
+        text: "Usage limits reset for Codex users.",
+        tweet_url: "https://x.com/thsottiaux/status/456",
+        tweet_created_at: "2026-08-03T23:00:00.000Z",
+        expires_at: "2026-08-03T23:30:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const snapshot = toPublicRadarSnapshot(internal, "en", { calculationNow });
+
+  assert.equal(snapshot.latestTiboActivity?.classification, "reset_executed");
+  assert.equal(snapshot.latestTiboActivity?.createdAt, "2026-08-03T23:00:00.000Z");
+});
+
 test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {
   const props = {
     value: "2026-08-04T00:00:00.000Z",

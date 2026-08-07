@@ -50,7 +50,8 @@ export function toPublicTiboActivity(
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
-  const candidates = (internal.active_tibo_signals ?? [])
+  const recentSignals = internal.recent_tibo_signals;
+  const candidates = (recentSignals ?? internal.active_tibo_signals ?? [])
     .filter((signal) => {
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
         return false;
@@ -60,7 +61,7 @@ export function toPublicTiboActivity(
       const createdAt = Date.parse(signal.tweet_created_at);
       if (!Number.isFinite(createdAt) || createdAt > nowTime) return false;
 
-      if (signal.expires_at) {
+      if (recentSignals === undefined && signal.expires_at) {
         const expiresAt = Date.parse(signal.expires_at);
         if (Number.isFinite(expiresAt) && expiresAt <= nowTime) return false;
       }

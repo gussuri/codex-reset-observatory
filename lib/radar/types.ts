@@ -214,6 +214,7 @@ export type RadarData = {
   };
   openai_status_history?: Array<OpenAIStatusHistoryItem>;
   active_tibo_signals?: Array<ActiveTiboSignal>;
+  recent_tibo_signals?: Array<ActiveTiboSignal>;
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   codex_environment?: {

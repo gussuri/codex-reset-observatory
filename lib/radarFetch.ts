@@ -184,6 +184,7 @@ function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null 
 
 type TiboSignalBundle = {
   activeSignals: Array<ActiveTiboSignal>;
+  recentSignals: Array<ActiveTiboSignal>;
   formalResets: Array<FormalTiboResetSignal>;
   rejectedResets: Array<RejectedTiboResetSignal>;
   health: DataSourceHealth;
@@ -242,6 +243,17 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
   const formalResets = associateTiboNotices(acceptedResets, notices);
+  const recentSignals = signals.map((signal) => ({
+    tweet_id: signal.tweet_id,
+    signal_type: signal.signal_type,
+    text: signal.text,
+    tweet_url: signal.tweet_url,
+    tweet_created_at: signal.tweet_created_at,
+    detected_at: signal.detected_at ?? undefined,
+    expires_at: signal.expires_at ?? undefined,
+    verification_status: signal.verification_status,
+    is_reply: signal.is_reply ?? undefined,
+  }));
   const rejectedResets = signals
     .filter(
       (signal) =>
@@ -257,6 +269,7 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
 
   return {
     activeSignals,
+    recentSignals,
     formalResets,
     rejectedResets,
     health: combineDataSourceHealth(activeResult.health, historyResult.health),
@@ -298,6 +311,7 @@ export async function fetchCurrentRadarData(
     ),
     openAIStatus: openAIStatus.data,
     activeTiboSignals: tiboSignals.activeSignals,
+    recentTiboSignals: tiboSignals.recentSignals,
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
   });

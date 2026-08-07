@@ -93,6 +93,7 @@ export function getLocalRadarData({
   calculationNow,
   dataHealth,
   activeTiboSignals = [],
+  recentTiboSignals,
   formalTiboResets = [],
   rejectedTiboResets = [],
 }: {
@@ -101,6 +102,7 @@ export function getLocalRadarData({
   calculationNow?: Date;
   dataHealth?: RadarDataHealth;
   activeTiboSignals?: RadarData["active_tibo_signals"];
+  recentTiboSignals?: RadarData["recent_tibo_signals"];
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
 } = {}): RadarData {
@@ -125,6 +127,7 @@ export function getLocalRadarData({
     openai_status_history: openAIStatus?.history ?? [],
     codex_environment: getLocalSignalEnvironment(openAIStatus, now),
     active_tibo_signals: activeTiboSignals,
+    recent_tibo_signals: recentTiboSignals,
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
   };
