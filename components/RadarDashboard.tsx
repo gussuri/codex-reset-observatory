@@ -121,9 +121,9 @@ function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
 type ResetTeaserStatus = "strong" | "weak" | "none" | "unknown";
 
 function getResetTeaserStatus(
-  activity: PublicRadarSnapshot["latestTiboActivity"] | null | undefined,
+  status: PublicRadarSnapshot["resetTeaserStatus"] | null | undefined,
 ): ResetTeaserStatus {
-  return activity?.teaserStrength ?? "unknown";
+  return status ?? "unknown";
 }
 
 function getResetTeaserStatusLabel(status: ResetTeaserStatus, locale: Locale) {
@@ -434,7 +434,7 @@ export function RadarDashboard({
     : getIncidentStatusFromReason(viewModel.displayReasoningSummary, locale);
   const resetTeaserStatus = isDataUnavailable
     ? "unknown" as const
-    : getResetTeaserStatus(state.data?.latestTiboActivity);
+    : getResetTeaserStatus(state.data?.resetTeaserStatus);
   const elapsedSinceLastReset = isDataUnavailable
     ? translateUI("unknownProbability", locale)
     : getElapsedSinceLastReset(

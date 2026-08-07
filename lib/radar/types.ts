@@ -353,6 +353,7 @@ export type PublicRadarSnapshot = {
   updatedAt: string | null;
   dataHealth: PublicDataHealth;
   viewModel: PublicRadarViewModel;
+  resetTeaserStatus?: TeaserStrength | "unknown";
   latestTiboActivity?: PublicTiboActivity | null;
 };
 

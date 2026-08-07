@@ -1,6 +1,10 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
-import { isTeaserStrength } from "./teaserStrength";
+import { getLastGlobalResetAt } from "./probability";
+import {
+  aggregateResetTeaserStatus,
+  isTeaserStrength,
+} from "./teaserStrength";
 import type {
   Locale,
   PublicDataHealth,
@@ -69,6 +73,7 @@ export function toPublicTiboActivity(
   const recentSignals = internal.recent_tibo_signals;
   const candidates = (recentSignals ?? internal.active_tibo_signals ?? [])
     .filter((signal) => {
+      if (signal.is_reply === true) return false;
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
         return false;
       }
@@ -229,6 +234,7 @@ export function toPublicRadarSnapshot(
     undefined,
     calculationNow,
   );
+  const latestResetAt = getLastGlobalResetAt(internal, calculationNow)?.toISOString() ?? null;
 
   return {
     schemaVersion: "public-v1",
@@ -236,6 +242,11 @@ export function toPublicRadarSnapshot(
     updatedAt: internal.updated_at ?? null,
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
+    resetTeaserStatus: aggregateResetTeaserStatus(
+      internal.recent_tibo_signals ?? internal.active_tibo_signals,
+      latestResetAt,
+      calculationNow,
+    ),
     latestTiboActivity: toPublicTiboActivity(internal, calculationNow, locale),
   };
 }

@@ -138,7 +138,9 @@ function isMissingTiboOptionalColumnError(error: unknown) {
   );
 }
 
-async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
+async function fetchRawTiboHistorySignals(
+  includeReplies = false,
+): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const configuration = getRequiredConfigurationHealth([
@@ -154,13 +156,17 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const queryTiboHistory = (fields: string) =>
-      supabase
+    const queryTiboHistory = (fields: string) => {
+      const query = supabase
         .from("tibo_signals")
-        .select(fields)
-        .or("is_reply.is.null,is_reply.eq.false")
+        .select(fields);
+      const filteredQuery = includeReplies
+        ? query
+        : query.or("is_reply.is.null,is_reply.eq.false");
+      return filteredQuery
         .order("tweet_created_at", { ascending: false })
         .limit(1000);
+    };
     type TiboHistoryQueryResult = {
       data: Array<FormalTiboResetSignal> | null;
       error: unknown | null;
@@ -195,7 +201,7 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
 }
 
 const getCachedTiboHistorySignals = unstable_cache(
-  fetchRawTiboHistorySignals,
+  () => fetchRawTiboHistorySignals(false),
   ["tibo-history-signals-cache-v2"],
   {
     revalidate: 60,
@@ -204,6 +210,7 @@ const getCachedTiboHistorySignals = unstable_cache(
 );
 
 function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null {
+  if (signal.is_reply === true) return null;
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") {
     return null;
   }
@@ -263,9 +270,10 @@ export function associateTiboNotices(
 
 async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBundle> {
   const tiboCacheBoundary = getTiboCacheBoundary(now);
-  const [activeResult, historyResult] = await Promise.all([
+  const [activeResult, historyResult, recentResult] = await Promise.all([
     getCachedTiboSignals(tiboCacheBoundary),
     getCachedTiboHistorySignals(),
+    getCachedTiboRecentSignals(),
   ]);
   const activeSignals = activeResult.data.filter((signal) => {
     if (signal.verification_status === "rejected") return false;
@@ -274,13 +282,14 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     return !isNaN(expiresTime) && expiresTime > now.getTime();
   });
   const signals = historyResult.data;
+  const recentSignalsSource = recentResult.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
   const notices = signals
     .map(toNoticeSignal)
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
   const formalResets = associateTiboNotices(acceptedResets, notices);
-  const recentSignals = signals.map((signal) => ({
+  const recentSignals = recentSignalsSource.map((signal) => ({
     tweet_id: signal.tweet_id,
     signal_type: signal.signal_type,
     text: signal.text,
@@ -298,6 +307,7 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     .filter(
       (signal) =>
         signal.signal_type === "reset_executed" &&
+        signal.is_reply !== true &&
         (signal.confidence ?? 0) >= 0.95 &&
         signal.verification_status === "rejected",
     )
@@ -312,7 +322,11 @@ async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBu
     recentSignals,
     formalResets,
     rejectedResets,
-    health: combineDataSourceHealth(activeResult.health, historyResult.health),
+    health: combineDataSourceHealth(
+      activeResult.health,
+      historyResult.health,
+      recentResult.health,
+    ),
   };
 }
 
@@ -383,6 +397,17 @@ const getCachedRadarCore = unstable_cache(
   ["radar-core-cache-v2"],
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
+    tags: ["radar-data"],
+  },
+);
+
+const getCachedTiboRecentSignals = unstable_cache(
+  // The UI-only teaser aggregation may use replies; formal history uses the
+  // separate reply-excluding cache above.
+  () => fetchRawTiboHistorySignals(true),
+  ["tibo-recent-signals-cache-v1"],
+  {
+    revalidate: 60,
     tags: ["radar-data"],
   },
 );
