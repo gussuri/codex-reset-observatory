@@ -47,7 +47,7 @@ test("renders unknown probabilities without aria-valuenow and with localized val
   assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 2);
 });
 
-test("dashboard shows the latest Tibo activity above history without audit details", () => {
+test("dashboard shows the latest Tibo activity below history for the experiment", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
@@ -75,7 +75,8 @@ test("dashboard shows the latest Tibo activity above history without audit detai
 
   const activityIndex = html.indexOf("Latest Tibo activity");
   const historyIndex = html.indexOf("Recent reset events");
-  assert.ok(activityIndex >= 0 && activityIndex < historyIndex);
+  const heatmapIndex = html.indexOf("Past random reset times");
+  assert.ok(activityIndex > historyIndex && activityIndex > heatmapIndex);
   assert.match(html, /Latest post/);
   assert.match(html, /A reset hint from Tibo/);
   assert.match(html, /Automated observation/);

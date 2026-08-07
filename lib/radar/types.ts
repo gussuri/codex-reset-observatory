@@ -89,7 +89,7 @@ export type ActiveTiboSignal = {
 };
 
 export type PublicTiboActivity = {
-  classification: "official_notice" | "reset_executed" | "teaser";
+  classification: "official_notice" | "reset_executed" | "teaser" | "irrelevant";
   text: string | null;
   createdAt: string;
   sourceUrl: string | null;

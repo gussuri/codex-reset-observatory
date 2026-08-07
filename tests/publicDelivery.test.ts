@@ -69,7 +69,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
    assert.equal("rejected_tibo_resets" in publicSnapshot, false);
    assert.equal("reasoningSummary" in publicSnapshot.viewModel, false);
    assert.equal("action" in publicSnapshot.viewModel, false);
-   assert.doesNotMatch(serialized, /private full tweet text|private-model|private reason/);
+  assert.doesNotMatch(serialized, /private-model|private reason|private-tweet/);
   assert.equal(publicSnapshot.viewModel.recentHistory.length >= 0, true);
 
   const staleSnapshot = toPublicRadarSnapshot(internal, "en", {
@@ -135,6 +135,40 @@ test("public Tibo activity can use a recent signal after its active expiry", () 
 
   assert.equal(snapshot.latestTiboActivity?.classification, "reset_executed");
   assert.equal(snapshot.latestTiboActivity?.createdAt, "2026-08-03T23:00:00.000Z");
+});
+
+test("public Tibo activity uses the newest stored post even when it is irrelevant", () => {
+  const calculationNow = new Date("2026-08-07T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "newest-irrelevant-tweet",
+        signal_type: "irrelevant",
+        text: "A newer Tibo post unrelated to resets.",
+        tweet_url: "https://x.com/thsottiaux/status/789",
+        tweet_created_at: "2026-08-06T23:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+      {
+        tweet_id: "older-reset-tweet",
+        signal_type: "reset_executed",
+        text: "An older reset post.",
+        tweet_url: "https://x.com/thsottiaux/status/790",
+        tweet_created_at: "2026-08-01T03:32:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const snapshot = toPublicRadarSnapshot(internal, "en", { calculationNow });
+
+  assert.deepEqual(snapshot.latestTiboActivity, {
+    classification: "irrelevant",
+    text: "A newer Tibo post unrelated to resets.",
+    createdAt: "2026-08-06T23:00:00.000Z",
+    sourceUrl: "https://x.com/thsottiaux/status/789",
+  });
 });
 
 test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {

@@ -557,13 +557,6 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        {state.data?.latestTiboActivity ? (
-          <TiboActivityCard
-            activity={state.data.latestTiboActivity}
-            locale={locale}
-          />
-        ) : null}
-
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -655,6 +648,13 @@ export function RadarDashboard({
           eventTimes={randomResetHeatmapEventTimes}
           locale={locale}
         />
+
+        {state.data?.latestTiboActivity ? (
+          <TiboActivityCard
+            activity={state.data.latestTiboActivity}
+            locale={locale}
+          />
+        ) : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">

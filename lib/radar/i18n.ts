@@ -204,6 +204,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset hint",
     zh: "重置提示",
   },
+  tiboClassificationIrrelevant: {
+    ja: "その他",
+    en: "Other",
+    zh: "其他",
+  },
   nextRegularResetReference: {
     ja: "次回定期リセット参考日",
     en: "Next regular reset reference",

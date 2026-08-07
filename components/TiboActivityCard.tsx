@@ -13,6 +13,8 @@ function getClassificationKey(
       return "tiboClassificationResetExecuted";
     case "teaser":
       return "tiboClassificationTeaser";
+    case "irrelevant":
+      return "tiboClassificationIrrelevant";
   }
 }
 

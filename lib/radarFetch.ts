@@ -135,7 +135,6 @@ async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<Forma
       .select(
         "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,is_reply",
       )
-      .in("signal_type", ["reset_executed", "official_notice", "teaser"])
       .or("is_reply.is.null,is_reply.eq.false")
       .order("tweet_created_at", { ascending: false })
       .limit(1000);

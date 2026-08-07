@@ -31,6 +31,7 @@ const PUBLIC_TIBO_CLASSIFICATIONS = new Set<PublicTiboActivity["classification"]
   "official_notice",
   "reset_executed",
   "teaser",
+  "irrelevant",
 ]);
 
 function normalizePublicPostText(value: string | null | undefined) {
@@ -40,7 +41,7 @@ function normalizePublicPostText(value: string | null | undefined) {
 }
 
 /**
- * Projects the newest active Tibo signal to the small public activity card.
+ * Projects the newest stored Tibo signal to the small public activity card.
  * Audit fields and the raw tweet identifier never cross the public boundary.
  */
 export function toPublicTiboActivity(
