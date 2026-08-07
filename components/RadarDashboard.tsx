@@ -686,6 +686,11 @@ export function RadarDashboard({
                     value={viewModel.regularResetForecast.expectedAt}
                     locale={locale}
                   />
+                  <span className="ml-2 text-sm font-medium text-slate-500 sm:text-base">
+                    {locale === "en"
+                      ? `(${viewModel.regularResetForecast.remaining})`
+                      : `（${viewModel.regularResetForecast.remaining}）`}
+                  </span>
                 </h2>
               </div>
               <p className="text-balance text-sm leading-6 text-slate-500 sm:max-w-lg sm:text-right">

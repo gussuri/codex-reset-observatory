@@ -529,7 +529,9 @@ test("shows the next regular reset reference only within 72 hours", () => {
     assert.match(html, new RegExp(escapeRegExp(labels[locale])));
     assert.match(html, new RegExp(escapeRegExp(notes[locale])));
     assert.doesNotMatch(html, /<dt[^>]*>参考日時<\/dt>|<dt[^>]*>Reference date and time<\/dt>|<dt[^>]*>参考日期和时间<\/dt>/);
-    assert.doesNotMatch(html, /残り3日|3 days remaining|剩余3天/);
+    const remaining = data.viewModel.regularResetForecast.remaining;
+    const remainingText = locale === "en" ? `(${remaining})` : `（${remaining}）`;
+    assert.match(html, new RegExp(escapeRegExp(remainingText)));
     assert.match(html, /dateTime="2026-08-08T03:32:00\.000Z"/);
   }
 });
