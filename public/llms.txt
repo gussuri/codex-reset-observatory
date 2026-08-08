@@ -2,7 +2,7 @@
 
 Codex Reset Observatory is an independent website that tracks and forecasts OpenAI Codex usage limits resets.
 
-It estimates whether a Codex usage limits reset is likely within the next 12, 24, 48, or 72 hours, based on public signals such as OpenAI Status information, official notices, incident hints, community activity, and observed reset history.
+It estimates whether a Codex usage limits reset is likely within the next 24 or 48 hours, based on public signals such as OpenAI Status information, official notices, incident hints, community activity, and observed reset history.
 
 ## Key pages
 
@@ -13,10 +13,8 @@ It estimates whether a Codex usage limits reset is likely within the next 12, 24
 
 ## What this site provides
 
-- 12-hour Codex usage limits reset probability
 - 24-hour Codex usage limits reset probability
 - 48-hour Codex usage limits reset probability
-- 72-hour Codex usage limits reset probability
 - Current expectation level and reasoning
 - Reset-related signals and status hints
 - Explanations of Codex Banked Reset (manual reset) and usage limits reset

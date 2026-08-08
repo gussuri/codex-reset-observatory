@@ -678,6 +678,13 @@ test("adds the forecast-method anchor to each localized FAQ", () => {
   }
 });
 
+test("public FAQ wording names only the displayed 24-hour and 48-hour forecasts", () => {
+  const html = renderToStaticMarkup(React.createElement(FaqView, { locale: "en" }));
+
+  assert.match(html, /within the next 24 or 48 hours/);
+  assert.doesNotMatch(html, /next 12, 24, 48, or 72 hours/);
+});
+
 test("joins display outlook sentences without locale-specific spacing errors", () => {
   const now = new Date("2026-08-04T00:00:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });

@@ -90,6 +90,14 @@ test("home metadata uses the unified brand and requested localized titles/descri
   }
 });
 
+test("home SEO descriptions expose only the public 24-hour and 48-hour horizons", () => {
+  for (const description of [HOME_DESCRIPTION_JA, HOME_DESCRIPTION_EN, HOME_DESCRIPTION_ZH]) {
+    assert.match(description, /24/);
+    assert.match(description, /48/);
+    assert.doesNotMatch(description, /12|72/);
+  }
+});
+
 test("WebSite JSON-LD uses one formal name and only the Japanese alternate name", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const jsonLd = getSiteJsonLd(locale);

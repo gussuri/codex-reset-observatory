@@ -306,6 +306,25 @@ test("keeps the included Status explanation when an incident hint is present", (
   assert.match(reason, /発生中のCodex関連障害が1件/);
 });
 
+test("limits the local public reasoning summary to the displayed horizons", () => {
+  const reason = getLocalProbabilityReason(
+    { openai_status_history: [], codex_environment: getLocalSignalEnvironment() },
+    0.24,
+    0.48,
+    "ja",
+    undefined,
+    null,
+    false,
+    NOW,
+    0.12,
+    0.72,
+  ) ?? "";
+
+  assert.match(reason, /24時間以内/);
+  assert.match(reason, /48時間以内/);
+  assert.doesNotMatch(reason, /12時間以内|72時間以内/);
+});
+
 test("keeps first-day cooldown in history pressure without a second negative signal", () => {
   const firstDayPressure = LOCAL_PROBABILITY_WEIGHTS.historyPressure[0];
   const activeNegativeBoosts = LOCAL_OBSERVATION_SIGNALS.filter(
