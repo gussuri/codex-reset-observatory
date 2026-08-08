@@ -426,9 +426,10 @@ test("formal reset updates latest reset time and regular forecast anchor", () =>
     tweet_id: "2083999999999999998",
     tweet_url: "https://x.com/thsottiaux/status/2083999999999999998",
   });
-  const data = getLocalRadarData({ formalTiboResets: [signal] });
-  const latest = getLastGlobalResetAt(data);
-  const viewModel = getRadarViewModel(data, "ja", false);
+  const calculationNow = new Date("2026-08-01T10:00:00.000Z");
+  const data = getLocalRadarData({ formalTiboResets: [signal], calculationNow });
+  const latest = getLastGlobalResetAt(data, calculationNow);
+  const viewModel = getRadarViewModel(data, "ja", false, undefined, calculationNow);
 
   assert.equal(latest?.toISOString(), signal.tweet_created_at);
   assert.equal(viewModel.regularResetForecast.lastCompletedAt, signal.tweet_created_at);

@@ -9,12 +9,36 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全28件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
+ * 全29件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.cycleType distinguishes regular and random resets, while recordKind
  * remains an independent record classification and resetMethod describes how
  * the reset was delivered.
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    "id": "local-codex-regular-reset-2026-08-08",
+    "recordKind": "reference",
+    "title": "定期リセット",
+    "kind": "window_closed",
+    "status": "closed",
+    "opened_at": "2026-08-08T12:32:00+09:00",
+    "closed_at": "2026-08-08T12:32:00+09:00",
+    "completed_at": "2026-08-08T12:32:00+09:00",
+    "window_minutes": 0,
+    "window_human": "定期実施",
+    "scope": "全有料プラン",
+    "summary": "通常の1週間サイクルのタイミングで、全有料プランのCodex利用上限リセットが実施されました。",
+    "source_url": null,
+    "details": {
+      "cycleType": "定期リセット",
+      "reasonType": "定期更新",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "noticeToExecution": "0分（定期）",
+      "noticeType": "なし",
+      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+    }
+  },
   {
     "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
     "recordKind": "confirmed_global",

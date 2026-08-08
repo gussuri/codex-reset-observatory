@@ -460,7 +460,7 @@ test("history page combines confirmed, banked, and regular reference records chr
   for (const item of visibleItems) {
     assert.match(html, new RegExp(escapeRegExp(escapeHtml(translateDynamic(item.title, "en")))));
   }
-  assert.ok(html.indexOf(firstTitle) < html.indexOf(secondTitle));
+  assert.ok(html.indexOf(escapeHtml(firstTitle)) < html.indexOf(escapeHtml(secondTitle)));
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
