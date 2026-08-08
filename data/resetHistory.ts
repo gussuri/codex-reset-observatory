@@ -26,14 +26,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "completed_at": "2026-08-08T12:32:00+09:00",
     "window_minutes": 0,
     "window_human": "定期実施",
-    "scope": "任意リセットを使っていないアカウント",
+    "scope": "任意リセット未使用アカウント",
     "summary": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
     "source_url": null,
     "details": {
       "cycleType": "定期リセット",
       "reasonType": "定期更新",
       "resetMethod": "強制リセット",
-      "scope": "任意リセットを使っていないアカウント",
+      "scope": "任意リセット未使用アカウント",
       "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
       "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"

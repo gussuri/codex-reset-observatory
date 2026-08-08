@@ -671,6 +671,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "All paid plans",
     zh: "所有付费套餐",
   },
+  "任意リセット未使用アカウント": {
+    ja: "任意リセット未使用アカウント",
+    en: "Accounts without a Banked Reset",
+    zh: "未使用任意重置的账户",
+  },
   "全プラン": {
     ja: "全プラン",
     en: "All plans",
@@ -819,6 +824,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "定期リセット",
     en: "Weekly reset",
     zh: "定期重置",
+  },
+  "定期更新": {
+    ja: "定期更新",
+    en: "Regular update",
+    zh: "定期更新",
   },
   "週間リセット参考日時": {
     ja: "週間リセット参考日時",
