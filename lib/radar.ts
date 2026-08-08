@@ -478,6 +478,35 @@ function getHistoryText(item: WindowLike & { kind?: string }) {
   return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
 }
 
+const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
+const REGULAR_RESET_SUMMARY =
+  "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
+const BANKED_RESET_METHOD = "任意リセット権1回配布";
+
+function isRegularHistoryItem(item: WindowLike) {
+  return item.recordKind === "regular_completed" || item.details?.cycleType === "定期リセット";
+}
+
+function getRegularResetMethod(item: WindowLike) {
+  return item.details?.resetMethod || "強制リセット";
+}
+
+function getRegularResetScope(item: WindowLike, resetMethod: string) {
+  if (resetMethod === BANKED_RESET_METHOD) {
+    return item.details?.scope ?? item.scope ?? "全有料プラン";
+  }
+
+  return REGULAR_RESET_SCOPE;
+}
+
+function getRegularResetSummary(item: WindowLike, resetMethod: string) {
+  if (resetMethod === BANKED_RESET_METHOD && item.details?.note) {
+    return item.details.note;
+  }
+
+  return REGULAR_RESET_SUMMARY;
+}
+
 export function getHistoryRecordKind(item: WindowLike): HistoryRecordKind {
   if (
     item.recordKind === "confirmed_global" ||
@@ -646,6 +675,22 @@ function getHistoryDetails(
   item: WindowLike & { kind?: string },
   locale: Locale,
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
+  if (isRegularHistoryItem(item)) {
+    const resetMethod = getRegularResetMethod(item);
+    const scope = getRegularResetScope(item, resetMethod);
+    const note = getRegularResetSummary(item, resetMethod);
+
+    return {
+      cycleType: translateDynamic("定期リセット", locale),
+      reasonType: translateDynamic("定期更新", locale),
+      resetMethod: translateDynamic(resetMethod, locale),
+      scope: translateDynamic(scope, locale),
+      noticeToExecution: "",
+      noticeType: undefined,
+      note: translateDynamic(note, locale),
+    };
+  }
+
   if (item.details) {
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
@@ -871,6 +916,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
 
   const result = items
     .map((item) => {
+      const isRegular = isRegularHistoryItem(item);
       const isPendingNotice = isPendingResetNotice(item);
       const resetAt = isPendingNotice
         ? null
@@ -879,28 +925,46 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
       const source = getEventSource(item);
       const recordKind = getHistoryRecordKind(item);
       const sourceKind = getHistorySourceKind(item);
+      const resetMethod = isRegular ? getRegularResetMethod(item) : null;
+      const regularSummary = isRegular
+        ? getRegularResetSummary(item, resetMethod ?? "強制リセット")
+        : null;
+      const resetTypes = isRegular
+        ? [translateDynamic("定期リセット", locale)]
+        : getResetTypes(item, locale);
+      const details = getHistoryDetails(item, locale);
 
       return {
         key,
         recordKind,
-        title: translateDynamic(item.title, locale),
-        resetType: getResetTypes(item, locale)[0],
-        resetTypes: getResetTypes(item, locale),
-        status: translateEventStatus(item.kind ?? item.status, locale),
-        details: getHistoryDetails(item, locale),
+        title: isRegular
+          ? translateDynamic("定期リセット", locale)
+          : translateDynamic(item.title, locale),
+        resetType: resetTypes[0],
+        resetTypes,
+        status: isRegular
+          ? translateDynamic("リセット実施", locale)
+          : translateEventStatus(item.kind ?? item.status, locale),
+        details,
         date: item.date ?? resetAt ?? item.opened_at,
-        signalAt: item.opened_at ?? null,
+        signalAt: isRegular ? null : item.opened_at ?? null,
         resetAt,
-        signalLabel: translateUI("detectionTime", locale),
+        signalLabel: isRegular ? "" : translateUI("detectionTime", locale),
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: translateDynamic(item.scope, locale),
+        scope: isRegular
+          ? details.scope
+          : translateDynamic(item.scope, locale),
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
         windowLength: item.window_human
           ? translateDynamic(item.window_human, locale)
           : formatWindowLength(item.window_minutes, locale),
-        source,
-        sourceKind,
-        summary: item.summary ? translateDynamic(item.summary, locale) : null,
+        source: isRegular ? null : source,
+        sourceKind: isRegular ? "none" : sourceKind,
+        summary: isRegular
+          ? translateDynamic(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
+          : item.summary
+            ? translateDynamic(item.summary, locale)
+            : null,
       };
     })
     .filter((item) => {

@@ -16,6 +16,7 @@ import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
+import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -464,7 +465,6 @@ test("history page combines confirmed, banked, and regular reference records chr
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
-  assert.match(html, /Source not recorded/);
   assert.match(html, /Weekly reset \(reference record\)/);
   assert.doesNotMatch(html, /Unclassified history sentinel/);
 
@@ -510,6 +510,67 @@ test("history page combines confirmed, banked, and regular reference records chr
     }[locale];
     assert.equal((localizedHtml.match(new RegExp(escapeRegExp(description), "g")) ?? []).length, 1);
   }
+});
+
+test("normalizes regular reset presentation and hides notice/source rows", () => {
+  const calculationNow = new Date("2026-08-08T05:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      regularResetEvents: getDueRegularResetEventRows(calculationNow),
+    }),
+    "ja",
+    {
+      calculationNow,
+      limitHistory: false,
+    },
+  );
+  const regular = snapshot.viewModel.recentHistory.find(
+    (item) => item.recordKind === "regular_completed",
+  );
+  assert.ok(regular);
+  assert.equal(regular.title, "定期リセット");
+  assert.equal(regular.details?.cycleType, "定期リセット");
+  assert.equal(regular.details?.reasonType, "定期更新");
+  assert.equal(regular.details?.resetMethod, "強制リセット");
+  assert.equal(regular.details?.scope, "任意リセット未使用アカウント");
+  assert.equal(regular.details?.noticeToExecution, "");
+  assert.equal(regular.details?.noticeType, undefined);
+  assert.equal(
+    regular.summary,
+    "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
+  );
+  assert.equal(regular.signalAt, null);
+  assert.equal(regular.signalLabel, "");
+  assert.equal(regular.source, null);
+
+  const regularOnlySnapshot = {
+    ...snapshot,
+    viewModel: {
+      ...snapshot.viewModel,
+      recentHistory: [regular],
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(HistoryView, { data: regularOnlySnapshot, locale: "ja" }),
+  );
+  assert.doesNotMatch(html, /予告/);
+  assert.doesNotMatch(html, /出典未記録/);
+});
+
+test("regular history keeps a known Banked Reset delivery method", () => {
+  const snapshot = toPublicRadarSnapshot(getLocalRadarData({}), "ja", {
+    calculationNow: new Date("2026-08-08T05:00:00.000Z"),
+    limitHistory: false,
+  });
+  const bankedRegular = snapshot.viewModel.recentHistory.find(
+    (item) =>
+      item.details?.cycleType === "定期リセット" &&
+      item.details.resetMethod === "任意リセット権1回配布",
+  );
+  assert.ok(bankedRegular);
+  assert.equal(bankedRegular.details?.reasonType, "定期更新");
+  assert.equal(bankedRegular.details?.resetMethod, "任意リセット権1回配布");
 });
 
 test("top dashboard omits latest reset and weekly reference cards", () => {

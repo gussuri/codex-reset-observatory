@@ -65,6 +65,10 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
 }
 
 function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) {
+  if (item.details?.cycleType === translateDynamic("定期リセット", locale)) {
+    return null;
+  }
+
   const label = getSourceLabel(item.sourceKind, locale);
   const canLink = Boolean(item.sourceKind && item.sourceKind !== "none" && isSafeHttpUrl(item.source));
 

@@ -778,7 +778,7 @@ export function RadarDashboard({
                         />
                       </p>
                     ) : null}
-                    {isSafeHttpUrl(item.source) ? (
+                    {item.details?.cycleType !== translateDynamic("定期リセット", locale) && isSafeHttpUrl(item.source) ? (
                       <a
                         className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
                         href={item.source ?? undefined}

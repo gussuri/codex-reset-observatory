@@ -224,10 +224,18 @@ test("automatically generated Tibo history is localized without Japanese leakage
       );
 
       assert.ok(item, `${locale} Tibo history item should be present`);
-      assert.equal(item.title, locale === "en" ? "Unscheduled reset" : "随机重置");
+      const isRegular = testCase.reason === "定期リセット";
+      assert.equal(
+        item.title,
+        isRegular
+          ? locale === "en" ? "Weekly reset" : "定期重置"
+          : locale === "en" ? "Unscheduled reset" : "随机重置",
+      );
       assert.equal(
         item.details?.reasonType,
-        locale === "en"
+        isRegular
+          ? locale === "en" ? "Regular update" : "定期更新"
+          : locale === "en"
           ? testCase.reason === "ご祝儀リセット"
               ? "Celebration reset"
             : testCase.reason === "詫びリセット"
@@ -245,7 +253,11 @@ test("automatically generated Tibo history is localized without Japanese leakage
       );
       assert.equal(
         item.summary,
-        locale === "en"
+        isRegular
+          ? locale === "en"
+            ? "Codex usage limits were reset on the usual weekly-cycle timing."
+            : "在常规的 1 周循环时间点，执行了 Codex 使用限制重置。"
+          : locale === "en"
           ? "Tibo announced that Codex usage limits were reset."
           : "Tibo 宣布 Codex 的使用限制已重置。",
       );
