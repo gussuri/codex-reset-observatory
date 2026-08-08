@@ -113,15 +113,15 @@ test("prioritizes official notice, strong teaser, incident, weak teaser, and ano
 
 test("renders all nine regime and elapsed outlook buckets", () => {
   const cases = [
-    [0.8, 12, "前回のリセットからまだ時間が浅く、最近のリセットも少なめです。"],
-    [0.8, 48, "最近はリセットが少なく、見込みは低めです。"],
-    [0.8, 96, "前回のリセットから時間はたっていますが、最近のリセットは少なめです。"],
-    [1, 12, "前回のリセットからまだ時間が浅く、短期の見込みは低めです。"],
-    [1, 48, "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。"],
-    [1, 96, "前回のリセットから時間がたっており、リセットの見込みは上がっています。"],
-    [1.3, 12, "最近はリセットが続いていますが、前回のリセットからまだ時間が浅い状態です。"],
-    [1.3, 48, "最近はリセットが続いており、いつもより起こりやすい状態です。"],
-    [1.3, 96, "最近はリセットが続いており、リセットの見込みは高めです。"],
+    [0.8, 12, "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。"],
+    [0.8, 48, "前回のリセットから少し時間がたっていますが、最近のリセットが少ないため、リセットの見込みは低めです。"],
+    [0.8, 96, "前回のリセットから時間はたっていますが、最近のリセットが少ないため、リセットの見込みはやや低めです。"],
+    [1, 12, "前回のリセットから時間がたっていないため、短期のリセット見込みは低めです。"],
+    [1, 48, "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。"],
+    [1, 96, "前回のリセットから時間がたっているため、リセットの見込みは高まりつつあります。"],
+    [1.3, 12, "最近はリセットが多いものの、前回のリセットから時間がたっていないため、リセットの見込みは抑えめです。"],
+    [1.3, 48, "最近はリセットが多く、前回のリセットからも少し時間がたっているため、リセットの見込みは高めです。"],
+    [1.3, 96, "最近はリセットが多く、前回のリセットからも時間がたっているため、リセットの見込みは高めです。"],
   ] as const;
 
   for (const [multiplier, elapsedHours, expected] of cases) {
@@ -129,14 +129,20 @@ test("renders all nine regime and elapsed outlook buckets", () => {
   }
 });
 
+test("does not use indirect or technical elapsed-time wording", () => {
+  const reason = reasonFor({ multiplier: 0.8, elapsedHours: 12 });
+
+  assert.doesNotMatch(reason ?? "", /時間が浅い|低発生帯|経過時間による抑制/);
+});
+
 test("uses the same outlook buckets in English and Chinese", () => {
   assert.equal(
     reasonFor({ locale: "en", multiplier: 1, elapsedHours: 48 }),
-    "Some time has passed since the last reset, making a reset more likely than just after a reset.",
+    "Some time has passed since the last reset, so a reset is becoming somewhat more likely.",
   );
   assert.equal(
     reasonFor({ locale: "zh", multiplier: 1, elapsedHours: 48 }),
-    "距离上次重置已有一段时间，比重置刚结束时更容易发生。",
+    "距离上次重置已经过了一段时间，因此重置预期有所上升。",
   );
 });
 
@@ -167,7 +173,7 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       multiplier: 0.8,
       elapsedHours: 0.5,
     }),
-    "前回のリセットからまだ時間が浅く、最近のリセットも少なめです。",
+    "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。",
   );
 });
 
