@@ -111,6 +111,25 @@ test("prioritizes official notice, strong teaser, incident, weak teaser, and ano
   assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常があり、リセットの可能性が少し上がっています。");
 });
 
+test("uses clear English and Chinese wording for teaser strength", () => {
+  assert.equal(
+    reasonFor({ locale: "en", signals: [signal("strong")] }),
+    "A post hints at a reset, making a reset more likely.",
+  );
+  assert.equal(
+    reasonFor({ locale: "en", signals: [signal("weak")] }),
+    "A post hints at a reset, making a reset slightly more likely.",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", signals: [signal("strong")] }),
+    "有帖子暗示可能重置，重置的可能性有所上升。",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", signals: [signal("weak")] }),
+    "有帖子暗示可能重置，重置的可能性略有上升。",
+  );
+});
+
 test("renders all nine regime and elapsed outlook buckets", () => {
   const cases = [
     [0.8, 12, "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。"],
@@ -142,7 +161,7 @@ test("uses the same outlook buckets in English and Chinese", () => {
   );
   assert.equal(
     reasonFor({ locale: "zh", multiplier: 1, elapsedHours: 48 }),
-    "距离上次重置已经过了一段时间，因此重置预期有所上升。",
+    "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
   );
 });
 
@@ -150,6 +169,14 @@ test("does not use regime diagnostics when the published model falls back", () =
   assert.equal(
     reasonFor({ source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
     "現在、大きな変化は確認されていません。",
+  );
+  assert.equal(
+    reasonFor({ locale: "en", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
+    "No major changes are currently apparent.",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
+    "目前未发现明显变化。",
   );
 });
 

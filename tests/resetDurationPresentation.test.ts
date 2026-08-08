@@ -190,7 +190,7 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
       );
       assert.equal(
         getReasonForData(data, "zh"),
-        "距离上次重置已经过了一段时间，因此重置预期有所上升。",
+        "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
       );
     },
   );
@@ -255,7 +255,7 @@ test("renders the normal outlook sentence in all supported locales", () => {
       );
       assert.equal(
         getReason("zh"),
-        "距离上次重置已经过了一段时间，因此重置预期有所上升。",
+        "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
       );
     },
   );
