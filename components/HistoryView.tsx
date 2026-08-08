@@ -148,7 +148,10 @@ function HistoryEventSection({
 
 function getHistoryDisplayTitle(item: HistoryItem, locale: Locale) {
   const title = translateDynamic(item.title, locale);
-  if (item.recordKind !== "reference") {
+  if (
+    item.recordKind !== "reference" ||
+    item.details?.cycleType === translateDynamic("定期リセット", locale)
+  ) {
     return title;
   }
 
