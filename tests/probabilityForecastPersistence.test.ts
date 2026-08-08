@@ -38,6 +38,14 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(regimeElapsed.halfLifeDays, null);
   assert.ok(regimeElapsed.probability24h >= 0);
   assert.ok(regimeElapsed.probability48h >= regimeElapsed.probability24h);
+  assert.equal(typeof regimeElapsed.regimeMultiplier, "number");
+  assert.equal(typeof regimeElapsed.recentRatePerDay, "number");
+  assert.equal(typeof regimeElapsed.longTermRatePerDay, "number");
+  assert.equal(typeof regimeElapsed.elapsedHoursSinceRecovery, "number");
+  assert.equal(regimeElapsed.selectedBinScheme, "A");
+  assert.equal(regimeElapsed.selectedPriorExposureDays, 2);
+  assert.equal(regimeElapsed.selectedRegimeHalfLifeDays, 3);
+  assert.equal(regimeElapsed.selectedRegimeRatioExponent, 1);
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");

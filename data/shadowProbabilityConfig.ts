@@ -1,6 +1,8 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
 export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
+// Freeze hazard-regime-elapsed-v1 parameters until its prospective sample is sufficient.
+// A single reset, miss, or new observation must not trigger retuning.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const REGIME_ELAPSED_SELECTED_BIN_SCHEME = "A" as const;

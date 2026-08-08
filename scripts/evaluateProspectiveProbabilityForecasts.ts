@@ -21,12 +21,12 @@ import {
 } from "../lib/radar/prospectiveProbabilityEvaluation";
 import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
 
-type PredictionHistoryRow = {
+export type PredictionHistoryRow = {
   logged_hour?: string | null;
   debug_info?: unknown;
 };
 
-type PredictionHistoryLoadResult = {
+export type PredictionHistoryLoadResult = {
   rows: Array<ProspectiveForecastRow>;
   reason: string | null;
 };
@@ -118,7 +118,7 @@ export function parsePredictionHistoryRows(rows: Array<PredictionHistoryRow>) {
   });
 }
 
-async function loadPredictionHistoryRows(): Promise<PredictionHistoryLoadResult> {
+export async function loadPredictionHistoryRows(): Promise<PredictionHistoryLoadResult> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
@@ -156,7 +156,7 @@ async function loadPredictionHistoryRows(): Promise<PredictionHistoryLoadResult>
   };
 }
 
-async function loadFormalTiboResets(): Promise<Array<FormalTiboResetSignal>> {
+export async function loadFormalTiboResets(): Promise<Array<FormalTiboResetSignal>> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return [];

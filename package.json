@@ -21,6 +21,7 @@
     "evaluate:regime-elapsed": "tsx scripts/evaluateRegimeElapsedProbability.ts",
     "evaluate:boundary-censored-probability": "tsx scripts/evaluateBoundaryCensoredProbability.ts",
     "evaluate:prospective-probability": "tsx scripts/evaluateProspectiveProbabilityForecasts.ts",
+    "evaluate:prospective-published-model": "tsx scripts/evaluatePublishedModelProspectively.ts",
     "check": "pnpm test && pnpm run lint && pnpm run typecheck",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "tsx --test tests/*.test.ts"

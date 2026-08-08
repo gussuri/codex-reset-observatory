@@ -19,6 +19,7 @@ import {
   calculateCalibratedShadowProbability,
   type CalibratedShadowProbabilityResult,
 } from "@/lib/radar/calibratedShadowProbability";
+import type { RegimeElapsedProbabilityResult } from "@/lib/radar/regimeElapsedProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
@@ -65,6 +66,14 @@ export type ExperimentalProbabilityForecast = {
   evaluationMode?: "prospective";
   pointInTimeProjectionVersion?: string;
   pointInTimeProjectionLimitations?: string;
+  regimeMultiplier?: number;
+  recentRatePerDay?: number;
+  longTermRatePerDay?: number;
+  elapsedHoursSinceRecovery?: number;
+  selectedBinScheme?: string;
+  selectedPriorExposureDays?: number;
+  selectedRegimeHalfLifeDays?: number;
+  selectedRegimeRatioExponent?: number;
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;
@@ -138,6 +147,23 @@ function toCalibratedExperimentalProbabilityForecast(
   };
 }
 
+function toRegimeElapsedExperimentalProbabilityForecast(
+  result: RegimeElapsedProbabilityResult,
+): ExperimentalProbabilityForecast {
+  const forecast = toExperimentalProbabilityForecast(result, null);
+  return {
+    ...forecast,
+    regimeMultiplier: result.regimeElapsed.regime.regimeMultiplier,
+    recentRatePerDay: result.regimeElapsed.regime.recentRatePerDay,
+    longTermRatePerDay: result.regimeElapsed.regime.longTermRatePerDay,
+    elapsedHoursSinceRecovery: result.regimeElapsed.elapsedHours,
+    selectedBinScheme: result.regimeElapsed.binScheme,
+    selectedPriorExposureDays: result.regimeElapsed.priorExposureDays,
+    selectedRegimeHalfLifeDays: result.regimeElapsed.regimeHalfLifeDays,
+    selectedRegimeRatioExponent: result.regimeElapsed.regimeRatioExponent,
+  };
+}
+
 export function buildExperimentalProbabilityForecasts(
   data: Parameters<typeof calculateShadowProbability>[0],
   options: ShadowProbabilityOptions & {
@@ -161,7 +187,7 @@ export function buildExperimentalProbabilityForecasts(
     )?.halfLifeDays ?? null;
     forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
   }
-  forecasts[regimeElapsed.modelVersion] = toExperimentalProbabilityForecast(regimeElapsed, null);
+  forecasts[regimeElapsed.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(regimeElapsed);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
   return forecasts;
 }
