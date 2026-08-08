@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import {
   getDisplayProbabilityReason,
+  getLastDisplayResetAt,
   getLocalSignalEvaluation,
 } from "../lib/radar/probability";
+import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import { formatElapsedResetDuration } from "../lib/radar/helpers";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
 
@@ -49,8 +51,7 @@ function withLocalHistory<T>(history: WindowEventLike[], callback: () => T) {
   }
 }
 
-function getReason(locale: "ja" | "en" | "zh") {
-  const data = getLocalRadarData({ calculationNow: NOW });
+function getReasonForData(data: ReturnType<typeof getLocalRadarData>, locale: "ja" | "en" | "zh") {
   return getDisplayProbabilityReason(
     data,
     0.2,
@@ -60,6 +61,10 @@ function getReason(locale: "ja" | "en" | "zh") {
     null,
     NOW,
   ) ?? "";
+}
+
+function getReason(locale: "ja" | "en" | "zh") {
+  return getReasonForData(getLocalRadarData({ calculationNow: NOW }), locale);
 }
 
 test("formats elapsed reset durations by truncated hours in Japanese", () => {
@@ -88,7 +93,7 @@ test("formats Chinese elapsed reset durations without spaces", () => {
   assert.equal(formatElapsedResetDuration(4 * 24 * HOUR_MS, "zh"), "4天");
 });
 
-test("uses the latest broad regular reset for elapsed display, ignoring newer reference and narrow records", () => {
+test("uses the latest broad regular recovery boundary, ignoring newer narrow records", () => {
   withLocalHistory(
     [
       resetEvent("regular", "2026-08-09T10:00:00.000Z", "confirmed_global", "定期リセット", "全有料プラン"),
@@ -97,12 +102,12 @@ test("uses the latest broad regular reset for elapsed display, ignoring newer re
       resetEvent("newer-narrow", "2026-08-09T12:00:00.000Z", "banked_distribution", "ランダムリセット", "不具合対象ユーザー（約50万人）"),
     ],
     () => {
-      assert.match(getReason("ja"), /直近のリセットから1日2時間経過しています。/);
+      assert.match(getReason("ja"), /直近のリセットから1日1時間経過しています。/);
     },
   );
 });
 
-test("uses a broad random banked distribution when it is the latest eligible reset", () => {
+test("uses a broad regular reference when it is the latest recovery boundary", () => {
   withLocalHistory(
     [
       resetEvent("random-banked", "2026-08-09T09:00:00.000Z", "banked_distribution", "ランダムリセット", "全有料プラン"),
@@ -110,19 +115,93 @@ test("uses a broad random banked distribution when it is the latest eligible res
       resetEvent("newer-narrow", "2026-08-09T11:00:00.000Z", "banked_distribution", "ランダムリセット", "限定ユーザー"),
     ],
     () => {
-      assert.match(getReason("ja"), /直近のリセットから1日3時間経過しています。/);
+      assert.match(getReason("ja"), /直近のリセットから1日2時間経過しています。/);
     },
   );
 });
 
-test("does not use reference or narrow distributions as the elapsed reset baseline", () => {
+test("does not use non-regular reference or narrow distributions as the elapsed reset baseline", () => {
   withLocalHistory(
     [
-      resetEvent("reference", "2026-08-09T10:00:00.000Z", "reference", "定期リセット", "全有料プラン"),
+      resetEvent("reference", "2026-08-09T10:00:00.000Z", "reference", "ランダムリセット", "全有料プラン"),
       resetEvent("narrow", "2026-08-09T11:00:00.000Z", "banked_distribution", "ランダムリセット", "限定ユーザー"),
     ],
     () => {
       assert.doesNotMatch(getReason("ja"), /直近のリセットから/);
+    },
+  );
+});
+
+test("uses persisted regular_completed as the display boundary and not the older random reset", () => {
+  const regularAt = "2026-08-08T03:32:00.000Z";
+  withLocalHistory(
+    [resetEvent("random", "2026-08-01T03:32:00.000Z", "confirmed_global", "ランダムリセット", "全有料プラン")],
+    () => {
+      const regularRow = getDueRegularResetEventRows(new Date(regularAt))[0];
+      const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
+
+      assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
+      assert.match(getReasonForData(data, "ja"), /直近のリセットから2日8時間経過しています。/);
+    },
+  );
+});
+
+test("uses the same regular recovery boundary in JA, EN, and ZH display reasons", () => {
+  const regularAt = "2026-08-08T03:32:00.000Z";
+  withLocalHistory(
+    [resetEvent("random", "2026-08-01T03:32:00.000Z", "confirmed_global", "ランダムリセット", "全有料プラン")],
+    () => {
+      const regularRow = getDueRegularResetEventRows(new Date(regularAt))[0];
+      const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
+
+      assert.match(getReasonForData(data, "ja"), /直近のリセットから2日8時間経過しています。/);
+      assert.match(getReasonForData(data, "en"), /It has been 2 days and 8 hours since the last reset\./);
+      assert.match(getReasonForData(data, "zh"), /距离上次重置已过去2天8小时。/);
+    },
+  );
+});
+
+test("ignores rejected, voided, future, and narrow regular events and falls back to random", () => {
+  const randomAt = "2026-08-01T03:32:00.000Z";
+  const regular = (id: string, completedAt: string, scope = "全有料プラン") =>
+    resetEvent(id, completedAt, "regular_completed", "定期リセット", scope);
+  withLocalHistory(
+    [
+      resetEvent("random", randomAt, "confirmed_global", "ランダムリセット", "全有料プラン"),
+      { ...regular("rejected", "2026-08-10T10:00:00.000Z"), status: "rejected" },
+      { ...regular("voided", "2026-08-10T09:00:00.000Z"), status: "voided" },
+      regular("future", "2026-08-10T13:00:00.000Z"),
+      regular("narrow", "2026-08-10T11:00:00.000Z", "限定ユーザー"),
+    ],
+    () => {
+      assert.equal(getLastDisplayResetAt(null, NOW)?.toISOString(), randomAt);
+    },
+  );
+});
+
+test("display boundary calculation does not change published probability values", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const before = getRadarViewModel(data, "ja", false, undefined, NOW);
+
+  getDisplayProbabilityReason(
+    data,
+    before.probability24h,
+    before.probability48h,
+    "ja",
+    getLocalSignalEvaluation(data, NOW),
+    null,
+    NOW,
+  );
+
+  const after = getRadarViewModel(data, "ja", false, undefined, NOW);
+  assert.deepEqual(
+    {
+      probability24h: after.probability24h,
+      probability48h: after.probability48h,
+    },
+    {
+      probability24h: before.probability24h,
+      probability48h: before.probability48h,
     },
   );
 });

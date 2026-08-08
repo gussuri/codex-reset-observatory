@@ -29,7 +29,7 @@ import {
   convertTiboResetSignalToHistoryEvent,
   isFormalTiboResetSignal,
 } from "./tiboHistory";
-import { isBroadResetScope, isEligibleRandomResetEvent } from "./resetEligibility";
+import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRecoveryResetAt } from "./recoveryBoundary";
 
 export type LocalSignalEvaluation = {
@@ -1089,48 +1089,11 @@ export function getLastResetBoundaryAt(
   return latestBoundary ? new Date(latestBoundary) : null;
 }
 
-function isEligibleElapsedResetEvent(
-  item: WindowEventLike,
-  completedAt: number | null,
-  nowTime: number,
-) {
-  if (item.recordKind !== "confirmed_global" && item.recordKind !== "banked_distribution") {
-    return false;
-  }
-
-  const cycleType = item.details?.cycleType;
-  if (cycleType !== "定期リセット" && cycleType !== "ランダムリセット") {
-    return false;
-  }
-
-  if (!isBroadResetScope(item)) {
-    return false;
-  }
-
-  return Number.isFinite(completedAt) && Number.isFinite(nowTime) && completedAt! <= nowTime;
-}
-
 export function getLastDisplayResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ) {
-  const combinedHistory = combineResetHistory(
-    LOCAL_RESET_HISTORY,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-  );
-  const latestTime = combinedHistory
-    .map((item) => {
-      const completedAt = getCompletedResetTimestamp(item);
-      return isEligibleElapsedResetEvent(item, completedAt, now.getTime())
-        ? completedAt
-        : null;
-    })
-    .filter((time): time is number => time !== null)
-    .sort((left, right) => right - left)[0];
-
-  return latestTime === undefined ? null : new Date(latestTime);
+  return getLastResetBoundaryAt(data, now);
 }
 
 export function getLocalExpectationLevel(
