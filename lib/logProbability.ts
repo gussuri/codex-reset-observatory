@@ -13,6 +13,7 @@ import {
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
 } from "@/lib/radar/shadowProbability";
+import { calculateRegimeElapsedProbability } from "@/lib/radar/regimeElapsedProbability";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   calculateCalibratedShadowProbability,
@@ -145,6 +146,7 @@ export function buildExperimentalProbabilityForecasts(
 ): ExperimentalProbabilityForecasts {
   const { shadowProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
+  const regimeElapsed = calculateRegimeElapsedProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
   const calibrated = calculateCalibratedShadowProbability(data, {
     ...calculationOptions,
@@ -159,6 +161,7 @@ export function buildExperimentalProbabilityForecasts(
     )?.halfLifeDays ?? null;
     forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
   }
+  forecasts[regimeElapsed.modelVersion] = toExperimentalProbabilityForecast(regimeElapsed, null);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
   return forecasts;
 }

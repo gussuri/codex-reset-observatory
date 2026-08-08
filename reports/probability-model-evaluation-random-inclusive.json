@@ -230,32 +230,32 @@
   ],
   "models": [
     {
-      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
-      "halfLifeDays": 30,
-      "kind": "recency",
+      "modelVersion": "hazard-regime-elapsed-v1",
+      "halfLifeDays": null,
+      "kind": "regime_elapsed",
       "classification": "baseline",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
-        "averagePrediction": 0.18639616941080567,
-        "brier": 0.25360276925899095,
-        "logLoss": 0.722869452094276,
+        "averagePrediction": 0.17403683830309358,
+        "brier": 0.26413765428477076,
+        "logLoss": 0.7726122766913778,
         "calibration": [
           {
             "range": "0-20%",
             "lower": 0,
             "upper": 0.2,
-            "count": 24,
-            "averagePrediction": 0.13426707781519598,
-            "actualRate": 0.2916666666666667
+            "count": 28,
+            "averagePrediction": 0.1351631165471978,
+            "actualRate": 0.32142857142857145
           },
           {
             "range": "20-40%",
             "lower": 0.2,
             "upper": 0.4,
-            "count": 18,
-            "averagePrediction": 0.25590162487161866,
-            "actualRate": 0.4444444444444444
+            "count": 14,
+            "averagePrediction": 0.25178428181488505,
+            "actualRate": 0.42857142857142855
           },
           {
             "range": "40-60%",
@@ -286,33 +286,33 @@
       "metrics48h": {
         "count": 42,
         "actualRate": 0.5714285714285714,
-        "averagePrediction": 0.3254024569551688,
-        "brier": 0.2963610996236414,
-        "logLoss": 0.7959153581382038,
+        "averagePrediction": 0.319370198501305,
+        "brier": 0.3240011101569392,
+        "logLoss": 0.8803440382577764,
         "calibration": [
           {
             "range": "0-20%",
             "lower": 0,
             "upper": 0.2,
             "count": 5,
-            "averagePrediction": 0.1910532266665949,
-            "actualRate": 0.4
+            "averagePrediction": 0.13578990258740115,
+            "actualRate": 0.8
           },
           {
             "range": "20-40%",
             "lower": 0.2,
             "upper": 0.4,
-            "count": 25,
-            "averagePrediction": 0.29226946026985573,
-            "actualRate": 0.6
+            "count": 30,
+            "averagePrediction": 0.31957775750759476,
+            "actualRate": 0.5
           },
           {
             "range": "40-60%",
             "lower": 0.4,
             "upper": 0.6000000000000001,
-            "count": 12,
-            "averagePrediction": 0.45040837933647654,
-            "actualRate": 0.5833333333333334
+            "count": 7,
+            "averagePrediction": 0.44960944269856584,
+            "actualRate": 0.7142857142857143
           },
           {
             "range": "60-80%",
@@ -335,33 +335,33 @@
       "nonOverlapping48h": {
         "count": 21,
         "actualRate": 0.5714285714285714,
-        "averagePrediction": 0.3284147084350764,
-        "brier": 0.2874963005124594,
-        "logLoss": 0.7752566318503222,
+        "averagePrediction": 0.32897975166358195,
+        "brier": 0.31685772553425295,
+        "logLoss": 0.8457589245614059,
         "calibration": [
           {
             "range": "0-20%",
             "lower": 0,
             "upper": 0.2,
             "count": 3,
-            "averagePrediction": 0.1914421804903912,
-            "actualRate": 0.3333333333333333
+            "averagePrediction": 0.15574206214558595,
+            "actualRate": 0.6666666666666666
           },
           {
             "range": "20-40%",
             "lower": 0.2,
             "upper": 0.4,
-            "count": 11,
-            "averagePrediction": 0.2850538859026516,
-            "actualRate": 0.5454545454545454
+            "count": 15,
+            "averagePrediction": 0.33491594821513027,
+            "actualRate": 0.5333333333333333
           },
           {
             "range": "40-60%",
             "lower": 0.4,
             "upper": 0.6000000000000001,
-            "count": 7,
-            "averagePrediction": 0.4552556558194662,
-            "actualRate": 0.7142857142857143
+            "count": 3,
+            "averagePrediction": 0.47253645842383624,
+            "actualRate": 0.6666666666666666
           },
           {
             "range": "60-80%",
@@ -388,7 +388,7 @@
       "modelVersion": "hazard-odds-v3-random-inclusive",
       "halfLifeDays": null,
       "kind": "shadow",
-      "classification": "no_meaningful_difference",
+      "classification": "promising_but_inconclusive",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
@@ -537,37 +537,37 @@
         ]
       },
       "differenceVsCurrent": {
-        "brier24h": 0.0021474858604326186,
-        "brier48h": 0.002742604857607356,
-        "logLoss24h": 0.005343803067477171,
-        "logLoss48h": 0.004560898607328001,
+        "brier24h": -0.008387399165347198,
+        "brier48h": -0.024897405675690487,
+        "logLoss24h": -0.044399021529624605,
+        "logLoss48h": -0.0798677815122446,
         "bootstrap24h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.001582501930790879,
-          "median": 0.0022568657653354845,
-          "upper": 0.005523142922099325
+          "lower": -0.01616479981808476,
+          "median": -0.008431619913048813,
+          "upper": 0.001620212214543213
         },
         "bootstrap48h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.008818200772298794,
-          "median": 0.003163735077288926,
-          "upper": 0.012496874904016596
+          "lower": -0.05064216220302347,
+          "median": -0.025167641975047415,
+          "upper": 0.007538809908597826
         }
       },
       "nonOverlapping48hDifferenceVsCurrent": {
-        "brier": 0.0023023095755814182,
-        "logLoss": 0.003080853407257167
+        "brier": -0.027059115446212145,
+        "logLoss": -0.06742143930382649
       }
     },
     {
       "modelVersion": "benchmark-constant-hazard-v1",
       "halfLifeDays": null,
       "kind": "constant_hazard",
-      "classification": "no_meaningful_difference",
+      "classification": "promising_but_inconclusive",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
@@ -716,37 +716,37 @@
         ]
       },
       "differenceVsCurrent": {
-        "brier24h": 0.007205600905767884,
-        "brier48h": 0.008508040664562566,
-        "logLoss24h": 0.019963342370537762,
-        "logLoss48h": 0.016856921240776868,
+        "brier24h": -0.0033292841200119327,
+        "brier48h": -0.019131969868735277,
+        "logLoss24h": -0.029779482226564014,
+        "logLoss48h": -0.06757175887879574,
         "bootstrap24h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.0064245985351762906,
-          "median": 0.00695251039492647,
-          "upper": 0.029549657021266565
+          "lower": -0.021647494379155204,
+          "median": -0.004054307110438872,
+          "upper": 0.025878272439495486
         },
         "bootstrap48h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.007909502733544946,
-          "median": 0.008508040664562613,
-          "upper": 0.027756536858487287
+          "lower": -0.046658949759645005,
+          "median": -0.020554593163225103,
+          "upper": 0.020852073974409097
         }
       },
       "nonOverlapping48hDifferenceVsCurrent": {
-        "brier": 0.012259907956302107,
-        "logLoss": 0.025862082551551868
+        "brier": -0.017101517065491456,
+        "logLoss": -0.04464021015953179
       }
     },
     {
       "modelVersion": "benchmark-v2-logit-calibrated-prequential-v1",
       "halfLifeDays": null,
       "kind": "prequential_calibrated",
-      "classification": "promising_but_inconclusive",
+      "classification": "clearly_better",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
@@ -895,37 +895,37 @@
         ]
       },
       "differenceVsCurrent": {
-        "brier24h": -0.012819454092058619,
-        "brier48h": -0.028782685232258243,
-        "logLoss24h": -0.03685519450726937,
-        "logLoss48h": -0.0612251633643327,
+        "brier24h": -0.023354339117838435,
+        "brier48h": -0.056422695765556086,
+        "logLoss24h": -0.08659801910437115,
+        "logLoss48h": -0.1456538434839053,
         "bootstrap24h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.04397497497497788,
-          "median": -0.012315813028722195,
-          "upper": 0.009266106198635951
+          "lower": -0.05002516913482932,
+          "median": -0.023354339117838376,
+          "upper": -0.0011036800729395432
         },
         "bootstrap48h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.06640863482987325,
-          "median": -0.02878268523225814,
-          "upper": 0.010568510341258395
+          "lower": -0.0936321232368951,
+          "median": -0.056422695765555995,
+          "upper": -0.023374960165003983
         }
       },
       "nonOverlapping48hDifferenceVsCurrent": {
-        "brier": -0.034706299733281876,
-        "logLoss": -0.07375601140547727
+        "brier": -0.06406772475507544,
+        "logLoss": -0.14425830411656093
       }
     },
     {
       "modelVersion": "hazard-odds-v3-recency-bayes-h14-r2",
       "halfLifeDays": 14,
       "kind": "recency",
-      "classification": "no_meaningful_difference",
+      "classification": "clearly_better",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
@@ -1074,37 +1074,216 @@
         ]
       },
       "differenceVsCurrent": {
-        "brier24h": 0.00043228515300780535,
-        "brier48h": 0.0014899233612342133,
-        "logLoss24h": 0.0035593929781869704,
-        "logLoss48h": 0.005863809898210004,
+        "brier24h": -0.010102599872772011,
+        "brier48h": -0.02615008717206363,
+        "logLoss24h": -0.046183431618914805,
+        "logLoss48h": -0.0785648702213626,
         "bootstrap24h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.0014963825243769209,
-          "median": 0.000432285153007961,
-          "upper": 0.002357391498011637
+          "lower": -0.016442451471875376,
+          "median": -0.010166268379804456,
+          "upper": -0.0023841335663981464
         },
         "bootstrap48h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.0059431213081486845,
-          "median": 0.0014340732242821438,
-          "upper": 0.010590363473828598
+          "lower": -0.05054999561958845,
+          "median": -0.026150087172063505,
+          "upper": -0.002251043274341717
         }
       },
       "nonOverlapping48hDifferenceVsCurrent": {
-        "brier": 0.0027252465052720054,
-        "logLoss": 0.008772039615381866
+        "brier": -0.026636178516521558,
+        "logLoss": -0.06173025309570179
+      }
+    },
+    {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
+      "halfLifeDays": 30,
+      "kind": "recency",
+      "classification": "clearly_better",
+      "metrics24h": {
+        "count": 42,
+        "actualRate": 0.35714285714285715,
+        "averagePrediction": 0.18639616941080567,
+        "brier": 0.25360276925899095,
+        "logLoss": 0.722869452094276,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 24,
+            "averagePrediction": 0.13426707781519598,
+            "actualRate": 0.2916666666666667
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 18,
+            "averagePrediction": 0.25590162487161866,
+            "actualRate": 0.4444444444444444
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 42,
+        "actualRate": 0.5714285714285714,
+        "averagePrediction": 0.3254024569551688,
+        "brier": 0.2963610996236414,
+        "logLoss": 0.7959153581382038,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 5,
+            "averagePrediction": 0.1910532266665949,
+            "actualRate": 0.4
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 25,
+            "averagePrediction": 0.29226946026985573,
+            "actualRate": 0.6
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 12,
+            "averagePrediction": 0.45040837933647654,
+            "actualRate": 0.5833333333333334
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 21,
+        "actualRate": 0.5714285714285714,
+        "averagePrediction": 0.3284147084350764,
+        "brier": 0.2874963005124594,
+        "logLoss": 0.7752566318503222,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "lower": 0,
+            "upper": 0.2,
+            "count": 3,
+            "averagePrediction": 0.1914421804903912,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "20-40%",
+            "lower": 0.2,
+            "upper": 0.4,
+            "count": 11,
+            "averagePrediction": 0.2850538859026516,
+            "actualRate": 0.5454545454545454
+          },
+          {
+            "range": "40-60%",
+            "lower": 0.4,
+            "upper": 0.6000000000000001,
+            "count": 7,
+            "averagePrediction": 0.4552556558194662,
+            "actualRate": 0.7142857142857143
+          },
+          {
+            "range": "60-80%",
+            "lower": 0.6,
+            "upper": 0.8,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "lower": 0.8,
+            "upper": 1,
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.010534885025779817,
+        "brier48h": -0.027640010533297843,
+        "logLoss24h": -0.049742824597101776,
+        "logLoss48h": -0.08442868011957261,
+        "bootstrap24h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.016685850130783966,
+          "median": -0.010569472397928447,
+          "upper": -0.003303223121482712
+        },
+        "bootstrap48h": {
+          "seed": 20260804,
+          "blockDays": 7,
+          "iterations": 2000,
+          "lower": -0.05075838158082611,
+          "median": -0.027640010533297867,
+          "upper": -0.001655677311876507
+        }
+      },
+      "nonOverlapping48hDifferenceVsCurrent": {
+        "brier": -0.029361425021793564,
+        "logLoss": -0.07050229271108366
       }
     },
     {
       "modelVersion": "hazard-odds-v3-recency-bayes-h60-r2",
       "halfLifeDays": 60,
       "kind": "recency",
-      "classification": "no_meaningful_difference",
+      "classification": "promising_but_inconclusive",
       "metrics24h": {
         "count": 42,
         "actualRate": 0.35714285714285715,
@@ -1253,30 +1432,30 @@
         ]
       },
       "differenceVsCurrent": {
-        "brier24h": 0.0007421236532242914,
-        "brier48h": 0.0008701974321199679,
-        "logLoss24h": 0.0014466208367087674,
-        "logLoss48h": 0.0010008344281658976,
+        "brier24h": -0.009792761372555525,
+        "brier48h": -0.026769813101177875,
+        "logLoss24h": -0.04829620376039301,
+        "logLoss48h": -0.08342784569140671,
         "bootstrap24h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.000668956559025684,
-          "median": 0.0007961011101665831,
-          "upper": 0.001937584209880429
+          "lower": -0.016082902760747274,
+          "median": -0.009801566558510978,
+          "upper": -0.0017821222186294476
         },
         "bootstrap48h": {
           "seed": 20260804,
           "blockDays": 7,
           "iterations": 2000,
-          "lower": -0.0047052327649569166,
-          "median": 0.0009519690123199092,
-          "upper": 0.005211720025441065
+          "lower": -0.05104049699237485,
+          "median": -0.026769813101177913,
+          "upper": 0.0013518029236503396
         }
       },
       "nonOverlapping48hDifferenceVsCurrent": {
-        "brier": 0.000503432363230194,
-        "logLoss": 0.000008996571430941458
+        "brier": -0.02885799265856337,
+        "logLoss": -0.07049329613965272
       }
     }
   ],
@@ -1933,11 +2112,11 @@
   },
   "diagnostics": {
     "ageStructure": "age_structure_inconclusive",
-    "calibration": "calibration_inconclusive",
-    "constantHazardClassification": "no_meaningful_difference",
-    "calibratedV2Classification": "promising_but_inconclusive",
+    "calibration": "underprediction_calibration_signal",
+    "constantHazardClassification": "promising_but_inconclusive",
+    "calibratedV2Classification": "clearly_better",
     "nonOverlapping48h": {
-      "constantHazardDirection": "worse",
+      "constantHazardDirection": "better",
       "calibratedV2Direction": "better"
     }
   },

@@ -427,10 +427,10 @@ export function RadarDashboard({
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
   const probability24h = isDataUnavailable
     ? undefined
-    : getTemporaryDisplayedProbability(viewModel.probability24h, 0.14, hasOfficialNotice);
+    : viewModel.probability24h;
   const probability48h = isDataUnavailable
     ? undefined
-    : getTemporaryDisplayedProbability(viewModel.probability48h, 0.27, hasOfficialNotice);
+    : viewModel.probability48h;
   const officialNoticeValue = isDataUnavailable
     ? translateUI("unknownProbability", locale)
     : viewModel.activeWindow.active && hasOfficialNotice
@@ -883,18 +883,6 @@ export function RadarDashboard({
       </div>
     </main>
   );
-}
-
-function getTemporaryDisplayedProbability(
-  probability: number | undefined,
-  cap: number,
-  hasOfficialNotice: boolean,
-) {
-  if (hasOfficialNotice || typeof probability !== "number" || !Number.isFinite(probability)) {
-    return probability;
-  }
-
-  return Math.min(probability, cap);
 }
 
 function RecommendationRow({

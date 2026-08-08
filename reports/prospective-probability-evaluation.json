@@ -1,36 +1,36 @@
 {
   "schemaVersion": "prospective-probability-evaluation-v1",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-04T10:42:44.695Z",
-  "asOf": "2026-08-04T10:42:44.695Z",
+  "generatedAt": "2026-08-08T14:32:35.394Z",
+  "asOf": "2026-08-08T14:32:35.394Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
-  "targetDefinition": "Same random-reset target definition as hazard-odds-v2-random-only.",
+  "targetDefinition": "Same random-reset target definition as hazard-regime-elapsed-v1; this archived comparison reads hazard-odds-v2-random-only rows where available.",
   "activeCandidateModel": "hazard-odds-v4-logit-calibrated-prequential-v2",
   "archivedCandidateModels": [
     "hazard-odds-v4-logit-calibrated-prequential-v1"
   ],
-  "evaluationStartAt": null,
+  "evaluationStartAt": "2026-08-04T12:26:50.674Z",
   "comparison": {
-    "resolved24h": 0,
-    "resolved48h": 0,
+    "resolved24h": 2,
+    "resolved48h": 2,
     "targetResetCount": 0,
-    "brierDifference24h": 0,
-    "brierDifference48h": 0,
-    "logLossDifference24h": 0,
-    "logLossDifference48h": 0
+    "brierDifference24h": 0.07821387237202732,
+    "brierDifference48h": 0.19931252593641813,
+    "logLossDifference24h": 0.185814479215632,
+    "logLossDifference48h": 0.4041464219818429
   },
   "models": {
     "v2": {
       "modelVersion": "hazard-odds-v2-random-only",
       "metrics24h": {
-        "count": 0,
+        "count": 2,
         "positiveCount": 0,
         "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "averagePrediction": 0.23802445285291696,
+        "brier": 0.05665591862018755,
+        "logLoss": 0.2718410539731495,
         "calibration": [
           {
             "range": "0-20%",
@@ -40,8 +40,8 @@
           },
           {
             "range": "20-40%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 2,
+            "averagePrediction": 0.23802445285291696,
             "actualRate": 0
           },
           {
@@ -63,17 +63,17 @@
             "actualRate": 0
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
+        "periodStart": "2026-08-04T12:26:50.674Z",
+        "periodEnd": "2026-08-04T15:04:12.378Z",
         "targetResetCount": 0
       },
       "metrics48h": {
-        "count": 0,
+        "count": 2,
         "positiveCount": 0,
         "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "averagePrediction": 0.3962532247130063,
+        "brier": 0.1570274630878961,
+        "logLoss": 0.5046152915083084,
         "calibration": [
           {
             "range": "0-20%",
@@ -83,8 +83,8 @@
           },
           {
             "range": "20-40%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 2,
+            "averagePrediction": 0.3962532247130063,
             "actualRate": 0
           },
           {
@@ -106,20 +106,20 @@
             "actualRate": 0
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
+        "periodStart": "2026-08-04T12:26:50.674Z",
+        "periodEnd": "2026-08-04T15:04:12.378Z",
         "targetResetCount": 0
       }
     },
     "v4": {
       "modelVersion": "hazard-odds-v4-logit-calibrated-prequential-v2",
       "metrics24h": {
-        "count": 0,
+        "count": 2,
         "positiveCount": 0,
         "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "averagePrediction": 0.367218508062219,
+        "brier": 0.13486979099221486,
+        "logLoss": 0.4576555331887815,
         "calibration": [
           {
             "range": "0-20%",
@@ -129,8 +129,8 @@
           },
           {
             "range": "20-40%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 2,
+            "averagePrediction": 0.367218508062219,
             "actualRate": 0
           },
           {
@@ -152,17 +152,17 @@
             "actualRate": 0
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
+        "periodStart": "2026-08-04T12:26:50.674Z",
+        "periodEnd": "2026-08-04T15:04:12.378Z",
         "targetResetCount": 0
       },
       "metrics48h": {
-        "count": 0,
+        "count": 2,
         "positiveCount": 0,
         "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "averagePrediction": 0.5968697730393683,
+        "brier": 0.35633998902431424,
+        "logLoss": 0.9087617134901513,
         "calibration": [
           {
             "range": "0-20%",
@@ -178,14 +178,14 @@
           },
           {
             "range": "40-60%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.5875712217410618,
             "actualRate": 0
           },
           {
             "range": "60-80%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.6061683243376748,
             "actualRate": 0
           },
           {
@@ -195,8 +195,8 @@
             "actualRate": 0
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
+        "periodStart": "2026-08-04T12:26:50.674Z",
+        "periodEnd": "2026-08-04T15:04:12.378Z",
         "targetResetCount": 0
       }
     }
@@ -210,19 +210,18 @@
       "maxLogLossWorsening": 0.05
     },
     "targetResetCount": 0,
-    "resolvedDaily24h": 0,
-    "resolvedDaily48h": 0,
-    "brier24hNotWorse": true,
-    "brier48hNotWorse": true,
+    "resolvedDaily24h": 2,
+    "resolvedDaily48h": 2,
+    "brier24hNotWorse": false,
+    "brier48hNotWorse": false,
     "oneHorizonClearlyImproved": false,
-    "logLossNotExtremelyWorse": true
+    "logLossNotExtremelyWorse": false
   },
   "notes": [
     "This is a prospective evaluation of forecasts saved after the active v4-v2 deployment point.",
     "Existing prediction_history rows are not backfilled or relabeled as v4 forecasts.",
     "Rows are filtered to the active v2 and v4 candidates before selecting the first saved forecast per Asia/Tokyo calendar day.",
     "Archived candidate models are excluded from the active comparison: hazard-odds-v4-logit-calibrated-prequential-v1.",
-    "Passing the gate never changes the public model automatically; manual review is required.",
-    "Data availability: No prediction_history rows contain both v2 and v4 experimental forecasts yet."
+    "Passing the gate never changes the public model automatically; manual review is required."
   ]
 }

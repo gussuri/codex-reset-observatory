@@ -26,12 +26,18 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     "hazard-odds-v3-recency-bayes-h14-r2",
     "hazard-odds-v3-recency-bayes-h30-r3",
     "hazard-odds-v3-recency-bayes-h60-r2",
+    "hazard-regime-elapsed-v1",
     "hazard-odds-v4-logit-calibrated-prequential-v2",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability12h, shadow.predictions.probability12h);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability72h, shadow.predictions.probability72h);
+  const regimeElapsed = forecasts["hazard-regime-elapsed-v1"];
+  assert.equal(regimeElapsed.modelVersion, "hazard-regime-elapsed-v1");
+  assert.equal(regimeElapsed.halfLifeDays, null);
+  assert.ok(regimeElapsed.probability24h >= 0);
+  assert.ok(regimeElapsed.probability48h >= regimeElapsed.probability24h);
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");
@@ -49,7 +55,11 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(LEGACY_SHADOW_PROBABILITY_MODEL_VERSION, "hazard-odds-v2-random-only");
   for (const forecast of Object.values(forecasts)) {
     assert.equal(forecast.generatedAt, now.toISOString());
-    assert.ok(forecast.completedEventCount >= forecast.completedIntervalCount);
+    if (forecast.modelVersion === "hazard-regime-elapsed-v1") {
+      assert.ok(forecast.completedEventCount >= 0);
+    } else {
+      assert.ok(forecast.completedEventCount >= forecast.completedIntervalCount);
+    }
     assert.ok(forecast.weightedEventCount >= 0);
     assert.ok(forecast.weightedExposureDays >= 0);
     assert.ok(forecast.probability48h >= forecast.probability24h);
@@ -59,7 +69,11 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     if (forecast.probability12h !== undefined) {
       assert.ok(forecast.probability12h <= forecast.probability24h);
     }
-    assert.equal(forecast.targetDefinition, shadow.targetDefinition);
+    if (forecast.modelVersion === "hazard-regime-elapsed-v1") {
+      assert.match(forecast.targetDefinition, /recovery-boundary/);
+    } else {
+      assert.equal(forecast.targetDefinition, shadow.targetDefinition);
+    }
   }
 
   const debugInfo = buildProbabilityDebugInfo(

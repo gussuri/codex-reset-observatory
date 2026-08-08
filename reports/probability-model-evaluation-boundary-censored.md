@@ -24,6 +24,7 @@
 | local-codex-regular-reset-2026-06-25 | 2026-06-24T22:01:00.000Z | reference | 全有料プラン | yes | accepted |
 | local-codex-rate-limit-reset-notice-2026-06-17 | 2026-06-17T22:00:00.000Z | reference | 全有料プラン | yes | accepted |
 | personal-reset-credit-2026-06-11 | 2026-06-12T00:11:00.000Z | banked_distribution | 全有料プラン | yes | accepted |
+| local-codex-regular-reset-2026-08-08 | 2026-08-08T03:32:00.000Z | reference | 任意リセット未使用アカウント | no | future_timestamp |
 | local-codex-regular-reset-2026-07-07 | 2026-07-07T00:30:00.000Z | reference | 任意リセットを使っていないアカウント | no | not_broad_scope |
 
 ## Evaluation
@@ -52,4 +53,4 @@
 - The candidate treats each accepted broad regular reset as a boundary and right-censors the interval at that boundary without incrementing random event count.
 - A regular boundary inside a scored horizon is censored rather than scored as a simple negative; current and candidate use the same scored origins.
 - The model calculations use only history available at each origin; future records are used only to create censor-aware evaluation labels.
-- The public model is hazard-odds-v3-recency-bayes-h30-r2; this report compares the boundary candidate with the unweighted hazard-odds-v3-random-inclusive baseline.
+- The public model is hazard-regime-elapsed-v1; this report compares the boundary candidate with the unweighted hazard-odds-v3-random-inclusive baseline.

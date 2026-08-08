@@ -30,6 +30,7 @@ import {
   isFormalTiboResetSignal,
 } from "./tiboHistory";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./resetEligibility";
+import { getLastRecoveryResetAt } from "./recoveryBoundary";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -1084,31 +1085,7 @@ export function getLastResetBoundaryAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ) {
-  const combinedHistory = combineResetHistory(
-    LOCAL_RESET_HISTORY,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-  );
-  const nowTime = now.getTime();
-  const candidates = combinedHistory.flatMap((item) => {
-    const time = getCompletedResetTimestamp(item);
-    const isRegularBoundary =
-      item.recordKind === "regular_completed" &&
-      item.details?.cycleType === "定期リセット" &&
-      item.status?.toLowerCase() !== "rejected" &&
-      item.status?.toLowerCase() !== "voided" &&
-      time !== null &&
-      time <= nowTime;
-
-    if (isRegularBoundary || isEligibleRandomResetEvent(item, time, nowTime)) {
-      return time === null ? [] : [new Date(time).toISOString()];
-    }
-
-    return [];
-  });
-
-  const latestBoundary = getLatestIsoDate(candidates);
+  const latestBoundary = getLastRecoveryResetAt(data ?? null, now, LOCAL_RESET_HISTORY);
   return latestBoundary ? new Date(latestBoundary) : null;
 }
 

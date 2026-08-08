@@ -465,7 +465,7 @@ test("history page combines confirmed, banked, and regular reference records chr
   assert.match(html, /August 2026/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
-  assert.match(html, /Weekly reset \(reference record\)/);
+  assert.match(html, /Weekly reset/);
   assert.doesNotMatch(html, /Unclassified history sentinel/);
 
   const unclassifiedData = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
@@ -482,15 +482,15 @@ test("history page combines confirmed, banked, and regular reference records chr
   const localizedAssertions = {
     ja: {
       title: "リセット履歴",
-    reference: "定期リセット（参考記録）",
+    reference: "定期リセット",
     },
     en: {
       title: "Reset history",
-      reference: "Weekly reset \(reference record\)",
+      reference: "Weekly reset",
     },
     zh: {
       title: "重置记录",
-      reference: "定期重置（参考记录）",
+      reference: "定期重置",
     },
   } as const;
 

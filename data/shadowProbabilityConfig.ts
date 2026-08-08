@@ -1,7 +1,18 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
+export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
+export const REGIME_ELAPSED_SELECTED_BIN_SCHEME = "A" as const;
+export const REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS = 2;
+export const REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS = 3;
+export const REGIME_ELAPSED_SELECTED_RATIO_EXPONENT = 1;
+export const REGIME_ELAPSED_MIN_MULTIPLIER = 0.5;
+export const REGIME_ELAPSED_MAX_MULTIPLIER = 2;
+export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
+export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;
+export const REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES = [3, 5, 7, 10, 14] as const;
+export const REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES = [0.25, 0.5, 0.75, 1] as const;
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
 export const CALIBRATED_SHADOW_MODEL_VERSION =
@@ -92,7 +103,7 @@ export const RECENCY_SHADOW_MODEL_CONFIG = [
     includeTeaserStrengthBoost: false,
   },
   {
-    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    modelVersion: RECENCY_H30_PROBABILITY_MODEL_VERSION,
     halfLifeDays: PUBLISHED_RECENCY_HALF_LIFE_DAYS,
     includeTeaserStrengthBoost: true,
   },

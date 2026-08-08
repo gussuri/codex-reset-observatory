@@ -7,7 +7,6 @@ import {
 } from "../data/resetHistory";
 import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
-  PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
@@ -28,6 +27,7 @@ import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
+import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import {
   createPrequentialOrigins,
   getActualWithinHorizon as getSharedActualWithinHorizon,
@@ -91,7 +91,7 @@ export type ModelClassification =
 export type ProbabilityModelDefinition = {
   modelVersion: string;
   halfLifeDays: number | null;
-  kind: "shadow" | "constant_hazard" | "prequential_calibrated" | "recency";
+  kind: "shadow" | "constant_hazard" | "prequential_calibrated" | "recency" | "regime_elapsed";
 };
 
 export type ModelEvaluation = {
@@ -438,14 +438,13 @@ export function classifyModelResult(input: {
 const MODEL_DEFINITIONS: Array<ProbabilityModelDefinition> = [
   {
     modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
-    halfLifeDays: PUBLISHED_RECENCY_HALF_LIFE_DAYS,
-    kind: "recency",
+    halfLifeDays: null,
+    kind: "regime_elapsed",
   },
   { modelVersion: SHADOW_PROBABILITY_MODEL_VERSION, halfLifeDays: null, kind: "shadow" },
   { modelVersion: CONSTANT_HAZARD_MODEL_VERSION, halfLifeDays: null, kind: "constant_hazard" },
   { modelVersion: CALIBRATED_V2_MODEL_VERSION, halfLifeDays: null, kind: "prequential_calibrated" },
   ...RECENCY_SHADOW_MODEL_CONFIG
-    .filter(({ modelVersion }) => modelVersion !== PUBLISHED_PROBABILITY_MODEL_VERSION)
     .map(({ modelVersion, halfLifeDays }) => ({
       modelVersion,
       halfLifeDays,
@@ -481,6 +480,9 @@ function getModelPrediction(
   }
   if (model.kind === "constant_hazard") {
     return calculateConstantHazardBenchmark(shadowResult).predictions;
+  }
+  if (model.kind === "regime_elapsed") {
+    return calculateRegimeElapsedProbability(data, options).predictions;
   }
   if (model.halfLifeDays !== null) {
     return calculateRecencyWeightedShadowProbability(data, model.halfLifeDays, options).predictions;

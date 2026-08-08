@@ -316,6 +316,9 @@ export function getPointInTimeRadarData(data: RadarData | null, origin: Date): R
     rejected_tibo_resets: (data.rejected_tibo_resets ?? []).filter((signal) =>
       isAvailableAt(signal.tweet_created_at, originTime),
     ),
+    regular_reset_events: (data.regular_reset_events ?? []).filter((event) =>
+      isAvailableAt(event.completed_at, originTime),
+    ),
     // Do not reuse current aggregate values at a historical origin.
     codex_environment: undefined,
   };

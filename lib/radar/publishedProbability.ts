@@ -1,6 +1,7 @@
 import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+  RECENCY_H30_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type {
   ActiveOfficialNotice,
@@ -13,13 +14,22 @@ import {
   derive72hFrom48hProbability,
   type ShadowProbabilityResult,
 } from "./shadowProbability";
+import { calculateRegimeElapsedProbability } from "./regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "./recencyWeightedProbability";
 import type { RadarData } from "./types";
 
-export type PublishedProbabilitySource = "shadow" | "heuristic-fallback";
+export type PublishedProbabilitySource = "shadow" | "legacy-shadow-fallback" | "heuristic-fallback";
 export type PublishedProbabilityFallbackReason =
   | "shadow_exception"
   | "shadow_invalid_prediction";
+
+const PUBLIC_CALCULATION_INTERVAL_MS = 10 * 60 * 1000;
+
+export function roundPublicProbabilityTime(now: Date) {
+  const time = now.getTime();
+  if (!Number.isFinite(time)) return now;
+  return new Date(Math.floor(time / PUBLIC_CALCULATION_INTERVAL_MS) * PUBLIC_CALCULATION_INTERVAL_MS);
+}
 
 export type PublishedProbabilityCalculation = {
   probability12h: number;
@@ -61,10 +71,40 @@ export function isValidShadowPrediction(
   );
 }
 
+function isValidModelPrediction(
+  shadow: Pick<ShadowProbabilityResult, "modelVersion" | "predictions">,
+  modelVersion: string,
+) {
+  const probability12h = shadow.predictions?.probability12h;
+  const probability24h = shadow.predictions?.probability24h;
+  const probability48h = shadow.predictions?.probability48h;
+  const probability72h = shadow.predictions?.probability72h;
+
+  return (
+    shadow.modelVersion === modelVersion &&
+    Number.isFinite(probability12h) &&
+    Number.isFinite(probability24h) &&
+    Number.isFinite(probability48h) &&
+    Number.isFinite(probability72h) &&
+    probability12h >= 0 &&
+    probability12h <= 1 &&
+    probability24h >= 0 &&
+    probability24h <= 1 &&
+    probability48h >= 0 &&
+    probability48h <= 1 &&
+    probability72h >= 0 &&
+    probability72h <= 1 &&
+    probability12h <= probability24h &&
+    probability24h <= probability48h &&
+    probability48h <= probability72h
+  );
+}
+
 export function selectPublishedProbability(
   primary: ProbabilityCalculationAudit,
   shadow: ShadowProbabilityResult | null,
   fallbackReason: PublishedProbabilityCalculation["fallbackReason"] = null,
+  legacyShadow: ShadowProbabilityResult | null = null,
 ): PublishedProbabilityCalculation {
   if (shadow && isValidShadowPrediction(shadow)) {
     return {
@@ -75,6 +115,20 @@ export function selectPublishedProbability(
       adoptedModel: shadow.modelVersion,
       source: "shadow",
       fallbackReason: null,
+      primary,
+      shadow,
+    };
+  }
+
+  if (legacyShadow && isValidModelPrediction(legacyShadow, RECENCY_H30_PROBABILITY_MODEL_VERSION)) {
+    return {
+      probability12h: legacyShadow.predictions.probability12h,
+      probability24h: legacyShadow.predictions.probability24h,
+      probability48h: legacyShadow.predictions.probability48h,
+      probability72h: legacyShadow.predictions.probability72h,
+      adoptedModel: legacyShadow.modelVersion,
+      source: "legacy-shadow-fallback",
+      fallbackReason: fallbackReason ?? "shadow_invalid_prediction",
       primary,
       shadow,
     };
@@ -98,7 +152,7 @@ export function selectPublishedProbability(
 function logPublishedProbabilityFallback(
   calculation: PublishedProbabilityCalculation,
 ) {
-  if (calculation.source !== "heuristic-fallback") return;
+  if (calculation.source === "shadow") return;
 
   console.warn("[Published probability fallback]", {
     reason: calculation.fallbackReason,
@@ -120,18 +174,48 @@ export function calculatePublishedProbability(
   runtime: { logFallback?: boolean } = {},
 ): PublishedProbabilityCalculation {
   const primary = getLocalProbabilityCalculation(data, options);
+  const publicModelOptions = {
+    ...options,
+    now: roundPublicProbabilityTime(options.now ?? new Date()),
+  };
 
   try {
-    const shadow = calculateRecencyWeightedShadowProbability(
+    const shadow = calculateRegimeElapsedProbability(
       data,
-      PUBLISHED_RECENCY_HALF_LIFE_DAYS,
-      options,
+      publicModelOptions,
     );
-    const selected = selectPublishedProbability(primary, shadow);
+    let legacyShadow: ShadowProbabilityResult | null = null;
+    if (!isValidShadowPrediction(shadow)) {
+      try {
+        legacyShadow = calculateRecencyWeightedShadowProbability(
+          data,
+          PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+          options,
+        );
+      } catch {
+        legacyShadow = null;
+      }
+    }
+    const selected = selectPublishedProbability(
+      primary,
+      shadow,
+      isValidShadowPrediction(shadow) ? null : "shadow_invalid_prediction",
+      legacyShadow,
+    );
     if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
     return selected;
   } catch {
-    const selected = selectPublishedProbability(primary, null, "shadow_exception");
+    let legacyShadow: ShadowProbabilityResult | null = null;
+    try {
+      legacyShadow = calculateRecencyWeightedShadowProbability(
+        data,
+        PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+        options,
+      );
+    } catch {
+      legacyShadow = null;
+    }
+    const selected = selectPublishedProbability(primary, null, "shadow_exception", legacyShadow);
     if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
     return selected;
   }

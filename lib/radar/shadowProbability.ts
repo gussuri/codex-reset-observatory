@@ -668,7 +668,7 @@ function getRegularProximityScore(expectedAt: string | null | undefined, now: Da
   ));
 }
 
-function getShadowSignalInputs(
+export function getShadowSignalInputs(
   data: RadarData | null,
   now: Date,
   signalEvaluation: LocalSignalEvaluation,

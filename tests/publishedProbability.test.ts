@@ -9,6 +9,7 @@ import { buildProbabilityDebugInfo } from "../lib/logProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import {
   calculatePublishedProbability,
+  roundPublicProbabilityTime,
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
 import {
@@ -22,6 +23,7 @@ import {
   getShadowCompletedResetEvents,
   probabilityToOdds,
 } from "../lib/radar/shadowProbability";
+import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
@@ -67,10 +69,11 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.shadow);
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.13090841139870835);
-  assert.equal(published.probability24h, 0.24519376978467242);
-  assert.equal(published.probability48h, 0.4361750242757559);
-  assert.equal(published.probability72h, 0.5630471678283646);
+  const regimeElapsed = calculateRegimeElapsedProbability(data, {
+    now: roundPublicProbabilityTime(NOW),
+    regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+  });
+  assert.deepEqual(published.shadow?.predictions, regimeElapsed.predictions);
   assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
   const recency = calculateRecencyWeightedShadowProbability(
     data,
@@ -80,8 +83,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
     },
   );
-  assert.equal(published.shadow?.modelVersion, recency.modelVersion);
-  assert.deepEqual(published.shadow?.predictions, recency.predictions);
+  assert.notEqual(published.shadow?.modelVersion, recency.modelVersion);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
   assert.equal(viewModel.probability12h, published.probability12h);
@@ -97,13 +99,46 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
   assert.equal(publishedDebug.probability72h, snapshot.viewModel.probability72h);
-  // The emergency display cap is presentation-only; the published/API values
-  // above remain the uncapped model output.
-  assert.match(html, />14%<\/dd>/);
-  assert.match(html, />27%<\/dd>/);
+  assert.match(html, new RegExp(`>${Math.round(published.probability24h * 100)}%<\\/dd>`));
+  assert.match(html, new RegExp(`>${Math.round(published.probability48h * 100)}%<\\/dd>`));
+  const uncappedHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: {
+        ...snapshot,
+        viewModel: {
+          ...snapshot.viewModel,
+          probability24h: 0.4,
+          probability48h: 0.6,
+        },
+      },
+      locale: "ja",
+    }),
+  );
+  assert.match(uncappedHtml, />40%<\/dd>/);
+  assert.match(uncappedHtml, />60%<\/dd>/);
   assert.ok(published.probability24h <= published.probability48h);
   assert.ok(published.probability48h <= published.probability72h);
  });
+
+test("public regime-elapsed calculations are stable within a ten-minute display interval", () => {
+  const first = calculatePublishedProbability(getLocalRadarData({ calculationNow: NOW }), {
+    now: new Date("2026-08-04T00:01:00.000Z"),
+    activeOfficialNotice: null,
+  });
+  const sameInterval = calculatePublishedProbability(getLocalRadarData({ calculationNow: NOW }), {
+    now: new Date("2026-08-04T00:09:59.999Z"),
+    activeOfficialNotice: null,
+  });
+  const nextInterval = calculatePublishedProbability(getLocalRadarData({ calculationNow: NOW }), {
+    now: new Date("2026-08-04T00:10:00.000Z"),
+    activeOfficialNotice: null,
+  });
+
+  assert.equal(first.shadow?.calculatedAt, "2026-08-04T00:00:00.000Z");
+  assert.equal(sameInterval.shadow?.calculatedAt, first.shadow?.calculatedAt);
+  assert.equal(sameInterval.probability24h, first.probability24h);
+  assert.equal(nextInterval.shadow?.calculatedAt, "2026-08-04T00:10:00.000Z");
+});
 
 function dataWithTeaserStrength(
   teaserStrength: "strong" | "weak" | "none",
@@ -398,7 +433,7 @@ test("the published model uses broad random distributions and excludes regular o
   assert.equal(published.shadow?.hazard.completedEventCount, events.length);
 });
 
-test("the h30 recency public model keeps the fixed-time forecast deterministic", () => {
+test("the regime-elapsed public model keeps the fixed-time forecast deterministic", () => {
   const fixedNow = new Date("2026-08-04T03:32:00.000Z");
   const data = getLocalRadarData({ calculationNow: fixedNow });
   const published = calculatePublishedProbability(data, { now: fixedNow }, { logFallback: false });
@@ -407,10 +442,10 @@ test("the h30 recency public model keeps the fixed-time forecast deterministic",
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.source, "shadow");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.13111217470479297);
-  assert.equal(published.probability24h, 0.2450339470537658);
-  assert.equal(published.probability48h, 0.4364474582890776);
-  assert.equal(published.probability72h, 0.5599740647880459);
+  assert.equal(published.probability12h, 0.08138424335817807);
+  assert.equal(published.probability24h, 0.15930501980383993);
+  assert.equal(published.probability48h, 0.30375901718892184);
+  assert.equal(published.probability72h, 0.4319803213867447);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(unweightedBaseline.predictions.probability24h, 0.26063284833834355);
   assert.equal(unweightedBaseline.predictions.probability48h, 0.44994539803274325);
@@ -548,6 +583,35 @@ test("invalid Shadow predictions fall back to the old heuristic model", () => {
   });
   assert.equal(mismatchedModel.source, "heuristic-fallback");
   assert.equal(mismatchedModel.fallbackReason, "shadow_invalid_prediction");
+});
+
+test("an invalid regime-elapsed prediction uses the valid h30 model before heuristic fallback", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const oldShadow = calculateRecencyWeightedShadowProbability(data, PUBLISHED_RECENCY_HALF_LIFE_DAYS, {
+    now: NOW,
+    activeOfficialNotice: null,
+  });
+  const invalidNewShadow = {
+    ...oldShadow,
+    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    predictions: {
+      ...oldShadow.predictions,
+      probability24h: Number.NaN,
+    },
+  };
+  const selected = selectPublishedProbability(
+    primary,
+    invalidNewShadow,
+    "shadow_invalid_prediction",
+    oldShadow,
+  );
+
+  assert.equal(selected.source, "legacy-shadow-fallback");
+  assert.equal(selected.adoptedModel, oldShadow.modelVersion);
+  assert.equal(selected.probability24h, oldShadow.predictions.probability24h);
+  assert.equal(selected.probability48h, oldShadow.predictions.probability48h);
+  assert.equal(selected.fallbackReason, "shadow_invalid_prediction");
 });
 
 test("public probability fields stay aligned in Japanese, English, and Chinese", () => {

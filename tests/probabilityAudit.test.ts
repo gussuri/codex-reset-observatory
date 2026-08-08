@@ -85,7 +85,7 @@ test("fixed calculation time makes probability and audit output reproducible", (
   );
 });
 
-test("strict history classification preserves the fixed public recency probability", () => {
+test("strict history classification preserves the fixed public regime-elapsed probability", () => {
   const now = new Date("2026-08-04T03:32:00.000Z");
   const viewModel = getRadarViewModel(
     getLocalRadarData({ calculationNow: now }),
@@ -95,8 +95,8 @@ test("strict history classification preserves the fixed public recency probabili
     now,
   );
 
-  assert.equal(viewModel.probability24h, 0.2450339470537658);
-  assert.equal(viewModel.probability48h, 0.4364474582890776);
+  assert.equal(viewModel.probability24h, 0.15930501980383993);
+  assert.equal(viewModel.probability48h, 0.30375901718892184);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

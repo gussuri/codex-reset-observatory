@@ -18,6 +18,7 @@
     "eval:tibo-teaser-strength:stress": "tsx scripts/evaluate-tibo-teaser-strength-stress.ts",
     "evaluate:shadow-probability": "tsx scripts/evaluate-shadow-probability.ts",
     "evaluate:probability-models": "tsx scripts/evaluateProbabilityModels.ts",
+    "evaluate:regime-elapsed": "tsx scripts/evaluateRegimeElapsedProbability.ts",
     "evaluate:boundary-censored-probability": "tsx scripts/evaluateBoundaryCensoredProbability.ts",
     "evaluate:prospective-probability": "tsx scripts/evaluateProspectiveProbabilityForecasts.ts",
     "check": "pnpm test && pnpm run lint && pnpm run typecheck",

@@ -1,0 +1,1629 @@
+{
+  "schemaVersion": "reset-regime-analysis-v1",
+  "asOf": "2026-08-08T04:27:00.000Z",
+  "targetDefinition": "Broad-scope random reset: confirmed global hard reset or broad Banked Reset distribution; regular reset is a recovery boundary only.",
+  "randomEvents": [
+    {
+      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "resetAt": "2026-08-01T03:32:00.000Z"
+    },
+    {
+      "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
+      "resetAt": "2026-07-29T04:09:00.000Z"
+    },
+    {
+      "id": "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+      "resetAt": "2026-07-28T03:09:00.000Z"
+    },
+    {
+      "id": "local-codex-outage-compensation-reset-2026-07-26",
+      "resetAt": "2026-07-25T19:17:00.000Z"
+    },
+    {
+      "id": "local-codex-10m-users-reset-2026-07-22",
+      "resetAt": "2026-07-21T17:05:00.000Z"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18",
+      "resetAt": "2026-07-18T03:31:00.000Z"
+    },
+    {
+      "id": "local-codex-9m-users-reset-2026-07-16",
+      "resetAt": "2026-07-16T04:15:00.000Z"
+    },
+    {
+      "id": "local-codex-8m-users-reset-2026-07-15",
+      "resetAt": "2026-07-14T20:45:00.000Z"
+    },
+    {
+      "id": "personal-tibo-7m-users-banked-reset-2026-07-14",
+      "resetAt": "2026-07-13T18:40:00.000Z"
+    },
+    {
+      "id": "local-codex-6m-users-reset-2026-07-13",
+      "resetAt": "2026-07-12T18:30:00.000Z"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11",
+      "resetAt": "2026-07-11T06:00:00.000Z"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11",
+      "resetAt": "2026-07-10T18:26:00.000Z"
+    },
+    {
+      "id": "local-codex-gpt-5-6-release-reset-2026-07-10",
+      "resetAt": "2026-07-09T22:00:00.000Z"
+    },
+    {
+      "id": "personal-codex-reset-button-aie-2026-07-02",
+      "resetAt": "2026-07-01T20:50:00.000Z"
+    },
+    {
+      "id": "local-codex-forced-reset-2026-06-30",
+      "resetAt": "2026-06-30T00:30:00.000Z"
+    },
+    {
+      "id": "local-codex-forced-comp-reset-2026-06-29",
+      "resetAt": "2026-06-29T00:00:00.000Z"
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-27",
+      "resetAt": "2026-06-27T03:00:00.000Z"
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-18",
+      "resetAt": "2026-06-17T22:00:00.000Z"
+    },
+    {
+      "id": "local-codex-reliability-compensation-2026-06-04",
+      "resetAt": "2026-06-04T00:25:58.000Z"
+    },
+    {
+      "id": "local-5m-users-celebration-2026-05-31",
+      "resetAt": "2026-05-31T15:25:06.000Z"
+    },
+    {
+      "id": "local-long-session-compression-compensation-2026-05-24",
+      "resetAt": "2026-05-23T20:14:00.000Z"
+    },
+    {
+      "id": "local-sam-like-promise-reset-2026-05-20",
+      "resetAt": "2026-05-19T18:39:18.000Z"
+    },
+    {
+      "id": "local-gpt-55-degradation-compensation-2026-05-17",
+      "resetAt": "2026-05-16T17:51:00.000Z"
+    }
+  ],
+  "recoveryBoundaries": [
+    {
+      "id": "local-gpt-55-degradation-compensation-2026-05-17",
+      "resetAt": "2026-05-16T17:51:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-gpt-55-degradation-compensation-2026-05-17"
+      ]
+    },
+    {
+      "id": "local-sam-like-promise-reset-2026-05-20",
+      "resetAt": "2026-05-19T18:39:18.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-sam-like-promise-reset-2026-05-20"
+      ]
+    },
+    {
+      "id": "local-long-session-compression-compensation-2026-05-24",
+      "resetAt": "2026-05-23T20:14:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-long-session-compression-compensation-2026-05-24"
+      ]
+    },
+    {
+      "id": "local-5m-users-celebration-2026-05-31",
+      "resetAt": "2026-05-31T15:25:06.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-5m-users-celebration-2026-05-31"
+      ]
+    },
+    {
+      "id": "local-codex-reliability-compensation-2026-06-04",
+      "resetAt": "2026-06-04T00:25:58.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-reliability-compensation-2026-06-04"
+      ]
+    },
+    {
+      "id": "personal-reset-credit-2026-06-11",
+      "resetAt": "2026-06-12T00:11:00.000Z",
+      "isRandom": false,
+      "isRegular": true,
+      "sourceIds": [
+        "personal-reset-credit-2026-06-11"
+      ]
+    },
+    {
+      "id": "local-codex-rate-limit-reset-notice-2026-06-17",
+      "resetAt": "2026-06-17T22:00:00.000Z",
+      "isRandom": true,
+      "isRegular": true,
+      "sourceIds": [
+        "local-codex-rate-limit-reset-notice-2026-06-17",
+        "personal-compensation-reset-credit-2026-06-18"
+      ]
+    },
+    {
+      "id": "local-codex-regular-reset-2026-06-25",
+      "resetAt": "2026-06-24T22:01:00.000Z",
+      "isRandom": false,
+      "isRegular": true,
+      "sourceIds": [
+        "local-codex-regular-reset-2026-06-25"
+      ]
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-27",
+      "resetAt": "2026-06-27T03:00:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "personal-compensation-reset-credit-2026-06-27"
+      ]
+    },
+    {
+      "id": "local-codex-forced-comp-reset-2026-06-29",
+      "resetAt": "2026-06-29T00:00:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-forced-comp-reset-2026-06-29"
+      ]
+    },
+    {
+      "id": "local-codex-forced-reset-2026-06-30",
+      "resetAt": "2026-06-30T00:30:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-forced-reset-2026-06-30"
+      ]
+    },
+    {
+      "id": "personal-codex-reset-button-aie-2026-07-02",
+      "resetAt": "2026-07-01T20:50:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "personal-codex-reset-button-aie-2026-07-02"
+      ]
+    },
+    {
+      "id": "local-codex-regular-reset-2026-07-07",
+      "resetAt": "2026-07-07T00:30:00.000Z",
+      "isRandom": false,
+      "isRegular": true,
+      "sourceIds": [
+        "local-codex-regular-reset-2026-07-07"
+      ]
+    },
+    {
+      "id": "local-codex-gpt-5-6-release-reset-2026-07-10",
+      "resetAt": "2026-07-09T22:00:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-gpt-5-6-release-reset-2026-07-10"
+      ]
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11",
+      "resetAt": "2026-07-10T18:26:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11"
+      ]
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11",
+      "resetAt": "2026-07-11T06:00:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11"
+      ]
+    },
+    {
+      "id": "local-codex-6m-users-reset-2026-07-13",
+      "resetAt": "2026-07-12T18:30:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-6m-users-reset-2026-07-13"
+      ]
+    },
+    {
+      "id": "personal-tibo-7m-users-banked-reset-2026-07-14",
+      "resetAt": "2026-07-13T18:40:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "personal-tibo-7m-users-banked-reset-2026-07-14"
+      ]
+    },
+    {
+      "id": "local-codex-8m-users-reset-2026-07-15",
+      "resetAt": "2026-07-14T20:45:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-8m-users-reset-2026-07-15"
+      ]
+    },
+    {
+      "id": "local-codex-9m-users-reset-2026-07-16",
+      "resetAt": "2026-07-16T04:15:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-9m-users-reset-2026-07-16"
+      ]
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18",
+      "resetAt": "2026-07-18T03:31:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18"
+      ]
+    },
+    {
+      "id": "local-codex-10m-users-reset-2026-07-22",
+      "resetAt": "2026-07-21T17:05:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-10m-users-reset-2026-07-22"
+      ]
+    },
+    {
+      "id": "local-codex-outage-compensation-reset-2026-07-26",
+      "resetAt": "2026-07-25T19:17:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-outage-compensation-reset-2026-07-26"
+      ]
+    },
+    {
+      "id": "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+      "resetAt": "2026-07-28T03:09:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-chatgpt-work-adoption-reset-2026-07-28"
+      ]
+    },
+    {
+      "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
+      "resetAt": "2026-07-29T04:09:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-codex-gpt56-sol-efficiency-reset-2026-07-29"
+      ]
+    },
+    {
+      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "resetAt": "2026-08-01T03:32:00.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "local-luna-100k-threads-efficiency-reset-2026-08-01"
+      ]
+    },
+    {
+      "id": "local-codex-regular-reset-2026-08-08",
+      "resetAt": "2026-08-08T03:32:00.000Z",
+      "isRandom": false,
+      "isRegular": true,
+      "sourceIds": [
+        "local-codex-regular-reset-2026-08-08"
+      ]
+    }
+  ],
+  "eventAudit": [
+    {
+      "id": "local-gpt-55-degradation-compensation-2026-05-17",
+      "resetAt": "2026-05-16T17:51:00.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 1,
+      "intervalsSincePreviousHours": null,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1,
+          "recentWeightedExposureDays": 0,
+          "recentRatePerDay": 0.2,
+          "longTermRatePerDay": 0.2,
+          "rawRateRatio": 1,
+          "regimeMultiplier": 1
+        },
+        "5": {
+          "recentWeightedEventCount": 1,
+          "recentWeightedExposureDays": 0,
+          "recentRatePerDay": 0.2,
+          "longTermRatePerDay": 0.2,
+          "rawRateRatio": 1,
+          "regimeMultiplier": 1
+        },
+        "7": {
+          "recentWeightedEventCount": 1,
+          "recentWeightedExposureDays": 0,
+          "recentRatePerDay": 0.2,
+          "longTermRatePerDay": 0.2,
+          "rawRateRatio": 1,
+          "regimeMultiplier": 1
+        },
+        "10": {
+          "recentWeightedEventCount": 1,
+          "recentWeightedExposureDays": 0,
+          "recentRatePerDay": 0.2,
+          "longTermRatePerDay": 0.2,
+          "rawRateRatio": 1,
+          "regimeMultiplier": 1
+        },
+        "14": {
+          "recentWeightedEventCount": 1,
+          "recentWeightedExposureDays": 0,
+          "recentRatePerDay": 0.2,
+          "longTermRatePerDay": 0.2,
+          "rawRateRatio": 1,
+          "regimeMultiplier": 1
+        }
+      }
+    },
+    {
+      "id": "local-sam-like-promise-reset-2026-05-20",
+      "resetAt": "2026-05-19T18:39:18.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 2,
+      "intervalsSincePreviousHours": 72.805,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.496140090743833,
+          "recentWeightedExposureDays": 2.180748577159906,
+          "recentRatePerDay": 0.2049250154809319,
+          "longTermRatePerDay": 0.23017534885951313,
+          "rawRateRatio": 0.8902995759376792,
+          "regimeMultiplier": 0.8902995759376792
+        },
+        "5": {
+          "recentWeightedEventCount": 1.6566933116187585,
+          "recentWeightedExposureDays": 2.476434284158149,
+          "recentRatePerDay": 0.2129369057786064,
+          "longTermRatePerDay": 0.23017534885951313,
+          "rawRateRatio": 0.9251073446121802,
+          "regimeMultiplier": 0.9251073446121802
+        },
+        "7": {
+          "recentWeightedEventCount": 1.7405334992384707,
+          "recentWeightedExposureDays": 2.6203172374782944,
+          "recentRatePerDay": 0.2171525047801465,
+          "longTermRatePerDay": 0.23017534885951313,
+          "rawRateRatio": 0.9434220730243572,
+          "regimeMultiplier": 0.9434220730243572
+        },
+        "10": {
+          "recentWeightedEventCount": 1.8103661589792348,
+          "recentWeightedExposureDays": 2.735838020253839,
+          "recentRatePerDay": 0.220665978517464,
+          "longTermRatePerDay": 0.23017534885951313,
+          "rawRateRatio": 0.9586864084743795,
+          "regimeMultiplier": 0.9586864084743795
+        },
+        "14": {
+          "recentWeightedEventCount": 1.860542560968643,
+          "recentWeightedExposureDays": 2.816723779878592,
+          "recentRatePerDay": 0.22318828197417387,
+          "longTermRatePerDay": 0.23017534885951313,
+          "rawRateRatio": 0.969644590874048,
+          "regimeMultiplier": 0.969644590874048
+        }
+      }
+    },
+    {
+      "id": "local-long-session-compression-compensation-2026-05-24",
+      "resetAt": "2026-05-23T20:14:00.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 3,
+      "intervalsSincePreviousHours": 97.57833333333333,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.584790037310029,
+          "recentWeightedExposureDays": 3.488764643031922,
+          "recentRatePerDay": 0.19162540868005207,
+          "longTermRatePerDay": 0.23392762863988953,
+          "rawRateRatio": 0.8191653538071045,
+          "regimeMultiplier": 0.8191653538071045
+        },
+        "5": {
+          "recentWeightedEventCount": 1.9428850325360103,
+          "recentWeightedExposureDays": 4.517451172160475,
+          "recentRatePerDay": 0.20271361671113874,
+          "longTermRatePerDay": 0.23392762863988953,
+          "rawRateRatio": 0.8665655181038836,
+          "regimeMultiplier": 0.8665655181038836
+        },
+        "7": {
+          "recentWeightedEventCount": 2.163689503406213,
+          "recentWeightedExposureDays": 5.098842092845199,
+          "recentRatePerDay": 0.20953192860433795,
+          "longTermRatePerDay": 0.23392762863988953,
+          "rawRateRatio": 0.8957126177126065,
+          "regimeMultiplier": 0.8957126177126065
+        },
+        "10": {
+          "recentWeightedEventCount": 2.3657610853769526,
+          "recentWeightedExposureDays": 5.607040543710638,
+          "recentRatePerDay": 0.21565658626633702,
+          "longTermRatePerDay": 0.23392762863988953,
+          "rawRateRatio": 0.9218944659090307,
+          "regimeMultiplier": 0.9218944659090307
+        },
+        "14": {
+          "recentWeightedEventCount": 2.521307388500597,
+          "recentWeightedExposureDays": 5.985825611053567,
+          "recentRatePerDay": 0.22027685489486087,
+          "longTermRatePerDay": 0.23392762863988953,
+          "rawRateRatio": 0.9416453121659999,
+          "regimeMultiplier": 0.9416453121659999
+        }
+      }
+    },
+    {
+      "id": "local-5m-users-celebration-2026-05-31",
+      "resetAt": "2026-05-31T15:25:06.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 3,
+      "intervalsSincePreviousHours": 187.185,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.261430623229783,
+          "recentWeightedExposureDays": 4.189628878675772,
+          "recentRatePerDay": 0.15937207678688972,
+          "longTermRatePerDay": 0.20081385392465573,
+          "rawRateRatio": 0.7936308858784478,
+          "regimeMultiplier": 0.7936308858784478
+        },
+        "5": {
+          "recentWeightedEventCount": 1.658988655260499,
+          "recentWeightedExposureDays": 6.299036510526824,
+          "recentRatePerDay": 0.16313778139850021,
+          "longTermRatePerDay": 0.20081385392465573,
+          "rawRateRatio": 0.8123831011166621,
+          "regimeMultiplier": 0.8123831011166621
+        },
+        "7": {
+          "recentWeightedEventCount": 1.9995128736056467,
+          "recentWeightedExposureDays": 7.7891126427680515,
+          "recentRatePerDay": 0.16861509249170234,
+          "longTermRatePerDay": 0.20081385392465573,
+          "rawRateRatio": 0.8396586649592702,
+          "regimeMultiplier": 0.8396586649592702
+        },
+        "10": {
+          "recentWeightedEventCount": 2.3778003842096447,
+          "recentWeightedExposureDays": 9.290305260716618,
+          "recentRatePerDay": 0.17510352161654502,
+          "longTermRatePerDay": 0.20081385392465573,
+          "rawRateRatio": 0.8719693297766344,
+          "regimeMultiplier": 0.8719693297766344
+        },
+        "14": {
+          "recentWeightedEventCount": 2.7136515710756037,
+          "recentWeightedExposureDays": 10.538355687755319,
+          "recentRatePerDay": 0.18081542785285537,
+          "longTermRatePerDay": 0.20081385392465573,
+          "rawRateRatio": 0.9004131155248698,
+          "regimeMultiplier": 0.9004131155248698
+        }
+      }
+    },
+    {
+      "id": "local-codex-reliability-compensation-2026-06-04",
+      "resetAt": "2026-06-04T00:25:58.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 3,
+      "intervalsSincePreviousHours": 81.01444444444445,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.57828807009014,
+          "recentWeightedExposureDays": 4.264611481980614,
+          "recentRatePerDay": 0.18074716394113452,
+          "longTermRatePerDay": 0.21220697712307268,
+          "rawRateRatio": 0.8517493929349337,
+          "regimeMultiplier": 0.8517493929349337
+        },
+        "5": {
+          "recentWeightedEventCount": 2.0389913550438914,
+          "recentWeightedExposureDays": 6.640780572274933,
+          "recentRatePerDay": 0.1826231252701649,
+          "longTermRatePerDay": 0.21220697712307268,
+          "rawRateRatio": 0.8605896363353304,
+          "regimeMultiplier": 0.8605896363353304
+        },
+        "7": {
+          "recentWeightedEventCount": 2.431392905041064,
+          "recentWeightedExposureDays": 8.445380785130732,
+          "recentRatePerDay": 0.18602993047490748,
+          "longTermRatePerDay": 0.21220697712307268,
+          "rawRateRatio": 0.8766437984129832,
+          "regimeMultiplier": 0.8766437984129832
+        },
+        "10": {
+          "recentWeightedEventCount": 2.881740151814456,
+          "recentWeightedExposureDays": 10.36191976749166,
+          "recentRatePerDay": 0.19063723834192473,
+          "longTermRatePerDay": 0.21220697712307268,
+          "rawRateRatio": 0.8983551857079691,
+          "regimeMultiplier": 0.8983551857079691
+        },
+        "14": {
+          "recentWeightedEventCount": 3.295997505688861,
+          "recentWeightedExposureDays": 12.02501566749855,
+          "recentRatePerDay": 0.19505082632146753,
+          "longTermRatePerDay": 0.21220697712307268,
+          "rawRateRatio": 0.9191536912018912,
+          "regimeMultiplier": 0.9191536912018912
+        }
+      }
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-18",
+      "resetAt": "2026-06-17T22:00:00.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 2,
+      "intervalsSincePreviousHours": 333.5672222222222,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.063613750842245,
+          "recentWeightedExposureDays": 4.325526783387651,
+          "recentRatePerDay": 0.14405150903318117,
+          "longTermRatePerDay": 0.16598330287012794,
+          "rawRateRatio": 0.86786746945199,
+          "regimeMultiplier": 0.86786746945199
+        },
+        "5": {
+          "recentWeightedEventCount": 1.2969164246374696,
+          "recentWeightedExposureDays": 7.130079832428002,
+          "recentRatePerDay": 0.1340867320588492,
+          "longTermRatePerDay": 0.16598330287012794,
+          "rawRateRatio": 0.8078326538890727,
+          "regimeMultiplier": 0.8078326538890727
+        },
+        "7": {
+          "recentWeightedEventCount": 1.6139801278578902,
+          "recentWeightedExposureDays": 9.68132412153206,
+          "recentRatePerDay": 0.13281525733312347,
+          "longTermRatePerDay": 0.16598330287012794,
+          "rawRateRatio": 0.8001723970816721,
+          "regimeMultiplier": 0.8001723970816721
+        },
+        "10": {
+          "recentWeightedEventCount": 2.0996747079410083,
+          "recentWeightedExposureDays": 12.875730955416028,
+          "recentRatePerDay": 0.13550057543438337,
+          "longTermRatePerDay": 0.16598330287012794,
+          "rawRateRatio": 0.8163506394399472,
+          "regimeMultiplier": 0.8163506394399472
+        },
+        "14": {
+          "recentWeightedEventCount": 2.6562903033130163,
+          "recentWeightedExposureDays": 16.090813493339184,
+          "recentRatePerDay": 0.14013707561270344,
+          "longTermRatePerDay": 0.16598330287012794,
+          "rawRateRatio": 0.8442841731035583,
+          "regimeMultiplier": 0.8442841731035583
+        }
+      }
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-27",
+      "resetAt": "2026-06-27T03:00:00.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 2,
+      "intervalsSincePreviousHours": 221,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.1267036411557068,
+          "recentWeightedExposureDays": 4.327780358929363,
+          "recentRatePerDay": 0.14843217776089804,
+          "longTermRatePerDay": 0.15569882009487895,
+          "rawRateRatio": 0.9533288541971429,
+          "regimeMultiplier": 0.9533288541971429
+        },
+        "5": {
+          "recentWeightedEventCount": 1.3618387560314054,
+          "recentWeightedExposureDays": 7.19020795522498,
+          "recentRatePerDay": 0.13739442606996047,
+          "longTermRatePerDay": 0.15569882009487895,
+          "rawRateRatio": 0.8824371693133947,
+          "regimeMultiplier": 0.8824371693133947
+        },
+        "7": {
+          "recentWeightedEventCount": 1.648485681355627,
+          "recentWeightedExposureDays": 9.931100230132598,
+          "recentRatePerDay": 0.1328820612397275,
+          "longTermRatePerDay": 0.15569882009487895,
+          "rawRateRatio": 0.8534558011342187,
+          "regimeMultiplier": 0.8534558011342187
+        },
+        "10": {
+          "recentWeightedEventCount": 2.1090562217549373,
+          "recentWeightedExposureDays": 13.607590352936374,
+          "recentRatePerDay": 0.1316973132485851,
+          "longTermRatePerDay": 0.15569882009487895,
+          "rawRateRatio": 0.845846572044233,
+          "regimeMultiplier": 0.845846572044233
+        },
+        "14": {
+          "recentWeightedEventCount": 2.683746247908486,
+          "recentWeightedExposureDays": 17.59447361149062,
+          "recentRatePerDay": 0.13349579701257777,
+          "longTermRatePerDay": 0.15569882009487895,
+          "rawRateRatio": 0.8573976150315641,
+          "regimeMultiplier": 0.8573976150315641
+        }
+      }
+    },
+    {
+      "id": "local-codex-forced-comp-reset-2026-06-29",
+      "resetAt": "2026-06-29T00:00:00.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 3,
+      "intervalsSincePreviousHours": 45,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.7305769241100188,
+          "recentWeightedExposureDays": 4.327887507832067,
+          "recentRatePerDay": 0.19057777516869817,
+          "longTermRatePerDay": 0.16899424950123224,
+          "rawRateRatio": 1.1277175154253314,
+          "regimeMultiplier": 1.1277175154253314
+        },
+        "5": {
+          "recentWeightedEventCount": 2.0501212360058583,
+          "recentWeightedExposureDays": 7.195533702632668,
+          "recentRatePerDay": 0.17737868965002693,
+          "longTermRatePerDay": 0.16899424950123224,
+          "rawRateRatio": 1.0496137600749165,
+          "regimeMultiplier": 1.0496137600749165
+        },
+        "7": {
+          "recentWeightedEventCount": 2.3691535117819424,
+          "recentWeightedExposureDays": 9.95952763937632,
+          "recentRatePerDay": 0.16879926081693683,
+          "longTermRatePerDay": 0.16899424950123224,
+          "rawRateRatio": 0.9988461815424436,
+          "regimeMultiplier": 0.9988461815424436
+        },
+        "10": {
+          "recentWeightedEventCount": 2.8520172729029287,
+          "recentWeightedExposureDays": 13.70744897469388,
+          "recentRatePerDay": 0.1624813060660681,
+          "longTermRatePerDay": 0.16899424950123224,
+          "rawRateRatio": 0.9614605617978933,
+          "regimeMultiplier": 0.9614605617978933
+        },
+        "14": {
+          "recentWeightedEventCount": 3.4458224835520808,
+          "recentWeightedExposureDays": 17.82526171085735,
+          "recentRatePerDay": 0.15977648403635072,
+          "longTermRatePerDay": 0.16899424950123224,
+          "rawRateRatio": 0.9454551531067671,
+          "regimeMultiplier": 0.9454551531067671
+        }
+      }
+    },
+    {
+      "id": "local-codex-forced-reset-2026-06-30",
+      "resetAt": "2026-06-30T00:30:00.000Z",
+      "rolling7dCount": 3,
+      "rolling14dCount": 4,
+      "intervalsSincePreviousHours": 24.5,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.366964041600434,
+          "recentWeightedExposureDays": 4.327929028840879,
+          "recentRatePerDay": 0.2349930708634184,
+          "longTermRatePerDay": 0.18423981883084484,
+          "rawRateRatio": 1.2754738490009663,
+          "regimeMultiplier": 1.2754738490009663
+        },
+        "5": {
+          "recentWeightedEventCount": 2.779587118594653,
+          "recentWeightedExposureDays": 7.197901264254165,
+          "recentRatePerDay": 0.2197702533884483,
+          "longTermRatePerDay": 0.18423981883084484,
+          "rawRateRatio": 1.192848835735259,
+          "regimeMultiplier": 1.192848835735259
+        },
+        "7": {
+          "recentWeightedEventCount": 3.141376313568454,
+          "recentWeightedExposureDays": 9.972923959473986,
+          "recentRatePerDay": 0.20734952588672062,
+          "longTermRatePerDay": 0.18423981883084484,
+          "rawRateRatio": 1.1254327495680692,
+          "regimeMultiplier": 1.1254327495680692
+        },
+        "10": {
+          "recentWeightedEventCount": 3.657186308706452,
+          "recentWeightedExposureDays": 13.756600555750898,
+          "recentRatePerDay": 0.1960375727064645,
+          "longTermRatePerDay": 0.18423981883084484,
+          "rawRateRatio": 1.0640347670253165,
+          "regimeMultiplier": 1.0640347670253165
+        },
+        "14": {
+          "recentWeightedEventCount": 4.275991728448597,
+          "recentWeightedExposureDays": 17.942191175490617,
+          "recentRatePerDay": 0.18881811005131238,
+          "longTermRatePerDay": 0.18423981883084484,
+          "rawRateRatio": 1.0248496294097584,
+          "regimeMultiplier": 1.0248496294097584
+        }
+      }
+    },
+    {
+      "id": "personal-codex-reset-button-aie-2026-07-02",
+      "resetAt": "2026-07-01T20:50:00.000Z",
+      "rolling7dCount": 4,
+      "rolling14dCount": 5,
+      "intervalsSincePreviousHours": 44.333333333333336,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.5446682779459775,
+          "recentWeightedExposureDays": 4.327983256657443,
+          "recentRatePerDay": 0.24739478085996233,
+          "longTermRatePerDay": 0.19599351637609966,
+          "rawRateRatio": 1.2622600248940212,
+          "regimeMultiplier": 1.2622600248940212
+        },
+        "5": {
+          "recentWeightedEventCount": 3.1516242523786824,
+          "recentWeightedExposureDays": 7.201419720666261,
+          "recentRatePerDay": 0.2413535812622958,
+          "longTermRatePerDay": 0.19599351637609966,
+          "rawRateRatio": 1.2314365583356999,
+          "regimeMultiplier": 1.2314365583356999
+        },
+        "7": {
+          "recentWeightedEventCount": 3.6162635684784235,
+          "recentWeightedExposureDays": 9.99397632289943,
+          "recentRatePerDay": 0.23088271657055737,
+          "longTermRatePerDay": 0.19599351637609966,
+          "rawRateRatio": 1.1780120120275175,
+          "regimeMultiplier": 1.1780120120275175
+        },
+        "10": {
+          "recentWeightedEventCount": 4.217660028395743,
+          "recentWeightedExposureDays": 13.837164233011606,
+          "recentRatePerDay": 0.21888761504482615,
+          "longTermRatePerDay": 0.19599351637609966,
+          "rawRateRatio": 1.1168104899184221,
+          "regimeMultiplier": 1.1168104899184221
+        },
+        "14": {
+          "recentWeightedEventCount": 4.902272747194662,
+          "recentWeightedExposureDays": 18.13932389677255,
+          "recentRatePerDay": 0.20975176123089528,
+          "longTermRatePerDay": 0.19599351637609966,
+          "rawRateRatio": 1.0701974489216999,
+          "regimeMultiplier": 1.0701974489216999
+        }
+      }
+    },
+    {
+      "id": "local-codex-gpt-5-6-release-reset-2026-07-10",
+      "resetAt": "2026-07-09T22:00:00.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 5,
+      "intervalsSincePreviousHours": 193.16666666666666,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.396284165994881,
+          "recentWeightedExposureDays": 4.328069258954144,
+          "recentRatePerDay": 0.1672440384455396,
+          "longTermRatePerDay": 0.1869947732363731,
+          "rawRateRatio": 0.8943781451802006,
+          "regimeMultiplier": 0.8943781451802006
+        },
+        "5": {
+          "recentWeightedEventCount": 2.0326657191689264,
+          "recentWeightedExposureDays": 7.209525087353062,
+          "recentRatePerDay": 0.17622018642441054,
+          "longTermRatePerDay": 0.1869947732363731,
+          "rawRateRatio": 0.9423802781998468,
+          "regimeMultiplier": 0.9423802781998468
+        },
+        "7": {
+          "recentWeightedEventCount": 2.629803737202555,
+          "recentWeightedExposureDays": 10.05159317201466,
+          "recentRatePerDay": 0.18102320878265926,
+          "longTermRatePerDay": 0.1869947732363731,
+          "rawRateRatio": 0.9680656076618495,
+          "regimeMultiplier": 0.9680656076618495
+        },
+        "10": {
+          "recentWeightedEventCount": 3.4142610786411733,
+          "recentWeightedExposureDays": 14.089346666635297,
+          "recentRatePerDay": 0.18324536317770296,
+          "longTermRatePerDay": 0.1869947732363731,
+          "rawRateRatio": 0.9799491183963166,
+          "regimeMultiplier": 0.9799491183963166
+        },
+        "14": {
+          "recentWeightedEventCount": 4.291054596032469,
+          "recentWeightedExposureDays": 18.81585545047191,
+          "recentRatePerDay": 0.18361608612059505,
+          "longTermRatePerDay": 0.1869947732363731,
+          "rawRateRatio": 0.9819316494397029,
+          "regimeMultiplier": 0.9819316494397029
+        }
+      }
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11",
+      "resetAt": "2026-07-10T18:26:00.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 6,
+      "intervalsSincePreviousHours": 20.433333333333334,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.146945060187591,
+          "recentWeightedExposureDays": 4.328072091790071,
+          "recentRatePerDay": 0.21963492645956031,
+          "longTermRatePerDay": 0.19992524162973246,
+          "rawRateRatio": 1.0985852745214173,
+          "regimeMultiplier": 1.0985852745214173
+        },
+        "5": {
+          "recentWeightedEventCount": 2.80637221375448,
+          "recentWeightedExposureDays": 7.209964847730314,
+          "recentRatePerDay": 0.22117257341501617,
+          "longTermRatePerDay": 0.19992524162973246,
+          "rawRateRatio": 1.106276384172812,
+          "regimeMultiplier": 1.106276384172812
+        },
+        "7": {
+          "recentWeightedEventCount": 3.41718542948721,
+          "recentWeightedExposureDays": 10.05541509864092,
+          "recentRatePerDay": 0.22024901542858347,
+          "longTermRatePerDay": 0.19992524162973246,
+          "rawRateRatio": 1.10165686750296,
+          "regimeMultiplier": 1.10165686750296
+        },
+        "10": {
+          "recentWeightedEventCount": 4.218602675313594,
+          "recentWeightedExposureDays": 14.10869346163587,
+          "recentRatePerDay": 0.21646144713806034,
+          "longTermRatePerDay": 0.19992524162973246,
+          "rawRateRatio": 1.0827119445925364,
+          "regimeMultiplier": 1.0827119445925364
+        },
+        "14": {
+          "recentWeightedEventCount": 5.113934330864692,
+          "recentWeightedExposureDays": 18.872894596107354,
+          "recentRatePerDay": 0.2117534253627959,
+          "longTermRatePerDay": 0.19992524162973246,
+          "rawRateRatio": 1.0591630333250746,
+          "regimeMultiplier": 1.0591630333250746
+        }
+      }
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11",
+      "resetAt": "2026-07-11T06:00:00.000Z",
+      "rolling7dCount": 3,
+      "rolling14dCount": 6,
+      "intervalsSincePreviousHours": 11.566666666666666,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.920706560320803,
+          "recentWeightedExposureDays": 4.328073464943991,
+          "recentRatePerDay": 0.27363808329943745,
+          "longTermRatePerDay": 0.21372006487930542,
+          "rawRateRatio": 1.2803574781524123,
+          "regimeMultiplier": 1.2803574781524123
+        },
+        "5": {
+          "recentWeightedEventCount": 3.6250001036987696,
+          "recentWeightedExposureDays": 7.210191717423949,
+          "recentRatePerDay": 0.2687361175074142,
+          "longTermRatePerDay": 0.21372006487930542,
+          "rawRateRatio": 1.2574210926764322,
+          "regimeMultiplier": 1.2574210926764322
+        },
+        "7": {
+          "recentWeightedEventCount": 4.257938407984336,
+          "recentWeightedExposureDays": 10.057439955968366,
+          "recentRatePerDay": 0.26214404328403657,
+          "longTermRatePerDay": 0.21372006487930542,
+          "rawRateRatio": 1.226576659669637,
+          "regimeMultiplier": 1.226576659669637
+        },
+        "10": {
+          "recentWeightedEventCount": 5.080004577437793,
+          "recentWeightedExposureDays": 14.119149484854942,
+          "recentRatePerDay": 0.25208204714082433,
+          "longTermRatePerDay": 0.21372006487930542,
+          "rawRateRatio": 1.1794964000370445,
+          "regimeMultiplier": 1.1794964000370445
+        },
+        "14": {
+          "recentWeightedEventCount": 5.993353454919909,
+          "recentWeightedExposureDays": 18.904132752910787,
+          "recentRatePerDay": 0.24194994932742425,
+          "longTermRatePerDay": 0.21372006487930542,
+          "rawRateRatio": 1.1320881334378274,
+          "regimeMultiplier": 1.1320881334378274
+        }
+      }
+    },
+    {
+      "id": "local-codex-6m-users-reset-2026-07-13",
+      "resetAt": "2026-07-12T18:30:00.000Z",
+      "rolling7dCount": 4,
+      "rolling14dCount": 7,
+      "intervalsSincePreviousHours": 36.5,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 3.0553341689479234,
+          "recentWeightedExposureDays": 4.328076918995719,
+          "recentRatePerDay": 0.28303408698005295,
+          "longTermRatePerDay": 0.22379013458490038,
+          "rawRateRatio": 1.264729955612395,
+          "regimeMultiplier": 1.264729955612395
+        },
+        "5": {
+          "recentWeightedEventCount": 3.935923485139469,
+          "recentWeightedExposureDays": 7.210815875787727,
+          "recentRatePerDay": 0.2867919522678384,
+          "longTermRatePerDay": 0.22379013458490038,
+          "rawRateRatio": 1.2815218722657173,
+          "regimeMultiplier": 1.2815218722657173
+        },
+        "7": {
+          "recentWeightedEventCount": 4.662663535315929,
+          "recentWeightedExposureDays": 10.063231363882155,
+          "recentRatePerDay": 0.28224085306167884,
+          "longTermRatePerDay": 0.22379013458490038,
+          "rawRateRatio": 1.2611854118824157,
+          "regimeMultiplier": 1.2611854118824157
+        },
+        "10": {
+          "recentWeightedEventCount": 5.571749840800936,
+          "recentWeightedExposureDays": 14.149944984189068,
+          "recentRatePerDay": 0.27212276653646417,
+          "longTermRatePerDay": 0.22379013458490038,
+          "rawRateRatio": 1.215973023302453,
+          "regimeMultiplier": 1.215973023302453
+        },
+        "14": {
+          "recentWeightedEventCount": 6.55864214178903,
+          "recentWeightedExposureDays": 18.997960292204592,
+          "recentRatePerDay": 0.2606611660138382,
+          "longTermRatePerDay": 0.22379013458490038,
+          "rawRateRatio": 1.1647571797448912,
+          "regimeMultiplier": 1.1647571797448912
+        }
+      }
+    },
+    {
+      "id": "personal-tibo-7m-users-banked-reset-2026-07-14",
+      "resetAt": "2026-07-13T18:40:00.000Z",
+      "rolling7dCount": 5,
+      "rolling14dCount": 7,
+      "intervalsSincePreviousHours": 24.166666666666668,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 3.4211324938370695,
+          "recentWeightedExposureDays": 4.328078621847752,
+          "recentRatePerDay": 0.30856422626657243,
+          "longTermRatePerDay": 0.23517643336157354,
+          "rawRateRatio": 1.3120541963155312,
+          "regimeMultiplier": 1.3120541963155312
+        },
+        "5": {
+          "recentWeightedEventCount": 4.423123364310154,
+          "recentWeightedExposureDays": 7.211162352049736,
+          "recentRatePerDay": 0.31509338261888487,
+          "longTermRatePerDay": 0.23517643336157354,
+          "rawRateRatio": 1.3398169966054485,
+          "regimeMultiplier": 1.3398169966054485
+        },
+        "7": {
+          "recentWeightedEventCount": 5.220181713308973,
+          "recentWeightedExposureDays": 10.066612985301562,
+          "recentRatePerDay": 0.3099766621235555,
+          "longTermRatePerDay": 0.23517643336157354,
+          "rawRateRatio": 1.3180600525860509,
+          "regimeMultiplier": 1.3180600525860509
+        },
+        "10": {
+          "recentWeightedEventCount": 6.196124653910766,
+          "recentWeightedExposureDays": 14.168619586853529,
+          "recentRatePerDay": 0.2977466142842963,
+          "longTermRatePerDay": 0.23517643336157354,
+          "rawRateRatio": 1.2660563391848187,
+          "regimeMultiplier": 1.2660563391848187
+        },
+        "14": {
+          "recentWeightedEventCount": 7.239682221520506,
+          "recentWeightedExposureDays": 19.056307526990878,
+          "recentRatePerDay": 0.28357637025511695,
+          "longTermRatePerDay": 0.23517643336157354,
+          "rawRateRatio": 1.2058026656911265,
+          "regimeMultiplier": 1.2058026656911265
+        }
+      }
+    },
+    {
+      "id": "local-codex-8m-users-reset-2026-07-15",
+      "resetAt": "2026-07-14T20:45:00.000Z",
+      "rolling7dCount": 6,
+      "rolling14dCount": 7,
+      "intervalsSincePreviousHours": 26.083333333333332,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 3.661437080120263,
+          "recentWeightedExposureDays": 4.32808006541724,
+          "recentRatePerDay": 0.32533577833441013,
+          "longTermRatePerDay": 0.2459461088673217,
+          "rawRateRatio": 1.3227929477425318,
+          "regimeMultiplier": 1.3227929477425318
+        },
+        "5": {
+          "recentWeightedEventCount": 4.804493426131148,
+          "recentWeightedExposureDays": 7.21148583381055,
+          "recentRatePerDay": 0.3372453419871919,
+          "longTermRatePerDay": 0.2459461088673217,
+          "rawRateRatio": 1.3712164162317468,
+          "regimeMultiplier": 1.3712164162317468
+        },
+        "7": {
+          "recentWeightedEventCount": 5.687576031964256,
+          "recentWeightedExposureDays": 10.069903629124033,
+          "recentRatePerDay": 0.33321415765343865,
+          "longTermRatePerDay": 0.2459461088673217,
+          "rawRateRatio": 1.3548258973806113,
+          "regimeMultiplier": 1.3548258973806113
+        },
+        "10": {
+          "recentWeightedEventCount": 6.7465083112245505,
+          "recentWeightedExposureDays": 14.187365136030575,
+          "recentRatePerDay": 0.32027086322375015,
+          "longTermRatePerDay": 0.2459461088673217,
+          "rawRateRatio": 1.3021993504948017,
+          "regimeMultiplier": 1.3021993504948017
+        },
+        "14": {
+          "recentWeightedEventCount": 7.860422391204603,
+          "recentWeightedExposureDays": 19.116102404347647,
+          "recentRatePerDay": 0.3043134780938796,
+          "longTermRatePerDay": 0.2459461088673217,
+          "rawRateRatio": 1.2373177176714139,
+          "regimeMultiplier": 1.2373177176714139
+        }
+      }
+    },
+    {
+      "id": "local-codex-9m-users-reset-2026-07-16",
+      "resetAt": "2026-07-16T04:15:00.000Z",
+      "rolling7dCount": 7,
+      "rolling14dCount": 7,
+      "intervalsSincePreviousHours": 31.5,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 3.703653005816991,
+          "recentWeightedExposureDays": 4.328081388327636,
+          "recentRatePerDay": 0.3282821250337689,
+          "longTermRatePerDay": 0.25556081400851866,
+          "rawRateRatio": 1.2845557966599144,
+          "regimeMultiplier": 1.2845557966599144
+        },
+        "5": {
+          "recentWeightedEventCount": 5.005227871132272,
+          "recentWeightedExposureDays": 7.211816781380475,
+          "recentRatePerDay": 0.3489014522643915,
+          "longTermRatePerDay": 0.25556081400851866,
+          "rawRateRatio": 1.3652384604345544,
+          "regimeMultiplier": 1.3652384604345544
+        },
+        "7": {
+          "recentWeightedEventCount": 5.994408846712311,
+          "recentWeightedExposureDays": 10.073433299798943,
+          "recentRatePerDay": 0.3484410834086049,
+          "longTermRatePerDay": 0.25556081400851866,
+          "rawRateRatio": 1.3634370541525598,
+          "regimeMultiplier": 1.3634370541525598
+        },
+        "10": {
+          "recentWeightedEventCount": 7.15983207345298,
+          "recentWeightedExposureDays": 14.208199466920316,
+          "recentRatePerDay": 0.3370689375144613,
+          "longTermRatePerDay": 0.25556081400851866,
+          "rawRateRatio": 1.3189382684593647,
+          "regimeMultiplier": 1.3189382684593647
+        },
+        "14": {
+          "recentWeightedEventCount": 8.365874618015777,
+          "recentWeightedExposureDays": 19.184154320049988,
+          "recentRatePerDay": 0.32092328307013057,
+          "longTermRatePerDay": 0.25556081400851866,
+          "rawRateRatio": 1.2557609206059,
+          "regimeMultiplier": 1.2557609206059
+        }
+      }
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18",
+      "resetAt": "2026-07-18T03:31:00.000Z",
+      "rolling7dCount": 6,
+      "rolling14dCount": 8,
+      "intervalsSincePreviousHours": 47.266666666666666,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 3.3496851571083734,
+          "recentWeightedExposureDays": 4.32808275351365,
+          "recentRatePerDay": 0.3035776127159587,
+          "longTermRatePerDay": 0.2624208708996739,
+          "rawRateRatio": 1.156834864830623,
+          "regimeMultiplier": 1.156834864830623
+        },
+        "5": {
+          "recentWeightedEventCount": 4.80935532064366,
+          "recentWeightedExposureDays": 7.212213019607946,
+          "recentRatePerDay": 0.3375135616800532,
+          "longTermRatePerDay": 0.2624208708996739,
+          "rawRateRatio": 1.2861536528056412,
+          "regimeMultiplier": 1.2861536528056412
+        },
+        "7": {
+          "recentWeightedEventCount": 5.932326417764662,
+          "recentWeightedExposureDays": 10.077939309749993,
+          "recentRatePerDay": 0.3452708124482812,
+          "longTermRatePerDay": 0.2624208708996739,
+          "rawRateRatio": 1.3157139950971415,
+          "regimeMultiplier": 1.3157139950971415
+        },
+        "10": {
+          "recentWeightedEventCount": 7.246211006027685,
+          "recentWeightedExposureDays": 14.236112896600225,
+          "recentRatePerDay": 0.34024478435172006,
+          "longTermRatePerDay": 0.2624208708996739,
+          "rawRateRatio": 1.2965614479718688,
+          "regimeMultiplier": 1.2965614479718688
+        },
+        "14": {
+          "recentWeightedEventCount": 8.588642193386654,
+          "recentWeightedExposureDays": 19.278320723942702,
+          "recentRatePerDay": 0.3274997320985498,
+          "longTermRatePerDay": 0.2624208708996739,
+          "rawRateRatio": 1.2479942276533187,
+          "regimeMultiplier": 1.2479942276533187
+        }
+      }
+    },
+    {
+      "id": "local-codex-10m-users-reset-2026-07-22",
+      "resetAt": "2026-07-21T17:05:00.000Z",
+      "rolling7dCount": 4,
+      "rolling14dCount": 9,
+      "intervalsSincePreviousHours": 85.56666666666666,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.4697793369546623,
+          "recentWeightedExposureDays": 4.328084083126661,
+          "recentRatePerDay": 0.24216631594455929,
+          "longTermRatePerDay": 0.26326855220578826,
+          "rawRateRatio": 0.9198452071680249,
+          "regimeMultiplier": 0.9198452071680249
+        },
+        "5": {
+          "recentWeightedEventCount": 3.933835461569234,
+          "recentWeightedExposureDays": 7.2127052379136325,
+          "recentRatePerDay": 0.2866391652778497,
+          "longTermRatePerDay": 0.26326855220578826,
+          "rawRateRatio": 1.088771001611288,
+          "regimeMultiplier": 1.088771001611288
+        },
+        "7": {
+          "recentWeightedEventCount": 5.167761105877412,
+          "recentWeightedExposureDays": 10.08416372317583,
+          "recentRatePerDay": 0.3070957392545159,
+          "longTermRatePerDay": 0.26326855220578826,
+          "rawRateRatio": 1.1664733090280732,
+          "regimeMultiplier": 1.1664733090280732
+        },
+        "10": {
+          "recentWeightedEventCount": 6.659595869044443,
+          "recentWeightedExposureDays": 14.277898277325509,
+          "recentRatePerDay": 0.3154966620894927,
+          "longTermRatePerDay": 0.26326855220578826,
+          "rawRateRatio": 1.1983833976603457,
+          "regimeMultiplier": 1.1983833976603457
+        },
+        "14": {
+          "recentWeightedEventCount": 8.198854555220702,
+          "recentWeightedExposureDays": 19.427096795070817,
+          "recentRatePerDay": 0.31259810029107443,
+          "longTermRatePerDay": 0.26326855220578826,
+          "rawRateRatio": 1.1873734924736734,
+          "regimeMultiplier": 1.1873734924736734
+        }
+      }
+    },
+    {
+      "id": "local-codex-outage-compensation-reset-2026-07-26",
+      "resetAt": "2026-07-25T19:17:00.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 7,
+      "intervalsSincePreviousHours": 98.2,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 1.9595921499955051,
+          "recentWeightedExposureDays": 4.3280847187706275,
+          "recentRatePerDay": 0.20655881145916638,
+          "longTermRatePerDay": 0.2623041826414309,
+          "rawRateRatio": 0.7874781460939634,
+          "regimeMultiplier": 0.7874781460939634
+        },
+        "5": {
+          "recentWeightedEventCount": 3.230865109269022,
+          "recentWeightedExposureDays": 7.21303855896574,
+          "recentRatePerDay": 0.24579420389814294,
+          "longTermRatePerDay": 0.2623041826414309,
+          "rawRateRatio": 0.9370578899008367,
+          "regimeMultiplier": 0.9370578899008367
+        },
+        "7": {
+          "recentWeightedEventCount": 4.446221830024758,
+          "recentWeightedExposureDays": 10.089061263461293,
+          "recentRatePerDay": 0.2711038489354673,
+          "longTermRatePerDay": 0.2623041826414309,
+          "rawRateRatio": 1.0335475637689908,
+          "regimeMultiplier": 1.0335475637689908
+        },
+        "10": {
+          "recentWeightedEventCount": 6.015063488268312,
+          "recentWeightedExposureDays": 14.31470547427875,
+          "recentRatePerDay": 0.2885111438297774,
+          "longTermRatePerDay": 0.2623041826414309,
+          "rawRateRatio": 1.0999105730013132,
+          "regimeMultiplier": 1.0999105730013132
+        },
+        "14": {
+          "recentWeightedEventCount": 7.695354588046378,
+          "recentWeightedExposureDays": 19.568415054979262,
+          "recentRatePerDay": 0.2940757755151336,
+          "longTermRatePerDay": 0.2623041826414309,
+          "rawRateRatio": 1.1211249952393414,
+          "regimeMultiplier": 1.1211249952393414
+        }
+      }
+    },
+    {
+      "id": "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+      "resetAt": "2026-07-28T03:09:00.000Z",
+      "rolling7dCount": 3,
+      "rolling14dCount": 6,
+      "intervalsSincePreviousHours": 55.86666666666667,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.1444286272718838,
+          "recentWeightedExposureDays": 4.328084886785947,
+          "recentRatePerDay": 0.2194591009278447,
+          "longTermRatePerDay": 0.2670307995751783,
+          "rawRateRatio": 0.821849394440582,
+          "regimeMultiplier": 0.821849394440582
+        },
+        "5": {
+          "recentWeightedEventCount": 3.339767151079439,
+          "recentWeightedExposureDays": 7.213158989216369,
+          "recentRatePerDay": 0.2521191580115073,
+          "longTermRatePerDay": 0.2670307995751783,
+          "rawRateRatio": 0.9441575968487753,
+          "regimeMultiplier": 0.9441575968487753
+        },
+        "7": {
+          "recentWeightedEventCount": 4.530910484165347,
+          "recentWeightedExposureDays": 10.091079546311695,
+          "recentRatePerDay": 0.27529185136199946,
+          "longTermRatePerDay": 0.2670307995751783,
+          "rawRateRatio": 1.0309367001857606,
+          "regimeMultiplier": 1.0309367001857606
+        },
+        "10": {
+          "recentWeightedEventCount": 6.118787752858406,
+          "recentWeightedExposureDays": 14.331430553159565,
+          "recentRatePerDay": 0.2925757997379235,
+          "longTermRatePerDay": 0.2670307995751783,
+          "rawRateRatio": 1.0956631227685534,
+          "regimeMultiplier": 1.0956631227685534
+        },
+        "14": {
+          "recentWeightedEventCount": 7.857667537828838,
+          "recentWeightedExposureDays": 19.636919950166458,
+          "recentRatePerDay": 0.2988727422661574,
+          "longTermRatePerDay": 0.2670307995751783,
+          "rawRateRatio": 1.1192444569751383,
+          "regimeMultiplier": 1.1192444569751383
+        }
+      }
+    },
+    {
+      "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
+      "resetAt": "2026-07-29T04:09:00.000Z",
+      "rolling7dCount": 3,
+      "rolling14dCount": 6,
+      "intervalsSincePreviousHours": 25,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.6857271914008347,
+          "recentWeightedExposureDays": 4.328084937241777,
+          "recentRatePerDay": 0.2572379496314149,
+          "longTermRatePerDay": 0.27568296459072067,
+          "rawRateRatio": 0.9330933814256921,
+          "regimeMultiplier": 0.9330933814256921
+        },
+        "5": {
+          "recentWeightedEventCount": 3.8906905745065816,
+          "recentWeightedExposureDays": 7.213201508603449,
+          "recentRatePerDay": 0.2841244013824002,
+          "longTermRatePerDay": 0.27568296459072067,
+          "rawRateRatio": 1.030620088565181,
+          "regimeMultiplier": 1.030620088565181
+        },
+        "7": {
+          "recentWeightedEventCount": 5.086856151288975,
+          "recentWeightedExposureDays": 10.091842591963166,
+          "recentRatePerDay": 0.3029516144887452,
+          "longTermRatePerDay": 0.27568296459072067,
+          "rawRateRatio": 1.098913075526838,
+          "regimeMultiplier": 1.098913075526838
+        },
+        "10": {
+          "recentWeightedEventCount": 6.692566301169817,
+          "recentWeightedExposureDays": 14.338084258635021,
+          "recentRatePerDay": 0.31607115085241505,
+          "longTermRatePerDay": 0.27568296459072067,
+          "rawRateRatio": 1.1465022923039685,
+          "regimeMultiplier": 1.1465022923039685
+        },
+        "14": {
+          "recentWeightedEventCount": 8.462693145702477,
+          "recentWeightedExposureDays": 19.665109719403482,
+          "recentRatePerDay": 0.3189839253995099,
+          "longTermRatePerDay": 0.27568296459072067,
+          "rawRateRatio": 1.1570679598323166,
+          "regimeMultiplier": 1.1570679598323166
+        }
+      }
+    },
+    {
+      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "resetAt": "2026-08-01T03:32:00.000Z",
+      "rolling7dCount": 4,
+      "rolling14dCount": 5,
+      "intervalsSincePreviousHours": 71.38333333333334,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 2.3508594543788592,
+          "recentWeightedExposureDays": 4.328085029402293,
+          "recentRatePerDay": 0.23386652490564144,
+          "longTermRatePerDay": 0.27776661496049704,
+          "rawRateRatio": 0.841953324516343,
+          "regimeMultiplier": 0.841953324516343
+        },
+        "5": {
+          "recentWeightedEventCount": 3.576058108056985,
+          "recentWeightedExposureDays": 7.213293988185699,
+          "recentRatePerDay": 0.265844417181148,
+          "longTermRatePerDay": 0.27776661496049704,
+          "rawRateRatio": 0.9570783631393406,
+          "regimeMultiplier": 0.9570783631393406
+        },
+        "7": {
+          "recentWeightedEventCount": 4.789148033656312,
+          "recentWeightedExposureDays": 10.093634151833793,
+          "recentRatePerDay": 0.28810856164254295,
+          "longTermRatePerDay": 0.27776661496049704,
+          "rawRateRatio": 1.0372325042860773,
+          "regimeMultiplier": 1.0372325042860773
+        },
+        "10": {
+          "recentWeightedEventCount": 6.445743270189507,
+          "recentWeightedExposureDays": 14.354639994928982,
+          "recentRatePerDay": 0.3057217545297253,
+          "longTermRatePerDay": 0.27776661496049704,
+          "rawRateRatio": 1.1006425468849232,
+          "regimeMultiplier": 1.1006425468849232
+        },
+        "14": {
+          "recentWeightedEventCount": 8.303897195708053,
+          "recentWeightedExposureDays": 19.738041453635283,
+          "recentRatePerDay": 0.31286180060693647,
+          "longTermRatePerDay": 0.27776661496049704,
+          "rawRateRatio": 1.126347745755661,
+          "regimeMultiplier": 1.126347745755661
+        }
+      }
+    }
+  ],
+  "current": {
+    "recentWeightedEventCount": 0.4623712102014854,
+    "recentWeightedExposureDays": 4.328085104323444,
+    "recentRatePerDay": 0.2310922160642832,
+    "longTermRatePerDay": 0.28089339705452065,
+    "rawRateRatio": 0.8227043372594082,
+    "regimeMultiplier": 0.8227043372594082,
+    "halfLifeDays": 3,
+    "priorEventCount": 1,
+    "priorExposureDays": 2,
+    "rawRandomEventCount": 23,
+    "observationStartAt": "2026-05-16T17:51:00.000Z"
+  },
+  "currentElapsedHours": 0.9166666666666666,
+  "resetIntervalsHours": [
+    {
+      "from": null,
+      "to": "2026-05-16T17:51:00.000Z",
+      "hours": null
+    },
+    {
+      "from": "2026-05-16T17:51:00.000Z",
+      "to": "2026-05-19T18:39:18.000Z",
+      "hours": 72.805
+    },
+    {
+      "from": "2026-05-19T18:39:18.000Z",
+      "to": "2026-05-23T20:14:00.000Z",
+      "hours": 97.57833333333333
+    },
+    {
+      "from": "2026-05-23T20:14:00.000Z",
+      "to": "2026-05-31T15:25:06.000Z",
+      "hours": 187.185
+    },
+    {
+      "from": "2026-05-31T15:25:06.000Z",
+      "to": "2026-06-04T00:25:58.000Z",
+      "hours": 81.01444444444445
+    },
+    {
+      "from": "2026-06-04T00:25:58.000Z",
+      "to": "2026-06-17T22:00:00.000Z",
+      "hours": 333.5672222222222
+    },
+    {
+      "from": "2026-06-17T22:00:00.000Z",
+      "to": "2026-06-27T03:00:00.000Z",
+      "hours": 221
+    },
+    {
+      "from": "2026-06-27T03:00:00.000Z",
+      "to": "2026-06-29T00:00:00.000Z",
+      "hours": 45
+    },
+    {
+      "from": "2026-06-29T00:00:00.000Z",
+      "to": "2026-06-30T00:30:00.000Z",
+      "hours": 24.5
+    },
+    {
+      "from": "2026-06-30T00:30:00.000Z",
+      "to": "2026-07-01T20:50:00.000Z",
+      "hours": 44.333333333333336
+    },
+    {
+      "from": "2026-07-01T20:50:00.000Z",
+      "to": "2026-07-09T22:00:00.000Z",
+      "hours": 193.16666666666666
+    },
+    {
+      "from": "2026-07-09T22:00:00.000Z",
+      "to": "2026-07-10T18:26:00.000Z",
+      "hours": 20.433333333333334
+    },
+    {
+      "from": "2026-07-10T18:26:00.000Z",
+      "to": "2026-07-11T06:00:00.000Z",
+      "hours": 11.566666666666666
+    },
+    {
+      "from": "2026-07-11T06:00:00.000Z",
+      "to": "2026-07-12T18:30:00.000Z",
+      "hours": 36.5
+    },
+    {
+      "from": "2026-07-12T18:30:00.000Z",
+      "to": "2026-07-13T18:40:00.000Z",
+      "hours": 24.166666666666668
+    },
+    {
+      "from": "2026-07-13T18:40:00.000Z",
+      "to": "2026-07-14T20:45:00.000Z",
+      "hours": 26.083333333333332
+    },
+    {
+      "from": "2026-07-14T20:45:00.000Z",
+      "to": "2026-07-16T04:15:00.000Z",
+      "hours": 31.5
+    },
+    {
+      "from": "2026-07-16T04:15:00.000Z",
+      "to": "2026-07-18T03:31:00.000Z",
+      "hours": 47.266666666666666
+    },
+    {
+      "from": "2026-07-18T03:31:00.000Z",
+      "to": "2026-07-21T17:05:00.000Z",
+      "hours": 85.56666666666666
+    },
+    {
+      "from": "2026-07-21T17:05:00.000Z",
+      "to": "2026-07-25T19:17:00.000Z",
+      "hours": 98.2
+    },
+    {
+      "from": "2026-07-25T19:17:00.000Z",
+      "to": "2026-07-28T03:09:00.000Z",
+      "hours": 55.86666666666667
+    },
+    {
+      "from": "2026-07-28T03:09:00.000Z",
+      "to": "2026-07-29T04:09:00.000Z",
+      "hours": 25
+    },
+    {
+      "from": "2026-07-29T04:09:00.000Z",
+      "to": "2026-08-01T03:32:00.000Z",
+      "hours": 71.38333333333334
+    }
+  ],
+  "densitySummary": {
+    "rolling": [
+      {
+        "days": 7,
+        "maxCount": 7,
+        "minCount": 1,
+        "latestCount": 1
+      },
+      {
+        "days": 14,
+        "maxCount": 9,
+        "minCount": 1,
+        "latestCount": 1
+      }
+    ],
+    "gpt56HighDensityPeriod": "Descriptive label only: the mid-July GPT-5.6 period contains the highest observed short-window concentration in this snapshot.",
+    "afterAugustFirst": "The post-2026-08-01 interval is short and does not support a stable normal-regime estimate."
+  },
+  "hotNormalDiagnostic": "inconclusive",
+  "notes": [
+    "Rolling counts and EWMA rates are descriptive diagnostics, not a post-hoc hot/normal rule used by the model.",
+    "The sample is small and the GPT-5.6 high-density period was identified after inspecting the history; this is a post-hoc selection limitation.",
+    "Regular boundaries reset elapsed exposure but never increase the random event or regime event count."
+  ]
+}

@@ -1,0 +1,2383 @@
+{
+  "schemaVersion": "probability-model-evaluation-regime-elapsed-v1",
+  "generatedAt": "2026-08-08T04:27:00.000Z",
+  "asOf": "2026-08-08T04:27:00.000Z",
+  "evaluationMode": "walk-forward-prequential",
+  "originSpacingHours": 6,
+  "originCount": 197,
+  "origins": [
+    "2026-06-18T00:00:00.000Z",
+    "2026-06-18T06:00:00.000Z",
+    "2026-06-18T12:00:00.000Z",
+    "2026-06-18T18:00:00.000Z",
+    "2026-06-19T00:00:00.000Z",
+    "2026-06-19T06:00:00.000Z",
+    "2026-06-19T12:00:00.000Z",
+    "2026-06-19T18:00:00.000Z",
+    "2026-06-20T00:00:00.000Z",
+    "2026-06-20T06:00:00.000Z",
+    "2026-06-20T12:00:00.000Z",
+    "2026-06-20T18:00:00.000Z",
+    "2026-06-21T00:00:00.000Z",
+    "2026-06-21T06:00:00.000Z",
+    "2026-06-21T12:00:00.000Z",
+    "2026-06-21T18:00:00.000Z",
+    "2026-06-22T00:00:00.000Z",
+    "2026-06-22T06:00:00.000Z",
+    "2026-06-22T12:00:00.000Z",
+    "2026-06-22T18:00:00.000Z",
+    "2026-06-23T00:00:00.000Z",
+    "2026-06-23T06:00:00.000Z",
+    "2026-06-23T12:00:00.000Z",
+    "2026-06-23T18:00:00.000Z",
+    "2026-06-24T00:00:00.000Z",
+    "2026-06-24T06:00:00.000Z",
+    "2026-06-24T12:00:00.000Z",
+    "2026-06-24T18:00:00.000Z",
+    "2026-06-25T00:00:00.000Z",
+    "2026-06-25T06:00:00.000Z",
+    "2026-06-25T12:00:00.000Z",
+    "2026-06-25T18:00:00.000Z",
+    "2026-06-26T00:00:00.000Z",
+    "2026-06-26T06:00:00.000Z",
+    "2026-06-26T12:00:00.000Z",
+    "2026-06-26T18:00:00.000Z",
+    "2026-06-27T00:00:00.000Z",
+    "2026-06-27T06:00:00.000Z",
+    "2026-06-27T12:00:00.000Z",
+    "2026-06-27T18:00:00.000Z",
+    "2026-06-28T00:00:00.000Z",
+    "2026-06-28T06:00:00.000Z",
+    "2026-06-28T12:00:00.000Z",
+    "2026-06-28T18:00:00.000Z",
+    "2026-06-29T00:00:00.000Z",
+    "2026-06-29T06:00:00.000Z",
+    "2026-06-29T12:00:00.000Z",
+    "2026-06-29T18:00:00.000Z",
+    "2026-06-30T00:00:00.000Z",
+    "2026-06-30T06:00:00.000Z",
+    "2026-06-30T12:00:00.000Z",
+    "2026-06-30T18:00:00.000Z",
+    "2026-07-01T00:00:00.000Z",
+    "2026-07-01T06:00:00.000Z",
+    "2026-07-01T12:00:00.000Z",
+    "2026-07-01T18:00:00.000Z",
+    "2026-07-02T00:00:00.000Z",
+    "2026-07-02T06:00:00.000Z",
+    "2026-07-02T12:00:00.000Z",
+    "2026-07-02T18:00:00.000Z",
+    "2026-07-03T00:00:00.000Z",
+    "2026-07-03T06:00:00.000Z",
+    "2026-07-03T12:00:00.000Z",
+    "2026-07-03T18:00:00.000Z",
+    "2026-07-04T00:00:00.000Z",
+    "2026-07-04T06:00:00.000Z",
+    "2026-07-04T12:00:00.000Z",
+    "2026-07-04T18:00:00.000Z",
+    "2026-07-05T00:00:00.000Z",
+    "2026-07-05T06:00:00.000Z",
+    "2026-07-05T12:00:00.000Z",
+    "2026-07-05T18:00:00.000Z",
+    "2026-07-06T00:00:00.000Z",
+    "2026-07-06T06:00:00.000Z",
+    "2026-07-06T12:00:00.000Z",
+    "2026-07-06T18:00:00.000Z",
+    "2026-07-07T00:00:00.000Z",
+    "2026-07-07T06:00:00.000Z",
+    "2026-07-07T12:00:00.000Z",
+    "2026-07-07T18:00:00.000Z",
+    "2026-07-08T00:00:00.000Z",
+    "2026-07-08T06:00:00.000Z",
+    "2026-07-08T12:00:00.000Z",
+    "2026-07-08T18:00:00.000Z",
+    "2026-07-09T00:00:00.000Z",
+    "2026-07-09T06:00:00.000Z",
+    "2026-07-09T12:00:00.000Z",
+    "2026-07-09T18:00:00.000Z",
+    "2026-07-10T00:00:00.000Z",
+    "2026-07-10T06:00:00.000Z",
+    "2026-07-10T12:00:00.000Z",
+    "2026-07-10T18:00:00.000Z",
+    "2026-07-11T00:00:00.000Z",
+    "2026-07-11T06:00:00.000Z",
+    "2026-07-11T12:00:00.000Z",
+    "2026-07-11T18:00:00.000Z",
+    "2026-07-12T00:00:00.000Z",
+    "2026-07-12T06:00:00.000Z",
+    "2026-07-12T12:00:00.000Z",
+    "2026-07-12T18:00:00.000Z",
+    "2026-07-13T00:00:00.000Z",
+    "2026-07-13T06:00:00.000Z",
+    "2026-07-13T12:00:00.000Z",
+    "2026-07-13T18:00:00.000Z",
+    "2026-07-14T00:00:00.000Z",
+    "2026-07-14T06:00:00.000Z",
+    "2026-07-14T12:00:00.000Z",
+    "2026-07-14T18:00:00.000Z",
+    "2026-07-15T00:00:00.000Z",
+    "2026-07-15T06:00:00.000Z",
+    "2026-07-15T12:00:00.000Z",
+    "2026-07-15T18:00:00.000Z",
+    "2026-07-16T00:00:00.000Z",
+    "2026-07-16T06:00:00.000Z",
+    "2026-07-16T12:00:00.000Z",
+    "2026-07-16T18:00:00.000Z",
+    "2026-07-17T00:00:00.000Z",
+    "2026-07-17T06:00:00.000Z",
+    "2026-07-17T12:00:00.000Z",
+    "2026-07-17T18:00:00.000Z",
+    "2026-07-18T00:00:00.000Z",
+    "2026-07-18T06:00:00.000Z",
+    "2026-07-18T12:00:00.000Z",
+    "2026-07-18T18:00:00.000Z",
+    "2026-07-19T00:00:00.000Z",
+    "2026-07-19T06:00:00.000Z",
+    "2026-07-19T12:00:00.000Z",
+    "2026-07-19T18:00:00.000Z",
+    "2026-07-20T00:00:00.000Z",
+    "2026-07-20T06:00:00.000Z",
+    "2026-07-20T12:00:00.000Z",
+    "2026-07-20T18:00:00.000Z",
+    "2026-07-21T00:00:00.000Z",
+    "2026-07-21T06:00:00.000Z",
+    "2026-07-21T12:00:00.000Z",
+    "2026-07-21T18:00:00.000Z",
+    "2026-07-22T00:00:00.000Z",
+    "2026-07-22T06:00:00.000Z",
+    "2026-07-22T12:00:00.000Z",
+    "2026-07-22T18:00:00.000Z",
+    "2026-07-23T00:00:00.000Z",
+    "2026-07-23T06:00:00.000Z",
+    "2026-07-23T12:00:00.000Z",
+    "2026-07-23T18:00:00.000Z",
+    "2026-07-24T00:00:00.000Z",
+    "2026-07-24T06:00:00.000Z",
+    "2026-07-24T12:00:00.000Z",
+    "2026-07-24T18:00:00.000Z",
+    "2026-07-25T00:00:00.000Z",
+    "2026-07-25T06:00:00.000Z",
+    "2026-07-25T12:00:00.000Z",
+    "2026-07-25T18:00:00.000Z",
+    "2026-07-26T00:00:00.000Z",
+    "2026-07-26T06:00:00.000Z",
+    "2026-07-26T12:00:00.000Z",
+    "2026-07-26T18:00:00.000Z",
+    "2026-07-27T00:00:00.000Z",
+    "2026-07-27T06:00:00.000Z",
+    "2026-07-27T12:00:00.000Z",
+    "2026-07-27T18:00:00.000Z",
+    "2026-07-28T00:00:00.000Z",
+    "2026-07-28T06:00:00.000Z",
+    "2026-07-28T12:00:00.000Z",
+    "2026-07-28T18:00:00.000Z",
+    "2026-07-29T00:00:00.000Z",
+    "2026-07-29T06:00:00.000Z",
+    "2026-07-29T12:00:00.000Z",
+    "2026-07-29T18:00:00.000Z",
+    "2026-07-30T00:00:00.000Z",
+    "2026-07-30T06:00:00.000Z",
+    "2026-07-30T12:00:00.000Z",
+    "2026-07-30T18:00:00.000Z",
+    "2026-07-31T00:00:00.000Z",
+    "2026-07-31T06:00:00.000Z",
+    "2026-07-31T12:00:00.000Z",
+    "2026-07-31T18:00:00.000Z",
+    "2026-08-01T00:00:00.000Z",
+    "2026-08-01T06:00:00.000Z",
+    "2026-08-01T12:00:00.000Z",
+    "2026-08-01T18:00:00.000Z",
+    "2026-08-02T00:00:00.000Z",
+    "2026-08-02T06:00:00.000Z",
+    "2026-08-02T12:00:00.000Z",
+    "2026-08-02T18:00:00.000Z",
+    "2026-08-03T00:00:00.000Z",
+    "2026-08-03T06:00:00.000Z",
+    "2026-08-03T12:00:00.000Z",
+    "2026-08-03T18:00:00.000Z",
+    "2026-08-04T00:00:00.000Z",
+    "2026-08-04T06:00:00.000Z",
+    "2026-08-04T12:00:00.000Z",
+    "2026-08-04T18:00:00.000Z",
+    "2026-08-05T00:00:00.000Z",
+    "2026-08-05T06:00:00.000Z",
+    "2026-08-05T12:00:00.000Z",
+    "2026-08-05T18:00:00.000Z",
+    "2026-08-06T00:00:00.000Z"
+  ],
+  "nonOverlapping24hOrigins": [
+    "2026-06-18T00:00:00.000Z",
+    "2026-06-19T00:00:00.000Z",
+    "2026-06-20T00:00:00.000Z",
+    "2026-06-21T00:00:00.000Z",
+    "2026-06-22T00:00:00.000Z",
+    "2026-06-23T00:00:00.000Z",
+    "2026-06-24T00:00:00.000Z",
+    "2026-06-25T00:00:00.000Z",
+    "2026-06-26T00:00:00.000Z",
+    "2026-06-27T00:00:00.000Z",
+    "2026-06-28T00:00:00.000Z",
+    "2026-06-29T00:00:00.000Z",
+    "2026-06-30T00:00:00.000Z",
+    "2026-07-01T00:00:00.000Z",
+    "2026-07-02T00:00:00.000Z",
+    "2026-07-03T00:00:00.000Z",
+    "2026-07-04T00:00:00.000Z",
+    "2026-07-05T00:00:00.000Z",
+    "2026-07-06T00:00:00.000Z",
+    "2026-07-07T00:00:00.000Z",
+    "2026-07-08T00:00:00.000Z",
+    "2026-07-09T00:00:00.000Z",
+    "2026-07-10T00:00:00.000Z",
+    "2026-07-11T00:00:00.000Z",
+    "2026-07-12T00:00:00.000Z",
+    "2026-07-13T00:00:00.000Z",
+    "2026-07-14T00:00:00.000Z",
+    "2026-07-15T00:00:00.000Z",
+    "2026-07-16T00:00:00.000Z",
+    "2026-07-17T00:00:00.000Z",
+    "2026-07-18T00:00:00.000Z",
+    "2026-07-19T00:00:00.000Z",
+    "2026-07-20T00:00:00.000Z",
+    "2026-07-21T00:00:00.000Z",
+    "2026-07-22T00:00:00.000Z",
+    "2026-07-23T00:00:00.000Z",
+    "2026-07-24T00:00:00.000Z",
+    "2026-07-25T00:00:00.000Z",
+    "2026-07-26T00:00:00.000Z",
+    "2026-07-27T00:00:00.000Z",
+    "2026-07-28T00:00:00.000Z",
+    "2026-07-29T00:00:00.000Z",
+    "2026-07-30T00:00:00.000Z",
+    "2026-07-31T00:00:00.000Z",
+    "2026-08-01T00:00:00.000Z",
+    "2026-08-02T00:00:00.000Z",
+    "2026-08-03T00:00:00.000Z",
+    "2026-08-04T00:00:00.000Z",
+    "2026-08-05T00:00:00.000Z",
+    "2026-08-06T00:00:00.000Z"
+  ],
+  "nonOverlapping48hOrigins": [
+    "2026-06-18T00:00:00.000Z",
+    "2026-06-20T00:00:00.000Z",
+    "2026-06-22T00:00:00.000Z",
+    "2026-06-24T00:00:00.000Z",
+    "2026-06-26T00:00:00.000Z",
+    "2026-06-28T00:00:00.000Z",
+    "2026-06-30T00:00:00.000Z",
+    "2026-07-02T00:00:00.000Z",
+    "2026-07-04T00:00:00.000Z",
+    "2026-07-06T00:00:00.000Z",
+    "2026-07-08T00:00:00.000Z",
+    "2026-07-10T00:00:00.000Z",
+    "2026-07-12T00:00:00.000Z",
+    "2026-07-14T00:00:00.000Z",
+    "2026-07-16T00:00:00.000Z",
+    "2026-07-18T00:00:00.000Z",
+    "2026-07-20T00:00:00.000Z",
+    "2026-07-22T00:00:00.000Z",
+    "2026-07-24T00:00:00.000Z",
+    "2026-07-26T00:00:00.000Z",
+    "2026-07-28T00:00:00.000Z",
+    "2026-07-30T00:00:00.000Z",
+    "2026-08-01T00:00:00.000Z",
+    "2026-08-03T00:00:00.000Z",
+    "2026-08-05T00:00:00.000Z"
+  ],
+  "targetDefinition": "Broad-scope random reset: confirmed global hard reset or broad Banked Reset distribution; regular reset is a recovery boundary only.",
+  "eventCount": 23,
+  "recoveryBoundaryCount": 27,
+  "labelSummary": {
+    "originCount": 197,
+    "scored24h": 189,
+    "censored24h": 8,
+    "positive24h": 65,
+    "scored48h": 181,
+    "censored48h": 16,
+    "positive48h": 104
+  },
+  "nonOverlappingLabelSummary": {
+    "originCount": 50,
+    "scored24h": 48,
+    "censored24h": 2,
+    "positive24h": 17,
+    "scored48h": 23,
+    "censored48h": 2,
+    "positive48h": 13
+  },
+  "selectedConfiguration": {
+    "binScheme": "A",
+    "priorExposureDays": 2,
+    "regimeHalfLifeDays": 3,
+    "regimeRatioExponent": 1,
+    "selectionKey": "A|prior=2|half=3|exp=1",
+    "selectionCounts": {
+      "A|prior=2|half=3|exp=1": 65,
+      "B|prior=2|half=14|exp=1": 5,
+      "B|prior=20|half=3|exp=1": 25,
+      "A|prior=20|half=3|exp=1": 6,
+      "B|prior=20|half=14|exp=0.25": 1,
+      "A|prior=20|half=14|exp=0.25": 32,
+      "A|prior=5|half=3|exp=1": 16,
+      "B|prior=2|half=3|exp=1": 46,
+      "B|prior=5|half=3|exp=1": 1
+    },
+    "candidateCount": 160,
+    "selectionAuditTail": [
+      {
+        "origin": "2026-08-01T06:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-01T12:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-01T18:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-02T00:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-02T06:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-02T12:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-02T18:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-03T00:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-03T06:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-03T12:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-03T18:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-04T00:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-04T06:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-04T12:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-04T18:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-05T00:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-05T06:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-05T12:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-05T18:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      },
+      {
+        "origin": "2026-08-06T00:00:00.000Z",
+        "selectedKey": "A|prior=2|half=3|exp=1",
+        "candidateCount": 160
+      }
+    ]
+  },
+  "candidateScores": [
+    {
+      "key": "A|prior=2|half=3|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2370983206130846,
+      "brier48h": 0.2751658990202473
+    },
+    {
+      "key": "A|prior=2|half=5|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.23824918987458674,
+      "brier48h": 0.2767492961596739
+    },
+    {
+      "key": "A|prior=2|half=3|exp=0.75",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.23841502824189037,
+      "brier48h": 0.2766962347360441
+    },
+    {
+      "key": "B|prior=2|half=3|exp=1",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2389688103558758,
+      "brier48h": 0.2765546782862797
+    },
+    {
+      "key": "B|prior=2|half=3|exp=0.75",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2397913457871353,
+      "brier48h": 0.27770587589787327
+    },
+    {
+      "key": "B|prior=2|half=5|exp=1",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24005725115066506,
+      "brier48h": 0.2780106556040756
+    },
+    {
+      "key": "A|prior=2|half=7|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 7,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24058075107319793,
+      "brier48h": 0.2812649275433052
+    },
+    {
+      "key": "A|prior=2|half=5|exp=0.75",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2408115833597451,
+      "brier48h": 0.2817996334726727
+    },
+    {
+      "key": "B|prior=2|half=5|exp=0.75",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2418603985671674,
+      "brier48h": 0.2825046845066345
+    },
+    {
+      "key": "B|prior=2|half=7|exp=1",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 7,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2421105099824646,
+      "brier48h": 0.2822847880420636
+    },
+    {
+      "key": "A|prior=5|half=3|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 5,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24192622350701182,
+      "brier48h": 0.2841373844378457
+    },
+    {
+      "key": "A|prior=5|half=5|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 5,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24221964032698493,
+      "brier48h": 0.284098988029822
+    },
+    {
+      "key": "B|prior=5|half=3|exp=1",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 5,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24265050962236373,
+      "brier48h": 0.2847045332700929
+    },
+    {
+      "key": "B|prior=5|half=5|exp=1",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 5,
+        "regimeHalfLifeDays": 5,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24306282904924928,
+      "brier48h": 0.28474022503679114
+    },
+    {
+      "key": "A|prior=2|half=3|exp=0.5",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 0.5
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.2429789265056338,
+      "brier48h": 0.2863934246515264
+    },
+    {
+      "key": "A|prior=2|half=7|exp=0.75",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 7,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24298173250178495,
+      "brier48h": 0.28674986207825665
+    },
+    {
+      "key": "B|prior=2|half=3|exp=0.5",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 3,
+        "regimeRatioExponent": 0.5
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24341809566612457,
+      "brier48h": 0.2866360688854115
+    },
+    {
+      "key": "A|prior=5|half=7|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 5,
+        "regimeHalfLifeDays": 7,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24354565745989934,
+      "brier48h": 0.2869801782574495
+    },
+    {
+      "key": "B|prior=2|half=7|exp=0.75",
+      "config": {
+        "binScheme": "B",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 7,
+        "regimeRatioExponent": 0.75
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24374835939616885,
+      "brier48h": 0.2872088679393262
+    },
+    {
+      "key": "A|prior=2|half=10|exp=1",
+      "config": {
+        "binScheme": "A",
+        "priorExposureDays": 2,
+        "regimeHalfLifeDays": 10,
+        "regimeRatioExponent": 1
+      },
+      "scoredCount24h": 189,
+      "scoredCount48h": 181,
+      "brier24h": 0.24353004472200404,
+      "brier48h": 0.2880749870066335
+    }
+  ],
+  "models": [
+    {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
+      "mode": "current-h30-r3",
+      "metrics24h": {
+        "count": 189,
+        "positiveCount": 65,
+        "actualRate": 0.3439153439153439,
+        "averagePrediction": 0.19825643058513315,
+        "brier": 0.24969745004766472,
+        "logLoss": 0.7158270687343753,
+        "predictionStandardDeviation": 0.06976680930277815,
+        "min": 0.09235410904005703,
+        "max": 0.34109139768847596,
+        "quantiles": {
+          "p5": 0.09572280913979467,
+          "p25": 0.13421910277784166,
+          "median": 0.20843085444426232,
+          "p75": 0.24624677949679138,
+          "p95": 0.31580110998469074
+        },
+        "auc": 0.5189826302729529,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 88,
+            "averagePrediction": 0.13362423903794493,
+            "actualRate": 0.3181818181818182
+          },
+          {
+            "range": "20-40%",
+            "count": 101,
+            "averagePrediction": 0.2545696271807029,
+            "actualRate": 0.36633663366336633
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 181,
+        "positiveCount": 104,
+        "actualRate": 0.574585635359116,
+        "averagePrediction": 0.35457511995850055,
+        "brier": 0.30394985358185633,
+        "logLoss": 0.8127899413373817,
+        "predictionStandardDeviation": 0.09986958663827215,
+        "min": 0.18014805661034128,
+        "max": 0.49762213847779857,
+        "quantiles": {
+          "p5": 0.19173087467493,
+          "p25": 0.27448625307727614,
+          "median": 0.38353827264762946,
+          "p75": 0.44012136357851633,
+          "p95": 0.48385522223652816
+        },
+        "auc": 0.4675324675324675,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 15,
+            "averagePrediction": 0.1888112978319788,
+            "actualRate": 0.4666666666666667
+          },
+          {
+            "range": "20-40%",
+            "count": 90,
+            "averagePrediction": 0.2998354664096553,
+            "actualRate": 0.6333333333333333
+          },
+          {
+            "range": "40-60%",
+            "count": 76,
+            "averagePrediction": 0.4521149377386835,
+            "actualRate": 0.5263157894736842
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping24h": {
+        "count": 48,
+        "positiveCount": 17,
+        "actualRate": 0.3541666666666667,
+        "averagePrediction": 0.1985743116781142,
+        "brier": 0.2586026219835145,
+        "logLoss": 0.7374190870441685,
+        "predictionStandardDeviation": 0.07094845417510014,
+        "min": 0.09434286992307526,
+        "max": 0.329838412759751,
+        "quantiles": {
+          "p5": 0.0995471444493443,
+          "p25": 0.13677422751071544,
+          "median": 0.21127375055710484,
+          "p75": 0.24532609505571815,
+          "p95": 0.3184076819953719
+        },
+        "auc": 0.49335863377609107,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 22,
+            "averagePrediction": 0.1320884902532335,
+            "actualRate": 0.36363636363636365
+          },
+          {
+            "range": "20-40%",
+            "count": 26,
+            "averagePrediction": 0.2548315451914747,
+            "actualRate": 0.34615384615384615
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 23,
+        "positiveCount": 13,
+        "actualRate": 0.5652173913043478,
+        "averagePrediction": 0.34676470003134285,
+        "brier": 0.308849419753034,
+        "logLoss": 0.8239399430197806,
+        "predictionStandardDeviation": 0.09924023184310127,
+        "min": 0.18014805661034128,
+        "max": 0.49523969506792076,
+        "quantiles": {
+          "p5": 0.1939886145702991,
+          "p25": 0.2559396100139312,
+          "median": 0.38832147329772165,
+          "p75": 0.4339724993220757,
+          "p95": 0.47786508177214476
+        },
+        "auc": 0.4230769230769231,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 2,
+            "averagePrediction": 0.18649000392829862,
+            "actualRate": 0.5
+          },
+          {
+            "range": "20-40%",
+            "count": 12,
+            "averagePrediction": 0.2999133351793516,
+            "actualRate": 0.6666666666666666
+          },
+          {
+            "range": "40-60%",
+            "count": 9,
+            "averagePrediction": 0.44484978563467426,
+            "actualRate": 0.4444444444444444
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": null
+    },
+    {
+      "modelVersion": "benchmark-constant-hazard-v1",
+      "mode": "constant-hazard",
+      "metrics24h": {
+        "count": 189,
+        "positiveCount": 65,
+        "actualRate": 0.3439153439153439,
+        "averagePrediction": 0.1803054916768151,
+        "brier": 0.2539320784880049,
+        "logLoss": 0.7276926661210498,
+        "predictionStandardDeviation": 0.04125105416976326,
+        "min": 0.11046719764207512,
+        "max": 0.23346639769680858,
+        "quantiles": {
+          "p5": 0.11771962365435987,
+          "p25": 0.145693129376116,
+          "median": 0.18729590688536768,
+          "p75": 0.2185110223935066,
+          "p95": 0.2299118797347808
+        },
+        "auc": 0.45,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 100,
+            "averagePrediction": 0.14503126308360562,
+            "actualRate": 0.37
+          },
+          {
+            "range": "20-40%",
+            "count": 89,
+            "averagePrediction": 0.21993945638828621,
+            "actualRate": 0.3146067415730337
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 181,
+        "positiveCount": 104,
+        "actualRate": 0.574585635359116,
+        "averagePrediction": 0.32962889952582347,
+        "brier": 0.31047167659443564,
+        "logLoss": 0.8253522661968764,
+        "predictionStandardDeviation": 0.06743890209352416,
+        "min": 0.20873139352925696,
+        "max": 0.4124262365400927,
+        "quantiles": {
+          "p5": 0.22530447782409804,
+          "p25": 0.2719815054491357,
+          "median": 0.35462016788835604,
+          "p75": 0.3896904914851679,
+          "p95": 0.4070766520741917
+        },
+        "auc": 0.41683316683316685,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 155,
+            "averagePrediction": 0.3168677827462206,
+            "actualRate": 0.6258064516129033
+          },
+          {
+            "range": "40-60%",
+            "count": 26,
+            "averagePrediction": 0.4057047880196104,
+            "actualRate": 0.2692307692307692
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping24h": {
+        "count": 48,
+        "positiveCount": 17,
+        "actualRate": 0.3541666666666667,
+        "averagePrediction": 0.18035244558472627,
+        "brier": 0.26083160111005427,
+        "logLoss": 0.7442700745770066,
+        "predictionStandardDeviation": 0.041106537190221545,
+        "min": 0.11046719764207512,
+        "max": 0.23171262780553492,
+        "quantiles": {
+          "p5": 0.11627850241769644,
+          "p25": 0.14453818603521673,
+          "median": 0.1926054101672175,
+          "p75": 0.21806590588210922,
+          "p95": 0.22872347839074808
+        },
+        "auc": 0.45351043643263755,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 25,
+            "averagePrediction": 0.14464016645182823,
+            "actualRate": 0.4
+          },
+          {
+            "range": "20-40%",
+            "count": 23,
+            "averagePrediction": 0.2191701402943979,
+            "actualRate": 0.30434782608695654
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 23,
+        "positiveCount": 13,
+        "actualRate": 0.5652173913043478,
+        "averagePrediction": 0.3279423844521754,
+        "brier": 0.3083483464736124,
+        "logLoss": 0.8210258306479451,
+        "predictionStandardDeviation": 0.0670266717091254,
+        "min": 0.21240893085359228,
+        "max": 0.40679571949312526,
+        "quantiles": {
+          "p5": 0.2291564021876533,
+          "p25": 0.2650759118542342,
+          "median": 0.3556544899511225,
+          "p75": 0.38877150420062556,
+          "p95": 0.40553523048327156
+        },
+        "auc": 0.4076923076923077,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 21,
+            "averagePrediction": 0.3204610002668599,
+            "actualRate": 0.6190476190476191
+          },
+          {
+            "range": "40-60%",
+            "count": 2,
+            "averagePrediction": 0.4064969183979874,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": 0.004234628440340199,
+        "brier48h": 0.006521823012579309,
+        "logLoss24h": 0.011865597386674476,
+        "logLoss48h": 0.012562324859494711,
+        "bootstrap24h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.0050454877025794915,
+          "median": 0.0038902307233044924,
+          "upper": 0.01623441409455391
+        },
+        "bootstrap48h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.009742374974832279,
+          "median": 0.006138878179654925,
+          "upper": 0.024258365898606863
+        }
+      }
+    },
+    {
+      "modelVersion": "hazard-regime-elapsed-v1-elapsed-only",
+      "mode": "elapsed-only",
+      "metrics24h": {
+        "count": 189,
+        "positiveCount": 65,
+        "actualRate": 0.3439153439153439,
+        "averagePrediction": 0.20252582976555808,
+        "brier": 0.24933831716368607,
+        "logLoss": 0.7138499708731266,
+        "predictionStandardDeviation": 0.06602247888369088,
+        "min": 0.034233266675705476,
+        "max": 0.31710160090779943,
+        "quantiles": {
+          "p5": 0.0858543103665739,
+          "p25": 0.16006186308600845,
+          "median": 0.20355252598329143,
+          "p75": 0.2588778396188045,
+          "p95": 0.2983669414138496
+        },
+        "auc": 0.49119106699751863,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 88,
+            "averagePrediction": 0.14421567731463392,
+            "actualRate": 0.3068181818181818
+          },
+          {
+            "range": "20-40%",
+            "count": 101,
+            "averagePrediction": 0.2533307150693336,
+            "actualRate": 0.37623762376237624
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 181,
+        "positiveCount": 104,
+        "actualRate": 0.574585635359116,
+        "averagePrediction": 0.365987076476585,
+        "brier": 0.30293897649381824,
+        "logLoss": 0.8087474169857827,
+        "predictionStandardDeviation": 0.0917883672686997,
+        "min": 0.08134386159212571,
+        "max": 0.5138636617613456,
+        "quantiles": {
+          "p5": 0.19946791761132696,
+          "p25": 0.3025469141711752,
+          "median": 0.3819533225670575,
+          "p75": 0.4439014541244448,
+          "p95": 0.47914138627783803
+        },
+        "auc": 0.42657342657342656,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 10,
+            "averagePrediction": 0.15139678449665958,
+            "actualRate": 0.4
+          },
+          {
+            "range": "20-40%",
+            "count": 90,
+            "averagePrediction": 0.31606342220238826,
+            "actualRate": 0.6222222222222222
+          },
+          {
+            "range": "40-60%",
+            "count": 81,
+            "averagePrediction": 0.44795043208741203,
+            "actualRate": 0.5432098765432098
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping24h": {
+        "count": 48,
+        "positiveCount": 17,
+        "actualRate": 0.3541666666666667,
+        "averagePrediction": 0.20183080610496407,
+        "brier": 0.25777270099462407,
+        "logLoss": 0.7334229695717421,
+        "predictionStandardDeviation": 0.06793778575845516,
+        "min": 0.034818407027420895,
+        "max": 0.31710160090779943,
+        "quantiles": {
+          "p5": 0.08528508389946526,
+          "p25": 0.1609644710119546,
+          "median": 0.20787670397192937,
+          "p75": 0.2591805657205634,
+          "p95": 0.3017866645546965
+        },
+        "auc": 0.4629981024667932,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 21,
+            "averagePrediction": 0.1380837835534631,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "20-40%",
+            "count": 27,
+            "averagePrediction": 0.25141182364502035,
+            "actualRate": 0.37037037037037035
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 23,
+        "positiveCount": 13,
+        "actualRate": 0.5652173913043478,
+        "averagePrediction": 0.354230195194901,
+        "brier": 0.3056774956913011,
+        "logLoss": 0.8131550202050747,
+        "predictionStandardDeviation": 0.09672518179423986,
+        "min": 0.08235413447406015,
+        "max": 0.48946084172562054,
+        "quantiles": {
+          "p5": 0.2063723235575976,
+          "p25": 0.2978367335167123,
+          "median": 0.3663880463371993,
+          "p75": 0.42715668954247843,
+          "p95": 0.47177183769104863
+        },
+        "auc": 0.4076923076923077,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 1,
+            "averagePrediction": 0.08235413447406015,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 12,
+            "averagePrediction": 0.3053520266258249,
+            "actualRate": 0.6666666666666666
+          },
+          {
+            "range": "40-60%",
+            "count": 10,
+            "averagePrediction": 0.44007160354987623,
+            "actualRate": 0.5
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.0003591328839786523,
+        "brier48h": -0.001010877088038098,
+        "logLoss24h": -0.0019770978612486667,
+        "logLoss48h": -0.0040425243515990195,
+        "bootstrap24h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.0057434606487015505,
+          "median": -0.0001860211643790106,
+          "upper": 0.00505827148901586
+        },
+        "bootstrap48h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.012944221281798307,
+          "median": -0.0009850705007435085,
+          "upper": 0.012068654824457856
+        }
+      }
+    },
+    {
+      "modelVersion": "hazard-regime-elapsed-v1-regime-only",
+      "mode": "regime-only",
+      "metrics24h": {
+        "count": 189,
+        "positiveCount": 65,
+        "actualRate": 0.3439153439153439,
+        "averagePrediction": 0.23828475090651852,
+        "brier": 0.23847098045955203,
+        "logLoss": 0.6894705233503823,
+        "predictionStandardDeviation": 0.10720407571383538,
+        "min": 0.05684953355367262,
+        "max": 0.39180764895972303,
+        "quantiles": {
+          "p5": 0.06070220180932701,
+          "p25": 0.13738244401617672,
+          "median": 0.26329424082525843,
+          "p75": 0.32694122227994216,
+          "p95": 0.3794607371528818
+        },
+        "auc": 0.5450372208436725,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 67,
+            "averagePrediction": 0.10934142145752349,
+            "actualRate": 0.29850746268656714
+          },
+          {
+            "range": "20-40%",
+            "count": 122,
+            "averagePrediction": 0.3090978908498191,
+            "actualRate": 0.36885245901639346
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 181,
+        "positiveCount": 104,
+        "actualRate": 0.574585635359116,
+        "averagePrediction": 0.41768446648566393,
+        "brier": 0.2808402875818083,
+        "logLoss": 0.7736601402200082,
+        "predictionStandardDeviation": 0.164257939032146,
+        "min": 0.11046719764207512,
+        "max": 0.6301020641361004,
+        "quantiles": {
+          "p5": 0.11983210568897597,
+          "p25": 0.2583787880153043,
+          "median": 0.4680002211993112,
+          "p75": 0.5534492209191691,
+          "p95": 0.6149388648819158
+        },
+        "auc": 0.5450799200799201,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 23,
+            "averagePrediction": 0.12094623704178815,
+            "actualRate": 0.34782608695652173
+          },
+          {
+            "range": "20-40%",
+            "count": 46,
+            "averagePrediction": 0.2871679779979215,
+            "actualRate": 0.5869565217391305
+          },
+          {
+            "range": "40-60%",
+            "count": 92,
+            "averagePrediction": 0.5143593434786109,
+            "actualRate": 0.6413043478260869
+          },
+          {
+            "range": "60-80%",
+            "count": 20,
+            "averagePrediction": 0.6144169197003733,
+            "actualRate": 0.5
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping24h": {
+        "count": 48,
+        "positiveCount": 17,
+        "actualRate": 0.3541666666666667,
+        "averagePrediction": 0.23721536168171445,
+        "brier": 0.24299356915183612,
+        "logLoss": 0.6995726073760706,
+        "predictionStandardDeviation": 0.10528466292895235,
+        "min": 0.05684953355367262,
+        "max": 0.3882463720771725,
+        "quantiles": {
+          "p5": 0.05993608580750724,
+          "p25": 0.13956591693750853,
+          "median": 0.25979021957858994,
+          "p75": 0.32296225576238635,
+          "p95": 0.36855561154988903
+        },
+        "auc": 0.5464895635673624,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 16,
+            "averagePrediction": 0.1058490717958168,
+            "actualRate": 0.3125
+          },
+          {
+            "range": "20-40%",
+            "count": 32,
+            "averagePrediction": 0.3028985066246633,
+            "actualRate": 0.375
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 23,
+        "positiveCount": 13,
+        "actualRate": 0.5652173913043478,
+        "averagePrediction": 0.41539786854226224,
+        "brier": 0.2924647335861604,
+        "logLoss": 0.7999571615177203,
+        "predictionStandardDeviation": 0.16295311820978942,
+        "min": 0.1125367223673941,
+        "max": 0.5978583877065146,
+        "quantiles": {
+          "p5": 0.1228264353970259,
+          "p25": 0.27021003324996934,
+          "median": 0.48190355130683626,
+          "p75": 0.5582634582239225,
+          "p95": 0.5968816983066055
+        },
+        "auc": 0.5153846153846153,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 3,
+            "averagePrediction": 0.1225288447236997,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "20-40%",
+            "count": 6,
+            "averagePrediction": 0.28855901659937927,
+            "actualRate": 0.6666666666666666
+          },
+          {
+            "range": "40-60%",
+            "count": 14,
+            "averagePrediction": 0.5325150244789041,
+            "actualRate": 0.5714285714285714
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.011226469588112686,
+        "brier48h": -0.023109566000048043,
+        "logLoss24h": -0.026356545383993013,
+        "logLoss48h": -0.03912980111737352,
+        "bootstrap24h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.027944402186183562,
+          "median": -0.010912693682146,
+          "upper": 0.002771429015396594
+        },
+        "bootstrap48h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.06134779127531933,
+          "median": -0.022901013604923255,
+          "upper": 0.01254093013200908
+        }
+      }
+    },
+    {
+      "modelVersion": "hazard-regime-elapsed-v1",
+      "mode": "regime-elapsed",
+      "metrics24h": {
+        "count": 189,
+        "positiveCount": 65,
+        "actualRate": 0.3439153439153439,
+        "averagePrediction": 0.2669277611762607,
+        "brier": 0.23743475775305506,
+        "logLoss": 0.6878913431362818,
+        "predictionStandardDeviation": 0.1371866503560662,
+        "min": 0.03329488173980644,
+        "max": 0.5212564346570976,
+        "quantiles": {
+          "p5": 0.04550600639636215,
+          "p25": 0.13905949641747717,
+          "median": 0.28898528843521887,
+          "p75": 0.37002250905538614,
+          "p95": 0.4817432587371066
+        },
+        "auc": 0.5615384615384615,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 62,
+            "averagePrediction": 0.09917383018386845,
+            "actualRate": 0.2903225806451613
+          },
+          {
+            "range": "20-40%",
+            "count": 91,
+            "averagePrediction": 0.3062413255591391,
+            "actualRate": 0.34065934065934067
+          },
+          {
+            "range": "40-60%",
+            "count": 36,
+            "averagePrediction": 0.4564613545842147,
+            "actualRate": 0.4444444444444444
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "metrics48h": {
+        "count": 181,
+        "positiveCount": 104,
+        "actualRate": 0.574585635359116,
+        "averagePrediction": 0.45620833888135853,
+        "brier": 0.27942044934015964,
+        "logLoss": 0.7711092463770978,
+        "predictionStandardDeviation": 0.18551072861314638,
+        "min": 0.0798454095427481,
+        "max": 0.710277929187243,
+        "quantiles": {
+          "p5": 0.12703597653159027,
+          "p25": 0.2760831481501038,
+          "median": 0.5188394471445571,
+          "p75": 0.5974737180827198,
+          "p95": 0.6866221217848999
+        },
+        "auc": 0.5484515484515484,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 30,
+            "averagePrediction": 0.1468697224467175,
+            "actualRate": 0.3333333333333333
+          },
+          {
+            "range": "20-40%",
+            "count": 26,
+            "averagePrediction": 0.26894296158255193,
+            "actualRate": 0.8461538461538461
+          },
+          {
+            "range": "40-60%",
+            "count": 80,
+            "averagePrediction": 0.521668971512791,
+            "actualRate": 0.575
+          },
+          {
+            "range": "60-80%",
+            "count": 45,
+            "averagePrediction": 0.6542573987101068,
+            "actualRate": 0.5777777777777777
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping24h": {
+        "count": 48,
+        "positiveCount": 17,
+        "actualRate": 0.3541666666666667,
+        "averagePrediction": 0.26439650874150217,
+        "brier": 0.24409068916566934,
+        "logLoss": 0.700613183388211,
+        "predictionStandardDeviation": 0.13629343442006192,
+        "min": 0.03371779255861141,
+        "max": 0.5088892512955758,
+        "quantiles": {
+          "p5": 0.05185981383823965,
+          "p25": 0.13374049522763565,
+          "median": 0.2901188867970458,
+          "p75": 0.3412023497480441,
+          "p95": 0.4643201106738431
+        },
+        "auc": 0.5616698292220114,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 16,
+            "averagePrediction": 0.09699710715107814,
+            "actualRate": 0.3125
+          },
+          {
+            "range": "20-40%",
+            "count": 23,
+            "averagePrediction": 0.3059301098447881,
+            "actualRate": 0.34782608695652173
+          },
+          {
+            "range": "40-60%",
+            "count": 9,
+            "averagePrediction": 0.4558540198605252,
+            "actualRate": 0.4444444444444444
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "nonOverlapping48h": {
+        "count": 23,
+        "positiveCount": 13,
+        "actualRate": 0.5652173913043478,
+        "averagePrediction": 0.4401214127674149,
+        "brier": 0.29195140839027445,
+        "logLoss": 0.7980242436254666,
+        "predictionStandardDeviation": 0.18593104826040371,
+        "min": 0.10752155563081711,
+        "max": 0.6802504656290598,
+        "quantiles": {
+          "p5": 0.13083274859216804,
+          "p25": 0.2652517848752012,
+          "median": 0.5159462274008998,
+          "p75": 0.5727977526960588,
+          "p95": 0.6582368288979263
+        },
+        "auc": 0.5230769230769231,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 4,
+            "averagePrediction": 0.14378894556849278,
+            "actualRate": 0.25
+          },
+          {
+            "range": "20-40%",
+            "count": 4,
+            "averagePrediction": 0.2575547903771268,
+            "actualRate": 1
+          },
+          {
+            "range": "40-60%",
+            "count": 11,
+            "averagePrediction": 0.5372138332464215,
+            "actualRate": 0.5454545454545454
+          },
+          {
+            "range": "60-80%",
+            "count": 4,
+            "averagePrediction": 0.6520163460393574,
+            "actualRate": 0.5
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ]
+      },
+      "differenceVsCurrent": {
+        "brier24h": -0.012262692294609662,
+        "brier48h": -0.024529404241696695,
+        "logLoss24h": -0.02793572559809354,
+        "logLoss48h": -0.041680694960283926,
+        "bootstrap24h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.041858649410335236,
+          "median": -0.011512536673976913,
+          "upper": 0.011896368947825595
+        },
+        "bootstrap48h": {
+          "seed": 20260808,
+          "iterations": 1000,
+          "lower": -0.07569980196832644,
+          "median": -0.024280384127660155,
+          "upper": 0.025794403754071393
+        }
+      }
+    }
+  ],
+  "currentSnapshot": {
+    "latestRandomResetAt": "2026-08-01T03:32:00.000Z",
+    "latestRecoveryResetAt": "2026-08-08T03:32:00.000Z",
+    "elapsedHours": 0.9166666666666666,
+    "oldH30R3": {
+      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
+      "predictions": {
+        "probability12h": 0.1227623659169248,
+        "probability24h": 0.2304541333483288,
+        "probability48h": 0.4077991591193282,
+        "probability72h": 0.544274290672635
+      },
+      "regime": null
+    },
+    "elapsedOnly": {
+      "probability12h": 0.050177724461896604,
+      "probability24h": 0.17887122541142408,
+      "probability48h": 0.42479068960465516,
+      "probability72h": 0.5600694585820606
+    },
+    "regimeOnly": {
+      "probability12h": 0.096294190315391,
+      "probability24h": 0.18331580954228532,
+      "probability48h": 0.33302693305642717,
+      "probability72h": 0.455293640766089
+    },
+    "newModel": {
+      "modelVersion": "hazard-regime-elapsed-v1",
+      "predictions": {
+        "probability12h": 0.04146877526348846,
+        "probability24h": 0.14967336727921413,
+        "probability48h": 0.3655349086235006,
+        "probability72h": 0.4911256470512039
+      },
+      "rawPredictions": {
+        "probability12h": 0.04146877526348846,
+        "probability24h": 0.14967336727921413,
+        "probability48h": 0.3655349086235006,
+        "probability72h": 0.4911256470512039
+      },
+      "regimeDiagnostics": {
+        "recentWeightedEventCount": 0.4623712102014854,
+        "recentWeightedExposureDays": 4.328085104323444,
+        "recentRatePerDay": 0.2310922160642832,
+        "longTermRatePerDay": 0.28089339705452065,
+        "rawRateRatio": 0.8227043372594082,
+        "regimeMultiplier": 0.8227043372594082,
+        "halfLifeDays": 3,
+        "priorEventCount": 1,
+        "priorExposureDays": 2,
+        "rawRandomEventCount": 23,
+        "observationStartAt": "2026-05-16T17:51:00.000Z"
+      },
+      "elapsedHazardBins": [
+        {
+          "startHour": 0,
+          "endHour": 12,
+          "exposureHours": 312.48333333333335,
+          "observedEvents": 1,
+          "posteriorLambdaPerHour": 0.004139680261962205,
+          "impliedDailyProbability": 0.09457635273178477
+        },
+        {
+          "startHour": 12,
+          "endHour": 24,
+          "exposureHours": 296.43333333333334,
+          "observedEvents": 1,
+          "posteriorLambdaPerHour": 0.0043325822310065105,
+          "impliedDailyProbability": 0.09875845653433712
+        },
+        {
+          "startHour": 24,
+          "endHour": 48,
+          "exposureHours": 448.35,
+          "observedEvents": 9,
+          "posteriorLambdaPerHour": 0.017949288170518926,
+          "impliedDailyProbability": 0.35
+        },
+        {
+          "startHour": 48,
+          "endHour": 72,
+          "exposureHours": 321.73333333333335,
+          "observedEvents": 4,
+          "posteriorLambdaPerHour": 0.01215006961711055,
+          "impliedDailyProbability": 0.2529339450697703
+        },
+        {
+          "startHour": 72,
+          "endHour": 168,
+          "exposureHours": 580.6477777777777,
+          "observedEvents": 6,
+          "posteriorLambdaPerHour": 0.010327381992371118,
+          "impliedDailyProbability": 0.21952858824721555
+        },
+        {
+          "startHour": 168,
+          "endHour": null,
+          "exposureHours": 42.95222222222225,
+          "observedEvents": 1,
+          "posteriorLambdaPerHour": 0.016407358757219395,
+          "impliedDailyProbability": 0.3254952830963713
+        }
+      ],
+      "signalMultipliers": {
+        "recentResetMomentum": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "regularResetProximity": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "teaser": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "teaserStrength": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "statusSignal": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "officialIncidentHint": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "officialUpdate": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "communitySignal": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "usageLimitAnomaly": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "complaintPressure": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "combinedBeforeCap": {
+          "probability24h": 1,
+          "probability48h": 1
+        },
+        "combinedAfterCap": {
+          "probability24h": 1,
+          "probability48h": 1
+        }
+      }
+    }
+  },
+  "regularPhaseDiagnostics": {
+    "modelVersion": "hazard-regime-elapsed-v1",
+    "horizon": "24h",
+    "phases": [
+      {
+        "boundaryAt": "2026-06-12T00:11:00.000Z",
+        "phase": "pre-24..0h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-06-12T00:11:00.000Z",
+        "phase": "post-0..24h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-06-12T00:11:00.000Z",
+        "phase": "post-24..48h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-06-17T22:00:00.000Z",
+        "phase": "pre-24..0h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-06-17T22:00:00.000Z",
+        "phase": "post-0..24h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0.0439538581775179,
+        "brier": 0.0022598753330409613
+      },
+      {
+        "boundaryAt": "2026-06-17T22:00:00.000Z",
+        "phase": "post-24..48h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0.05439371991354075,
+        "brier": 0.0031972616870612324
+      },
+      {
+        "boundaryAt": "2026-06-24T22:01:00.000Z",
+        "phase": "pre-24..0h",
+        "originCount": 4,
+        "scoredCount": 0,
+        "censoredCount": 4,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": 0.0769662948608891,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-06-24T22:01:00.000Z",
+        "phase": "post-0..24h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0.04376538222101353,
+        "brier": 0.00191544182052295
+      },
+      {
+        "boundaryAt": "2026-06-24T22:01:00.000Z",
+        "phase": "post-24..48h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 3,
+        "actualRate": 0.75,
+        "averagePrediction": 0.04885750448062531,
+        "brier": 0.6763710509966123
+      },
+      {
+        "boundaryAt": "2026-07-07T00:30:00.000Z",
+        "phase": "pre-24..0h",
+        "originCount": 4,
+        "scoredCount": 0,
+        "censoredCount": 4,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": 0.16852051125183637,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-07-07T00:30:00.000Z",
+        "phase": "post-0..24h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0.15140476435277703,
+        "brier": 0.0229615050202217
+      },
+      {
+        "boundaryAt": "2026-07-07T00:30:00.000Z",
+        "phase": "post-24..48h",
+        "originCount": 4,
+        "scoredCount": 4,
+        "censoredCount": 0,
+        "positiveCount": 1,
+        "actualRate": 0.25,
+        "averagePrediction": 0.1413529152753161,
+        "brier": 0.19815167407705658
+      },
+      {
+        "boundaryAt": "2026-08-08T03:32:00.000Z",
+        "phase": "pre-24..0h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-08-08T03:32:00.000Z",
+        "phase": "post-0..24h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      },
+      {
+        "boundaryAt": "2026-08-08T03:32:00.000Z",
+        "phase": "post-24..48h",
+        "originCount": 0,
+        "scoredCount": 0,
+        "censoredCount": 0,
+        "positiveCount": 0,
+        "actualRate": null,
+        "averagePrediction": null,
+        "brier": null
+      }
+    ],
+    "note": "Origins whose horizon crosses a regular recovery boundary without a random event are censored and excluded from scored metrics."
+  },
+  "regularBoundaryAudit": [
+    {
+      "id": "local-codex-regular-reset-2026-08-08",
+      "resetAt": "2026-08-08T03:32:00.000Z",
+      "included": true,
+      "randomEligible": false,
+      "regularEligible": true,
+      "reason": "regular_boundary"
+    },
+    {
+      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "resetAt": "2026-08-01T03:32:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
+      "resetAt": "2026-07-29T04:09:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-chatgpt-work-adoption-reset-2026-07-28",
+      "resetAt": "2026-07-28T03:09:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-outage-compensation-reset-2026-07-26",
+      "resetAt": "2026-07-25T19:17:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-10m-users-reset-2026-07-22",
+      "resetAt": "2026-07-21T17:05:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-4-2026-07-18",
+      "resetAt": "2026-07-18T03:31:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-9m-users-reset-2026-07-16",
+      "resetAt": "2026-07-16T04:15:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-8m-users-reset-2026-07-15",
+      "resetAt": "2026-07-14T20:45:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "personal-tibo-7m-users-banked-reset-2026-07-14",
+      "resetAt": "2026-07-13T18:40:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "personal-tibo-500k-compensation-reset-2026-07-13",
+      "resetAt": "2026-07-12T22:00:00.000Z",
+      "included": false,
+      "randomEligible": false,
+      "regularEligible": false,
+      "reason": "narrow_scope"
+    },
+    {
+      "id": "local-codex-6m-users-reset-2026-07-13",
+      "resetAt": "2026-07-12T18:30:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-3-2026-07-11",
+      "resetAt": "2026-07-11T06:00:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-gpt-5-6-sol-release-reset-2-2026-07-11",
+      "resetAt": "2026-07-10T18:26:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-gpt-5-6-release-reset-2026-07-10",
+      "resetAt": "2026-07-09T22:00:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-regular-reset-2026-07-07",
+      "resetAt": "2026-07-07T00:30:00.000Z",
+      "included": true,
+      "randomEligible": false,
+      "regularEligible": true,
+      "reason": "regular_boundary"
+    },
+    {
+      "id": "personal-codex-reset-button-aie-2026-07-02",
+      "resetAt": "2026-07-01T20:50:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-forced-reset-2026-06-30",
+      "resetAt": "2026-06-30T00:30:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-forced-comp-reset-2026-06-29",
+      "resetAt": "2026-06-29T00:00:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-27",
+      "resetAt": "2026-06-27T03:00:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-codex-regular-reset-2026-06-25",
+      "resetAt": "2026-06-24T22:01:00.000Z",
+      "included": true,
+      "randomEligible": false,
+      "regularEligible": true,
+      "reason": "regular_boundary"
+    },
+    {
+      "id": "local-codex-rate-limit-reset-notice-2026-06-17",
+      "resetAt": "2026-06-17T22:00:00.000Z",
+      "included": true,
+      "randomEligible": false,
+      "regularEligible": true,
+      "reason": "regular_boundary"
+    },
+    {
+      "id": "personal-compensation-reset-credit-2026-06-18",
+      "resetAt": "2026-06-17T22:00:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "personal-reset-credit-2026-06-11",
+      "resetAt": "2026-06-12T00:11:00.000Z",
+      "included": true,
+      "randomEligible": false,
+      "regularEligible": true,
+      "reason": "regular_boundary"
+    },
+    {
+      "id": "local-codex-reliability-compensation-2026-06-04",
+      "resetAt": "2026-06-04T00:25:58.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-5m-users-celebration-2026-05-31",
+      "resetAt": "2026-05-31T15:25:06.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-long-session-compression-compensation-2026-05-24",
+      "resetAt": "2026-05-23T20:14:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-sam-like-promise-reset-2026-05-20",
+      "resetAt": "2026-05-19T18:39:18.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    },
+    {
+      "id": "local-gpt-55-degradation-compensation-2026-05-17",
+      "resetAt": "2026-05-16T17:51:00.000Z",
+      "included": true,
+      "randomEligible": true,
+      "regularEligible": false,
+      "reason": "random_boundary"
+    }
+  ],
+  "notes": [
+    "All model predictions are generated from point-in-time projected data at each 6-hour origin.",
+    "A horizon with a regular recovery boundary and no random event is censored rather than scored as a simple negative.",
+    "The 24-hour and 48-hour non-overlapping subsets are lower-sample references; overlapping 6-hour origins are dependent.",
+    "The selected configuration is chosen from past-origin scores only; no future label is used at the origin where a choice is made.",
+    "The public model is hazard-regime-elapsed-v1; hazard-odds-v3-recency-bayes-h30-r3 remains the comparison and fallback model.",
+    "The current model uses bin scheme A, prior exposure 2 days, regime half-life 3 days, and ratio exponent 1.",
+    "No fixed 14%/27% display cap is included in these predictions."
+  ]
+}
