@@ -271,7 +271,7 @@ test("falls back to the latest normal post when no related post is valid", () =>
   assert.equal(rejected.latestTiboActivity?.text, "accepted-none post text");
 });
 
-test("changing teaser strength only changes the UI status, not published probabilities", () => {
+test("changing teaser strength updates published probabilities while preserving the UI status", () => {
   const makeSnapshot = (teaserStrength: TeaserSignal["teaser_strength"]) =>
     toPublicRadarSnapshot(
       getLocalRadarData({
@@ -297,12 +297,17 @@ test("changing teaser strength only changes the UI status, not published probabi
   const weak = makeSnapshot("weak");
   const strong = makeSnapshot("strong");
 
-  assert.deepEqual(
-    [weak.viewModel.probability24h, weak.viewModel.probability48h],
-    [none.viewModel.probability24h, none.viewModel.probability48h],
-  );
-  assert.deepEqual(
-    [strong.viewModel.probability24h, strong.viewModel.probability48h],
-    [none.viewModel.probability24h, none.viewModel.probability48h],
-  );
+  assert.ok(weak.viewModel.probability24h !== undefined);
+  assert.ok(weak.viewModel.probability48h !== undefined);
+  assert.ok(strong.viewModel.probability24h !== undefined);
+  assert.ok(strong.viewModel.probability48h !== undefined);
+  assert.ok(none.viewModel.probability24h !== undefined);
+  assert.ok(none.viewModel.probability48h !== undefined);
+  assert.ok(weak.viewModel.probability24h > none.viewModel.probability24h);
+  assert.ok(weak.viewModel.probability48h > none.viewModel.probability48h);
+  assert.ok(strong.viewModel.probability24h > weak.viewModel.probability24h);
+  assert.ok(strong.viewModel.probability48h > weak.viewModel.probability48h);
+  assert.equal(none.resetTeaserStatus, "none");
+  assert.equal(weak.resetTeaserStatus, "weak");
+  assert.equal(strong.resetTeaserStatus, "strong");
 });

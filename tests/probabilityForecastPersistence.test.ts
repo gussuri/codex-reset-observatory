@@ -24,7 +24,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.deepEqual(Object.keys(forecasts), [
     "hazard-odds-v3-random-inclusive",
     "hazard-odds-v3-recency-bayes-h14-r2",
-    "hazard-odds-v3-recency-bayes-h30-r2",
+    "hazard-odds-v3-recency-bayes-h30-r3",
     "hazard-odds-v3-recency-bayes-h60-r2",
     "hazard-odds-v4-logit-calibrated-prequential-v2",
   ]);

@@ -14,6 +14,10 @@ export type ResetTeaserSignal = {
   expires_at?: string | null;
 };
 
+export type TeaserStrengthWindowOptions = {
+  includeReplies?: boolean;
+};
+
 export function isTeaserStrength(value: unknown): value is TeaserStrength {
   return typeof value === "string" &&
     (TIBO_TEASER_STRENGTHS as readonly string[]).includes(value);
@@ -31,20 +35,22 @@ function getTimestamp(value: string | Date | null | undefined) {
 }
 
 /**
- * Returns the posts eligible for the UI-only 48-hour teaser aggregation.
- * Expiration is intentionally not part of this filter; the UI window is
- * separate from the active-signal expiry used by probability calculations.
+ * Returns posts eligible for a 48-hour teaser-strength window.
+ * Expiration is intentionally not part of this filter; callers can choose
+ * whether replies belong to their own use of the shared time window.
  */
-export function getUiResetTeaserSignals(
+export function getTeaserStrengthSignals(
   signals: readonly ResetTeaserSignal[] | null | undefined,
   latestResetAt: string | Date | null | undefined,
   now: Date = new Date(),
+  options: TeaserStrengthWindowOptions = {},
 ) {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
   const latestResetTime = getTimestamp(latestResetAt);
   const cutoffTime = nowTime - RESET_TEASER_LOOKBACK_MS;
+  const includeReplies = options.includeReplies ?? true;
 
   return (signals ?? []).filter((signal) => {
     const createdTime = getTimestamp(signal.tweet_created_at);
@@ -53,8 +59,23 @@ export function getUiResetTeaserSignals(
         createdTime <= nowTime &&
         createdTime >= cutoffTime &&
         (latestResetTime === null || createdTime > latestResetTime) &&
-        signal.verification_status !== "rejected",
+        signal.verification_status !== "rejected" &&
+        (includeReplies || signal.is_reply !== true),
     );
+  });
+}
+
+/**
+ * UI aggregation keeps its existing reply-inclusive behavior. Probability
+ * code uses getTeaserStrengthSignals directly with replies disabled.
+ */
+export function getUiResetTeaserSignals(
+  signals: readonly ResetTeaserSignal[] | null | undefined,
+  latestResetAt: string | Date | null | undefined,
+  now: Date = new Date(),
+) {
+  return getTeaserStrengthSignals(signals, latestResetAt, now, {
+    includeReplies: true,
   });
 }
 

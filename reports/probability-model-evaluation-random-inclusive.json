@@ -230,7 +230,7 @@
   ],
   "models": [
     {
-      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r2",
+      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
       "halfLifeDays": 30,
       "kind": "recency",
       "classification": "baseline",

@@ -11,7 +11,7 @@
 
 | Model | Half-life | Classification | 24h Brier | 48h Brier |
 | --- | ---: | --- | ---: | ---: |
-| hazard-odds-v3-recency-bayes-h30-r2 | 30 | baseline | 0.2536 | 0.2964 |
+| hazard-odds-v3-recency-bayes-h30-r3 | 30 | baseline | 0.2536 | 0.2964 |
 | hazard-odds-v3-random-inclusive | none | no_meaningful_difference | 0.2558 | 0.2991 |
 | benchmark-constant-hazard-v1 | none | no_meaningful_difference | 0.2608 | 0.3049 |
 | benchmark-v2-logit-calibrated-prequential-v1 | none | promising_but_inconclusive | 0.2408 | 0.2676 |
@@ -20,7 +20,7 @@
 
 ## Metrics
 
-### hazard-odds-v3-recency-bayes-h30-r2
+### hazard-odds-v3-recency-bayes-h30-r3
 
 - 24h: n=42, actual=35.71%, mean=18.64%, Brier=0.2536, logLoss=0.7229
 - 48h: n=42, actual=57.14%, mean=32.54%, Brier=0.2964, logLoss=0.7959
@@ -143,6 +143,6 @@
 - Benchmark models are evaluation-only and are not written to experimentalProbabilityForecasts or used by the public model.
 - Daily evaluation origins overlap, so daily metric differences are not independent.
 - The non-overlapping 48h section is a lower-sample reference analysis.
-- The public model is hazard-odds-v3-recency-bayes-h30-r2; hazard-odds-v3-random-inclusive remains the unweighted comparison baseline.
+- The public model is hazard-odds-v3-recency-bayes-h30-r3; hazard-odds-v3-random-inclusive remains the unweighted comparison baseline.
 - Benchmark results do not change API responses, UI, DTOs, Supabase, or stored Shadow forecasts.
 - No automatic winner is selected from an inconclusive result.

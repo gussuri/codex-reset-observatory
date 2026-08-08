@@ -39,6 +39,7 @@ import {
 import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
+import { getTeaserStrengthSignals } from "./teaserStrength";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -92,6 +93,7 @@ export type ShadowSignalMultipliers = {
   recentResetMomentum: ShadowProbabilityPair;
   regularResetProximity: ShadowProbabilityPair;
   teaser: ShadowProbabilityPair;
+  teaserStrength: ShadowProbabilityPair;
   statusSignal: ShadowProbabilityPair;
   officialIncidentHint: ShadowProbabilityPair;
   officialUpdate: ShadowProbabilityPair;
@@ -106,6 +108,7 @@ export type ShadowSignalInputs = {
   recentResetCount7d: number;
   regularResetProximity: number;
   teaserScore: number;
+  teaserStrengthMultiplier?: ShadowProbabilityPair;
   normalizedStatusScore: number;
   officialIncidentHintCount: number;
   officialUpdateCount: number;
@@ -150,6 +153,7 @@ export type ShadowProbabilityOptions = {
 export type ShadowProbabilityModelOptions = {
   modelVersion?: string;
   hazardOptions?: ShadowHazardBuildOptions;
+  includeTeaserStrengthBoost?: boolean;
 };
 
 function clamp01(value: number) {
@@ -436,6 +440,7 @@ export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): Sha
       1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability24h,
       1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability48h,
     ),
+    teaserStrength: input.teaserStrengthMultiplier ?? pair(1, 1),
     statusSignal: pair(
       1 + statusScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.statusSignal.probability24h,
       1 + statusScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.statusSignal.probability48h,
@@ -506,6 +511,31 @@ function getLatestAcceptedTiboResetTime(data: RadarData | null, now: Date) {
   );
 }
 
+function getEligibleFormalTeaserSignals(
+  data: RadarData | null,
+  now: Date,
+  latestResetTime: number | null,
+) {
+  const latestTiboResetTime = getLatestAcceptedTiboResetTime(data, now);
+  const cutoff = Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
+
+  return [
+    ...(data?.active_tibo_signals ?? []),
+    ...(data?.formal_tibo_resets ?? []),
+  ].filter((signal) => {
+    const createdAt = getTimestamp(signal.tweet_created_at);
+    return Boolean(
+      signal.signal_type === "teaser" &&
+        (signal.confidence ?? 0) >= 0.8 &&
+        signal.verification_status !== "rejected" &&
+        signal.is_reply !== true &&
+        createdAt !== null &&
+        createdAt <= now.getTime() &&
+        createdAt > cutoff,
+    );
+  });
+}
+
 function getTeaserScore(
   data: RadarData | null,
   now: Date,
@@ -540,22 +570,7 @@ function getTeaserScore(
     ));
   }
 
-  const latestTiboResetTime = getLatestAcceptedTiboResetTime(data, now);
-  const cutoff = Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
-  const dynamicTeasers = [
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.formal_tibo_resets ?? []),
-  ].filter((signal) => {
-    const createdAt = getTimestamp(signal.tweet_created_at);
-    return Boolean(
-      signal.signal_type === "teaser" &&
-        (signal.confidence ?? 0) >= 0.8 &&
-        signal.verification_status !== "rejected" &&
-        createdAt !== null &&
-        createdAt <= now.getTime() &&
-        createdAt > cutoff,
-    );
-  });
+  const dynamicTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
 
   if (dynamicTeasers.length === 0) return 0;
   return clamp01(Math.max(
@@ -563,6 +578,77 @@ function getTeaserScore(
       getTeaserDecayFactor(signal.tweet_created_at, now),
     ),
   ));
+}
+
+function getTeaserStrengthSourceSignals(data: RadarData | null) {
+  const seen = new Set<string>();
+  return [
+    ...(data?.active_tibo_signals ?? []),
+    ...(data?.recent_tibo_signals ?? []),
+  ].flatMap((signal) => {
+    if (seen.has(signal.tweet_id)) return [];
+    seen.add(signal.tweet_id);
+    return [{
+      tweet_created_at: signal.tweet_created_at,
+      teaser_strength: signal.teaser_strength ?? null,
+      signal_type: signal.signal_type,
+      verification_status: signal.verification_status,
+      is_reply: signal.is_reply,
+    }];
+  });
+}
+
+function getTeaserStrengthMultiplier(
+  data: RadarData | null,
+  now: Date,
+  latestResetTime: number | null,
+) {
+  // A formal teaser already owns this signal slot. Do not multiply its
+  // established 1.8x/2.2x effect by the weaker strength signal.
+  if (getEligibleFormalTeaserSignals(data, now, latestResetTime).length > 0) {
+    return pair(1, 1);
+  }
+
+  const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);
+  const eligibleSignals = getTeaserStrengthSignals(
+    getTeaserStrengthSourceSignals(data),
+    latestResetAt,
+    now,
+    { includeReplies: false },
+  ).filter(
+    (signal) => signal.teaser_strength === "strong" || signal.teaser_strength === "weak",
+  );
+
+  if (eligibleSignals.length === 0) return pair(1, 1);
+
+  return pair(
+    Math.max(
+      ...eligibleSignals.map((signal) => {
+        const strength = signal.teaser_strength;
+        if (strength !== "strong" && strength !== "weak") return 1;
+        const initial = SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength[strength];
+        const progress = getTeaserDecayFactor(
+          signal.tweet_created_at,
+          now,
+          SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength.lookbackHours,
+        );
+        return 1 + (initial.multiplier24h - 1) * progress;
+      }),
+    ),
+    Math.max(
+      ...eligibleSignals.map((signal) => {
+        const strength = signal.teaser_strength;
+        if (strength !== "strong" && strength !== "weak") return 1;
+        const initial = SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength[strength];
+        const progress = getTeaserDecayFactor(
+          signal.tweet_created_at,
+          now,
+          SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength.lookbackHours,
+        );
+        return 1 + (initial.multiplier48h - 1) * progress;
+      }),
+    ),
+  );
 }
 
 function getRegularProximityScore(expectedAt: string | null | undefined, now: Date) {
@@ -587,6 +673,7 @@ function getShadowSignalInputs(
   signalEvaluation: LocalSignalEvaluation,
   latestResetTime: number | null,
   regularResetExpectedAt: string | null | undefined,
+  includeTeaserStrengthBoost: boolean,
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
@@ -594,6 +681,9 @@ function getShadowSignalInputs(
     recentResetCount7d: getRecent7DayResetCount(data, now),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
     teaserScore: getTeaserScore(data, now, latestResetTime, localObservationSignals),
+    teaserStrengthMultiplier: includeTeaserStrengthBoost
+      ? getTeaserStrengthMultiplier(data, now, latestResetTime)
+      : pair(1, 1),
     normalizedStatusScore: clamp01(
       signalEvaluation.statusIncidents.weightedStatusScore /
         LOCAL_PROBABILITY_WEIGHTS.countLimits.statusIncidents,
@@ -673,6 +763,7 @@ export function calculateShadowProbabilityForModel(
     signalEvaluation,
     latestResetTime,
     options.regularResetExpectedAt,
+    modelOptions.includeTeaserStrengthBoost === true,
     localObservationSignals,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs);

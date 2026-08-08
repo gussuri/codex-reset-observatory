@@ -48,6 +48,7 @@ export function calculateRecencyWeightedShadowProbability(
         completedIntervalWeight: ({ currentTime }) =>
           getRecencyDecayWeight((nowTime - currentTime) / DAY_MS, model.halfLifeDays),
       },
+      includeTeaserStrengthBoost: model.includeTeaserStrengthBoost,
     },
   );
 }

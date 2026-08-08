@@ -1,6 +1,6 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r2";
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
@@ -44,6 +44,17 @@ export const SHADOW_SIGNAL_MULTIPLIER_CONFIG = {
     probability24h: 0.8,
     probability48h: 1.2,
   },
+  teaserStrength: {
+    lookbackHours: 48,
+    weak: {
+      multiplier24h: 1.15,
+      multiplier48h: 1.2,
+    },
+    strong: {
+      multiplier24h: 1.35,
+      multiplier48h: 1.5,
+    },
+  },
   statusSignal: {
     probability24h: 0.5,
     probability48h: 0.7,
@@ -78,13 +89,16 @@ export const RECENCY_SHADOW_MODEL_CONFIG = [
   {
     modelVersion: "hazard-odds-v3-recency-bayes-h14-r2",
     halfLifeDays: 14,
+    includeTeaserStrengthBoost: false,
   },
   {
     modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
     halfLifeDays: PUBLISHED_RECENCY_HALF_LIFE_DAYS,
+    includeTeaserStrengthBoost: true,
   },
   {
     modelVersion: "hazard-odds-v3-recency-bayes-h60-r2",
     halfLifeDays: 60,
+    includeTeaserStrengthBoost: false,
   },
 ] as const;
