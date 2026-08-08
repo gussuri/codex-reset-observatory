@@ -1,8 +1,8 @@
 {
   "schemaVersion": "prospective-published-model-evaluation-v1",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-08T15:14:50.369Z",
-  "asOf": "2026-08-08T15:14:50.369Z",
+  "generatedAt": "2026-08-08T15:17:01.283Z",
+  "asOf": "2026-08-08T15:17:01.283Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",

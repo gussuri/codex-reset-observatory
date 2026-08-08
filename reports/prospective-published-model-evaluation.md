@@ -6,7 +6,7 @@
 - Evaluation start: 2026-08-08T14:59:40.532Z
 - Active model: hazard-regime-elapsed-v1
 - Baseline model: hazard-odds-v3-recency-bayes-h30-r3
-- As of: 2026-08-08T15:14:50.369Z
+- As of: 2026-08-08T15:17:01.283Z
 - Saved forecasts: active=1, baseline=11, comparable=1
 - Source: prediction_history.debug_info.experimentalProbabilityForecasts
 - Target definition: Completed broad-scope random reset events after reset-history deduplication; includes forced resets and Banked Reset distributions, while excluding regular resets, narrow-scope distributions, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and reference records.
