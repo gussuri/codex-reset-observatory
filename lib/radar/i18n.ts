@@ -185,7 +185,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "本预测并非官方信息，实际重置时间请以官方消息为准。",
   },
   forecastOutlook: {
-    ja: "現在の見立て",
+    ja: "現在の見込み",
     en: "Current outlook",
     zh: "当前判断",
   },
