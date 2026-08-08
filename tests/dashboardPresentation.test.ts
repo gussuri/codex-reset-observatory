@@ -415,11 +415,8 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /<dl class="grid gap-2 sm:grid-cols-2 lg:grid-cols-2">/);
   assert.match(html, /現在の見込み/);
-  assert.match(html, /現在、目立った観測変化はありません。/);
-  assert.match(
-    html,
-    /現在、目立った観測変化はありません。/,
-  );
+  assert.doesNotMatch(html, /現在、目立った観測変化はありません。/);
+  assert.match(outlookText, /前回のリセット|最近はリセット|現在、大きな変化/);
   assert.match(html, /radar-grid relative h-11 w-11 shrink-0/);
   assert.match(html, /mt-2 max-w-2xl text-xs leading-5 text-slate-600/);
   assert.doesNotMatch(outlookText, /直近のリセットから2日20時間経過しています。/);
@@ -472,7 +469,7 @@ test("observation status row reflects an active Codex incident without changing 
   );
 
   assert.match(html, /Codex incidents[\s\S]*Active/);
-  assert.match(html, /A Codex-related incident is currently active/);
+  assert.match(html, /A Codex incident is active, making a reset more likely/);
 });
 
 test("observation status row reflects an active reset teaser from the latest Tibo activity", () => {

@@ -90,15 +90,24 @@ function getIncidentStatusFromReason(
 ): IncidentStatus {
   if (!reason) return "unknown";
 
-  const activePhrase = locale === "en"
-    ? "A Codex-related incident is currently active"
+  const activePhrases = locale === "en"
+    ? [
+        "A Codex incident is active",
+        "A Codex-related incident is currently active",
+      ]
     : locale === "zh"
-      ? "当前有 Codex 相关故障正在发生"
-      : "現在、Codex関連の障害が発生しており";
+      ? [
+          "Codex正在发生故障",
+          "当前有 Codex 相关故障正在发生",
+        ]
+      : [
+          "Codexで障害が起きており",
+          "現在、Codex関連の障害が発生しており",
+        ];
 
   // The display summary already uses the evaluated incident state. Reuse its
   // localized wording here instead of introducing a second incident query.
-  return reason.includes(activePhrase) ? "active" : "none";
+  return activePhrases.some((phrase) => reason.includes(phrase)) ? "active" : "none";
 }
 
 function getElapsedSinceLastReset(
@@ -140,29 +149,7 @@ function getCompactOutlookReason(
   reason: string | null | undefined,
   locale: Locale,
 ) {
-  if (!reason) return null;
-
-  const redundantSentences = locale === "en"
-    ? [
-        /It has been .+? since the last reset\.\s*/,
-        /There is currently no official notice or active Codex-related incident\.\s*/,
-      ]
-    : locale === "zh"
-      ? [
-          /距离上次重置已过去.+?。\s*/,
-          /目前没有官方预告，也没有正在发生的 Codex 相关故障。\s*/,
-        ]
-      : [
-          /直近のリセットから.+?経過しています。\s*/,
-          /現在、公式予告や発生中のCodex関連障害はありません。\s*/,
-        ];
-
-  const compactReason = redundantSentences.reduce(
-    (current, sentence) => current.replace(sentence, ""),
-    reason,
-  ).trim();
-
-  return compactReason || translateUI("noObservedChange", locale);
+  return reason?.trim() || translateUI("outlookUnavailable", locale);
 }
 
 function ObservationStatusItem({
@@ -461,9 +448,10 @@ export function RadarDashboard({
         state.fetchedAt,
         locale,
       );
-  const compactOutlookReason = isDataUnavailable
-    ? null
-    : getCompactOutlookReason(viewModel.displayReasoningSummary, locale);
+  const compactOutlookReason = getCompactOutlookReason(
+    isDataUnavailable ? null : viewModel.displayReasoningSummary,
+    locale,
+  );
   const visibleHistory = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" ||
       item.recordKind === "banked_distribution" ||
@@ -689,7 +677,7 @@ export function RadarDashboard({
             </div>
 
             <dl className="mt-4 space-y-3">
-              {!isDataUnavailable && compactOutlookReason ? (
+              {compactOutlookReason ? (
                 <RecommendationRow reason={compactOutlookReason} locale={locale} />
               ) : null}
             </dl>

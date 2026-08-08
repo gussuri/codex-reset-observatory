@@ -230,6 +230,7 @@ export function getRadarViewModel(
       signalEvaluation,
       activeOfficialNotice,
       calculationNow,
+      probabilityCalculation,
     ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",

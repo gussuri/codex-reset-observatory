@@ -8,7 +8,7 @@ import {
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
 import type { Locale, RadarData, WindowEventLike } from "./types";
-import { translateDynamic } from "./i18n";
+import { translateDynamic, translateUI } from "./i18n";
 import {
   deriveComplaintPressure,
   evaluateStatusIncidents,
@@ -20,7 +20,6 @@ import {
   isWithinHours,
   getDateTime,
   probabilityToPercent,
-  getExpectationKey,
   getExpectationLabel,
   formatElapsedResetDuration,
 } from "./helpers";
@@ -31,6 +30,7 @@ import {
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRecoveryResetAt } from "./recoveryBoundary";
+import { aggregateResetTeaserStatus } from "./teaserStrength";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -1327,6 +1327,11 @@ export function getLocalProbabilityReason(
   }
 }
 
+type DisplayProbabilityModelContext = {
+  source: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback";
+  shadow?: unknown;
+};
+
 export function getDisplayProbabilityReason(
   data: RadarData | null,
   probability24h: number | undefined,
@@ -1335,116 +1340,83 @@ export function getDisplayProbabilityReason(
   signalEvaluation?: LocalSignalEvaluation,
   activeOfficialNotice?: ActiveOfficialNotice | null,
   now: Date = new Date(),
+  publishedCalculation?: DisplayProbabilityModelContext,
 ): string | null {
+  if (!data) {
+    return translateUI("outlookUnavailable", locale);
+  }
+
   const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
     ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
     : activeOfficialNotice;
 
   if (resolvedOfficialNotice) {
-    return locale === "en"
-      ? "An official reset notice has been detected. Please prioritize checking the notice and scheduled timing."
-      : locale === "zh"
-        ? "已确认官方重置预告。请优先查看预告内容和计划时间。"
-        : "公式リセット予告が確認されています。予告内容と実施予定時刻を優先して確認してください。";
+    return translateUI("outlookOfficialNotice", locale);
   }
 
   const environment = resolvedSignalEvaluation.environment;
-  const expectationKey = getExpectationKey({ p24h: probability24h, p48h: probability48h });
-  const expectationText = {
-    ja: {
-      low: "低め",
-      medium: "中程度",
-      high: "高め",
-      very_high: "かなり高め",
-      unknown: "不明",
-    },
-    en: {
-      low: "low",
-      medium: "moderate",
-      high: "high",
-      very_high: "very high",
-      unknown: "unclear",
-    },
-    zh: {
-      low: "偏低",
-      medium: "中等",
-      high: "较高",
-      very_high: "很高",
-      unknown: "不明",
-    },
-  }[locale][expectationKey];
-  const sentences: string[] = [];
   const activeIncidentCount = resolvedSignalEvaluation.statusIncidents.activeStatusIncidentCount;
-  const officialSignalCount =
-    (environment.official_incident_hints_24h ?? 0) +
-    (environment.official_updates_24h ?? 0);
   const issueAnomalyCount = environment.issue_or_limit_anomalies_24h ?? 0;
+  const latestResetAt = getLastDisplayResetAt(data, now)?.toISOString() ?? null;
+  const teaserStatus = aggregateResetTeaserStatus(
+    data.recent_tibo_signals ?? data.active_tibo_signals,
+    latestResetAt,
+    now,
+  );
 
-  if (officialSignalCount > 0) {
-    sentences.push(
-      locale === "en"
-        ? `Official developer activity suggests an update or reset, and the likelihood is ${expectationText}.`
-        : locale === "zh"
-          ? `检测到官方开发者关于更新或重置的动向，可能性${expectationText}。`
-          : `公式開発者から更新やリセットを示唆する動きが確認されており、可能性は${expectationText}です。`,
-    );
+  if (teaserStatus === "strong") {
+    return translateUI("outlookStrongTeaser", locale);
   }
 
   if (activeIncidentCount > 0) {
-    sentences.push(
-      locale === "en"
-        ? "A Codex-related incident is currently active, so a reset is considered more likely than usual."
-        : locale === "zh"
-          ? "当前有 Codex 相关故障正在发生，因此重置可能性高于平时。"
-          : "現在、Codex関連の障害が発生しており、障害対応によるリセットの可能性を通常より高めに見ています。",
-    );
+    return translateUI("outlookActiveIncident", locale);
+  }
+
+  if (teaserStatus === "weak") {
+    return translateUI("outlookWeakTeaser", locale);
   }
 
   if (issueAnomalyCount > 0) {
-    sentences.push(
-      locale === "en"
-        ? "Usage-limit anomalies have been reported, so a reset is considered more likely than usual."
-        : locale === "zh"
-          ? "有使用限制异常报告，因此重置可能性高于平时。"
-          : "利用上限まわりの異常が報告されており、リセットの可能性を通常より高めに見ています。",
-    );
+    return translateUI("outlookUsageAnomaly", locale);
   }
 
-  const lastReset = getLastDisplayResetAt(data, now);
-  if (lastReset) {
-    const elapsedDuration = formatElapsedResetDuration(
-      Math.max(0, now.getTime() - lastReset.getTime()),
-      locale,
-    );
-    sentences.push(
-      locale === "en"
-        ? `It has been ${elapsedDuration} since the last reset.`
-        : locale === "zh"
-          ? `距离上次重置已过去${elapsedDuration}。`
-          : `直近のリセットから${elapsedDuration}経過しています。`,
-    );
+  const shadow = publishedCalculation?.source === "shadow"
+    ? publishedCalculation.shadow
+    : null;
+  const regimeElapsed = shadow && typeof shadow === "object" && "regimeElapsed" in shadow
+    ? (shadow as {
+        regimeElapsed?: {
+          elapsedHours?: number;
+          regime?: {
+            regimeMultiplier?: number;
+          } | null;
+        } | null;
+      }).regimeElapsed
+    : null;
+  const regimeMultiplier = regimeElapsed?.regime?.regimeMultiplier;
+  const elapsedHours = regimeElapsed?.elapsedHours;
+  if (
+    typeof regimeMultiplier !== "number" ||
+    !Number.isFinite(regimeMultiplier) ||
+    typeof elapsedHours !== "number" ||
+    !Number.isFinite(elapsedHours)
+  ) {
+    return translateUI("outlookFallbackNoMajorChange", locale);
   }
 
-  const hasRelevantSignal =
-    officialSignalCount > 0 ||
-    activeIncidentCount > 0 ||
-    issueAnomalyCount > 0;
-  if (!hasRelevantSignal) {
-    sentences.push(
-      locale === "en"
-        ? "There is currently no official notice or active Codex-related incident."
-        : locale === "zh"
-          ? "目前没有官方预告，也没有正在发生的 Codex 相关故障。"
-          : "現在、公式予告や発生中のCodex関連障害はありません。",
-    );
-  }
+  const regimeKey = regimeMultiplier < 0.9
+    ? "Low"
+    : regimeMultiplier > 1.2
+      ? "High"
+      : "Normal";
+  const elapsedKey = elapsedHours < 24
+    ? "Under24h"
+    : elapsedHours < 72
+      ? "24To72h"
+      : "72hPlus";
 
-  return joinDisplayReasonSentences(sentences.slice(0, 2), locale);
-}
-
-function joinDisplayReasonSentences(sentences: string[], locale: Locale) {
-  return sentences.filter(Boolean).join(locale === "en" ? " " : "");
+  return translateUI(`outlook${regimeKey}${elapsedKey}`, locale);
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {

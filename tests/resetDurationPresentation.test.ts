@@ -51,7 +51,15 @@ function withLocalHistory<T>(history: WindowEventLike[], callback: () => T) {
   }
 }
 
-function getReasonForData(data: ReturnType<typeof getLocalRadarData>, locale: "ja" | "en" | "zh") {
+function getReasonForData(
+  data: ReturnType<typeof getLocalRadarData>,
+  locale: "ja" | "en" | "zh",
+  regimeMultiplier = 1,
+) {
+  const lastReset = getLastDisplayResetAt(data, NOW);
+  const elapsedHours = lastReset
+    ? Math.max(0, (NOW.getTime() - lastReset.getTime()) / HOUR_MS)
+    : 0;
   return getDisplayProbabilityReason(
     data,
     0.2,
@@ -60,6 +68,15 @@ function getReasonForData(data: ReturnType<typeof getLocalRadarData>, locale: "j
     getLocalSignalEvaluation(data, NOW),
     null,
     NOW,
+    {
+      source: "shadow",
+      shadow: {
+        regimeElapsed: {
+          elapsedHours,
+          regime: { regimeMultiplier },
+        },
+      },
+    },
   ) ?? "";
 }
 
@@ -102,7 +119,10 @@ test("uses the latest broad regular recovery boundary, ignoring newer narrow rec
       resetEvent("newer-narrow", "2026-08-09T12:00:00.000Z", "banked_distribution", "ランダムリセット", "不具合対象ユーザー（約50万人）"),
     ],
     () => {
-      assert.match(getReason("ja"), /直近のリセットから1日1時間経過しています。/);
+      assert.equal(
+        getReason("ja"),
+        "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+      );
     },
   );
 });
@@ -115,7 +135,10 @@ test("uses a broad regular reference when it is the latest recovery boundary", (
       resetEvent("newer-narrow", "2026-08-09T11:00:00.000Z", "banked_distribution", "ランダムリセット", "限定ユーザー"),
     ],
     () => {
-      assert.match(getReason("ja"), /直近のリセットから1日2時間経過しています。/);
+      assert.equal(
+        getReason("ja"),
+        "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+      );
     },
   );
 });
@@ -141,7 +164,10 @@ test("uses persisted regular_completed as the display boundary and not the older
       const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
 
       assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
-      assert.match(getReasonForData(data, "ja"), /直近のリセットから2日8時間経過しています。/);
+      assert.equal(
+        getReasonForData(data, "ja"),
+        "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+      );
     },
   );
 });
@@ -154,9 +180,18 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
       const regularRow = getDueRegularResetEventRows(new Date(regularAt))[0];
       const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
 
-      assert.match(getReasonForData(data, "ja"), /直近のリセットから2日8時間経過しています。/);
-      assert.match(getReasonForData(data, "en"), /It has been 2 days and 8 hours since the last reset\./);
-      assert.match(getReasonForData(data, "zh"), /距离上次重置已过去2天8小时。/);
+      assert.equal(
+        getReasonForData(data, "ja"),
+        "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+      );
+      assert.equal(
+        getReasonForData(data, "en"),
+        "Some time has passed since the last reset, making a reset more likely than just after a reset.",
+      );
+      assert.equal(
+        getReasonForData(data, "zh"),
+        "距离上次重置已有一段时间，比重置刚结束时更容易发生。",
+      );
     },
   );
 });
@@ -206,13 +241,22 @@ test("display boundary calculation does not change published probability values"
   );
 });
 
-test("renders the elapsed reset sentence in all supported locales", () => {
+test("renders the normal outlook sentence in all supported locales", () => {
   withLocalHistory(
     [resetEvent("regular", "2026-08-09T10:00:00.000Z", "confirmed_global", "定期リセット", "全有料プラン")],
     () => {
-      assert.match(getReason("ja"), /直近のリセットから1日2時間経過しています。/);
-      assert.match(getReason("en"), /It has been 1 day and 2 hours since the last reset\./);
-      assert.match(getReason("zh"), /距离上次重置已过去1天2小时。/);
+      assert.equal(
+        getReason("ja"),
+        "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+      );
+      assert.equal(
+        getReason("en"),
+        "Some time has passed since the last reset, making a reset more likely than just after a reset.",
+      );
+      assert.equal(
+        getReason("zh"),
+        "距离上次重置已有一段时间，比重置刚结束时更容易发生。",
+      );
     },
   );
 });

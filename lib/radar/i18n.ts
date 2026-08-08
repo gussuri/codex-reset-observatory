@@ -99,10 +99,85 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Active",
     zh: "有",
   },
-  noObservedChange: {
-    ja: "現在、目立った観測変化はありません。",
-    en: "No notable changes are currently observed.",
-    zh: "目前未观察到明显变化。",
+  outlookOfficialNotice: {
+    ja: "公式のリセット予告があります。",
+    en: "An official reset notice is available.",
+    zh: "有官方重置预告。",
+  },
+  outlookStrongTeaser: {
+    ja: "リセットを匂わせる投稿があり、見込みが上がっています。",
+    en: "A post hints at a reset, and the outlook has improved.",
+    zh: "有帖子暗示即将重置，当前预期有所上升。",
+  },
+  outlookActiveIncident: {
+    ja: "Codexで障害が起きており、リセットの可能性が上がっています。",
+    en: "A Codex incident is active, making a reset more likely.",
+    zh: "Codex正在发生故障，重置可能性有所上升。",
+  },
+  outlookWeakTeaser: {
+    ja: "リセットを匂わせる投稿があり、見込みが少し上がっています。",
+    en: "A post hints at a reset, and the outlook has improved slightly.",
+    zh: "有帖子暗示重置，当前预期略有上升。",
+  },
+  outlookUsageAnomaly: {
+    ja: "利用上限まわりの異常があり、リセットの可能性が少し上がっています。",
+    en: "Usage-limit anomalies are present, making a reset slightly more likely.",
+    zh: "使用上限出现异常，重置可能性略有上升。",
+  },
+  outlookLowUnder24h: {
+    ja: "前回のリセットからまだ時間が浅く、最近のリセットも少なめです。",
+    en: "It has not been long since the last reset, and recent resets have been less frequent.",
+    zh: "距离上次重置时间还短，近期重置也较少。",
+  },
+  outlookLow24To72h: {
+    ja: "最近はリセットが少なく、見込みは低めです。",
+    en: "Resets have been less frequent recently, so the outlook is lower.",
+    zh: "近期重置较少，因此当前预期偏低。",
+  },
+  outlookLow72hPlus: {
+    ja: "前回のリセットから時間はたっていますが、最近のリセットは少なめです。",
+    en: "More time has passed since the last reset, but recent resets have been less frequent.",
+    zh: "距离上次重置已经过了一段时间，但近期重置较少。",
+  },
+  outlookNormalUnder24h: {
+    ja: "前回のリセットからまだ時間が浅く、短期の見込みは低めです。",
+    en: "It has not been long since the last reset, so the short-term outlook is low.",
+    zh: "距离上次重置时间还短，短期预期偏低。",
+  },
+  outlookNormal24To72h: {
+    ja: "前回のリセットから少し時間がたち、リセット直後より起こりやすくなっています。",
+    en: "Some time has passed since the last reset, making a reset more likely than just after a reset.",
+    zh: "距离上次重置已有一段时间，比重置刚结束时更容易发生。",
+  },
+  outlookNormal72hPlus: {
+    ja: "前回のリセットから時間がたっており、リセットの見込みは上がっています。",
+    en: "More time has passed since the last reset, and the outlook has increased.",
+    zh: "距离上次重置已经较久，当前预期有所上升。",
+  },
+  outlookHighUnder24h: {
+    ja: "最近はリセットが続いていますが、前回のリセットからまだ時間が浅い状態です。",
+    en: "Resets have been occurring close together, but little time has passed since the last reset.",
+    zh: "近期重置接连发生，但距离上次重置时间还短。",
+  },
+  outlookHigh24To72h: {
+    ja: "最近はリセットが続いており、いつもより起こりやすい状態です。",
+    en: "Resets have been occurring close together, making a reset more likely than usual.",
+    zh: "近期重置接连发生，当前比平时更容易发生。",
+  },
+  outlookHigh72hPlus: {
+    ja: "最近はリセットが続いており、リセットの見込みは高めです。",
+    en: "Resets have been occurring close together, so the outlook is relatively high.",
+    zh: "近期重置接连发生，重置预期偏高。",
+  },
+  outlookFallbackNoMajorChange: {
+    ja: "現在、大きな変化は確認されていません。",
+    en: "No major changes are currently confirmed.",
+    zh: "目前没有确认到明显变化。",
+  },
+  outlookUnavailable: {
+    ja: "現在の見込みを確認できません。",
+    en: "The current outlook is unavailable.",
+    zh: "当前预期暂不可用。",
   },
   elapsedSinceResetShort: {
     ja: "前回のリセットから",
