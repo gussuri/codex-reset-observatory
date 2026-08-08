@@ -23,6 +23,11 @@ test("monitor health workflow checks the production endpoint every ten minutes",
     workflow,
     /https:\/\/codex\.gussuriworks\.com\/api\/monitor\/health/,
   );
+  assert.match(
+    workflow,
+    /https:\/\/codex\.gussuriworks\.com\/api\/regular-reset\/sync/,
+  );
+  assert.match(workflow, /regular-reset-sync:/);
   assert.match(workflow, /secrets\.CRON_SECRET/);
   assert.match(workflow, /HTTP_STATUS.*!= "200"/);
   assert.doesNotMatch(workflow, /--show-error/);

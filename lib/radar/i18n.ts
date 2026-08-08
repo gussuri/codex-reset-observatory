@@ -937,6 +937,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
 
   // Summaries
+  "定期リセットが予定時刻に実施されました。": {
+    ja: "定期リセットが予定時刻に実施されました。",
+    en: "The regular reset was completed at the scheduled time.",
+    zh: "定期重置已在预定时间完成。",
+  },
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。": {
     ja: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
     en: "Codex usage limits were reset on the usual weekly-cycle timing.",

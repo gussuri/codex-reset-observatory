@@ -24,6 +24,7 @@ import {
   type RejectedTiboResetSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
+import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
@@ -209,6 +210,76 @@ const getCachedTiboHistorySignals = unstable_cache(
   },
 );
 
+function isRegularResetEventRow(value: unknown): value is RegularResetEventRow {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Partial<RegularResetEventRow>;
+  return (
+    typeof row.schedule_key === "string" &&
+    typeof row.window_start_at === "string" &&
+    typeof row.window_end_at === "string" &&
+    typeof row.representative_at === "string" &&
+    typeof row.scheduled_at === "string" &&
+    typeof row.completed_at === "string" &&
+    row.cycle_type === "定期リセット" &&
+    typeof row.reset_method === "string" &&
+    typeof row.scope === "string" &&
+    row.record_kind === "regular_completed" &&
+    (row.status === "completed" || row.status === "corrected" || row.status === "voided")
+  );
+}
+
+async function fetchRawRegularResetEvents(): Promise<
+  DataFetchResult<RegularResetEventRow[]>
+> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return { data: [], health: configuration };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const { data, error } = await supabase
+      .from("regular_reset_events")
+      .select(
+        "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at",
+      )
+      .order("completed_at", { ascending: false })
+      .limit(1000);
+
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: data !== null,
+      hasError: Boolean(error),
+    });
+    if (error) {
+      console.error("Regular reset events query failed", { detail: "database_error" });
+      return { data: [], health };
+    }
+
+    const rows = (data ?? []).filter(isRegularResetEventRow);
+    return { data: rows, health };
+  } catch {
+    console.error("Failed to load regular reset events", { detail: "request_failed" });
+    return { data: [], health: { state: "degraded", detail: "request_failed" } };
+  }
+}
+
+const getCachedRegularResetEvents = unstable_cache(
+  () => fetchRawRegularResetEvents(),
+  ["regular-reset-events-cache-v1"],
+  {
+    revalidate: 60,
+    tags: ["radar-data"],
+  },
+);
+
 function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null {
   if (signal.is_reply === true) return null;
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") {
@@ -350,9 +421,10 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
-  const [openAIStatus, tiboSignals] = await Promise.all([
+  const [openAIStatus, tiboSignals, regularResetEvents] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow),
+    getCachedRegularResetEvents(),
   ]);
 
   return getLocalRadarData({
@@ -360,7 +432,7 @@ export async function fetchCurrentRadarData(
     calculationNow,
     dataHealth: createRadarDataHealth(
       checkedAt,
-      tiboSignals.health,
+      combineDataSourceHealth(tiboSignals.health, regularResetEvents.health),
       openAIStatus.health,
     ),
     openAIStatus: openAIStatus.data,
@@ -368,6 +440,7 @@ export async function fetchCurrentRadarData(
     recentTiboSignals: tiboSignals.recentSignals,
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
+    regularResetEvents: regularResetEvents.data,
   });
 }
 

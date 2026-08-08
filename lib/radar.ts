@@ -96,6 +96,7 @@ export function getLocalRadarData({
   recentTiboSignals,
   formalTiboResets = [],
   rejectedTiboResets = [],
+  regularResetEvents = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   checkedAt?: string;
@@ -105,12 +106,14 @@ export function getLocalRadarData({
   recentTiboSignals?: RadarData["recent_tibo_signals"];
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
+  regularResetEvents?: RadarData["regular_reset_events"];
 } = {}): RadarData {
   const now = calculationNow ?? new Date();
   const resolvedCheckedAt = checkedAt ?? now.toISOString();
   const updatedAt = getLocalModelUpdatedAt(openAIStatus, {
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
+    regular_reset_events: regularResetEvents,
   });
 
   return {
@@ -130,6 +133,7 @@ export function getLocalRadarData({
     recent_tibo_signals: recentTiboSignals,
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
+    regular_reset_events: regularResetEvents,
   };
 }
 
@@ -265,7 +269,12 @@ function getLatestRegularOrForcedResetAt(
   // 全体履歴から、周期の基準にできる完了済みイベントだけを拾う。
   const combinedHistory = getCombinedResetHistory(data);
   for (const item of combinedHistory) {
-    if (item.status?.toLowerCase() === "rejected" || !isBroadResetScope(item)) {
+    const isPersistedRegular = getHistoryRecordKind(item) === "regular_completed";
+    if (
+      item.status?.toLowerCase() === "rejected" ||
+      item.status?.toLowerCase() === "voided" ||
+      (!isPersistedRegular && !isBroadResetScope(item))
+    ) {
       continue;
     }
 
@@ -429,7 +438,11 @@ function getLatestCompletedLocalWindow(data?: RadarData | null): WindowLike | un
   const globalHistory = getCombinedResetHistory(data);
 
   return globalHistory
-    .filter((item) => getCompletedResetAt(item) && getHistoryRecordKind(item) === "confirmed_global")
+    .filter((item) =>
+      getCompletedResetAt(item) &&
+      (getHistoryRecordKind(item) === "confirmed_global" ||
+        getHistoryRecordKind(item) === "regular_completed")
+    )
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
@@ -469,7 +482,8 @@ export function getHistoryRecordKind(item: WindowLike): HistoryRecordKind {
   if (
     item.recordKind === "confirmed_global" ||
     item.recordKind === "banked_distribution" ||
-    item.recordKind === "reference"
+    item.recordKind === "reference" ||
+    item.recordKind === "regular_completed"
   ) {
     return item.recordKind;
   }
@@ -1081,5 +1095,6 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
   );
 }

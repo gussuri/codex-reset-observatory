@@ -464,7 +464,8 @@ export function RadarDashboard({
   const visibleHistory = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" ||
       item.recordKind === "banked_distribution" ||
-      item.recordKind === "reference",
+      item.recordKind === "reference" ||
+      item.recordKind === "regular_completed",
   );
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",

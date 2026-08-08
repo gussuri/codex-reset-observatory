@@ -206,7 +206,8 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
   const visibleItems = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" ||
       item.recordKind === "banked_distribution" ||
-      item.recordKind === "reference",
+      item.recordKind === "reference" ||
+      item.recordKind === "regular_completed",
   );
 
   return (

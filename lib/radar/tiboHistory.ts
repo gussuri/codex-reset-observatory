@@ -1,5 +1,9 @@
 import type { WindowEventLike } from "./types";
 import type { TeaserStrength } from "./teaserStrength";
+import {
+  toRegularResetHistoryEvent,
+  type RegularResetEventRow,
+} from "./regularResetSchedule";
 
 export type TiboSignalType =
   | "official_notice"
@@ -267,15 +271,61 @@ function matchesRejected(item: WindowEventLike, rejectedSignals: Array<RejectedT
   });
 }
 
+function mergePersistedRegularEvents(
+  staticHistory: Array<WindowEventLike>,
+  regularRows: Array<RegularResetEventRow>,
+) {
+  const result = [...staticHistory];
+
+  for (const row of regularRows) {
+    const persisted = toRegularResetHistoryEvent(row);
+    const persistedTime = getTimestamp(getCompletedAt(persisted));
+    const duplicateIndex = result.findIndex((item) => {
+      if (item.details?.cycleType !== "定期リセット") return false;
+      const itemTime = getTimestamp(getCompletedAt(item));
+      return itemTime !== null && persistedTime !== null && itemTime === persistedTime;
+    });
+
+    if (row.status === "voided") {
+      if (duplicateIndex !== -1) result.splice(duplicateIndex, 1);
+      continue;
+    }
+
+    if (duplicateIndex === -1) {
+      result.push(persisted);
+      continue;
+    }
+
+    const merged = mergeDuplicateHistory(persisted, result[duplicateIndex]);
+    result[duplicateIndex] = {
+      ...merged,
+      ...persisted,
+      id: persisted.id,
+      recordKind: "regular_completed",
+      title: result[duplicateIndex].title ?? persisted.title,
+      summary: result[duplicateIndex].summary ?? persisted.summary,
+      source_url: result[duplicateIndex].source_url ?? persisted.source_url,
+      details: {
+        ...merged.details!,
+        note: result[duplicateIndex].details?.note ?? merged.details?.note,
+      },
+    };
+  }
+
+  return result;
+}
+
 export function combineResetHistory(
   staticHistory: Array<WindowEventLike>,
   formalTiboResets: Array<FormalTiboResetSignal>,
   rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
+  regularResetRows: Array<RegularResetEventRow> = [],
 ) {
   const dynamicItems = formalTiboResets
     .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal))
     .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
-  const filteredStaticHistory = staticHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
+  const regularMergedHistory = mergePersistedRegularEvents(staticHistory, regularResetRows);
+  const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];
   const matchedDynamicIndexes = new Set<number>();
 

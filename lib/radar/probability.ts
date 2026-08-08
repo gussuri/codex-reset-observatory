@@ -974,6 +974,7 @@ export function getRecent7DayResetCount(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
   );
 
   return combinedHistory.filter((item) => {
@@ -1060,6 +1061,7 @@ export function getLastGlobalResetAt(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
   );
   const candidates = combinedHistory.map((item) => {
     const time = getCompletedResetTimestamp(item);
@@ -1071,6 +1073,43 @@ export function getLastGlobalResetAt(
   const latestOfficialStr = getLatestIsoDate(candidates);
   const latestOfficialAt = latestOfficialStr ? new Date(latestOfficialStr) : null;
   return latestOfficialAt;
+}
+
+/**
+ * UI boundary only: a completed regular reset consumes earlier teaser
+ * signals and restarts the elapsed-time display. Regular events are not
+ * eligible random target events and therefore never affect probability code.
+ */
+export function getLastResetBoundaryAt(
+  data?: RadarData | null,
+  now: Date = new Date(),
+) {
+  const combinedHistory = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
+  );
+  const nowTime = now.getTime();
+  const candidates = combinedHistory.flatMap((item) => {
+    const time = getCompletedResetTimestamp(item);
+    const isRegularBoundary =
+      item.recordKind === "regular_completed" &&
+      item.details?.cycleType === "定期リセット" &&
+      item.status?.toLowerCase() !== "rejected" &&
+      item.status?.toLowerCase() !== "voided" &&
+      time !== null &&
+      time <= nowTime;
+
+    if (isRegularBoundary || isEligibleRandomResetEvent(item, time, nowTime)) {
+      return time === null ? [] : [new Date(time).toISOString()];
+    }
+
+    return [];
+  });
+
+  const latestBoundary = getLatestIsoDate(candidates);
+  return latestBoundary ? new Date(latestBoundary) : null;
 }
 
 function isEligibleElapsedResetEvent(
@@ -1102,6 +1141,7 @@ export function getLastDisplayResetAt(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
   );
   const latestTime = combinedHistory
     .map((item) => {

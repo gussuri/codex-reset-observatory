@@ -200,6 +200,7 @@ export function getShadowCompletedResetEvents(
     staticHistory,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
   );
   const seen = new Set<string>();
 

@@ -1,6 +1,6 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
-import { getLastGlobalResetAt } from "./probability";
+import { getLastResetBoundaryAt } from "./probability";
 import {
   aggregateResetTeaserStatus,
   getUiResetTeaserSignals,
@@ -87,7 +87,7 @@ export function toPublicTiboActivity(
   internal: RadarData,
   now: Date = new Date(),
   locale: Locale = "ja",
-  latestResetAt: string | null = getLastGlobalResetAt(internal, now)?.toISOString() ?? null,
+  latestResetAt: string | null = getLastResetBoundaryAt(internal, now)?.toISOString() ?? null,
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
@@ -271,7 +271,7 @@ export function toPublicRadarSnapshot(
     undefined,
     calculationNow,
   );
-  const latestResetAt = getLastGlobalResetAt(internal, calculationNow)?.toISOString() ?? null;
+  const latestResetAt = getLastResetBoundaryAt(internal, calculationNow)?.toISOString() ?? null;
 
   return {
     schemaVersion: "public-v1",

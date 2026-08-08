@@ -4,6 +4,7 @@ import type {
   RejectedTiboResetSignal,
 } from "./tiboHistory";
 import type { TeaserStrength } from "./teaserStrength";
+import type { RegularResetEventRow } from "./regularResetSchedule";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -12,7 +13,8 @@ export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 export type HistoryRecordKind =
   | "confirmed_global"
   | "banked_distribution"
-  | "reference";
+  | "reference"
+  | "regular_completed";
 
 export type HistorySourceKind =
   | "direct_post"
@@ -222,6 +224,7 @@ export type RadarData = {
   recent_tibo_signals?: Array<ActiveTiboSignal>;
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
+  regular_reset_events?: Array<RegularResetEventRow>;
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;
