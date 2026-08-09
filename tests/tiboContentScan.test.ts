@@ -82,3 +82,11 @@ test("content.js selects after a valid parse and before deduplication", () => {
   assert.ok(selectionIndex > source.indexOf("if (translated)"));
   assert.match(source, /newestSeenTweetCreatedAt/);
 });
+
+test("content.js does not access storage.local directly after trusted-context hardening", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+
+  assert.doesNotMatch(source, /chrome\.storage\.local/);
+  assert.match(source, /GET_CONTENT_MONITOR_STATE/);
+  assert.match(source, /SAVE_CONTENT_SCAN_DIAGNOSTIC/);
+});

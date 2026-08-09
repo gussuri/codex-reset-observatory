@@ -17,7 +17,7 @@ X (旧Twitter) 上で Tibo 氏（`@thsottiaux`）の投稿をリアルタイム�
 
 * **完全分離構成**: DOMを解析する `content.js` は秘密鍵を持ちません。
 * **背景通信**: 投稿を検知すると `chrome.runtime.sendMessage` で `service-worker.js` へ投稿情報のみを渡します。
-* **暗号化保管**: `service-worker.js` が `chrome.storage.local` から `TIBO_WEBHOOK_SECRET` を読み出し、Vercel API へ送信します。ソースコードや Git リポジトリに秘密鍵が含まれることは一切ありません。
+* **trusted context限定**: `service-worker.js` が `chrome.storage.local` から `TIBO_WEBHOOK_SECRET` を読み出し、拡張機能自身のtrusted contextからのみアクセスできるよう制限したうえでWebhook APIへ送信します。ソースコードやGitリポジトリに秘密鍵が含まれることはありません。
 
 ---
 

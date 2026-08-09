@@ -67,3 +67,26 @@ test("CI workflow enforces the ordered quality gate contract", () => {
 
   assert.deepStrictEqual(runCommands, commands);
 });
+
+test("all external workflow actions are pinned to full commit SHAs", () => {
+  const workflowFiles = [
+    ".github/workflows/ci.yml",
+    ".github/workflows/log-probability.yml",
+    ".github/workflows/notify-workflow-failures.yml",
+    ".github/workflows/tibo-monitor-health.yml",
+  ];
+  const externalUses = workflowFiles.flatMap((file) =>
+    readFileSync(resolve(file), "utf8")
+      .split("\n")
+      .filter((line) => /uses:\s*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@/.test(line)),
+  );
+
+  assert.ok(externalUses.length > 0);
+  for (const line of externalUses) {
+    assert.match(
+      line,
+      /uses:\s*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?\s*$/i,
+      `External action is not pinned: ${line}`,
+    );
+  }
+});

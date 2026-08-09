@@ -35,7 +35,10 @@ test("monitor health workflow checks the production endpoint every ten minutes",
   assert.match(workflow, /status.*healthy|status.*warning|status.*unhealthy/);
   assert.match(workflow, /<!-- tibo-monitor-health-alert -->/);
   assert.match(workflow, /\[Monitor alert\] Tibo parser health/);
-  assert.match(workflow, /actions\/github-script@v7/);
+  assert.match(
+    workflow,
+    /actions\/github-script@[0-9a-f]{40}\s+#\s+v7\.1\.0/,
+  );
 });
 
 test("health API reads the existing session start and returns warning as HTTP 200", () => {
@@ -104,7 +107,10 @@ test("workflow notifier only opens one issue and closes it after recovery", () =
     workflow,
     /^permissions:\n  actions: read\n  contents: read\n  issues: write$/m,
   );
-  assert.match(workflow, /actions\/github-script@v7/);
+  assert.match(
+    workflow,
+    /actions\/github-script@[0-9a-f]{40}\s+#\s+v7\.1\.0/,
+  );
   assert.match(workflow, /conclusion === "success"/);
   assert.match(workflow, /issues\.create\(/);
   assert.match(workflow, /issues\.createComment\(/);

@@ -71,6 +71,30 @@
     return intervalId;
   }
 
+  function requestServiceWorker(action, payload = {}) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action, ...payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.success) {
+          reject(new Error(response?.error || "Service worker request failed."));
+          return;
+        }
+        resolve(response.data);
+      });
+    });
+  }
+
+  function getMonitorState(keys) {
+    return requestServiceWorker("GET_CONTENT_MONITOR_STATE", { keys });
+  }
+
+  function setMonitorState(items) {
+    return requestServiceWorker("SET_CONTENT_MONITOR_STATE", { items });
+  }
+
   // Check if tweet article is currently showing machine-translated text
   function isTranslatedTweet(article) {
     const translationContainer = article.querySelector(
@@ -95,12 +119,12 @@
   // Leader Lock Mechanism for Heartbeat
   async function tryAcquireLeaderLock() {
     const now = Date.now();
-    const data = await chrome.storage.local.get(["tibo_leader_tab_id", "tibo_leader_timestamp"]);
+    const data = await getMonitorState(["tibo_leader_tab_id", "tibo_leader_timestamp"]);
     const leaderTab = data.tibo_leader_tab_id || "";
     const leaderTimestamp = data.tibo_leader_timestamp || 0;
 
     if (leaderTab === TAB_ID || !leaderTab || now - leaderTimestamp > 30 * 1000) {
-      await chrome.storage.local.set({
+      await setMonitorState({
         tibo_leader_tab_id: TAB_ID,
         tibo_leader_timestamp: now,
       });
@@ -113,7 +137,7 @@
     const isLeader = await tryAcquireLeaderLock();
     if (!isLeader) return;
 
-    const storageData = await chrome.storage.local.get([
+    const storageData = await getMonitorState([
       "tibo_last_page_reload_at",
       "tibo_last_page_reload_status",
       "tibo_last_page_reload_error",
@@ -154,9 +178,9 @@
 
   // Maintain leader lock timestamp every 10s if we are the current leader
   async function refreshLeaderLock() {
-    const data = await chrome.storage.local.get(["tibo_leader_tab_id"]);
+    const data = await getMonitorState(["tibo_leader_tab_id"]);
     if (data.tibo_leader_tab_id === TAB_ID) {
-      await chrome.storage.local.set({ tibo_leader_timestamp: Date.now() });
+      await setMonitorState({ tibo_leader_timestamp: Date.now() });
     }
   }
 
@@ -208,28 +232,37 @@
   }
 
   async function saveScanDiagnostic(summary, reasonCode, articles, messages, error) {
-    const settings = await TiboDiagnostics.getDiagnosticSettings(chrome.storage.local);
+    const settingsData = await getMonitorState([
+      "tibo_diagnostics_enabled",
+      "tibo_diagnostics_mask_text",
+    ]);
+    const settings = {
+      enabled: settingsData.tibo_diagnostics_enabled !== false,
+      maskPostText: settingsData.tibo_diagnostics_mask_text !== false,
+    };
     if (!settings.enabled) return;
 
     const snapshots = Array.from(articles)
       .slice(0, 3)
       .map((article) => buildArticleSnapshot(article, settings.maskPostText));
 
-    await TiboDiagnostics.appendDiagnosticLog(chrome.storage.local, {
-      type: "scan",
-      reasonCode,
-      currentUrl: summary.currentUrl,
-      selectorVersion: SELECTOR_VERSION,
-      scanTimestamp: summary.scanTimestamp,
-      summary,
-      snapshots,
-      messages: [
-        "No new Tibo post was parsed during this scan.",
-        `reason=${reasonCode}`,
-        `articles=${summary.articleCount}, time=${summary.timeElementCount}, text=${summary.tweetTextCount}, matchingStatus=${summary.matchingTiboStatusCount}, translated=${summary.translatedTweetCount}`,
-        ...(messages || []),
-        ...(error ? [TiboDiagnostics.sanitizeDiagnosticText(error.message || error)] : []),
-      ],
+    await requestServiceWorker("SAVE_CONTENT_SCAN_DIAGNOSTIC", {
+      entry: {
+        type: "scan",
+        reasonCode,
+        currentUrl: summary.currentUrl,
+        selectorVersion: SELECTOR_VERSION,
+        scanTimestamp: summary.scanTimestamp,
+        summary,
+        snapshots,
+        messages: [
+          "No new Tibo post was parsed during this scan.",
+          `reason=${reasonCode}`,
+          `articles=${summary.articleCount}, time=${summary.timeElementCount}, text=${summary.tweetTextCount}, matchingStatus=${summary.matchingTiboStatusCount}, translated=${summary.translatedTweetCount}`,
+          ...(messages || []),
+          ...(error ? [TiboDiagnostics.sanitizeDiagnosticText(error.message || error)] : []),
+        ],
+      },
     });
   }
 
@@ -336,7 +369,7 @@
       lastSeenTweetId = newestParsedTweet?.tweetId || lastSeenTweetId;
       newestSeenTweetCreatedAt = newestParsedTweet?.createdAt || newestSeenTweetCreatedAt;
       lastScanError = null;
-      TiboDiagnostics.markSuccessfulScan(chrome.storage.local).catch((error) => {
+      requestServiceWorker("MARK_CONTENT_SCAN_SUCCESS").catch((error) => {
         handleExtensionError(error, "diagnostic recovery marker");
       });
     }

@@ -70,7 +70,7 @@ jobs:
 
       - name: Open parser health alert if unhealthy
         if: steps.monitor-health.outputs.status == 'unhealthy'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           HEALTH_STATUS: ${{ steps.monitor-health.outputs.status }}
           HEALTH_DETAIL: ${{ steps.monitor-health.outputs.detail }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: Close parser health alert after recovery
         if: steps.monitor-health.outputs.status == 'healthy'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:

@@ -16,11 +16,37 @@ const DEFAULT_OBSERVATORY_DOMAIN = "https://codex.gussuriworks.com";
 const LEGACY_OBSERVATORY_DOMAIN = "https://codex-reset-observatory.vercel.app";
 const TEST_HISTORY_URL = `${DEFAULT_OBSERVATORY_DOMAIN}${HISTORY_PATH}`;
 const TEST_NOTIFICATION_ID = "tibo-monitor-notification-test";
+const CONTENT_MONITOR_STORAGE_KEYS = new Set([
+  "tibo_leader_tab_id",
+  "tibo_leader_timestamp",
+  "tibo_last_page_reload_at",
+  "tibo_last_page_reload_status",
+  "tibo_last_page_reload_error",
+  "tibo_diagnostics_enabled",
+  "tibo_diagnostics_mask_text",
+]);
 let notificationIconDiagnosticsPromise = null;
 let notificationIconDiagnosticsUrl = null;
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
+
+function restrictLocalStorageToTrustedContexts() {
+  if (typeof chrome === "undefined" || !chrome.storage?.local?.setAccessLevel) return;
+
+  try {
+    const result = chrome.storage.local.setAccessLevel({
+      accessLevel: "TRUSTED_CONTEXTS",
+    });
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Keep startup resilient on older Chrome versions without this API.
+  }
+}
+
+restrictLocalStorageToTrustedContexts();
 
 function saveServiceDiagnostic(entry) {
   return TiboDiagnostics.appendDiagnosticLog(chrome.storage.local, {
@@ -71,12 +97,14 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
   if (chrome.runtime.onInstalled) {
     chrome.runtime.onInstalled.addListener(() => {
       setupReloadAlarm();
+      restrictLocalStorageToTrustedContexts();
       scheduleObservatoryDomainMigration();
     });
   }
   if (chrome.runtime.onStartup) {
     chrome.runtime.onStartup.addListener(() => {
       setupReloadAlarm();
+      restrictLocalStorageToTrustedContexts();
       scheduleObservatoryDomainMigration();
     });
   }
@@ -260,7 +288,66 @@ async function handleReloadAlarm() {
   }
 }
 
+function getContentMonitorState(keys) {
+  const requestedKeys = Array.isArray(keys)
+    ? keys.filter((key) => typeof key === "string" && CONTENT_MONITOR_STORAGE_KEYS.has(key))
+    : [];
+  return chrome.storage.local.get(requestedKeys).then((data) => {
+    const safeData = {};
+    for (const key of requestedKeys) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) safeData[key] = data[key];
+    }
+    return safeData;
+  });
+}
+
+function setContentMonitorState(items) {
+  const safeItems = {};
+  if (items && typeof items === "object") {
+    for (const [key, value] of Object.entries(items)) {
+      if (CONTENT_MONITOR_STORAGE_KEYS.has(key)) safeItems[key] = value;
+    }
+  }
+  return chrome.storage.local.set(safeItems);
+}
+
+function saveContentScanDiagnostic(entry) {
+  return TiboDiagnostics.appendDiagnosticLog(chrome.storage.local, entry);
+}
+
+function markContentScanSuccessful() {
+  return TiboDiagnostics.markSuccessfulScan(chrome.storage.local);
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "GET_CONTENT_MONITOR_STATE") {
+    getContentMonitorState(request.keys)
+      .then((data) => sendResponse({ success: true, data }))
+      .catch(() => sendResponse({ success: false, error: "storage_read_failed" }));
+    return true;
+  }
+
+  if (request.action === "SET_CONTENT_MONITOR_STATE") {
+    setContentMonitorState(request.items)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false, error: "storage_write_failed" }));
+    return true;
+  }
+
+  if (request.action === "SAVE_CONTENT_SCAN_DIAGNOSTIC") {
+    saveContentScanDiagnostic(request.entry)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false, error: "diagnostic_write_failed" }));
+    return true;
+  }
+
+  if (request.action === "MARK_CONTENT_SCAN_SUCCESS") {
+    markContentScanSuccessful()
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false, error: "diagnostic_write_failed" }));
+    return true;
+  }
+
   if (request.action === "POST_TWEET") {
     // Enqueue POST_TWEET through serialized Promise queue
     enqueuePostTweet(request.payload)

@@ -40,6 +40,7 @@ function setupServiceWorkerContext(
   let alarmListener: ((alarm: { name: string }) => void) | null = null;
   let messageListener: Function | null = null;
   let notificationClickListener: ((notificationId: string) => void) | null = null;
+  let storageLocalAccessLevel: string | null = null;
 
   if (opts.observatoryDomain !== undefined) {
     localStore.observatory_domain = opts.observatoryDomain;
@@ -59,6 +60,9 @@ function setupServiceWorkerContext(
         },
         set: async (obj: Record<string, any>) => {
           Object.assign(localStore, obj);
+        },
+        setAccessLevel: async (options: { accessLevel: string }) => {
+          storageLocalAccessLevel = options.accessLevel;
         },
       },
     },
@@ -212,6 +216,7 @@ function setupServiceWorkerContext(
   return {
     context,
     localStore,
+    getStorageLocalAccessLevel: () => storageLocalAccessLevel,
     alarmsCreated,
     reloadedTabIds,
     openedTabs,
@@ -242,6 +247,27 @@ function setupServiceWorkerContext(
     },
   };
 }
+
+test("service worker restricts local storage to trusted extension contexts", () => {
+  const { getStorageLocalAccessLevel } = setupServiceWorkerContext();
+
+  assert.equal(getStorageLocalAccessLevel(), "TRUSTED_CONTEXTS");
+});
+
+test("content monitor state bridge excludes webhook secrets", async () => {
+  const { localStore, sendMessage } = setupServiceWorkerContext();
+  localStore.tibo_leader_tab_id = "tab-1";
+  localStore.webhook_secret = "must-not-cross-the-bridge";
+
+  const response = await sendMessage({
+    action: "GET_CONTENT_MONITOR_STATE",
+    keys: ["tibo_leader_tab_id", "webhook_secret"],
+  });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data, { tibo_leader_tab_id: "tab-1" });
+  assert.equal(Object.hasOwn(response.data, "webhook_secret"), false);
+});
 
 test("REQUIREMENT 3: Extension setup registers a 10-minute page reload alarm", () => {
   const { alarmsCreated } = setupServiceWorkerContext();
