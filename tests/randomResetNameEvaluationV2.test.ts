@@ -3,22 +3,27 @@ import test from "node:test";
 import {
   V2_NAME_MODEL,
   V2_NAME_PROMPT_VERSION,
+  V2_NAME_TEMPERATURE,
   buildV2NamePrompt,
   isV2RetryableFailure,
   parseV2NameResponse,
 } from "../scripts/evaluate-random-reset-names-v2";
 
-test("v2 prompt is source-centered and does not include existing display-name fields", () => {
+test("v2 experiment 2 prompt is descriptive and source-centered", () => {
   const prompt = buildV2NamePrompt({
     sourcePostText: "To celebrate the launch, I reset the limits for everyone.",
     tweetCreatedAt: "2026-08-01T03:32:00.000Z",
     completedAt: "2026-08-01T03:32:00.000Z",
   });
 
-  assert.equal(V2_NAME_PROMPT_VERSION, "random-reset-name-v2-experiment");
+  assert.equal(V2_NAME_PROMPT_VERSION, "random-reset-name-v2-experiment-2");
   assert.equal(V2_NAME_MODEL, "gemini-3.5-flash-lite");
+  assert.equal(V2_NAME_TEMPERATURE, 0.2);
   assert.match(prompt, /To celebrate the launch/);
   assert.match(prompt, /Always end with/);
+  assert.match(prompt, /Prefer information that is distinctive/);
+  assert.match(prompt, /Do not intentionally make the name humorous/);
+  assert.doesNotMatch(prompt, /humorous or strange tone|memorable and readable title|joke, event, situation, or excuse/);
   assert.doesNotMatch(prompt, /manual_name_ja|ai_name_ja|既存表示名|過去に生成/);
 });
 

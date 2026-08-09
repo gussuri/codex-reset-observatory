@@ -19,9 +19,9 @@ import {
   type SourceTweetRow,
 } from "./evaluate-random-reset-names-round2";
 
-export const V2_NAME_PROMPT_VERSION = "random-reset-name-v2-experiment";
+export const V2_NAME_PROMPT_VERSION = "random-reset-name-v2-experiment-2";
 export const V2_NAME_MODEL = "gemini-3.5-flash-lite";
-export const V2_NAME_TEMPERATURE = 0.3;
+export const V2_NAME_TEMPERATURE = 0.2;
 const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 15;
 const DEFAULT_REQUEST_DELAY_MS = 3000;
@@ -72,36 +72,40 @@ export type V2EvaluationCase = {
   existingDisplayName: string;
 };
 
-const V2_NAME_PROMPT = `You are an editor naming unusual Codex usage-limit resets announced by Tibo.
+const V2_NAME_PROMPT = `You are an editor naming Codex usage-limit resets announced by Tibo.
 
 Read Tibo's original reset post and create a short, natural Japanese name for the reset.
 
-The goal is not strict factual classification.
-The goal is to create a memorable history title that lets a reader later understand
-"what was that reset about?"
-
 Guidelines:
 
-- First, understand what Tibo's post is basically saying.
-- Summarize the apparent reason, celebration, joke, event, situation, or excuse behind the reset.
-- Natural paraphrasing is allowed.
-- You may preserve the humorous or strange tone of the original post.
-- Names such as:
-  「○○記念リセット」
-  「○○ご祝儀リセット」
-  「○○お詫びリセット」
-  「○○祝いリセット」
-  are allowed when natural.
-- Do not mechanically include classification, reset method, or target plan.
+- Summarize the main reason, event, announcement, milestone, product, or circumstance associated with the reset.
+- Prefer information that is distinctive to that specific post.
+- Preserve distinctive product names, model names, concrete numbers, or events
+  when they are important for identifying the reset.
+- Do not replace a specific fact with a vague or flashy expression.
+- Natural Japanese paraphrasing is allowed.
+- Keep the wording simple and descriptive.
+- Do not intentionally make the name humorous, dramatic, catchy, or sensational.
+- Do not invent facts that are not reasonably supported by the original post.
+- Do not mechanically include reset classification, reset method, or target plan
+  unless needed to distinguish the event.
 - Do not begin with 「Tibo氏による」.
-- Do not make the title sound like a formal OpenAI event name.
+- Do not make the title sound like an official OpenAI event name unless the source
+  explicitly gives such a name.
 - Do not invent unrelated products, people, numbers, dates, outages, milestones, or events that are not reasonably supported by the post.
-- Prefer a memorable and readable title over a bureaucratic description.
-- Target roughly 15–35 Japanese characters.
-- If the reason is genuinely unclear, make the best reasonable short summary rather than returning null.
+- Prefer roughly 15–35 Japanese characters.
 - Always end with 「リセット」.
+- If the post gives a specific distinctive fact, prefer that over a generic summary.
 
-Return JSON only:
+Examples of the desired style:
+
+「Claude CodeでもGPT-5.6 Solが使える記念リセット」
+「Luna 10万スレッド週末解放リセット」
+
+These are style examples only.
+Do not copy facts from them unless those facts are present in the source post.
+
+Return JSON:
 {
   "name": "string",
   "reason": "短い日本語の説明"
@@ -398,7 +402,7 @@ function countStatuses(cases: V2EvaluationCase[]) {
 }
 
 function markdownQuote(value: string) {
-  return value.split(/\r?\n/).map((line) => `> ${line || " "}`).join("\n");
+  return value.split(/\r?\n/).map((line) => line ? `> ${line}` : ">").join("\n");
 }
 
 function markdownCell(value: string | null | undefined) {
@@ -416,7 +420,7 @@ export function buildV2MarkdownReport(metadata: {
 }, cases: V2EvaluationCase[]) {
   const counts = countStatuses(cases);
   const lines = [
-    "# Random reset display-name v2 experiment",
+    "# Random reset display-name v2 experiment 2",
     "",
     "This is a read-only evaluation experiment. No generated name was written to Supabase, `reset_display_names`, production event history, classification, API, UI, or probability data.",
     "",
@@ -502,8 +506,8 @@ async function main() {
   const retryDelayMs = Number(getArgument("retry-delay-ms", String(DEFAULT_RETRY_DELAY_MS)));
   const timeoutMs = Number(getArgument("timeout-ms", String(DEFAULT_TIMEOUT_MS)));
   const maxRetries = Number(getArgument("max-retries", String(DEFAULT_MAX_RETRIES)));
-  const outputJson = path.resolve(getArgument("output-json", "reports/random-reset-name-v2-experiment.json"));
-  const outputMarkdown = path.resolve(getArgument("output-markdown", "reports/random-reset-name-v2-experiment.md"));
+  const outputJson = path.resolve(getArgument("output-json", "reports/random-reset-name-v2-experiment-2.json"));
+  const outputMarkdown = path.resolve(getArgument("output-markdown", "reports/random-reset-name-v2-experiment-2.md"));
 
   if (!isIntegerInRange(limit, 1, MAX_LIMIT)) throw new Error(`--limit must be an integer from 1 to ${MAX_LIMIT}`);
   if (!Number.isInteger(requestDelayMs) || requestDelayMs < 0) throw new Error("--request-delay-ms must be non-negative");
@@ -558,7 +562,7 @@ async function main() {
   };
   const counts = countStatuses(cases);
   const report = {
-    evaluation: "random-reset-name-v2-experiment",
+    evaluation: V2_NAME_PROMPT_VERSION,
     promptVersion: V2_NAME_PROMPT_VERSION,
     model: V2_NAME_MODEL,
     temperature: V2_NAME_TEMPERATURE,
