@@ -88,6 +88,15 @@ test("derives a stable very_high key without depending on the Japanese label", (
   assert.equal(getExpectationKey({ p24h: 0.9, p48h: 0.95 }), "very_high");
 });
 
+test("uses either displayed horizon for expectation thresholds", () => {
+  assert.equal(getExpectationKey({ p24h: 0.3, p48h: 0.93 }), "very_high");
+  assert.equal(getExpectationKey({ p24h: 0.3, p48h: 0.7 }), "high");
+  assert.equal(getExpectationKey({ p24h: 0.3, p48h: 0.4 }), "medium");
+  assert.equal(getExpectationKey({ p24h: 0.1, p48h: 0.1 }), "low");
+  assert.equal(getExpectationKey({ p24h: 0.8, p48h: 0.1 }), "very_high");
+  assert.equal(getExpectationKey({ p24h: 0.61, p48h: 0.1 }), "high");
+});
+
 test("falls back from resolvedAt to updatedAt and then createdAt", () => {
   const result = evaluate([
     incident({ id: "updated", resolvedAt: null }),

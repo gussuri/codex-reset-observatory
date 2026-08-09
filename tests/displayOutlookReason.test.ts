@@ -104,11 +104,25 @@ const officialNotice: ActiveOfficialNotice = {
 };
 
 test("prioritizes official notice, strong teaser, incident, weak teaser, and anomaly", () => {
-  assert.equal(reasonFor({ notice: officialNotice, signals: [signal("strong")] }), "公式のリセット予告があります。");
+  assert.equal(
+    reasonFor({ notice: officialNotice, signals: [signal("strong")] }),
+    "公式のリセット予告があり、リセットの見込みが高まっています。",
+  );
   assert.equal(reasonFor({ signals: [signal("strong")] }), "リセットを匂わせる投稿があり、見込みが上がっています。");
   assert.equal(reasonFor({ statusIncidents: { activeStatusIncidentCount: 1 } }), "Codexで障害が起きており、リセットの可能性が上がっています。");
   assert.equal(reasonFor({ signals: [signal("weak")] }), "リセットを匂わせる投稿があり、見込みが少し上がっています。");
   assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常があり、リセットの可能性が少し上がっています。");
+});
+
+test("uses a short official-notice outlook in English and Chinese", () => {
+  assert.equal(
+    reasonFor({ locale: "en", notice: officialNotice }),
+    "An official reset notice is active, making a reset more likely.",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", notice: officialNotice }),
+    "有官方重置预告，重置的可能性正在上升。",
+  );
 });
 
 test("uses clear English and Chinese wording for teaser strength", () => {

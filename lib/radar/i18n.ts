@@ -100,9 +100,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "有",
   },
   outlookOfficialNotice: {
-    ja: "公式のリセット予告があります。",
-    en: "An official reset notice is available.",
-    zh: "有官方重置预告。",
+    ja: "公式のリセット予告があり、リセットの見込みが高まっています。",
+    en: "An official reset notice is active, making a reset more likely.",
+    zh: "有官方重置预告，重置的可能性正在上升。",
   },
   outlookOfficialNoticeWithin24: {
     ja: "公式のリセット予告が24時間以内の予定に入っています。",

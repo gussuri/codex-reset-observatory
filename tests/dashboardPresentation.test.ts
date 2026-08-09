@@ -427,7 +427,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
 
   assert.match(html, /Planned reset/);
   assert.doesNotMatch(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
-  assert.match(html, /An official reset notice is scheduled for Monday, raising the outlook within the next 48 hours\./);
+  assert.match(html, /An official reset notice is active, making a reset more likely\./);
   assert.doesNotMatch(html, /time not specified|Pacific Time|In the viewer(?:&#x27;|')s local time/);
   assert.equal((html.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
   assert.doesNotMatch(html, />[^<]*2026-08-10T07:00:00\.000Z/);
@@ -440,7 +440,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
     }),
   );
   assert.doesNotMatch(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
-  assert.match(jaHtml, /月曜日の公式リセット予告があり、48時間以内の見込みを押し上げています。/);
+  assert.match(jaHtml, /公式のリセット予告があり、リセットの見込みが高まっています。/);
   assert.match(jaHtml, /リセット予定/);
   assert.doesNotMatch(jaHtml, /Pacific Time|閲覧者の現地時刻換算|時刻未定/);
   assert.equal((jaHtml.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
@@ -454,7 +454,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   );
   assert.doesNotMatch(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
   assert.match(zhHtml, /重置安排/);
-  assert.match(zhHtml, /星期一/);
+  assert.match(zhHtml, /有官方重置预告，重置的可能性正在上升。/);
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 

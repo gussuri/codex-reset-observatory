@@ -32,8 +32,7 @@ import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
-import { getTemporalNoticeCoverage, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
-import { formatOfficialNoticeTimingReason } from "./officialNoticePresentation";
+import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -135,34 +134,9 @@ function zeroProbabilityPair(): ProbabilityPair {
 }
 
 function getOfficialNoticeTimingReason(
-  notice: ActiveOfficialNotice,
-  now: Date,
   locale: Locale,
 ) {
-  const temporalResolution = notice.temporalResolutionStatus
-    ? {
-        status: notice.temporalResolutionStatus,
-        temporalPrecision: notice.temporalPrecision ?? "unknown",
-        confidence: notice.temporalConfidence ?? null,
-        expectedStartAt: notice.expectedAt,
-        expectedEndAt: notice.expectedEndAt,
-      }
-    : null;
-  const coverage24 = getTemporalNoticeCoverage(temporalResolution, now, 24);
-  const coverage48 = getTemporalNoticeCoverage(temporalResolution, now, 48);
-  if (coverage24 === null || coverage48 === null) {
-    return translateUI("outlookOfficialNotice", locale);
-  }
-  if (coverage24 > 0) {
-    return formatOfficialNoticeTimingReason(notice, locale, "24h") ??
-      translateUI("outlookOfficialNoticeWithin24", locale);
-  }
-  if (coverage48 > 0) {
-    return formatOfficialNoticeTimingReason(notice, locale, "48h") ??
-      translateUI("outlookOfficialNoticeWithin48", locale);
-  }
-  return formatOfficialNoticeTimingReason(notice, locale, "outside") ??
-    translateUI("outlookOfficialNoticeOutsideForecast", locale);
+  return translateUI("outlookOfficialNotice", locale);
 }
 
 function getProbabilityComponents(
@@ -1206,7 +1180,7 @@ export function getLocalProbabilityReason(
   void probability72h;
 
   if (resolvedOfficialNotice) {
-    return getOfficialNoticeTimingReason(resolvedOfficialNotice, now, locale);
+    return getOfficialNoticeTimingReason(locale);
   }
 
   const p24 = probabilityToPercent(probability24h, locale);
@@ -1392,7 +1366,7 @@ export function getDisplayProbabilityReason(
     : activeOfficialNotice;
 
   if (resolvedOfficialNotice) {
-    return getOfficialNoticeTimingReason(resolvedOfficialNotice, now, locale);
+    return getOfficialNoticeTimingReason(locale);
   }
 
   const environment = resolvedSignalEvaluation.environment;
