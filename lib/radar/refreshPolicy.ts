@@ -2,7 +2,7 @@ import { getRefreshIntervalMs } from "./helpers";
 import type { PublicRadarSnapshot } from "./types";
 
 export const RADAR_FETCH_TIMEOUT_MS = 15_000;
-export const MAX_VISIBLE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+export const MAX_VISIBLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 export const REFRESH_EVENT_MIN_INTERVAL_MS = 30 * 1000;
 
 const REFRESH_RETRY_INTERVALS_MS = [

@@ -64,12 +64,12 @@ function snapshot(
 }
 
 const NOW = Date.parse("2026-08-04T01:00:00.000Z");
-const FRESH_AT = "2026-08-04T00:55:00.000Z";
+const FRESH_AT = "2026-08-04T00:56:00.000Z";
 
 test("fresh initial data waits for the remaining update interval", () => {
   assert.deepEqual(getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW), {
     action: "wait",
-    delayMs: 5 * 60 * 1000,
+    delayMs: 60 * 1000,
   });
 });
 
@@ -96,10 +96,10 @@ test("stale data also coalesces wake events within thirty seconds of a success",
   );
 });
 
-test("visible refresh is capped at ten minutes even for low probability", () => {
+test("visible refresh is capped at five minutes even for low probability", () => {
   assert.deepEqual(
     getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT)),
-    { action: "wait", delayMs: 10 * 60 * 1000 },
+    { action: "wait", delayMs: 5 * 60 * 1000 },
   );
 });
 
