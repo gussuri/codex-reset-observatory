@@ -17,6 +17,8 @@ import {
   fetchResetDisplayNames,
   getResetDisplayNameWritePayload,
   hashResetDisplayNameInput,
+  shouldPreserveExistingAcceptedResetDisplayName,
+  shouldSkipResetDisplayNameGenerationWithoutSource,
   shouldReuseResetDisplayNameResult,
 } from "../lib/radar/resetDisplayNameStore";
 import {
@@ -289,6 +291,14 @@ async function main() {
     }
     if (candidate.existing?.manual_name_ja?.trim()) {
       rows.push(resultRow(candidate, null, "manual"));
+      continue;
+    }
+    if (shouldPreserveExistingAcceptedResetDisplayName(candidate.existing ?? null)) {
+      rows.push(resultRow(candidate, null, "preserved_legacy_accepted"));
+      continue;
+    }
+    if (shouldSkipResetDisplayNameGenerationWithoutSource(candidate.sourceText)) {
+      rows.push(resultRow(candidate, null, "source_unavailable"));
       continue;
     }
     if (shouldReuseResetDisplayNameResult(candidate.existing ?? null, candidate.inputHash, RANDOM_RESET_NAME_MODEL)) {

@@ -1,4 +1,10 @@
 import type { Locale, ResetDisplayNameRecord, WindowEventLike } from "./types";
+import {
+  RANDOM_RESET_NAME_MAX_LENGTH,
+  RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V1_MAX_LENGTH,
+  RANDOM_RESET_NAME_V1_PROMPT_VERSION,
+} from "./randomResetNameConfig";
 
 export const GENERIC_RESET_DISPLAY_TITLES = new Set([
   "ランダムリセット",
@@ -33,16 +39,30 @@ export function isGenericResetDisplayTitle(title: string | null | undefined) {
 }
 
 export function isSafeStoredAiResetName(record: ResetDisplayNameRecord | null | undefined) {
-  return Boolean(
-    record?.ai_status === "accepted" &&
-      typeof record.ai_name_ja === "string" &&
-      record.ai_name_ja.trim().length > 0 &&
-      record.ai_name_ja.trim().length <= 32 &&
-      typeof record.ai_confidence === "number" &&
-      record.ai_confidence >= 0.7 &&
-      typeof record.ai_evidence === "string" &&
-      record.ai_evidence.trim().length > 0 &&
-      (!record.ai_flags || record.ai_flags.length === 0),
+  if (
+    record?.ai_status !== "accepted" ||
+    typeof record.ai_name_ja !== "string" ||
+    record.ai_name_ja.trim().length === 0
+  ) {
+    return false;
+  }
+
+  if (record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION) {
+    return (
+      record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      record.ai_name_ja.trim().endsWith("リセット") &&
+      (!record.ai_flags || record.ai_flags.length === 0)
+    );
+  }
+
+  return (
+    (record.ai_prompt_version === RANDOM_RESET_NAME_V1_PROMPT_VERSION || record.ai_prompt_version === null) &&
+    record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_V1_MAX_LENGTH &&
+    typeof record.ai_confidence === "number" &&
+    record.ai_confidence >= 0.7 &&
+    typeof record.ai_evidence === "string" &&
+    record.ai_evidence.trim().length > 0 &&
+    (!record.ai_flags || record.ai_flags.length === 0)
   );
 }
 

@@ -7,11 +7,18 @@ import {
   assessRandomResetNameResult,
   buildRandomResetNamePrompt,
   parseRandomResetNameResponse,
+  parseRandomResetNameV2Response,
+  RANDOM_RESET_NAME_MAX_LENGTH,
+  RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_TEMPERATURE,
+  RANDOM_RESET_NAME_V2_SYSTEM_PROMPT,
+  generateRandomResetName,
   toRandomResetNameInput,
 } from "../lib/radar/randomResetNaming";
 import {
   getResetDisplayNameEventKey,
   isGenericResetDisplayTitle,
+  isSafeStoredAiResetName,
   resolveJapaneseResetDisplayName,
   resolveResetDisplayTitle,
 } from "../lib/radar/resetDisplayNames";
@@ -21,6 +28,8 @@ import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import {
   getResetDisplayNameWritePayload,
   hashResetDisplayNameInput,
+  shouldPreserveExistingAcceptedResetDisplayName,
+  shouldSkipResetDisplayNameGenerationWithoutSource,
   shouldReuseResetDisplayNameResult,
 } from "../lib/radar/resetDisplayNameStore";
 import {
@@ -119,6 +128,108 @@ test("display-name safety accepts only grounded, sufficiently confident names", 
   assert.equal(assessRandomResetNameResult(hallucinated).status, "review_required");
 });
 
+test("production v2 naming uses the descriptive prompt and accepts a grounded source-based name", () => {
+  const item = resetItem();
+  const input = toRandomResetNameInput(item, Date.parse(completedAt));
+  input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
+
+  assert.equal(RANDOM_RESET_NAME_PROMPT_VERSION, "random-reset-name-v2");
+  assert.equal(RANDOM_RESET_NAME_TEMPERATURE, 0.2);
+  assert.match(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /distinctive product names, model names, concrete numbers/);
+  assert.match(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /simple and descriptive/);
+  assert.doesNotMatch(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /humorous or strange tone/);
+  assert.doesNotMatch(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /joke|excuse/i);
+
+  const result = parseRandomResetNameV2Response(
+    {
+      name: "Luna 10万スレッド週末解放記念リセット",
+      reason: "原文にあるLunaスレッド数と週末の解放内容を要約した。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(result.status, "success");
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+  assert.equal(result.confidence, null);
+  assert.equal(result.evidence, null);
+  assert.equal(assessRandomResetNameResult(result).status, "accepted");
+});
+
+test("production v2 naming rejects unsupported or generic generated names without v1 gates", () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "Good feedback today, and I reset the limits.";
+
+  const unsupported = parseRandomResetNameV2Response(
+    { name: "GPT-5.6公開記念リセット", reason: "モデル名を要約した。" },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(unsupported.status, "success");
+  assert.equal(assessRandomResetNameResult(unsupported).status, "review_required");
+
+  const generic = parseRandomResetNameV2Response(
+    { name: "ランダムリセット", reason: "具体的な特徴がない。" },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(assessRandomResetNameResult(generic).status, "review_required");
+
+  const malformed = parseRandomResetNameV2Response(
+    { name: "週末イベント", reason: "語尾が要件を満たさない。" },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(malformed.status, "invalid_schema");
+  assert.equal(RANDOM_RESET_NAME_MAX_LENGTH, 40);
+});
+
+test("production Gemini requests use the v2 prompt, temperature, and parser", async () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
+  const originalFetch = globalThis.fetch;
+  type GeminiRequest = {
+    contents?: Array<{ parts?: Array<{ text?: string }> }>;
+    generationConfig?: { temperature?: number };
+  };
+  let requestJson: string | null = null;
+  globalThis.fetch = async (_input, init) => {
+    requestJson = String(init?.body);
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({
+        name: "Luna 10万スレッド週末解放記念リセット",
+        reason: "原文の具体的なスレッド数と週末の解放を要約した。",
+      }) }] } }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const result = await generateRandomResetName(input, {
+      apiKey: "test-key",
+      timeoutMs: 1_000,
+    });
+    assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+    assert.equal(assessRandomResetNameResult(result).status, "accepted");
+    const capturedRequest = JSON.parse(requestJson ?? "{}") as GeminiRequest;
+    assert.equal(capturedRequest.generationConfig?.temperature, RANDOM_RESET_NAME_TEMPERATURE);
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V2_SYSTEM_PROMPT);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("production naming failures remain best-effort webhook-safe results", async () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "A reset is available for the weekend.";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("rate limited", { status: 429, headers: { "retry-after": "5" } });
+  try {
+    const result = await generateRandomResetName(input, { apiKey: "test-key", timeoutMs: 1_000 });
+    assert.equal(result.status, "rate_limited");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("null, API error, and rate-limited results remain safe fallbacks", () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   const empty = parseRandomResetNameResponse(
@@ -162,6 +273,14 @@ test("Japanese display priority preserves human titles and accepts only safe AI 
   );
   assert.equal(resolveResetDisplayTitle(item, record, "en"), "ランダムリセット");
   assert.equal(resolveResetDisplayTitle(item, record, "zh"), "ランダムリセット");
+
+  const v2Record = acceptedRecord({
+    ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
+    ai_confidence: null,
+    ai_evidence: null,
+  });
+  assert.equal(isSafeStoredAiResetName(v2Record), true);
+  assert.equal(resolveJapaneseResetDisplayName(item, v2Record), "週末の利用上限リセット");
 });
 
 test("only completed broad random resets are naming candidates", () => {
@@ -201,10 +320,28 @@ test("input hashes and stored result reuse are idempotent", () => {
   const hash = hashResetDisplayNameInput(input, null);
   const same = hashResetDisplayNameInput(input, null);
   assert.equal(hash, same);
-  const record = acceptedRecord({ input_hash: hash });
+  const record = acceptedRecord({
+    input_hash: hash,
+    ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
+    ai_confidence: null,
+    ai_evidence: null,
+  });
   assert.equal(shouldReuseResetDisplayNameResult(record, hash, "gemini-3.5-flash-lite"), true);
   assert.equal(shouldReuseResetDisplayNameResult(record, "different", "gemini-3.5-flash-lite"), false);
   assert.equal(shouldReuseResetDisplayNameResult({ ...record, ai_status: "api_error" }, hash, "gemini-3.5-flash-lite"), false);
+});
+
+test("existing accepted v1 names are preserved and source-less events skip Gemini", () => {
+  assert.equal(shouldPreserveExistingAcceptedResetDisplayName(acceptedRecord()), true);
+  assert.equal(
+    shouldPreserveExistingAcceptedResetDisplayName(
+      acceptedRecord({ ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION, ai_confidence: null, ai_evidence: null }),
+    ),
+    false,
+  );
+  assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource(null), true);
+  assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource("  "), true);
+  assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource("Original Tibo post"), false);
 });
 
 test("accepted-only backfill writes are explicit and retryable failures stay retryable", () => {

@@ -5,6 +5,7 @@ import {
   generateRandomResetName,
   RANDOM_RESET_NAME_MODEL,
   RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V1_PROMPT_VERSION,
   toRandomResetNameInput,
   type RandomResetNameEvaluationInput,
   type RandomResetNameGenerationResult,
@@ -125,6 +126,23 @@ export function shouldReuseResetDisplayNameResult(
   );
 }
 
+export function shouldPreserveExistingAcceptedResetDisplayName(
+  record: ResetDisplayNameRecord | null | undefined,
+) {
+  return Boolean(
+    record?.ai_status === "accepted" &&
+      typeof record.ai_name_ja === "string" &&
+      record.ai_name_ja.trim() &&
+      (record.ai_prompt_version === RANDOM_RESET_NAME_V1_PROMPT_VERSION || record.ai_prompt_version === null),
+  );
+}
+
+export function shouldSkipResetDisplayNameGenerationWithoutSource(
+  sourcePostText: string | null | undefined,
+) {
+  return !sourcePostText?.trim();
+}
+
 function buildUpsertPayload(
   eventKey: string,
   sourceTweetId: string | null,
@@ -227,6 +245,25 @@ export async function ensureResetDisplayNameForEvent(
   if (existing?.manual_name_ja?.trim()) {
     return { eventKey, status: "manual", displayName: existing.manual_name_ja.trim(), inputMode, skipped: true };
   }
+  const existingAiName = existing?.ai_name_ja?.trim() ?? null;
+  if (shouldPreserveExistingAcceptedResetDisplayName(existing) && existingAiName) {
+    return {
+      eventKey,
+      status: "preserved_legacy_accepted",
+      displayName: existingAiName,
+      inputMode,
+      skipped: true,
+    };
+  }
+  if (shouldSkipResetDisplayNameGenerationWithoutSource(sourcePostText)) {
+    return {
+      eventKey,
+      status: existing?.ai_status === "accepted" ? "preserved_existing" : "source_unavailable",
+      displayName: existing?.ai_status === "accepted" ? existing.ai_name_ja : null,
+      inputMode,
+      skipped: true,
+    };
+  }
   if (shouldReuseResetDisplayNameResult(existing, inputHash, options.model ?? RANDOM_RESET_NAME_MODEL)) {
     return {
       eventKey,
@@ -302,6 +339,7 @@ function recordToResult(record: ReturnType<typeof getResetDisplayNameWritePayloa
     flags: record.ai_flags ?? [],
     status: "success",
     model: record.ai_model ?? RANDOM_RESET_NAME_MODEL,
+    promptVersion: record.ai_prompt_version ?? RANDOM_RESET_NAME_V1_PROMPT_VERSION,
     latencyMs: 0,
     httpStatus: 200,
     retryAfterSeconds: null,
