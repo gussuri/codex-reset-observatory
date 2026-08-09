@@ -1,0 +1,45 @@
+{
+  "evaluation": "random-reset-name-v2-experiment",
+  "promptVersion": "random-reset-name-v2-experiment",
+  "model": "gemini-3.5-flash-lite",
+  "temperature": 0.3,
+  "readOnly": true,
+  "productionDataModified": false,
+  "metadata": {
+    "startedAt": "2026-08-09T12:50:14.013Z",
+    "asOf": "2026-08-09T12:50:13.540Z",
+    "candidateCount": 23,
+    "directTiboCandidateCount": 6,
+    "pairedCount": 1,
+    "requestDelayMs": 2500,
+    "maxRetries": 2
+  },
+  "counts": {
+    "total": 1,
+    "success": 1,
+    "apiFailure": 0,
+    "rateLimited": 0,
+    "invalidJson": 0,
+    "invalidSchema": 0
+  },
+  "cases": [
+    {
+      "caseNumber": 1,
+      "eventKey": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "tweetId": "2083395449814229287",
+      "completedAt": "2026-08-01T03:32:00.000Z",
+      "tweetCreatedAt": "2026-08-01T03:32:37+00:00",
+      "sourceUrl": "https://x.com/thsottiaux/status/2083395449814229287",
+      "sourcePostText": "To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.\n\nEnjoy.",
+      "reasonType": "ご祝儀リセット",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "generatedName": "爆速仕事ウィーク記念の制限解除リセット",
+      "reason": "1週間の効率化を祝って、週末にLunaスレッドを大量に動かせるよう利用制限をリセットしたため。",
+      "status": "success",
+      "attempts": 1,
+      "retryCount": 0,
+      "existingDisplayName": "Luna 10万スレッド到達・効率改善記念リセット"
+    }
+  ]
+}
