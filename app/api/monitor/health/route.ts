@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from("tibo_heartbeat")
       .select(
-        "last_heartbeat_at,last_successful_parse_at,last_scan_error,last_page_reload_status,last_page_reload_error",
+        "session_started_at,last_heartbeat_at,last_successful_parse_at,last_scan_error,last_page_reload_status,last_page_reload_error",
       )
       .eq("id", "main")
       .maybeSingle();
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json(health, {
-      status: health.status === "healthy" ? 200 : 503,
+      status: health.status === "unhealthy" ? 503 : 200,
       headers: noStoreHeaders,
     });
   } catch {

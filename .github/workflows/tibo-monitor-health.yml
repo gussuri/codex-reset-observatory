@@ -7,21 +7,170 @@ on:
 
 permissions:
   contents: read
+  issues: write
+
+concurrency:
+  group: tibo-monitor-health
+  cancel-in-progress: false
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
     steps:
       - name: Check production monitor health
+        id: monitor-health
         run: |
           set -euo pipefail
           RESPONSE_FILE="$(mktemp)"
           trap 'rm -f "$RESPONSE_FILE"' EXIT
           HTTP_STATUS="$(curl --silent --max-time 30 --output "$RESPONSE_FILE" --write-out "%{http_code}" --header "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "https://codex.gussuriworks.com/api/monitor/health")"
           cat "$RESPONSE_FILE"
-          if [ "$HTTP_STATUS" != "200" ]; then
+          if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "503" ]; then
             exit 1
           fi
+
+          STATUS="$(jq -er '.status // empty' "$RESPONSE_FILE")"
+          case "$STATUS" in
+            healthy|warning)
+              [ "$HTTP_STATUS" = "200" ]
+              ;;
+            unhealthy)
+              [ "$HTTP_STATUS" = "503" ]
+              ;;
+            *)
+              echo "Unexpected monitor health status"
+              exit 1
+              ;;
+          esac
+
+          DETAIL="$(jq -r '.detail // "unknown"' "$RESPONSE_FILE")"
+          case "$DETAIL" in
+            healthy|heartbeat_missing|heartbeat_invalid|heartbeat_future|heartbeat_stale|parse_missing|parse_invalid|parse_future|parse_stale|scan_error|page_reload_failed|configuration_unavailable|database_unavailable|unauthorized)
+              ;;
+            *)
+              DETAIL="unknown"
+              ;;
+          esac
+
+          HEARTBEAT_AGE_SECONDS="$(jq -r 'if .heartbeatAgeSeconds == null then "unknown" else (.heartbeatAgeSeconds | tostring) end' "$RESPONSE_FILE")"
+          PARSE_AGE_SECONDS="$(jq -r 'if .parseAgeSeconds == null then "unknown" else (.parseAgeSeconds | tostring) end' "$RESPONSE_FILE")"
+          case "$HEARTBEAT_AGE_SECONDS" in
+            unknown|*[!0-9]*) HEARTBEAT_AGE_SECONDS="unknown" ;;
+          esac
+          case "$PARSE_AGE_SECONDS" in
+            unknown|*[!0-9]*) PARSE_AGE_SECONDS="unknown" ;;
+          esac
+
+          {
+            echo "status=$STATUS"
+            echo "detail=$DETAIL"
+            echo "heartbeat_age_seconds=$HEARTBEAT_AGE_SECONDS"
+            echo "parse_age_seconds=$PARSE_AGE_SECONDS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open parser health alert if unhealthy
+        if: steps.monitor-health.outputs.status == 'unhealthy'
+        uses: actions/github-script@v7
+        env:
+          HEALTH_STATUS: ${{ steps.monitor-health.outputs.status }}
+          HEALTH_DETAIL: ${{ steps.monitor-health.outputs.detail }}
+          HEARTBEAT_AGE_SECONDS: ${{ steps.monitor-health.outputs.heartbeat_age_seconds }}
+          PARSE_AGE_SECONDS: ${{ steps.monitor-health.outputs.parse_age_seconds }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const marker = "<!-- tibo-monitor-health-alert -->";
+            const issueTitle = "[Monitor alert] Tibo parser health";
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                per_page: 100,
+              },
+            );
+            const existingIssue = issues.find(
+              (issue) =>
+                !issue.pull_request &&
+                issue.body?.includes(marker),
+            );
+
+            if (existingIssue) {
+              return;
+            }
+
+            const body = [
+              marker,
+              "Status: " + process.env.HEALTH_STATUS,
+              "Detail: " + process.env.HEALTH_DETAIL,
+              "Heartbeat age seconds: " + process.env.HEARTBEAT_AGE_SECONDS,
+              "Parse age seconds: " + process.env.PARSE_AGE_SECONDS,
+              "Run: " + process.env.RUN_URL,
+            ].join("\n");
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body,
+            });
+
+      - name: Close parser health alert after recovery
+        if: steps.monitor-health.outputs.status == 'healthy'
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const marker = "<!-- tibo-monitor-health-alert -->";
+            const issueTitle = "[Monitor alert] Tibo parser health";
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                per_page: 100,
+              },
+            );
+            const existingIssue = issues.find(
+              (issue) =>
+                !issue.pull_request &&
+                issue.body?.includes(marker),
+            );
+
+            if (!existingIssue) {
+              return;
+            }
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                per_page: 100,
+              },
+            );
+            const alreadyRecovered = comments.some((comment) =>
+              comment.body?.startsWith("Recovered"),
+            );
+
+            if (!alreadyRecovered) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: "Recovered\n\nRun: " + process.env.RUN_URL,
+              });
+            }
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingIssue.number,
+              state: "closed",
+            });
 
   regular-reset-sync:
     runs-on: ubuntu-latest

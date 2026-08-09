@@ -1,6 +1,7 @@
 export const MONITOR_HEALTH_MAX_AGE_SECONDS = 900;
+export const MONITOR_PARSE_ALERT_AGE_SECONDS = 1800;
 
-export type MonitorHealthStatus = "healthy" | "unhealthy";
+export type MonitorHealthStatus = "healthy" | "warning" | "unhealthy";
 
 export type MonitorHealthDetail =
   | "healthy"
@@ -16,6 +17,7 @@ export type MonitorHealthDetail =
   | "page_reload_failed";
 
 export interface TiboHeartbeatSnapshot {
+  session_started_at: string | null;
   last_heartbeat_at: string | null;
   last_successful_parse_at: string | null;
   last_scan_error: string | null;
@@ -41,6 +43,37 @@ function getTimestamp(value: unknown): number | null {
 
 function getAgeSeconds(timestamp: number, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - timestamp) / 1000));
+}
+
+function getOperationalFailureDetail(
+  snapshot: TiboHeartbeatSnapshot,
+): "scan_error" | "page_reload_failed" | null {
+  if (snapshot.last_scan_error !== null) {
+    return "scan_error";
+  }
+
+  if (
+    snapshot.last_page_reload_status !== "success" &&
+    snapshot.last_page_reload_status !== null
+  ) {
+    return "page_reload_failed";
+  }
+
+  return null;
+}
+
+function isWithinParseAlertAge(
+  sessionStartedAt: string | null,
+  now: Date,
+): boolean {
+  const sessionTimestamp = getTimestamp(sessionStartedAt);
+  if (sessionTimestamp === null || sessionTimestamp > now.getTime()) {
+    return false;
+  }
+
+  return (
+    getAgeSeconds(sessionTimestamp, now) <= MONITOR_PARSE_ALERT_AGE_SECONDS
+  );
 }
 
 export function evaluateTiboHeartbeat(
@@ -88,8 +121,19 @@ export function evaluateTiboHeartbeat(
   }
 
   if (snapshot.last_successful_parse_at === null) {
+    const operationalFailure = getOperationalFailureDetail(snapshot);
+    if (operationalFailure) {
+      return {
+        status: "unhealthy",
+        detail: operationalFailure,
+        heartbeatAgeSeconds,
+      };
+    }
+
     return {
-      status: "unhealthy",
+      status: isWithinParseAlertAge(snapshot.session_started_at, now)
+        ? "warning"
+        : "unhealthy",
       detail: "parse_missing",
       heartbeatAgeSeconds,
     };
@@ -114,30 +158,32 @@ export function evaluateTiboHeartbeat(
 
   const parseAgeSeconds = getAgeSeconds(parseTimestamp, now);
   if (parseAgeSeconds > MONITOR_HEALTH_MAX_AGE_SECONDS) {
+    const operationalFailure = getOperationalFailureDetail(snapshot);
+    if (operationalFailure) {
+      return {
+        status: "unhealthy",
+        detail: operationalFailure,
+        heartbeatAgeSeconds,
+        parseAgeSeconds,
+      };
+    }
+
     return {
-      status: "unhealthy",
+      status:
+        parseAgeSeconds <= MONITOR_PARSE_ALERT_AGE_SECONDS
+          ? "warning"
+          : "unhealthy",
       detail: "parse_stale",
       heartbeatAgeSeconds,
       parseAgeSeconds,
     };
   }
 
-  if (snapshot.last_scan_error !== null) {
+  const operationalFailure = getOperationalFailureDetail(snapshot);
+  if (operationalFailure) {
     return {
       status: "unhealthy",
-      detail: "scan_error",
-      heartbeatAgeSeconds,
-      parseAgeSeconds,
-    };
-  }
-
-  if (
-    snapshot.last_page_reload_status !== "success" &&
-    snapshot.last_page_reload_status !== null
-  ) {
-    return {
-      status: "unhealthy",
-      detail: "page_reload_failed",
+      detail: operationalFailure,
       heartbeatAgeSeconds,
       parseAgeSeconds,
     };

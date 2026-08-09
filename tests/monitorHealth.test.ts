@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  MONITOR_PARSE_ALERT_AGE_SECONDS,
   evaluateTiboHeartbeat,
   type TiboHeartbeatSnapshot,
 } from "../lib/radar/monitorHealth";
@@ -11,6 +12,7 @@ function snapshot(
   overrides: Partial<TiboHeartbeatSnapshot> = {},
 ): TiboHeartbeatSnapshot {
   return {
+    session_started_at: null,
     last_heartbeat_at: "2026-08-01T23:58:00.000Z",
     last_successful_parse_at: "2026-08-01T23:55:00.000Z",
     last_scan_error: null,
@@ -79,9 +81,58 @@ test("reports a missing heartbeat timestamp as unhealthy", () => {
   });
 });
 
-test("reports a missing parse timestamp as unhealthy", () => {
+test("reports a missing parse timestamp as a warning during a new session", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      session_started_at: "2026-08-02T00:00:00.000Z",
+      last_successful_parse_at: null,
+    }),
+    now,
+  );
+
+  assert.deepStrictEqual(result, {
+    status: "warning",
+    detail: "parse_missing",
+    heartbeatAgeSeconds: 120,
+  });
+});
+
+test("does not grant parse_missing a grace period without a valid session start", () => {
   const result = evaluateTiboHeartbeat(
     snapshot({ last_successful_parse_at: null }),
+    now,
+  );
+
+  assert.deepStrictEqual(result, {
+    status: "unhealthy",
+    detail: "parse_missing",
+    heartbeatAgeSeconds: 120,
+  });
+});
+
+test("keeps parse_missing as a warning through the 30-minute grace period", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      session_started_at: "2026-08-01T23:31:00.000Z",
+      last_successful_parse_at: null,
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "warning");
+  assert.equal(result.detail, "parse_missing");
+  assert.equal(
+    Math.floor((now.getTime() - new Date("2026-08-01T23:31:00.000Z").getTime()) / 1000),
+    MONITOR_PARSE_ALERT_AGE_SECONDS - 60,
+  );
+});
+
+test("reports parse_missing as unhealthy after the 30-minute grace period", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      session_started_at: "2026-08-01T23:29:00.000Z",
+      last_successful_parse_at: null,
+    }),
     now,
   );
 
@@ -129,9 +180,23 @@ test("reports a future heartbeat timestamp as unhealthy", () => {
   });
 });
 
-test("reports a parse timestamp older than fifteen minutes as unhealthy", () => {
+test("reports a parse timestamp 16 minutes old as a warning", () => {
   const result = evaluateTiboHeartbeat(
-    snapshot({ last_successful_parse_at: "2026-08-01T23:44:59.000Z" }),
+    snapshot({ last_successful_parse_at: "2026-08-01T23:44:00.000Z" }),
+    now,
+  );
+
+  assert.deepStrictEqual(result, {
+    status: "warning",
+    detail: "parse_stale",
+    heartbeatAgeSeconds: 120,
+    parseAgeSeconds: 960,
+  });
+});
+
+test("reports a parse timestamp older than thirty minutes as unhealthy", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({ last_successful_parse_at: "2026-08-01T23:29:59.000Z" }),
     now,
   );
 
@@ -139,8 +204,35 @@ test("reports a parse timestamp older than fifteen minutes as unhealthy", () => 
     status: "unhealthy",
     detail: "parse_stale",
     heartbeatAgeSeconds: 120,
-    parseAgeSeconds: 901,
+    parseAgeSeconds: 1801,
   });
+});
+
+test("keeps a stale heartbeat unhealthy during the parse grace period", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_heartbeat_at: "2026-08-01T23:44:59.000Z",
+      last_successful_parse_at: "2026-08-01T23:45:00.000Z",
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "unhealthy");
+  assert.equal(result.detail, "heartbeat_stale");
+});
+
+test("does not soften an operational scan error during the parse grace period", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      session_started_at: "2026-08-02T00:00:00.000Z",
+      last_successful_parse_at: null,
+      last_scan_error: "scan_error",
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "unhealthy");
+  assert.equal(result.detail, "scan_error");
 });
 
 test("reports a future parse timestamp as unhealthy", () => {

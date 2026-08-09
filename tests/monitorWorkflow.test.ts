@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const healthWorkflowPath = resolve(".github/workflows/tibo-monitor-health.yml");
+const healthRoutePath = resolve("app/api/monitor/health/route.ts");
 const notifierWorkflowPath = resolve(
   ".github/workflows/notify-workflow-failures.yml",
 );
@@ -29,8 +30,68 @@ test("monitor health workflow checks the production endpoint every ten minutes",
   );
   assert.match(workflow, /regular-reset-sync:/);
   assert.match(workflow, /secrets\.CRON_SECRET/);
-  assert.match(workflow, /HTTP_STATUS.*!= "200"/);
-  assert.doesNotMatch(workflow, /--show-error/);
+  assert.match(workflow, /^permissions:\n  contents: read\n  issues: write$/m);
+  assert.match(workflow, /HTTP_STATUS.*503/);
+  assert.match(workflow, /status.*healthy|status.*warning|status.*unhealthy/);
+  assert.match(workflow, /<!-- tibo-monitor-health-alert -->/);
+  assert.match(workflow, /\[Monitor alert\] Tibo parser health/);
+  assert.match(workflow, /actions\/github-script@v7/);
+});
+
+test("health API reads the existing session start and returns warning as HTTP 200", () => {
+  const route = readWorkflow(healthRoutePath);
+
+  assert.match(route, /session_started_at,last_heartbeat_at,last_successful_parse_at/);
+  assert.match(route, /health\.status === "unhealthy" \? 503 : 200/);
+});
+
+test("health warnings and unhealthy states do not fail the health-check job", () => {
+  const workflow = readWorkflow(healthWorkflowPath);
+  const healthJob = workflow.slice(
+    workflow.indexOf("  health-check:"),
+    workflow.indexOf("  regular-reset-sync:"),
+  );
+
+  assert.match(healthJob, /HTTP_STATUS.*503/);
+  assert.match(healthJob, /healthy\|warning/);
+  assert.match(healthJob, /unhealthy\)/);
+  assert.doesNotMatch(
+    healthJob,
+    /if \[ "\$HTTP_STATUS" != "200" \]; then\s+exit 1/,
+  );
+  assert.doesNotMatch(
+    healthJob,
+    /if \[ "\$STATUS" = "unhealthy" \]; then\s+exit 1/,
+  );
+});
+
+test("health issue handling deduplicates alerts and closes only after recovery", () => {
+  const workflow = readWorkflow(healthWorkflowPath);
+
+  assert.match(workflow, /steps\.monitor-health\.outputs\.status == 'unhealthy'/);
+  assert.match(workflow, /steps\.monitor-health\.outputs\.status == 'healthy'/);
+  assert.match(workflow, /state: "open"/);
+  assert.match(workflow, /existingIssue/);
+  assert.match(workflow, /if \(existingIssue\) \{\s+return;/);
+  assert.match(workflow, /issues\.create\(/);
+  assert.match(workflow, /issues\.createComment\(/);
+  assert.match(workflow, /issues\.listComments/);
+  assert.match(workflow, /alreadyRecovered/);
+  assert.match(workflow, /state: "closed"/);
+  assert.doesNotMatch(
+    workflow,
+    /steps\.monitor-health\.outputs\.status == 'warning'[\s\S]*issues\.create/,
+  );
+});
+
+test("regular reset synchronization still fails on a non-200 response", () => {
+  const workflow = readWorkflow(healthWorkflowPath);
+  const regularResetJob = workflow.slice(workflow.indexOf("  regular-reset-sync:"));
+
+  assert.match(
+    regularResetJob,
+    /if \[ "\$HTTP_STATUS" != "200" \]; then\s+exit 1/,
+  );
 });
 
 test("workflow notifier only opens one issue and closes it after recovery", () => {
