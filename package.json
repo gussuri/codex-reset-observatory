@@ -18,6 +18,7 @@
     "eval:tibo-teaser-strength": "tsx scripts/evaluate-tibo-teaser-strength.ts",
     "eval:tibo-teaser-strength:stress": "tsx scripts/evaluate-tibo-teaser-strength-stress.ts",
     "eval:random-reset-names": "tsx scripts/evaluate-random-reset-names.ts",
+    "eval:random-reset-names:round2": "tsx scripts/evaluate-random-reset-names-round2.ts",
     "evaluate:shadow-probability": "tsx scripts/evaluate-shadow-probability.ts",
     "evaluate:probability-models": "tsx scripts/evaluateProbabilityModels.ts",
     "evaluate:regime-elapsed": "tsx scripts/evaluateRegimeElapsedProbability.ts",
