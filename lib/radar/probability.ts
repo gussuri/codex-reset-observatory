@@ -33,6 +33,7 @@ import { getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { getTiboDisplayLabel } from "./tiboHandle";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -962,7 +963,7 @@ export function getActiveOfficialNotice(
         expectedEndAt: signal.expected_end_at ?? null,
         expiresAt: signal.expires_at ?? null,
         source: signal.tweet_url ?? null,
-        sourceLabel: "Tibo (@tibo_maker)",
+        sourceLabel: getTiboDisplayLabel(signal.tweet_url),
         temporalPrecision: signal.ai_temporal_precision ?? null,
         temporalConfidence: signal.ai_temporal_confidence ?? null,
         temporalResolutionStatus: signal.temporal_resolution_status ?? null,

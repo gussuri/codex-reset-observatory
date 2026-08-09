@@ -121,6 +121,7 @@ test("uses clear Japanese labels for the Tibo post card and unrelated classifica
   assert.match(html, />リセットとは関係のない投稿です。<\/span>/);
   assert.match(html, /aria-hidden="true"[^>]*>」<\/span>/);
   assert.match(html, /リセットとは無関係/);
+  assert.match(html, /Tibo \(@thsottiaux\)/);
   assert.doesNotMatch(html, /Tibo氏の最新動向|>その他</);
 });
 
@@ -158,7 +159,28 @@ test("renders a related Tibo heading when the card uses the related variant", ()
   );
 
   assert.match(html, /Related Tibo post/);
+  assert.match(html, /Tibo \(@thsottiaux\)/);
   assert.doesNotMatch(html, /Latest Tibo post/);
+});
+
+test("keeps the Tibo handle unchanged across supported locales", () => {
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(
+      React.createElement(TiboActivityCard, {
+        locale,
+        variant: "related",
+        activity: {
+          classification: "official_notice",
+          teaserStrength: null,
+          text: "A current notice",
+          createdAt: "2026-08-07T21:46:56.000Z",
+          sourceUrl: "https://x.com/thsottiaux/status/locale-handle",
+        },
+      }),
+    );
+
+    assert.match(html, /Tibo \(@thsottiaux\)/);
+  }
 });
 
 test("places a related Tibo card after current status and before history", () => {
@@ -364,7 +386,7 @@ test("shows an unresolved notice without inventing a planned datetime", (t: Test
         tweet_id: "presentation-notice",
         signal_type: "official_notice",
         text: "A reset notice from Tibo",
-        tweet_url: "https://x.com/tibo_maker/status/presentation-notice",
+        tweet_url: "https://x.com/thsottiaux/status/presentation-notice",
         tweet_created_at: openedAt,
         expires_at: expiresAt,
         confidence: 0.96,
@@ -385,7 +407,7 @@ test("shows an unresolved notice without inventing a planned datetime", (t: Test
   assert.match(html, /time not specified/);
   assert.doesNotMatch(html, /An official reset notice has been detected\. Please check the latest status\./);
   assert.doesNotMatch(html, /Notice posted/);
-  assert.match(html, /Tibo \(@tibo_maker\)/);
+  assert.match(html, /Tibo \(@thsottiaux\)/);
 });
 
 test("shows a resolved notice window with only the viewer-local schedule and source", () => {
@@ -399,7 +421,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
         tweet_id: "presentation-resolved-notice",
         signal_type: "official_notice",
         text: "I'll do another performative reset on Monday",
-        tweet_url: "https://x.com/tibo_maker/status/presentation-resolved-notice",
+        tweet_url: "https://x.com/thsottiaux/status/presentation-resolved-notice",
         tweet_created_at: openedAt,
         expires_at: "2026-08-11T09:00:00.000Z",
         confidence: 0.96,
@@ -695,7 +717,7 @@ test("keeps the simplified official notice card above the probability card", (t:
         tweet_id: "presentation-official-notice",
         signal_type: "official_notice",
         text: "A reset notice from Tibo",
-        tweet_url: "https://x.com/tibo_maker/status/presentation-official-notice",
+        tweet_url: "https://x.com/thsottiaux/status/presentation-official-notice",
         tweet_created_at: openedAt,
         expires_at: "2026-08-02T12:00:00.000Z",
         confidence: 0.96,
@@ -716,7 +738,7 @@ test("keeps the simplified official notice card above the probability card", (t:
 
   assert.ok(noticeIndex >= 0 && noticeIndex < probabilityIndex);
   assert.doesNotMatch(html, /Notice posted/);
-  assert.match(html, /Tibo \(@tibo_maker\)/);
+  assert.match(html, /Tibo \(@thsottiaux\)/);
   assert.match(html, /Official reset notice[\s\S]*Notice available/);
   assert.doesNotMatch(html, /Official notice: None/);
   assert.doesNotMatch(html, /border-slate-50/);

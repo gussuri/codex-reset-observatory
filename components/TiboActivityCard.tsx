@@ -1,6 +1,7 @@
 import { ExternalLink, MessageCircle } from "lucide-react";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { translateUI } from "@/lib/radar/i18n";
+import { getTiboDisplayLabel } from "@/lib/radar/tiboHandle";
 import type { Locale, PublicTiboActivity } from "@/lib/radar/types";
 
 function getClassificationKey(
@@ -49,15 +50,20 @@ export function TiboActivityCard({
       className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm sm:p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2
-          id="tibo-activity-heading"
-          className="min-w-0 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl"
-        >
-          {translateUI(
-            variant === "related" ? "tiboRelatedActivity" : "tiboLatestActivity",
-            locale,
-          )}
-        </h2>
+        <div className="min-w-0">
+          <h2
+            id="tibo-activity-heading"
+            className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl"
+          >
+            {translateUI(
+              variant === "related" ? "tiboRelatedActivity" : "tiboLatestActivity",
+              locale,
+            )}
+          </h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            {getTiboDisplayLabel(activity.sourceUrl)}
+          </p>
+        </div>
         <MessageCircle className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
       </div>
 
