@@ -1023,6 +1023,8 @@ function getActiveWindow(
       openedAt,
       expectedAt,
       expectedEndAt,
+      expectedPrecision: officialNotice?.temporalPrecision ?? null,
+      expectedTimeZone: officialNotice?.temporalTimezone ?? null,
       source,
       sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
     };
@@ -1040,6 +1042,8 @@ function getActiveWindow(
     openedAt,
     expectedAt,
     expectedEndAt,
+    expectedPrecision: null,
+    expectedTimeZone: null,
     source,
     sourceLabel: null,
   };

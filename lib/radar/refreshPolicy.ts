@@ -2,6 +2,8 @@ import { getRefreshIntervalMs } from "./helpers";
 import type { PublicRadarSnapshot } from "./types";
 
 export const RADAR_FETCH_TIMEOUT_MS = 15_000;
+export const MAX_VISIBLE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+export const REFRESH_EVENT_MIN_INTERVAL_MS = 30 * 1000;
 
 const REFRESH_RETRY_INTERVALS_MS = [
   60 * 1000,
@@ -42,7 +44,10 @@ function getFreshDataRemainingMs(
   const elapsedMs = nowMs - fetchedTime;
   if (elapsedMs < 0) return null;
 
-  const intervalMs = getRefreshIntervalMs(data.viewModel.probability24h);
+  const intervalMs = Math.min(
+    getRefreshIntervalMs(data.viewModel.probability24h),
+    MAX_VISIBLE_REFRESH_INTERVAL_MS,
+  );
   return Math.max(0, intervalMs - elapsedMs);
 }
 
@@ -58,6 +63,35 @@ export function getInitialRefreshPlan(
   }
 
   return { action: "wait", delayMs: remainingMs };
+}
+
+/**
+ * Returns the plan used by visibility/focus/online wake events.  A wake event
+ * should be prompt, but repeated browser events must not create a fetch storm.
+ */
+export function getEventRefreshPlan(
+  data: PublicRadarSnapshot | null | undefined,
+  fetchedAt: string | null | undefined,
+  nowMs = Date.now(),
+): RefreshPlan {
+  const fetchedTime = getValidTime(fetchedAt);
+  if (fetchedTime === null || !Number.isFinite(nowMs) || nowMs < fetchedTime) {
+    return { action: "fetch", delayMs: 0 };
+  }
+
+  const elapsedMs = nowMs - fetchedTime;
+  if (elapsedMs < REFRESH_EVENT_MIN_INTERVAL_MS) {
+    return {
+      action: "wait",
+      delayMs: REFRESH_EVENT_MIN_INTERVAL_MS - elapsedMs,
+    };
+  }
+
+  if (!data || data.dataHealth.stale || data.dataHealth.overall === "degraded") {
+    return { action: "fetch", delayMs: 0 };
+  }
+
+  return { action: "fetch", delayMs: 0 };
 }
 
 export function getRefreshRetryDelayMs(failureCount: number) {

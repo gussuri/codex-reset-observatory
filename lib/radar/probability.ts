@@ -31,6 +31,8 @@ import {
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
+import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
+import { getTemporalNoticeCoverage, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -50,6 +52,10 @@ export type ActiveOfficialNotice = {
   expiresAt: string | null;
   source: string | null;
   sourceLabel: string;
+  temporalPrecision?: TemporalPrecision | null;
+  temporalConfidence?: number | null;
+  temporalResolutionStatus?: TemporalResolutionStatus | null;
+  temporalTimezone?: string | null;
 };
 
 export type ProbabilityPair = {
@@ -125,6 +131,30 @@ type PeriodContributions = {
 
 function zeroProbabilityPair(): ProbabilityPair {
   return { probability24h: 0, probability48h: 0 };
+}
+
+function getOfficialNoticeTimingReason(
+  notice: ActiveOfficialNotice,
+  now: Date,
+  locale: Locale,
+) {
+  const temporalResolution = notice.temporalResolutionStatus
+    ? {
+        status: notice.temporalResolutionStatus,
+        temporalPrecision: notice.temporalPrecision ?? "unknown",
+        confidence: notice.temporalConfidence ?? null,
+        expectedStartAt: notice.expectedAt,
+        expectedEndAt: notice.expectedEndAt,
+      }
+    : null;
+  const coverage24 = getTemporalNoticeCoverage(temporalResolution, now, 24);
+  const coverage48 = getTemporalNoticeCoverage(temporalResolution, now, 48);
+  if (coverage24 === null || coverage48 === null) {
+    return translateUI("outlookOfficialNotice", locale);
+  }
+  if (coverage24 > 0) return translateUI("outlookOfficialNoticeWithin24", locale);
+  if (coverage48 > 0) return translateUI("outlookOfficialNoticeWithin48", locale);
+  return translateUI("outlookOfficialNoticeOutsideForecast", locale);
 }
 
 function getProbabilityComponents(
@@ -896,9 +926,12 @@ export function getActiveOfficialNotice(
   now: Date = new Date(),
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
 ): ActiveOfficialNotice | null {
-  const resolvedLatestResetAt = latestResetAt === undefined
-    ? getLastGlobalResetAt(data, now)
-    : latestResetAt;
+  const recoveryBoundaryAt = getLastResetBoundaryAt(data, now);
+  const suppliedResetTime = latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const recoveryBoundaryTime = recoveryBoundaryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const resolvedLatestResetAt = suppliedResetTime >= recoveryBoundaryTime
+    ? latestResetAt
+    : recoveryBoundaryAt;
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
   const cutoff = Math.max(
     resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
@@ -916,12 +949,23 @@ export function getActiveOfficialNotice(
 
       const observedTime = new Date(signal.tweet_created_at).getTime();
       const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
+      const latestBoundaryTime = cutoff === Number.NEGATIVE_INFINITY ? null : cutoff;
       if (
         Number.isNaN(observedTime) ||
         observedTime > now.getTime() ||
         Number.isNaN(expiresTime) ||
         expiresTime <= now.getTime() ||
-        observedTime <= cutoff
+        (observedTime <= cutoff && isTemporalNoticeConsumedAtReset(
+          signal.temporal_resolution_status === "resolved"
+            ? {
+                status: signal.temporal_resolution_status,
+                temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+                expectedStartAt: signal.expected_start_at ?? null,
+                expectedEndAt: signal.expected_end_at ?? null,
+              }
+            : null,
+          latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
+        ))
       ) {
         return [];
       }
@@ -932,11 +976,15 @@ export function getActiveOfficialNotice(
         title: signal.text ?? null,
         summary: signal.text ?? null,
         observedAt: signal.tweet_created_at,
-        expectedAt: null,
-        expectedEndAt: null,
+        expectedAt: signal.expected_start_at ?? null,
+        expectedEndAt: signal.expected_end_at ?? null,
         expiresAt: signal.expires_at ?? null,
         source: signal.tweet_url ?? null,
         sourceLabel: "Tibo (@tibo_maker)",
+        temporalPrecision: signal.ai_temporal_precision ?? null,
+        temporalConfidence: signal.ai_temporal_confidence ?? null,
+        temporalResolutionStatus: signal.temporal_resolution_status ?? null,
+        temporalTimezone: signal.ai_temporal_timezone ?? null,
       }];
     });
   const localNotices = localObservationSignals
@@ -1150,11 +1198,7 @@ export function getLocalProbabilityReason(
   void probability72h;
 
   if (resolvedOfficialNotice) {
-    return locale === "en"
-      ? "An official reset notice has been detected, indicating a very high probability within the next 24 and 48 hours."
-      : locale === "zh"
-        ? "有官方重置预告，预计未来 24 小时和 48 小时内执行的概率极高。"
-        : "公式リセット予告があるため、通常より高めに見ています。";
+    return getOfficialNoticeTimingReason(resolvedOfficialNotice, now, locale);
   }
 
   const p24 = probabilityToPercent(probability24h, locale);
@@ -1340,7 +1384,7 @@ export function getDisplayProbabilityReason(
     : activeOfficialNotice;
 
   if (resolvedOfficialNotice) {
-    return translateUI("outlookOfficialNotice", locale);
+    return getOfficialNoticeTimingReason(resolvedOfficialNotice, now, locale);
   }
 
   const environment = resolvedSignalEvaluation.environment;

@@ -4,6 +4,7 @@ import type {
   RejectedTiboResetSignal,
 } from "./tiboHistory";
 import type { TeaserStrength } from "./teaserStrength";
+import type { TemporalKind, TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import type { RegularResetEventRow } from "./regularResetSchedule";
 
 export type Locale = "ja" | "en" | "zh";
@@ -90,6 +91,15 @@ export type ActiveTiboSignal = {
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
   teaser_strength?: TeaserStrength | null;
+  ai_temporal_expression?: string | null;
+  ai_temporal_kind?: TemporalKind | null;
+  ai_temporal_precision?: TemporalPrecision | null;
+  ai_temporal_timezone?: string | null;
+  ai_temporal_confidence?: number | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: TemporalResolutionStatus | null;
+  temporal_resolution_version?: string | null;
   is_reply?: boolean;
   is_quote?: boolean;
 };
@@ -277,6 +287,8 @@ export type RadarViewModel = {
     openedAt?: string | null;
     expectedAt?: string | null;
     expectedEndAt?: string | null;
+    expectedPrecision?: TemporalPrecision | null;
+    expectedTimeZone?: string | null;
     source?: string | null;
     sourceLabel?: string | null;
     forecastDate?: string;

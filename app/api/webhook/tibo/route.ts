@@ -17,6 +17,12 @@ import {
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
+import {
+  getTemporalNoticeExpiry,
+  parseTiboTemporalSemantics,
+  resolveTiboTemporalSchedule,
+  TIBO_SOURCE_TIME_ZONE,
+} from "@/lib/radar/tiboTemporal";
 
 function isMissingTiboOptionalColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -27,7 +33,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?)/i.test(message) &&
+    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_)/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -126,7 +132,7 @@ export async function POST(req: NextRequest) {
     if (shouldRunGeminiClassification(mode)) {
       try {
         aiResult = await classifyWithGemini(
-          { text, tweetCreatedAt, ...replyMetadata },
+          { text, tweetCreatedAt, sourceTimeZone: TIBO_SOURCE_TIME_ZONE, ...replyMetadata },
           { mode },
         );
       } catch {
@@ -144,6 +150,19 @@ export async function POST(req: NextRequest) {
           teaserStrengthConfidence: null,
           teaserStrengthEvidenceQuote: null,
           teaserStrengthReasonJa: null,
+          temporalExpression: null,
+          temporalKind: null,
+          temporalPrecision: null,
+          weekday: null,
+          relativeDayOffset: null,
+          relativeAmount: null,
+          relativeUnit: null,
+          explicitDateParts: null,
+          explicitTimeParts: null,
+          daypart: null,
+          rangeKind: null,
+          explicitTimezone: null,
+          temporalConfidence: null,
           model: process.env.GEMINI_MODEL || null,
           status: "api_error" as const,
           classifiedAt: new Date().toISOString(),
@@ -154,8 +173,24 @@ export async function POST(req: NextRequest) {
     const selectedClassification = selectTiboClassification(mode, ruleResult, aiResult);
     const classificationResponse = buildTiboClassificationResponse(mode, ruleResult, aiResult);
 
-    // 5. Expiration Calculation based on tweet_created_at
-    const expiresAt = new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
+    const temporalSemantics = selectedClassification.signalType === "official_notice" &&
+      aiResult?.status === "success" &&
+      aiResult.temporalDirection === "future"
+      ? parseTiboTemporalSemantics(aiResult, text)
+      : null;
+    const temporalResolution = selectedClassification.signalType === "official_notice"
+      ? resolveTiboTemporalSchedule(
+          temporalSemantics,
+          createdDate.toISOString(),
+          TIBO_SOURCE_TIME_ZONE,
+        )
+      : null;
+
+    // 5. Expiration follows the resolved notice window when available. Other
+    // signals retain the existing tweet-created-at + 24h behavior.
+    const expiresAt = temporalResolution?.status === "resolved"
+      ? new Date(getTemporalNoticeExpiry(temporalResolution, createdDate.toISOString()) ?? createdDate.toISOString())
+      : new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
     const receivedAt = new Date().toISOString();
 
     // 6. Build Supabase Payload
@@ -190,6 +225,15 @@ export async function POST(req: NextRequest) {
       ai_teaser_strength_confidence: aiResult?.teaserStrengthConfidence ?? null,
       ai_teaser_strength_evidence_quote: aiResult?.teaserStrengthEvidenceQuote || null,
       ai_teaser_strength_reason_ja: aiResult?.teaserStrengthReasonJa || null,
+      ai_temporal_expression: aiResult?.temporalExpression || null,
+      ai_temporal_kind: aiResult?.temporalKind || null,
+      ai_temporal_precision: aiResult?.temporalPrecision || null,
+      ai_temporal_timezone: temporalResolution?.timezone ?? aiResult?.explicitTimezone ?? null,
+      ai_temporal_confidence: aiResult?.temporalConfidence ?? null,
+      expected_start_at: temporalResolution?.expectedStartAt ?? null,
+      expected_end_at: temporalResolution?.expectedEndAt ?? null,
+      temporal_resolution_status: temporalResolution?.status ?? null,
+      temporal_resolution_version: temporalResolution?.version ?? null,
       ai_model: aiResult?.model || null,
       ai_classification_status: aiResult?.status || "skipped",
       ai_classified_at: aiResult?.classifiedAt || null,
@@ -312,6 +356,15 @@ export async function POST(req: NextRequest) {
         ai_teaser_strength_confidence: _aiTeaserStrengthConfidence,
         ai_teaser_strength_evidence_quote: _aiTeaserStrengthEvidenceQuote,
         ai_teaser_strength_reason_ja: _aiTeaserStrengthReasonJa,
+        ai_temporal_expression: _aiTemporalExpression,
+        ai_temporal_kind: _aiTemporalKind,
+        ai_temporal_precision: _aiTemporalPrecision,
+        ai_temporal_timezone: _aiTemporalTimezone,
+        ai_temporal_confidence: _aiTemporalConfidence,
+        expected_start_at: _expectedStartAt,
+        expected_end_at: _expectedEndAt,
+        temporal_resolution_status: _temporalResolutionStatus,
+        temporal_resolution_version: _temporalResolutionVersion,
         ...legacyPayload
       } = persistedPayload;
       upsertResult = await supabase

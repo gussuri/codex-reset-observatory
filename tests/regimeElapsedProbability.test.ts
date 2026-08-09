@@ -275,3 +275,42 @@ test("official notice override and horizon monotonicity remain intact", () => {
   assert.ok(result.predictions.probability24h <= result.predictions.probability48h);
   assert.ok(result.predictions.probability48h <= result.predictions.probability72h);
 });
+
+test("resolved future notice uses partial horizon coverage instead of a fixed override", () => {
+  const now = new Date("2026-08-08T20:34:50.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const baseline = calculateRegimeElapsedProbability(data, {
+    now,
+    activeOfficialNotice: null,
+  });
+  const notice = {
+    origin: "dynamic" as const,
+    id: "monday-notice",
+    title: "I'll do another performative reset on Monday",
+    summary: "I'll do another performative reset on Monday",
+    observedAt: "2026-08-08T20:34:50.000Z",
+    expectedAt: "2026-08-10T07:00:00.000Z",
+    expectedEndAt: "2026-08-11T07:00:00.000Z",
+    expiresAt: "2026-08-11T09:00:00.000Z",
+    source: null,
+    sourceLabel: "Tibo",
+    temporalPrecision: "day" as const,
+    temporalConfidence: 0.95,
+    temporalResolutionStatus: "resolved" as const,
+    temporalTimezone: "America/Los_Angeles",
+  };
+  const result = calculateRegimeElapsedProbability(data, {
+    now,
+    activeOfficialNotice: notice,
+  });
+
+  assert.equal(result.regimeElapsed.officialNoticeTimingPolicyVersion, "official-notice-window-v1");
+  assert.ok(
+    Math.abs(
+      result.predictions.probability24h - baseline.predictions.probability24h,
+    ) < 1e-12,
+  );
+  assert.ok(result.predictions.probability48h > baseline.predictions.probability48h);
+  assert.ok(result.predictions.probability48h < 0.96);
+  assert.ok(result.predictions.probability24h <= result.predictions.probability48h);
+});

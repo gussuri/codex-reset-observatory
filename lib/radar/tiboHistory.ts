@@ -1,5 +1,6 @@
 import type { WindowEventLike } from "./types";
 import type { TeaserStrength } from "./teaserStrength";
+import type { TemporalKind, TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import {
   toRegularResetHistoryEvent,
   type RegularResetEventRow,
@@ -47,6 +48,15 @@ export type FormalTiboResetSignal = {
   ai_teaser_strength_confidence?: number | null;
   ai_teaser_strength_evidence_quote?: string | null;
   ai_teaser_strength_reason_ja?: string | null;
+  ai_temporal_expression?: string | null;
+  ai_temporal_kind?: TemporalKind | null;
+  ai_temporal_precision?: TemporalPrecision | null;
+  ai_temporal_timezone?: string | null;
+  ai_temporal_confidence?: number | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: TemporalResolutionStatus | null;
+  temporal_resolution_version?: string | null;
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
   expires_at?: string | null;

@@ -39,11 +39,15 @@ import {
   type RecoveryBoundaryAudit,
   type RecoveryResetBoundary,
 } from "./recoveryBoundary";
+import {
+  getTemporalNoticeCoverage,
+} from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const LOG_2 = Math.LN2;
 const INTEGRATION_STEP_HOURS = 10 / 60;
+export const OFFICIAL_NOTICE_TIMING_POLICY_VERSION = "official-notice-window-v1";
 
 export type RegimeElapsedBinScheme = "A" | "B";
 export type RegimeElapsedMode = "full" | "elapsed-only" | "regime-only";
@@ -99,6 +103,7 @@ export type RegimeElapsedAudit = {
   randomBoundaryCount: number;
   regularBoundaryCount: number;
   boundaryAudit: RecoveryBoundaryAudit[];
+  officialNoticeTimingPolicyVersion: string;
 };
 
 export type RegimeElapsedProbabilityResult = ShadowProbabilityResult & {
@@ -430,6 +435,49 @@ function makeHorizons(
   } satisfies ShadowProbabilityHorizons;
 }
 
+function applyOfficialNoticeTimingPolicy(
+  baseline: ShadowProbabilityHorizons,
+  notice: ActiveOfficialNotice | null,
+  now: Date,
+) {
+  if (!notice) return null;
+
+  const temporalResolution = {
+    status: notice.temporalResolutionStatus ?? "unresolved",
+    temporalPrecision: notice.temporalPrecision ?? "unknown",
+    confidence: notice.temporalConfidence ?? null,
+    expectedStartAt: notice.expectedAt,
+    expectedEndAt: notice.expectedEndAt,
+  };
+  const coverage24 = getTemporalNoticeCoverage(temporalResolution, now, 24);
+  const coverage48 = getTemporalNoticeCoverage(temporalResolution, now, 48);
+  if (coverage24 === null || coverage48 === null) {
+    return {
+      probability12h: derive12hFrom24hProbability(0.9),
+      probability24h: 0.9,
+      probability48h: 0.96,
+      probability72h: derive72hFrom48hProbability(0.96),
+    } satisfies ShadowProbabilityHorizons;
+  }
+
+  const probability24h = clamp(
+    baseline.probability24h + coverage24 * (0.9 - baseline.probability24h),
+    0,
+    1,
+  );
+  const probability48h = clamp(
+    baseline.probability48h + coverage48 * (0.96 - baseline.probability48h),
+    probability24h,
+    1,
+  );
+  return {
+    probability12h: derive12hFrom24hProbability(probability24h),
+    probability24h,
+    probability48h,
+    probability72h: Math.max(probability48h, derive72hFrom48hProbability(probability48h)),
+  } satisfies ShadowProbabilityHorizons;
+}
+
 export function calculateRegimeElapsedProbability(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
@@ -485,12 +533,17 @@ export function calculateRegimeElapsedProbability(
     ),
   };
   const officialNoticeActive = Boolean(resolvedOfficialNotice);
+  const officialNoticePredictions = applyOfficialNoticeTimingPolicy(
+    baseline,
+    resolvedOfficialNotice,
+    now,
+  );
   const officialNoticeOverride = {
     active: officialNoticeActive,
-    probability12h: officialNoticeActive ? derive12hFrom24hProbability(0.9) : null,
-    probability24h: officialNoticeActive ? 0.9 : null,
-    probability48h: officialNoticeActive ? 0.96 : null,
-    probability72h: officialNoticeActive ? derive72hFrom48hProbability(0.96) : null,
+    probability12h: officialNoticePredictions?.probability12h ?? null,
+    probability24h: officialNoticePredictions?.probability24h ?? null,
+    probability48h: officialNoticePredictions?.probability48h ?? null,
+    probability72h: officialNoticePredictions?.probability72h ?? null,
   };
   const warnings: string[] = [];
   if (hazard.completedIntervalCount < 2) {
@@ -502,12 +555,7 @@ export function calculateRegimeElapsedProbability(
     calculatedAt: now.toISOString(),
     targetDefinition: REGIME_ELAPSED_TARGET_DEFINITION,
     predictions: officialNoticeActive
-      ? {
-          probability12h: officialNoticeOverride.probability12h!,
-          probability24h: officialNoticeOverride.probability24h!,
-          probability48h: officialNoticeOverride.probability48h!,
-          probability72h: officialNoticeOverride.probability72h!,
-        }
+      ? officialNoticePredictions!
       : adjusted,
     baseline,
     confidence: {
@@ -544,6 +592,7 @@ export function calculateRegimeElapsedProbability(
       randomBoundaryCount: hazard.randomBoundaryCount,
       regularBoundaryCount: hazard.regularBoundaryCount,
       boundaryAudit: getRecoveryBoundaryAudit(data, now, options.staticHistory ?? LOCAL_RESET_HISTORY),
+      officialNoticeTimingPolicyVersion: OFFICIAL_NOTICE_TIMING_POLICY_VERSION,
     },
   };
 }

@@ -29,6 +29,7 @@ import type { HistorySourceKind, Locale, PublicRadarSnapshot } from "@/lib/radar
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import {
   canStartRadarRefresh,
+  getEventRefreshPlan,
   getInitialRefreshPlan,
   getRefreshRetryDelayMs,
   RADAR_FETCH_TIMEOUT_MS,
@@ -122,6 +123,37 @@ function getElapsedSinceLastReset(
   }
 
   return formatElapsedResetDuration(observedTime - resetTime, locale);
+}
+
+function getScheduleTimeZoneLabel(timeZone: string | null | undefined, locale: Locale) {
+  const normalized = timeZone?.trim() ?? "";
+  if (normalized === "America/Los_Angeles" || normalized === "PDT" || normalized === "PST") {
+    return locale === "en" ? "Pacific Time" : locale === "zh" ? "太平洋时间" : "Pacific Time";
+  }
+  if (normalized === "America/New_York" || normalized === "EDT" || normalized === "EST") {
+    return locale === "en" ? "Eastern Time" : locale === "zh" ? "东部时间" : "Eastern Time";
+  }
+  if (normalized === "UTC" || normalized === "GMT") return "UTC";
+  return normalized || "Unknown time zone";
+}
+
+function formatScheduledSourceDay(
+  value: string,
+  timeZone: string | null | undefined,
+  locale: Locale,
+) {
+  if (!timeZone) return null;
+  try {
+    const localeName = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
+    return new Intl.DateTimeFormat(localeName, {
+      timeZone,
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+    }).format(new Date(value));
+  } catch {
+    return null;
+  }
 }
 
 function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
@@ -240,7 +272,7 @@ export function RadarDashboard({
       }
 
       const data = (await response.json()) as PublicRadarSnapshot;
-      const fetchedAt = data.checkedAt;
+      const fetchedAt = new Date().toISOString();
       if (!isCurrentLifecycle()) {
         return { kind: "aborted" as const };
       }
@@ -354,7 +386,7 @@ export function RadarDashboard({
     const resumeRefreshLifecycle = () => {
       if (!isCurrentLifecycle()) return;
 
-      const plan = getInitialRefreshPlan(
+      const plan = getEventRefreshPlan(
         latestDataRef.current,
         latestFetchedAtRef.current,
         Date.now(),
@@ -379,8 +411,13 @@ export function RadarDashboard({
       resumeRefreshLifecycle();
     };
 
+    const handleFocus = () => {
+      resumeRefreshLifecycle();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("online", handleOnline);
+    window.addEventListener("focus", handleFocus);
 
     const initialPlan = getInitialRefreshPlan(
       initialData,
@@ -398,6 +435,7 @@ export function RadarDashboard({
       clearRefreshTimer();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("focus", handleFocus);
       inFlightRef.current?.abort();
       inFlightRef.current = null;
     };
@@ -594,17 +632,41 @@ export function RadarDashboard({
                     {translateUI("scheduledResetTime", locale)}
                   </dt>
                   <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                    <div className="flex flex-wrap items-center gap-y-1">
-                      <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
-                      {viewModel.activeWindow.expectedEndAt ? (
-                        <>
-                          <span className="mx-1.5 text-slate-500 font-normal text-xl">
-                            {translateUI("timeRangeSeparator", locale)}
-                          </span>
-                          <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
-                        </>
-                      ) : null}
-                    </div>
+                    {viewModel.activeWindow.expectedPrecision && viewModel.activeWindow.expectedPrecision !== "exact_time" ? (
+                      <>
+                        <p className="text-lg font-semibold sm:text-xl">
+                          {translateUI("scheduledResetPlan", locale)}: {formatScheduledSourceDay(
+                            viewModel.activeWindow.expectedAt,
+                            viewModel.activeWindow.expectedTimeZone,
+                            locale,
+                          ) ?? translateUI("scheduledResetTimeUnknown", locale)}・{translateUI("scheduledResetTimeUnknown", locale)}（{getScheduleTimeZoneLabel(viewModel.activeWindow.expectedTimeZone, locale)}）
+                        </p>
+                        {viewModel.activeWindow.expectedEndAt ? (
+                          <p className="mt-2 text-base font-medium text-slate-700 sm:text-lg">
+                            <span className="mr-2">{translateUI("scheduledResetLocalRange", locale)}:</span>
+                            <span className="inline-flex flex-wrap items-center gap-y-1">
+                              <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
+                              <span className="mx-1.5 text-slate-500 font-normal text-base">
+                                {translateUI("timeRangeSeparator", locale)}
+                              </span>
+                              <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
+                            </span>
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-y-1">
+                        <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
+                        {viewModel.activeWindow.expectedEndAt ? (
+                          <>
+                            <span className="mx-1.5 text-slate-500 font-normal text-xl">
+                              {translateUI("timeRangeSeparator", locale)}
+                            </span>
+                            <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
+                          </>
+                        ) : null}
+                      </div>
+                    )}
                   </dd>
                 </div>
               ) : (

@@ -60,6 +60,8 @@ export function getTeaserStrengthSignals(
         createdTime >= cutoffTime &&
         (latestResetTime === null || createdTime > latestResetTime) &&
         signal.verification_status !== "rejected" &&
+        signal.signal_type !== "official_notice" &&
+        signal.signal_type !== "reset_executed" &&
         (includeReplies || signal.is_reply !== true),
     );
   });

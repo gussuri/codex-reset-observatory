@@ -104,6 +104,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "An official reset notice is available.",
     zh: "有官方重置预告。",
   },
+  outlookOfficialNoticeWithin24: {
+    ja: "公式のリセット予告が24時間以内の予定に入っています。",
+    en: "The official reset notice falls within the next 24 hours.",
+    zh: "官方重置预告的时间落在未来 24 小时内。",
+  },
+  outlookOfficialNoticeWithin48: {
+    ja: "公式のリセット予告があり、48時間以内の見込みを押し上げています。",
+    en: "An official reset notice is active and raises the outlook within 48 hours.",
+    zh: "已有官方重置预告，正在提高未来 48 小时内的预期。",
+  },
+  outlookOfficialNoticeOutsideForecast: {
+    ja: "公式のリセット予告はありますが、まだ24時間・48時間の予測範囲外です。",
+    en: "An official reset notice is active, but it is outside the next 24- and 48-hour forecast windows.",
+    zh: "已有官方重置预告，但目前仍在未来 24 小时和 48 小时预测范围之外。",
+  },
   outlookStrongTeaser: {
     ja: "リセットを匂わせる投稿があり、見込みが上がっています。",
     en: "A post hints at a reset, making a reset more likely.",
@@ -223,6 +238,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "現在の状況",
     en: "Current status",
     zh: "当前状况",
+  },
+  scheduledResetPlan: {
+    ja: "予定",
+    en: "Planned",
+    zh: "计划",
+  },
+  scheduledResetTimeUnknown: {
+    ja: "時刻未定",
+    en: "time not specified",
+    zh: "时间未定",
+  },
+  scheduledResetLocalRange: {
+    ja: "閲覧者の現地時刻換算",
+    en: "In the viewer's local time",
+    zh: "按查看者当地时间换算",
   },
   randomReset: {
     ja: "ランダムリセット",

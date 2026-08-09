@@ -385,6 +385,49 @@ test("labels a dynamic notice by its post time when no execution time is schedul
   assert.match(html, /Tibo \(@tibo_maker\)/);
 });
 
+test("shows a resolved notice window with source-local day and viewer-local range", () => {
+  const openedAt = "2026-08-08T20:34:50.000Z";
+  const expectedStartAt = "2026-08-10T07:00:00.000Z";
+  const expectedEndAt = "2026-08-11T07:00:00.000Z";
+  const data = getLocalRadarData({
+    calculationNow: new Date(openedAt),
+    activeTiboSignals: [
+      {
+        tweet_id: "presentation-resolved-notice",
+        signal_type: "official_notice",
+        text: "I'll do another performative reset on Monday",
+        tweet_url: "https://x.com/tibo_maker/status/presentation-resolved-notice",
+        tweet_created_at: openedAt,
+        expires_at: "2026-08-11T09:00:00.000Z",
+        confidence: 0.96,
+        verification_status: "auto_unverified",
+        ai_temporal_expression: "on Monday",
+        ai_temporal_kind: "weekday",
+        ai_temporal_precision: "day",
+        ai_temporal_timezone: "America/Los_Angeles",
+        ai_temporal_confidence: 0.95,
+        expected_start_at: expectedStartAt,
+        expected_end_at: expectedEndAt,
+        temporal_resolution_status: "resolved",
+        temporal_resolution_version: "tibo-temporal-v1",
+      },
+    ],
+  });
+
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(data, "en", { calculationNow: new Date(openedAt) }),
+      initialFetchedAt: openedAt,
+      locale: "en",
+    }),
+  );
+
+  assert.match(html, /Planned[\s\S]*Monday/);
+  assert.match(html, /time not specified[\s\S]*Pacific Time/);
+  assert.match(html, /In the viewer(?:&#x27;|')s local time/);
+  assert.doesNotMatch(html, />[^<]*2026-08-10T07:00:00\.000Z/);
+});
+
 test("keeps the normal dashboard focused on the current outlook", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const data = getLocalRadarData({ calculationNow });

@@ -1,6 +1,7 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
+import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import {
   aggregateResetTeaserStatus,
   getUiResetTeaserSignals,
@@ -75,7 +76,19 @@ function isCurrentOfficialNotice(
     createdTime <= nowTime &&
     Number.isFinite(expiresTime) &&
     expiresTime > nowTime &&
-    (!Number.isFinite(latestResetTime) || createdTime > latestResetTime)
+    (!Number.isFinite(latestResetTime) ||
+      createdTime > latestResetTime ||
+      !isTemporalNoticeConsumedAtReset(
+        signal.temporal_resolution_status === "resolved"
+          ? {
+              status: signal.temporal_resolution_status,
+              temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+              expectedStartAt: signal.expected_start_at ?? null,
+              expectedEndAt: signal.expected_end_at ?? null,
+            }
+          : null,
+        latestResetAt,
+      ))
   );
 }
 
@@ -181,6 +194,8 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       openedAt: viewModel.activeWindow.openedAt ?? null,
       expectedAt: viewModel.activeWindow.expectedAt ?? null,
       expectedEndAt: viewModel.activeWindow.expectedEndAt ?? null,
+      expectedPrecision: viewModel.activeWindow.expectedPrecision ?? null,
+      expectedTimeZone: viewModel.activeWindow.expectedTimeZone ?? null,
       source: safeHttpUrl(viewModel.activeWindow.source),
       sourceLabel: viewModel.activeWindow.sourceLabel ?? null,
       forecastDate: viewModel.activeWindow.forecastDate,

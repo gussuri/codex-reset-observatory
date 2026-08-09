@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canStartRadarRefresh,
+  getEventRefreshPlan,
   getInitialRefreshPlan,
   getRefreshRetryDelayMs,
   RADAR_FETCH_TIMEOUT_MS,
@@ -63,13 +64,43 @@ function snapshot(
 }
 
 const NOW = Date.parse("2026-08-04T01:00:00.000Z");
-const FRESH_AT = "2026-08-04T00:00:00.000Z";
+const FRESH_AT = "2026-08-04T00:55:00.000Z";
 
 test("fresh initial data waits for the remaining update interval", () => {
   assert.deepEqual(getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW), {
     action: "wait",
-    delayMs: 5 * 60 * 60 * 1000,
+    delayMs: 5 * 60 * 1000,
   });
+});
+
+test("wake events fetch after thirty seconds but coalesce rapid events", () => {
+  assert.deepEqual(
+    getEventRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT) + 29_000),
+    { action: "wait", delayMs: 1_000 },
+  );
+  assert.deepEqual(
+    getEventRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT) + 30_000),
+    { action: "fetch", delayMs: 0 },
+  );
+});
+
+test("stale data also coalesces wake events within thirty seconds of a success", () => {
+  const stale = snapshot(FRESH_AT, { stale: true });
+  assert.deepEqual(
+    getEventRefreshPlan(stale, FRESH_AT, Date.parse(FRESH_AT) + 29_000),
+    { action: "wait", delayMs: 1_000 },
+  );
+  assert.deepEqual(
+    getEventRefreshPlan(stale, FRESH_AT, Date.parse(FRESH_AT) + 30_000),
+    { action: "fetch", delayMs: 0 },
+  );
+});
+
+test("visible refresh is capped at ten minutes even for low probability", () => {
+  assert.deepEqual(
+    getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT)),
+    { action: "wait", delayMs: 10 * 60 * 1000 },
+  );
 });
 
 test("missing, invalid, stale, degraded, and expired initial data fetch immediately", () => {
