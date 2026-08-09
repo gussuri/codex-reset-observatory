@@ -137,7 +137,7 @@ function getScheduleTimeZoneLabel(timeZone: string | null | undefined, locale: L
   return normalized || "Unknown time zone";
 }
 
-function formatScheduledSourceDay(
+export function formatScheduledSourceDay(
   value: string,
   timeZone: string | null | undefined,
   locale: Locale,
@@ -145,12 +145,13 @@ function formatScheduledSourceDay(
   if (!timeZone) return null;
   try {
     const localeName = locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
-    return new Intl.DateTimeFormat(localeName, {
+    const formatted = new Intl.DateTimeFormat(localeName, {
       timeZone,
       month: "long",
       day: "numeric",
-      weekday: "long",
+      weekday: locale === "ja" ? "short" : "long",
     }).format(new Date(value));
+    return locale === "ja" ? formatted.replace(/\(([^)]+)\)/, "（$1）") : formatted;
   } catch {
     return null;
   }
@@ -643,7 +644,7 @@ export function RadarDashboard({
                         </p>
                         {viewModel.activeWindow.expectedEndAt ? (
                           <p className="mt-2 text-base font-medium text-slate-700 sm:text-lg">
-                            <span className="mr-2">{translateUI("scheduledResetLocalRange", locale)}:</span>
+                            <span className="mr-2">{translateUI("scheduledResetLocalRange", locale)}: </span>
                             <span className="inline-flex flex-wrap items-center gap-y-1">
                               <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
                               <span className="mx-1.5 text-slate-500 font-normal text-base">

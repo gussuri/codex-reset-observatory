@@ -74,6 +74,7 @@ import {
   type LocalSignalEvaluation,
 } from "./radar/probability";
 import { calculatePublishedProbability } from "./radar/publishedProbability";
+import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
 export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
@@ -996,30 +997,13 @@ function getActiveWindow(
   const expectedAt = officialNotice?.expectedAt ?? null;
   const expectedEndAt = officialNotice?.expectedEndAt ?? null;
   const source = officialNotice?.source ?? null;
-  const noticeTitle = officialNotice?.title ?? null;
 
   if (active) {
-    let summary = "";
-    if (noticeTitle) {
-      const transTitle = translateDynamic(noticeTitle, locale);
-      summary = locale === "en"
-        ? `${transTitle} Please prioritize checking the details of the official notice.`
-        : locale === "zh"
-          ? `${transTitle} 请优先确认官方预告的详细内容。`
-          : `${transTitle} 予告内容を優先して最新状況を確認してください。`;
-    } else {
-      summary = locale === "en"
-        ? "An official reset notice has been detected. Please prioritize checking the notice."
-        : locale === "zh"
-          ? "已检测到官方重置预告。请优先确认预告内容。"
-          : "このサイトで確認した公式リセット予告があります。予告内容を優先して最新状況を確認してください。";
-    }
-
     return {
       active,
       kind: "official",
       label: translateUI("activeNoticeLabel", locale),
-      summary,
+      summary: formatOfficialNoticeSummary(officialNotice ?? {}, locale),
       openedAt,
       expectedAt,
       expectedEndAt,

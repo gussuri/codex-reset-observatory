@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { RadarDashboard } from "../components/RadarDashboard";
+import { formatScheduledSourceDay, RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
 import { formatProbabilityDisplay, ProbabilityMetrics } from "../components/ProbabilityMetrics";
 import { TiboActivityCard } from "../components/TiboActivityCard";
@@ -381,6 +381,7 @@ test("labels a dynamic notice by its post time when no execution time is schedul
   );
 
   assert.match(html, /Notice posted/);
+  assert.match(html, /An official reset notice has been detected\. Please check the latest status\./);
   assert.doesNotMatch(html, /Estimated reset window/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
 });
@@ -423,9 +424,55 @@ test("shows a resolved notice window with source-local day and viewer-local rang
   );
 
   assert.match(html, /Planned[\s\S]*Monday/);
+  assert.match(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
+  assert.match(html, /An official reset notice is scheduled for Monday, raising the outlook within the next 48 hours\./);
   assert.match(html, /time not specified[\s\S]*Pacific Time/);
   assert.match(html, /In the viewer(?:&#x27;|')s local time/);
   assert.doesNotMatch(html, />[^<]*2026-08-10T07:00:00\.000Z/);
+
+  const jaHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(data, "ja", { calculationNow: new Date(openedAt) }),
+      initialFetchedAt: openedAt,
+      locale: "ja",
+    }),
+  );
+  assert.match(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
+  assert.match(jaHtml, /月曜日の公式リセット予告があり、48時間以内の見込みを押し上げています。/);
+  assert.match(jaHtml, /リセット予定/);
+  assert.match(jaHtml, /予定: 8月10日（月）・時刻未定（Pacific Time）/);
+
+  const zhHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(data, "zh", { calculationNow: new Date(openedAt) }),
+      initialFetchedAt: openedAt,
+      locale: "zh",
+    }),
+  );
+  assert.match(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
+  assert.match(zhHtml, /重置安排/);
+  assert.match(zhHtml, /星期一/);
+});
+
+test("formats all Japanese schedule weekdays with compact parentheses", () => {
+  const mondayAtSourceMidnight = Date.parse("2026-08-10T07:00:00.000Z");
+  const labels = Array.from({ length: 7 }, (_, offset) =>
+    formatScheduledSourceDay(
+      new Date(mondayAtSourceMidnight + offset * 24 * 60 * 60 * 1000).toISOString(),
+      "America/Los_Angeles",
+      "ja",
+    ),
+  );
+
+  assert.deepEqual(labels, [
+    "8月10日（月）",
+    "8月11日（火）",
+    "8月12日（水）",
+    "8月13日（木）",
+    "8月14日（金）",
+    "8月15日（土）",
+    "8月16日（日）",
+  ]);
 });
 
 test("keeps the normal dashboard focused on the current outlook", () => {

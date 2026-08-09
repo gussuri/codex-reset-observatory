@@ -225,9 +225,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "尚待确认",
   },
   scheduledResetTime: {
-    ja: "予告時間",
-    en: "Estimated reset window",
-    zh: "预告时间",
+    ja: "リセット予定",
+    en: "Planned reset",
+    zh: "重置安排",
   },
   source: {
     ja: "ソース",
@@ -300,7 +300,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "查看更多重置历史 →",
   },
   timeRangeSeparator: {
-    ja: " 〜 ",
+    ja: " ～ ",
     en: " to ",
     zh: " 至 ",
   },

@@ -33,6 +33,7 @@ import { getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import { getTemporalNoticeCoverage, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { formatOfficialNoticeTimingReason } from "./officialNoticePresentation";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -152,9 +153,16 @@ function getOfficialNoticeTimingReason(
   if (coverage24 === null || coverage48 === null) {
     return translateUI("outlookOfficialNotice", locale);
   }
-  if (coverage24 > 0) return translateUI("outlookOfficialNoticeWithin24", locale);
-  if (coverage48 > 0) return translateUI("outlookOfficialNoticeWithin48", locale);
-  return translateUI("outlookOfficialNoticeOutsideForecast", locale);
+  if (coverage24 > 0) {
+    return formatOfficialNoticeTimingReason(notice, locale, "24h") ??
+      translateUI("outlookOfficialNoticeWithin24", locale);
+  }
+  if (coverage48 > 0) {
+    return formatOfficialNoticeTimingReason(notice, locale, "48h") ??
+      translateUI("outlookOfficialNoticeWithin48", locale);
+  }
+  return formatOfficialNoticeTimingReason(notice, locale, "outside") ??
+    translateUI("outlookOfficialNoticeOutsideForecast", locale);
 }
 
 function getProbabilityComponents(
