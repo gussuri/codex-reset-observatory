@@ -23,9 +23,10 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel } from "./radar/types";
+import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord } from "./radar/types";
 import { combineResetHistory } from "./radar/tiboHistory";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
+import { getResetDisplayNameEventKey, resolveResetDisplayTitle } from "./radar/resetDisplayNames";
 import {
   translateUI,
   translateDynamic,
@@ -98,6 +99,7 @@ export function getLocalRadarData({
   formalTiboResets = [],
   rejectedTiboResets = [],
   regularResetEvents = [],
+  resetDisplayNames = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   checkedAt?: string;
@@ -108,6 +110,7 @@ export function getLocalRadarData({
   formalTiboResets?: RadarData["formal_tibo_resets"];
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
   regularResetEvents?: RadarData["regular_reset_events"];
+  resetDisplayNames?: RadarData["reset_display_names"];
 } = {}): RadarData {
   const now = calculationNow ?? new Date();
   const resolvedCheckedAt = checkedAt ?? now.toISOString();
@@ -135,6 +138,7 @@ export function getLocalRadarData({
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
     regular_reset_events: regularResetEvents,
+    reset_display_names: resetDisplayNames,
   };
 }
 
@@ -236,7 +240,14 @@ export function getRadarViewModel(
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,
-      title: translateDynamic(latestWindow?.title, locale),
+      title: translateDynamic(
+        resolveResetDisplayTitle(
+          latestWindow ?? {},
+          getResetDisplayNameRecord(source, latestWindow),
+          locale,
+        ),
+        locale,
+      ),
       summary: latestWindow?.summary
         ? translateDynamic(latestWindow.summary, locale)
         : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
@@ -868,6 +879,16 @@ function unwrapRadarData(data: RadarData | null): RadarData | null {
   return data.data ?? data.result ?? data.current ?? data;
 }
 
+function getResetDisplayNameRecord(
+  data: RadarData | null | undefined,
+  item: WindowEventLike | undefined,
+): ResetDisplayNameRecord | null {
+  if (!item) return null;
+  const eventKey = getResetDisplayNameEventKey(item);
+  if (!eventKey) return null;
+  return data?.reset_display_names?.find((record) => record.event_key === eventKey) ?? null;
+}
+
 function getString(
   source: Record<string, unknown> | null | undefined,
   paths: string[],
@@ -941,7 +962,10 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         recordKind,
         title: isRegular
           ? translateDynamic("定期リセット", locale)
-          : translateDynamic(item.title, locale),
+          : translateDynamic(
+              resolveResetDisplayTitle(item, getResetDisplayNameRecord(data, item), locale),
+              locale,
+            ),
         resetType: resetTypes[0],
         resetTypes,
         status: isRegular

@@ -23,6 +23,25 @@ export type HistorySourceKind =
   | "official_status"
   | "none";
 
+export type ResetDisplayNameRecord = {
+  event_key: string;
+  source_tweet_id: string | null;
+  manual_name_ja: string | null;
+  ai_name_ja: string | null;
+  ai_confidence: number | null;
+  ai_evidence: string | null;
+  ai_reason: string | null;
+  ai_model: string | null;
+  ai_prompt_version: string | null;
+  ai_input_mode: string | null;
+  ai_status: string | null;
+  ai_flags: string[] | null;
+  ai_generated_at: string | null;
+  input_hash: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ResetHistoryDetails = {
   cycleType: string;
   reasonType: string;
@@ -235,6 +254,7 @@ export type RadarData = {
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   regular_reset_events?: Array<RegularResetEventRow>;
+  reset_display_names?: Array<ResetDisplayNameRecord>;
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;

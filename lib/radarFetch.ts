@@ -17,6 +17,7 @@ import type {
   RadarData,
 } from "@/lib/radar/types";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
+import { fetchResetDisplayNames } from "@/lib/radar/resetDisplayNameStore";
 import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
@@ -280,6 +281,15 @@ const getCachedRegularResetEvents = unstable_cache(
   },
 );
 
+const getCachedResetDisplayNames = unstable_cache(
+  () => fetchResetDisplayNames(),
+  ["reset-display-names-cache-v1"],
+  {
+    revalidate: 60,
+    tags: ["radar-data"],
+  },
+);
+
 function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null {
   if (signal.is_reply === true) return null;
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") {
@@ -430,10 +440,11 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
-  const [openAIStatus, tiboSignals, regularResetEvents] = await Promise.all([
+  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow),
     getCachedRegularResetEvents(),
+    getCachedResetDisplayNames(),
   ]);
 
   return getLocalRadarData({
@@ -450,6 +461,7 @@ export async function fetchCurrentRadarData(
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
     regularResetEvents: regularResetEvents.data,
+    resetDisplayNames,
   });
 }
 

@@ -16,7 +16,7 @@ import {
   type RandomResetNameEvaluationInput,
   type RandomResetNameEvaluationResult,
   type RandomResetNameEvaluationStatus,
-} from "./evaluate-random-reset-names";
+} from "../lib/radar/randomResetNaming";
 
 export type RoundTwoCondition = "metadata_only" | "metadata_plus_source";
 

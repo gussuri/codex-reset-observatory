@@ -9,7 +9,10 @@ import {
   selectTiboClassification,
   shouldRunGeminiClassification,
 } from "@/lib/radar/tiboClassificationMode";
-import type { FormalTiboResetSignal } from "@/lib/radar/tiboHistory";
+import {
+  convertTiboResetSignalToHistoryEvent,
+  type FormalTiboResetSignal,
+} from "@/lib/radar/tiboHistory";
 import {
   buildFormalAdoptionResult,
   isNewFormalAdoption,
@@ -17,6 +20,10 @@ import {
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
+import {
+  ensureResetDisplayNameForEvent,
+} from "@/lib/radar/resetDisplayNameStore";
+import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
 import {
   getTemporalNoticeExpiry,
   parseTiboTemporalSemantics,
@@ -389,6 +396,28 @@ export async function POST(req: NextRequest) {
         sourceUrl: tweetUrl,
         adoptedAt: new Date().toISOString(),
       });
+    }
+
+    // Display-name generation is deliberately best-effort. The formal reset
+    // row is already durable, and a naming failure must never turn collection
+    // into a failed webhook delivery.
+    if (formalCandidate.is_reply !== true) {
+      try {
+        await ensureResetDisplayNameForEvent(
+          convertTiboResetSignalToHistoryEvent(formalCandidate),
+          {
+            sourcePostText: text.trim(),
+            sourceTweetId: tweetId,
+            apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+            model: RANDOM_RESET_NAME_MODEL,
+            timeoutMs: 8_000,
+          },
+        );
+      } catch {
+        console.warn("[Webhook Warning] Reset display-name generation skipped", {
+          reason: "best_effort_failed",
+        });
+      }
     }
 
     // 9. Purge Next.js Cache
