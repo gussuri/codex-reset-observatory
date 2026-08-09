@@ -8,9 +8,10 @@ type LocalizedDateTimeProps = {
   value: string | null | undefined;
   locale?: Locale;
   className?: string;
+  weekday?: "short" | "long";
 };
 
-export function LocalizedDateTime({ value, locale = "ja", className }: LocalizedDateTimeProps) {
+export function LocalizedDateTime({ value, locale = "ja", className, weekday }: LocalizedDateTimeProps) {
   // Wait for the browser timezone so overseas visitors never see a JST date
   // during SSR or the first hydration render.
   const [timeZone, setTimeZone] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export function LocalizedDateTime({ value, locale = "ja", className }: Localized
     );
   }
 
-  const local = formatDateTimeInZone(date, timeZone, formatLocale);
+  const local = formatDateTimeInZone(date, timeZone, formatLocale, { weekday });
 
   return (
     <span className={classes}>
@@ -85,12 +86,18 @@ function parseDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatDateTimeInZone(date: Date, timeZone: string, localeStr: string) {
+export function formatDateTimeInZone(
+  date: Date,
+  timeZone: string,
+  localeStr: string,
+  options: { weekday?: "short" | "long" } = {},
+) {
   const safeTimeZone = getSafeTimeZone(timeZone);
   const formatted = new Intl.DateTimeFormat(localeStr, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    weekday: options.weekday,
     hour: "2-digit",
     minute: "2-digit",
     hour12: localeStr === "en-US",

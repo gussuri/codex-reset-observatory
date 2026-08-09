@@ -82,7 +82,6 @@ function getHistoryDisplayTitle(
       ? `${title}（参考记录）`
       : `${title}（参考記録）`;
 }
-
 type IncidentStatus = "active" | "none" | "unknown";
 
 function getIncidentStatusFromReason(
@@ -123,18 +122,6 @@ function getElapsedSinceLastReset(
   }
 
   return formatElapsedResetDuration(observedTime - resetTime, locale);
-}
-
-function getScheduleTimeZoneLabel(timeZone: string | null | undefined, locale: Locale) {
-  const normalized = timeZone?.trim() ?? "";
-  if (normalized === "America/Los_Angeles" || normalized === "PDT" || normalized === "PST") {
-    return locale === "en" ? "Pacific Time" : locale === "zh" ? "太平洋时间" : "Pacific Time";
-  }
-  if (normalized === "America/New_York" || normalized === "EDT" || normalized === "EST") {
-    return locale === "en" ? "Eastern Time" : locale === "zh" ? "东部时间" : "Eastern Time";
-  }
-  if (normalized === "UTC" || normalized === "GMT") return "UTC";
-  return normalized || "Unknown time zone";
 }
 
 export function formatScheduledSourceDay(
@@ -468,7 +455,7 @@ export function RadarDashboard({
   const resetTeaserStatus = isDataUnavailable
     ? "unknown" as const
     : getResetTeaserStatus(state.data?.resetTeaserStatus);
-  const shouldPlaceTiboAbove = !isDataUnavailable && (
+  const shouldRenderRelatedTibo = !isDataUnavailable && (
     hasOfficialNotice ||
     resetTeaserStatus === "strong" ||
     resetTeaserStatus === "weak"
@@ -477,7 +464,7 @@ export function RadarDashboard({
     <TiboActivityCard
       activity={state.data.latestTiboActivity}
       locale={locale}
-      variant={shouldPlaceTiboAbove ? "related" : "latest"}
+      variant={shouldRenderRelatedTibo ? "related" : "latest"}
     />
   ) : null;
   const elapsedSinceLastReset = isDataUnavailable
@@ -500,7 +487,6 @@ export function RadarDashboard({
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",
     icon: "text-amber-700",
-    badge: "bg-amber-200 text-amber-950",
   };
 
   return (
@@ -572,125 +558,74 @@ export function RadarDashboard({
         ) : null}
 
         {hasOfficialNotice ? (
-          <section className={`rounded-lg border p-5 shadow-sm ${resetNoticeTone.card}`}>
-          <div className="sm:hidden">
-            <div className="flex items-center gap-3">
-              <Bell className={`h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
-              <p className="text-sm font-medium text-slate-500">
-                {translateUI("officialNotice", locale)}
-              </p>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <h2 className="whitespace-nowrap text-lg font-semibold leading-tight">
-                {viewModel.activeWindow.active ? translateUI("activeNoticeLabel", locale) : translateUI("noNotice", locale)}
-              </h2>
-              {viewModel.activeWindow.active && viewModel.activeWindow.kind === "official" ? (
-                <span
-                  className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
-                >
-                  {translateUI("checkAction", locale)}
-                </span>
-              ) : null}
-            </div>
-            {viewModel.activeWindow.active && viewModel.activeWindow.summary ? (
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
-                {viewModel.activeWindow.summary}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="hidden items-start gap-3 sm:flex sm:flex-row sm:justify-between">
+          <section className={`rounded-lg border p-4 shadow-sm sm:p-5 ${resetNoticeTone.card}`}>
             <div className="flex items-start gap-3">
               <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-500">
                   {translateUI("officialNotice", locale)}
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold leading-tight text-balance">
-                  {viewModel.activeWindow.active ? translateUI("activeNoticeLabel", locale) : translateUI("noNotice", locale)}
+                <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+                  {translateUI("activeNoticeLabel", locale)}
                 </h2>
-                {viewModel.activeWindow.active && viewModel.activeWindow.summary ? (
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
-                    {viewModel.activeWindow.summary}
-                  </p>
-                ) : null}
               </div>
             </div>
-            {viewModel.activeWindow.active && viewModel.activeWindow.kind === "official" ? (
-              <span
-                className={`inline-flex w-fit shrink-0 rounded-md px-3 py-1 text-sm font-semibold ${resetNoticeTone.badge}`}
-              >
-                {translateUI("checkAction", locale)}
-              </span>
-            ) : null}
-          </div>
 
-          {viewModel.activeWindow.kind === "official" ? (
-            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              {viewModel.activeWindow.expectedAt ? (
-                <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
-                  <dt className="text-xs font-semibold text-slate-500">
-                    {translateUI("scheduledResetTime", locale)}
-                  </dt>
-                  <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                    {viewModel.activeWindow.expectedPrecision && viewModel.activeWindow.expectedPrecision !== "exact_time" ? (
-                      <>
-                        <p className="text-lg font-semibold sm:text-xl">
-                          {translateUI("scheduledResetPlan", locale)}: {formatScheduledSourceDay(
-                            viewModel.activeWindow.expectedAt,
-                            viewModel.activeWindow.expectedTimeZone,
-                            locale,
-                          ) ?? translateUI("scheduledResetTimeUnknown", locale)}・{translateUI("scheduledResetTimeUnknown", locale)}（{getScheduleTimeZoneLabel(viewModel.activeWindow.expectedTimeZone, locale)}）
-                        </p>
-                        {viewModel.activeWindow.expectedEndAt ? (
-                          <p className="mt-2 text-base font-medium text-slate-700 sm:text-lg">
-                            <span className="mr-2">{translateUI("scheduledResetLocalRange", locale)}: </span>
-                            <span className="inline-flex flex-wrap items-center gap-y-1">
-                              <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
-                              <span className="mx-1.5 text-slate-500 font-normal text-base">
-                                {translateUI("timeRangeSeparator", locale)}
-                              </span>
-                              <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
-                            </span>
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-y-1">
-                        <LocalizedDateTime value={viewModel.activeWindow.expectedAt} locale={locale} />
-                        {viewModel.activeWindow.expectedEndAt ? (
-                          <>
-                            <span className="mx-1.5 text-slate-500 font-normal text-xl">
-                              {translateUI("timeRangeSeparator", locale)}
-                            </span>
-                            <LocalizedDateTime value={viewModel.activeWindow.expectedEndAt} locale={locale} />
-                          </>
-                        ) : null}
-                      </div>
-                    )}
-                  </dd>
-                </div>
-              ) : (
-                <div className="rounded-md bg-white/80 p-4 sm:col-span-2">
-                  <dt className="text-xs font-semibold text-slate-500">
-                    {translateUI("noticePostedAt", locale)}
-                  </dt>
-                  <dd className="mt-1 text-2xl font-semibold leading-tight text-slate-950">
-                    <LocalizedDateTime value={viewModel.activeWindow.openedAt} locale={locale} />
-                  </dd>
-                </div>
-              )}
-              <MiniInfo
-                label={translateUI("source", locale)}
-                value={viewModel.activeWindow.sourceLabel ?? "Unknown"}
-                href={viewModel.activeWindow.source}
-              />
+            <dl className="mt-4 space-y-3 border-t border-amber-200/80 pt-4">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="shrink-0 text-sm font-semibold text-slate-600">
+                  {translateUI("scheduledResetTime", locale)}{locale === "en" ? ": " : "："}
+                </dt>
+                <dd className="min-w-0 text-lg font-semibold leading-tight text-slate-950 sm:text-xl">
+                  {viewModel.activeWindow.expectedAt ? (
+                    <span className="inline-flex flex-wrap items-baseline gap-y-1">
+                      <LocalizedDateTime
+                        value={viewModel.activeWindow.expectedAt}
+                        locale={locale}
+                        weekday="short"
+                      />
+                      {viewModel.activeWindow.expectedPrecision !== "exact_time" && viewModel.activeWindow.expectedEndAt ? (
+                        <>
+                          <span className="mx-1.5 font-normal text-slate-500">
+                            {translateUI("timeRangeSeparator", locale)}
+                          </span>
+                          <LocalizedDateTime
+                            value={viewModel.activeWindow.expectedEndAt}
+                            locale={locale}
+                            weekday="short"
+                          />
+                        </>
+                      ) : null}
+                    </span>
+                  ) : (
+                    translateUI("scheduledResetTimeUnknown", locale)
+                  )}
+                </dd>
+              </div>
+
+              <div className="flex flex-col gap-1 border-t border-amber-200/80 pt-3 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="shrink-0 text-sm font-semibold text-slate-600">
+                  {translateUI("source", locale)}
+                </dt>
+                <dd className="min-w-0 text-sm font-semibold text-slate-900 sm:text-base">
+                  {isSafeHttpUrl(viewModel.activeWindow.source) ? (
+                    <a
+                      className="inline-flex max-w-full items-center gap-1 break-words text-teal-700 underline-offset-4 hover:underline"
+                      href={viewModel.activeWindow.source ?? undefined}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {viewModel.activeWindow.sourceLabel ?? "Unknown"}
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </a>
+                  ) : (
+                    viewModel.activeWindow.sourceLabel ?? "Unknown"
+                  )}
+                </dd>
+              </div>
             </dl>
-          ) : null}
           </section>
         ) : null}
-
-        {hasOfficialNotice && shouldPlaceTiboAbove ? tiboActivityCard : null}
 
         <section>
           <article className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -748,8 +683,6 @@ export function RadarDashboard({
 
         </section>
 
-        {!hasOfficialNotice && shouldPlaceTiboAbove ? tiboActivityCard : null}
-
         {!isDataUnavailable &&
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
@@ -777,6 +710,8 @@ export function RadarDashboard({
             </div>
           </section>
         ) : null}
+
+        {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -870,7 +805,7 @@ export function RadarDashboard({
           locale={locale}
         />
 
-        {!shouldPlaceTiboAbove ? tiboActivityCard : null}
+        {!shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">
@@ -949,39 +884,8 @@ function RecommendationRow({
         {translateUI("forecastOutlook", locale)}
       </dt>
       <dd className="text-sm leading-6 text-slate-700">
-        {reason}
-      </dd>
-    </div>
-  );
-}
-
-function MiniInfo({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: string;
-  href?: string | null;
-}) {
-  return (
-    <div className="rounded-md bg-white/70 p-3">
-      <dt className="text-xs font-semibold text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold text-slate-900">
-        {isSafeHttpUrl(href) ? (
-          <a
-            className="inline-flex items-center gap-1 text-teal-700 underline-offset-4 hover:underline"
-            href={href ?? undefined}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {value}
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        ) : (
-          value
-        )}
-      </dd>
-    </div>
+      {reason}
+    </dd>
+  </div>
   );
 }

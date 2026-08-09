@@ -161,7 +161,7 @@ test("renders a related Tibo heading when the card uses the related variant", ()
   assert.doesNotMatch(html, /Latest Tibo post/);
 });
 
-test("places a related Tibo card directly below an active official notice", () => {
+test("places a related Tibo card after current status and before history", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
@@ -196,17 +196,18 @@ test("places a related Tibo card directly below an active official notice", () =
     React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
   );
 
-  const noticeIndex = html.indexOf("Notice posted");
+  const noticeIndex = html.indexOf("Reset-related notice");
   const relatedIndex = html.indexOf("Related Tibo post");
-  const outlookIndex = html.indexOf("Current outlook");
+  const statusIndex = html.indexOf("Current status");
+  const historyIndex = html.indexOf("Recent reset events");
 
-  assert.ok(noticeIndex >= 0 && noticeIndex < relatedIndex);
-  assert.ok(relatedIndex < outlookIndex);
+  assert.ok(noticeIndex >= 0 && noticeIndex < statusIndex);
+  assert.ok(statusIndex < relatedIndex && relatedIndex < historyIndex);
   assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
   assert.doesNotMatch(html, /Latest Tibo post/);
 });
 
-test("places strong and weak related cards below current outlook, while none and unknown stay below history", () => {
+test("places strong and weak related cards before history, while none and unknown stay below history", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const cases = [
     { strength: "strong" as const, text: "I feel like a reset soon." },
@@ -236,11 +237,11 @@ test("places strong and weak related cards below current outlook, while none and
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
     );
-    const outlookIndex = html.indexOf("Current outlook");
+    const statusIndex = html.indexOf("Current status");
     const relatedIndex = html.indexOf("Related Tibo post");
     const historyIndex = html.indexOf("Recent reset events");
 
-    assert.ok(outlookIndex >= 0 && outlookIndex < relatedIndex);
+    assert.ok(statusIndex >= 0 && statusIndex < relatedIndex);
     assert.ok(relatedIndex < historyIndex);
     assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
     assert.doesNotMatch(html, /Latest Tibo post/);
@@ -350,7 +351,7 @@ test("does not render the omitted 12-hour and 72-hour metrics", () => {
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
 });
 
-test("labels a dynamic notice by its post time when no execution time is scheduled", (t: TestContext) => {
+test("shows an unresolved notice without inventing a planned datetime", (t: TestContext) => {
   t.mock.timers.enable({
     apis: ["Date"],
     now: new Date("2026-08-02T00:00:00.000Z"),
@@ -380,13 +381,14 @@ test("labels a dynamic notice by its post time when no execution time is schedul
     }),
   );
 
-  assert.match(html, /Notice posted/);
-  assert.match(html, /An official reset notice has been detected\. Please check the latest status\./);
-  assert.doesNotMatch(html, /Estimated reset window/);
+  assert.match(html, /Planned reset/);
+  assert.match(html, /time not specified/);
+  assert.doesNotMatch(html, /An official reset notice has been detected\. Please check the latest status\./);
+  assert.doesNotMatch(html, /Notice posted/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
 });
 
-test("shows a resolved notice window with source-local day and viewer-local range", () => {
+test("shows a resolved notice window with only the viewer-local schedule and source", () => {
   const openedAt = "2026-08-08T20:34:50.000Z";
   const expectedStartAt = "2026-08-10T07:00:00.000Z";
   const expectedEndAt = "2026-08-11T07:00:00.000Z";
@@ -423,11 +425,11 @@ test("shows a resolved notice window with source-local day and viewer-local rang
     }),
   );
 
-  assert.match(html, /Planned[\s\S]*Monday/);
-  assert.match(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
+  assert.match(html, /Planned reset/);
+  assert.doesNotMatch(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
   assert.match(html, /An official reset notice is scheduled for Monday, raising the outlook within the next 48 hours\./);
-  assert.match(html, /time not specified[\s\S]*Pacific Time/);
-  assert.match(html, /In the viewer(?:&#x27;|')s local time/);
+  assert.doesNotMatch(html, /time not specified|Pacific Time|In the viewer(?:&#x27;|')s local time/);
+  assert.equal((html.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
   assert.doesNotMatch(html, />[^<]*2026-08-10T07:00:00\.000Z/);
 
   const jaHtml = renderToStaticMarkup(
@@ -437,10 +439,11 @@ test("shows a resolved notice window with source-local day and viewer-local rang
       locale: "ja",
     }),
   );
-  assert.match(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
+  assert.doesNotMatch(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
   assert.match(jaHtml, /月曜日の公式リセット予告があり、48時間以内の見込みを押し上げています。/);
   assert.match(jaHtml, /リセット予定/);
-  assert.match(jaHtml, /予定: 8月10日（月）・時刻未定（Pacific Time）/);
+  assert.doesNotMatch(jaHtml, /Pacific Time|閲覧者の現地時刻換算|時刻未定/);
+  assert.equal((jaHtml.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
 
   const zhHtml = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
@@ -449,9 +452,10 @@ test("shows a resolved notice window with source-local day and viewer-local rang
       locale: "zh",
     }),
   );
-  assert.match(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
+  assert.doesNotMatch(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
   assert.match(zhHtml, /重置安排/);
   assert.match(zhHtml, /星期一/);
+  assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 
 test("formats all Japanese schedule weekdays with compact parentheses", () => {
@@ -679,7 +683,7 @@ test("teaser strength labels stay natural in English and Simplified Chinese", ()
   assert.match(chineseHtml, /重置暗示帖[\s\S]*有（较弱）/);
 });
 
-test("keeps the large official notice card above the probability card", (t: TestContext) => {
+test("keeps the simplified official notice card above the probability card", (t: TestContext) => {
   t.mock.timers.enable({
     apis: ["Date"],
     now: new Date("2026-08-02T00:00:00.000Z"),
@@ -707,11 +711,11 @@ test("keeps the large official notice card above the probability card", (t: Test
     }),
   );
 
-  const noticeIndex = html.indexOf("Notice posted");
+  const noticeIndex = html.indexOf("Planned reset");
   const probabilityIndex = html.indexOf("Within 24h");
 
   assert.ok(noticeIndex >= 0 && noticeIndex < probabilityIndex);
-  assert.match(html, /Notice posted/);
+  assert.doesNotMatch(html, /Notice posted/);
   assert.match(html, /Tibo \(@tibo_maker\)/);
   assert.match(html, /Official reset notice[\s\S]*Notice available/);
   assert.doesNotMatch(html, /Official notice: None/);

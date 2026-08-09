@@ -322,6 +322,18 @@ test("formats Tokyo time with one JST label in Japanese and Chinese", () => {
   assert.doesNotMatch(chinese, /GMT\+9/);
 });
 
+test("formats a scheduled Japanese datetime with a compact weekday", () => {
+  assert.equal(
+    formatDateTimeInZone(
+      new Date("2026-08-10T07:00:00.000Z"),
+      "Asia/Tokyo",
+      "ja-JP",
+      { weekday: "short" },
+    ),
+    "2026年8月10日(月) 16:00 JST",
+  );
+});
+
 test("uses IANA zone identity for Seoul instead of the shared UTC+9 offset", () => {
   const value = formatDateTimeInZone(
     new Date("2026-08-01T03:32:00.000Z"),
