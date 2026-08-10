@@ -642,6 +642,13 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500 sm:text-sm">
+              <span className="font-medium">
+                {translateUI("lastSuccessfulRefresh", locale)}{locale === "en" ? ": " : "："}
+              </span>
+              <LocalizedDateTime value={state.fetchedAt} locale={locale} className="font-medium text-slate-700" />
+            </div>
+
             <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,1fr)]">
               <ProbabilityMetrics
                 className="grid w-full grid-cols-2 gap-3"
@@ -806,15 +813,6 @@ export function RadarDashboard({
         />
 
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
-
-        <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-2 text-sm">
-            <p className="font-medium text-slate-500">
-              {translateUI("lastSuccessfulRefresh", locale)}{locale === "en" ? ": " : "："}
-            </p>
-            <LocalizedDateTime value={state.fetchedAt} locale={locale} className="font-medium text-slate-700" />
-          </div>
-        </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav

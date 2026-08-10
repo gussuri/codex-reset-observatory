@@ -30,11 +30,11 @@ export function AboutView({ locale }: AboutViewProps) {
     en: {
       category: "Codex reset reference",
       title: "About " + SITE_NAME,
-      subTitle: "An unofficial reference site for Codex reset history, Banked Resets, and unscheduled reset signals.",
+      subTitle: "An unofficial reference site for Codex reset history, Banked Resets, and random reset signals.",
       paragraphs: [
         SITE_NAME + " collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices and past reset history so you can compare what is happening now with earlier reset patterns.",
-        "The unscheduled reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
+        "The random reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
         "Using a Banked Reset refreshes the applicable usage limit. The resulting usage window and reset date may differ by account.",
       ],
       nav: {

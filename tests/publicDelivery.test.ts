@@ -12,6 +12,7 @@ import {
   LocalizedDateTime,
 } from "../components/LocalizedDateTime";
 import { HistoryView } from "../components/HistoryView";
+import { groupHistoryByMonth } from "../components/LocalizedHistoryEvents";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -460,6 +461,7 @@ test("history page combines confirmed, banked, and regular reference records chr
   const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
 
   assert.match(html, /<h2[^>]*>Reset history<\/h2>/);
+  assert.match(html, /<h1 class="mt-2 text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">Recent Codex Reset Events<\/h1>/);
   assert.doesNotMatch(html, /<h2[^>]*>Confirmed global resets|<h2[^>]*>Banked Reset distributions/);
   assert.doesNotMatch(html, /text-\[11px\]/);
   const visibleItems = data.viewModel.recentHistory.filter(
@@ -474,7 +476,7 @@ test("history page combines confirmed, banked, and regular reference records chr
     assert.match(html, new RegExp(escapeRegExp(escapeHtml(translateDynamic(item.title, "en")))));
   }
   assert.ok(html.indexOf(escapeHtml(firstTitle)) < html.indexOf(escapeHtml(secondTitle)));
-  assert.match(html, /August 2026/);
+  assert.match(html, /aria-busy="true"/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
   assert.match(html, /Weekly reset/);
@@ -522,6 +524,46 @@ test("history page combines confirmed, banked, and regular reference records chr
     }[locale];
     assert.equal((localizedHtml.match(new RegExp(escapeRegExp(description), "g")) ?? []).length, 1);
   }
+});
+
+test("dashboard keeps freshness beside the current status", () => {
+  const data = toPublicRadarSnapshot(getLocalRadarData({}), "en");
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: data, locale: "en" }),
+  );
+  const freshnessLabel = translateUI("lastSuccessfulRefresh", "en");
+  const currentStatusIndex = html.indexOf(translateUI("currentStatus", "en"));
+  const freshnessIndex = html.indexOf(freshnessLabel);
+  const historyIndex = html.indexOf(translateUI("resetHistory", "en"));
+
+  assert.ok(currentStatusIndex >= 0);
+  assert.ok(freshnessIndex > currentStatusIndex);
+  assert.ok(historyIndex > freshnessIndex);
+  assert.equal((html.match(new RegExp(escapeRegExp(freshnessLabel), "g")) ?? []).length, 1);
+});
+
+test("history month grouping follows the viewer timezone", () => {
+  const data = toPublicRadarSnapshot(getLocalRadarData({}), "en", { limitHistory: false });
+  const sourceItem = data.viewModel.recentHistory[0];
+  assert.ok(sourceItem);
+  const boundaryItem = {
+    ...sourceItem,
+    resetAt: "2026-08-01T03:32:00.000Z",
+    date: "2026-08-01T03:32:00.000Z",
+  };
+
+  assert.equal(
+    groupHistoryByMonth([boundaryItem], "en", "Asia/Tokyo")[0]?.label,
+    "August 2026",
+  );
+  assert.equal(
+    groupHistoryByMonth([boundaryItem], "en", "America/New_York")[0]?.label,
+    "July 2026",
+  );
+
+  const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
+  assert.match(html, /aria-busy="true"/);
+  assert.doesNotMatch(html, /August 2026/);
 });
 
 test("normalizes regular reset presentation and hides notice/source rows", () => {

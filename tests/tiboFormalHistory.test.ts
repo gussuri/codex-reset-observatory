@@ -229,7 +229,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
         item.title,
         isRegular
           ? locale === "en" ? "Weekly reset" : "定期重置"
-          : locale === "en" ? "Unscheduled reset" : "随机重置",
+          : locale === "en" ? "Random reset" : "随机重置",
       );
       assert.equal(
         item.details?.reasonType,
@@ -242,7 +242,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
               ? "Compensation reset"
               : testCase.reason === "定期リセット"
                 ? "Weekly reset"
-                : "Unscheduled reset"
+                : "Random reset"
           : testCase.reason === "ご祝儀リセット"
             ? "庆祝重置"
             : testCase.reason === "詫びリセット"

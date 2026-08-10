@@ -256,8 +256,8 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   randomReset: {
     ja: "ランダムリセット",
-    en: "Unscheduled reset probability",
-    zh: "不定期重置",
+    en: "Random reset",
+    zh: "随机重置",
   },
   expectationLabel: {
     ja: "期待度",
@@ -982,7 +982,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "ランダムリセット": {
     ja: "ランダムリセット",
-    en: "Unscheduled reset",
+    en: "Random reset",
     zh: "随机重置",
   },
   "個人別リセット": {
@@ -1350,7 +1350,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)": {
     ja: "GPT-5.6リリース記念ランダムリセット警戒期間に伴う確率底上げブースト (+20%)",
-    en: "GPT-5.6 launch celebration boost (+20% probability boost during unscheduled reset alert period)",
+    en: "GPT-5.6 launch celebration boost (+20% probability boost during random reset alert period)",
     zh: "GPT-5.6 发布庆祝随机重置警戒期概率提升 (+20%)",
   },
   "システムによる確率調整": {

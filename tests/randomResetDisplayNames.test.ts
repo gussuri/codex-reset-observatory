@@ -400,7 +400,7 @@ test("AI display names affect Japanese titles only and never public audit fields
   const en = getRadarViewModel(withName, "en", true, undefined, now);
   const baseline = getRadarViewModel(withoutName, "ja", true, undefined, now);
   assert.equal(ja.recentHistory[0]?.title, "週末の利用上限リセット");
-  assert.equal(en.recentHistory[0]?.title, "Unscheduled reset");
+  assert.equal(en.recentHistory[0]?.title, "Random reset");
   assert.equal(ja.probability24h, baseline.probability24h);
   assert.equal(ja.probability48h, baseline.probability48h);
 
