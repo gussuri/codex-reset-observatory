@@ -8,10 +8,17 @@ type LocalizedDateTimeProps = {
   value: string | null | undefined;
   locale?: Locale;
   className?: string;
+  timeClassName?: string;
   weekday?: "short" | "long";
 };
 
-export function LocalizedDateTime({ value, locale = "ja", className, weekday }: LocalizedDateTimeProps) {
+export function LocalizedDateTime({
+  value,
+  locale = "ja",
+  className,
+  timeClassName,
+  weekday,
+}: LocalizedDateTimeProps) {
   // Wait for the browser timezone so overseas visitors never see a JST date
   // during SSR or the first hydration render.
   const [timeZone, setTimeZone] = useState<string | null>(null);
@@ -34,6 +41,14 @@ export function LocalizedDateTime({ value, locale = "ja", className, weekday }: 
   const classes = ["inline-flex", "flex-col", className]
     .filter((item): item is string => Boolean(item))
     .join(" ");
+  const timeClasses = [
+    "block",
+    "leading-tight",
+    timeClassName ? null : "font-bold text-slate-900",
+    timeClassName,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(" ");
 
   if (!timeZone) {
     return (
@@ -41,7 +56,7 @@ export function LocalizedDateTime({ value, locale = "ja", className, weekday }: 
         <time
           dateTime={date.toISOString()}
           aria-busy="true"
-          className="block min-h-[1.25em] min-w-[12rem] font-bold leading-tight"
+          className={`min-h-[1.25em] min-w-[12rem] ${timeClasses}`}
         >
           <span
             aria-hidden="true"
@@ -58,7 +73,7 @@ export function LocalizedDateTime({ value, locale = "ja", className, weekday }: 
     <span className={classes}>
       <time
         dateTime={date.toISOString()}
-        className="block font-bold leading-tight text-slate-900"
+        className={timeClasses}
       >
         {local}
       </time>

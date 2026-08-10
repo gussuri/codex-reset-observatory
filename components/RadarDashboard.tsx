@@ -681,10 +681,14 @@ export function RadarDashboard({
             </dl>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-500 sm:text-sm">
-              <span className="font-medium">
+              <span className="font-normal">
                 {translateUI("lastSuccessfulRefresh", locale)}{locale === "en" ? ": " : "："}
               </span>
-              <LocalizedDateTime value={state.fetchedAt} locale={locale} className="font-medium text-slate-700" />
+              <LocalizedDateTime
+                value={state.fetchedAt}
+                locale={locale}
+                timeClassName="font-normal text-slate-500"
+              />
             </div>
           </article>
 

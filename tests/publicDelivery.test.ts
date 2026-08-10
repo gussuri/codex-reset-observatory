@@ -410,10 +410,12 @@ test("date class composition omits an absent className", () => {
     React.createElement(LocalizedDateTime, {
       value: "2026-08-04T00:00:00.000Z",
       locale: "en",
+      timeClassName: "font-normal text-slate-500",
     }),
   );
 
   assert.doesNotMatch(html, /class="[^"]*(undefined|null|false)/);
+  assert.match(html, /<time[^>]*font-normal text-slate-500/);
 });
 
 test("dashboard renders the translated reset history label", () => {
@@ -542,6 +544,20 @@ test("dashboard places freshness below the current outlook", () => {
   assert.ok(freshnessIndex > outlookIndex);
   assert.ok(historyIndex > freshnessIndex);
   assert.equal((html.match(new RegExp(escapeRegExp(freshnessLabel), "g")) ?? []).length, 1);
+});
+
+test("freshness uses concise localized labels and subdued datetime styling", () => {
+  assert.equal(translateUI("lastSuccessfulRefresh", "ja"), "最終更新");
+  assert.equal(translateUI("lastSuccessfulRefresh", "en"), "Last updated");
+  assert.equal(translateUI("lastSuccessfulRefresh", "zh"), "最后更新");
+
+  const data = toPublicRadarSnapshot(getLocalRadarData({}), "ja");
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: data, locale: "ja" }),
+  );
+
+  assert.match(html, /最終更新：/);
+  assert.match(html, /<time[^>]*font-normal text-slate-500/);
 });
 
 test("history month grouping follows the viewer timezone", () => {

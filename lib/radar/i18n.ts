@@ -38,9 +38,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "实时数据和缓存数据均不可用，概率数值已暂时隐藏。",
   },
   lastSuccessfulRefresh: {
-    ja: "最終取得成功時刻",
-    en: "Last successful refresh",
-    zh: "上次成功更新时间",
+    ja: "最終更新",
+    en: "Last updated",
+    zh: "最后更新",
   },
   unknownProbability: { ja: "不明", en: "Unknown", zh: "未知" },
   noticePostedAt: { ja: "予告投稿時刻", en: "Notice posted", zh: "预告发布时间" },
