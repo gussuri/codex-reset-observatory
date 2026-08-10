@@ -261,7 +261,14 @@ test("automatically generated Tibo history is localized without Japanese leakage
           ? "Tibo announced that Codex usage limits were reset."
           : "Tibo 宣布 Codex 的使用限制已重置。",
       );
-      assert.equal(item.details?.note, item.summary);
+      assert.equal(
+        item.details?.note,
+        isRegular
+          ? locale === "en"
+            ? "The next regular reset is generally expected about one week after you first use Codex or Work following a forced reset. Using a Banked Reset may shift the timing for your account."
+            : "下一次定期重置通常以强制重置后首次使用 Codex 或 Work 的时间为起点，约一周后进行。使用手动重置后，您的账号实际执行时间可能会有所不同。"
+          : item.summary,
+      );
       const visibleText = [
         item.title,
         item.summary,

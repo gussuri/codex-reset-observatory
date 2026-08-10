@@ -494,6 +494,8 @@ function getHistoryText(item: WindowLike & { kind?: string }) {
 const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
 const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
+const REGULAR_RESET_NOTE =
+  "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。";
 const BANKED_RESET_METHOD = "任意リセット権1回配布";
 
 function isRegularHistoryItem(item: WindowLike) {
@@ -691,7 +693,9 @@ function getHistoryDetails(
   if (isRegularHistoryItem(item)) {
     const resetMethod = getRegularResetMethod(item);
     const scope = getRegularResetScope(item, resetMethod);
-    const note = getRegularResetSummary(item, resetMethod);
+    const note = resetMethod === BANKED_RESET_METHOD
+      ? getRegularResetSummary(item, resetMethod)
+      : REGULAR_RESET_NOTE;
 
     return {
       cycleType: translateDynamic("定期リセット", locale),

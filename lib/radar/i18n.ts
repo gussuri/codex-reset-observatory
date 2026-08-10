@@ -1052,6 +1052,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Codex usage limits were reset on the usual weekly-cycle timing.",
     zh: "在常规的 1 周循环时间点，执行了 Codex 使用限制重置。",
   },
+  "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。": {
+    ja: "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。",
+    en: "The next regular reset is generally expected about one week after you first use Codex or Work following a forced reset. Using a Banked Reset may shift the timing for your account.",
+    zh: "下一次定期重置通常以强制重置后首次使用 Codex 或 Work 的时间为起点，约一周后进行。使用手动重置后，您的账号实际执行时间可能会有所不同。",
+  },
   "1週間サイクルの定期リセットが実施されました。": {
     ja: "1週間サイクルの定期リセットが実施されました。",
     en: "A weekly-cycle reset was completed.",

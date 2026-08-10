@@ -36,7 +36,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "任意リセット未使用アカウント",
       "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+      "note": "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。"
     }
   },
   {
@@ -382,7 +382,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "任意リセットを使っていないアカウント",
       "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって、このサイトの共通参考日時と異なる場合があります。"
+      "note": "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。"
     }
   },
   {
@@ -499,7 +499,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+      "note": "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。"
     }
   },
   {
@@ -523,7 +523,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "0分（定期）",
       "noticeType": "なし",
-      "note": "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。"
+      "note": "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。"
     }
   },
   {

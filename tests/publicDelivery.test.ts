@@ -552,6 +552,10 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
     regular.summary,
     "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
   );
+  assert.equal(
+    regular.details?.note,
+    "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。",
+  );
   assert.equal(regular.signalAt, null);
   assert.equal(regular.signalLabel, "");
   assert.equal(regular.source, null);
@@ -583,6 +587,37 @@ test("regular history keeps a known Banked Reset delivery method", () => {
   assert.ok(bankedRegular);
   assert.equal(bankedRegular.details?.reasonType, "定期更新");
   assert.equal(bankedRegular.details?.resetMethod, "任意リセット権1回配布");
+});
+
+test("regular reset supplement is localized without changing the history summary", () => {
+  const expectedNotes = {
+    ja: "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。",
+    en: "The next regular reset is generally expected about one week after you first use Codex or Work following a forced reset. Using a Banked Reset may shift the timing for your account.",
+    zh: "下一次定期重置通常以强制重置后首次使用 Codex 或 Work 的时间为起点，约一周后进行。使用手动重置后，您的账号实际执行时间可能会有所不同。",
+  } as const;
+  const expectedSummaries = {
+    ja: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
+    en: "Codex usage limits were reset on the usual weekly-cycle timing.",
+    zh: "在常规的 1 周循环时间点，执行了 Codex 使用限制重置。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const calculationNow = new Date("2026-08-08T05:00:00.000Z");
+    const snapshot = toPublicRadarSnapshot(getLocalRadarData({
+      calculationNow,
+      regularResetEvents: getDueRegularResetEventRows(calculationNow),
+    }), locale, {
+      calculationNow,
+      limitHistory: false,
+    });
+    const regular = snapshot.viewModel.recentHistory.find(
+      (item) => item.recordKind === "regular_completed",
+    );
+
+    assert.ok(regular);
+    assert.equal(regular.details?.note, expectedNotes[locale]);
+    assert.equal(regular.summary, expectedSummaries[locale]);
+  }
 });
 
 test("top dashboard omits latest reset and weekly reference cards", () => {
