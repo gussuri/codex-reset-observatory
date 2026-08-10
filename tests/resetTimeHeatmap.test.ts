@@ -129,6 +129,7 @@ test("groups reset records by the viewer's local weekday", () => {
   assert.equal(formatHeatmapWeekdayLabel(1, "en"), "Mon");
   assert.equal(formatHeatmapWeekdayLabel(2, "zh"), "周二");
   assert.equal(formatHeatmapWeekdayBarLabel(distribution.bins[0], "ja"), "日曜日・1件");
+  assert.equal(formatHeatmapWeekdayBarLabel(distribution.bins[1], "en"), "Mon, 1 recorded reset");
 });
 
 test("uses raw record counts for bar heights and keeps empty bins", () => {
@@ -149,7 +150,11 @@ test("uses raw record counts for bar heights and keeps empty bins", () => {
   assert.equal(getRawBarHeightPercent(0, 6), 0);
   assert.deepEqual(getHeatmapTimeAxisTicks(), [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]);
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
-  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 records");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 recorded resets");
+  assert.equal(
+    formatHeatmapBarLabel({ startHour: 2, endHour: 4, rawCount: 1 }, "en"),
+    "02:00–04:00, 1 recorded reset",
+  );
   assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");
   assert.equal(Object.hasOwn(bin, "weightedCount"), false);
 });

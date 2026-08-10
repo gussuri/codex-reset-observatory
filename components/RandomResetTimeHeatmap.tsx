@@ -103,7 +103,7 @@ export function RandomResetTimeHeatmap({
     <section
       aria-busy={!heatmap}
       aria-label={content.heading}
-      className="rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm sm:p-5"
+      className="min-w-0 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm sm:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -171,14 +171,14 @@ export function RandomResetTimeHeatmap({
         <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
       ) : (
         <>
-          <div className="mt-5" aria-label={content.timeAxis}>
-            <div className="grid h-28 grid-cols-12" role="list" aria-label={content.heading}>
+          <div className="mt-5 min-w-0">
+            <div className="grid h-32 grid-cols-12 sm:h-28" role="list" aria-label={content.heading}>
               {(timeHeatmap?.bins ?? []).map((bin) => {
                 const label = formatHeatmapBarLabel(bin, locale);
                 const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
 
                 return (
-                  <div className="min-w-0 px-1" key={bin.startHour} role="listitem">
+                  <div className="min-w-0 px-0.5 sm:px-1" key={bin.startHour} role="listitem">
                     <ResetCountBar
                       ariaLabel={label}
                       barHeight={barHeight}
@@ -188,7 +188,7 @@ export function RandomResetTimeHeatmap({
                 );
               })}
             </div>
-            <div className="relative h-7 border-t border-slate-200">
+            <div aria-hidden="true" className="relative h-7 border-t border-slate-200">
               {timeAxisTicks.map((hour, index) => {
                 const isFirst = index === 0;
                 const isLast = index === timeAxisTicks.length - 1;
@@ -200,7 +200,7 @@ export function RandomResetTimeHeatmap({
 
                 return (
                   <span
-                    className={`absolute top-0 flex flex-col gap-0.5 text-[0.65rem] font-medium tabular-nums text-slate-500 ${position}`}
+                    className={`absolute top-0 flex flex-col gap-0.5 text-[0.7rem] font-medium leading-none tabular-nums text-slate-500 sm:text-[0.65rem] ${position}`}
                     key={hour}
                     style={
                       isFirst || isLast
@@ -215,7 +215,7 @@ export function RandomResetTimeHeatmap({
               })}
             </div>
           </div>
-          <p className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
+          <p aria-hidden="true" className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
           <div className="mt-6 border-t border-slate-100 pt-5">
             <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
               {content.weekdayHeading}
@@ -233,7 +233,7 @@ export function RandomResetTimeHeatmap({
                       barHeight={barHeight}
                       rawCount={bin.rawCount}
                     />
-                    <div className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
+                    <div aria-hidden="true" className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
                       {formatHeatmapWeekdayLabel(bin.weekday, locale)}
                     </div>
                   </div>
@@ -259,7 +259,7 @@ function ResetCountBar({
   return (
     <div
       aria-label={ariaLabel}
-      className="relative h-28 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+      className="relative h-32 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 sm:h-28"
       role="img"
       tabIndex={0}
       title={ariaLabel}
@@ -267,7 +267,7 @@ function ResetCountBar({
       {rawCount > 0 ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 text-center text-[0.65rem] font-semibold tabular-nums text-slate-700"
+          className="pointer-events-none absolute inset-x-0 text-center text-xs font-semibold tabular-nums text-slate-700 sm:text-[0.65rem]"
           style={{ bottom: `calc(${barHeight}% + 0.25rem)` }}
         >
           {rawCount}
@@ -275,7 +275,7 @@ function ResetCountBar({
       ) : null}
       <span
         aria-hidden="true"
-        className="absolute inset-x-1 bottom-0 rounded-t bg-teal-600"
+        className="absolute inset-x-0.5 bottom-0 rounded-t bg-teal-600 sm:inset-x-1"
         style={{ height: `${barHeight}%` }}
       />
     </div>

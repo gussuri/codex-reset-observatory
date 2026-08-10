@@ -172,7 +172,7 @@ export function formatHeatmapWeekdayBarLabel(
   locale: "ja" | "en" | "zh",
 ) {
   const label = formatHeatmapWeekdayLabel(bin.weekday, locale);
-  if (locale === "en") return `${label}, ${bin.rawCount} records`;
+  if (locale === "en") return `${label}, ${formatEnglishRecordCount(bin.rawCount)}`;
   if (locale === "zh") return `${label}，${bin.rawCount}条记录`;
   return `${label}曜日・${bin.rawCount}件`;
 }
@@ -182,9 +182,13 @@ export function formatHeatmapBarLabel(
   locale: "ja" | "en" | "zh",
 ) {
   const range = formatHeatmapTimeRange(bin, locale);
-  if (locale === "en") return `${range}, ${bin.rawCount} records`;
+  if (locale === "en") return `${range}, ${formatEnglishRecordCount(bin.rawCount)}`;
   if (locale === "zh") return `${range}，${bin.rawCount}条记录`;
   return `${range}・${bin.rawCount}件`;
+}
+
+function formatEnglishRecordCount(count: number) {
+  return `${count} recorded ${count === 1 ? "reset" : "resets"}`;
 }
 
 export function formatHeatmapTimeRange(

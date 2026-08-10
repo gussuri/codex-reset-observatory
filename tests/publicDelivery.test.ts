@@ -526,18 +526,20 @@ test("history page combines confirmed, banked, and regular reference records chr
   }
 });
 
-test("dashboard keeps freshness beside the current status", () => {
+test("dashboard places freshness below the current outlook", () => {
   const data = toPublicRadarSnapshot(getLocalRadarData({}), "en");
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, { initialData: data, locale: "en" }),
   );
   const freshnessLabel = translateUI("lastSuccessfulRefresh", "en");
   const currentStatusIndex = html.indexOf(translateUI("currentStatus", "en"));
+  const outlookIndex = html.indexOf(translateUI("forecastOutlook", "en"));
   const freshnessIndex = html.indexOf(freshnessLabel);
   const historyIndex = html.indexOf(translateUI("resetHistory", "en"));
 
   assert.ok(currentStatusIndex >= 0);
-  assert.ok(freshnessIndex > currentStatusIndex);
+  assert.ok(outlookIndex > currentStatusIndex);
+  assert.ok(freshnessIndex > outlookIndex);
   assert.ok(historyIndex > freshnessIndex);
   assert.equal((html.match(new RegExp(escapeRegExp(freshnessLabel), "g")) ?? []).length, 1);
 });
