@@ -410,12 +410,12 @@ test("date class composition omits an absent className", () => {
     React.createElement(LocalizedDateTime, {
       value: "2026-08-04T00:00:00.000Z",
       locale: "en",
-      timeClassName: "font-normal text-slate-500",
+      timeClassName: "font-normal text-slate-700",
     }),
   );
 
   assert.doesNotMatch(html, /class="[^"]*(undefined|null|false)/);
-  assert.match(html, /<time[^>]*font-normal text-slate-500/);
+  assert.match(html, /<time[^>]*font-normal text-slate-700/);
 });
 
 test("dashboard renders the translated reset history label", () => {
@@ -557,7 +557,8 @@ test("freshness uses concise localized labels and subdued datetime styling", () 
   );
 
   assert.match(html, /最終更新：/);
-  assert.match(html, /<time[^>]*font-normal text-slate-500/);
+  assert.match(html, /<time[^>]*font-normal text-slate-700/);
+  assert.match(html, /lg:justify-end/);
 });
 
 test("history month grouping follows the viewer timezone", () => {
