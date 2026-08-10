@@ -495,7 +495,7 @@ const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
 const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
 const REGULAR_RESET_NOTE =
-  "強制リセット後にCodex / Workを初めて使用した時点から、約1週間後が次回定期リセットの目安です。任意リセットを使用した場合は、実施時刻がユーザーごとに前後することがあります。";
+  "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。";
 const BANKED_RESET_METHOD = "任意リセット権1回配布";
 
 function isRegularHistoryItem(item: WindowLike) {
