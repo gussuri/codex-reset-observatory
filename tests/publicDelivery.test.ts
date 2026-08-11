@@ -387,6 +387,27 @@ test("formats Tokyo time with one JST label in Japanese and Chinese", () => {
   assert.doesNotMatch(chinese, /GMT\+9/);
 });
 
+test("marks usage-derived execution times as approximate without changing the timezone label", () => {
+  const date = new Date("2026-08-11T00:02:00.000Z");
+
+  assert.equal(
+    formatDateTimeInZone(date, "Asia/Tokyo", "ja-JP", { approximate: true }),
+    "2026年8月11日 09:02頃 JST",
+  );
+  assert.match(
+    formatDateTimeInZone(date, "Asia/Tokyo", "en-US", { approximate: true }),
+    /^around Aug 11, 2026, 09:02 AM JST$/,
+  );
+  assert.equal(
+    formatDateTimeInZone(date, "Asia/Tokyo", "zh-CN", { approximate: true }),
+    "约2026年8月11日 09:02 JST",
+  );
+  assert.equal(
+    formatDateTimeInZone(date, "Asia/Tokyo", "ja-JP"),
+    "2026年8月11日 09:02 JST",
+  );
+});
+
 test("formats a scheduled Japanese datetime with a compact weekday", () => {
   assert.equal(
     formatDateTimeInZone(

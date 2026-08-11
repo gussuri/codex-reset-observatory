@@ -24,6 +24,7 @@ import {
 } from "@/lib/codexUsageRecovery";
 import {
   readCodexRecoveryObservations,
+  readResetExecutionEstimates,
 } from "@/lib/codexUsageRecoveryStore";
 import {
   findRelatedTiboNotice,
@@ -330,6 +331,46 @@ const getCachedCodexRecoveryObservations = unstable_cache(
   },
 );
 
+async function fetchRawResetExecutionEstimates() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return { data: [], health: configuration };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const result = await readResetExecutionEstimates(supabase);
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: result.rows.length > 0 || result.error === null,
+      hasError: Boolean(result.error),
+    });
+    if (result.error) {
+      console.error("Reset execution estimates query failed", { detail: "database_error" });
+    }
+    return { data: result.rows, health };
+  } catch {
+    console.error("Failed to load reset execution estimates", { detail: "request_failed" });
+    return { data: [], health: { state: "degraded" as const, detail: "request_failed" as const } };
+  }
+}
+
+const getCachedResetExecutionEstimates = unstable_cache(
+  () => fetchRawResetExecutionEstimates(),
+  ["reset-execution-estimates-cache-v1"],
+  {
+    revalidate: 30,
+    tags: ["radar-data"],
+  },
+);
+
 const getCachedResetDisplayNames = unstable_cache(
   () => fetchResetDisplayNames(),
   ["reset-display-names-cache-v1"],
@@ -493,12 +534,13 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
-  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery] = await Promise.all([
+  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery, resetExecutionEstimates] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow),
     getCachedRegularResetEvents(),
     getCachedResetDisplayNames(),
     getCachedCodexRecoveryObservations(),
+    getCachedResetExecutionEstimates(),
   ]);
 
   const codexRecoveryObservation = codexRecovery.data.find((observation) =>
@@ -514,6 +556,7 @@ export async function fetchCurrentRadarData(
         tiboSignals.health,
         regularResetEvents.health,
         codexRecovery.health,
+        resetExecutionEstimates.health,
       ),
       openAIStatus.health,
     ),
@@ -524,6 +567,7 @@ export async function fetchCurrentRadarData(
     rejectedTiboResets: tiboSignals.rejectedResets,
     regularResetEvents: regularResetEvents.data,
     resetDisplayNames,
+    resetExecutionEstimates: resetExecutionEstimates.data,
     codexRecoveryObservation,
   });
 }

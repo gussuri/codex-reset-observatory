@@ -12,9 +12,11 @@ import {
 } from "@/lib/codexUsageRecovery";
 import {
   confirmNearestCodexRecoveryObservation,
+  findFormalTiboResetCluster,
   findRecentFormalTiboReset,
   insertCodexRecoveryObservation,
   readCodexUsageMonitorState,
+  upsertResetExecutionEstimate,
   upsertCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
 import { getActiveOfficialNotice } from "@/lib/radar/probability";
@@ -158,9 +160,10 @@ export async function POST(request: Request) {
     }
 
     const confirmedAt = matchingTibo.tweetId ? now.toISOString() : null;
-    const observationError = await insertCodexRecoveryObservation(client, {
+    const observationResult = await insertCodexRecoveryObservation(client, {
       sourceKey: CODEX_USAGE_SOURCE_KEY,
       observedAt: snapshot.observedAt,
+      previousObservedAt: decision.previous.observedAt,
       previousUsedPercent: decision.previous.usedPercent,
       currentUsedPercent: decision.current.usedPercent,
       previousResetsAt: decision.previous.resetsAt,
@@ -171,9 +174,33 @@ export async function POST(request: Request) {
       matchedTiboTweetId: matchingTibo.tweetId,
       confirmedAt,
     });
-    if (observationError) {
+    if (observationResult.error) {
       console.warn("[Codex usage] recovery observation write failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+
+    if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
+      try {
+        const cluster = await findFormalTiboResetCluster(
+          client,
+          matchingTibo.tweetId,
+          matchingTibo.tweetCreatedAt,
+        );
+        if (!cluster.error) {
+          const estimateResult = await upsertResetExecutionEstimate(client, {
+            resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
+            tiboAnnouncedAt: cluster.announcedAt,
+            tiboPrimaryTweetId: cluster.primaryTweetId,
+            tiboSourceTweetIds: cluster.sourceTweetIds,
+            usageObservation: observationResult.observation,
+          });
+          if (estimateResult.error) {
+            console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
+          }
+        }
+      } catch {
+        console.warn("[Codex usage] reset execution estimate skipped", { reason: "request_failed" });
+      }
     }
 
     const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString());

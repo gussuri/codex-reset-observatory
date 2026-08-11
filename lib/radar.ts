@@ -24,6 +24,10 @@ import type {
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
 import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord } from "./radar/types";
+import {
+  resolveDisplayExecutionTime,
+  type ResetExecutionEstimate,
+} from "./radar/resetExecution";
 import { combineResetHistory } from "./radar/tiboHistory";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import { getResetDisplayNameEventKey, resolveResetDisplayTitle } from "./radar/resetDisplayNames";
@@ -101,6 +105,7 @@ export function getLocalRadarData({
   rejectedTiboResets = [],
   regularResetEvents = [],
   resetDisplayNames = [],
+  resetExecutionEstimates = [],
   codexRecoveryObservation = null,
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
@@ -113,6 +118,7 @@ export function getLocalRadarData({
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
   regularResetEvents?: RadarData["regular_reset_events"];
   resetDisplayNames?: RadarData["reset_display_names"];
+  resetExecutionEstimates?: RadarData["reset_execution_estimates"];
   codexRecoveryObservation?: CodexRecoveryObservation | null;
 } = {}): RadarData {
   const now = calculationNow ?? new Date();
@@ -142,6 +148,7 @@ export function getLocalRadarData({
     rejected_tibo_resets: rejectedTiboResets,
     regular_reset_events: regularResetEvents,
     reset_display_names: resetDisplayNames,
+    reset_execution_estimates: resetExecutionEstimates,
     codex_usage_recovery: codexRecoveryObservation,
   };
 }
@@ -489,6 +496,57 @@ function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
       : item.resetAt ?? item.date ?? "";
 
   return `${item.title}-${resetKey}`;
+}
+
+function getHistoryTiboTweetIds(item: WindowLike) {
+  return Array.from(new Set([
+    ...(item.sourceTweetIds ?? []),
+    item.source_url?.match(/\/status\/(\d+)/i)?.[1] ?? null,
+  ].filter((value): value is string => Boolean(value))));
+}
+
+function getResetExecutionEstimateForHistoryItem(
+  data: RadarData | null,
+  item: WindowLike,
+): ResetExecutionEstimate | null {
+  const estimates = data?.reset_execution_estimates ?? [];
+  if (estimates.length === 0) return null;
+
+  const eventKey = getResetDisplayNameEventKey(item);
+  const tweetIds = new Set(getHistoryTiboTweetIds(item));
+  return estimates.find((estimate) =>
+    (eventKey !== null && estimate.resetEventKey === eventKey) ||
+    estimate.tiboSourceTweetIds.some((tweetId) => tweetIds.has(tweetId)),
+  ) ?? null;
+}
+
+function getHistoryExecutionPresentation(
+  data: RadarData | null,
+  item: WindowLike,
+  canonicalResetAt: string | null,
+) {
+  if (!canonicalResetAt) {
+    return { resetAt: null, executionTimePrecision: null } as const;
+  }
+
+  const estimate = getResetExecutionEstimateForHistoryItem(data, item);
+  const tweetIds = getHistoryTiboTweetIds(item);
+  if (!estimate && tweetIds.length === 0) {
+    return { resetAt: canonicalResetAt, executionTimePrecision: null } as const;
+  }
+
+  const decision = resolveDisplayExecutionTime({
+    resetEventKey: getResetDisplayNameEventKey(item) ?? item.id ?? "history-event",
+    tiboAnnouncedAt: estimate?.tiboAnnouncedAt ?? canonicalResetAt,
+    tiboPrimaryTweetId: estimate?.tiboPrimaryTweetId ?? tweetIds[0] ?? "",
+    tiboSourceTweetIds: estimate?.tiboSourceTweetIds ?? tweetIds,
+    persistedEstimate: estimate,
+  });
+
+  return {
+    resetAt: decision.displayExecutionAt ?? canonicalResetAt,
+    executionTimePrecision: decision.executionTimePrecision,
+  } as const;
 }
 
 function getHistoryText(item: WindowLike & { kind?: string }) {
@@ -949,9 +1007,15 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
     .map((item) => {
       const isRegular = isRegularHistoryItem(item);
       const isPendingNotice = isPendingResetNotice(item);
-      const resetAt = isPendingNotice
+      const canonicalResetAt = isPendingNotice
         ? null
         : item.closed_at ?? item.completed_at ?? item.opened_at ?? null;
+      const executionPresentation = getHistoryExecutionPresentation(
+        data,
+        item,
+        canonicalResetAt,
+      );
+      const resetAt = executionPresentation.resetAt;
       const key = item.id ?? item.guid ?? `${item.title}-${resetAt ?? item.date ?? ""}`;
       const source = getEventSource(item);
       const recordKind = getHistoryRecordKind(item);
@@ -983,6 +1047,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         date: item.date ?? resetAt ?? item.opened_at,
         signalAt: isRegular ? null : item.opened_at ?? null,
         resetAt,
+        executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: isRegular ? "" : translateUI("detectionTime", locale),
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
         scope: isRegular

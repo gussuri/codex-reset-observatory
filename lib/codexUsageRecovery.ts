@@ -23,6 +23,7 @@ export type CodexRecoveryObservation = {
   id?: string;
   sourceKey: string;
   observedAt: string;
+  previousObservedAt?: string | null;
   previousUsedPercent: number;
   currentUsedPercent: number;
   previousResetsAt: number;

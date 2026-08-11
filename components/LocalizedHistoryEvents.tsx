@@ -143,7 +143,7 @@ function HistoryItemRow({ item, locale }: { item: HistoryItem; locale: Locale })
         ) : null}
         {item.resetAt ? (
           <p>
-            {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} />
+            {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} approximate={item.executionTimePrecision === "approximate"} />
           </p>
         ) : null}
         <HistorySource item={item} locale={locale} />

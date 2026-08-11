@@ -16,6 +16,8 @@ import {
 } from "@/lib/radar/tiboHistory";
 import {
   confirmNearestCodexRecoveryObservation,
+  findFormalTiboResetCluster,
+  upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
 import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
 import {
@@ -449,6 +451,26 @@ export async function POST(req: NextRequest) {
           console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
             reason: "lookup_failed",
           });
+        } else if (recoveryMatch.observation) {
+          const cluster = await findFormalTiboResetCluster(
+            supabase,
+            formalCandidate.tweet_id,
+            formalCandidate.tweet_created_at,
+          );
+          if (!cluster.error) {
+            const estimateResult = await upsertResetExecutionEstimate(supabase, {
+              resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
+              tiboAnnouncedAt: cluster.announcedAt,
+              tiboPrimaryTweetId: cluster.primaryTweetId,
+              tiboSourceTweetIds: cluster.sourceTweetIds,
+              usageObservation: recoveryMatch.observation,
+            });
+            if (estimateResult.error) {
+              console.warn("[Tibo Warning] Reset execution estimate write failed", {
+                reason: "database_error",
+              });
+            }
+          }
         }
       } catch {
         console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {

@@ -10,6 +10,10 @@ import type {
   CodexRecoveryObservation,
   PublicRecoveryObservation,
 } from "../codexUsageRecovery";
+import type {
+  ExecutionTimePrecision,
+  ResetExecutionEstimate,
+} from "./resetExecution";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -263,6 +267,7 @@ export type RadarData = {
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   regular_reset_events?: Array<RegularResetEventRow>;
   codex_usage_recovery?: CodexRecoveryObservation | null;
+  reset_execution_estimates?: Array<ResetExecutionEstimate>;
   reset_display_names?: Array<ResetDisplayNameRecord>;
   codex_environment?: {
     updated_at?: string;
@@ -350,6 +355,7 @@ export type RadarViewModel = {
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;
+    executionTimePrecision?: ExecutionTimePrecision | null;
     signalLabel: string;
     resetLabel: string;
     scopeLabel?: string;

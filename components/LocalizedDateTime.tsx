@@ -10,6 +10,7 @@ type LocalizedDateTimeProps = {
   className?: string;
   timeClassName?: string;
   weekday?: "short" | "long";
+  approximate?: boolean;
 };
 
 export function LocalizedDateTime({
@@ -18,6 +19,7 @@ export function LocalizedDateTime({
   className,
   timeClassName,
   weekday,
+  approximate = false,
 }: LocalizedDateTimeProps) {
   // Wait for the browser timezone so overseas visitors never see a JST date
   // during SSR or the first hydration render.
@@ -67,7 +69,7 @@ export function LocalizedDateTime({
     );
   }
 
-  const local = formatDateTimeInZone(date, timeZone, formatLocale, { weekday });
+  const local = formatDateTimeInZone(date, timeZone, formatLocale, { weekday, approximate });
 
   return (
     <span className={classes}>
@@ -105,7 +107,7 @@ export function formatDateTimeInZone(
   date: Date,
   timeZone: string,
   localeStr: string,
-  options: { weekday?: "short" | "long" } = {},
+  options: { weekday?: "short" | "long"; approximate?: boolean } = {},
 ) {
   const safeTimeZone = getSafeTimeZone(timeZone);
   const formatted = new Intl.DateTimeFormat(localeStr, {
@@ -119,7 +121,10 @@ export function formatDateTimeInZone(
     timeZone: safeTimeZone,
   }).format(date);
 
-  return `${formatted} ${getTimeZoneLabel(date, safeTimeZone)}`;
+  const approximatePrefix = options.approximate && localeStr === "en-US" ? "around " : "";
+  const approximateSuffix = options.approximate && localeStr === "ja-JP" ? "頃" : "";
+  const approximateChinesePrefix = options.approximate && localeStr === "zh-CN" ? "约" : "";
+  return `${approximatePrefix}${approximateChinesePrefix}${formatted}${approximateSuffix} ${getTimeZoneLabel(date, safeTimeZone)}`;
 }
 
 export function getTimeZoneLabel(date: Date, timeZone: string) {

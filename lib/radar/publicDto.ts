@@ -239,6 +239,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       date: item.date ?? null,
       signalAt: item.signalAt ?? null,
       resetAt: item.resetAt ?? null,
+      executionTimePrecision: item.executionTimePrecision ?? null,
       signalLabel: item.signalLabel,
       resetLabel: item.resetLabel,
       scopeLabel: item.scopeLabel,

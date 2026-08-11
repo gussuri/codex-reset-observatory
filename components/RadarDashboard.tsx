@@ -803,6 +803,7 @@ export function RadarDashboard({
                         <LocalizedDateTime
                           value={item.resetAt}
                           locale={locale}
+                          approximate={item.executionTimePrecision === "approximate"}
                           className="font-bold text-slate-900 sm:font-normal sm:text-slate-700"
                         />
                       </p>
