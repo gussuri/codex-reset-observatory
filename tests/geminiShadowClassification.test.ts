@@ -38,8 +38,24 @@ test("Gemini prompt receives structured reply metadata without treating reply st
   assert.match(prompt, /Replying to: @alice/);
   assert.match(prompt, /Parent context shown in the same article: A reset is coming soon\./);
   assert.match(prompt, /Source timeline: with_replies/);
-  assert.match(prompt, /Tibo's own text: Maybe :\)/);
+  assert.match(prompt, /AUTHOR TEXT: Maybe :\)/);
   assert.match(prompt, /reply status alone must not raise/i);
+});
+
+test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
+  const prompt = buildGeminiPrompt({
+    text: "Hi.\n\nIt is done.",
+    isQuote: true,
+    quoteAuthorHandle: "@blueemi99",
+    quoteContextText: "So what about our reset?",
+    quoteTweetUrl: "https://x.com/blueemi99/status/9876543210",
+  });
+
+  assert.match(prompt, /AUTHOR TEXT: Hi\./);
+  assert.match(prompt, /QUOTED CONTEXT \(not Tibo's own text\): So what about our reset\?/);
+  assert.match(prompt, /Quoted author: @blueemi99/);
+  assert.match(prompt, /never treat it as Tibo's own assertion/);
+  assert.ok(prompt.indexOf("AUTHOR TEXT:") < prompt.indexOf("QUOTED CONTEXT"));
 });
 
 test("2. GEMINI_MODEL or GEMINI_API_KEY missing returns model_not_configured without calling API", async () => {

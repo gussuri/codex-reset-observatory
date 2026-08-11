@@ -16,6 +16,10 @@ export type GeminiClassificationInput = {
   replyToHandles?: string[];
   replyContextText?: string | null;
   sourceTimeline?: "profile" | "with_replies";
+  isQuote?: boolean;
+  quoteContextText?: string | null;
+  quoteTweetUrl?: string | null;
+  quoteAuthorHandle?: string | null;
   sourceTimeZone?: string;
 };
 
@@ -127,6 +131,9 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
   const handles = input.replyToHandles?.length ? input.replyToHandles.join(", ") : "none";
   const context = input.replyContextText?.trim() || "none";
   const timeline = input.sourceTimeline || "unknown";
+  const quoteContext = input.quoteContextText?.trim() || "none";
+  const quoteAuthor = input.quoteAuthorHandle?.trim() || "none";
+  const quoteUrl = input.quoteTweetUrl?.trim() || "none";
   const createdAt = input.tweetCreatedAt || "unknown";
   const sourceTimeZone = input.sourceTimeZone || TIBO_SOURCE_TIME_ZONE;
 
@@ -138,7 +145,11 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
     `Source timeline: ${timeline}`,
     `Tweet created at: ${createdAt}`,
     `Source timezone for temporal interpretation: ${sourceTimeZone}`,
-    `Tibo's own text: ${input.text}`,
+    `AUTHOR TEXT: ${input.text}`,
+    `Quoted author: ${quoteAuthor}`,
+    `Quoted post URL: ${quoteUrl}`,
+    `QUOTED CONTEXT (not Tibo's own text): ${quoteContext}`,
+    "Use quoted context only to interpret what Tibo may be responding to; never treat it as Tibo's own assertion.",
     "Reply status alone must not raise teaser or official_notice; classify a contextless short reply conservatively.",
   ].join("\n");
 }

@@ -14,6 +14,7 @@ export type ClassificationResult = {
 
 export type TiboReplyClassificationMetadata = {
   isReply?: boolean;
+  isQuote?: boolean;
 };
 
 /**
@@ -31,7 +32,9 @@ export function classifyTiboTweet(
     ? metadata.isReply
     : url.includes("/status/") &&
       (text.startsWith("@") || normalized.includes("reply"));
-  const isQuote = normalized.includes("quote") || false;
+  const isQuote = typeof metadata?.isQuote === "boolean"
+    ? metadata.isQuote
+    : normalized.includes("quote") || false;
 
   // 1. 否定・過去・昔話回想パターンの先頭評価 (Negative / Past / Retrospective Exclusion -> irrelevant)
   const negativeOrPastPatterns = [

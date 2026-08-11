@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.6-replies";
+  const SELECTOR_VERSION = "v1.7-replies-quotes";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -401,6 +401,10 @@
         : [],
       replyContextText: replyMetadata?.replyContextText || null,
       sourceTimeline: sourceTimeline || null,
+      isQuote: replyMetadata?.isQuote === true,
+      quoteContextText: replyMetadata?.quoteContextText || null,
+      quoteTweetUrl: replyMetadata?.quoteTweetUrl || null,
+      quoteAuthorHandle: replyMetadata?.quoteAuthorHandle || null,
     };
 
     try {

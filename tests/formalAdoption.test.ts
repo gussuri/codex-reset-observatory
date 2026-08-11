@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildFormalAdoptionResult,
+  hasExistingFormalResetCluster,
   isNewFormalAdoption,
 } from "../lib/radar/formalAdoption";
 import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
@@ -51,6 +52,28 @@ test("formal adoption rejects ineligible or unavailable candidates", () => {
     ),
     false,
   );
+});
+
+test("a nearby formal reset in the same five-minute cluster suppresses a second adoption", () => {
+  const first = candidate({
+    tweet_id: "first-reset",
+    tweet_url: "https://x.com/thsottiaux/status/first-reset",
+    tweet_created_at: "2026-08-11T00:27:44.000Z",
+  });
+  const second = candidate({
+    tweet_id: "second-reset",
+    tweet_url: "https://x.com/thsottiaux/status/second-reset",
+    tweet_created_at: "2026-08-11T00:28:16.000Z",
+  });
+
+  assert.equal(hasExistingFormalResetCluster(second, [first]), true);
+  assert.equal(hasExistingFormalResetCluster(second, [
+    candidate({
+      tweet_id: "later-reset",
+      tweet_url: "https://x.com/thsottiaux/status/later-reset",
+      tweet_created_at: "2026-08-11T00:34:00.000Z",
+    }),
+  ]), false);
 });
 
 test("formal adoption response contains only display-safe adoption fields", () => {

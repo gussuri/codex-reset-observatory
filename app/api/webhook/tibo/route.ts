@@ -15,6 +15,7 @@ import {
 } from "@/lib/radar/tiboHistory";
 import {
   buildFormalAdoptionResult,
+  hasExistingFormalResetCluster,
   isNewFormalAdoption,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
@@ -40,7 +41,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_)/i.test(message) &&
+    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -216,7 +217,10 @@ export async function POST(req: NextRequest) {
       reply_to_handles: replyMetadata.replyToHandles ?? null,
       reply_context_text: replyMetadata.replyContextText ?? null,
       source_timeline: replyMetadata.sourceTimeline ?? null,
-      is_quote: ruleResult.isQuote,
+      is_quote: ruleResult.isQuote || replyMetadata.isQuote === true,
+      quote_context_text: replyMetadata.quoteContextText ?? null,
+      quote_tweet_url: replyMetadata.quoteTweetUrl ?? null,
+      quote_author_handle: replyMetadata.quoteAuthorHandle ?? null,
 
       // Audit columns
       rule_signal_type: ruleResult.signalType,
@@ -342,13 +346,51 @@ export async function POST(req: NextRequest) {
       confidence: persistedPayload.confidence,
       verification_status: persistedPayload.verification_status,
       classification_source: persistedPayload.classification_source,
+      rule_signal_type: persistedPayload.rule_signal_type,
+      ai_signal_type: persistedPayload.ai_signal_type,
       ai_classification_status: persistedPayload.ai_classification_status,
       ai_reset_type_ja: persistedPayload.ai_reset_type_ja,
       ai_notice_to_execution: persistedPayload.ai_notice_to_execution,
       expires_at: persistedPayload.expires_at,
       is_reply: persistedPayload.is_reply,
+      is_quote: persistedPayload.is_quote,
+      quote_context_text: persistedPayload.quote_context_text,
+      quote_tweet_url: persistedPayload.quote_tweet_url,
+      quote_author_handle: persistedPayload.quote_author_handle,
     };
-    const newlyAdopted = isNewFormalAdoption(formalCandidate, existingSignal);
+    let existingFormalCluster = false;
+    const adoptionEligible = isNewFormalAdoption(formalCandidate, existingSignal);
+    if (adoptionEligible) {
+      const createdTime = Date.parse(formalCandidate.tweet_created_at);
+      if (Number.isFinite(createdTime)) {
+        try {
+          const { data: nearbySignals, error: nearbyLookupError } = await supabase
+            .from("tibo_signals")
+            .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,is_reply")
+            .eq("signal_type", "reset_executed")
+            .neq("tweet_id", tweetId)
+            .gte("tweet_created_at", new Date(createdTime - 5 * 60 * 1000).toISOString())
+            .lte("tweet_created_at", new Date(createdTime + 5 * 60 * 1000).toISOString())
+            .limit(20);
+
+          if (nearbyLookupError) {
+            console.warn("[Tibo Warning] Formal cluster lookup unavailable", {
+              reason: "lookup_failed",
+            });
+          } else {
+            existingFormalCluster = hasExistingFormalResetCluster(
+              formalCandidate,
+              (nearbySignals ?? []) as Array<FormalTiboResetSignal>,
+            );
+          }
+        } catch {
+          console.warn("[Tibo Warning] Formal cluster lookup unavailable", {
+            reason: "lookup_failed",
+          });
+        }
+      }
+    }
+    const newlyAdopted = adoptionEligible && !existingFormalCluster;
 
     // 8. Supabase Upsert
     let upsertResult = await supabase
@@ -372,6 +414,9 @@ export async function POST(req: NextRequest) {
         expected_end_at: _expectedEndAt,
         temporal_resolution_status: _temporalResolutionStatus,
         temporal_resolution_version: _temporalResolutionVersion,
+        quote_context_text: _quoteContextText,
+        quote_tweet_url: _quoteTweetUrl,
+        quote_author_handle: _quoteAuthorHandle,
         ...legacyPayload
       } = persistedPayload;
       upsertResult = await supabase

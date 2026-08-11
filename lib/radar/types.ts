@@ -69,6 +69,7 @@ export type WindowLike = {
   source?: string | null;
   source_url?: string | null;
   sourceKind?: HistorySourceKind;
+  sourceTweetIds?: string[];
   recordKind?: HistoryRecordKind;
   link?: string | null;
   sources?: Array<{
@@ -121,6 +122,9 @@ export type ActiveTiboSignal = {
   temporal_resolution_version?: string | null;
   is_reply?: boolean;
   is_quote?: boolean;
+  quote_context_text?: string | null;
+  quote_tweet_url?: string | null;
+  quote_author_handle?: string | null;
 };
 
 export type PublicTiboActivity = {

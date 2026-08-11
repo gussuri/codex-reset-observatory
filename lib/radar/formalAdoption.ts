@@ -1,5 +1,6 @@
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import {
+  areFormalTiboResetSignalsSameCluster,
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "./tiboHistory";
@@ -43,6 +44,16 @@ export function isNewFormalAdoption(
   if (!lookupAvailable || !isFormalTiboResetSignal(candidate)) return false;
   if (hasStaticHistoryTweet(candidate.tweet_id)) return false;
   return !wasAlreadyFormal(existing, candidate);
+}
+
+export function hasExistingFormalResetCluster(
+  candidate: FormalTiboResetSignal,
+  existingSignals: Array<FormalTiboResetSignal>,
+) {
+  return existingSignals.some((existing) =>
+    existing.tweet_id !== candidate.tweet_id &&
+    areFormalTiboResetSignalsSameCluster(candidate, existing),
+  );
 }
 
 export function buildFormalAdoptionResult(

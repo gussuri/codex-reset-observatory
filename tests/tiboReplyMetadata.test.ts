@@ -13,6 +13,8 @@ type FakeElementOptions = {
   links?: FakeElement[];
   nestedArticles?: FakeElement[];
   tweetText?: FakeElement | null;
+  quote?: FakeElement | null;
+  throwOnQuote?: boolean;
 };
 
 class FakeElement {
@@ -22,6 +24,8 @@ class FakeElement {
   private readonly links: FakeElement[];
   private readonly nestedArticles: FakeElement[];
   private readonly tweetText: FakeElement | null;
+  private readonly quote: FakeElement | null;
+  private readonly throwOnQuote: boolean;
 
   constructor(options: FakeElementOptions = {}) {
     this.innerText = options.text || "";
@@ -30,6 +34,8 @@ class FakeElement {
     this.links = options.links || [];
     this.nestedArticles = options.nestedArticles || [];
     this.tweetText = options.tweetText || null;
+    this.quote = options.quote || null;
+    this.throwOnQuote = options.throwOnQuote === true;
   }
 
   getAttribute(name: string) {
@@ -42,6 +48,10 @@ class FakeElement {
     }
     if (selector.includes('data-testid="tweetText"')) {
       return this.tweetText;
+    }
+    if (selector.includes("quoteTweet") || selector.includes("quotedTweet") || selector.includes("Quoted")) {
+      if (this.throwOnQuote) throw new Error("quote DOM unavailable");
+      return this.quote;
     }
     return null;
   }
@@ -67,6 +77,10 @@ function loadScanUtils() {
         isReply: boolean;
         replyToHandles: string[];
         replyContextText: string | null;
+        isQuote: boolean;
+        quoteContextText: string | null;
+        quoteTweetUrl: string | null;
+        quoteAuthorHandle: string | null;
       };
     };
   }).TiboMonitorScan;
@@ -103,6 +117,32 @@ test("reply metadata parser rejects unsafe or oversized supplied values", () => 
   assert.equal(parseTiboReplyMetadata({ replyContextText: "x".repeat(1001) }).ok, false);
 });
 
+test("quote metadata parser accepts safe nullable fields and normalizes the handle", () => {
+  assert.deepEqual(
+    parseTiboReplyMetadata({
+      isQuote: true,
+      quoteContextText: "  So what about our reset?  ",
+      quoteTweetUrl: "https://x.com/blueemi99/status/1234567890",
+      quoteAuthorHandle: "blueemi99",
+    }),
+    {
+      ok: true,
+      value: {
+        isQuote: true,
+        quoteContextText: "So what about our reset?",
+        quoteTweetUrl: "https://x.com/blueemi99/status/1234567890",
+        quoteAuthorHandle: "@blueemi99",
+      },
+    },
+  );
+});
+
+test("quote metadata parser rejects unsafe or oversized fields", () => {
+  assert.equal(parseTiboReplyMetadata({ quoteAuthorHandle: "@not-valid-handle!" }).ok, false);
+  assert.equal(parseTiboReplyMetadata({ quoteTweetUrl: "https://evil.example/status/123" }).ok, false);
+  assert.equal(parseTiboReplyMetadata({ quoteContextText: "x".repeat(1001) }).ok, false);
+});
+
 test("timeline source recognizes profile and with-replies pages on both X hosts", () => {
   const scan = loadScanUtils();
   assert.equal(scan.getTimelineSource("https://x.com/thsottiaux"), "profile");
@@ -127,6 +167,45 @@ test("explicit Replying to DOM metadata identifies a reply and visible parent co
     isReply: true,
     replyToHandles: ["@alice"],
     replyContextText: "The parent post is visible.",
+    isQuote: false,
+    quoteContextText: null,
+    quoteTweetUrl: null,
+    quoteAuthorHandle: null,
+  }));
+});
+
+test("quote card metadata is collected best-effort without changing author text", () => {
+  const scan = loadScanUtils();
+  const quoteText = new FakeElement({ text: "So what about our reset?" });
+  const quoteLink = new FakeElement({
+    attributes: { href: "https://x.com/blueemi99/status/9876543210" },
+  });
+  const quote = new FakeElement({ tweetText: quoteText, links: [quoteLink] });
+  const article = new FakeElement({ quote });
+
+  assert.equal(JSON.stringify(scan.extractReplyMetadata(article)), JSON.stringify({
+    isReply: false,
+    replyToHandles: [],
+    replyContextText: null,
+    isQuote: true,
+    quoteContextText: "So what about our reset?",
+    quoteTweetUrl: "https://x.com/blueemi99/status/9876543210",
+    quoteAuthorHandle: "@blueemi99",
+  }));
+});
+
+test("quote DOM failures do not stop ordinary tweet collection", () => {
+  const scan = loadScanUtils();
+  const article = new FakeElement({ throwOnQuote: true });
+
+  assert.equal(JSON.stringify(scan.extractReplyMetadata(article)), JSON.stringify({
+    isReply: false,
+    replyToHandles: [],
+    replyContextText: null,
+    isQuote: false,
+    quoteContextText: null,
+    quoteTweetUrl: null,
+    quoteAuthorHandle: null,
   }));
 });
 
@@ -137,6 +216,10 @@ test("a normal post or contextless reply does not invent reply context", () => {
     isReply: false,
     replyToHandles: [],
     replyContextText: null,
+    isQuote: false,
+    quoteContextText: null,
+    quoteTweetUrl: null,
+    quoteAuthorHandle: null,
   }));
 
   const marker = new FakeElement({ text: "Replying to @alice", links: [] });
@@ -145,5 +228,9 @@ test("a normal post or contextless reply does not invent reply context", () => {
     isReply: true,
     replyToHandles: ["@alice"],
     replyContextText: null,
+    isQuote: false,
+    quoteContextText: null,
+    quoteTweetUrl: null,
+    quoteAuthorHandle: null,
   }));
 });

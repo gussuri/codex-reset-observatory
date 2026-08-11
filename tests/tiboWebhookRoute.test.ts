@@ -120,6 +120,10 @@ test("new reply metadata is validated and persisted while old payload fields rem
         replyToHandles: ["alice"],
         replyContextText: "A reset is coming soon.",
         sourceTimeline: "with_replies",
+        isQuote: true,
+        quoteContextText: "So what about our reset?",
+        quoteTweetUrl: "https://x.com/blueemi99/status/9876543210",
+        quoteAuthorHandle: "@blueemi99",
       }),
     );
     assert.equal(response.status, 200);
@@ -129,6 +133,10 @@ test("new reply metadata is validated and persisted while old payload fields rem
     assert.deepEqual(upsertBody.reply_to_handles, ["@alice"]);
     assert.equal(upsertBody.reply_context_text, "A reset is coming soon.");
     assert.equal(upsertBody.source_timeline, "with_replies");
+    assert.equal(upsertBody.is_quote, true);
+    assert.equal(upsertBody.quote_context_text, "So what about our reset?");
+    assert.equal(upsertBody.quote_tweet_url, "https://x.com/blueemi99/status/9876543210");
+    assert.equal(upsertBody.quote_author_handle, "@blueemi99");
     assert.equal(upsertBody.ai_teaser_strength, null);
     assert.equal(upsertBody.ai_teaser_strength_confidence, null);
   } finally {
@@ -196,7 +204,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "POST", "POST", "GET", "POST", "POST"]);
+    assert.deepEqual(fetchMethods, ["GET", "POST", "GET", "POST", "GET", "POST", "POST"]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");

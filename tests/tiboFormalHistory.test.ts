@@ -173,6 +173,121 @@ test("official notice is preferred over a teaser and only a prior post is linked
   assert.equal(findRelatedTiboNotice(reset, [noticeSignal({ tweet_created_at: "2026-07-29T00:00:00.000Z" })]), null);
 });
 
+test("the 2026-08-11 duplicate completion posts become one canonical event", () => {
+  const notice = noticeSignal({
+    tweet_id: "2086189414292865249",
+    text: "I'll do another performative reset on Monday",
+    tweet_created_at: "2026-08-08T20:34:50.000Z",
+    temporal_resolution_status: "resolved",
+    ai_temporal_precision: "day",
+    expected_start_at: "2026-08-10T07:00:00.000Z",
+    expected_end_at: "2026-08-11T07:00:00.000Z",
+  });
+  const first = resetSignal({
+    tweet_id: "2086972802457063486",
+    text: "Hi.\n\nIt is done.",
+    tweet_url: "https://x.com/thsottiaux/status/2086972802457063486",
+    tweet_created_at: "2026-08-11T00:27:44.000Z",
+    confidence: 0.95,
+    rule_signal_type: "irrelevant",
+    ai_signal_type: "reset_executed",
+    related_notice: notice,
+  });
+  const second = resetSignal({
+    tweet_id: "2086972933566857393",
+    text: "Usage limits have been reset for all paid ChatGPT Work and Codex users.\nHappy Monday you all.",
+    tweet_url: "https://x.com/thsottiaux/status/2086972933566857393",
+    tweet_created_at: "2026-08-11T00:28:16.000Z",
+    confidence: 1,
+    rule_signal_type: "reset_executed",
+    ai_signal_type: "reset_executed",
+    related_notice: notice,
+  });
+
+  const combined = combineResetHistory([], [second, first]);
+
+  assert.equal(combined.length, 1);
+  assert.equal(combined[0].completed_at, "2026-08-11T00:27:44.000Z");
+  assert.equal(combined[0].source_url, second.tweet_url);
+  assert.deepEqual(combined[0].sourceTweetIds, [
+    "2086972802457063486",
+    "2086972933566857393",
+  ]);
+  assert.equal(combined[0].details?.noticeToExecution, "51時間53分");
+  withLocalHistory([], () => {
+    assert.equal(
+      getRecent7DayResetCount(
+        { formal_tibo_resets: [first, second] },
+        new Date("2026-08-11T01:00:00.000Z"),
+      ),
+      1,
+    );
+  });
+});
+
+test("resolved Monday notice is matched by its schedule window beyond the 48-hour fallback", () => {
+  const reset = resetSignal({
+    tweet_created_at: "2026-08-11T00:27:44.000Z",
+  });
+  const notice = noticeSignal({
+    tweet_created_at: "2026-08-08T20:34:50.000Z",
+    temporal_resolution_status: "resolved",
+    ai_temporal_precision: "day",
+    expected_start_at: "2026-08-10T07:00:00.000Z",
+    expected_end_at: "2026-08-11T07:00:00.000Z",
+  });
+
+  assert.equal(findRelatedTiboNotice(reset, [notice])?.tweet_id, notice.tweet_id);
+  assert.equal(
+    findRelatedTiboNotice(reset, [
+      {
+        ...notice,
+        expected_start_at: "2026-08-09T07:00:00.000Z",
+        expected_end_at: "2026-08-10T07:00:00.000Z",
+      },
+    ]),
+    null,
+  );
+  assert.equal(
+    findRelatedTiboNotice(reset, [
+      noticeSignal({ tweet_created_at: "2026-08-10T20:00:00.000Z" }),
+    ])?.tweet_created_at,
+    "2026-08-10T20:00:00.000Z",
+  );
+});
+
+test("formal resets more than five minutes apart remain separate", () => {
+  const first = resetSignal({
+    tweet_id: "reset-before",
+    tweet_url: "https://x.com/thsottiaux/status/reset-before",
+    tweet_created_at: "2026-08-11T00:27:44.000Z",
+  });
+  const second = resetSignal({
+    tweet_id: "reset-after",
+    tweet_url: "https://x.com/thsottiaux/status/reset-after",
+    tweet_created_at: "2026-08-11T00:33:00.000Z",
+  });
+
+  assert.equal(combineResetHistory([], [first, second]).length, 2);
+});
+
+test("rejected and irrelevant posts cannot enter a formal reset cluster", () => {
+  const valid = resetSignal({ tweet_id: "valid-reset" });
+  const rejected = resetSignal({
+    tweet_id: "rejected-reset",
+    tweet_created_at: "2026-08-01T09:01:00.000Z",
+    verification_status: "rejected",
+  });
+  const irrelevant = resetSignal({
+    tweet_id: "irrelevant-reset",
+    tweet_created_at: "2026-08-01T09:02:00.000Z",
+    signal_type: "irrelevant",
+  });
+
+  const combined = combineResetHistory([], [valid, rejected, irrelevant]);
+  assert.deepEqual(combined.map((item) => item.sourceTweetIds), [["valid-reset"]]);
+});
+
 test("notice-to-execution duration and notice type are stored in the converted event", () => {
   const reset = resetSignal();
   const notice = noticeSignal({ tweet_created_at: "2026-08-01T07:00:00.000Z" });

@@ -63,10 +63,99 @@
     }
   }
 
+  function extractQuoteTweetUrl(href) {
+    if (typeof href !== "string" || href.length === 0) return null;
+    try {
+      const url = new URL(href, "https://x.com");
+      if (url.protocol !== "https:" || !/^(x|twitter)\.com$/i.test(url.hostname)) return null;
+      const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/i);
+      if (!match) return null;
+      return {
+        url: `https://${url.hostname.toLowerCase()}/${match[1]}/status/${match[2]}`,
+        handle: `@${match[1]}`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function getQuoteMarker(article) {
+    if (!article || typeof article.querySelector !== "function") return null;
+    const selectors = [
+      '[data-testid="quoteTweet"]',
+      '[data-testid="quotedTweet"]',
+      '[data-testid="quote"]',
+      '[aria-label*="Quoted"]',
+      '[aria-label*="引用"]',
+    ];
+
+    for (const selector of selectors) {
+      const marker = article.querySelector(selector);
+      if (marker) return marker;
+    }
+    return null;
+  }
+
+  function extractQuoteMetadata(article) {
+    const marker = getQuoteMarker(article);
+    if (!marker) {
+      return {
+        isQuote: false,
+        quoteContextText: null,
+        quoteTweetUrl: null,
+        quoteAuthorHandle: null,
+      };
+    }
+
+    const links = typeof marker.querySelectorAll === "function"
+      ? Array.from(marker.querySelectorAll('a[href*="/status/"]'))
+      : [];
+    let quoteTweetUrl = null;
+    let quoteAuthorHandle = null;
+    for (const link of links) {
+      const parsed = extractQuoteTweetUrl(link.getAttribute?.("href"));
+      if (!parsed) continue;
+      quoteTweetUrl = parsed.url;
+      quoteAuthorHandle = parsed.handle;
+      break;
+    }
+
+    const textElement = marker.querySelector?.('[data-testid="tweetText"]');
+    const quoteContextText = String(textElement?.innerText || "").trim().slice(0, 1000) || null;
+
+    return {
+      isQuote: true,
+      quoteContextText,
+      quoteTweetUrl,
+      quoteAuthorHandle,
+    };
+  }
+
+  function emptyQuoteMetadata() {
+    return {
+      isQuote: false,
+      quoteContextText: null,
+      quoteTweetUrl: null,
+      quoteAuthorHandle: null,
+    };
+  }
+
   function extractReplyMetadata(article) {
+    let quoteMetadata;
+    try {
+      quoteMetadata = extractQuoteMetadata(article);
+    } catch {
+      // Quote cards are optional; a changing X DOM must not stop the scan.
+      quoteMetadata = emptyQuoteMetadata();
+    }
     const marker = getReplyMarker(article);
     if (!marker) {
-      return { isReply: false, replyToHandles: [], replyContextText: null };
+      return {
+        isReply: false,
+        replyToHandles: [],
+        replyContextText: null,
+        ...quoteMetadata,
+      };
     }
 
     const handles = [];
@@ -104,6 +193,7 @@
       isReply: true,
       replyToHandles: handles,
       replyContextText,
+      ...quoteMetadata,
     };
   }
 
@@ -111,5 +201,6 @@
     selectNewestParsedTweet,
     getTimelineSource,
     extractReplyMetadata,
+    extractQuoteMetadata,
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

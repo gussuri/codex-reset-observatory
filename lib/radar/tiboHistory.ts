@@ -5,6 +5,8 @@ import {
   toRegularResetHistoryEvent,
   type RegularResetEventRow,
 } from "./regularResetSchedule";
+import { isBroadResetScope } from "./resetEligibility";
+import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 
 export type TiboSignalType =
   | "official_notice"
@@ -29,6 +31,10 @@ export type TiboNoticeSignal = {
   signal_type: "official_notice" | "teaser";
   confidence: number | null;
   verification_status: TiboVerificationStatus;
+  ai_temporal_precision?: TemporalPrecision | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: TemporalResolutionStatus | null;
 };
 
 export type FormalTiboResetSignal = {
@@ -41,6 +47,8 @@ export type FormalTiboResetSignal = {
   confidence: number | null;
   verification_status: TiboVerificationStatus;
   classification_source?: TiboClassificationSource | null;
+  rule_signal_type?: TiboSignalType | null;
+  ai_signal_type?: TiboSignalType | null;
   ai_classification_status?: string | null;
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
@@ -61,6 +69,10 @@ export type FormalTiboResetSignal = {
   translated_text_zh?: string | null;
   expires_at?: string | null;
   is_reply?: boolean | null;
+  is_quote?: boolean | null;
+  quote_context_text?: string | null;
+  quote_tweet_url?: string | null;
+  quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: "profile" | "with_replies" | null;
@@ -149,11 +161,27 @@ export function findRelatedTiboNotice(
     const confidenceThreshold = signal.signal_type === "official_notice"
       ? OFFICIAL_NOTICE_CONFIDENCE
       : TEASER_CONFIDENCE;
+    const hasResolvedSchedule = signal.signal_type === "official_notice" &&
+      signal.temporal_resolution_status === "resolved" &&
+      getTimestamp(signal.expected_start_at) !== null;
+    const matchesResolvedSchedule = hasResolvedSchedule
+      ? isTemporalNoticeConsumedAtReset(
+          {
+            status: "resolved",
+            temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+            expectedStartAt: signal.expected_start_at ?? null,
+            expectedEndAt: signal.expected_end_at ?? null,
+          },
+          resetSignal.tweet_created_at,
+        )
+      : false;
+    const matchesLookback = signalTime !== null &&
+      signalTime >= resetTime - NOTICE_LOOKBACK_MS;
 
     return Boolean(
       signalTime !== null &&
         signalTime < resetTime &&
-        signalTime >= resetTime - NOTICE_LOOKBACK_MS &&
+        (matchesResolvedSchedule || (!hasResolvedSchedule && matchesLookback)) &&
         (previousResetTime === null || previousResetTime === undefined || signalTime > previousResetTime) &&
         signal.verification_status !== "rejected" &&
         (signal.confidence ?? 0) >= confidenceThreshold,
@@ -171,8 +199,9 @@ export function findRelatedTiboNotice(
 export function convertTiboResetSignalToHistoryEvent(
   signal: FormalTiboResetSignal,
   relatedNotice: TiboNoticeSignal | null = signal.related_notice ?? null,
+  completedAtOverride?: string,
 ): WindowEventLike {
-  const completedAt = new Date(signal.tweet_created_at).toISOString();
+  const completedAt = new Date(completedAtOverride ?? signal.tweet_created_at).toISOString();
   const noticeAt = relatedNotice
     ? new Date(relatedNotice.tweet_created_at).toISOString()
     : completedAt;
@@ -211,7 +240,98 @@ export function convertTiboResetSignalToHistoryEvent(
         : "なし",
       note: summary,
     },
+    sourceTweetIds: [signal.tweet_id],
   };
+}
+
+function getRepresentativeRank(signal: FormalTiboResetSignal) {
+  const explicitBroadScope = isAllPaidScope(signal.text) ? 1 : 0;
+  const bothClassifiersAgree =
+    signal.rule_signal_type === "reset_executed" &&
+    signal.ai_signal_type === "reset_executed"
+    ? 1
+    : 0;
+
+  return [
+    signal.verification_status === "confirmed" ? 1 : 0,
+    explicitBroadScope,
+    signal.confidence ?? 0,
+    bothClassifiersAgree,
+  ];
+}
+
+function compareRepresentativeSignals(
+  left: FormalTiboResetSignal,
+  right: FormalTiboResetSignal,
+) {
+  const leftRank = getRepresentativeRank(left);
+  const rightRank = getRepresentativeRank(right);
+  for (let index = 0; index < leftRank.length; index += 1) {
+    if (leftRank[index] !== rightRank[index]) {
+      return rightRank[index] - leftRank[index];
+    }
+  }
+
+  const leftTime = getTimestamp(left.tweet_created_at) ?? 0;
+  const rightTime = getTimestamp(right.tweet_created_at) ?? 0;
+  if (leftTime !== rightTime) return rightTime - leftTime;
+  return right.tweet_id.localeCompare(left.tweet_id);
+}
+
+export function areFormalTiboResetSignalsSameCluster(
+  left: FormalTiboResetSignal,
+  right: FormalTiboResetSignal,
+) {
+  if (!isFormalTiboResetSignal(left) || !isFormalTiboResetSignal(right)) return false;
+  const leftEvent = convertTiboResetSignalToHistoryEvent(left);
+  const rightEvent = convertTiboResetSignalToHistoryEvent(right);
+  return isBroadResetScope(leftEvent) && isBroadResetScope(rightEvent) && isSameReset(leftEvent, rightEvent);
+}
+
+function clusterFormalTiboResetSignals(signals: Array<FormalTiboResetSignal>) {
+  const sorted = signals
+    .slice()
+    .sort((left, right) => {
+      const timeDifference =
+        (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
+      return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
+    });
+  const clusters: Array<Array<FormalTiboResetSignal>> = [];
+
+  for (const signal of sorted) {
+    const current = clusters.at(-1);
+    const anchor = current?.[0];
+    if (anchor && areFormalTiboResetSignalsSameCluster(anchor, signal)) {
+      current!.push(signal);
+    } else {
+      clusters.push([signal]);
+    }
+  }
+
+  return clusters.map((cluster) => {
+    const earliest = cluster[0];
+    const representative = cluster.slice().sort(compareRepresentativeSignals)[0];
+    const relatedNotice = representative.related_notice ??
+      cluster.find((signal) => signal.related_notice)?.related_notice ??
+      null;
+    const sourceTweetIds = cluster
+      .slice()
+      .sort((left, right) => {
+        const timeDifference =
+          (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
+        return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
+      })
+      .map((signal) => signal.tweet_id);
+
+    return {
+      ...convertTiboResetSignalToHistoryEvent(
+        representative,
+        relatedNotice,
+        earliest.tweet_created_at,
+      ),
+      sourceTweetIds,
+    };
+  });
 }
 
 function isSameReset(left: WindowEventLike, right: WindowEventLike) {
@@ -242,6 +362,10 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
   const note = staticDetails && Object.prototype.hasOwnProperty.call(staticDetails, "note")
     ? staticDetails.note ?? null
     : dynamicDetails?.note ?? null;
+  const sourceTweetIds = Array.from(new Set([
+    ...(dynamicItem.sourceTweetIds ?? []),
+    ...(staticItem.sourceTweetIds ?? []),
+  ]));
 
   return {
     ...dynamicItem,
@@ -251,6 +375,7 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
     summary: staticItem.summary ?? dynamicItem.summary,
     scope,
     source_url: staticItem.source_url ?? dynamicItem.source_url,
+    ...(sourceTweetIds.length > 0 ? { sourceTweetIds } : {}),
     details: {
       cycleType: staticDetails?.cycleType ?? dynamicDetails?.cycleType ?? "",
       reasonType: staticDetails?.reasonType ?? dynamicDetails?.reasonType ?? "",
@@ -331,9 +456,9 @@ export function combineResetHistory(
   rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
   regularResetRows: Array<RegularResetEventRow> = [],
 ) {
-  const dynamicItems = formalTiboResets
+  const formalSignals = formalTiboResets
     .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal))
-    .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
+  const dynamicItems = clusterFormalTiboResetSignals(formalSignals);
   const regularMergedHistory = mergePersistedRegularEvents(staticHistory, regularResetRows);
   const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];

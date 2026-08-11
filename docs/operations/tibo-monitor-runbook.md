@@ -82,6 +82,9 @@ LIMIT 1;
 - `reply_to_handles`: Xの返信先領域から取得した安全なハンドル配列です。取得できない場合は空です。
 - `reply_context_text`: 同じ投稿記事内で明確に表示された親文脈だけが入り、取得できない場合は空です。
 - `source_timeline`: `profile` または `with_replies`。どの監視タブで取得したかを示します。
+- `is_quote`: Xが同じ記事内に引用投稿を明示した場合に `true` です。引用カードの取得失敗は通常投稿の収集を妨げません。
+- `quote_context_text`: 同じ記事内で明確に表示された引用本文だけが入り、取得できない場合は空です。
+- `quote_tweet_url` / `quote_author_handle`: 安全なXのstatus URLから取得できた引用元のURLとハンドルです。
 
 監視の稼働状態は `public.tibo_heartbeat` の `id='main'` を確認します。`last_heartbeat_at`、`last_successful_parse_at`、`last_seen_tweet_id`、`last_scan_error`、`last_page_reload_at`、`last_page_reload_status`、`last_page_reload_error` が手掛かりになります。プロフィールと返信のどちらが不足・停滞しているかは、拡張機能オプションのローカル診断ログで `sourceTimeline` と `monitored_tab_missing` / `timeline_stalled` を確認します。
 
