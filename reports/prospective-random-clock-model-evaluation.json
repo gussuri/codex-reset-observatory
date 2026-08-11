@@ -1,19 +1,19 @@
 {
   "schemaVersion": "prospective-random-clock-model-evaluation-v1",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-11T18:31:51.650Z",
-  "asOf": "2026-08-11T18:31:51.650Z",
+  "generatedAt": "2026-08-11T18:51:33.563Z",
+  "asOf": "2026-08-11T18:51:33.563Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
   "targetDefinition": "Broad-scope random reset probability modeled by elapsed time since the latest broad-scope random reset and the existing point-in-time random-reset regime. Regular resets remain recovery boundaries for product/state logic but do not reset the random-event hazard clock.",
   "activeModelVersion": "hazard-regime-random-elapsed-v1",
   "baselineModelVersion": "hazard-regime-elapsed-v1",
-  "freezeAt": "2026-08-12T00:00:00.000Z",
+  "freezeAt": "2026-08-11T18:38:51.000Z",
   "evaluationStartAt": null,
   "forecastCounts": {
     "active": 0,
-    "baseline": 53,
+    "baseline": 0,
     "comparable": 0
   },
   "comparison": {
@@ -228,11 +228,11 @@
   },
   "notes": [
     "Only prediction_history rows containing both the random-clock shadow and published forecasts are compared.",
-    "Rows before the first comparable forecast are not backfilled and are not relabeled.",
+    "Rows before 2026-08-11T18:38:51.000Z are excluded from the prospective sample; no forecast is backfilled or relabeled.",
     "The daily representative is the first saved forecast in each Asia/Tokyo calendar day.",
     "A regular-only boundary inside a scored horizon is censored; no-boundary horizons are scored as negative and random boundaries are positive.",
     "Target positives are completed broad-scope random reset boundaries only; regular resets are never random positives.",
     "Prospective results alone never auto-publish or retune a model; manual review is required.",
-    "The random-clock shadow parameters are frozen at 2026-08-12T00:00:00.000Z; A single reset, miss, or new observation must not trigger retuning."
+    "The random-clock shadow parameters are frozen at 2026-08-11T18:38:51.000Z; A single reset, miss, or new observation must not trigger retuning."
   ]
 }

@@ -7,7 +7,7 @@ export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-regime-elapsed-v1";
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.
 export const RANDOM_ELAPSED_SHADOW_MODEL_VERSION = "hazard-regime-random-elapsed-v1";
-export const RANDOM_ELAPSED_SHADOW_FREEZE_AT = "2026-08-12T00:00:00.000Z";
+export const RANDOM_ELAPSED_SHADOW_FREEZE_AT = "2026-08-11T18:38:51.000Z";
 export const RANDOM_ELAPSED_SHADOW_FREEZE_POLICY =
   "A single reset, miss, or new observation must not trigger retuning.";
 export const RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION =

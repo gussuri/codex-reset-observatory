@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  RANDOM_ELAPSED_SHADOW_FREEZE_AT,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -91,14 +92,14 @@ test("regular-only horizons are censored while random and no-event horizons are 
 
 test("prospective comparison excludes unresolved horizons and never enables automatic publication", () => {
   const report = evaluateRandomClockModelProspectively(
-    [row("2026-08-01T00:00:00.000Z"), row("2026-08-02T00:00:00.000Z")],
-    [boundary("regular", "2026-08-01T12:00:00.000Z", false, true)],
-    new Date("2026-08-03T00:00:00.000Z"),
+    [row("2026-08-11T19:00:00.000Z"), row("2026-08-13T00:00:00.000Z")],
+    [boundary("regular", "2026-08-12T07:00:00.000Z", false, true)],
+    new Date("2026-08-15T01:00:00.000Z"),
   );
 
-  assert.equal(report.evaluationStartAt, "2026-08-01T00:00:00.000Z");
+  assert.equal(report.evaluationStartAt, "2026-08-11T19:00:00.000Z");
   assert.equal(report.comparison.resolved24h, 1);
-  assert.equal(report.comparison.resolved48h, 0);
+  assert.equal(report.comparison.resolved48h, 1);
   assert.equal(report.gate.autoPublish, false);
   assert.equal(report.backfilled, false);
   assert.equal(report.activeModelVersion, RANDOM_ELAPSED_SHADOW_MODEL_VERSION);
@@ -107,14 +108,55 @@ test("prospective comparison excludes unresolved horizons and never enables auto
 
 test("prospective comparison ignores boundaries after the as-of time", () => {
   const report = evaluateRandomClockModelProspectively(
-    [row("2026-08-01T00:00:00.000Z")],
-    [boundary("future-random", "2026-08-03T00:00:00.000Z", true, false)],
-    new Date("2026-08-02T00:00:00.000Z"),
+    [row("2026-08-11T19:00:00.000Z")],
+    [boundary("future-random", "2026-08-13T00:00:00.000Z", true, false)],
+    new Date("2026-08-12T20:00:00.000Z"),
   );
 
   assert.equal(report.comparison.resolved24h, 1);
   assert.equal(report.comparison.positiveCount24h, 0);
   assert.equal(report.comparison.targetResetCount, 0);
+});
+
+test("freeze timestamp is fixed, not in the future, and excludes earlier rows without backfill", () => {
+  assert.equal(RANDOM_ELAPSED_SHADOW_FREEZE_AT, "2026-08-11T18:38:51.000Z");
+  assert.ok(
+    new Date(RANDOM_ELAPSED_SHADOW_FREEZE_AT).getTime()
+      <= new Date("2026-08-12T03:45:00+09:00").getTime(),
+  );
+
+  const report = evaluateRandomClockModelProspectively(
+    [
+      row("2026-08-11T18:38:50.999Z"),
+      row("2026-08-11T18:38:51.000Z"),
+      row("2026-08-12T00:00:00.000Z"),
+    ],
+    [],
+    new Date("2026-08-14T01:00:00.000Z"),
+  );
+
+  assert.equal(report.backfilled, false);
+  assert.equal(report.forecastCounts.active, 2);
+  assert.equal(report.forecastCounts.baseline, 2);
+  assert.equal(report.forecastCounts.comparable, 2);
+  assert.equal(report.evaluationStartAt, "2026-08-11T18:38:51.000Z");
+  assert.equal(report.status, "insufficient_data");
+  assert.equal(report.activeModelVersion, RANDOM_ELAPSED_SHADOW_MODEL_VERSION);
+  assert.equal(report.baselineModelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
+});
+
+test("zero random-clock rows remain insufficient_data without altering public-only rows", () => {
+  const report = evaluateRandomClockModelProspectively(
+    [row("2026-08-11T19:00:00.000Z", false, true)],
+    [],
+    new Date("2026-08-12T20:00:00.000Z"),
+  );
+
+  assert.equal(report.status, "insufficient_data");
+  assert.equal(report.forecastCounts.active, 0);
+  assert.equal(report.forecastCounts.baseline, 1);
+  assert.equal(report.forecastCounts.comparable, 0);
+  assert.equal(report.backfilled, false);
 });
 
 test("random target labels remain positive when a same-time boundary has both flags", () => {

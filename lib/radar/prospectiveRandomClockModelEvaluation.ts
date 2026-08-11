@@ -290,14 +290,18 @@ export function evaluateRandomClockModelProspectively(
 ): RandomClockProspectiveEvaluationReport {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
 
+  const freezeTime = timestamp(RANDOM_ELAPSED_SHADOW_FREEZE_AT);
+  if (freezeTime === null) throw new RangeError("RANDOM_ELAPSED_SHADOW_FREEZE_AT must be a valid date");
+  const isEligibleForecast = (row: ProspectiveForecastRow) => {
+    const generatedAt = timestamp(row.generatedAt);
+    return generatedAt !== null
+      && generatedAt >= freezeTime
+      && generatedAt <= asOf.getTime();
+  };
   const comparableRows = selectComparableRandomClockForecasts(rows).filter((row) => {
-    const generatedAt = timestamp(row.generatedAt);
-    return generatedAt !== null && generatedAt <= asOf.getTime();
+    return isEligibleForecast(row);
   });
-  const eligibleRows = rows.filter((row) => {
-    const generatedAt = timestamp(row.generatedAt);
-    return generatedAt !== null && generatedAt <= asOf.getTime();
-  });
+  const eligibleRows = rows.filter(isEligibleForecast);
   const knownBoundaries = boundaries.filter((boundary) => {
     const boundaryTime = timestamp(boundary.resetAt);
     return boundaryTime !== null && boundaryTime <= asOf.getTime();
@@ -392,7 +396,7 @@ export function evaluateRandomClockModelProspectively(
     },
     notes: [
       "Only prediction_history rows containing both the random-clock shadow and published forecasts are compared.",
-      "Rows before the first comparable forecast are not backfilled and are not relabeled.",
+      `Rows before ${RANDOM_ELAPSED_SHADOW_FREEZE_AT} are excluded from the prospective sample; no forecast is backfilled or relabeled.`,
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day.",
       "A regular-only boundary inside a scored horizon is censored; no-boundary horizons are scored as negative and random boundaries are positive.",
       "Target positives are completed broad-scope random reset boundaries only; regular resets are never random positives.",

@@ -55,7 +55,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(typeof randomElapsed.recoveryElapsedHours, "number");
   assert.equal(typeof randomElapsed.randomBoundaryCount, "number");
   assert.equal(typeof randomElapsed.regularBoundaryCount, "number");
-  assert.equal(randomElapsed.freezeAt, "2026-08-12T00:00:00.000Z");
+  assert.equal(randomElapsed.freezeAt, "2026-08-11T18:38:51.000Z");
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");
