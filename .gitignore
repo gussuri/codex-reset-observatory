@@ -10,6 +10,9 @@ dev-server*.log
 start-server*.log
 .pnpm-debug.log
 *.log
+apps/codex-usage-monitor/bin/
+apps/codex-usage-monitor/obj/
+apps/codex-usage-monitor/dist/
 
 # Scratch / Temporary test files
 scratch/

@@ -6,49 +6,47 @@ for Tibo's reset confirmation.
 
 ## 日常運用
 
-> **普段はバックグラウンド自動監視です。黒いターミナルを開きっぱなしにする必要はありません。**
+> **通常運用ではWindows GUIアプリを起動している間だけ監視します。黒いターミナルを開きっぱなしにする必要はありません。**
 
 ### 普段の状態
 
-Codex usage monitorは、Windows Task Schedulerからバックグラウンドで自動実行されます。
+`Codex Usage Monitor`を起動すると監視が始まり、アプリを閉じると監視が止まります。
 
-- Task名: `Codex Reset Observatory Usage Monitor`
-- Windowsへログオンすると自動起動
+- GUI source: `apps/codex-usage-monitor/`
+- GUI executable: `apps/codex-usage-monitor/dist/CodexUsageMonitor.exe`
 - 通常のpolling: 120秒
 - 最低polling: 60秒
 
-monitorはCodex公式app-serverから週次利用枠を定期取得し、Vercel webhookへ安全なスナップショットを送信します。
+monitorはCodex公式app-serverから週次利用枠を定期取得し、Vercel webhookへ安全なスナップショットを送信します。GUIには監視状態、週間使用率、残量、次回通常リセット、最終成功取得時刻、送信状態を表示します。
 
 ### 自動監視が動いているか確認する
 
-Windowsの「タスク スケジューラ」で、`Codex Reset Observatory Usage Monitor`を開き、次を確認します。
+GUIの状態表示で`監視中`または`再接続中`になっていることと、最終確認時刻が更新されていることを確認します。
 
-- 実行中か
-- 最終実行結果
-- 最終実行時刻
-
-Supabaseのlatest monitor stateが更新され続けていることでも確認できます。ただし、個人のusage raw値がpublic APIに表示されるとは限りません。
+必要に応じて、Supabaseのlatest monitor stateが更新され続けていることでも確認できます。ただし、個人のusage raw値がpublic APIに表示されるとは限りません。
 
 ### 手動で監視画面を表示する
 
-黒いコンソールでログを確認したい場合は、二重起動を避けるため、先にTask Scheduler版を一旦「終了」します。その後、Windows Terminalまたはcmdで次を実行します。
+通常はデスクトップまたはStart Menuから`CodexUsageMonitor.exe`を起動します。アプリ起動時に監視が自動開始され、ウィンドウを閉じるとapp-server、polling、監視プロセスが終了します。
+
+開発・デバッグで黒いコンソールのログを確認したい場合だけ、Windows Terminalまたはcmdで次を実行します。
 
 ```powershell
 cd /d C:\Users\Yura\Documents\codex-reset-observatory
 corepack pnpm run monitor:codex-usage
 ```
 
-`[Codex usage monitor] app_server_started {}`や`[Codex usage monitor] snapshot_sent ...`などのログを確認できます。終了するには`Ctrl+C`を押します。
-
-手動確認が終わったら、手動monitorを`Ctrl+C`で終了し、Task Schedulerから`Codex Reset Observatory Usage Monitor`を再度「実行」して通常運用へ戻します。
+CLIは開発・デバッグ用です。`[Codex usage monitor] app_server_started {}`や`[Codex usage monitor] snapshot_sent ...`などのログを確認できます。終了するには`Ctrl+C`を押します。
 
 ### 二重起動に注意
 
-Task Scheduler版が動いている状態で手動monitorを起動すると、二重起動になる可能性があります。手動確認時は原則として先にTask Scheduler版を終了してください。
+GUIを起動している状態でCLIを起動すると、二重監視になる可能性があります。デバッグ時はGUIを閉じてからCLIを起動してください。
 
 ### PC再起動後
 
-Windowsログオン時にTask Schedulerから自動起動するため、通常は手動起動不要です。不安な場合だけ、Task Schedulerの状態またはSupabaseのlatest monitor state更新を確認します。
+PC再起動やWindowsログオンだけではmonitorは自動起動しません。通常運用へ戻る場合はGUIアプリを起動してください。
+
+Task Scheduler、Startup folder、registry Run key、Windows serviceは現在の運用では使用しません。
 
 ## Data source and safety
 
@@ -116,7 +114,7 @@ order is also reconciled when a usage observation arrives after Tibo. The
 canonical global reset time remains the first trusted Tibo completion post;
 the local observation timestamp is never used as the formal history timestamp.
 
-## Windows Task Scheduler
+## Windows configuration and CLI debugging
 
 Set the secret in the current user's environment without printing it:
 
@@ -124,36 +122,24 @@ Set the secret in the current user's environment without printing it:
 [Environment]::SetEnvironmentVariable('CODEX_USAGE_MONITOR_SECRET', '<value>', 'User')
 ```
 
-Do not put the value in a task argument or repository file. Then install a
-current-user, non-administrator logon task from the repository root:
+Do not put the value in a task argument, GUI configuration file, or repository
+file. The GUI inherits the current user's environment. The value is never
+shown in the UI or logs.
+
+For CLI debugging, run from the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\install-codex-usage-monitor-task.ps1
-```
-
-The task runs `corepack pnpm run monitor:codex-usage`, starts at the user's logon,
-and restarts up to three times with a two-minute interval. The installer refuses
-to register the task until the User-scope secret exists. Verify only the task
-state, never the task action's environment:
-
-```powershell
-Get-ScheduledTask -TaskName 'Codex Reset Observatory Usage Monitor'
-Get-ScheduledTaskInfo -TaskName 'Codex Reset Observatory Usage Monitor'
-```
-
-To stop and remove it:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\uninstall-codex-usage-monitor-task.ps1
+corepack pnpm run monitor:codex-usage
 ```
 
 If the monitor is stopped, the server keeps the last state. After a gap over 10
-minutes, the next snapshot rebases instead of inventing a reset.
+minutes, the next snapshot rebases instead of inventing a reset. The GUI and CLI
+both use the same monitor core.
 
 ## Troubleshooting
 
 - `monitor_secret_missing`: set the User-scope `CODEX_USAGE_MONITOR_SECRET` and
-  start a new user session before running the task.
+  restart the GUI after the environment value is available.
 - `app_server_spawn_failed`: verify the local Codex installation and
   `CODEX_CLI_PATH`.
 - `snapshot_rejected`: the app-server response had no unambiguous weekly Codex

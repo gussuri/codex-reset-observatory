@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createJsonMonitorLogger,
   createJsonLineParser,
   createNotificationDebouncer,
+  getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
   getRestartBackoffMs,
   toSafeMonitorPayload,
@@ -69,4 +71,41 @@ test("monitor payload contains only safe rate-limit fields", () => {
       resetsAt: 1787012727,
     },
   );
+});
+
+test("GUI event output exposes safe snapshot state without credentials", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  logger("snapshot_sent", {
+    observedAt: "2026-08-11T00:02:00.000Z",
+    usedPercent: 6,
+    resetsAt: 1787012727,
+    planType: "plus",
+    windowDurationMins: 10080,
+    secret: "must-not-leak",
+  });
+
+  const event = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.equal(event.event, "snapshot_sent");
+  assert.equal(typeof event.at, "string");
+  assert.deepEqual({
+    observedAt: event.observedAt,
+    usedPercent: event.usedPercent,
+    resetsAt: event.resetsAt,
+    planType: event.planType,
+    windowDurationMins: event.windowDurationMins,
+  }, {
+    observedAt: "2026-08-11T00:02:00.000Z",
+    usedPercent: 6,
+    resetsAt: 1787012727,
+    planType: "plus",
+    windowDurationMins: 10080,
+  });
+  assert.equal(lines[0].includes("must-not-leak"), false);
+});
+
+test("GUI-safe error codes preserve only known machine-readable reasons", () => {
+  assert.equal(getSafeMonitorErrorCode(new Error("monitor_secret_missing")), "monitor_secret_missing");
+  assert.equal(getSafeMonitorErrorCode(new Error("private error details")), "Error");
 });

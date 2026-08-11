@@ -106,7 +106,9 @@ export function toSafeMonitorPayload(snapshot: CodexUsageSnapshot) {
   };
 }
 
-function getSafeErrorCode(error: unknown) {
+export function getSafeMonitorErrorCode(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/^[a-z0-9_]{1,80}$/.test(message)) return message;
   if (error && typeof error === "object") {
     const code = (error as { code?: unknown }).code;
     if (typeof code === "string" && code.length <= 80) return code;
@@ -158,7 +160,41 @@ export function getMonitorConfig(env: NodeJS.ProcessEnv = process.env): CodexUsa
   };
 }
 
-type MonitorLogger = (event: string, details?: Record<string, unknown>) => void;
+export type MonitorLogger = (event: string, details?: Record<string, unknown>) => void;
+
+export type MonitorEventWriter = (line: string) => void;
+
+export function createJsonMonitorLogger(
+  writeLine: MonitorEventWriter = (line) => process.stdout.write(`${line}\n`),
+): MonitorLogger {
+  return (event, details = {}) => {
+    const safeDetails: Record<string, unknown> = {};
+    const allowedKeys = event === "snapshot_sent"
+      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins"]
+      : event === "snapshot_failed"
+        ? ["reason"]
+        : event === "session_restart"
+          ? ["reason", "backoffMs"]
+          : event === "error"
+            ? ["reason"]
+            : event === "snapshot_rejected"
+              ? ["reason"]
+              : [];
+
+    for (const key of allowedKeys) {
+      const value = details[key];
+      if (typeof value === "string" || typeof value === "number") {
+        safeDetails[key] = value;
+      }
+    }
+
+    writeLine(JSON.stringify({
+      event,
+      at: new Date().toISOString(),
+      ...safeDetails,
+    }));
+  };
+}
 
 function defaultLogger(event: string, details: Record<string, unknown> = {}) {
   console.info(`[Codex usage monitor] ${event}`, details);
@@ -291,11 +327,14 @@ async function runAppServerSession(
         }
         await postUsageSnapshot(config, snapshot);
         logger("snapshot_sent", {
+          observedAt: snapshot.observedAt,
           usedPercent: snapshot.usedPercent,
           resetsAt: snapshot.resetsAt,
+          planType: snapshot.planType,
+          windowDurationMins: snapshot.windowDurationMins,
         });
       } catch (error) {
-        logger("snapshot_failed", { reason: getSafeErrorCode(error) });
+        logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
       } finally {
         refreshInFlight = false;
       }
@@ -339,7 +378,9 @@ async function runAppServerSession(
     child.stderr.on("data", () => {
       // Never forward app-server stderr: it may contain private diagnostics.
     });
-    child.once("error", () => finish(new Error("app_server_process_error")));
+    child.once("error", (error: NodeJS.ErrnoException) => finish(
+      new Error(error.code === "ENOENT" ? "codex_cli_not_found" : "app_server_process_error"),
+    ));
     child.once("close", () => {
       if (signal.aborted) finish();
       else finish(new Error("app_server_exited"));
@@ -362,7 +403,8 @@ async function runAppServerSession(
         if (settled) return;
         pollTimer = setInterval(() => { void refresh(); }, config.pollIntervalMs);
       } catch (error) {
-        finish(new Error(getSafeErrorCode(error) === "unknown" ? "app_server_initialize_failed" : getSafeErrorCode(error)));
+        const reason = getSafeMonitorErrorCode(error);
+        finish(new Error(reason === "unknown" ? "app_server_initialize_failed" : reason));
       }
     };
 
@@ -385,7 +427,7 @@ export async function runCodexUsageMonitor(
       restartAttempt = 0;
     } catch (error) {
       logger("session_restart", {
-        reason: getSafeErrorCode(error),
+        reason: getSafeMonitorErrorCode(error),
         backoffMs: getRestartBackoffMs(restartAttempt),
       });
       await waitFor(getRestartBackoffMs(restartAttempt), signal);
@@ -401,7 +443,7 @@ if (invokedPath === import.meta.url) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   runCodexUsageMonitor(process.env, { signal: controller.signal }).catch((error) => {
-    console.error("[Codex usage monitor] stopped", { reason: getSafeErrorCode(error) });
+    console.error("[Codex usage monitor] stopped", { reason: getSafeMonitorErrorCode(error) });
     process.exitCode = 1;
   });
 }
