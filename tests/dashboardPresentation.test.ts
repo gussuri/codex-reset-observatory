@@ -550,6 +550,82 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.doesNotMatch(html, /border-amber-300 bg-amber-50/);
 });
 
+test("aligns reset history notice and execution timestamps in a desktop grid", () => {
+  const calculationNow = new Date("2026-08-12T00:00:00.000Z");
+  const baseSnapshot = toPublicRadarSnapshot(getLocalRadarData({ calculationNow }), "ja", { calculationNow });
+  const template = baseSnapshot.viewModel.recentHistory.find((item) => item.resetAt);
+  if (!template) throw new Error("Expected a reset history item for the presentation test");
+
+  const historyItem = {
+    ...template,
+    key: "timestamp-alignment-test",
+    recordKind: "confirmed_global" as const,
+    title: "テストリセット",
+    signalLabel: "予告",
+    signalAt: "2026-08-10T20:34:00.000Z",
+    resetLabel: "実施",
+    resetAt: "2026-08-11T00:00:00.000Z",
+    executionTimePrecision: "approximate" as const,
+    source: "https://x.com/thsottiaux/status/timestamp-alignment-test",
+    details: {
+      ...(template.details ?? {
+        cycleType: "ランダムリセット",
+        reasonType: "ランダムリセット",
+        resetMethod: "強制リセット",
+        scope: "全体",
+        noticeToExecution: "0分",
+      }),
+      cycleType: "ランダムリセット",
+    },
+  };
+  const alignedSnapshot = {
+    ...baseSnapshot,
+    viewModel: {
+      ...baseSnapshot.viewModel,
+      recentHistory: [historyItem],
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: alignedSnapshot, locale: "ja" }),
+  );
+
+  const historyIndex = html.indexOf("テストリセット");
+  const noticeLabelIndex = html.indexOf(">予告：</span>", historyIndex);
+  const executionLabelIndex = html.indexOf(">実施：</span>", historyIndex);
+  const sourceIndex = html.indexOf("ソース", executionLabelIndex);
+  assert.ok(historyIndex >= 0);
+  assert.ok(noticeLabelIndex > historyIndex);
+  assert.ok(executionLabelIndex > noticeLabelIndex);
+  assert.ok(sourceIndex > executionLabelIndex);
+  assert.match(html, /sm:grid sm:grid-cols-\[auto_auto\] sm:justify-end sm:gap-x-3/);
+  assert.match(html, /tabular-nums/);
+
+  const labels = {
+    ja: [">予告：</span>", ">実施：</span>"],
+    en: [">Notice: </span>", ">Reset: </span>"],
+    zh: [">预告：</span>", ">执行：</span>"],
+  } as const;
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const localizedHtml = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: alignedSnapshot, locale }),
+    );
+    for (const label of labels[locale]) assert.match(localizedHtml, new RegExp(label));
+  }
+
+  const withoutNoticeSnapshot = {
+    ...alignedSnapshot,
+    viewModel: {
+      ...alignedSnapshot.viewModel,
+      recentHistory: [{ ...historyItem, signalLabel: "", signalAt: null }],
+    },
+  };
+  const withoutNoticeHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: withoutNoticeSnapshot, locale: "ja" }),
+  );
+  assert.doesNotMatch(withoutNoticeHtml, />予告：<\/span>/);
+  assert.match(withoutNoticeHtml, />実施：<\/span>/);
+});
+
 test("observation status row reflects an active Codex incident without changing the calculation", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(

@@ -790,34 +790,45 @@ export function RadarDashboard({
                     />
                   </div>
                   <div className="border-t border-slate-200/80 pt-3 text-sm leading-6 text-slate-700 sm:border-t-0 sm:pt-0 md:text-right">
-                    {item.signalLabel && hasPriorSignal(item.signalAt, item.resetAt) ? (
-                      <p className="sm:block hidden">
-                        {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
-                      </p>
-                    ) : null}
-                    {item.resetAt || item.resetLabel ? (
-                      <p className="font-normal sm:font-normal">
-                        <span className="text-slate-600">
-                          {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}
-                        </span>
-                        <LocalizedDateTime
-                          value={item.resetAt}
-                          locale={locale}
-                          approximate={item.executionTimePrecision === "approximate"}
-                          className="font-bold text-slate-900 sm:font-normal sm:text-slate-700"
-                        />
-                      </p>
-                    ) : null}
+                    <div className="sm:grid sm:grid-cols-[auto_auto] sm:justify-end sm:gap-x-3">
+                      {item.signalLabel && hasPriorSignal(item.signalAt, item.resetAt) ? (
+                        <div className="hidden sm:contents">
+                          <span className="text-slate-600">
+                            {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}
+                          </span>
+                          <span className="tabular-nums">
+                            <LocalizedDateTime value={item.signalAt} locale={locale} />
+                          </span>
+                        </div>
+                      ) : null}
+                      {item.resetAt || item.resetLabel ? (
+                        <div className="sm:contents">
+                          <span className="text-slate-600">
+                            {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}
+                          </span>
+                          <span className="tabular-nums font-bold text-slate-900 sm:font-normal sm:text-slate-700">
+                            <LocalizedDateTime
+                              value={item.resetAt}
+                              locale={locale}
+                              approximate={item.executionTimePrecision === "approximate"}
+                              className="font-bold text-slate-900 sm:font-normal sm:text-slate-700"
+                            />
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                     {item.details?.cycleType !== translateDynamic("定期リセット", locale) && isSafeHttpUrl(item.source) ? (
-                      <a
-                        className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
-                        href={item.source ?? undefined}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {translateUI("source", locale)}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                      <div className="sm:text-right">
+                        <a
+                          className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
+                          href={item.source ?? undefined}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {translateUI("source", locale)}
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </div>
                     ) : null}
                   </div>
                 </div>
