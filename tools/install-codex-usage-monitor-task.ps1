@@ -30,7 +30,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -RestartInterval (New-TimeSpan -Minutes 2)
 $principal = New-ScheduledTaskPrincipal `
   -UserId $currentUser `
-  -LogonType InteractiveToken `
+  -LogonType Interactive `
   -RunLevel Limited
 
 Register-ScheduledTask `
