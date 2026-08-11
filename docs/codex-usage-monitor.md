@@ -4,6 +4,52 @@ The local monitor observes the weekly usage window exposed by the official
 Codex app-server. It is an independent corroboration signal, not a replacement
 for Tibo's reset confirmation.
 
+## 日常運用
+
+> **普段はバックグラウンド自動監視です。黒いターミナルを開きっぱなしにする必要はありません。**
+
+### 普段の状態
+
+Codex usage monitorは、Windows Task Schedulerからバックグラウンドで自動実行されます。
+
+- Task名: `Codex Reset Observatory Usage Monitor`
+- Windowsへログオンすると自動起動
+- 通常のpolling: 120秒
+- 最低polling: 60秒
+
+monitorはCodex公式app-serverから週次利用枠を定期取得し、Vercel webhookへ安全なスナップショットを送信します。
+
+### 自動監視が動いているか確認する
+
+Windowsの「タスク スケジューラ」で、`Codex Reset Observatory Usage Monitor`を開き、次を確認します。
+
+- 実行中か
+- 最終実行結果
+- 最終実行時刻
+
+Supabaseのlatest monitor stateが更新され続けていることでも確認できます。ただし、個人のusage raw値がpublic APIに表示されるとは限りません。
+
+### 手動で監視画面を表示する
+
+黒いコンソールでログを確認したい場合は、二重起動を避けるため、先にTask Scheduler版を一旦「終了」します。その後、Windows Terminalまたはcmdで次を実行します。
+
+```powershell
+cd /d C:\Users\Yura\Documents\codex-reset-observatory
+corepack pnpm run monitor:codex-usage
+```
+
+`[Codex usage monitor] app_server_started {}`や`[Codex usage monitor] snapshot_sent ...`などのログを確認できます。終了するには`Ctrl+C`を押します。
+
+手動確認が終わったら、手動monitorを`Ctrl+C`で終了し、Task Schedulerから`Codex Reset Observatory Usage Monitor`を再度「実行」して通常運用へ戻します。
+
+### 二重起動に注意
+
+Task Scheduler版が動いている状態で手動monitorを起動すると、二重起動になる可能性があります。手動確認時は原則として先にTask Scheduler版を終了してください。
+
+### PC再起動後
+
+Windowsログオン時にTask Schedulerから自動起動するため、通常は手動起動不要です。不安な場合だけ、Task Schedulerの状態またはSupabaseのlatest monitor state更新を確認します。
+
 ## Data source and safety
 
 The monitor starts the official local executable with `codex.exe app-server` and
