@@ -98,6 +98,14 @@ test("home SEO descriptions expose only the public 24-hour and 48-hour horizons"
   }
 });
 
+test("llms description keeps Codex central while explaining the shared Work pool", () => {
+  const llms = readFileSync(join(root, "public/llms.txt"), "utf8");
+
+  assert.match(llms, /independent website that tracks and forecasts OpenAI Codex usage limits resets/);
+  assert.match(llms, /Codex and ChatGPT Work remain separate experiences/);
+  assert.match(llms, /agentic usage and credits pool/);
+});
+
 test("WebSite JSON-LD uses one formal name and only the Japanese alternate name", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const jsonLd = getSiteJsonLd(locale);

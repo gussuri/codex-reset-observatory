@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { AboutView } from "../components/AboutView";
 import { formatScheduledSourceDay, RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
 import { formatProbabilityDisplay, ProbabilityMetrics } from "../components/ProbabilityMetrics";
@@ -791,6 +792,37 @@ test("adds the forecast-method anchor to each localized FAQ", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const html = renderToStaticMarkup(React.createElement(FaqView, { locale }));
     assert.match(html, /id="forecast-method"/);
+  }
+});
+
+test("explains the shared Codex and Work usage pool in localized About and FAQ content", () => {
+  const cases = {
+    ja: {
+      about: "CodexとChatGPT Workは、対象プランでは同じエージェント利用量・クレジットのプールを共有しています。",
+      question: "ChatGPT Workのリセットも関係ありますか？",
+      answer: "その共有利用枠に対するリセットであれば、CodexだけでなくChatGPT Workの利用にも関係します。",
+    },
+    en: {
+      about: "On eligible plans, Codex and ChatGPT Work share the same agentic usage and credits pool.",
+      question: "Does a Codex reset also affect ChatGPT Work?",
+      answer: "A reset affecting that shared pool can therefore affect both Codex and ChatGPT Work",
+    },
+    zh: {
+      about: "在符合条件的方案中，Codex 和 ChatGPT Work 共享同一个代理式使用量和额度池。",
+      question: "Codex 的重置也会影响 ChatGPT Work 吗？",
+      answer: "影响这一共享额度池的重置也可能影响两者。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const aboutHtml = renderToStaticMarkup(React.createElement(AboutView, { locale }));
+    const faqHtml = renderToStaticMarkup(React.createElement(FaqView, { locale }));
+
+    assert.ok(aboutHtml.includes(cases[locale].about), locale);
+    assert.ok(aboutHtml.includes("Codex") || locale === "zh", locale);
+    assert.ok(faqHtml.includes(cases[locale].question), locale);
+    assert.ok(faqHtml.includes(cases[locale].answer), locale);
+    assert.match(faqHtml, /"@type":"FAQPage"/);
   }
 });
 

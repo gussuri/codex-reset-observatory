@@ -37,6 +37,10 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "公式予告がある場合は、その内容を優先して確認します。予告がない場合は、直近の履歴やStatusの動きから現在の見立てを表示しています。",
         },
         {
+          question: "ChatGPT Workのリセットも関係ありますか？",
+          answer: "はい。対象プランでは、CodexとChatGPT Workは同じエージェント利用量・クレジットのプールを共有しています。その共有利用枠に対するリセットであれば、CodexだけでなくChatGPT Workの利用にも関係します。ただし、対象プランやリセットの範囲によって適用状況が異なる場合があります。",
+        },
+        {
           question: "トークン・使用量・制限・レートのリセットは同じ意味ですか？",
           answer: "検索では似た意味で使われることがあります。このサイトでは、Codexの利用上限や使用量の回復につながるリセットを中心に扱っています。",
         },
@@ -90,6 +94,10 @@ export function FaqView({ locale }: FaqViewProps) {
         {
           question: "When is the next Codex usage limits reset?",
           answer: "OpenAI does not always publish an exact reset time. This site shows official notices and estimates whether a usage-limits reset looks likely within the next 24 or 48 hours.",
+        },
+        {
+          question: "Does a Codex reset also affect ChatGPT Work?",
+          answer: "Yes. On eligible plans, Codex and ChatGPT Work share the same agentic usage and credits pool. A reset affecting that shared pool can therefore affect both Codex and ChatGPT Work, although the applicable scope may vary by plan and event.",
         },
         {
           question: "How does Codex reset work?",
@@ -179,6 +187,10 @@ export function FaqView({ locale }: FaqViewProps) {
         {
           question: "什么时候可以知道 Codex 重置的具体时间？",
           answer: "如果官方发布了预告，请优先查看预告中的详细信息。在没有预告的情况下，本站会根据最近的重置历史、OpenAI Status 上的故障信息和社区动态显示当前预测。",
+        },
+        {
+          question: "Codex 的重置也会影响 ChatGPT Work 吗？",
+          answer: "会。在符合条件的方案中，Codex 和 ChatGPT Work 共享同一个代理式使用量和额度池，因此影响这一共享额度池的重置也可能影响两者。不过，具体适用范围可能因方案和事件而不同。",
         },
         {
           question: "Token、额度、使用限制和速率限制的重置是同一回事吗？",
