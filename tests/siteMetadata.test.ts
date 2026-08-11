@@ -104,7 +104,24 @@ test("Japanese home title uses the observatory search title without a template s
   assert.equal(SITE_NAME, "Codex Reset Observatory");
   assert.equal(SITE_NAME_JA, "Codexリセット観測所");
   assert.equal(HOME_TITLE_EN, "Codex Usage Limit Reset Status, History and Forecast");
-  assert.equal(HOME_TITLE_ZH, "Codex 使用上限重置状态、历史与预测");
+  assert.equal(HOME_TITLE_ZH, "Codex 重置观测站｜使用额度、时间、历史与预测");
+});
+
+test("Chinese home title uses the localized observatory search title without a suffix", () => {
+  const expectedTitle = "Codex 重置观测站｜使用额度、时间、历史与预测";
+
+  assert.equal(HOME_TITLE_ZH, expectedTitle);
+  assert.equal(titleFrom(zhHomeMetadata), expectedTitle);
+  assert.equal(openGraphFrom(zhHomeMetadata).title, expectedTitle);
+  assert.equal(zhHomeMetadata.twitter?.title, expectedTitle);
+  assert.equal(
+    HOME_DESCRIPTION_ZH,
+    "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
+  );
+  assert.equal(HOME_TITLE_JA, "Codexリセット観測所｜タイミング・履歴・次回予測");
+  assert.equal(HOME_TITLE_EN, "Codex Usage Limit Reset Status, History and Forecast");
+  assert.equal(SITE_NAME, "Codex Reset Observatory");
+  assert.equal(titleFrom(zhFaqMetadata), "Codex 重置 FAQ | 重置时机、使用限制与手动重置");
 });
 
 test("home SEO descriptions expose only the public 24-hour and 48-hour horizons", () => {

@@ -12,7 +12,7 @@ export const HOME_TITLE_EN =
   "Codex Usage Limit Reset Status, History and Forecast";
 export const HOME_DESCRIPTION_EN =
   "Check the latest Codex reset time, recent history, official notices, and reset forecasts for the next 24 and 48 hours.";
-export const HOME_TITLE_ZH = "Codex 使用上限重置状态、历史与预测";
+export const HOME_TITLE_ZH = "Codex 重置观测站｜使用额度、时间、历史与预测";
 export const HOME_DESCRIPTION_ZH =
   "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。";
 
