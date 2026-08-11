@@ -121,7 +121,7 @@ test("uses the latest broad regular recovery boundary, ignoring newer narrow rec
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。",
+        "前回のリセットから少し時間がたっています。",
       );
     },
   );
@@ -137,7 +137,7 @@ test("uses a broad regular reference when it is the latest recovery boundary", (
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。",
+        "前回のリセットから少し時間がたっています。",
       );
     },
   );
@@ -166,7 +166,7 @@ test("uses persisted regular_completed as the display boundary and not the older
       assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。",
+        "前回のリセットから少し時間がたっています。",
       );
     },
   );
@@ -182,15 +182,15 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
 
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。",
+        "前回のリセットから少し時間がたっています。",
       );
       assert.equal(
         getReasonForData(data, "en"),
-        "Some time has passed since the last reset, so a reset is becoming somewhat more likely.",
+        "Some time has passed since the last reset.",
       );
       assert.equal(
         getReasonForData(data, "zh"),
-        "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
+        "距离上次重置已经过了一段时间。",
       );
     },
   );
@@ -247,15 +247,15 @@ test("renders the normal outlook sentence in all supported locales", () => {
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。",
+        "前回のリセットから少し時間がたっています。",
       );
       assert.equal(
         getReason("en"),
-        "Some time has passed since the last reset, so a reset is becoming somewhat more likely.",
+        "Some time has passed since the last reset.",
       );
       assert.equal(
         getReason("zh"),
-        "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
+        "距离上次重置已经过了一段时间。",
       );
     },
   );

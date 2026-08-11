@@ -146,20 +146,34 @@ test("uses clear English and Chinese wording for teaser strength", () => {
 
 test("renders all nine regime and elapsed outlook buckets", () => {
   const cases = [
-    [0.8, 12, "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。"],
-    [0.8, 48, "前回のリセットから少し時間がたっていますが、最近のリセットが少ないため、リセットの見込みは低めです。"],
-    [0.8, 96, "前回のリセットから時間はたっていますが、最近のリセットが少ないため、リセットの見込みはやや低めです。"],
-    [1, 12, "前回のリセットから時間がたっていないため、短期のリセット見込みは低めです。"],
-    [1, 48, "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。"],
-    [1, 96, "前回のリセットから時間がたっているため、リセットの見込みは高まりつつあります。"],
-    [1.3, 12, "最近はリセットが多いものの、前回のリセットから時間がたっていないため、リセットの見込みは抑えめです。"],
-    [1.3, 48, "最近はリセットが多く、前回のリセットからも少し時間がたっているため、リセットの見込みは高めです。"],
-    [1.3, 96, "最近はリセットが多く、前回のリセットからも時間がたっているため、リセットの見込みは高めです。"],
+    [0.8, 12, "前回のリセットからまだ時間がたっていません。最近のランダムリセットのペースは、これまでより遅めです。"],
+    [0.8, 48, "前回のリセットから少し時間がたっています。最近のランダムリセットのペースは、これまでより遅めです。"],
+    [0.8, 96, "前回のリセットから時間がたっています。最近のランダムリセットのペースは、これまでより遅めです。"],
+    [1, 12, "前回のリセットからまだ時間がたっていません。"],
+    [1, 48, "前回のリセットから少し時間がたっています。"],
+    [1, 96, "前回のリセットから時間がたっています。"],
+    [1.3, 12, "最近のランダムリセットのペースは、これまでより速めです。ただし、前回のリセットからはまだ時間がたっていません。"],
+    [1.3, 48, "最近のランダムリセットのペースは、これまでより速めです。前回のリセットからも少し時間がたっています。"],
+    [1.3, 96, "最近のランダムリセットのペースは、これまでより速めです。前回のリセットからも時間がたっています。"],
   ] as const;
 
   for (const [multiplier, elapsedHours, expected] of cases) {
     assert.equal(reasonFor({ multiplier, elapsedHours }), expected);
   }
+});
+
+test("keeps regime wording limited to pace statements in Japanese", () => {
+  const low = reasonFor({ multiplier: 0.8, elapsedHours: 12 });
+  const normal = reasonFor({ multiplier: 1, elapsedHours: 12 });
+  const high = reasonFor({ multiplier: 1.3, elapsedHours: 12 });
+
+  assert.match(low ?? "", /最近のランダムリセットのペース/);
+  assert.match(high ?? "", /最近のランダムリセットのペース/);
+  assert.doesNotMatch(normal ?? "", /ランダムリセット|ペース|これまで/);
+  assert.doesNotMatch(
+    [low, normal, high].join(" "),
+    /見込みは低め|見込みは高め|最近のリセットが少ない|最近のリセットが多い|最近の傾向/,
+  );
 });
 
 test("does not use indirect or technical elapsed-time wording", () => {
@@ -171,11 +185,27 @@ test("does not use indirect or technical elapsed-time wording", () => {
 test("uses the same outlook buckets in English and Chinese", () => {
   assert.equal(
     reasonFor({ locale: "en", multiplier: 1, elapsedHours: 48 }),
-    "Some time has passed since the last reset, so a reset is becoming somewhat more likely.",
+    "Some time has passed since the last reset.",
   );
   assert.equal(
     reasonFor({ locale: "zh", multiplier: 1, elapsedHours: 48 }),
-    "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
+    "距离上次重置已经过了一段时间。",
+  );
+  assert.match(
+    reasonFor({ locale: "en", multiplier: 0.8, elapsedHours: 12 }) ?? "",
+    /Recent random resets have been occurring at a slower pace than before\./,
+  );
+  assert.match(
+    reasonFor({ locale: "en", multiplier: 1.3, elapsedHours: 12 }) ?? "",
+    /Recent random resets have been occurring at a faster pace than before\./,
+  );
+  assert.match(
+    reasonFor({ locale: "zh", multiplier: 0.8, elapsedHours: 12 }) ?? "",
+    /最近的随机重置节奏比过去更慢。/,
+  );
+  assert.match(
+    reasonFor({ locale: "zh", multiplier: 1.3, elapsedHours: 12 }) ?? "",
+    /最近的随机重置节奏比过去更快。/,
   );
 });
 
@@ -214,7 +244,7 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       multiplier: 0.8,
       elapsedHours: 0.5,
     }),
-    "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。",
+    "前回のリセットからまだ時間がたっていません。最近のランダムリセットのペースは、これまでより遅めです。",
   );
 });
 
