@@ -5,7 +5,7 @@ export const SITE_NAME = "Codex Reset Observatory";
 export const SITE_NAME_JA = "Codexリセット観測所";
 export const SITE_OG_IMAGE_URL = SITE_URL + "/og-image.png";
 
-export const HOME_TITLE_JA = "Codex利用上限のリセット状況・履歴・次回予測";
+export const HOME_TITLE_JA = "Codexリセット観測所｜タイミング・履歴・次回予測";
 export const HOME_DESCRIPTION_JA =
   "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。";
 export const HOME_TITLE_EN =

@@ -90,6 +90,23 @@ test("home metadata uses the unified brand and requested localized titles/descri
   }
 });
 
+test("Japanese home title uses the observatory search title without a template suffix", () => {
+  const expectedTitle = "Codexリセット観測所｜タイミング・履歴・次回予測";
+
+  assert.equal(HOME_TITLE_JA, expectedTitle);
+  assert.equal(titleFrom(jaHomeMetadata), expectedTitle);
+  assert.equal(openGraphFrom(jaHomeMetadata).title, expectedTitle);
+  assert.equal(jaHomeMetadata.twitter?.title, expectedTitle);
+  assert.equal(
+    HOME_DESCRIPTION_JA,
+    "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。",
+  );
+  assert.equal(SITE_NAME, "Codex Reset Observatory");
+  assert.equal(SITE_NAME_JA, "Codexリセット観測所");
+  assert.equal(HOME_TITLE_EN, "Codex Usage Limit Reset Status, History and Forecast");
+  assert.equal(HOME_TITLE_ZH, "Codex 使用上限重置状态、历史与预测");
+});
+
 test("home SEO descriptions expose only the public 24-hour and 48-hour horizons", () => {
   for (const description of [HOME_DESCRIPTION_JA, HOME_DESCRIPTION_EN, HOME_DESCRIPTION_ZH]) {
     assert.match(description, /24/);
