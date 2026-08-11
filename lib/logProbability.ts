@@ -20,6 +20,10 @@ import {
   type CalibratedShadowProbabilityResult,
 } from "@/lib/radar/calibratedShadowProbability";
 import type { RegimeElapsedProbabilityResult } from "@/lib/radar/regimeElapsedProbability";
+import {
+  calculateRandomElapsedProbability,
+  type RandomElapsedProbabilityResult,
+} from "@/lib/radar/randomElapsedProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
@@ -74,6 +78,23 @@ export type ExperimentalProbabilityForecast = {
   selectedPriorExposureDays?: number;
   selectedRegimeHalfLifeDays?: number;
   selectedRegimeRatioExponent?: number;
+  elapsedHoursSinceRandom?: number;
+  randomElapsedHours?: number;
+  recoveryElapsedHours?: number;
+  latestRandomResetAt?: string | null;
+  latestRecoveryResetAt?: string | null;
+  randomBoundaryCount?: number;
+  regularBoundaryCount?: number;
+  hazardBins?: Array<{
+    startHour: number;
+    endHour: number | null;
+    exposureHours: number;
+    observedEvents: number;
+    posteriorLambdaPerHour: number;
+    impliedDailyProbability: number;
+  }>;
+  freezeAt?: string;
+  freezePolicy?: string;
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;
@@ -164,6 +185,33 @@ function toRegimeElapsedExperimentalProbabilityForecast(
   };
 }
 
+function toRandomElapsedExperimentalProbabilityForecast(
+  result: RandomElapsedProbabilityResult,
+): ExperimentalProbabilityForecast {
+  const forecast = toExperimentalProbabilityForecast(result, null);
+  return {
+    ...forecast,
+    regimeMultiplier: result.randomElapsed.regime.regimeMultiplier,
+    recentRatePerDay: result.randomElapsed.regime.recentRatePerDay,
+    longTermRatePerDay: result.randomElapsed.regime.longTermRatePerDay,
+    elapsedHoursSinceRecovery: result.randomElapsed.recoveryElapsedHours,
+    elapsedHoursSinceRandom: result.randomElapsed.randomElapsedHours,
+    randomElapsedHours: result.randomElapsed.randomElapsedHours,
+    recoveryElapsedHours: result.randomElapsed.recoveryElapsedHours,
+    latestRandomResetAt: result.randomElapsed.latestRandomResetAt,
+    latestRecoveryResetAt: result.randomElapsed.latestRecoveryResetAt,
+    randomBoundaryCount: result.randomElapsed.randomBoundaryCount,
+    regularBoundaryCount: result.randomElapsed.regularBoundaryCount,
+    hazardBins: result.randomElapsed.bins,
+    selectedBinScheme: result.randomElapsed.binScheme,
+    selectedPriorExposureDays: result.randomElapsed.priorExposureDays,
+    selectedRegimeHalfLifeDays: result.randomElapsed.regimeHalfLifeDays,
+    selectedRegimeRatioExponent: result.randomElapsed.regimeRatioExponent,
+    freezeAt: result.randomElapsed.freezeAt,
+    freezePolicy: result.randomElapsed.freezePolicy,
+  };
+}
+
 export function buildExperimentalProbabilityForecasts(
   data: Parameters<typeof calculateShadowProbability>[0],
   options: ShadowProbabilityOptions & {
@@ -173,6 +221,7 @@ export function buildExperimentalProbabilityForecasts(
   const { shadowProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
   const regimeElapsed = calculateRegimeElapsedProbability(data, calculationOptions);
+  const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
   const calibrated = calculateCalibratedShadowProbability(data, {
     ...calculationOptions,
@@ -188,6 +237,7 @@ export function buildExperimentalProbabilityForecasts(
     forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
   }
   forecasts[regimeElapsed.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(regimeElapsed);
+  forecasts[randomElapsed.modelVersion] = toRandomElapsedExperimentalProbabilityForecast(randomElapsed);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
   return forecasts;
 }

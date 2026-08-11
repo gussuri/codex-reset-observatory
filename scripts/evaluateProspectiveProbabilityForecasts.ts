@@ -20,6 +20,7 @@ import {
   type ProspectiveProbabilityEvaluationReport,
 } from "../lib/radar/prospectiveProbabilityEvaluation";
 import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
+import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 
 export type PredictionHistoryRow = {
   logged_hour?: string | null;
@@ -181,6 +182,36 @@ export async function loadFormalTiboResets(): Promise<Array<FormalTiboResetSigna
   } catch (error) {
     console.error(
       "Prospective Tibo reset query failed",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return [];
+  }
+}
+
+export async function loadRegularResetEvents(): Promise<Array<RegularResetEventRow>> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) return [];
+
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const { data, error } = await supabase
+      .from("regular_reset_events")
+      .select(
+        "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at",
+      )
+      .order("completed_at", { ascending: true })
+      .limit(1000);
+    if (error) {
+      console.error("Prospective regular reset query failed", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<RegularResetEventRow>;
+  } catch (error) {
+    console.error(
+      "Prospective regular reset query failed",
       error instanceof Error ? error.message : "unknown error",
     );
     return [];

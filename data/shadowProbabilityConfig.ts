@@ -4,6 +4,14 @@ export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bay
 // Freeze hazard-regime-elapsed-v1 parameters until its prospective sample is sufficient.
 // A single reset, miss, or new observation must not trigger retuning.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-regime-elapsed-v1";
+// Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
+// Keep these parameters frozen until the prospective sample is sufficient for manual review.
+export const RANDOM_ELAPSED_SHADOW_MODEL_VERSION = "hazard-regime-random-elapsed-v1";
+export const RANDOM_ELAPSED_SHADOW_FREEZE_AT = "2026-08-12T00:00:00.000Z";
+export const RANDOM_ELAPSED_SHADOW_FREEZE_POLICY =
+  "A single reset, miss, or new observation must not trigger retuning.";
+export const RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION =
+  "Broad-scope random reset probability modeled by elapsed time since the latest broad-scope random reset and the existing point-in-time random-reset regime. Regular resets remain recovery boundaries for product/state logic but do not reset the random-event hazard clock.";
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const REGIME_ELAPSED_SELECTED_BIN_SCHEME = "A" as const;
 export const REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS = 2;

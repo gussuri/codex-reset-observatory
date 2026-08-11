@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
   SHADOW_PROBABILITY_MODEL_VERSION,
+  RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
+  RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION,
 } from "../data/shadowProbabilityConfig";
 import { buildExperimentalProbabilityForecasts, buildProbabilityDebugInfo } from "../lib/logProbability";
 import { calculateShadowProbability } from "../lib/radar/shadowProbability";
@@ -27,6 +29,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     "hazard-odds-v3-recency-bayes-h30-r3",
     "hazard-odds-v3-recency-bayes-h60-r2",
     "hazard-regime-elapsed-v1",
+    RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
     "hazard-odds-v4-logit-calibrated-prequential-v2",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
@@ -46,6 +49,13 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(regimeElapsed.selectedPriorExposureDays, 2);
   assert.equal(regimeElapsed.selectedRegimeHalfLifeDays, 3);
   assert.equal(regimeElapsed.selectedRegimeRatioExponent, 1);
+  const randomElapsed = forecasts[RANDOM_ELAPSED_SHADOW_MODEL_VERSION];
+  assert.equal(randomElapsed.modelVersion, RANDOM_ELAPSED_SHADOW_MODEL_VERSION);
+  assert.equal(typeof randomElapsed.randomElapsedHours, "number");
+  assert.equal(typeof randomElapsed.recoveryElapsedHours, "number");
+  assert.equal(typeof randomElapsed.randomBoundaryCount, "number");
+  assert.equal(typeof randomElapsed.regularBoundaryCount, "number");
+  assert.equal(randomElapsed.freezeAt, "2026-08-12T00:00:00.000Z");
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");
@@ -79,6 +89,8 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     }
     if (forecast.modelVersion === "hazard-regime-elapsed-v1") {
       assert.match(forecast.targetDefinition, /recovery-boundary/);
+    } else if (forecast.modelVersion === RANDOM_ELAPSED_SHADOW_MODEL_VERSION) {
+      assert.equal(forecast.targetDefinition, RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION);
     } else {
       assert.equal(forecast.targetDefinition, shadow.targetDefinition);
     }
@@ -96,6 +108,6 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.deepEqual(Object.keys(debugInfo.experimentalProbabilityForecasts as object), Object.keys(forecasts));
   assert.doesNotMatch(
     JSON.stringify(toPublicRadarSnapshot(data, "en", { calculationNow: now })),
-    /hazard-odds-v3-recency|hazard-odds-v4-logit-calibrated|alpha24h|alpha48h|calibrationSampleCount/,
+    /hazard-odds-v3-recency|hazard-odds-v4-logit-calibrated|hazard-regime-random-elapsed|alpha24h|alpha48h|calibrationSampleCount/,
   );
 });
