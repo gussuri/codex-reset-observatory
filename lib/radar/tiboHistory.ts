@@ -98,7 +98,7 @@ function getTweetId(url: string | null | undefined) {
 }
 
 function isAllPaidScope(text: string) {
-  return /all\s+(?:paid\s+)?(?:users|accounts|plans)|all\s+chatgpt\s+work\s+and\s+codex\s+users|全有料(?:プラン|ユーザー)|全ユーザー|全プラン/i.test(text);
+  return /all\s+(?:paid\s+)?(?:users|accounts|plans)|all\s+paid\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\s+users|all\s+chatgpt\s+work\s+and\s+codex\s+users|全有料(?:プラン|ユーザー)|全ユーザー|全プラン/i.test(text);
 }
 
 function getScope(text: string) {
