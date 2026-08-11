@@ -826,6 +826,37 @@ test("explains the shared Codex and Work usage pool in localized About and FAQ c
   }
 });
 
+test("adds stable ChatGPT reset FAQ anchors and keeps the whole-service distinction", () => {
+  const cases = {
+    ja: {
+      work: "ChatGPT Workのリセットも関係ありますか？",
+      reset: "ChatGPTのリセットとCodexのリセットは同じですか？",
+      distinction: "すべてのChatGPT利用制限がCodexと同じわけではありません。",
+    },
+    en: {
+      work: "Does a Codex reset also affect ChatGPT Work?",
+      reset: "Is a ChatGPT reset the same as a Codex reset?",
+      distinction: "Not all ChatGPT usage limits are the same as Codex limits.",
+    },
+    zh: {
+      work: "Codex 的重置也会影响 ChatGPT Work 吗？",
+      reset: "ChatGPT 的重置和 Codex 的重置是同一回事吗？",
+      distinction: "并非所有 ChatGPT 使用限制都与 Codex 的限制相同。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(React.createElement(FaqView, { locale }));
+
+    assert.match(html, new RegExp(`id="chatgpt-work-reset"`));
+    assert.match(html, new RegExp(`id="chatgpt-reset"`));
+    assert.ok(html.includes(cases[locale].work), locale);
+    assert.ok(html.includes(cases[locale].reset), locale);
+    assert.ok(html.includes(cases[locale].distinction), locale);
+    assert.match(html, /"@type":"FAQPage"/);
+  }
+});
+
 test("public FAQ wording names only the displayed 24-hour and 48-hour forecasts", () => {
   const html = renderToStaticMarkup(React.createElement(FaqView, { locale: "en" }));
 

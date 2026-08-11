@@ -98,6 +98,21 @@ test("home SEO descriptions expose only the public 24-hour and 48-hour horizons"
   }
 });
 
+test("Japanese FAQ metadata covers Codex and ChatGPT Work reset searches", () => {
+  const title = titleFrom(jaFaqMetadata);
+  const description = jaFaqMetadata.description ?? "";
+
+  assert.equal(title, "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory");
+  assert.match(description, /Codex/);
+  assert.match(description, /ChatGPT Work/);
+  assert.match(description, /リセット/);
+  assert.match(description, /利用上限/);
+  assert.equal(openGraphFrom(jaFaqMetadata).title, title);
+  assert.equal(openGraphFrom(jaFaqMetadata).description, description);
+  assert.equal(jaFaqMetadata.twitter?.title, title);
+  assert.equal(jaFaqMetadata.twitter?.description, description);
+});
+
 test("llms description keeps Codex central while explaining the shared Work pool", () => {
   const llms = readFileSync(join(root, "public/llms.txt"), "utf8");
 

@@ -6,11 +6,14 @@ import {
   siteUrl,
 } from "@/lib/siteMetadata";
 
+const FAQ_TITLE = "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory";
+const FAQ_DESCRIPTION =
+  "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。";
+
 export const metadata: Metadata = {
   applicationName: SITE_NAME,
-  title: "FAQ",
-  description:
-    "Codexのリセットタイミング、トークン・使用量・制限・レートのリセット、期待度、公式予告とコミュニティ予測の違いを説明します。",
+  title: { absolute: FAQ_TITLE },
+  description: FAQ_DESCRIPTION,
   alternates: {
     canonical: siteUrl("/faq"),
     languages: {
@@ -20,9 +23,8 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "FAQ",
-    description:
-      "Codexのリセットタイミング、トークン・使用量・制限・レートのリセット、期待度、公式予告とコミュニティ予測の違いを説明します。",
+    title: FAQ_TITLE,
+    description: FAQ_DESCRIPTION,
     url: siteUrl("/faq"),
     siteName: SITE_NAME,
     type: "article",
@@ -31,9 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "FAQ",
-    description:
-      "Codexのリセットタイミング、トークン・使用量・制限・レートのリセット、期待度、公式予告とコミュニティ予測の違いを説明します。",
+    title: FAQ_TITLE,
+    description: FAQ_DESCRIPTION,
     images: [SITE_OG_IMAGE_URL],
   },
 };
