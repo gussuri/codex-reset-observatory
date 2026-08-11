@@ -44,9 +44,12 @@ the secret or storage is unavailable.
 ## Recovery interpretation
 
 The server compares the previous and current weekly snapshots. A recovery needs
-both a decrease of at least one percentage point in `usedPercent` and a forward
-move in `resetsAt`. The first observation is a baseline. An observation after a
-gap greater than 10 minutes is a rebase and does not create an event.
+both a decrease of at least one percentage point in `usedPercent` and a
+`resetsAt` advance of at least one hour. The app-server timestamp may jitter by
+a few seconds, so smaller changes are ignored. Raw `resetsAt` values are kept
+unchanged for monitoring and later analysis. The first observation is a
+baseline. An observation after a gap greater than 10 minutes is a rebase and
+does not create an event.
 
 The previous scheduled reset is used only as context. An observation within 60
 minutes of that schedule is marked `regular` when there is no active official
@@ -114,6 +117,6 @@ minutes, the next snapshot rebases instead of inventing a reset.
   response body.
 
 The database migration is
-`20260811060000_add_codex_usage_recovery_observation.sql`. Both tables have RLS
+`20260811043509_add_codex_usage_recovery_observation.sql`. Both tables have RLS
 enabled, no client-role grants or policies, and are intended for the service
 role webhook only.

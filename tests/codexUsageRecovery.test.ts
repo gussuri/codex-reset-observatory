@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   CODEX_WEEKLY_WINDOW_MINUTES,
   MAX_USAGE_COMPARISON_GAP_MS,
+  RESET_AT_MEANINGFUL_FORWARD_SEC,
   REGULAR_RESET_PROXIMITY_MS,
   UNCONFIRMED_RECOVERY_ACTIVE_MS,
   evaluateCodexUsageRecovery,
@@ -245,6 +246,31 @@ test("a forward reset with unchanged usage is not recovery", () => {
 test("a usage decrease with an unchanged reset timestamp is not recovery", () => {
   const result = evaluateCodexUsageRecovery(previous(), snapshot({ usedPercent: 68, resetsAt: previous().resetsAt }), { activeOfficialNotice: false });
   assert.equal(result.kind, "no_recovery");
+});
+
+test("ignores small forward and backward reset timestamp jitter", () => {
+  const resetAtValues = [2727, 2728, 2727, 2726, 2728];
+  let prior = previous({ usedPercent: 4, resetsAt: resetAtValues[0] });
+
+  for (let index = 1; index < resetAtValues.length; index += 1) {
+    const resetsAt = resetAtValues[index];
+    const current = snapshot({
+      observedAt: new Date(NOW.getTime() + (index + 1) * 60 * 1000).toISOString(),
+      usedPercent: 4,
+      resetsAt,
+    });
+    assert.equal(evaluateCodexUsageRecovery(prior, current).kind, "no_recovery");
+    prior = current;
+  }
+});
+
+test("requires a meaningful reset timestamp advance", () => {
+  const base = previous({ usedPercent: 4, resetsAt: 1_000_000 });
+  assert.equal(evaluateCodexUsageRecovery(base, snapshot({ usedPercent: 3, resetsAt: 1_000_001 })).kind, "no_recovery");
+  assert.equal(evaluateCodexUsageRecovery(base, snapshot({ usedPercent: 3, resetsAt: 1_000_002 })).kind, "no_recovery");
+  assert.equal(evaluateCodexUsageRecovery(base, snapshot({ usedPercent: 3, resetsAt: 999_999 })).kind, "no_recovery");
+  assert.equal(evaluateCodexUsageRecovery(base, snapshot({ usedPercent: 3, resetsAt: 1_000_000 + RESET_AT_MEANINGFUL_FORWARD_SEC - 1 })).kind, "no_recovery");
+  assert.equal(evaluateCodexUsageRecovery(base, snapshot({ usedPercent: 3, resetsAt: 1_000_000 + RESET_AT_MEANINGFUL_FORWARD_SEC })).kind, "recovery");
 });
 
 test("a less than one point usage change is not recovery", () => {
