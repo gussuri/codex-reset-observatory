@@ -11,8 +11,13 @@ import {
 } from "@/lib/radar/tiboClassificationMode";
 import {
   convertTiboResetSignalToHistoryEvent,
+  isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "@/lib/radar/tiboHistory";
+import {
+  confirmNearestCodexRecoveryObservation,
+} from "@/lib/codexUsageRecoveryStore";
+import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
 import {
   buildFormalAdoptionResult,
   hasExistingFormalResetCluster,
@@ -429,6 +434,27 @@ export async function POST(req: NextRequest) {
         reason: "database_error",
       });
       return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
+
+    if (isFormalTiboResetSignal(formalCandidate)) {
+      try {
+        const recoveryMatch = await confirmNearestCodexRecoveryObservation(
+          supabase,
+          formalCandidate.tweet_id,
+          formalCandidate.tweet_created_at,
+          USAGE_TIBO_MATCH_WINDOW_MS,
+          receivedAt,
+        );
+        if (recoveryMatch.error) {
+          console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
+            reason: "lookup_failed",
+          });
+        }
+      } catch {
+        console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
+          reason: "request_failed",
+        });
+      }
     }
 
     const formalAdoption = buildFormalAdoptionResult(newlyAdopted, formalCandidate);

@@ -2,6 +2,7 @@ import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { getPublicRecoveryObservation } from "../codexUsageRecovery";
 import {
   aggregateResetTeaserStatus,
   getUiResetTeaserSignals,
@@ -304,6 +305,10 @@ export function toPublicRadarSnapshot(
       calculationNow,
       locale,
       latestResetAt,
+    ),
+    recoveryObservation: getPublicRecoveryObservation(
+      internal.codex_usage_recovery,
+      calculationNow,
     ),
   };
 }

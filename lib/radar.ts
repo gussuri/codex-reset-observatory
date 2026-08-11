@@ -76,6 +76,7 @@ import {
 } from "./radar/probability";
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
+import type { CodexRecoveryObservation } from "./codexUsageRecovery";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
 export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
@@ -100,6 +101,7 @@ export function getLocalRadarData({
   rejectedTiboResets = [],
   regularResetEvents = [],
   resetDisplayNames = [],
+  codexRecoveryObservation = null,
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   checkedAt?: string;
@@ -111,6 +113,7 @@ export function getLocalRadarData({
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
   regularResetEvents?: RadarData["regular_reset_events"];
   resetDisplayNames?: RadarData["reset_display_names"];
+  codexRecoveryObservation?: CodexRecoveryObservation | null;
 } = {}): RadarData {
   const now = calculationNow ?? new Date();
   const resolvedCheckedAt = checkedAt ?? now.toISOString();
@@ -139,6 +142,7 @@ export function getLocalRadarData({
     rejected_tibo_resets: rejectedTiboResets,
     regular_reset_events: regularResetEvents,
     reset_display_names: resetDisplayNames,
+    codex_usage_recovery: codexRecoveryObservation,
   };
 }
 

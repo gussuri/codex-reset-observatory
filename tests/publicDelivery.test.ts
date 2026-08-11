@@ -117,6 +117,70 @@ test("public Tibo activity exposes the post projection and classification", () =
   );
 });
 
+test("public recovery projection exposes only the provisional status fields", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    codexRecoveryObservation: {
+      sourceKey: "local-codex-app-server",
+      observedAt: "2026-08-03T23:30:00.000Z",
+      previousUsedPercent: 69,
+      currentUsedPercent: 0,
+      previousResetsAt: 1780000000,
+      currentResetsAt: 1780600000,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+      matchedTiboTweetId: null,
+      confirmedAt: null,
+    },
+  });
+
+  const snapshot = toPublicRadarSnapshot(internal, "ja", { calculationNow });
+  const serialized = JSON.stringify(snapshot);
+  assert.deepEqual(snapshot.recoveryObservation, {
+    status: "observed_unconfirmed",
+    observedAt: "2026-08-03T23:30:00.000Z",
+    confidence: "strong",
+    cycleHint: "unexpected",
+  });
+  assert.doesNotMatch(serialized, /usedPercent|previousResetsAt|currentResetsAt|planType|matchedTiboTweetId/);
+});
+
+test("usage recovery presentation does not change published probabilities", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const base = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  );
+  const withRecovery = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      codexRecoveryObservation: {
+        sourceKey: "local-codex-app-server",
+        observedAt: "2026-08-03T23:30:00.000Z",
+        previousUsedPercent: 69,
+        currentUsedPercent: 0,
+        previousResetsAt: 1780000000,
+        currentResetsAt: 1780600000,
+        cycleHint: "unexpected",
+        confidence: "strong",
+        status: "observed",
+      },
+    }),
+    "ja",
+    { calculationNow },
+  );
+  assert.equal(withRecovery.viewModel.probability24h, base.viewModel.probability24h);
+  assert.equal(withRecovery.viewModel.probability48h, base.viewModel.probability48h);
+  assert.deepEqual(withRecovery.viewModel.recentHistory, base.viewModel.recentHistory);
+  assert.equal(
+    withRecovery.viewModel.regularResetForecast.sourceResetAt,
+    base.viewModel.regularResetForecast.sourceResetAt,
+  );
+});
+
 test("public Tibo activity exposes only the UI teaser strength, not its audit details", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const internal = getLocalRadarData({

@@ -6,6 +6,10 @@ import type {
 import type { TeaserStrength } from "./teaserStrength";
 import type { TemporalKind, TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import type { RegularResetEventRow } from "./regularResetSchedule";
+import type {
+  CodexRecoveryObservation,
+  PublicRecoveryObservation,
+} from "../codexUsageRecovery";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -258,6 +262,7 @@ export type RadarData = {
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   regular_reset_events?: Array<RegularResetEventRow>;
+  codex_usage_recovery?: CodexRecoveryObservation | null;
   reset_display_names?: Array<ResetDisplayNameRecord>;
   codex_environment?: {
     updated_at?: string;
@@ -394,6 +399,7 @@ export type PublicRadarSnapshot = {
   viewModel: PublicRadarViewModel;
   resetTeaserStatus?: TeaserStrength | "unknown";
   latestTiboActivity?: PublicTiboActivity | null;
+  recoveryObservation?: PublicRecoveryObservation | null;
 };
 
 export type CachedRadarData = {

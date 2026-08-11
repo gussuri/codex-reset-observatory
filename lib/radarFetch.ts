@@ -19,6 +19,13 @@ import type {
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
 import { fetchResetDisplayNames } from "@/lib/radar/resetDisplayNameStore";
 import {
+  getPublicRecoveryObservation,
+  type CodexRecoveryObservation,
+} from "@/lib/codexUsageRecovery";
+import {
+  readCodexRecoveryObservations,
+} from "@/lib/codexUsageRecoveryStore";
+import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
@@ -281,6 +288,48 @@ const getCachedRegularResetEvents = unstable_cache(
   },
 );
 
+async function fetchRawCodexRecoveryObservations(): Promise<
+  DataFetchResult<CodexRecoveryObservation[]>
+> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return { data: [], health: configuration };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const result = await readCodexRecoveryObservations(supabase);
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: result.rows.length > 0 || result.error === null,
+      hasError: Boolean(result.error),
+    });
+    if (result.error) {
+      console.error("Codex recovery observations query failed", { detail: "database_error" });
+    }
+    return { data: result.rows, health };
+  } catch {
+    console.error("Failed to load Codex recovery observations", { detail: "request_failed" });
+    return { data: [], health: { state: "degraded", detail: "request_failed" } };
+  }
+}
+
+const getCachedCodexRecoveryObservations = unstable_cache(
+  () => fetchRawCodexRecoveryObservations(),
+  ["codex-recovery-observations-cache-v1"],
+  {
+    revalidate: 30,
+    tags: ["radar-data"],
+  },
+);
+
 const getCachedResetDisplayNames = unstable_cache(
   () => fetchResetDisplayNames(),
   ["reset-display-names-cache-v1"],
@@ -444,19 +493,28 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
-  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames] = await Promise.all([
+  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow),
     getCachedRegularResetEvents(),
     getCachedResetDisplayNames(),
+    getCachedCodexRecoveryObservations(),
   ]);
+
+  const codexRecoveryObservation = codexRecovery.data.find((observation) =>
+    getPublicRecoveryObservation(observation, calculationNow),
+  ) ?? null;
 
   return getLocalRadarData({
     checkedAt,
     calculationNow,
     dataHealth: createRadarDataHealth(
       checkedAt,
-      combineDataSourceHealth(tiboSignals.health, regularResetEvents.health),
+      combineDataSourceHealth(
+        tiboSignals.health,
+        regularResetEvents.health,
+        codexRecovery.health,
+      ),
       openAIStatus.health,
     ),
     openAIStatus: openAIStatus.data,
@@ -466,6 +524,7 @@ export async function fetchCurrentRadarData(
     rejectedTiboResets: tiboSignals.rejectedResets,
     regularResetEvents: regularResetEvents.data,
     resetDisplayNames,
+    codexRecoveryObservation,
   });
 }
 

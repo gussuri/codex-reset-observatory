@@ -6,6 +6,7 @@ import {
   getEventRefreshPlan,
   getInitialRefreshPlan,
   getRefreshRetryDelayMs,
+  ACTIVE_NOTICE_REFRESH_INTERVAL_MS,
   RADAR_FETCH_TIMEOUT_MS,
   startAbortTimeout,
 } from "../lib/radar/refreshPolicy";
@@ -13,7 +14,7 @@ import type { PublicRadarSnapshot } from "../lib/radar/types";
 
 function snapshot(
   checkedAt: string,
-  options: { stale?: boolean; overall?: "ok" | "degraded" } = {},
+  options: { stale?: boolean; overall?: "ok" | "degraded"; official?: boolean; provisional?: boolean } = {},
 ): PublicRadarSnapshot {
   return {
     schemaVersion: "public-v1",
@@ -45,10 +46,10 @@ function snapshot(
         isNoticeWindow: false,
       },
       activeWindow: {
-        active: false,
-        kind: "none",
-        label: "none",
-        summary: "none",
+        active: options.official ?? false,
+        kind: options.official ? "official" : "none",
+        label: options.official ? "official" : "none",
+        summary: options.official ? "official" : "none",
       },
       displayReasoningSummary: null,
       latestWindow: {
@@ -60,6 +61,14 @@ function snapshot(
       },
       recentHistory: [],
     },
+    recoveryObservation: options.provisional
+      ? {
+          status: "observed_unconfirmed",
+          observedAt: checkedAt,
+          confidence: "strong",
+          cycleHint: "unexpected",
+        }
+      : null,
   };
 }
 
@@ -100,6 +109,20 @@ test("visible refresh is capped at five minutes even for low probability", () =>
   assert.deepEqual(
     getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT)),
     { action: "wait", delayMs: 5 * 60 * 1000 },
+  );
+});
+
+test("active official notices refresh at about one minute", () => {
+  assert.deepEqual(
+    getInitialRefreshPlan(snapshot(FRESH_AT, { official: true }), FRESH_AT, Date.parse(FRESH_AT)),
+    { action: "wait", delayMs: ACTIVE_NOTICE_REFRESH_INTERVAL_MS },
+  );
+});
+
+test("active strong provisional recovery refreshes at about one minute", () => {
+  assert.deepEqual(
+    getInitialRefreshPlan(snapshot(FRESH_AT, { provisional: true }), FRESH_AT, Date.parse(FRESH_AT)),
+    { action: "wait", delayMs: ACTIVE_NOTICE_REFRESH_INTERVAL_MS },
   );
 });
 

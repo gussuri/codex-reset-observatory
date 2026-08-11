@@ -3,6 +3,7 @@ import type { PublicRadarSnapshot } from "./types";
 
 export const RADAR_FETCH_TIMEOUT_MS = 15_000;
 export const MAX_VISIBLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+export const ACTIVE_NOTICE_REFRESH_INTERVAL_MS = 60 * 1000;
 export const REFRESH_EVENT_MIN_INTERVAL_MS = 30 * 1000;
 
 const REFRESH_RETRY_INTERVALS_MS = [
@@ -44,9 +45,16 @@ function getFreshDataRemainingMs(
   const elapsedMs = nowMs - fetchedTime;
   if (elapsedMs < 0) return null;
 
+  const hasActiveOfficialNotice =
+    data.viewModel.activeWindow.active && data.viewModel.activeWindow.kind === "official";
+  const hasActiveStrongRecovery = data.recoveryObservation?.status === "observed_unconfirmed" &&
+    data.recoveryObservation.confidence === "strong";
+  const maxIntervalMs = hasActiveOfficialNotice || hasActiveStrongRecovery
+    ? ACTIVE_NOTICE_REFRESH_INTERVAL_MS
+    : MAX_VISIBLE_REFRESH_INTERVAL_MS;
   const intervalMs = Math.min(
     getRefreshIntervalMs(data.viewModel.probability24h),
-    MAX_VISIBLE_REFRESH_INTERVAL_MS,
+    maxIntervalMs,
   );
   return Math.max(0, intervalMs - elapsedMs);
 }

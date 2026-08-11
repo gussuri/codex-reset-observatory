@@ -239,6 +239,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Current status",
     zh: "当前状况",
   },
+  observedRecoveryTitle: {
+    ja: "利用枠の回復を観測",
+    en: "Usage recovery observed",
+    zh: "已观测到使用额度恢复",
+  },
+  observedRecoveryBody: {
+    ja: "監視中のCodexアカウントで利用枠の回復を観測しました。Tiboによる全体リセットの完了発表を確認中です。",
+    en: "Usage recovery was observed on the monitored Codex account. We are checking for Tibo's announcement of a global reset.",
+    zh: "在监测中的 Codex 账户上观测到使用额度恢复。正在确认 Tibo 是否发布全体重置完成的公告。",
+  },
+  observedRecoveryChecking: {
+    ja: "確認中",
+    en: "Checking",
+    zh: "确认中",
+  },
   scheduledResetPlan: {
     ja: "予定",
     en: "Planned",

@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "monitor:x": "tsx scripts/monitor-tibo-x.ts",
+    "monitor:codex-usage": "tsx tools/codex-usage-monitor.ts",
     "tibo:ai-backfill": "tsx scripts/backfill-tibo-ai-classification.ts",
     "tibo:temporal-backfill": "tsx scripts/backfill-tibo-temporal.ts",
     "eval:tibo-classifiers": "tsx scripts/evaluate-tibo-classifiers.ts",
