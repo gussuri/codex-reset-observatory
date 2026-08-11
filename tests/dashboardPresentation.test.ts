@@ -517,7 +517,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const incidentIndex = html.indexOf("Codex関連障害");
   const elapsedIndex = html.indexOf("前回のリセットから");
   const teaserIndex = html.indexOf("リセット匂わせ投稿");
-  const outlookIndex = html.indexOf("現在の見込み");
+  const outlookIndex = html.lastIndexOf("現在の状況");
   const historyIndex = html.indexOf("リセット履歴", outlookIndex);
   const outlookText = html.slice(outlookIndex, historyIndex);
 
@@ -531,7 +531,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.match(html, /前回のリセットから[\s\S]*2日20時間/);
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /<dl class="grid gap-2 sm:grid-cols-2 lg:grid-cols-2">/);
-  assert.match(html, /現在の見込み/);
+  assert.match(html, /現在の状況/);
   assert.doesNotMatch(html, /現在、目立った観測変化はありません。/);
   assert.match(outlookText, /前回のリセット|最近はリセット|現在、大きな変化/);
   assert.match(html, /radar-grid relative h-11 w-11 shrink-0/);
@@ -842,8 +842,8 @@ test("keeps dashboard labels localized without extra direct-answer links", () =>
     assert.match(html, new RegExp(item.description));
     assert.doesNotMatch(html, new RegExp(item.directAnswer));
     assert.doesNotMatch(html, /When is the next Codex reset\?|下一次 Codex 重置是什么时候？|予測のしくみを見る →|How the forecast works →|查看预测方式 →/);
-    const outlookLabel = item.locale === "ja" ? "現在の見込み" : item.locale === "en" ? "Current outlook" : "当前判断";
-    const outlookIndex = html.indexOf(outlookLabel);
+    const outlookLabel = item.locale === "ja" ? "現在の状況" : item.locale === "en" ? "Current conditions" : "当前状况";
+    const outlookIndex = html.lastIndexOf(outlookLabel);
     const historyLabel = item.locale === "ja" ? "リセット履歴" : item.locale === "en" ? "Reset history" : "重置历史";
     const historyIndex = html.indexOf(historyLabel, outlookIndex);
     const outlookText = html.slice(outlookIndex, historyIndex);

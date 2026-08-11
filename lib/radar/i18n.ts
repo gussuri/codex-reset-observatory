@@ -305,9 +305,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "本预测并非官方信息，实际重置时间请以官方消息为准。",
   },
   forecastOutlook: {
-    ja: "現在の見込み",
-    en: "Current outlook",
-    zh: "当前判断",
+    ja: "現在の状況",
+    en: "Current conditions",
+    zh: "当前状况",
   },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",
