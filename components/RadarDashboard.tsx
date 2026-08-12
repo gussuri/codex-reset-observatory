@@ -664,7 +664,7 @@ export function RadarDashboard({
                     translateUI("scheduledResetTimeUnknown", locale)
                   )}
                   {showTiboLocalTimeNote ? (
-                    <p className="mt-1 text-xs font-normal leading-5 text-slate-500">
+                    <p className="mt-1 text-sm font-normal leading-5 text-slate-600">
                       {translateUI("tiboNoticeLocalTime", locale)}
                     </p>
                   ) : null}
