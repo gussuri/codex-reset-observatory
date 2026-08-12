@@ -357,6 +357,8 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.match(html, new RegExp(locale === "ja" ? "過去のランダムリセット曜日" : locale === "en" ? "Past random reset weekdays" : "过去的随机重置星期几"));
     assert.match(html, new RegExp(intervalHeadings[locale]));
     assert.match(html, new RegExp(intervalDescriptions[locale]));
+    assert.match(html, new RegExp(locale === "ja" ? "リセット件数" : locale === "en" ? "Reset records" : "重置记录数"));
+    assert.doesNotMatch(html, /対象件数|Recorded events|记录数量/);
     assert.match(html, new RegExp(locale === "ja" ? "aria-pressed=\"true\"[^>]*>直近1か月" : locale === "en" ? "aria-pressed=\"true\"[^>]*>Last month" : "aria-pressed=\"true\"[^>]*>最近1个月"));
     assert.doesNotMatch(html, /mx-auto w-full max-w-2xl|mx-auto mt-4 w-full max-w-md/);
     assert.match(html, new RegExp(`<h2 class="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">${weekdayHeadings[locale]}`));

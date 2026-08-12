@@ -36,13 +36,12 @@ const CONTENT = {
     weekdayDescription: "過去のランダムリセットが実施された曜日を集計しています。",
     intervalHeading: "過去のランダムリセット間隔",
     intervalDescription: "過去のランダムリセットどうしの間隔を集計しています。前回のランダムリセットから次のランダムリセットまでの経過時間です。",
-    intervalCount: "間隔件数",
     median: "中央値",
     average: "平均",
     shortest: "最短",
     longest: "最長",
     intervalEmpty: "この期間では、ランダムリセット間隔を集計できる記録がありません。",
-    count: "対象件数",
+    count: "リセット件数",
     empty: "対象となる記録はありません。",
     ariaBusy: "過去のランダムリセット時刻・曜日・間隔を読み込んでいます",
   },
@@ -58,13 +57,12 @@ const CONTENT = {
     weekdayDescription: "Past random reset records are grouped by day of the week.",
     intervalHeading: "Past random reset intervals",
     intervalDescription: "Past intervals between consecutive random resets are grouped by elapsed time. Each interval runs from one random reset to the next.",
-    intervalCount: "Intervals",
     median: "Median",
     average: "Average",
     shortest: "Shortest",
     longest: "Longest",
     intervalEmpty: "There are not enough matching records to calculate random reset intervals for this range.",
-    count: "Recorded events",
+    count: "Reset records",
     empty: "No matching records are available.",
     ariaBusy: "Loading past random reset times, weekdays, and intervals",
   },
@@ -80,13 +78,12 @@ const CONTENT = {
     weekdayDescription: "按星期几汇总过去的随机重置记录。",
     intervalHeading: "过去的随机重置间隔",
     intervalDescription: "按经过时间汇总连续两次随机重置之间的间隔。每个间隔从一次随机重置到下一次随机重置。",
-    intervalCount: "间隔数",
     median: "中位数",
     average: "平均",
     shortest: "最短",
     longest: "最长",
     intervalEmpty: "此期间没有足够的匹配记录可用于统计随机重置间隔。",
-    count: "记录数量",
+    count: "重置记录数",
     empty: "没有可用的匹配记录。",
     ariaBusy: "正在加载过去的随机重置时刻、星期和间隔",
   },
@@ -331,7 +328,6 @@ function RandomResetIntervalSection({
   locale: Locale;
 }) {
   const stats = [
-    [content.intervalCount, `n=${distribution.totalCount}`],
     [content.median, formatRandomResetDuration(distribution.medianMs, locale)],
     [content.average, formatRandomResetDuration(distribution.averageMs, locale)],
     [content.shortest, formatRandomResetDuration(distribution.minMs, locale)],
@@ -344,7 +340,7 @@ function RandomResetIntervalSection({
         {content.intervalHeading}
       </h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">{content.intervalDescription}</p>
-      <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-5">
+      <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-4">
         {stats.map(([label, value]) => (
           <div className="min-w-0" key={label}>
             <dt className="text-slate-500">{label}</dt>
