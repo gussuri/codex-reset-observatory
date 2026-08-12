@@ -664,7 +664,7 @@ export function RadarDashboard({
                     translateUI("scheduledResetTimeUnknown", locale)
                   )}
                   {showTiboLocalTimeNote ? (
-                    <p className="mt-2 text-sm font-normal leading-5 text-slate-600">
+                    <p className="mt-2 text-base font-normal leading-6 text-slate-600">
                       {translateUI("tiboNoticeLocalTime", locale)}
                     </p>
                   ) : null}
@@ -962,12 +962,12 @@ function RecommendationRow({
 }) {
   return (
     <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:grid sm:grid-cols-[7rem_1fr] sm:items-start sm:gap-6">
-      <dt className="whitespace-nowrap text-sm font-medium text-slate-500">
+      <dt className="whitespace-nowrap text-base font-medium text-slate-500">
         {translateUI("forecastOutlook", locale)}
       </dt>
-      <dd className="text-sm leading-6 text-slate-700">
-      {reason}
-    </dd>
+      <dd className="text-base leading-6 text-slate-700">
+        {reason}
+      </dd>
   </div>
   );
 }
