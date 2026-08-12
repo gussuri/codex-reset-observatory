@@ -322,6 +322,16 @@ test("renders the random reset time heatmap after history with a timezone-free S
     en: "Past random reset weekdays",
     zh: "过去的随机重置星期几",
   } as const;
+  const intervalHeadings = {
+    ja: "過去のランダムリセット間隔",
+    en: "Past random reset intervals",
+    zh: "过去的随机重置间隔",
+  } as const;
+  const intervalDescriptions = {
+    ja: "過去のランダムリセットどうしの間隔を集計しています。前回のランダムリセットから次のランダムリセットまでの経過時間です。",
+    en: "Past intervals between consecutive random resets are grouped by elapsed time. Each interval runs from one random reset to the next.",
+    zh: "按经过时间汇总连续两次随机重置之间的间隔。每个间隔从一次随机重置到下一次随机重置。",
+  } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(internalData, locale, { calculationNow });
@@ -333,21 +343,27 @@ test("renders the random reset time heatmap after history with a timezone-free S
       }),
     );
     const historyIndex = html.indexOf(locale === "ja" ? "直近のリセット履歴" : locale === "en" ? "Recent reset events" : "最近的重置历史");
+    const weekdayIndex = html.indexOf(weekdayHeadings[locale]);
     const heatmapIndex = html.indexOf(headings[locale]);
+    const intervalIndex = html.indexOf(intervalHeadings[locale]);
 
     assert.ok(historyIndex >= 0);
     assert.ok(heatmapIndex > historyIndex);
+    assert.ok(intervalIndex > weekdayIndex);
     assert.ok(html.includes(descriptions[locale]));
     assert.match(html, new RegExp(locale === "ja" ? "時刻" : locale === "en" ? "Time" : "时间"));
     assert.match(html, new RegExp(locale === "ja" ? "全期間" : locale === "en" ? "All time" : "全部期间"));
     assert.match(html, new RegExp(locale === "ja" ? "直近1か月" : locale === "en" ? "Last month" : "最近1个月"));
     assert.match(html, new RegExp(locale === "ja" ? "過去のランダムリセット曜日" : locale === "en" ? "Past random reset weekdays" : "过去的随机重置星期几"));
+    assert.match(html, new RegExp(intervalHeadings[locale]));
+    assert.match(html, new RegExp(intervalDescriptions[locale]));
     assert.match(html, new RegExp(locale === "ja" ? "aria-pressed=\"true\"[^>]*>直近1か月" : locale === "en" ? "aria-pressed=\"true\"[^>]*>Last month" : "aria-pressed=\"true\"[^>]*>最近1个月"));
     assert.doesNotMatch(html, /mx-auto w-full max-w-2xl|mx-auto mt-4 w-full max-w-md/);
     assert.match(html, new RegExp(`<h2 class="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">${weekdayHeadings[locale]}`));
     assert.doesNotMatch(html, /閲覧者のタイムゾーン|Viewer time zone|查看者时区/);
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
     assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
+    assert.match(html, /grid grid-cols-6/);
     assert.doesNotMatch(html, /Raw count|Weighted share|加权构成比/);
     assert.doesNotMatch(html, /実際のシステム実行時刻|Some records may reflect|部分记录反映/);
     assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);

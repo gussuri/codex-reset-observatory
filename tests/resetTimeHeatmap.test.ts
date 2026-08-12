@@ -4,12 +4,17 @@ import test from "node:test";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import {
+  buildRandomResetIntervalDistribution,
+  buildRandomResetIntervals,
   buildRandomResetTimeHeatmap,
   buildRandomResetWeekdayDistribution,
+  filterRandomResetIntervals,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
   formatHeatmapWeekdayBarLabel,
   formatHeatmapWeekdayLabel,
+  formatRandomResetIntervalBarLabel,
+  formatRandomResetDuration,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   getHeatmapHour,
@@ -174,4 +179,154 @@ test("filters the chart between all records and the last 30 days", () => {
     "2026-08-05T00:00:00.000Z",
     "2026-07-07T00:00:00.000Z",
   ]);
+});
+
+const INTERVAL_NOW = new Date("2026-08-10T00:00:00.000Z");
+const HOUR_MS = 60 * 60 * 1000;
+
+function addHours(base: Date, hours: number) {
+  return new Date(base.getTime() + hours * HOUR_MS).toISOString();
+}
+
+test("builds random reset intervals in chronological order", () => {
+  const intervals = buildRandomResetIntervals(
+    ["2026-01-03T00:00:00.000Z", "2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"],
+    INTERVAL_NOW,
+  );
+
+  assert.deepEqual(
+    intervals.map(({ startAt, endAt, durationMs }) => ({ startAt, endAt, durationMs })),
+    [
+      {
+        startAt: "2026-01-01T00:00:00.000Z",
+        endAt: "2026-01-02T00:00:00.000Z",
+        durationMs: 24 * HOUR_MS,
+      },
+      {
+        startAt: "2026-01-02T00:00:00.000Z",
+        endAt: "2026-01-03T00:00:00.000Z",
+        durationMs: 24 * HOUR_MS,
+      },
+    ],
+  );
+});
+
+test("creates N-1 intervals and excludes invalid, future, duplicate, and non-positive events", () => {
+  const elevenEvents = Array.from({ length: 11 }, (_, index) => addHours(new Date("2026-01-01T00:00:00.000Z"), index * 24));
+  assert.equal(buildRandomResetIntervals(elevenEvents, INTERVAL_NOW).length, 10);
+
+  const intervals = buildRandomResetIntervals(
+    [
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+      "not-a-date",
+      "2026-08-11T00:00:00.000Z",
+    ],
+    INTERVAL_NOW,
+  );
+  assert.equal(intervals.length, 0);
+
+  assert.deepEqual(
+    filterRandomResetIntervals(
+      [
+        { startAt: "2026-01-01T00:00:00.000Z", endAt: "2026-01-02T00:00:00.000Z", durationMs: 0 },
+        { startAt: "2026-01-02T00:00:00.000Z", endAt: "2026-01-01T00:00:00.000Z", durationMs: -1 },
+      ],
+      "all",
+      INTERVAL_NOW,
+    ),
+    [],
+  );
+});
+
+test("filters intervals by endAt, including an out-of-range start and excluding an out-of-range end", () => {
+  const intervals = buildRandomResetIntervals(
+    [
+      "2026-07-06T00:00:00.000Z",
+      "2026-07-10T00:00:00.000Z",
+      "2026-07-11T00:00:00.000Z",
+      "2026-07-12T00:00:00.000Z",
+    ],
+    INTERVAL_NOW,
+  );
+  const filtered = filterRandomResetIntervals(intervals, "lastMonth", INTERVAL_NOW);
+
+  assert.deepEqual(
+    filtered.map((interval) => [interval.startAt, interval.endAt]),
+    [
+      ["2026-07-10T00:00:00.000Z", "2026-07-11T00:00:00.000Z"],
+      ["2026-07-11T00:00:00.000Z", "2026-07-12T00:00:00.000Z"],
+    ],
+  );
+  assert.equal(filtered.some((interval) => interval.endAt === "2026-07-10T00:00:00.000Z"), false);
+});
+
+test("assigns exact duration boundaries to the required interval bins", () => {
+  const durations = [11.999, 12, 23.999, 24, 47.999, 48, 71.999, 72, 167.999, 168];
+  const eventTimes = [addHours(INTERVAL_NOW, -1200)];
+  for (const duration of durations) eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
+
+  const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
+  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 1]);
+});
+
+test("calculates odd and even medians, arithmetic average, minimum, and maximum", () => {
+  const eventTimes = [addHours(INTERVAL_NOW, -100)];
+  for (const duration of [10, 20, 30]) eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
+  const odd = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
+  assert.equal(odd.medianMs, 20 * HOUR_MS);
+  assert.equal(odd.averageMs, 20 * HOUR_MS);
+  assert.equal(odd.minMs, 10 * HOUR_MS);
+  assert.equal(odd.maxMs, 30 * HOUR_MS);
+
+  const evenEventTimes = [addHours(INTERVAL_NOW, -100)];
+  for (const duration of [10, 20, 30, 40]) {
+    evenEventTimes.push(addHours(new Date(evenEventTimes.at(-1)!), duration));
+  }
+  const even = buildRandomResetIntervalDistribution(evenEventTimes, "all", INTERVAL_NOW);
+  assert.equal(even.medianMs, 25 * HOUR_MS);
+});
+
+test("returns null statistics for zero intervals and the same values for one interval", () => {
+  const empty = buildRandomResetIntervalDistribution(["2026-01-01T00:00:00.000Z"], "all", INTERVAL_NOW);
+  assert.equal(empty.totalCount, 0);
+  assert.equal(empty.medianMs, null);
+  assert.equal(empty.averageMs, null);
+  assert.equal(empty.minMs, null);
+  assert.equal(empty.maxMs, null);
+
+  const one = buildRandomResetIntervalDistribution(
+    ["2026-01-01T00:00:00.000Z", "2026-01-02T12:00:00.000Z"],
+    "all",
+    INTERVAL_NOW,
+  );
+  assert.equal(one.totalCount, 1);
+  assert.equal(one.medianMs, 36 * HOUR_MS);
+  assert.equal(one.averageMs, 36 * HOUR_MS);
+  assert.equal(one.minMs, 36 * HOUR_MS);
+  assert.equal(one.maxMs, 36 * HOUR_MS);
+});
+
+test("formats random reset interval durations and localized bar labels", () => {
+  assert.equal(formatRandomResetDuration(9 * HOUR_MS, "ja"), "9時間");
+  assert.equal(formatRandomResetDuration(12.5 * HOUR_MS, "ja"), "12.5時間");
+  assert.equal(formatRandomResetDuration(24 * HOUR_MS, "ja"), "1日");
+  assert.equal(formatRandomResetDuration(36 * HOUR_MS, "ja"), "1.5日");
+  assert.equal(formatRandomResetDuration(67.2 * HOUR_MS, "ja"), "2.8日");
+  assert.equal(formatRandomResetDuration(168 * HOUR_MS, "ja"), "7日");
+  assert.equal(formatRandomResetDuration(9 * HOUR_MS, "en"), "9h");
+  assert.equal(formatRandomResetDuration(12.5 * HOUR_MS, "en"), "12.5h");
+  assert.equal(formatRandomResetDuration(24 * HOUR_MS, "en"), "1d");
+  assert.equal(formatRandomResetDuration(36 * HOUR_MS, "en"), "1.5d");
+  assert.equal(formatRandomResetDuration(67.2 * HOUR_MS, "en"), "2.8d");
+  assert.equal(formatRandomResetDuration(168 * HOUR_MS, "en"), "7d");
+  assert.equal(formatRandomResetDuration(9 * HOUR_MS, "zh"), "9小时");
+  assert.equal(formatRandomResetDuration(24 * HOUR_MS, "zh"), "1天");
+  assert.equal(formatRandomResetDuration(168 * HOUR_MS, "zh"), "7天");
+
+  const bin = { key: "24-48h" as const, minHours: 24, maxHours: 48, rawCount: 3 };
+  assert.equal(formatRandomResetIntervalBarLabel(bin, "ja"), "24–48時間・3件");
+  assert.equal(formatRandomResetIntervalBarLabel({ ...bin, rawCount: 1 }, "en"), "24–48h, 1 interval");
+  assert.equal(formatRandomResetIntervalBarLabel(bin, "en"), "24–48h, 3 intervals");
+  assert.equal(formatRandomResetIntervalBarLabel(bin, "zh"), "24–48小时，3个间隔");
 });

@@ -3,8 +3,39 @@ import { DISPLAY_TIME_ZONE } from "./helpers";
 export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
 export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
 export const RANDOM_RESET_WEEKDAY_BIN_COUNT = 7;
+export const RANDOM_RESET_INTERVAL_BIN_COUNT = 6;
 
 export type RandomResetTimeHeatmapRange = "all" | "lastMonth";
+
+export type RandomResetIntervalRecord = {
+  startAt: string;
+  endAt: string;
+  durationMs: number;
+};
+
+export type RandomResetIntervalBinKey =
+  | "0-12h"
+  | "12-24h"
+  | "24-48h"
+  | "48-72h"
+  | "3-7d"
+  | "7d-plus";
+
+export type RandomResetIntervalBin = {
+  key: RandomResetIntervalBinKey;
+  minHours: number;
+  maxHours: number | null;
+  rawCount: number;
+};
+
+export type RandomResetIntervalDistribution = {
+  bins: RandomResetIntervalBin[];
+  totalCount: number;
+  medianMs: number | null;
+  averageMs: number | null;
+  minMs: number | null;
+  maxMs: number | null;
+};
 
 export type RandomResetTimeHeatmapBin = {
   startHour: number;
@@ -139,6 +170,200 @@ export function filterHeatmapEventTimes(
     const timestamp = new Date(eventTime).getTime();
     return Number.isFinite(timestamp) && timestamp >= startTime && timestamp <= nowTime;
   });
+}
+
+export function buildRandomResetIntervals(
+  eventTimes: string[],
+  now: Date | number = Date.now(),
+): RandomResetIntervalRecord[] {
+  const nowTime = toTimestamp(now);
+  if (!Number.isFinite(nowTime)) return [];
+
+  const timestamps = Array.from(
+    new Set(
+      eventTimes
+        .map((eventTime) => new Date(eventTime).getTime())
+        .filter((timestamp) => Number.isFinite(timestamp) && timestamp <= nowTime),
+    ),
+  ).sort((left, right) => left - right);
+
+  const intervals: RandomResetIntervalRecord[] = [];
+  for (let index = 1; index < timestamps.length; index += 1) {
+    const startTime = timestamps[index - 1];
+    const endTime = timestamps[index];
+    const durationMs = endTime - startTime;
+    if (durationMs <= 0) continue;
+
+    intervals.push({
+      startAt: new Date(startTime).toISOString(),
+      endAt: new Date(endTime).toISOString(),
+      durationMs,
+    });
+  }
+
+  return intervals;
+}
+
+export function filterRandomResetIntervals(
+  intervals: RandomResetIntervalRecord[],
+  range: RandomResetTimeHeatmapRange,
+  now: Date | number = Date.now(),
+): RandomResetIntervalRecord[] {
+  const nowTime = toTimestamp(now);
+  if (!Number.isFinite(nowTime)) return [];
+
+  const startTime =
+    range === "lastMonth"
+      ? nowTime - RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS * 24 * 60 * 60 * 1000
+      : Number.NEGATIVE_INFINITY;
+
+  return intervals.filter((interval) => {
+    const endTime = new Date(interval.endAt).getTime();
+    const startAt = new Date(interval.startAt).getTime();
+    return (
+      Number.isFinite(startAt)
+      && Number.isFinite(endTime)
+      && Number.isFinite(interval.durationMs)
+      && interval.durationMs > 0
+      && endTime > startAt
+      && endTime >= startTime
+      && endTime <= nowTime
+    );
+  });
+}
+
+export function buildRandomResetIntervalDistribution(
+  eventTimes: string[],
+  range: RandomResetTimeHeatmapRange,
+  now: Date | number = Date.now(),
+): RandomResetIntervalDistribution {
+  const intervals = filterRandomResetIntervals(
+    buildRandomResetIntervals(eventTimes, now),
+    range,
+    now,
+  );
+  const durations = intervals.map((interval) => interval.durationMs).sort((left, right) => left - right);
+  const bins = buildRandomResetIntervalBins();
+
+  for (const durationMs of durations) {
+    const bin = bins[getRandomResetIntervalBinIndex(durationMs)];
+    bin.rawCount += 1;
+  }
+
+  if (durations.length === 0) {
+    return {
+      bins,
+      totalCount: 0,
+      medianMs: null,
+      averageMs: null,
+      minMs: null,
+      maxMs: null,
+    };
+  }
+
+  const middle = Math.floor(durations.length / 2);
+  const medianMs = durations.length % 2 === 1
+    ? durations[middle]
+    : (durations[middle - 1] + durations[middle]) / 2;
+
+  return {
+    bins,
+    totalCount: durations.length,
+    medianMs,
+    averageMs: durations.reduce((sum, durationMs) => sum + durationMs, 0) / durations.length,
+    minMs: durations[0],
+    maxMs: durations[durations.length - 1],
+  };
+}
+
+export function formatRandomResetIntervalBinLabel(
+  bin: Pick<RandomResetIntervalBin, "key">,
+  locale: "ja" | "en" | "zh",
+) {
+  const labels = {
+    ja: {
+      "0-12h": "0–12時間",
+      "12-24h": "12–24時間",
+      "24-48h": "24–48時間",
+      "48-72h": "48–72時間",
+      "3-7d": "3–7日",
+      "7d-plus": "7日以上",
+    },
+    en: {
+      "0-12h": "0–12h",
+      "12-24h": "12–24h",
+      "24-48h": "24–48h",
+      "48-72h": "48–72h",
+      "3-7d": "3–7d",
+      "7d-plus": "7d+",
+    },
+    zh: {
+      "0-12h": "0–12小时",
+      "12-24h": "12–24小时",
+      "24-48h": "24–48小时",
+      "48-72h": "48–72小时",
+      "3-7d": "3–7天",
+      "7d-plus": "7天以上",
+    },
+  } as const;
+
+  return labels[locale][bin.key];
+}
+
+export function formatRandomResetIntervalBarLabel(
+  bin: Pick<RandomResetIntervalBin, "key" | "rawCount">,
+  locale: "ja" | "en" | "zh",
+) {
+  const range = formatRandomResetIntervalBinLabel(bin, locale);
+  if (locale === "en") {
+    return `${range}, ${bin.rawCount} ${bin.rawCount === 1 ? "interval" : "intervals"}`;
+  }
+  if (locale === "zh") return `${range}，${bin.rawCount}个间隔`;
+  return `${range}・${bin.rawCount}件`;
+}
+
+export function formatRandomResetDuration(
+  durationMs: number | null,
+  locale: "ja" | "en" | "zh",
+) {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) return "—";
+
+  const hours = durationMs / (60 * 60 * 1000);
+  const unit = hours < 24 ? hours : hours / 24;
+  const value = formatOneDecimal(unit);
+  if (locale === "en") return `${value}${hours < 24 ? "h" : "d"}`;
+  if (locale === "zh") return `${value}${hours < 24 ? "小时" : "天"}`;
+  return `${value}${hours < 24 ? "時間" : "日"}`;
+}
+
+function buildRandomResetIntervalBins(): RandomResetIntervalBin[] {
+  return [
+    { key: "0-12h", minHours: 0, maxHours: 12, rawCount: 0 },
+    { key: "12-24h", minHours: 12, maxHours: 24, rawCount: 0 },
+    { key: "24-48h", minHours: 24, maxHours: 48, rawCount: 0 },
+    { key: "48-72h", minHours: 48, maxHours: 72, rawCount: 0 },
+    { key: "3-7d", minHours: 72, maxHours: 168, rawCount: 0 },
+    { key: "7d-plus", minHours: 168, maxHours: null, rawCount: 0 },
+  ];
+}
+
+function getRandomResetIntervalBinIndex(durationMs: number) {
+  const durationHours = durationMs / (60 * 60 * 1000);
+  if (durationHours < 12) return 0;
+  if (durationHours < 24) return 1;
+  if (durationHours < 48) return 2;
+  if (durationHours < 72) return 3;
+  if (durationHours < 168) return 4;
+  return 5;
+}
+
+function toTimestamp(value: Date | number) {
+  return typeof value === "number" ? value : value.getTime();
+}
+
+function formatOneDecimal(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {

@@ -3,16 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "@/lib/radar/types";
 import {
+  buildRandomResetIntervalDistribution,
   buildRandomResetTimeHeatmap,
   buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
   formatHeatmapWeekdayBarLabel,
   formatHeatmapWeekdayLabel,
+  formatRandomResetIntervalBarLabel,
+  formatRandomResetIntervalBinLabel,
+  formatRandomResetDuration,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
+  RANDOM_RESET_INTERVAL_BIN_COUNT,
 } from "@/lib/radar/resetTimeHeatmap";
-import type { RandomResetTimeHeatmapRange } from "@/lib/radar/resetTimeHeatmap";
+import type {
+  RandomResetIntervalDistribution,
+  RandomResetTimeHeatmapRange,
+} from "@/lib/radar/resetTimeHeatmap";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 
 const CONTENT = {
@@ -26,9 +34,17 @@ const CONTENT = {
     lastMonth: "直近1か月",
     weekdayHeading: "過去のランダムリセット曜日",
     weekdayDescription: "過去のランダムリセットが実施された曜日を集計しています。",
+    intervalHeading: "過去のランダムリセット間隔",
+    intervalDescription: "過去のランダムリセットどうしの間隔を集計しています。前回のランダムリセットから次のランダムリセットまでの経過時間です。",
+    intervalCount: "間隔件数",
+    median: "中央値",
+    average: "平均",
+    shortest: "最短",
+    longest: "最長",
+    intervalEmpty: "この期間では、ランダムリセット間隔を集計できる記録がありません。",
     count: "対象件数",
     empty: "対象となる記録はありません。",
-    ariaBusy: "過去のランダムリセット時刻と曜日を読み込んでいます",
+    ariaBusy: "過去のランダムリセット時刻・曜日・間隔を読み込んでいます",
   },
   en: {
     heading: "Past random reset times",
@@ -40,9 +56,17 @@ const CONTENT = {
     lastMonth: "Last month",
     weekdayHeading: "Past random reset weekdays",
     weekdayDescription: "Past random reset records are grouped by day of the week.",
+    intervalHeading: "Past random reset intervals",
+    intervalDescription: "Past intervals between consecutive random resets are grouped by elapsed time. Each interval runs from one random reset to the next.",
+    intervalCount: "Intervals",
+    median: "Median",
+    average: "Average",
+    shortest: "Shortest",
+    longest: "Longest",
+    intervalEmpty: "There are not enough matching records to calculate random reset intervals for this range.",
     count: "Recorded events",
     empty: "No matching records are available.",
-    ariaBusy: "Loading past random reset times and weekdays",
+    ariaBusy: "Loading past random reset times, weekdays, and intervals",
   },
   zh: {
     heading: "过去的随机重置时刻",
@@ -54,9 +78,17 @@ const CONTENT = {
     lastMonth: "最近1个月",
     weekdayHeading: "过去的随机重置星期几",
     weekdayDescription: "按星期几汇总过去的随机重置记录。",
+    intervalHeading: "过去的随机重置间隔",
+    intervalDescription: "按经过时间汇总连续两次随机重置之间的间隔。每个间隔从一次随机重置到下一次随机重置。",
+    intervalCount: "间隔数",
+    median: "中位数",
+    average: "平均",
+    shortest: "最短",
+    longest: "最长",
+    intervalEmpty: "此期间没有足够的匹配记录可用于统计随机重置间隔。",
     count: "记录数量",
     empty: "没有可用的匹配记录。",
-    ariaBusy: "正在加载过去的随机重置时刻和星期",
+    ariaBusy: "正在加载过去的随机重置时刻、星期和间隔",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -83,12 +115,14 @@ export function RandomResetTimeHeatmap({
       return {
         time: buildRandomResetTimeHeatmap(visibleEventTimes, timeZone, now),
         weekday: buildRandomResetWeekdayDistribution(visibleEventTimes, timeZone, now),
+        interval: buildRandomResetIntervalDistribution(eventTimes, range, now),
       };
     },
     [eventTimes, range, timeZone],
   );
   const timeHeatmap = heatmap?.time ?? null;
   const weekdayDistribution = heatmap?.weekday ?? null;
+  const intervalDistribution = heatmap?.interval ?? null;
   const maxRawCount = timeHeatmap
     ? Math.max(...timeHeatmap.bins.map((item) => item.rawCount))
     : 0;
@@ -97,6 +131,10 @@ export function RandomResetTimeHeatmap({
     : 0;
   const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
   const weekdayBarScaleMax = weekdayMaxRawCount > 0 ? weekdayMaxRawCount + 1 : 0;
+  const intervalMaxRawCount = intervalDistribution
+    ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
+    : 0;
+  const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount + 1 : 0;
   const timeAxisTicks = getHeatmapTimeAxisTicks();
 
   return (
@@ -166,9 +204,33 @@ export function RandomResetTimeHeatmap({
               ))}
             </div>
           </div>
+          <div className="border-t border-slate-100 pt-5">
+            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+              {content.intervalHeading}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{content.intervalDescription}</p>
+            <div className="mt-4 grid grid-cols-6 gap-1" aria-hidden="true">
+              {Array.from({ length: RANDOM_RESET_INTERVAL_BIN_COUNT }, (_, index) => (
+                <span
+                  className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+                  key={index}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       ) : timeHeatmap?.totalCount === 0 ? (
-        <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
+        <>
+          <p className="mt-5 text-sm text-slate-600">{content.empty}</p>
+          {intervalDistribution ? (
+            <RandomResetIntervalSection
+              barScaleMax={intervalBarScaleMax}
+              content={content}
+              distribution={intervalDistribution}
+              locale={locale}
+            />
+          ) : null}
+        </>
       ) : (
         <>
           <div className="mt-5 min-w-0">
@@ -241,9 +303,87 @@ export function RandomResetTimeHeatmap({
               })}
             </div>
           </div>
+          {intervalDistribution ? (
+            <RandomResetIntervalSection
+              barScaleMax={intervalBarScaleMax}
+              content={content}
+              distribution={intervalDistribution}
+              locale={locale}
+            />
+          ) : null}
         </>
       )}
     </section>
+  );
+}
+
+type HeatmapContent = (typeof CONTENT)[Locale];
+
+function RandomResetIntervalSection({
+  barScaleMax,
+  content,
+  distribution,
+  locale,
+}: {
+  barScaleMax: number;
+  content: HeatmapContent;
+  distribution: RandomResetIntervalDistribution;
+  locale: Locale;
+}) {
+  const stats = [
+    [content.intervalCount, `n=${distribution.totalCount}`],
+    [content.median, formatRandomResetDuration(distribution.medianMs, locale)],
+    [content.average, formatRandomResetDuration(distribution.averageMs, locale)],
+    [content.shortest, formatRandomResetDuration(distribution.minMs, locale)],
+    [content.longest, formatRandomResetDuration(distribution.maxMs, locale)],
+  ] as const;
+
+  return (
+    <div className="mt-6 border-t border-slate-100 pt-5">
+      <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
+        {content.intervalHeading}
+      </h2>
+      <p className="mt-1 text-sm leading-6 text-slate-600">{content.intervalDescription}</p>
+      <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-5">
+        {stats.map(([label, value]) => (
+          <div className="min-w-0" key={label}>
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-slate-800">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {distribution.totalCount === 0 ? (
+        <p className="mt-5 text-sm leading-6 text-slate-600">{content.intervalEmpty}</p>
+      ) : (
+        <>
+          <div
+            aria-label={content.intervalHeading}
+            className="mt-5 grid h-32 grid-cols-6 gap-1 sm:h-28"
+            role="list"
+          >
+            {distribution.bins.map((bin) => (
+              <div className="min-w-0 px-0.5 sm:px-1" key={bin.key} role="listitem">
+                <ResetCountBar
+                  ariaLabel={formatRandomResetIntervalBarLabel(bin, locale)}
+                  barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
+                  rawCount={bin.rawCount}
+                />
+              </div>
+            ))}
+          </div>
+          <div
+            aria-hidden="true"
+            className="mt-1 grid grid-cols-6 gap-1 text-center text-[0.55rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
+          >
+            {distribution.bins.map((bin) => (
+              <span className="min-w-0 break-words" key={bin.key}>
+                {formatRandomResetIntervalBinLabel(bin, locale)}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
