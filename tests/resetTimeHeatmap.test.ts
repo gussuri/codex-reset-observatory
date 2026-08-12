@@ -14,6 +14,7 @@ import {
   formatHeatmapWeekdayBarLabel,
   formatHeatmapWeekdayLabel,
   formatRandomResetIntervalBarLabel,
+  formatRandomResetIntervalBinLabel,
   formatRandomResetDuration,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
@@ -262,12 +263,27 @@ test("filters intervals by endAt, including an out-of-range start and excluding 
 });
 
 test("assigns exact duration boundaries to the required interval bins", () => {
-  const durations = [11.999, 12, 23.999, 24, 47.999, 48, 71.999, 72, 167.999, 168];
-  const eventTimes = [addHours(INTERVAL_NOW, -1200)];
+  const durations = [
+    11.999,
+    12,
+    23.999,
+    24,
+    47.999,
+    48,
+    71.999,
+    72,
+    119.999,
+    120,
+    167.999,
+    168,
+    239.999,
+    240,
+  ];
+  const eventTimes = [addHours(INTERVAL_NOW, -2200)];
   for (const duration of durations) eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
 
   const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
-  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 1]);
+  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 2, 2, 1]);
 });
 
 test("calculates odd and even medians, arithmetic average, minimum, and maximum", () => {
@@ -325,6 +341,25 @@ test("formats random reset interval durations and localized bar labels", () => {
   assert.equal(formatRandomResetDuration(168 * HOUR_MS, "zh"), "7天");
 
   const bin = { key: "24-48h" as const, minHours: 24, maxHours: 48, rawCount: 3 };
+  const intervalBinKeys = [
+    "0-12h",
+    "12-24h",
+    "24-48h",
+    "48-72h",
+    "3-5d",
+    "5-7d",
+    "7-10d",
+    "10d-plus",
+  ] as const;
+  assert.deepEqual(
+    intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "ja")),
+    ["0–12時間", "12–24時間", "24–48時間", "48–72時間", "3–5日", "5–7日", "7–10日", "10日以上"],
+  );
+  assert.equal(formatRandomResetIntervalBinLabel({ key: "3-5d" }, "en"), "3–5d");
+  assert.equal(formatRandomResetIntervalBinLabel({ key: "10d-plus" }, "zh"), "10天以上");
+  assert.equal(formatRandomResetIntervalBarLabel({ key: "3-5d", rawCount: 5 }, "ja"), "3–5日・5件");
+  assert.equal(formatRandomResetIntervalBarLabel({ key: "10d-plus", rawCount: 2 }, "en"), "10d+, 2 intervals");
+  assert.equal(formatRandomResetIntervalBarLabel({ key: "10d-plus", rawCount: 2 }, "zh"), "10天以上，2个间隔");
   assert.equal(formatRandomResetIntervalBarLabel(bin, "ja"), "24–48時間・3件");
   assert.equal(formatRandomResetIntervalBarLabel({ ...bin, rawCount: 1 }, "en"), "24–48h, 1 interval");
   assert.equal(formatRandomResetIntervalBarLabel(bin, "en"), "24–48h, 3 intervals");

@@ -363,7 +363,7 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.doesNotMatch(html, /閲覧者のタイムゾーン|Viewer time zone|查看者时区/);
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
     assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
-    assert.match(html, /grid grid-cols-6/);
+    assert.match(html, /grid grid-cols-8/);
     assert.doesNotMatch(html, /Raw count|Weighted share|加权构成比/);
     assert.doesNotMatch(html, /実際のシステム実行時刻|Some records may reflect|部分记录反映/);
     assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);
