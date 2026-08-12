@@ -33,6 +33,7 @@ function setupServiceWorkerContext(
   const localStore: Record<string, any> = {};
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
   const reloadedTabIds: number[] = [];
+  const updatedTabs: Array<{ tabId: number; updateProperties: any }> = [];
   const openedTabs: Array<{ url: string }> = [];
   const createdNotifications: Array<{ id: string; options: any }> = [];
   const activeNotificationIds: Record<string, boolean> = {};
@@ -94,6 +95,12 @@ function setupServiceWorkerContext(
           throw new Error("Simulated tab reload failure");
         }
         reloadedTabIds.push(tabId);
+      },
+      update: async (tabId: number, updateProperties: any) => {
+        const tab = customTabs.find((candidate) => candidate.id === tabId);
+        if (tab) Object.assign(tab, updateProperties);
+        updatedTabs.push({ tabId, updateProperties });
+        return tab || { id: tabId, ...updateProperties };
       },
       create: async (tab: { url: string }) => {
         openedTabs.push(tab);
@@ -219,6 +226,7 @@ function setupServiceWorkerContext(
     getStorageLocalAccessLevel: () => storageLocalAccessLevel,
     alarmsCreated,
     reloadedTabIds,
+    updatedTabs,
     openedTabs,
     createdNotifications,
     getNotificationCreateCalls: () => notificationCreateCalls,
@@ -228,10 +236,10 @@ function setupServiceWorkerContext(
         await alarmListener({ name });
       }
     },
-    sendMessage: (msg: any): Promise<any> => {
+    sendMessage: (msg: any, sender: any = {}): Promise<any> => {
       return new Promise((resolve) => {
         if (messageListener) {
-          messageListener(msg, {}, (res: any) => resolve(res));
+          messageListener(msg, sender, (res: any) => resolve(res));
         } else {
           resolve(null);
         }
@@ -383,6 +391,64 @@ test("REQUIREMENT 5: Ignores tweet status detail tabs (/thsottiaux/status/...) a
 
   assert.strictEqual(reloadedTabIds.length, 0, "Individual status detail tabs must NOT be reloaded");
   assert.strictEqual(localStore["tibo_last_page_reload_status"], "monitored_tab_missing");
+});
+
+test("RESTORE_MONITORED_TIMELINE returns a profile tab from a Tibo status page to the profile timeline", async () => {
+  const tabs = [{ id: 601, url: "https://x.com/thsottiaux/status/9876543210" }];
+  const context = setupServiceWorkerContext(tabs);
+
+  const result = await context.sendMessage(
+    { action: "RESTORE_MONITORED_TIMELINE", timeline: "profile" },
+    { tab: tabs[0] },
+  );
+
+  assert.deepEqual(result, { success: true, data: { timeline: "profile" } });
+  assert.deepEqual(context.updatedTabs, [
+    { tabId: 601, updateProperties: { url: "https://x.com/thsottiaux" } },
+  ]);
+});
+
+test("RESTORE_MONITORED_TIMELINE restores with_replies and rejects non-Tibo status pages", async () => {
+  const repliesTabs = [{ id: 602, url: "https://twitter.com/thsottiaux/status/123456789" }];
+  const repliesContext = setupServiceWorkerContext(repliesTabs);
+  const repliesResult = await repliesContext.sendMessage(
+    { action: "RESTORE_MONITORED_TIMELINE", timeline: "with_replies" },
+    { tab: repliesTabs[0] },
+  );
+
+  assert.equal(repliesResult.success, true);
+  assert.deepEqual(repliesContext.updatedTabs[0], {
+    tabId: 602,
+    updateProperties: { url: "https://x.com/thsottiaux/with_replies" },
+  });
+
+  const otherUserTabs = [{ id: 603, url: "https://x.com/other/status/123456789" }];
+  const otherUserContext = setupServiceWorkerContext(otherUserTabs);
+  const otherUserResult = await otherUserContext.sendMessage(
+    { action: "RESTORE_MONITORED_TIMELINE", timeline: "profile" },
+    { tab: otherUserTabs[0] },
+  );
+
+  assert.deepEqual(otherUserResult, {
+    success: false,
+    error: "invalid_timeline_restore_request",
+  });
+  assert.deepEqual(otherUserContext.updatedTabs, []);
+});
+
+test("the ten-minute alarm restores a remembered status tab when its canonical timeline is missing", async () => {
+  const tabs = [{ id: 604, url: "https://x.com/thsottiaux/status/9876543210" }];
+  const context = setupServiceWorkerContext(tabs);
+  context.localStore.tibo_last_profile_reload_tab_id = 604;
+
+  await context.fireAlarm("tibo_page_reload_alarm");
+
+  assert.deepEqual(context.updatedTabs[0], {
+    tabId: 604,
+    updateProperties: { url: "https://x.com/thsottiaux" },
+  });
+  assert.deepEqual(context.reloadedTabIds, []);
+  assert.equal(context.localStore.tibo_last_profile_reload_status, "success");
 });
 
 test("REQUIREMENT 5 & 6: Strictly matches profile tabs and reloads exactly 1 profile tab when multiple exist", async () => {

@@ -32,6 +32,7 @@ import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
 import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
+import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
   getTemporalNoticeExpiry,
   parseTiboTemporalSemantics,
@@ -83,10 +84,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const authHeader = req.headers.get("authorization");
-    const token = authHeader?.replace(/^Bearer\s+/i, "");
-
-    if (!token || token !== expectedSecret) {
+    if (!isBearerAuthorizationValid(req.headers.get("authorization"), expectedSecret)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

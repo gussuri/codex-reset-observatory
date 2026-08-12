@@ -13,6 +13,7 @@ import {
   buildProbabilityDebugInfo,
   hasOfficialNoticeForLog,
 } from "@/lib/logProbability";
+import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +39,9 @@ function getSupabaseClient() {
 
 async function handleLogRequest(request: NextRequest) {
   // Authorization ヘッダーによる認証
-  const authHeader = request.headers.get("Authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!isBearerAuthorizationValid(request.headers.get("authorization"), cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

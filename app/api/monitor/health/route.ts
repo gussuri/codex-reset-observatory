@@ -4,6 +4,7 @@ import {
   evaluateTiboHeartbeat,
   type TiboHeartbeatSnapshot,
 } from "@/lib/radar/monitorHealth";
+import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     return unavailable("configuration_unavailable");
   }
 
-  if (request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+  if (!isBearerAuthorizationValid(request.headers.get("authorization"), cronSecret)) {
     return NextResponse.json(
       { status: "unhealthy", detail: "unauthorized" },
       { status: 401, headers: noStoreHeaders },

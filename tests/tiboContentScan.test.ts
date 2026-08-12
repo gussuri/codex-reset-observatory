@@ -19,6 +19,25 @@ function getNewestSelector() {
   return (context.TiboMonitorScan as { selectNewestParsedTweet: (current: ParsedTweet | null, candidate: Partial<ParsedTweet>) => ParsedTweet }).selectNewestParsedTweet;
 }
 
+function getScanUtilities() {
+  const context: Record<string, unknown> = { URL };
+  createContext(context);
+  runInContext(
+    readFileSync("extension/tibo-monitor/scan-utils.js", "utf8"),
+    context,
+  );
+  return context.TiboMonitorScan as {
+    getTimelineSource: (url: string) => string | null;
+    isTiboStatusUrl: (url: string) => boolean;
+    shouldRestoreMonitoredTimeline: (url: string, timeline: string | null) => boolean;
+    createTimelineRestoreGate: (debounceMs?: number, now?: () => number) => {
+      tryStart: () => boolean;
+      finish: () => void;
+      reset: () => void;
+    };
+  };
+}
+
 function newestInOrder(
   selector: ReturnType<typeof getNewestSelector>,
   tweets: Array<Partial<ParsedTweet>>,
@@ -70,6 +89,44 @@ test("invalid datetime candidates are ignored by the selector", () => {
   ]);
 
   assert.equal(result?.tweetId, "valid");
+});
+
+test("timeline ownership recognizes canonical pages but never status pages", () => {
+  const scan = getScanUtilities();
+
+  assert.equal(scan.getTimelineSource("https://x.com/thsottiaux"), "profile");
+  assert.equal(scan.getTimelineSource("https://x.com/thsottiaux/with_replies"), "with_replies");
+  assert.equal(scan.getTimelineSource("https://x.com/thsottiaux/status/123"), null);
+  assert.equal(scan.isTiboStatusUrl("https://twitter.com/thsottiaux/status/123"), true);
+  assert.equal(scan.isTiboStatusUrl("https://x.com/other/status/123"), false);
+});
+
+test("only the owned Tibo status page requests timeline restoration", () => {
+  const scan = getScanUtilities();
+  const statusUrl = "https://x.com/thsottiaux/status/123";
+
+  assert.equal(scan.shouldRestoreMonitoredTimeline(statusUrl, "profile"), true);
+  assert.equal(scan.shouldRestoreMonitoredTimeline(statusUrl, "with_replies"), true);
+  assert.equal(scan.shouldRestoreMonitoredTimeline("https://x.com/other/status/123", "profile"), false);
+  assert.equal(scan.shouldRestoreMonitoredTimeline("https://x.com/home", "profile"), false);
+  assert.equal(scan.shouldRestoreMonitoredTimeline("https://x.com/search?q=reset", "profile"), false);
+  assert.equal(scan.shouldRestoreMonitoredTimeline("https://x.com/notifications", "profile"), false);
+});
+
+test("timeline restore gate suppresses in-flight and rapid duplicate requests", () => {
+  const scan = getScanUtilities();
+  let now = 1000;
+  const gate = scan.createTimelineRestoreGate(3000, () => now);
+
+  assert.equal(gate.tryStart(), true);
+  assert.equal(gate.tryStart(), false);
+  gate.finish();
+  now += 1000;
+  assert.equal(gate.tryStart(), false);
+  now += 2000;
+  assert.equal(gate.tryStart(), true);
+  gate.reset();
+  assert.equal(gate.tryStart(), true);
 });
 
 test("content.js selects after a valid parse and before deduplication", () => {

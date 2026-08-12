@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { getDueRegularResetEventRows } from "@/lib/radar/regularResetSchedule";
+import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ function response(body: Record<string, unknown>, status = 200) {
 async function syncRegularResetEvents(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return response({ ok: false, error: "configuration_unavailable" }, 503);
-  if (request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+  if (!isBearerAuthorizationValid(request.headers.get("authorization"), cronSecret)) {
     return response({ ok: false, error: "unauthorized" }, 401);
   }
 

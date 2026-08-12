@@ -31,6 +31,8 @@
   let extensionContextInvalidated = false;
   const intervalIds = [];
   let mutationObserver = null;
+  let monitoredTimeline = TiboMonitorScan.getTimelineSource(window.location.href);
+  const timelineRestoreGate = TiboMonitorScan.createTimelineRestoreGate();
 
   function getSourceTimeline() {
     const detected = TiboMonitorScan.getTimelineSource(window.location.href);
@@ -38,6 +40,32 @@
     return /\/notifications(?:\/|$)/i.test(window.location.pathname)
       ? "profile"
       : null;
+  }
+
+  async function restoreMonitoredTimelineIfNeeded() {
+    const currentTimeline = TiboMonitorScan.getTimelineSource(window.location.href);
+    if (currentTimeline) {
+      monitoredTimeline = currentTimeline;
+      timelineRestoreGate.reset();
+      return false;
+    }
+
+    if (!TiboMonitorScan.shouldRestoreMonitoredTimeline(window.location.href, monitoredTimeline)) {
+      return false;
+    }
+
+    if (!timelineRestoreGate.tryStart()) return true;
+
+    try {
+      await requestServiceWorker("RESTORE_MONITORED_TIMELINE", {
+        timeline: monitoredTimeline,
+      });
+    } catch (error) {
+      handleExtensionError(error, "timeline restore");
+    } finally {
+      timelineRestoreGate.finish();
+    }
+    return true;
   }
 
   function handleExtensionError(error, operation) {
@@ -267,6 +295,8 @@
   }
 
   async function scanTweets() {
+    if (await restoreMonitoredTimelineIfNeeded()) return;
+
     const scanTimestamp = new Date().toISOString();
     let tweetArticles = [];
     const records = [];

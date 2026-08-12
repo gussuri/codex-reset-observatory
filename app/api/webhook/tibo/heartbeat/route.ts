@@ -5,6 +5,7 @@ import {
   isMissingHeartbeatDiagnosticColumn,
   withoutHeartbeatDiagnosticColumns,
 } from "../../../../../lib/radar/heartbeat";
+import { isBearerAuthorizationValid } from "../../../../../lib/security/bearerAuth";
 
 function getSupabaseServiceClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -28,10 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const authHeader = req.headers.get("authorization");
-    const token = authHeader?.replace(/^Bearer\s+/i, "");
-
-    if (!token || token !== expectedSecret) {
+    if (!isBearerAuthorizationValid(req.headers.get("authorization"), expectedSecret)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

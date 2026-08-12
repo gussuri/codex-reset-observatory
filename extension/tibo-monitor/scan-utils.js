@@ -32,6 +32,50 @@
     }
   }
 
+  function isTiboStatusUrl(urlString) {
+    if (!urlString) return false;
+    try {
+      const url = new URL(urlString);
+      const host = url.hostname.toLowerCase();
+      if (host !== "x.com" && host !== "twitter.com") return false;
+      const pathname = url.pathname.replace(/\/+$/, "") || "/";
+      return /^\/thsottiaux\/status\/\d+$/i.test(pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldRestoreMonitoredTimeline(urlString, monitoredTimeline) {
+    return (
+      (monitoredTimeline === "profile" || monitoredTimeline === "with_replies")
+      && isTiboStatusUrl(urlString)
+      && getTimelineSource(urlString) === null
+    );
+  }
+
+  function createTimelineRestoreGate(debounceMs = 3000, now = () => Date.now()) {
+    let inFlight = false;
+    let lastRequestedAt = Number.NEGATIVE_INFINITY;
+
+    return {
+      tryStart() {
+        const currentTime = now();
+        if (!Number.isFinite(currentTime)) return false;
+        if (inFlight || currentTime - lastRequestedAt < debounceMs) return false;
+        inFlight = true;
+        lastRequestedAt = currentTime;
+        return true;
+      },
+      finish() {
+        inFlight = false;
+      },
+      reset() {
+        inFlight = false;
+        lastRequestedAt = Number.NEGATIVE_INFINITY;
+      },
+    };
+  }
+
   function getReplyMarker(article) {
     if (!article || typeof article.querySelector !== "function") return null;
     const selectors = [
@@ -200,6 +244,9 @@
   global.TiboMonitorScan = {
     selectNewestParsedTweet,
     getTimelineSource,
+    isTiboStatusUrl,
+    shouldRestoreMonitoredTimeline,
+    createTimelineRestoreGate,
     extractReplyMetadata,
     extractQuoteMetadata,
   };

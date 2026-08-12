@@ -171,6 +171,56 @@ function getTimelineReloadKey(timeline) {
     : "tibo_last_profile_reload";
 }
 
+function getCanonicalTimelineUrl(timeline) {
+  return timeline === "with_replies"
+    ? "https://x.com/thsottiaux/with_replies"
+    : "https://x.com/thsottiaux";
+}
+
+function isValidRestoreTimeline(timeline) {
+  return timeline === "profile" || timeline === "with_replies";
+}
+
+async function restoreStoredDriftedTimeline(timeline, candidateTabs, now) {
+  const canonicalTabs = (candidateTabs || []).filter(
+    (tab) => getMonitoredTimeline(tab.url) === timeline,
+  );
+  if (canonicalTabs.length > 0) return null;
+
+  const key = getTimelineReloadKey(timeline);
+  const state = await chrome.storage.local.get([`${key}_tab_id`]);
+  const storedTabId = state[`${key}_tab_id`];
+  const tab = (candidateTabs || []).find(
+    (candidate) => candidate.id === storedTabId
+      && TiboMonitorScan.isTiboStatusUrl(candidate.url),
+  );
+  if (!tab) return null;
+
+  try {
+    await chrome.tabs.update(tab.id, { url: getCanonicalTimelineUrl(timeline) });
+    await chrome.storage.local.set({
+      [`${key}_at`]: now,
+      [`${key}_status`]: "success",
+      [`${key}_error`]: null,
+      [`${key}_tab_id`]: tab.id,
+    });
+    console.log(`[Service Worker] Restored ${timeline} tab ${tab.id} from a status-page SPA drift.`);
+    return { timeline, status: "restored", success: true, tabId: tab.id };
+  } catch (error) {
+    await chrome.storage.local.set({
+      [`${key}_status`]: "error",
+      [`${key}_error`]: "page_reload_error",
+    });
+    await saveServiceDiagnostic({
+      reasonCode: "page_reload_error",
+      sourceTimeline: timeline,
+      messages: [`The ${timeline} monitoring tab could not be restored from a status page.`],
+      error: error?.message || String(error),
+    });
+    return { timeline, status: "error", success: false, tabId: tab.id };
+  }
+}
+
 async function reloadTimeline(timeline, tabs, now) {
   const key = getTimelineReloadKey(timeline);
   const tab = tabs[0];
@@ -236,8 +286,12 @@ async function handleReloadAlarm() {
     );
 
     const results = [
-      await reloadTimeline("profile", profileTabs, now),
-      await reloadTimeline("with_replies", repliesTabs, now),
+      (profileTabs.length === 0
+        ? await restoreStoredDriftedTimeline("profile", candidateTabs, now)
+        : null) || await reloadTimeline("profile", profileTabs, now),
+      (repliesTabs.length === 0
+        ? await restoreStoredDriftedTimeline("with_replies", candidateTabs, now)
+        : null) || await reloadTimeline("with_replies", repliesTabs, now),
     ];
     const successful = results.find((result) => result.success);
     const hasError = results.some((result) => result.status === "error");
@@ -320,6 +374,25 @@ function markContentScanSuccessful() {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "RESTORE_MONITORED_TIMELINE") {
+    const timeline = request.timeline;
+    const tab = sender?.tab;
+    const tabId = tab?.id;
+    if (
+      !Number.isInteger(tabId)
+      || !isValidRestoreTimeline(timeline)
+      || !TiboMonitorScan.isTiboStatusUrl(tab?.url)
+    ) {
+      sendResponse({ success: false, error: "invalid_timeline_restore_request" });
+      return false;
+    }
+
+    chrome.tabs.update(tabId, { url: getCanonicalTimelineUrl(timeline) })
+      .then(() => sendResponse({ success: true, data: { timeline } }))
+      .catch(() => sendResponse({ success: false, error: "timeline_restore_failed" }));
+    return true;
+  }
+
   if (request.action === "GET_CONTENT_MONITOR_STATE") {
     getContentMonitorState(request.keys)
       .then((data) => sendResponse({ success: true, data }))

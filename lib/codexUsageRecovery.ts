@@ -1,3 +1,5 @@
+import { isBearerAuthorizationValid } from "./security/bearerAuth";
+
 export const CODEX_WEEKLY_WINDOW_MINUTES = 7 * 24 * 60;
 export const MAX_USAGE_COMPARISON_GAP_MS = 10 * 60 * 1000;
 export const RESET_AT_MEANINGFUL_FORWARD_SEC = 60 * 60;
@@ -225,9 +227,7 @@ export function isCodexUsageAuthorizationValid(
   authorizationHeader: string | null,
   expectedSecret: string | undefined,
 ) {
-  if (!authorizationHeader || !expectedSecret) return false;
-  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
-  return Boolean(match && match[1] === expectedSecret);
+  return isBearerAuthorizationValid(authorizationHeader, expectedSecret);
 }
 
 export function evaluateCodexUsageRecovery(
