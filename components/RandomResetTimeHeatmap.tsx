@@ -340,7 +340,7 @@ function RandomResetIntervalSection({
         {content.intervalHeading}
       </h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">{content.intervalDescription}</p>
-      <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-4">
+      <dl className="mx-auto mt-4 grid w-full grid-cols-2 gap-x-3 gap-y-3 text-sm sm:max-w-2xl sm:grid-cols-4">
         {stats.map(([label, value]) => (
           <div className="min-w-0" key={label}>
             <dt className="text-slate-500">{label}</dt>
