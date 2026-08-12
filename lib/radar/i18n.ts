@@ -229,6 +229,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Planned reset",
     zh: "重置安排",
   },
+  tiboNoticeLocalTime: {
+    ja: "Tibo氏の予告日時をお使いの地域の時間に変換して表示しています",
+    en: "Tibo's notice date and time are shown in your local time.",
+    zh: "Tibo 的预告日期和时间会转换为您所在地区的本地时间显示。",
+  },
   source: {
     ja: "ソース",
     en: "Source",

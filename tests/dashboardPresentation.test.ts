@@ -11,6 +11,7 @@ import { TiboActivityCard } from "../components/TiboActivityCard";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
+import type { ActiveTiboSignal } from "../lib/radar/types";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -460,6 +461,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   );
 
   assert.match(html, /Planned reset/);
+  assert.match(html, /Tibo(?:&#x27;|')s notice date and time are shown in your local time\./);
   assert.doesNotMatch(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
   assert.match(html, /An official reset notice is active, making a reset more likely\./);
   assert.doesNotMatch(html, /time not specified|Pacific Time|In the viewer(?:&#x27;|')s local time/);
@@ -476,6 +478,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
   assert.match(jaHtml, /公式のリセット予告があり、リセットの見込みが高まっています。/);
   assert.match(jaHtml, /リセット予定/);
+  assert.match(jaHtml, /Tibo氏の予告日時をお使いの地域の時間に変換して表示しています/);
   assert.doesNotMatch(jaHtml, /Pacific Time|閲覧者の現地時刻換算|時刻未定/);
   assert.equal((jaHtml.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
 
@@ -489,7 +492,51 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
   assert.match(zhHtml, /重置安排/);
   assert.match(zhHtml, /有官方重置预告，重置的可能性正在上升。/);
+  assert.match(zhHtml, /Tibo 的预告日期和时间会转换为您所在地区的本地时间显示。/);
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
+});
+
+test("shows the local-time note only for resolved Tibo notices", () => {
+  const renderNotice = (tweetUrl: string, overrides: Partial<ActiveTiboSignal> = {}) => {
+    const openedAt = "2026-08-08T20:34:50.000Z";
+    const data = getLocalRadarData({
+      calculationNow: new Date(openedAt),
+      activeTiboSignals: [
+        {
+          tweet_id: `presentation-local-time-${tweetUrl}`,
+          signal_type: "official_notice",
+          text: "Reset notice",
+          tweet_url: tweetUrl,
+          tweet_created_at: openedAt,
+          expires_at: "2026-08-11T09:00:00.000Z",
+          confidence: 0.96,
+          verification_status: "auto_unverified",
+          ...overrides,
+        },
+      ],
+    });
+
+    return renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(data, "en", { calculationNow: new Date(openedAt) }),
+        locale: "en",
+      }),
+    );
+  };
+
+  const unresolvedHtml = renderNotice("https://x.com/thsottiaux/status/unresolved");
+  assert.doesNotMatch(unresolvedHtml, /Tibo(?:&#x27;|')s notice date and time are shown in your local time\./);
+
+  const nonTiboHtml = renderNotice(
+    "https://x.com/other-account/status/non-tibo",
+    {
+      ai_temporal_precision: "exact_time",
+      ai_temporal_timezone: "America/Los_Angeles",
+      expected_start_at: "2026-08-10T07:00:00.000Z",
+      temporal_resolution_status: "resolved",
+    },
+  );
+  assert.doesNotMatch(nonTiboHtml, /Tibo(?:&#x27;|')s notice date and time are shown in your local time\./);
 });
 
 test("formats all Japanese schedule weekdays with compact parentheses", () => {

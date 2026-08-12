@@ -51,6 +51,39 @@ function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | n
   return Number.isFinite(signalTime) && Number.isFinite(resetTime) && signalTime < resetTime;
 }
 
+function isTiboNoticeSource(sourceUrl: string | null | undefined) {
+  if (!sourceUrl) return false;
+
+  try {
+    const url = new URL(sourceUrl);
+    if (
+      !["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(url.hostname.toLowerCase()) ||
+      !["http:", "https:"].includes(url.protocol)
+    ) {
+      return false;
+    }
+
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments.length >= 3 &&
+      segments[0]?.toLowerCase() === "thsottiaux" &&
+      segments[1]?.toLowerCase() === "status";
+  } catch {
+    return false;
+  }
+}
+
+function shouldShowTiboLocalTimeNote(
+  activeWindow: PublicRadarSnapshot["viewModel"]["activeWindow"],
+) {
+  return activeWindow.kind === "official" &&
+    isTiboNoticeSource(activeWindow.source) &&
+    Boolean(activeWindow.expectedAt) &&
+    Number.isFinite(Date.parse(activeWindow.expectedAt ?? "")) &&
+    Boolean(activeWindow.expectedTimeZone) &&
+    Boolean(activeWindow.expectedPrecision) &&
+    activeWindow.expectedPrecision !== "unknown";
+}
+
 function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
   switch (sourceKind) {
     case "direct_post":
@@ -441,6 +474,7 @@ export function RadarDashboard({
     state.data?.recoveryObservation?.status === "observed_unconfirmed" &&
     state.data.recoveryObservation.confidence === "strong";
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const showTiboLocalTimeNote = shouldShowTiboLocalTimeNote(viewModel.activeWindow);
   const probability24h = isDataUnavailable
     ? undefined
     : hasProvisionalRecovery
@@ -629,6 +663,11 @@ export function RadarDashboard({
                   ) : (
                     translateUI("scheduledResetTimeUnknown", locale)
                   )}
+                  {showTiboLocalTimeNote ? (
+                    <p className="mt-1 text-xs font-normal leading-5 text-slate-500">
+                      {translateUI("tiboNoticeLocalTime", locale)}
+                    </p>
+                  ) : null}
                 </dd>
               </div>
 
