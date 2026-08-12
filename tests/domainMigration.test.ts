@@ -9,6 +9,9 @@ import { SITE_URL, siteUrl } from "../lib/siteMetadata";
 import robots from "../app/robots";
 
 const legacyHost = "codex-reset-observatory.vercel.app";
+
+// TODO(test-cleanup): Remove this compatibility suite when the legacy Vercel host
+// is no longer supported by the redirect and extension migration paths.
 const newHost = "codex.gussuriworks.com";
 
 function responseFor(url: string) {

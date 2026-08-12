@@ -56,72 +56,65 @@ function openGraphFrom(metadata: Metadata) {
   return metadata.openGraph;
 }
 
-test("home metadata uses the unified brand and requested localized titles/descriptions", () => {
+test("home metadata preserves exact localized SEO contracts", () => {
   const homeCases = [
-    [jaHomeMetadata, HOME_TITLE_JA, HOME_DESCRIPTION_JA, "ja"],
-    [enHomeMetadata, HOME_TITLE_EN, HOME_DESCRIPTION_EN, "en"],
-    [zhHomeMetadata, HOME_TITLE_ZH, HOME_DESCRIPTION_ZH, "zh"],
+    {
+      locale: "ja",
+      metadata: jaHomeMetadata,
+      titleConstant: HOME_TITLE_JA,
+      descriptionConstant: HOME_DESCRIPTION_JA,
+      path: "/",
+      expectedTitle: "Codexリセット観測所｜タイミング・履歴・次回予測",
+      expectedDescription: "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。",
+    },
+    {
+      locale: "en",
+      metadata: enHomeMetadata,
+      titleConstant: HOME_TITLE_EN,
+      descriptionConstant: HOME_DESCRIPTION_EN,
+      path: "/en",
+      expectedTitle: "Codex Usage Limit Reset Status, History and Forecast",
+      expectedDescription: "Check the latest Codex reset time, recent history, official notices, and reset forecasts for the next 24 and 48 hours.",
+    },
+    {
+      locale: "zh",
+      metadata: zhHomeMetadata,
+      titleConstant: HOME_TITLE_ZH,
+      descriptionConstant: HOME_DESCRIPTION_ZH,
+      path: "/zh",
+      expectedTitle: "Codex 重置观测站｜使用额度、时间、历史与预测",
+      expectedDescription: "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
+    },
   ] as const;
 
-  for (const [metadata, title, description, path] of homeCases) {
-    assert.strictEqual(metadata.applicationName, SITE_NAME);
-    assert.strictEqual(titleFrom(metadata), title);
-    assert.strictEqual(metadata.description, description);
+  assert.strictEqual(SITE_NAME, "Codex Reset Observatory");
+  assert.strictEqual(SITE_NAME_JA, "Codexリセット観測所");
 
-    const openGraph = openGraphFrom(metadata);
-    assert.strictEqual(openGraph.siteName, SITE_NAME);
-    assert.strictEqual(openGraph.title, title);
-    assert.strictEqual(openGraph.description, description);
-    assert.strictEqual(openGraph.url, siteUrl(path === "ja" ? "/" : "/" + path));
-    const firstImage = Array.isArray(openGraph.images)
-      ? openGraph.images[0]
-      : openGraph.images;
+  for (const item of homeCases) {
+    assert.strictEqual(item.titleConstant, item.expectedTitle, item.locale);
+    assert.strictEqual(item.descriptionConstant, item.expectedDescription, item.locale);
+    assert.strictEqual(item.metadata.applicationName, SITE_NAME, item.locale);
+    assert.strictEqual(titleFrom(item.metadata), item.expectedTitle, item.locale);
+    assert.strictEqual(item.metadata.description, item.expectedDescription, item.locale);
+
+    const openGraph = openGraphFrom(item.metadata);
+    assert.strictEqual(openGraph.siteName, SITE_NAME, item.locale);
+    assert.strictEqual(openGraph.title, item.expectedTitle, item.locale);
+    assert.strictEqual(openGraph.description, item.expectedDescription, item.locale);
+    assert.strictEqual(openGraph.url, siteUrl(item.path), item.locale);
+    const firstImage = Array.isArray(openGraph.images) ? openGraph.images[0] : openGraph.images;
     const firstImageUrl =
       typeof firstImage === "string"
         ? firstImage
         : firstImage instanceof URL
           ? firstImage.toString()
           : firstImage?.url;
-    assert.strictEqual(firstImageUrl, SITE_OG_IMAGE_URL);
+    assert.strictEqual(firstImageUrl, SITE_OG_IMAGE_URL, item.locale);
 
-    assert.strictEqual(metadata.twitter?.title, title);
-    assert.strictEqual(metadata.twitter?.description, description);
-    assert.deepStrictEqual(metadata.twitter?.images, [SITE_OG_IMAGE_URL]);
+    assert.strictEqual(item.metadata.twitter?.title, item.expectedTitle, item.locale);
+    assert.strictEqual(item.metadata.twitter?.description, item.expectedDescription, item.locale);
+    assert.deepStrictEqual(item.metadata.twitter?.images, [SITE_OG_IMAGE_URL], item.locale);
   }
-});
-
-test("Japanese home title uses the observatory search title without a template suffix", () => {
-  const expectedTitle = "Codexリセット観測所｜タイミング・履歴・次回予測";
-
-  assert.equal(HOME_TITLE_JA, expectedTitle);
-  assert.equal(titleFrom(jaHomeMetadata), expectedTitle);
-  assert.equal(openGraphFrom(jaHomeMetadata).title, expectedTitle);
-  assert.equal(jaHomeMetadata.twitter?.title, expectedTitle);
-  assert.equal(
-    HOME_DESCRIPTION_JA,
-    "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。",
-  );
-  assert.equal(SITE_NAME, "Codex Reset Observatory");
-  assert.equal(SITE_NAME_JA, "Codexリセット観測所");
-  assert.equal(HOME_TITLE_EN, "Codex Usage Limit Reset Status, History and Forecast");
-  assert.equal(HOME_TITLE_ZH, "Codex 重置观测站｜使用额度、时间、历史与预测");
-});
-
-test("Chinese home title uses the localized observatory search title without a suffix", () => {
-  const expectedTitle = "Codex 重置观测站｜使用额度、时间、历史与预测";
-
-  assert.equal(HOME_TITLE_ZH, expectedTitle);
-  assert.equal(titleFrom(zhHomeMetadata), expectedTitle);
-  assert.equal(openGraphFrom(zhHomeMetadata).title, expectedTitle);
-  assert.equal(zhHomeMetadata.twitter?.title, expectedTitle);
-  assert.equal(
-    HOME_DESCRIPTION_ZH,
-    "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
-  );
-  assert.equal(HOME_TITLE_JA, "Codexリセット観測所｜タイミング・履歴・次回予測");
-  assert.equal(HOME_TITLE_EN, "Codex Usage Limit Reset Status, History and Forecast");
-  assert.equal(SITE_NAME, "Codex Reset Observatory");
-  assert.equal(titleFrom(zhFaqMetadata), "Codex 重置 FAQ | 重置时机、使用限制与手动重置");
 });
 
 test("home SEO descriptions expose only the public 24-hour and 48-hour horizons", () => {
@@ -132,19 +125,43 @@ test("home SEO descriptions expose only the public 24-hour and 48-hour horizons"
   }
 });
 
-test("Japanese FAQ metadata covers Codex and ChatGPT Work reset searches", () => {
-  const title = titleFrom(jaFaqMetadata);
-  const description = jaFaqMetadata.description ?? "";
+test("localized FAQ metadata preserves search contracts", () => {
+  const cases = [
+    {
+      metadata: jaFaqMetadata,
+      title: "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory",
+      description: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
+      openGraphTitle: "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory",
+      openGraphDescription: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
+      twitterDescription: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
+    },
+    {
+      metadata: enFaqMetadata,
+      title: "Codex Reset FAQ | Usage Limits, Banked Resets, and Timing",
+      description: "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
+      openGraphTitle: "Codex Reset FAQ | Usage Limits Reset Timing",
+      openGraphDescription: "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
+      twitterDescription: "Did Codex reset today? Find answers about usage limits reset timing, Banked Resets, reset history, and why the forecast changes.",
+    },
+    {
+      metadata: zhFaqMetadata,
+      title: "Codex 重置 FAQ | 重置时机、使用限制与手动重置",
+      description: "关于 Codex 重置具体时机、Token 和使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
+      openGraphTitle: "Codex 重置 FAQ",
+      openGraphDescription: "关于 Codex 重置具体时机、使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
+      twitterDescription: "关于 Codex 重置具体时机、使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
+    },
+  ] as const;
 
-  assert.equal(title, "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory");
-  assert.match(description, /Codex/);
-  assert.match(description, /ChatGPT Work/);
-  assert.match(description, /リセット/);
-  assert.match(description, /利用上限/);
-  assert.equal(openGraphFrom(jaFaqMetadata).title, title);
-  assert.equal(openGraphFrom(jaFaqMetadata).description, description);
-  assert.equal(jaFaqMetadata.twitter?.title, title);
-  assert.equal(jaFaqMetadata.twitter?.description, description);
+  for (const item of cases) {
+    const openGraph = openGraphFrom(item.metadata);
+    assert.equal(titleFrom(item.metadata), item.title);
+    assert.equal(item.metadata.description, item.description);
+    assert.equal(openGraph.title, item.openGraphTitle);
+    assert.equal(openGraph.description, item.openGraphDescription);
+    assert.equal(item.metadata.twitter?.title, item.openGraphTitle);
+    assert.equal(item.metadata.twitter?.description, item.twitterDescription);
+  }
 });
 
 test("llms description keeps Codex central while explaining the shared Work pool", () => {

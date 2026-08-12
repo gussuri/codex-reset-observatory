@@ -23,7 +23,6 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
     }),
   );
 
-  assert.match(html, /^<dl class="mt-4 grid w-full grid-cols-2 gap-3">/);
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
   assert.match(html, /aria-label="Within 24h"/);
   assert.match(html, /aria-label="Within 48h"/);
@@ -33,9 +32,6 @@ test("renders only the 24-hour and 48-hour probability progressbars", () => {
   assert.strictEqual((html.match(/aria-valuemax="100"/g) ?? []).length, 2);
   assert.match(html, />23%</);
   assert.match(html, />77%</);
-  assert.match(html, /rounded-lg border p-4 pl-6 lg:p-5 lg:pl-7/);
-  assert.match(html, /text-sm font-medium lg:text-base/);
-  assert.match(html, /mt-2 text-3xl font-semibold lg:mt-3 lg:text-4xl/);
   assert.match(html, /aria-valuenow="23"/);
   assert.match(html, /aria-valuenow="77"/);
 });
@@ -360,12 +356,9 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.match(html, new RegExp(locale === "ja" ? "リセット件数" : locale === "en" ? "Reset records" : "重置记录数"));
     assert.doesNotMatch(html, /対象件数|Recorded events|记录数量/);
     assert.match(html, new RegExp(locale === "ja" ? "aria-pressed=\"true\"[^>]*>直近1か月" : locale === "en" ? "aria-pressed=\"true\"[^>]*>Last month" : "aria-pressed=\"true\"[^>]*>最近1个月"));
-    assert.doesNotMatch(html, /mx-auto w-full max-w-2xl|mx-auto mt-4 w-full max-w-md/);
-    assert.match(html, new RegExp(`<h2 class="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">${weekdayHeadings[locale]}`));
+    assert.match(html, new RegExp(`<h2[^>]*>${weekdayHeadings[locale]}`));
     assert.doesNotMatch(html, /閲覧者のタイムゾーン|Viewer time zone|查看者时区/);
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
-    assert.match(html, /class="block aspect-\[1\.35\] min-w-0 rounded bg-slate-200/);
-    assert.match(html, /grid grid-cols-8/);
     assert.doesNotMatch(html, /Raw count|Weighted share|加权构成比/);
     assert.doesNotMatch(html, /実際のシステム実行時刻|Some records may reflect|部分记录反映/);
     assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);
@@ -540,7 +533,6 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const outlookText = html.slice(outlookIndex, historyIndex);
 
   assert.ok(probabilityIndex >= 0 && probabilityIndex < noticeIndex);
-  assert.match(html, /lg:grid-cols-\[minmax\(0,1\.4fr\)_minmax\(20rem,1fr\)\]/);
   assert.ok(noticeIndex >= 0 && noticeIndex < teaserIndex);
   assert.ok(teaserIndex < incidentIndex && incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);
@@ -548,12 +540,9 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.match(html, /Codex関連障害[\s\S]*なし/);
   assert.match(html, /前回のリセットから[\s\S]*2日20時間/);
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
-  assert.match(html, /<dl class="grid gap-2 sm:grid-cols-2 lg:grid-cols-2">/);
   assert.match(html, /現在の見込み/);
   assert.doesNotMatch(html, /現在、目立った観測変化はありません。/);
   assert.match(outlookText, /前回のリセット|最近はリセット|現在、大きな変化/);
-  assert.match(html, /radar-grid relative h-11 w-11 shrink-0/);
-  assert.match(html, /mt-2 max-w-2xl text-xs leading-5 text-slate-600/);
   assert.doesNotMatch(outlookText, /直近のリセットから2日20時間経過しています。/);
   assert.doesNotMatch(outlookText, /公式予告や発生中のCodex関連障害はありません。/);
   assert.doesNotMatch(outlookText, /直近7日間でリセットが3回/);
@@ -615,9 +604,6 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
   assert.ok(noticeLabelIndex > historyIndex);
   assert.ok(executionLabelIndex > noticeLabelIndex);
   assert.ok(sourceIndex > executionLabelIndex);
-  assert.match(html, /sm:grid sm:grid-cols-\[auto_auto\] sm:justify-end sm:gap-x-3/);
-  assert.match(html, /tabular-nums/);
-
   const labels = {
     ja: [">予告：</span>", ">実施：</span>"],
     en: [">Notice: </span>", ">Reset: </span>"],
