@@ -150,9 +150,9 @@ test("renders all nine regime and elapsed outlook buckets", () => {
     [0.8, 48, "前回のリセットから少し時間がたっていますが、最近のリセットが少ないため、リセットの見込みは低めです。"],
     [0.8, 96, "前回のリセットから時間はたっていますが、最近のリセットが少ないため、リセットの見込みはやや低めです。"],
     [1, 12, "前回のリセットから時間がたっていないため、短期のリセット見込みは低めです。"],
-    [1, 48, "前回のリセットから少し時間がたっており、リセットの見込みは少し上がっています。"],
+    [1, 48, "前回のリセットから少し時間がたっており、リセットの見込みは中程度です。"],
     [1, 96, "前回のリセットから時間がたっているため、リセットの見込みは高まりつつあります。"],
-    [1.3, 12, "最近はリセットが多いものの、前回のリセットから時間がたっていないため、リセットの見込みは抑えめです。"],
+    [1.3, 12, "最近はリセットが多いものの、前回のリセットから時間がたっていないため、リセットの見込みは中程度です。"],
     [1.3, 48, "最近はリセットが多く、前回のリセットからも少し時間がたっているため、リセットの見込みは高めです。"],
     [1.3, 96, "最近はリセットが多く、前回のリセットからも時間がたっているため、リセットの見込みは高めです。"],
   ] as const;
@@ -171,11 +171,19 @@ test("does not use indirect or technical elapsed-time wording", () => {
 test("uses the same outlook buckets in English and Chinese", () => {
   assert.equal(
     reasonFor({ locale: "en", multiplier: 1, elapsedHours: 48 }),
-    "Some time has passed since the last reset, so a reset is becoming somewhat more likely.",
+    "Some time has passed since the last reset, and the current reset outlook is moderate.",
   );
   assert.equal(
     reasonFor({ locale: "zh", multiplier: 1, elapsedHours: 48 }),
-    "距离上次重置已经过了一段时间，因此重置的可能性有所上升。",
+    "距离上次重置已经过了一段时间，目前的重置可能性处于中等水平。",
+  );
+  assert.equal(
+    reasonFor({ locale: "en", multiplier: 1.3, elapsedHours: 12 }),
+    "Resets have been frequent recently, but not much time has passed since the last reset, so the current reset outlook is moderate.",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", multiplier: 1.3, elapsedHours: 12 }),
+    "近期重置较多，但距离上次重置还没过多久，因此目前的重置可能性处于中等水平。",
   );
 });
 
