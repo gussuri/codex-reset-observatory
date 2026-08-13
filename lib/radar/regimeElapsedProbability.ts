@@ -47,7 +47,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const LOG_2 = Math.LN2;
 const INTEGRATION_STEP_HOURS = 10 / 60;
-export const OFFICIAL_NOTICE_TIMING_POLICY_VERSION = "official-notice-window-v2";
+export const OFFICIAL_NOTICE_TIMING_POLICY_VERSION = "official-notice-window-v3";
 
 export type RegimeElapsedBinScheme = "A" | "B";
 export type RegimeElapsedMode = "full" | "elapsed-only" | "regime-only";

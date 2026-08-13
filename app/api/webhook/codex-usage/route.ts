@@ -8,6 +8,7 @@ import {
   evaluateCodexUsageRecovery,
   isCodexUsageAuthorizationValid,
   parseCodexUsageWebhookPayload,
+  shouldCreateNoticeBackedEstimate,
   type CodexUsageSnapshot,
 } from "@/lib/codexUsageRecovery";
 import {
@@ -181,6 +182,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
     }
 
+    const noticeSignal = notice.noticeSignal;
     if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
       try {
         const cluster = await findFormalTiboResetCluster(
@@ -203,16 +205,16 @@ export async function POST(request: Request) {
       } catch {
         console.warn("[Codex usage] reset execution estimate skipped", { reason: "request_failed" });
       }
-    } else if (notice.noticeSignal && decision.confidence === "strong" && decision.cycleHint !== "regular" && observationResult.observation) {
+    } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observationResult.observation)) {
       try {
         const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `tibo-reset-${notice.noticeSignal.id}`,
-          tiboAnnouncedAt: notice.noticeSignal.observedAt,
-          tiboPrimaryTweetId: notice.noticeSignal.id,
-          tiboSourceTweetIds: [notice.noticeSignal.id].filter(Boolean),
+          resetEventKey: `tibo-reset-${noticeSignal.id}`,
+          tiboAnnouncedAt: noticeSignal.observedAt,
+          tiboPrimaryTweetId: noticeSignal.id,
+          tiboSourceTweetIds: [noticeSignal.id].filter(Boolean),
           usageObservation: observationResult.observation,
-          officialNoticeTweetId: notice.noticeSignal.id,
-          officialNoticeAt: notice.noticeSignal.observedAt,
+          officialNoticeTweetId: noticeSignal.id,
+          officialNoticeAt: noticeSignal.observedAt,
         });
         if (estimateResult.error) {
           console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });

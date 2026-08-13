@@ -672,13 +672,7 @@ export function getTemporalNoticeCoverage(
   }
   const remainingStart = Math.max(nowTime, start);
   const remainingDuration = end - remainingStart;
-  if (remainingDuration <= 0) {
-    const overdueMs = nowTime - end;
-    if (overdueMs <= TIBO_NOTICE_GRACE_MS) {
-      return Math.max(0, Math.min(1, 1 - overdueMs / TIBO_NOTICE_GRACE_MS));
-    }
-    return 0;
-  }
+  if (remainingDuration <= 0) return 0;
   const intersection = Math.max(0, Math.min(nowTime + horizonHours * HOUR_MS, end) - remainingStart);
   const confidence = typeof resolution.confidence === "number" && Number.isFinite(resolution.confidence)
     ? Math.min(1, Math.max(0, resolution.confidence))

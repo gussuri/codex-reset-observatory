@@ -61,6 +61,47 @@ test("G. exact_time after grace expiry (>120m) has 0.0 support", () => {
   assert.equal(coverage24, 0);
 });
 
+const nonExactNoticeResolution = {
+  status: "resolved" as const,
+  temporalPrecision: "day" as const,
+  confidence: 0.9,
+  expectedStartAt: EXPECTED_ISO,
+  expectedEndAt: new Date(EXPECTED_TIME + 60 * 60 * 1000).toISOString(),
+};
+
+test("non-exact window just before expected end retains positive coverage", () => {
+  const end = Date.parse(nonExactNoticeResolution.expectedEndAt);
+  const coverage24 = getTemporalNoticeCoverage(nonExactNoticeResolution, new Date(end - 1), 24);
+  assert.equal(coverage24, 0.9);
+});
+
+test("non-exact day window ends immediately without the exact-time grace", () => {
+  const end = Date.parse(nonExactNoticeResolution.expectedEndAt);
+  assert.equal(getTemporalNoticeCoverage(nonExactNoticeResolution, new Date(end), 24), 0);
+  assert.equal(getTemporalNoticeCoverage(nonExactNoticeResolution, new Date(end + 30 * 60 * 1000), 24), 0);
+});
+
+test("non-exact daypart and range windows end immediately without grace", () => {
+  const end = Date.parse(nonExactNoticeResolution.expectedEndAt);
+  for (const temporalPrecision of ["daypart", "range"] as const) {
+    assert.equal(
+      getTemporalNoticeCoverage(
+        { ...nonExactNoticeResolution, temporalPrecision },
+        new Date(end + 1),
+        24,
+      ),
+      0,
+    );
+  }
+});
+
+test("non-exact coverage does not rise at the window end", () => {
+  const end = Date.parse(nonExactNoticeResolution.expectedEndAt);
+  const beforeEnd = getTemporalNoticeCoverage(nonExactNoticeResolution, new Date(end - 1), 24);
+  const atEnd = getTemporalNoticeCoverage(nonExactNoticeResolution, new Date(end), 24);
+  assert.ok(beforeEnd !== null && atEnd !== null && atEnd <= beforeEnd);
+});
+
 test("H. reset confirmation ends overdue pending state", () => {
   const overdueNow = new Date(EXPECTED_TIME + 23 * 60 * 1000); // 23 min overdue
 

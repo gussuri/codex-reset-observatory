@@ -104,9 +104,11 @@ not change the public display.
 
 Strong, non-regular observations without a prior official notice are public only as a provisional derived state for 90 minutes. The UI says that usage recovery was observed on the monitored Codex account and that Tibo confirmation is pending.
 
-When a valid prior `official_notice` exists and a strong, non-regular usage recovery is observed during its active/grace window, it is immediately confirmed as a `confirmed global reset`. The canonical execution time uses the local observation window (`observedAt`, `approximate`).
+When a valid prior `official_notice` exists and a strong, unexpected usage recovery is observed during its active/grace window, it is immediately confirmed as a `confirmed global reset`. The canonical execution time uses the local observation window (`observedAt`, `approximate`). A strong recovery classified as `unknown` is not immediately promoted to a global confirmation.
 
 Subsequent Tibo `reset_executed` posts are not a mandatory confirmation requirement, but serve as additional corroboration that merges into the same canonical reset event without creating duplicate history entries or boundary shifts.
+
+公式予告が有効な間は、監視対象のCodexアカウントでBanked Resetや手動リセットを使用しないでください。手動リセットでも`usedPercent`の低下と`resetsAt`の前進が起こり得るため、Usage Monitorから全体リセットと区別できない可能性があります。公式予告中の監視アカウントは観測専用として扱ってください。誤って手動リセットやBanked Resetを使用した場合は、その直後のrecovery observationを全体リセット確定の根拠にしないでください。
 
 ## Windows configuration and CLI debugging
 

@@ -8,6 +8,19 @@ export const UNCONFIRMED_RECOVERY_ACTIVE_MS = 90 * 60 * 1000;
 export const USAGE_TIBO_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const CODEX_USAGE_SOURCE_KEY = "local-codex-app-server";
 
+export function shouldCreateNoticeBackedEstimate<T extends { id: string }>(
+  noticeSignal: T | null | undefined,
+  decision: { confidence: string; cycleHint: string },
+  observation: unknown,
+): noticeSignal is T {
+  return Boolean(
+    noticeSignal &&
+    decision.confidence === "strong" &&
+    decision.cycleHint === "unexpected" &&
+    observation,
+  );
+}
+
 export type CodexUsageSnapshot = {
   observedAt: string;
   limitId: "codex";

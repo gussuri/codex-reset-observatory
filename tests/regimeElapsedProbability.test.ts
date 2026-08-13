@@ -9,6 +9,7 @@ import {
   calculateRegimeElapsedProbability,
   getRegimeElapsedHazardAtAge,
   integrateRegimeElapsedHazard,
+  OFFICIAL_NOTICE_TIMING_POLICY_VERSION,
 } from "../lib/radar/regimeElapsedProbability";
 import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 import { getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
@@ -304,7 +305,8 @@ test("resolved future notice uses partial horizon coverage instead of a fixed ov
     activeOfficialNotice: notice,
   });
 
-  assert.equal(result.regimeElapsed.officialNoticeTimingPolicyVersion, "official-notice-window-v2");
+  assert.equal(result.regimeElapsed.officialNoticeTimingPolicyVersion, OFFICIAL_NOTICE_TIMING_POLICY_VERSION);
+  assert.equal(OFFICIAL_NOTICE_TIMING_POLICY_VERSION, "official-notice-window-v3");
   assert.ok(
     Math.abs(
       result.predictions.probability24h - baseline.predictions.probability24h,

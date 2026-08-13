@@ -4,6 +4,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/codex-usage/route";
+import { shouldCreateNoticeBackedEstimate } from "../lib/codexUsageRecovery";
 
 const ENV_KEYS = [
   "CODEX_USAGE_MONITOR_SECRET",
@@ -138,4 +139,26 @@ test("the first valid snapshot is stored as a baseline only", async () => {
     globalThis.fetch = originalFetch;
     restore();
   }
+});
+
+test("notice-backed estimate is not created for a strong unknown recovery", () => {
+  assert.equal(
+    shouldCreateNoticeBackedEstimate(
+      { id: "notice-1" },
+      { confidence: "strong", cycleHint: "unknown" },
+      { id: "recovery-1" },
+    ),
+    false,
+  );
+});
+
+test("notice-backed estimate is created for a strong unexpected recovery", () => {
+  assert.equal(
+    shouldCreateNoticeBackedEstimate(
+      { id: "notice-1" },
+      { confidence: "strong", cycleHint: "unexpected" },
+      { id: "recovery-1" },
+    ),
+    true,
+  );
 });
