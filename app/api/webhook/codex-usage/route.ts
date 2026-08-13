@@ -68,8 +68,10 @@ async function hasActiveOfficialNotice(
       })),
     regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
   };
+  const activeNotice = getActiveOfficialNotice(data, null, observedAt);
   return {
-    active: Boolean(getActiveOfficialNotice(data, null, observedAt)),
+    active: Boolean(activeNotice),
+    noticeSignal: activeNotice ?? null,
     error: null,
   };
 }
@@ -200,6 +202,20 @@ export async function POST(request: Request) {
         }
       } catch {
         console.warn("[Codex usage] reset execution estimate skipped", { reason: "request_failed" });
+      }
+    } else if (notice.noticeSignal && decision.confidence === "strong" && decision.cycleHint !== "regular" && observationResult.observation) {
+      try {
+        await upsertResetExecutionEstimate(client, {
+          resetEventKey: `tibo-reset-${notice.noticeSignal.id}`,
+          tiboAnnouncedAt: notice.noticeSignal.observedAt,
+          tiboPrimaryTweetId: notice.noticeSignal.id,
+          tiboSourceTweetIds: [notice.noticeSignal.id].filter(Boolean),
+          usageObservation: observationResult.observation,
+          officialNoticeTweetId: notice.noticeSignal.id,
+          officialNoticeAt: notice.noticeSignal.observedAt,
+        });
+      } catch {
+        console.warn("[Codex usage] notice-backed reset execution estimate skipped", { reason: "request_failed" });
       }
     }
 

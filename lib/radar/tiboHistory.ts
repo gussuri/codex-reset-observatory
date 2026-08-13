@@ -450,15 +450,128 @@ function mergePersistedRegularEvents(
   return result;
 }
 
+export type CodexRecoveryObservationInput = {
+  id?: string | null;
+  observedAt?: string | null;
+  previousObservedAt?: string | null;
+  previousUsedPercent?: number | null;
+  currentUsedPercent?: number | null;
+  cycleHint?: string | null;
+  confidence?: string | null;
+  status?: string | null;
+  matchedTiboTweetId?: string | null;
+};
+
+export function findNoticeBackedRecoveryEvents(
+  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal>,
+  recoveryObservations: Array<CodexRecoveryObservationInput>,
+  estimates: Array<any> = [],
+): Array<WindowEventLike> {
+  const events: Array<WindowEventLike> = [];
+  const processedObsIds = new Set<string>();
+
+  for (const obs of recoveryObservations) {
+    if (!obs || !obs.observedAt || !obs.previousObservedAt) continue;
+    if (obs.id && processedObsIds.has(obs.id)) continue;
+    if (obs.confidence !== "strong" || obs.cycleHint === "regular" || obs.status === "rejected" || obs.status === "voided") {
+      continue;
+    }
+
+    const obsTime = getTimestamp(obs.observedAt);
+    const prevObsTime = getTimestamp(obs.previousObservedAt);
+    if (!obsTime || !prevObsTime || prevObsTime >= obsTime) continue;
+
+    // Find valid prior official notice
+    const validNotices = noticeSignals.filter((signal) => {
+      if (signal.signal_type !== "official_notice") return false;
+      if (signal.verification_status === "rejected") return false;
+      if ((signal.confidence ?? 0) < OFFICIAL_NOTICE_CONFIDENCE) return false;
+      const noticeTime = getTimestamp(signal.tweet_created_at);
+      if (!noticeTime || noticeTime >= obsTime) return false;
+
+      const expectedStart = getTimestamp(signal.expected_start_at);
+      const expiry = getTimestamp((signal as any).expires_at) ??
+        (expectedStart ? expectedStart + 2 * 60 * 60 * 1000 : noticeTime + 48 * 60 * 60 * 1000);
+      return obsTime <= expiry;
+    });
+
+    if (validNotices.length === 0) continue;
+
+    const matchingNotice = validNotices.slice().sort((a, b) => (getTimestamp(b.tweet_created_at) ?? 0) - (getTimestamp(a.tweet_created_at) ?? 0))[0];
+    const noticeTime = getTimestamp(matchingNotice.tweet_created_at)!;
+    const noticeMinutes = Math.max(0, Math.round((obsTime - noticeTime) / 60000));
+    const noticeToExecStr = formatNoticeToExecution(noticeMinutes);
+    const summary = "監視中のCodexアカウントで利用枠の回復を確認しました。事前のTibo氏による公式予告と一致するため、全体リセット完了として記録しました。";
+
+    if (obs.id) processedObsIds.add(obs.id);
+
+    events.push({
+      id: `notice-recovery-${obs.id ?? matchingNotice.tweet_id}`,
+      recordKind: "confirmed_global",
+      title: "全体リセット完了",
+      kind: "reset_completed",
+      status: "closed",
+      opened_at: new Date(noticeTime).toISOString(),
+      closed_at: obs.observedAt,
+      completed_at: obs.observedAt,
+      window_minutes: noticeMinutes,
+      scope: "全有料プラン",
+      summary,
+      source_url: matchingNotice.tweet_url,
+      sourceTweetIds: [matchingNotice.tweet_id],
+      details: {
+        cycleType: "ランダムリセット",
+        reasonType: "ランダムリセット",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: noticeToExecStr,
+        noticeType: "公式予告あり",
+        note: summary,
+      },
+    });
+  }
+
+  return events;
+}
+
 export function combineResetHistory(
   staticHistory: Array<WindowEventLike>,
   formalTiboResets: Array<FormalTiboResetSignal>,
   rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
   regularResetRows: Array<RegularResetEventRow> = [],
+  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal> = [],
+  recoveryObservations: Array<CodexRecoveryObservationInput> = [],
+  estimates: Array<any> = [],
 ) {
   const formalSignals = formalTiboResets
-    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal))
-  const dynamicItems = clusterFormalTiboResetSignals(formalSignals);
+    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
+  const tiboItems = clusterFormalTiboResetSignals(formalSignals);
+  const noticeBackedEvents = findNoticeBackedRecoveryEvents(
+    noticeSignals.length > 0 ? noticeSignals : (formalTiboResets as any),
+    recoveryObservations,
+    estimates,
+  );
+
+  const dynamicItems: Array<WindowEventLike> = [];
+  for (const noticeEvent of noticeBackedEvents) {
+    const matchingTiboIndex = tiboItems.findIndex((tiboEvent) => isSameReset(noticeEvent, tiboEvent));
+    if (matchingTiboIndex !== -1) {
+      const merged = mergeDuplicateHistory(tiboItems[matchingTiboIndex], noticeEvent);
+      // Preserve notice-backed recovery canonical execution time (observedAt) & title/summary
+      dynamicItems.push({
+        ...merged,
+        closed_at: noticeEvent.closed_at,
+        completed_at: noticeEvent.completed_at,
+        title: noticeEvent.title ?? merged.title,
+        summary: noticeEvent.summary ?? merged.summary,
+      });
+      tiboItems.splice(matchingTiboIndex, 1);
+    } else {
+      dynamicItems.push(noticeEvent);
+    }
+  }
+  dynamicItems.push(...tiboItems);
+
   const regularMergedHistory = mergePersistedRegularEvents(staticHistory, regularResetRows);
   const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];

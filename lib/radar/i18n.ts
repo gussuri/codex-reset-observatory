@@ -259,6 +259,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Checking",
     zh: "确认中",
   },
+  noticeBackedRecoveryTitle: {
+    ja: "全体リセット完了",
+    en: "Global reset completed",
+    zh: "全局重置已完成",
+  },
+  noticeBackedRecoveryBody: {
+    ja: "監視中のCodexアカウントで利用枠の回復を確認しました。事前のTibo氏による公式予告と一致するため、全体リセット完了として記録しました。",
+    en: "A quota recovery was observed on the monitored Codex account. Because it matches Tibo's prior official notice, it has been recorded as a completed global reset.",
+    zh: "监控中的 Codex 账户已观测到额度恢复。由于与 Tibo 事先发布的官方预告一致，已记录为全局重置完成。",
+  },
   scheduledResetPlan: {
     ja: "予定",
     en: "Planned",

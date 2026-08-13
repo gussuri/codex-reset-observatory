@@ -91,8 +91,11 @@ function isMatchedUsageObservation(
   value: CodexRecoveryObservation | null | undefined,
   sourceTweetIds: Set<string>,
 ) {
-  if (!value || value.status !== "confirmed" || !value.matchedTiboTweetId) return false;
-  if (!sourceTweetIds.has(value.matchedTiboTweetId)) return false;
+  if (!value) return false;
+  const statusStr = (value.status ?? "") as string;
+  const isConfirmed = statusStr === "confirmed" && value.matchedTiboTweetId && sourceTweetIds.has(value.matchedTiboTweetId);
+  const isNoticeBacked = value.confidence === "strong" && value.cycleHint !== "regular" && statusStr !== "rejected" && statusStr !== "voided";
+  if (!isConfirmed && !isNoticeBacked) return false;
 
   const observedAt = parseTimestamp(value.observedAt);
   const previousObservedAt = parseTimestamp(value.previousObservedAt);

@@ -1260,10 +1260,22 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     };
   });
 
+  const rawNoticeSignals = data?.active_tibo_signals ?? data?.recent_tibo_signals ?? [];
+  const noticeSignals = rawNoticeSignals.map((s) => ({
+    ...s,
+    text: s.text ?? "",
+    tweet_url: s.tweet_url ?? "",
+  })) as any[];
+  const observations = (data as any)?.codex_recovery_observations ?? (data?.codex_usage_recovery ? [data.codex_usage_recovery] : []);
+  const estimates = data?.reset_execution_estimates ?? [];
+
   return combineResetHistory(
     [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    observations,
+    estimates,
   );
 }

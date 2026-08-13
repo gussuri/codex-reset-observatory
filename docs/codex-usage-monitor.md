@@ -102,17 +102,11 @@ An off-schedule recovery is `unexpected`; it is strong only when an active
 official notice corroborates it. Medium observations are stored for audit but do
 not change the public display.
 
-Strong, non-regular observations are public only as a provisional derived state
-for 90 minutes. The UI says that usage recovery was observed on the monitored
-Codex account and that Tibo confirmation is pending. It never says that a global
-reset is confirmed. The provisional state is excluded from reset history,
-probability learning, and prospective targets.
+Strong, non-regular observations without a prior official notice are public only as a provisional derived state for 90 minutes. The UI says that usage recovery was observed on the monitored Codex account and that Tibo confirmation is pending.
 
-When a formal Tibo `reset_executed` signal arrives, the nearest strong or medium
-non-regular observation within 90 minutes is marked `confirmed`. The reverse
-order is also reconciled when a usage observation arrives after Tibo. The
-canonical global reset time remains the first trusted Tibo completion post;
-the local observation timestamp is never used as the formal history timestamp.
+When a valid prior `official_notice` exists and a strong, non-regular usage recovery is observed during its active/grace window, it is immediately confirmed as a `confirmed global reset`. The canonical execution time uses the local observation window (`observedAt`, `approximate`).
+
+Subsequent Tibo `reset_executed` posts are not a mandatory confirmation requirement, but serve as additional corroboration that merges into the same canonical reset event without creating duplicate history entries or boundary shifts.
 
 ## Windows configuration and CLI debugging
 

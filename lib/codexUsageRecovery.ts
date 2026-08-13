@@ -269,6 +269,7 @@ export function evaluateCodexUsageRecovery(
 export function getPublicRecoveryObservation(
   observation: CodexRecoveryObservation | null | undefined,
   now: Date = new Date(),
+  latestResetAt?: string | null,
 ): PublicRecoveryObservation | null {
   if (!observation || observation.status !== "observed" || observation.confidence !== "strong" || observation.cycleHint === "regular") {
     return null;
@@ -278,6 +279,13 @@ export function getPublicRecoveryObservation(
   const nowTime = now.getTime();
   if (!Number.isFinite(observedTime) || !Number.isFinite(nowTime) || observedTime > nowTime) return null;
   if (nowTime - observedTime > UNCONFIRMED_RECOVERY_ACTIVE_MS) return null;
+
+  if (latestResetAt) {
+    const resetTime = Date.parse(latestResetAt);
+    if (Number.isFinite(resetTime) && resetTime >= observedTime - 60 * 1000) {
+      return null;
+    }
+  }
 
   return {
     status: "observed_unconfirmed",

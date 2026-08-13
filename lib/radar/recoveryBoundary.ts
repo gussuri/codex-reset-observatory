@@ -104,11 +104,21 @@ function getCombinedHistory(
   data: RadarData | null,
   staticHistory: Array<WindowEventLike>,
 ) {
+  const rawNoticeSignals = data?.active_tibo_signals ?? data?.recent_tibo_signals ?? [];
+  const noticeSignals = rawNoticeSignals.map((s) => ({
+    ...s,
+    text: s.text ?? "",
+    tweet_url: s.tweet_url ?? "",
+  })) as any[];
+
   return combineResetHistory(
     staticHistory,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    (data as any)?.codex_recovery_observations ?? (data?.codex_usage_recovery ? [data.codex_usage_recovery] : []),
+    data?.reset_execution_estimates ?? [],
   );
 }
 

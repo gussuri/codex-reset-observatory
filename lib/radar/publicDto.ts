@@ -312,6 +312,7 @@ export function toPublicRadarSnapshot(
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,
       calculationNow,
+      latestResetAt,
     ),
   };
 }
