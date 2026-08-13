@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   SHADOW_PROBABILITY_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION,
@@ -12,6 +13,7 @@ import { calculateShadowProbability } from "../lib/radar/shadowProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 
 test("internal forecast audit stores the inclusive model and all fixed recency models without duplicate keys", () => {
   const now = new Date("2026-08-04T12:00:00.000Z");
@@ -49,6 +51,14 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(regimeElapsed.selectedPriorExposureDays, 2);
   assert.equal(regimeElapsed.selectedRegimeHalfLifeDays, 3);
   assert.equal(regimeElapsed.selectedRegimeRatioExponent, 1);
+  const explicitPublished = calculateRegimeElapsedProbability(
+    data,
+    { now },
+    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  );
+  assert.equal(explicitPublished.regimeElapsed.regime.priorExposureDays, 2);
+  assert.equal(regimeElapsed.probability24h, explicitPublished.predictions.probability24h);
+  assert.equal(regimeElapsed.probability48h, explicitPublished.predictions.probability48h);
   const randomElapsed = forecasts[RANDOM_ELAPSED_SHADOW_MODEL_VERSION];
   assert.equal(randomElapsed.modelVersion, RANDOM_ELAPSED_SHADOW_MODEL_VERSION);
   assert.equal(typeof randomElapsed.randomElapsedHours, "number");

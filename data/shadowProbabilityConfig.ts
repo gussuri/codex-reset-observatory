@@ -19,6 +19,16 @@ export const REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS = 3;
 export const REGIME_ELAPSED_SELECTED_RATIO_EXPONENT = 1;
 export const REGIME_ELAPSED_MIN_MULTIPLIER = 0.5;
 export const REGIME_ELAPSED_MAX_MULTIPLIER = 2;
+// Single source of truth for the frozen published regime-elapsed model.
+// Candidate evaluation may still explore other configurations separately.
+export const PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS = {
+  binScheme: REGIME_ELAPSED_SELECTED_BIN_SCHEME,
+  priorExposureDays: REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS,
+  regimeHalfLifeDays: REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS,
+  regimeRatioExponent: REGIME_ELAPSED_SELECTED_RATIO_EXPONENT,
+  minRegimeMultiplier: REGIME_ELAPSED_MIN_MULTIPLIER,
+  maxRegimeMultiplier: REGIME_ELAPSED_MAX_MULTIPLIER,
+} as const;
 export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
 export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;
 export const REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES = [3, 5, 7, 10, 14] as const;

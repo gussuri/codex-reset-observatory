@@ -95,8 +95,8 @@ test("strict history classification preserves the fixed public regime-elapsed pr
     now,
   );
 
-  assert.equal(viewModel.probability24h, 0.15930501980383993);
-  assert.equal(viewModel.probability48h, 0.30375901718892184);
+  assert.equal(viewModel.probability24h, 0.30074612549113855);
+  assert.equal(viewModel.probability48h, 0.5259396127712295);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

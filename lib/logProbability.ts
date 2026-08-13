@@ -1,4 +1,5 @@
 import {
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
@@ -220,7 +221,11 @@ export function buildExperimentalProbabilityForecasts(
 ): ExperimentalProbabilityForecasts {
   const { shadowProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
-  const regimeElapsed = calculateRegimeElapsedProbability(data, calculationOptions);
+  const regimeElapsed = calculateRegimeElapsedProbability(
+    data,
+    calculationOptions,
+    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  );
   const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
   const calibrated = calculateCalibratedShadowProbability(data, {

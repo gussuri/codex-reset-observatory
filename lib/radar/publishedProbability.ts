@@ -1,4 +1,5 @@
 import {
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -183,6 +184,7 @@ export function calculatePublishedProbability(
     const shadow = calculateRegimeElapsedProbability(
       data,
       publicModelOptions,
+      PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
     );
     let legacyShadow: ShadowProbabilityResult | null = null;
     if (!isValidShadowPrediction(shadow)) {

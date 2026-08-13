@@ -14,6 +14,7 @@ import {
 } from "../lib/radar/publishedProbability";
 import {
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   SHADOW_PROBABILITY_MODEL_VERSION,
@@ -69,11 +70,25 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.shadow);
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
+  assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
+    binScheme: "A",
+    priorExposureDays: 2,
+    regimeHalfLifeDays: 3,
+    regimeRatioExponent: 1,
+    minRegimeMultiplier: 0.5,
+    maxRegimeMultiplier: 2,
+  });
   const regimeElapsed = calculateRegimeElapsedProbability(data, {
     now: roundPublicProbabilityTime(NOW),
     regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
-  });
+  }, PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS);
   assert.deepEqual(published.shadow?.predictions, regimeElapsed.predictions);
+  assert.equal((published.shadow as typeof regimeElapsed).regimeElapsed.priorExposureDays, 2);
+  assert.equal(
+    (published.shadow as typeof regimeElapsed).regimeElapsed.regime.priorExposureDays,
+    2,
+  );
+  assert.equal(regimeElapsed.regimeElapsed.regime.priorExposureDays, 2);
   assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
   const recency = calculateRecencyWeightedShadowProbability(
     data,
@@ -442,10 +457,10 @@ test("the regime-elapsed public model keeps the fixed-time forecast deterministi
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.source, "shadow");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.08138424335817807);
-  assert.equal(published.probability24h, 0.15930501980383993);
-  assert.equal(published.probability48h, 0.30375901718892184);
-  assert.equal(published.probability72h, 0.4319803213867447);
+  assert.equal(published.probability12h, 0.16054591287411935);
+  assert.equal(published.probability24h, 0.30074612549113855);
+  assert.equal(published.probability48h, 0.5259396127712295);
+  assert.equal(published.probability72h, 0.6884007930191491);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(unweightedBaseline.predictions.probability24h, 0.26063284833834355);
   assert.equal(unweightedBaseline.predictions.probability48h, 0.44994539803274325);

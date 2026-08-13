@@ -6,17 +6,12 @@ import {
 } from "../data/resetHistory";
 import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_BIN_SCHEME_CANDIDATES,
-  REGIME_ELAPSED_MAX_MULTIPLIER,
-  REGIME_ELAPSED_MIN_MULTIPLIER,
   REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES,
   REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES,
   REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES,
-  REGIME_ELAPSED_SELECTED_BIN_SCHEME,
-  REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS,
-  REGIME_ELAPSED_SELECTED_RATIO_EXPONENT,
-  REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
@@ -506,8 +501,8 @@ function modelOptions(origin: Date, config: RegimeElapsedCandidateConfig, mode: 
     priorExposureDays: config.priorExposureDays,
     regimeHalfLifeDays: config.regimeHalfLifeDays,
     regimeRatioExponent: config.regimeRatioExponent,
-    minRegimeMultiplier: REGIME_ELAPSED_MIN_MULTIPLIER,
-    maxRegimeMultiplier: REGIME_ELAPSED_MAX_MULTIPLIER,
+    minRegimeMultiplier: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.minRegimeMultiplier,
+    maxRegimeMultiplier: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.maxRegimeMultiplier,
   };
 }
 
@@ -677,10 +672,10 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
   const nonOverlapping24h = new Set(nonOverlapping24hOrigins);
   const nonOverlapping48h = new Set(nonOverlapping48hOrigins);
   const fallbackConfig: RegimeElapsedCandidateConfig = {
-    binScheme: REGIME_ELAPSED_SELECTED_BIN_SCHEME,
-    priorExposureDays: REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS,
-    regimeHalfLifeDays: REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS,
-    regimeRatioExponent: REGIME_ELAPSED_SELECTED_RATIO_EXPONENT,
+    binScheme: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.binScheme,
+    priorExposureDays: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.priorExposureDays,
+    regimeHalfLifeDays: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.regimeHalfLifeDays,
+    regimeRatioExponent: PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS.regimeRatioExponent,
   };
   const candidates = getCandidateConfigurations();
   const candidateRows = new Map<string, RegimeEvaluationRow[]>(candidates.map((config) => [configKey(config), []]));
