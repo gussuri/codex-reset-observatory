@@ -89,7 +89,20 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     const event = events[0];
     assert.equal(event.recordKind, "confirmed_global");
     assert.equal(event.completed_at, "2026-08-13T03:34:43.341Z");
+    assert.equal(event.details?.cycleType, "ランダムリセット");
+    assert.equal(event.details?.reasonType, "ご祝儀リセット");
+    assert.equal(event.details?.resetMethod, "強制リセット");
     assert.ok(event.sourceTweetIds?.includes("2087706104814023111"));
+  });
+
+  it("未知のnotice-backed eventはreasonTypeのランダムリセットfallbackを維持する", () => {
+    const events = findNoticeBackedRecoveryEvents(
+      [sampleNotice],
+      [sampleRecovery],
+      [{ ...sampleEstimate, resetEventKey: "tibo-reset-unknown" }],
+    );
+    assert.equal(events.length, 1);
+    assert.equal(events[0].details?.reasonType, "ランダムリセット");
   });
 
   it("K. active notice/recoveryがなくてもpersisted estimateだけで残る", () => {
@@ -244,6 +257,10 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     );
     assert.equal(ja.viewModel.recentHistory[0]?.resetAt, sampleEstimate.displayExecutionAt);
     assert.equal(ja.viewModel.recentHistory[0]?.executionTimePrecision, "approximate");
+    assert.equal(ja.viewModel.recentHistory[0]?.resetType, "ご祝儀リセット");
+    assert.equal(ja.viewModel.recentHistory[0]?.details?.cycleType, "ランダムリセット");
+    assert.equal(ja.viewModel.recentHistory[0]?.details?.reasonType, "ご祝儀リセット");
+    assert.equal(ja.viewModel.recentHistory[0]?.details?.resetMethod, "強制リセット");
     assert.equal(ja.viewModel.recentHistory[0]?.details?.note, ja.viewModel.recentHistory[0]?.summary);
   });
 
