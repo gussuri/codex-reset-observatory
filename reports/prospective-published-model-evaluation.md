@@ -3,17 +3,17 @@
 - Status: insufficient_data
 - Evaluation mode: prospective
 - Backfilled: false
-- Evaluation start: 2026-08-08T14:59:40.532Z
-- Active model: hazard-regime-elapsed-v1
+- Evaluation start: not started
+- Active model: hazard-elapsed-v1
 - Baseline model: hazard-odds-v3-recency-bayes-h30-r3
-- As of: 2026-08-08T15:17:01.283Z
-- Saved forecasts: active=1, baseline=11, comparable=1
+- As of: 2026-08-13T06:20:00.000Z
+- Saved forecasts: active=0, baseline=86, comparable=0
 - Source: prediction_history.debug_info.experimentalProbabilityForecasts
 - Target definition: Completed broad-scope random reset events after reset-history deduplication; includes forced resets and Banked Reset distributions, while excluding regular resets, narrow-scope distributions, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and reference records.
 
 ## Daily first forecast comparison
 
-### hazard-regime-elapsed-v1
+### hazard-elapsed-v1
 - 24h: n=0, positive=0, actual=0.00%, mean=0.00%, Brier=0.0000, logLoss=0.0000, targetResets=0
 - 48h: n=0, positive=0, actual=0.00%, mean=0.00%, Brier=0.0000, logLoss=0.0000, targetResets=0
 
@@ -47,4 +47,5 @@
 - The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.
 - Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.
 - Prospective results alone never auto-publish or retune a model; manual review is required.
-- hazard-regime-elapsed-v1 parameters remain fixed throughout the evaluation period.
+- The frozen hazard-elapsed-v1 publication parameters and the hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.
+- Data availability: No prediction_history rows contain both the published hazard-elapsed-v1 and h30-r3 forecasts yet.

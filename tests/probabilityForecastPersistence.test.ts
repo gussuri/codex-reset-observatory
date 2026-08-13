@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   SHADOW_PROBABILITY_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
@@ -30,6 +32,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     "hazard-odds-v3-recency-bayes-h14-r2",
     "hazard-odds-v3-recency-bayes-h30-r3",
     "hazard-odds-v3-recency-bayes-h60-r2",
+    ELAPSED_ONLY_MODEL_VERSION,
     "hazard-regime-elapsed-v1",
     RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
     "hazard-odds-v4-logit-calibrated-prequential-v2",
@@ -51,6 +54,11 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(regimeElapsed.selectedPriorExposureDays, 2);
   assert.equal(regimeElapsed.selectedRegimeHalfLifeDays, 3);
   assert.equal(regimeElapsed.selectedRegimeRatioExponent, 1);
+  const elapsedOnly = forecasts[ELAPSED_ONLY_MODEL_VERSION];
+  assert.equal(elapsedOnly.modelVersion, ELAPSED_ONLY_MODEL_VERSION);
+  assert.equal(elapsedOnly.mode, "elapsed-only");
+  assert.equal(elapsedOnly.effectiveRegimeMultiplier, 1);
+  assert.equal(typeof elapsedOnly.regimeMultiplier, "number");
   const explicitPublished = calculateRegimeElapsedProbability(
     data,
     { now },
@@ -59,6 +67,13 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(explicitPublished.regimeElapsed.regime.priorExposureDays, 2);
   assert.equal(regimeElapsed.probability24h, explicitPublished.predictions.probability24h);
   assert.equal(regimeElapsed.probability48h, explicitPublished.predictions.probability48h);
+  const explicitElapsedOnly = calculateRegimeElapsedProbability(
+    data,
+    { now },
+    PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  );
+  assert.equal(elapsedOnly.probability24h, explicitElapsedOnly.predictions.probability24h);
+  assert.equal(elapsedOnly.probability48h, explicitElapsedOnly.predictions.probability48h);
   const randomElapsed = forecasts[RANDOM_ELAPSED_SHADOW_MODEL_VERSION];
   assert.equal(randomElapsed.modelVersion, RANDOM_ELAPSED_SHADOW_MODEL_VERSION);
   assert.equal(typeof randomElapsed.randomElapsedHours, "number");
@@ -83,7 +98,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(LEGACY_SHADOW_PROBABILITY_MODEL_VERSION, "hazard-odds-v2-random-only");
   for (const forecast of Object.values(forecasts)) {
     assert.equal(forecast.generatedAt, now.toISOString());
-    if (forecast.modelVersion === "hazard-regime-elapsed-v1") {
+    if (forecast.modelVersion === "hazard-regime-elapsed-v1" || forecast.modelVersion === ELAPSED_ONLY_MODEL_VERSION) {
       assert.ok(forecast.completedEventCount >= 0);
     } else {
       assert.ok(forecast.completedEventCount >= forecast.completedIntervalCount);
@@ -97,7 +112,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     if (forecast.probability12h !== undefined) {
       assert.ok(forecast.probability12h <= forecast.probability24h);
     }
-    if (forecast.modelVersion === "hazard-regime-elapsed-v1") {
+    if (forecast.modelVersion === "hazard-regime-elapsed-v1" || forecast.modelVersion === ELAPSED_ONLY_MODEL_VERSION) {
       assert.match(forecast.targetDefinition, /recovery-boundary/);
     } else if (forecast.modelVersion === RANDOM_ELAPSED_SHADOW_MODEL_VERSION) {
       assert.equal(forecast.targetDefinition, RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION);

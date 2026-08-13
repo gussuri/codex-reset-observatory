@@ -13,7 +13,9 @@ import {
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
 import {
+  ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
@@ -68,27 +70,40 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
 
   assert.equal(published.source, "shadow");
   assert.ok(published.shadow);
+  assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, "hazard-elapsed-v1");
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
+    modelVersion: "hazard-regime-elapsed-v1",
     binScheme: "A",
     priorExposureDays: 2,
     regimeHalfLifeDays: 3,
     regimeRatioExponent: 1,
     minRegimeMultiplier: 0.5,
     maxRegimeMultiplier: 2,
+    mode: "full",
   });
+  const elapsedOnly = calculateRegimeElapsedProbability(data, {
+    now: roundPublicProbabilityTime(NOW),
+    regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+  }, PUBLISHED_ELAPSED_MODEL_OPTIONS);
+  assert.deepEqual(published.shadow?.predictions, elapsedOnly.predictions);
+  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.priorExposureDays, 2);
+  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.mode, "elapsed-only");
+  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.effectiveRegimeMultiplier, 1);
+  assert.equal(
+    (published.shadow as typeof elapsedOnly).regimeElapsed.regime.priorExposureDays,
+    2,
+  );
+  assert.equal(elapsedOnly.regimeElapsed.regime.priorExposureDays, 2);
   const regimeElapsed = calculateRegimeElapsedProbability(data, {
     now: roundPublicProbabilityTime(NOW),
     regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
   }, PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS);
-  assert.deepEqual(published.shadow?.predictions, regimeElapsed.predictions);
-  assert.equal((published.shadow as typeof regimeElapsed).regimeElapsed.priorExposureDays, 2);
-  assert.equal(
-    (published.shadow as typeof regimeElapsed).regimeElapsed.regime.priorExposureDays,
-    2,
-  );
-  assert.equal(regimeElapsed.regimeElapsed.regime.priorExposureDays, 2);
+  assert.equal(regimeElapsed.modelVersion, "hazard-regime-elapsed-v1");
+  assert.equal(regimeElapsed.regimeElapsed.mode, "full");
+  assert.notDeepEqual(regimeElapsed.predictions, elapsedOnly.predictions);
   assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
   const recency = calculateRecencyWeightedShadowProbability(
     data,
@@ -457,10 +472,10 @@ test("the regime-elapsed public model keeps the fixed-time forecast deterministi
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.source, "shadow");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.16054591287411935);
-  assert.equal(published.probability24h, 0.30074612549113855);
-  assert.equal(published.probability48h, 0.5259396127712295);
-  assert.equal(published.probability72h, 0.6884007930191491);
+  assert.equal(published.probability12h, 0.13934647286119084);
+  assert.equal(published.probability24h, 0.26417185751966454);
+  assert.equal(published.probability48h, 0.4727318880937301);
+  assert.equal(published.probability72h, 0.6320698917516959);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(unweightedBaseline.predictions.probability24h, 0.26063284833834355);
   assert.equal(unweightedBaseline.predictions.probability48h, 0.44994539803274325);

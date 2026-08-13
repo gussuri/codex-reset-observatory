@@ -13,6 +13,12 @@ import {
 } from "../lib/radar/regimeElapsedProbability";
 import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 import { getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
+import {
+  ELAPSED_ONLY_MODEL_VERSION,
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  REGIME_ELAPSED_FULL_MODEL_VERSION,
+  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+} from "../data/shadowProbabilityConfig";
 
 function resetEvent(
   id: string,
@@ -126,6 +132,39 @@ test("a regular boundary resets elapsed age without increasing random event coun
   assert.ok(result.regimeElapsed.elapsedHours < 2);
   assert.equal(result.regimeElapsed.randomBoundaryCount, 1);
   assert.equal(result.regimeElapsed.regularBoundaryCount, 1);
+});
+
+test("elapsed-only publication keeps full regime diagnostics out of the effective probability", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const staticHistory = [
+    resetEvent("old", "2026-06-01T00:00:00.000Z"),
+    resetEvent("older", "2026-07-01T00:00:00.000Z"),
+    resetEvent("a", "2026-08-01T00:00:00.000Z"),
+    resetEvent("b", "2026-08-03T00:00:00.000Z"),
+    resetEvent("c", "2026-08-05T00:00:00.000Z"),
+  ];
+  const full = calculateRegimeElapsedProbability(
+    data,
+    { now: NOW, staticHistory, activeOfficialNotice: null },
+    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  );
+  const elapsedOnly = calculateRegimeElapsedProbability(
+    data,
+    { now: NOW, staticHistory, activeOfficialNotice: null },
+    PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  );
+
+  assert.equal(full.modelVersion, REGIME_ELAPSED_FULL_MODEL_VERSION);
+  assert.equal(full.regimeElapsed.mode, "full");
+  assert.equal(elapsedOnly.modelVersion, ELAPSED_ONLY_MODEL_VERSION);
+  assert.equal(elapsedOnly.regimeElapsed.mode, "elapsed-only");
+  assert.equal(elapsedOnly.regimeElapsed.effectiveRegimeMultiplier, 1);
+  assert.ok(full.regimeElapsed.regime.regimeMultiplier > 1);
+  assert.equal(
+    elapsedOnly.regimeElapsed.regime.regimeMultiplier,
+    full.regimeElapsed.regime.regimeMultiplier,
+  );
+  assert.notDeepEqual(elapsedOnly.predictions, full.predictions);
 });
 
 test("forecast integration smoothly crosses elapsed bins", () => {

@@ -5,7 +5,8 @@ import {
   MAX_TOTAL_ODDS_MULTIPLIER_24H,
   MAX_TOTAL_ODDS_MULTIPLIER_48H,
   MIN_BASELINE_DAILY_PROBABILITY,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  ELAPSED_ONLY_MODEL_VERSION,
+  REGIME_ELAPSED_FULL_MODEL_VERSION,
   REGIME_ELAPSED_MAX_MULTIPLIER,
   REGIME_ELAPSED_MIN_MULTIPLIER,
   REGIME_ELAPSED_SELECTED_BIN_SCHEME,
@@ -98,6 +99,7 @@ export type RegimeElapsedAudit = {
   latestRecoveryResetAt: string | null;
   elapsedHours: number;
   regime: RegimeDiagnostics;
+  effectiveRegimeMultiplier: number;
   bins: Array<RegimeElapsedHazardBin>;
   recoveryBoundaryCount: number;
   randomBoundaryCount: number;
@@ -545,13 +547,18 @@ export function calculateRegimeElapsedProbability(
     probability48h: officialNoticePredictions?.probability48h ?? null,
     probability72h: officialNoticePredictions?.probability72h ?? null,
   };
+  const modelVersion = modelOptions.modelVersion ?? (
+    mode === "elapsed-only"
+      ? ELAPSED_ONLY_MODEL_VERSION
+      : REGIME_ELAPSED_FULL_MODEL_VERSION
+  );
   const warnings: string[] = [];
   if (hazard.completedIntervalCount < 2) {
     warnings.push("Recovery-boundary intervals are sparse; treat this model as exploratory.");
   }
 
   return {
-    modelVersion: modelOptions.modelVersion ?? PUBLISHED_PROBABILITY_MODEL_VERSION,
+    modelVersion,
     calculatedAt: now.toISOString(),
     targetDefinition: REGIME_ELAPSED_TARGET_DEFINITION,
     predictions: officialNoticeActive
@@ -583,10 +590,8 @@ export function calculateRegimeElapsedProbability(
       latestRandomResetAt,
       latestRecoveryResetAt,
       elapsedHours,
-      regime: {
-        ...regime,
-        regimeMultiplier,
-      },
+      regime,
+      effectiveRegimeMultiplier: regimeMultiplier,
       bins: hazard.bins.map((bin) => ({ ...bin })),
       recoveryBoundaryCount: hazard.recoveryBoundaryCount,
       randomBoundaryCount: hazard.randomBoundaryCount,

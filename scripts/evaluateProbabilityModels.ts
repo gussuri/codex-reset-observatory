@@ -6,6 +6,7 @@ import {
   LOCAL_RESET_HISTORY,
 } from "../data/resetHistory";
 import {
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
@@ -482,7 +483,11 @@ function getModelPrediction(
     return calculateConstantHazardBenchmark(shadowResult).predictions;
   }
   if (model.kind === "regime_elapsed") {
-    return calculateRegimeElapsedProbability(data, options).predictions;
+    return calculateRegimeElapsedProbability(
+      data,
+      options,
+      PUBLISHED_ELAPSED_MODEL_OPTIONS,
+    ).predictions;
   }
   if (model.halfLifeDays !== null) {
     return calculateRecencyWeightedShadowProbability(data, model.halfLifeDays, options).predictions;

@@ -1,4 +1,5 @@
 import {
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
@@ -20,7 +21,10 @@ import {
   calculateCalibratedShadowProbability,
   type CalibratedShadowProbabilityResult,
 } from "@/lib/radar/calibratedShadowProbability";
-import type { RegimeElapsedProbabilityResult } from "@/lib/radar/regimeElapsedProbability";
+import type {
+  RegimeElapsedMode,
+  RegimeElapsedProbabilityResult,
+} from "@/lib/radar/regimeElapsedProbability";
 import {
   calculateRandomElapsedProbability,
   type RandomElapsedProbabilityResult,
@@ -72,6 +76,8 @@ export type ExperimentalProbabilityForecast = {
   pointInTimeProjectionVersion?: string;
   pointInTimeProjectionLimitations?: string;
   regimeMultiplier?: number;
+  effectiveRegimeMultiplier?: number;
+  mode?: RegimeElapsedMode;
   recentRatePerDay?: number;
   longTermRatePerDay?: number;
   elapsedHoursSinceRecovery?: number;
@@ -175,7 +181,9 @@ function toRegimeElapsedExperimentalProbabilityForecast(
   const forecast = toExperimentalProbabilityForecast(result, null);
   return {
     ...forecast,
+    mode: result.regimeElapsed.mode,
     regimeMultiplier: result.regimeElapsed.regime.regimeMultiplier,
+    effectiveRegimeMultiplier: result.regimeElapsed.effectiveRegimeMultiplier,
     recentRatePerDay: result.regimeElapsed.regime.recentRatePerDay,
     longTermRatePerDay: result.regimeElapsed.regime.longTermRatePerDay,
     elapsedHoursSinceRecovery: result.regimeElapsed.elapsedHours,
@@ -221,6 +229,11 @@ export function buildExperimentalProbabilityForecasts(
 ): ExperimentalProbabilityForecasts {
   const { shadowProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
+  const elapsedOnly = calculateRegimeElapsedProbability(
+    data,
+    calculationOptions,
+    PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  );
   const regimeElapsed = calculateRegimeElapsedProbability(
     data,
     calculationOptions,
@@ -241,6 +254,7 @@ export function buildExperimentalProbabilityForecasts(
     )?.halfLifeDays ?? null;
     forecasts[result.modelVersion] = toExperimentalProbabilityForecast(result, halfLifeDays);
   }
+  forecasts[elapsedOnly.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(elapsedOnly);
   forecasts[regimeElapsed.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(regimeElapsed);
   forecasts[randomElapsed.modelVersion] = toRandomElapsedExperimentalProbabilityForecast(randomElapsed);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);

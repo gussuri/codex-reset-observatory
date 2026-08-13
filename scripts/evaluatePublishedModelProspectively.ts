@@ -123,7 +123,7 @@ async function main() {
       ? history.reason
       : history.reason?.includes("query")
         ? history.reason
-        : "No prediction_history rows contain both the published regime-elapsed-v1 and h30-r3 forecasts yet."
+        : "No prediction_history rows contain both the published hazard-elapsed-v1 and h30-r3 forecasts yet."
     : null;
   const report = availabilityReason
     ? {

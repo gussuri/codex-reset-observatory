@@ -1413,13 +1413,18 @@ export function getDisplayProbabilityReason(
     ? (shadow as {
         regimeElapsed?: {
           elapsedHours?: number;
+          mode?: "full" | "elapsed-only" | "regime-only";
+          effectiveRegimeMultiplier?: number;
           regime?: {
             regimeMultiplier?: number;
           } | null;
         } | null;
       }).regimeElapsed
     : null;
-  const regimeMultiplier = regimeElapsed?.regime?.regimeMultiplier;
+  const mode = regimeElapsed?.mode;
+  const regimeMultiplier = regimeElapsed?.effectiveRegimeMultiplier ?? (
+    mode === "elapsed-only" ? 1 : regimeElapsed?.regime?.regimeMultiplier
+  );
   const elapsedHours = regimeElapsed?.elapsedHours;
   if (
     typeof regimeMultiplier !== "number" ||
@@ -1430,11 +1435,13 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookFallbackNoMajorChange", locale);
   }
 
-  const regimeKey = regimeMultiplier < 0.9
-    ? "Low"
-    : regimeMultiplier > 1.2
-      ? "High"
-      : "Normal";
+  const regimeKey = mode === "elapsed-only"
+    ? "Normal"
+    : regimeMultiplier < 0.9
+      ? "Low"
+      : regimeMultiplier > 1.2
+        ? "High"
+        : "Normal";
   const elapsedKey = elapsedHours < 24
     ? "Under24h"
     : elapsedHours < 72

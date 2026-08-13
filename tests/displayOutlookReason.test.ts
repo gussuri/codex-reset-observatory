@@ -17,12 +17,15 @@ function modelContext(
   regimeMultiplier: number,
   elapsedHours: number,
   source: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback" = "shadow",
+  mode?: "full" | "elapsed-only" | "regime-only",
 ) {
   return {
     source,
     shadow: {
       regimeElapsed: {
         elapsedHours,
+        mode,
+        effectiveRegimeMultiplier: mode === "elapsed-only" ? 1 : regimeMultiplier,
         regime: { regimeMultiplier },
       },
     },
@@ -52,6 +55,7 @@ function reasonFor({
   multiplier = 1,
   elapsedHours = 48,
   source = "shadow" as const,
+  mode,
   now = NOW,
   regularResetEvents = [],
 }: {
@@ -63,6 +67,7 @@ function reasonFor({
   multiplier?: number;
   elapsedHours?: number;
   source?: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback";
+  mode?: "full" | "elapsed-only" | "regime-only";
   now?: Date;
   regularResetEvents?: RegularResetEventRow[];
 } = {}) {
@@ -86,7 +91,7 @@ function reasonFor({
     evaluation,
     notice,
     now,
-    modelContext(multiplier, elapsedHours, source),
+    modelContext(multiplier, elapsedHours, source, mode),
   );
 }
 
@@ -166,6 +171,21 @@ test("does not use indirect or technical elapsed-time wording", () => {
   const reason = reasonFor({ multiplier: 0.8, elapsedHours: 12 });
 
   assert.doesNotMatch(reason ?? "", /時間が浅い|低発生帯|経過時間による抑制/);
+});
+
+test("elapsed-only publication uses the normal outlook wording despite raw regime diagnostics", () => {
+  assert.equal(
+    reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
+    "前回のリセットから少し時間がたっており、リセットの見込みは中程度です。",
+  );
+  assert.equal(
+    reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
+    "Some time has passed since the last reset, and the current reset outlook is moderate.",
+  );
+  assert.equal(
+    reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
+    "距离上次重置已经过了一段时间，目前的重置可能性处于中等水平。",
+  );
 });
 
 test("uses the same outlook buckets in English and Chinese", () => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_FREEZE_AT,
 } from "../data/shadowProbabilityConfig";
@@ -135,14 +135,14 @@ test("random shadow preserves the public model output and target separation", ()
   const publicClock = calculateRegimeElapsedProbability(
     data,
     { now },
-    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+    PUBLISHED_ELAPSED_MODEL_OPTIONS,
   );
 
   assert.notEqual(random.modelVersion, before.modelVersion);
   assert.match(random.targetDefinition, /random reset.*regular resets remain recovery boundaries/i);
   assert.ok(before.predictions.probability24h >= 0);
   assert.ok(before.predictions.probability48h >= before.predictions.probability24h);
-  assert.equal(published.adoptedModel, "hazard-regime-elapsed-v1");
+  assert.equal(published.adoptedModel, "hazard-elapsed-v1");
   assert.equal(published.probability12h, publicClock.predictions.probability12h);
   assert.equal(published.probability24h, publicClock.predictions.probability24h);
   assert.equal(published.probability48h, publicClock.predictions.probability48h);

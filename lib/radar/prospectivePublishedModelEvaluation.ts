@@ -414,7 +414,7 @@ export function evaluatePublishedModelProspectively(
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
-      "hazard-regime-elapsed-v1 parameters remain fixed throughout the evaluation period.",
+      "The frozen hazard-elapsed-v1 publication parameters and the hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",
     ],
   };
 }

@@ -1,9 +1,12 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
 export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
-// Freeze hazard-regime-elapsed-v1 parameters until its prospective sample is sufficient.
+// Freeze the shared elapsed-hazard parameters for the public elapsed-only model
+// and the full-regime shadow until their prospective samples are sufficient.
 // A single reset, miss, or new observation must not trigger retuning.
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = "hazard-regime-elapsed-v1";
+export const REGIME_ELAPSED_FULL_MODEL_VERSION = "hazard-regime-elapsed-v1";
+export const ELAPSED_ONLY_MODEL_VERSION = "hazard-elapsed-v1";
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.
 export const RANDOM_ELAPSED_SHADOW_MODEL_VERSION = "hazard-regime-random-elapsed-v1";
@@ -19,15 +22,25 @@ export const REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS = 3;
 export const REGIME_ELAPSED_SELECTED_RATIO_EXPONENT = 1;
 export const REGIME_ELAPSED_MIN_MULTIPLIER = 0.5;
 export const REGIME_ELAPSED_MAX_MULTIPLIER = 2;
-// Single source of truth for the frozen published regime-elapsed model.
+// Single source of truth for the frozen full regime-elapsed shadow configuration.
 // Candidate evaluation may still explore other configurations separately.
 export const PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS = {
+  modelVersion: REGIME_ELAPSED_FULL_MODEL_VERSION,
   binScheme: REGIME_ELAPSED_SELECTED_BIN_SCHEME,
   priorExposureDays: REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS,
   regimeHalfLifeDays: REGIME_ELAPSED_SELECTED_REGIME_HALF_LIFE_DAYS,
   regimeRatioExponent: REGIME_ELAPSED_SELECTED_RATIO_EXPONENT,
   minRegimeMultiplier: REGIME_ELAPSED_MIN_MULTIPLIER,
   maxRegimeMultiplier: REGIME_ELAPSED_MAX_MULTIPLIER,
+  mode: "full" as const,
+} as const;
+// The published forecast uses the same frozen elapsed hazard, but deliberately
+// excludes the regime multiplier. The full model remains available for shadow
+// diagnostics and prospective comparison.
+export const PUBLISHED_ELAPSED_MODEL_OPTIONS = {
+  ...PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  modelVersion: ELAPSED_ONLY_MODEL_VERSION,
+  mode: "elapsed-only" as const,
 } as const;
 export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
 export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;

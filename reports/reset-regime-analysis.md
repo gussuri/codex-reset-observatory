@@ -1,23 +1,23 @@
 # Reset Regime Analysis
 
 - schema: reset-regime-analysis-v1
-- asOf: 2026-08-08T04:27:00.000Z
+- asOf: 2026-08-13T06:20:00.000Z
 - target: Broad-scope random reset: confirmed global hard reset or broad Banked Reset distribution; regular reset is a recovery boundary only.
 - random events: 23
 - recovery boundaries: 27
-- current elapsed hours: 0.92
+- current elapsed hours: 122.80
 - hot/normal diagnostic: inconclusive
 
 ## Current regime diagnostics
 
 ```json
 {
-  "recentWeightedEventCount": 0.4623712102014854,
-  "recentWeightedExposureDays": 4.328085104323444,
-  "recentRatePerDay": 0.2310922160642832,
-  "longTermRatePerDay": 0.28089339705452065,
-  "rawRateRatio": 0.8227043372594082,
-  "regimeMultiplier": 0.8227043372594082,
+  "recentWeightedEventCount": 0.1430210496270805,
+  "recentWeightedExposureDays": 4.328085116992881,
+  "recentRatePerDay": 0.18062668698271975,
+  "longTermRatePerDay": 0.26513437003736123,
+  "rawRateRatio": 0.6812646996964854,
+  "regimeMultiplier": 0.6812646996964854,
   "halfLifeDays": 3,
   "priorEventCount": 1,
   "priorExposureDays": 2,

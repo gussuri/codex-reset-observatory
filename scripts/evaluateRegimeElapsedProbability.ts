@@ -1,12 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
-  LOCAL_RESET_HISTORY,
-} from "../data/resetHistory";
-import {
+  ELAPSED_ONLY_MODEL_VERSION,
+  PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  REGIME_ELAPSED_FULL_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_BIN_SCHEME_CANDIDATES,
   REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES,
@@ -718,15 +719,24 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
   const models = [
     currentModel,
     buildModelEvaluation("benchmark-constant-hazard-v1", "constant-hazard", constantRows, nonOverlapping24h, nonOverlapping48h, currentModel),
-    buildModelEvaluation("hazard-regime-elapsed-v1-elapsed-only", "elapsed-only", elapsedRows, nonOverlapping24h, nonOverlapping48h, currentModel),
+    buildModelEvaluation(ELAPSED_ONLY_MODEL_VERSION, "elapsed-only", elapsedRows, nonOverlapping24h, nonOverlapping48h, currentModel),
     buildModelEvaluation("hazard-regime-elapsed-v1-regime-only", "regime-only", regimeRows, nonOverlapping24h, nonOverlapping48h, currentModel),
-    buildModelEvaluation(PUBLISHED_PROBABILITY_MODEL_VERSION, "regime-elapsed", fullRows, nonOverlapping24h, nonOverlapping48h, currentModel),
+    buildModelEvaluation(REGIME_ELAPSED_FULL_MODEL_VERSION, "regime-elapsed", fullRows, nonOverlapping24h, nonOverlapping48h, currentModel),
   ];
   for (const model of models) evaluationRows.set(model, model === currentModel ? currentRows : model.mode === "constant-hazard" ? constantRows : model.mode === "elapsed-only" ? elapsedRows : model.mode === "regime-only" ? regimeRows : fullRows);
 
   const snapshotOptions = pointInTimeOptions(asOf);
   const oldSnapshot = calculateRecencyWeightedShadowProbability(sourceData, 30, snapshotOptions);
-  const newSnapshot = calculateRegimeElapsedProbability(sourceData, snapshotOptions, selectedConfig);
+  const elapsedOnlySnapshot = calculateRegimeElapsedProbability(
+    sourceData,
+    snapshotOptions,
+    PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  );
+  const fullRegimeSnapshot = calculateRegimeElapsedProbability(
+    sourceData,
+    snapshotOptions,
+    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  );
   const boundariesForAudit = getRecoveryResetEvents(sourceData, asOf, LOCAL_RESET_HISTORY);
   const regimeAnalysis = {
     schemaVersion: "reset-regime-analysis-v1",
@@ -735,8 +745,8 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
     randomEvents: randomEvents.map((event) => ({ id: event.id, resetAt: event.resetAt })),
     recoveryBoundaries: boundariesForAudit,
     eventAudit: buildRegimeEventAudit(randomEvents),
-    current: newSnapshot.regimeElapsed.regime,
-    currentElapsedHours: newSnapshot.regimeElapsed.elapsedHours,
+    current: fullRegimeSnapshot.regimeElapsed.regime,
+    currentElapsedHours: fullRegimeSnapshot.regimeElapsed.elapsedHours,
     resetIntervalsHours: buildResetIntervals(randomEvents),
     densitySummary: buildDensitySummary(randomEvents, asOf),
     hotNormalDiagnostic: "inconclusive",
@@ -782,38 +792,45 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
     }).sort((left, right) => (left.brier24h ?? Infinity) + (left.brier48h ?? Infinity) - ((right.brier24h ?? Infinity) + (right.brier48h ?? Infinity))).slice(0, 20),
     models,
     currentSnapshot: {
-      latestRandomResetAt: newSnapshot.regimeElapsed.latestRandomResetAt,
-      latestRecoveryResetAt: newSnapshot.regimeElapsed.latestRecoveryResetAt,
-      elapsedHours: newSnapshot.regimeElapsed.elapsedHours,
+      latestRandomResetAt: elapsedOnlySnapshot.regimeElapsed.latestRandomResetAt,
+      latestRecoveryResetAt: elapsedOnlySnapshot.regimeElapsed.latestRecoveryResetAt,
+      elapsedHours: elapsedOnlySnapshot.regimeElapsed.elapsedHours,
       oldH30R3: {
         modelVersion: oldSnapshot.modelVersion,
         predictions: oldSnapshot.predictions,
         regime: null,
       },
-      elapsedOnly: calculateRegimeElapsedProbability(sourceData, snapshotOptions, { ...selectedConfig, mode: "elapsed-only" }).predictions,
+      elapsedOnly: elapsedOnlySnapshot.predictions,
       regimeOnly: calculateRegimeElapsedProbability(sourceData, snapshotOptions, { ...selectedConfig, mode: "regime-only" }).predictions,
+      fullRegimeShadow: {
+        modelVersion: fullRegimeSnapshot.modelVersion,
+        predictions: fullRegimeSnapshot.predictions,
+        regimeDiagnostics: fullRegimeSnapshot.regimeElapsed.regime,
+      },
       newModel: {
-        modelVersion: newSnapshot.modelVersion,
-        predictions: newSnapshot.predictions,
-        rawPredictions: newSnapshot.predictions,
-        regimeDiagnostics: newSnapshot.regimeElapsed.regime,
-        elapsedHazardBins: newSnapshot.regimeElapsed.bins,
-        signalMultipliers: newSnapshot.multipliers,
+        modelVersion: elapsedOnlySnapshot.modelVersion,
+        predictions: elapsedOnlySnapshot.predictions,
+        rawPredictions: elapsedOnlySnapshot.predictions,
+        regimeDiagnostics: elapsedOnlySnapshot.regimeElapsed.regime,
+        effectiveRegimeMultiplier: elapsedOnlySnapshot.regimeElapsed.effectiveRegimeMultiplier,
+        elapsedHazardBins: elapsedOnlySnapshot.regimeElapsed.bins,
+        signalMultipliers: elapsedOnlySnapshot.multipliers,
       },
     },
     regularPhaseDiagnostics: {
       modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
       horizon: "24h",
-      phases: buildRegularPhaseDiagnostics(fullRows, boundaries),
+      phases: buildRegularPhaseDiagnostics(elapsedRows, boundaries),
       note: "Origins whose horizon crosses a regular recovery boundary without a random event are censored and excluded from scored metrics.",
     },
-    regularBoundaryAudit: newSnapshot.regimeElapsed.boundaryAudit,
+    regularBoundaryAudit: elapsedOnlySnapshot.regimeElapsed.boundaryAudit,
     notes: [
       "All model predictions are generated from point-in-time projected data at each 6-hour origin.",
       "A horizon with a regular recovery boundary and no random event is censored rather than scored as a simple negative.",
       "The 24-hour and 48-hour non-overlapping subsets are lower-sample references; overlapping 6-hour origins are dependent.",
       "The selected configuration is chosen from past-origin scores only; no future label is used at the origin where a choice is made.",
-      `The public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; ${RECENCY_H30_PROBABILITY_MODEL_VERSION} remains the comparison and fallback model.`,
+      `The public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; ${REGIME_ELAPSED_FULL_MODEL_VERSION} remains the full-regime shadow and ${RECENCY_H30_PROBABILITY_MODEL_VERSION} remains the comparison and fallback model.`,
+      "The published model uses elapsed-only hazard with an effective regime multiplier of 1; full regime diagnostics remain shadow-only.",
       `The current model uses bin scheme ${selectedConfig.binScheme}, prior exposure ${selectedConfig.priorExposureDays} days, regime half-life ${selectedConfig.regimeHalfLifeDays} days, and ratio exponent ${selectedConfig.regimeRatioExponent}.`,
       "No fixed 14%/27% display cap is included in these predictions.",
     ],
