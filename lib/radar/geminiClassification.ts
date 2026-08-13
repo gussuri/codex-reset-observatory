@@ -94,8 +94,11 @@ Do not generate UTC timestamps. Return temporalExpression as an exact contiguous
 original Tibo text, or null. Use the source timezone supplied below only as context; explicitTimezone
 must be null unless the tweet itself contains a timezone. If the tweet has no explicit clock time,
 explicitTimeParts must be null. Use temporalKind=none or vague when the phrase is ambiguous (soon,
-later, sometime, early next week, around Monday, probably Monday). temporalConfidence must reflect
-the semantic extraction confidence and must not be invented from the tweet timestamp.
+later, sometime, early next week, around Monday, probably Monday). For quantified relative time phrases
+such as "in the next hour or so" (relativeAmount=1, relativeUnit="hours", temporalKind="relative_duration",
+temporalPrecision="exact_time") or "in two hours" (relativeAmount=2, relativeUnit="hours",
+temporalKind="relative_duration", temporalPrecision="exact_time"), extract as relative_duration.
+temporalConfidence must reflect the semantic extraction confidence and must not be invented from the tweet timestamp.
 
 Respond ONLY with a JSON object strictly matching this schema:
 {

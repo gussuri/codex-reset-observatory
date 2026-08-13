@@ -125,8 +125,66 @@ function hasClockExpression(value: string) {
   return /\b(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b|\b(?:noon|midnight)\b/i.test(value);
 }
 
-function hasNumericDuration(value: string) {
-  return /\b\d+(?:\.\d+)?\s*(?:minute|minutes|min|hour|hours|hr|hrs|day|days)\b/i.test(value);
+function isValidRelativeDuration(
+  expression: string,
+  amount: number,
+  unit: "minutes" | "hours" | "days",
+): boolean {
+  if (!expression || typeof expression !== "string") return false;
+  const lower = expression.toLowerCase();
+
+  // 1. Verify Unit presence in source expression
+  const hasUnit =
+    unit === "hours"
+      ? /\b(?:hour|hours|hr|hrs)\b/i.test(lower)
+      : unit === "minutes"
+        ? /\b(?:minute|minutes|min)\b/i.test(lower)
+        : /\b(?:day|days)\b/i.test(lower);
+
+  if (!hasUnit) return false;
+
+  // 2. Reject vague / non-quantified expressions
+  if (/\b(?:soon|later|in a while|coming hours|sometime)\b/i.test(lower)) {
+    return false;
+  }
+
+  // 3. Check for numeric digits in source expression
+  const digitMatch = lower.match(/\b(\d+(?:\.\d+)?)\b/);
+  if (digitMatch) {
+    const numericVal = parseFloat(digitMatch[1]);
+    return Math.abs(numericVal - amount) < 0.01;
+  }
+
+  // 4. Check for natural language 1-unit duration (amount = 1)
+  if (amount === 1) {
+    if (/\b(?:an|a|one|next|first)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // 5. Check for word-number representations
+  const wordNumbers: Record<number, RegExp> = {
+    1: /\b(?:one)\b/i,
+    2: /\b(?:two)\b/i,
+    3: /\b(?:three)\b/i,
+    4: /\b(?:four)\b/i,
+    5: /\b(?:five)\b/i,
+    6: /\b(?:six)\b/i,
+    7: /\b(?:seven)\b/i,
+    8: /\b(?:eight)\b/i,
+    9: /\b(?:nine)\b/i,
+    10: /\b(?:ten)\b/i,
+    12: /\b(?:twelve)\b/i,
+    24: /\b(?:twenty[- ]four)\b/i,
+    48: /\b(?:forty[- ]eight)\b/i,
+  };
+
+  const wordPattern = wordNumbers[amount];
+  if (wordPattern && wordPattern.test(lower)) {
+    return true;
+  }
+
+  return false;
 }
 
 function hasTemporalText(value: string, text: string) {
@@ -212,7 +270,9 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   if (
     parsed.relativeAmount !== null &&
     parsed.relativeAmount !== undefined &&
-    (relativeAmount === null || !relativeUnit || !hasNumericDuration(expression ?? ""))
+    (relativeAmount === null ||
+      !relativeUnit ||
+      !isValidRelativeDuration(expression ?? "", relativeAmount, relativeUnit))
   ) {
     return null;
   }
