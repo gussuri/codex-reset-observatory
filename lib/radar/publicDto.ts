@@ -202,6 +202,8 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       forecastDate: viewModel.activeWindow.forecastDate,
       forecastTime: viewModel.activeWindow.forecastTime ?? null,
       remaining: viewModel.activeWindow.remaining,
+      isOverduePending: viewModel.activeWindow.isOverduePending ?? false,
+      overdueText: viewModel.activeWindow.overdueText ?? null,
     },
     displayReasoningSummary: viewModel.displayReasoningSummary,
     latestWindow: {

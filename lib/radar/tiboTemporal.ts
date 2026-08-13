@@ -661,16 +661,47 @@ export function getTemporalNoticeCoverage(
   if (!Number.isFinite(nowTime) || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   if (resolution.temporalPrecision === "exact_time") {
     const distance = start - nowTime;
-    return distance >= 0 && distance <= horizonHours * HOUR_MS ? 1 : 0;
+    if (distance >= 0) {
+      return distance <= horizonHours * HOUR_MS ? 1 : 0;
+    }
+    const overdueMs = nowTime - start;
+    if (overdueMs <= TIBO_NOTICE_GRACE_MS) {
+      return Math.max(0, Math.min(1, 1 - overdueMs / TIBO_NOTICE_GRACE_MS));
+    }
+    return 0;
   }
   const remainingStart = Math.max(nowTime, start);
   const remainingDuration = end - remainingStart;
-  if (remainingDuration <= 0) return 0;
+  if (remainingDuration <= 0) {
+    const overdueMs = nowTime - end;
+    if (overdueMs <= TIBO_NOTICE_GRACE_MS) {
+      return Math.max(0, Math.min(1, 1 - overdueMs / TIBO_NOTICE_GRACE_MS));
+    }
+    return 0;
+  }
   const intersection = Math.max(0, Math.min(nowTime + horizonHours * HOUR_MS, end) - remainingStart);
   const confidence = typeof resolution.confidence === "number" && Number.isFinite(resolution.confidence)
     ? Math.min(1, Math.max(0, resolution.confidence))
     : 0;
   return Math.min(1, Math.max(0, (intersection / remainingDuration) * confidence));
+}
+
+export function isOverdueNoticePending(
+  resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
+  latestResetAt: string | Date | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!resolution || resolution.status !== "resolved" || resolution.temporalPrecision !== "exact_time") {
+    return false;
+  }
+  if (!resolution.expectedStartAt) return false;
+  const start = Date.parse(resolution.expectedStartAt);
+  if (!Number.isFinite(start)) return false;
+  const nowTime = now.getTime();
+  if (nowTime <= start || nowTime > start + TIBO_NOTICE_GRACE_MS) {
+    return false;
+  }
+  return !isTemporalNoticeConsumedAtReset(resolution, latestResetAt);
 }
 
 export function isTemporalNoticeConsumedAtReset(

@@ -668,6 +668,11 @@ export function RadarDashboard({
                       {translateUI("tiboNoticeLocalTime", locale)}
                     </p>
                   ) : null}
+                  {viewModel.activeWindow.isOverduePending && viewModel.activeWindow.overdueText ? (
+                    <p className="mt-2 text-base font-normal leading-6 text-slate-600">
+                      {viewModel.activeWindow.overdueText}
+                    </p>
+                  ) : null}
                 </dd>
               </div>
 

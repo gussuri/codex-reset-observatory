@@ -304,7 +304,7 @@ test("resolved future notice uses partial horizon coverage instead of a fixed ov
     activeOfficialNotice: notice,
   });
 
-  assert.equal(result.regimeElapsed.officialNoticeTimingPolicyVersion, "official-notice-window-v1");
+  assert.equal(result.regimeElapsed.officialNoticeTimingPolicyVersion, "official-notice-window-v2");
   assert.ok(
     Math.abs(
       result.predictions.probability24h - baseline.predictions.probability24h,

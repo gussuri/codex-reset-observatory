@@ -920,11 +920,12 @@ export function getActiveOfficialNotice(
     resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
     latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
   );
-  const dynamicNotices: Array<ActiveOfficialNotice> = (data?.active_tibo_signals ?? [])
-    .flatMap((signal) => {
+  const rawSignals: any[] = (data?.active_tibo_signals ?? (data as any)?.tibo_signals ?? []);
+  const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
+    .flatMap((signal: any) => {
       if (
         signal.signal_type !== "official_notice" ||
-        (signal.confidence ?? 0) < 0.95 ||
+        (signal.confidence ?? signal.ai_confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected"
       ) {
         return [];

@@ -274,6 +274,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "In the viewer's local time",
     zh: "按查看者当地时间换算",
   },
+  overdueNoticePendingText: {
+    ja: "予定時刻を過ぎています。リセットを確認中です。",
+    en: "The expected time has passed. Waiting for reset confirmation.",
+    zh: "预计时间已过，正在等待重置确认。",
+  },
   randomReset: {
     ja: "ランダムリセット",
     en: "Random reset",

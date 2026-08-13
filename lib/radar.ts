@@ -36,6 +36,7 @@ import {
   translateDynamic,
   translateExpectation,
 } from "./radar/i18n";
+import { isOverdueNoticePending } from "./radar/tiboTemporal";
 import {
   probabilityToPercent,
   normalizeProbability,
@@ -199,7 +200,9 @@ export function getRadarViewModel(
     (observedLatestWindow && getHistoryRecordKind(observedLatestWindow) === "confirmed_global"
       ? observedLatestWindow
       : undefined) ?? latestCompletedLocalWindow;
-  const activeWindow = getDisplayResetNotice(getActiveWindow(activeOfficialNotice, locale));
+  const activeWindow = getDisplayResetNotice(
+    getActiveWindow(activeOfficialNotice, locale, signalEvaluation.latestResetAt, calculationNow),
+  );
   const recentHistory = addPersonalResetEventsToHistory(
     observedHistory,
     locale,
@@ -1088,12 +1091,24 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
 function getActiveWindow(
   officialNotice: ReturnType<typeof getActiveOfficialNotice>,
   locale: Locale = "ja",
+  latestResetAt?: string | Date | null,
+  now: Date = new Date(),
 ): RadarViewModel["activeWindow"] {
   const active = Boolean(officialNotice);
   const openedAt = officialNotice?.observedAt ?? null;
   const expectedAt = officialNotice?.expectedAt ?? null;
   const expectedEndAt = officialNotice?.expectedEndAt ?? null;
   const source = officialNotice?.source ?? null;
+
+  const noticeResolution = officialNotice ? {
+    status: officialNotice.temporalResolutionStatus ?? "unresolved",
+    temporalPrecision: officialNotice.temporalPrecision ?? "unknown",
+    expectedStartAt: officialNotice.expectedAt,
+    expectedEndAt: officialNotice.expectedEndAt,
+  } : null;
+
+  const isOverduePending = isOverdueNoticePending(noticeResolution, latestResetAt, now);
+  const overdueText = isOverduePending ? translateUI("overdueNoticePendingText", locale) : null;
 
   if (active) {
     return {
@@ -1108,6 +1123,8 @@ function getActiveWindow(
       expectedTimeZone: officialNotice?.temporalTimezone ?? null,
       source,
       sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
+      isOverduePending,
+      overdueText,
     };
   }
 
@@ -1127,6 +1144,8 @@ function getActiveWindow(
     expectedTimeZone: null,
     source,
     sourceLabel: null,
+    isOverduePending: false,
+    overdueText: null,
   };
 }
 

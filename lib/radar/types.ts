@@ -328,6 +328,8 @@ export type RadarViewModel = {
     forecastDate?: string;
     forecastTime?: string | null;
     remaining?: string;
+    isOverduePending?: boolean;
+    overdueText?: string | null;
   };
   reasoningSummary: string | null;
   displayReasoningSummary: string | null;
