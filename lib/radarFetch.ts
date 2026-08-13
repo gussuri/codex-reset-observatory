@@ -444,12 +444,21 @@ export function associateTiboNotices(
   return associated.reverse();
 }
 
-async function getTiboSignalBundle(now: Date = new Date()): Promise<TiboSignalBundle> {
+async function getTiboSignalBundle(
+  now: Date = new Date(),
+  bypassCache = false,
+): Promise<TiboSignalBundle> {
   const tiboCacheBoundary = getTiboCacheBoundary(now);
   const [activeResult, historyResult, recentResult] = await Promise.all([
-    getCachedTiboSignals(tiboCacheBoundary),
-    getCachedTiboHistorySignals(),
-    getCachedTiboRecentSignals(),
+    bypassCache
+      ? fetchRawTiboSignals(tiboCacheBoundary)
+      : getCachedTiboSignals(tiboCacheBoundary),
+    bypassCache
+      ? fetchRawTiboHistorySignals(false)
+      : getCachedTiboHistorySignals(),
+    bypassCache
+      ? fetchRawTiboHistorySignals(true)
+      : getCachedTiboRecentSignals(),
   ]);
   const activeSignals = activeResult.data.filter((signal) => {
     if (signal.verification_status === "rejected") return false;
@@ -531,17 +540,23 @@ export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
 }
 
 export async function fetchCurrentRadarData(
-  options: { cache?: RequestCache; revalidate?: number; calculationNow?: Date } = {},
+  options: {
+    cache?: RequestCache;
+    revalidate?: number;
+    calculationNow?: Date;
+    /** Bypass Next's Data Cache while preserving the Production normalizer. */
+    bypassCache?: boolean;
+  } = {},
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
   const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery, resetExecutionEstimates] = await Promise.all([
     fetchOpenAIStatusSignals(options),
-    getTiboSignalBundle(calculationNow),
-    getCachedRegularResetEvents(),
-    getCachedResetDisplayNames(),
-    getCachedCodexRecoveryObservations(),
-    getCachedResetExecutionEstimates(),
+    getTiboSignalBundle(calculationNow, options.bypassCache === true),
+    options.bypassCache ? fetchRawRegularResetEvents() : getCachedRegularResetEvents(),
+    options.bypassCache ? fetchResetDisplayNames() : getCachedResetDisplayNames(),
+    options.bypassCache ? fetchRawCodexRecoveryObservations() : getCachedCodexRecoveryObservations(),
+    options.bypassCache ? fetchRawResetExecutionEstimates() : getCachedResetExecutionEstimates(),
   ]);
 
   const codexRecoveryObservation = codexRecovery.data.find((observation) =>

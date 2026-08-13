@@ -14,7 +14,8 @@ import {
   REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES,
   REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES,
 } from "../data/shadowProbabilityConfig";
-import { getLocalRadarData } from "../lib/radar";
+import { fetchCurrentRadarData } from "../lib/radarFetch";
+import type { RadarData } from "../lib/radar/types";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
 import { calculateConstantHazardBenchmark } from "../lib/radar/evaluationProbabilityModels";
 import {
@@ -42,6 +43,8 @@ const LOG_LOSS_EPSILON = 1e-12;
 const BOOTSTRAP_ITERATIONS = 1_000;
 const BOOTSTRAP_SEED = 20260808;
 const DEFAULT_AS_OF = "2026-08-08T04:27:00.000Z";
+export const EVALUATION_INPUT_MODE = "production-point-in-time" as const;
+export const FUTURE_LEAKAGE_POLICY_VERSION = "availability-timestamps-v1" as const;
 
 export const REGIME_ELAPSED_EVALUATION_REPORT_BASENAME =
   "probability-model-evaluation-regime-elapsed-v1";
@@ -519,7 +522,7 @@ function pointInTimeOptions(origin: Date) {
 
 function getPrediction(
   mode: ModelKey,
-  data: ReturnType<typeof getLocalRadarData>,
+  data: RadarData,
   origin: Date,
   config: RegimeElapsedCandidateConfig,
 ): Pick<ShadowProbabilityHorizons, "probability24h" | "probability48h"> {
@@ -535,7 +538,7 @@ function getPrediction(
 }
 
 function makeModelRows(
-  sourceData: ReturnType<typeof getLocalRadarData>,
+  sourceData: RadarData,
   origins: string[],
   mode: ModelKey,
   config: RegimeElapsedCandidateConfig,
@@ -543,7 +546,8 @@ function makeModelRows(
 ): RegimeEvaluationRow[] {
   return origins.map((recordedAt) => {
     const origin = new Date(recordedAt);
-    const data = getPointInTimeRadarData(sourceData, origin) ?? getLocalRadarData({ calculationNow: origin });
+    const data = getPointInTimeRadarData(sourceData, origin);
+    if (!data) throw new Error(`Unable to project RadarData at origin ${recordedAt}`);
     const prediction = getPrediction(mode, data, origin, config);
     return {
       recordedAt,
@@ -556,7 +560,7 @@ function makeModelRows(
 }
 
 function makePrequentialModelRows(
-  sourceData: ReturnType<typeof getLocalRadarData>,
+  sourceData: RadarData,
   selectionAudit: Array<{ origin: string; selectedKey: string }>,
   mode: ModelKey,
   candidates: RegimeElapsedCandidateConfig[],
@@ -566,7 +570,8 @@ function makePrequentialModelRows(
   const configsByKey = new Map(candidates.map((config) => [configKey(config), config]));
   return selectionAudit.map(({ origin: recordedAt, selectedKey }) => {
     const origin = new Date(recordedAt);
-    const data = getPointInTimeRadarData(sourceData, origin) ?? getLocalRadarData({ calculationNow: origin });
+    const data = getPointInTimeRadarData(sourceData, origin);
+    if (!data) throw new Error(`Unable to project RadarData at origin ${recordedAt}`);
     const config = configsByKey.get(selectedKey) ?? fallbackConfig;
     const prediction = getPrediction(mode, data, origin, config);
     return {
@@ -662,9 +667,8 @@ function buildRegimeEventAudit(
   });
 }
 
-export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_AS_OF)) {
+export function evaluateRegimeElapsedProbability(sourceData: RadarData, asOf: Date) {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
-  const sourceData = getLocalRadarData({ calculationNow: asOf });
   const randomEvents = makeRandomEvents(sourceData, asOf);
   const boundaries = getRecoveryResetEvents(sourceData, asOf, LOCAL_RESET_HISTORY);
   const origins = createSixHourOrigins(randomEvents, asOf.toISOString());
@@ -690,7 +694,8 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
     candidateSelectionCounts.set(selectedKey, (candidateSelectionCounts.get(selectedKey) ?? 0) + 1);
     selectionAudit.push({ origin: recordedAt, selectedKey, candidateCount: candidates.length });
     const origin = new Date(recordedAt);
-    const data = getPointInTimeRadarData(sourceData, origin) ?? getLocalRadarData({ calculationNow: origin });
+    const data = getPointInTimeRadarData(sourceData, origin);
+    if (!data) throw new Error(`Unable to project RadarData at origin ${recordedAt}`);
     for (const config of candidates) {
       const key = configKey(config);
       const prediction = getPrediction("regime-elapsed", data, origin, config);
@@ -739,8 +744,12 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
   );
   const boundariesForAudit = getRecoveryResetEvents(sourceData, asOf, LOCAL_RESET_HISTORY);
   const regimeAnalysis = {
-    schemaVersion: "reset-regime-analysis-v1",
+    schemaVersion: "reset-regime-analysis-v2",
     asOf: asOf.toISOString(),
+    inputMode: EVALUATION_INPUT_MODE,
+    sourceAsOf: asOf.toISOString(),
+    futureLeakagePolicyVersion: FUTURE_LEAKAGE_POLICY_VERSION,
+    backfilled: false,
     targetDefinition: "Broad-scope random reset: confirmed global hard reset or broad Banked Reset distribution; regular reset is a recovery boundary only.",
     randomEvents: randomEvents.map((event) => ({ id: event.id, resetAt: event.resetAt })),
     recoveryBoundaries: boundariesForAudit,
@@ -757,9 +766,14 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
     ],
   };
   const evaluationReport = {
-    schemaVersion: "probability-model-evaluation-regime-elapsed-v1",
+    schemaVersion: "probability-model-evaluation-regime-elapsed-v2",
     generatedAt: asOf.toISOString(),
     asOf: asOf.toISOString(),
+    inputMode: EVALUATION_INPUT_MODE,
+    sourceAsOf: asOf.toISOString(),
+    sourceDataCheckedAt: sourceData.checked_at ?? null,
+    futureLeakagePolicyVersion: FUTURE_LEAKAGE_POLICY_VERSION,
+    backfilled: false,
     evaluationMode: "walk-forward-prequential",
     originSpacingHours: 6,
     originCount: origins.length,
@@ -838,7 +852,7 @@ export function evaluateRegimeElapsedProbability(asOf: Date = new Date(DEFAULT_A
   return { evaluationReport, regimeAnalysis };
 }
 
-function makeRandomEvents(data: ReturnType<typeof getLocalRadarData>, asOf: Date) {
+function makeRandomEvents(data: RadarData, asOf: Date) {
   const result = calculateRegimeElapsedProbability(data, {
     now: asOf,
     staticHistory: LOCAL_RESET_HISTORY,
@@ -937,6 +951,11 @@ function writeMarkdown(evaluationReport: ReturnType<typeof evaluateRegimeElapsed
     "",
     `- model: ${PUBLISHED_PROBABILITY_MODEL_VERSION}`,
     `- asOf: ${evaluationReport.asOf}`,
+    `- input mode: ${evaluationReport.inputMode}`,
+    `- source asOf: ${evaluationReport.sourceAsOf}`,
+    `- source checkedAt: ${evaluationReport.sourceDataCheckedAt ?? "unknown"}`,
+    `- future leakage policy: ${evaluationReport.futureLeakagePolicyVersion}`,
+    `- backfilled: ${evaluationReport.backfilled}`,
     `- mode: ${evaluationReport.evaluationMode}`,
     `- origins: ${evaluationReport.originCount} (every ${evaluationReport.originSpacingHours}h)`,
     `- target events: ${evaluationReport.eventCount}`,
@@ -1000,6 +1019,10 @@ function writeRegimeMarkdown(regimeAnalysis: ReturnType<typeof evaluateRegimeEla
     "",
     `- schema: ${regimeAnalysis.schemaVersion}`,
     `- asOf: ${regimeAnalysis.asOf}`,
+    `- input mode: ${regimeAnalysis.inputMode}`,
+    `- source asOf: ${regimeAnalysis.sourceAsOf}`,
+    `- future leakage policy: ${regimeAnalysis.futureLeakagePolicyVersion}`,
+    `- backfilled: ${regimeAnalysis.backfilled}`,
     `- target: ${regimeAnalysis.targetDefinition}`,
     `- random events: ${regimeAnalysis.randomEvents.length}`,
     `- recovery boundaries: ${regimeAnalysis.recoveryBoundaries.length}`,
@@ -1056,8 +1079,22 @@ function parseAsOf(args: string[]) {
   return asOf;
 }
 
-function main() {
-  const report = evaluateRegimeElapsedProbability(parseAsOf(process.argv.slice(2)));
+async function loadProductionEvaluationSource(asOf: Date) {
+  const sourceData = await fetchCurrentRadarData({
+    cache: "no-store",
+    calculationNow: asOf,
+    bypassCache: true,
+  });
+  if (sourceData.data_health?.overall !== "ok") {
+    throw new Error("Production-like evaluation source is unavailable or degraded");
+  }
+  return sourceData;
+}
+
+async function main() {
+  const asOf = parseAsOf(process.argv.slice(2));
+  const sourceData = await loadProductionEvaluationSource(asOf);
+  const report = evaluateRegimeElapsedProbability(sourceData, asOf);
   writeReports(report);
   console.log(JSON.stringify({
     asOf: report.evaluationReport.asOf,
@@ -1077,5 +1114,8 @@ function main() {
 }
 
 if (basename(process.argv[1] ?? "") === "evaluateRegimeElapsedProbability.ts") {
-  main();
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : "Production-like evaluation failed");
+    process.exitCode = 1;
+  });
 }

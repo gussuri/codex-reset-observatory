@@ -1,6 +1,9 @@
 import type { RadarData } from "./types";
 import type { ShadowResetEvent } from "./shadowProbability";
 import type { OpenAIStatusHistoryItem } from "../openaiStatus";
+import type { CodexRecoveryObservation } from "../codexUsageRecovery";
+import type { ResetExecutionEstimate } from "./resetExecution";
+import type { RegularResetEventRow } from "./regularResetSchedule";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -236,6 +239,95 @@ function isAvailableAt(value: string | null | undefined, originTime: number) {
   return parsed !== null && parsed <= originTime;
 }
 
+function isAfterOrigin(value: string | null | undefined, originTime: number) {
+  const parsed = value ? timestamp(value) : null;
+  return parsed !== null && parsed > originTime;
+}
+
+/**
+ * An execution estimate is usable only after both its persisted state and its
+ * displayed execution time were available. This prevents a later-created
+ * estimate from making an earlier origin appear to know about a reset.
+ */
+export function projectResetExecutionEstimateToOrigin(
+  estimate: ResetExecutionEstimate,
+  origin: Date,
+): ResetExecutionEstimate | null {
+  const originTime = origin.getTime();
+  if (
+    !Number.isFinite(originTime) ||
+    !isAvailableAt(estimate.createdAt, originTime) ||
+    !isAvailableAt(estimate.updatedAt ?? estimate.createdAt, originTime) ||
+    !isAvailableAt(estimate.displayExecutionAt, originTime)
+  ) {
+    return null;
+  }
+
+  const futureStateTimestamp = [
+    estimate.manualOverrideAt,
+    estimate.manualExecutionAt,
+    estimate.tiboAnnouncedAt,
+    estimate.officialNoticeAt,
+    estimate.executionWindowStartAt,
+    estimate.executionWindowEndAt,
+    estimate.recoveryPreviousObservedAt,
+    estimate.recoveryObservedAt,
+  ].some((value) => isAfterOrigin(value, originTime));
+  return futureStateTimestamp ? null : { ...estimate };
+}
+
+/**
+ * Recovery observations may be confirmed or matched after an origin. When the
+ * observation itself was already available, retain only the observed state so
+ * later confirmation metadata cannot leak into the historical snapshot.
+ */
+export function projectCodexRecoveryObservationToOrigin(
+  observation: CodexRecoveryObservation,
+  origin: Date,
+): CodexRecoveryObservation | null {
+  const originTime = origin.getTime();
+  if (
+    !Number.isFinite(originTime) ||
+    !isAvailableAt(observation.createdAt, originTime) ||
+    !isAvailableAt(observation.observedAt, originTime) ||
+    !isAvailableAt(observation.previousObservedAt, originTime)
+  ) {
+    return null;
+  }
+
+  const confirmationWasFuture = isAfterOrigin(observation.confirmedAt, originTime);
+  const updateWasFuture = isAfterOrigin(observation.updatedAt, originTime);
+  if (confirmationWasFuture || (updateWasFuture && observation.status !== "observed")) {
+    return {
+      ...observation,
+      status: "observed",
+      matchedTiboTweetId: null,
+      confirmedAt: null,
+    };
+  }
+  if (updateWasFuture) return null;
+  return { ...observation };
+}
+
+export function isRegularResetEventAvailableAt(
+  event: RegularResetEventRow,
+  origin: Date,
+) {
+  const originTime = origin.getTime();
+  if (!Number.isFinite(originTime) || !isAvailableAt(event.completed_at, originTime)) {
+    return false;
+  }
+
+  const status = event.status.toLowerCase();
+  if (status === "voided" || status === "corrected") {
+    // A future correction cannot be reconstructed from the current row. Keep
+    // only the state that was already known at the origin; downstream history
+    // eligibility still excludes a known voided row.
+    return isAvailableAt(event.corrected_at, originTime);
+  }
+  return true;
+}
+
 function projectStatusIncidentToOrigin(
   incident: OpenAIStatusHistoryItem,
   originTime: number,
@@ -310,6 +402,9 @@ export function getPointInTimeRadarData(data: RadarData | null, origin: Date): R
     active_tibo_signals: (data.active_tibo_signals ?? []).filter((signal) =>
       isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
     ),
+    recent_tibo_signals: (data.recent_tibo_signals ?? []).filter((signal) =>
+      isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
+    ),
     formal_tibo_resets: (data.formal_tibo_resets ?? []).filter((signal) =>
       isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
     ),
@@ -317,9 +412,18 @@ export function getPointInTimeRadarData(data: RadarData | null, origin: Date): R
       isAvailableAt(signal.tweet_created_at, originTime),
     ),
     regular_reset_events: (data.regular_reset_events ?? []).filter((event) =>
-      isAvailableAt(event.completed_at, originTime),
+      isRegularResetEventAvailableAt(event, origin),
     ),
+    reset_execution_estimates: (data.reset_execution_estimates ?? []).flatMap((estimate) => {
+      const projected = projectResetExecutionEstimateToOrigin(estimate, origin);
+      return projected ? [projected] : [];
+    }),
+    codex_recovery_observations: (data.codex_recovery_observations ?? []).flatMap((observation) => {
+      const projected = projectCodexRecoveryObservationToOrigin(observation, origin);
+      return projected ? [projected] : [];
+    }),
     // Do not reuse current aggregate values at a historical origin.
     codex_environment: undefined,
+    codex_usage_recovery: undefined,
   };
 }

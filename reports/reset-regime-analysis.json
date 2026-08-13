@@ -1,11 +1,27 @@
 {
-  "schemaVersion": "reset-regime-analysis-v1",
+  "schemaVersion": "reset-regime-analysis-v2",
   "asOf": "2026-08-13T06:20:00.000Z",
+  "inputMode": "production-point-in-time",
+  "sourceAsOf": "2026-08-13T06:20:00.000Z",
+  "futureLeakagePolicyVersion": "availability-timestamps-v1",
+  "backfilled": false,
   "targetDefinition": "Broad-scope random reset: confirmed global hard reset or broad Banked Reset distribution; regular reset is a recovery boundary only.",
   "randomEvents": [
     {
-      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "id": "tibo-reset-2087706104814023111",
+      "resetAt": "2026-08-13T03:34:43.341Z"
+    },
+    {
+      "id": "tibo-reset-2083395449814229287",
       "resetAt": "2026-08-01T03:32:00.000Z"
+    },
+    {
+      "id": "tibo-reset-2086188036493344823",
+      "resetAt": "2026-08-08T20:29:22.000Z"
+    },
+    {
+      "id": "tibo-reset-2086972933566857393",
+      "resetAt": "2026-08-11T00:28:16.000Z"
     },
     {
       "id": "local-codex-gpt56-sol-efficiency-reset-2026-07-29",
@@ -324,21 +340,48 @@
       ]
     },
     {
-      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "id": "tibo-reset-2083395449814229287",
       "resetAt": "2026-08-01T03:32:00.000Z",
       "isRandom": true,
       "isRegular": false,
       "sourceIds": [
-        "local-luna-100k-threads-efficiency-reset-2026-08-01"
+        "tibo-reset-2083395449814229287"
       ]
     },
     {
-      "id": "local-codex-regular-reset-2026-08-08",
+      "id": "regular-reset-weekly-regular-reset-2026-08-08T03-32-00-000Z",
       "resetAt": "2026-08-08T03:32:00.000Z",
       "isRandom": false,
       "isRegular": true,
       "sourceIds": [
-        "local-codex-regular-reset-2026-08-08"
+        "regular-reset-weekly-regular-reset-2026-08-08T03-32-00-000Z"
+      ]
+    },
+    {
+      "id": "tibo-reset-2086188036493344823",
+      "resetAt": "2026-08-08T20:29:22.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "tibo-reset-2086188036493344823"
+      ]
+    },
+    {
+      "id": "tibo-reset-2086972933566857393",
+      "resetAt": "2026-08-11T00:28:16.000Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "tibo-reset-2086972933566857393"
+      ]
+    },
+    {
+      "id": "tibo-reset-2087706104814023111",
+      "resetAt": "2026-08-13T03:34:43.341Z",
+      "isRandom": true,
+      "isRegular": false,
+      "sourceIds": [
+        "tibo-reset-2087706104814023111"
       ]
     }
   ],
@@ -1422,7 +1465,7 @@
       }
     },
     {
-      "id": "local-luna-100k-threads-efficiency-reset-2026-08-01",
+      "id": "tibo-reset-2083395449814229287",
       "resetAt": "2026-08-01T03:32:00.000Z",
       "rolling7dCount": 4,
       "rolling14dCount": 5,
@@ -1469,22 +1512,169 @@
           "regimeMultiplier": 1.126347745755661
         }
       }
+    },
+    {
+      "id": "tibo-reset-2086188036493344823",
+      "resetAt": "2026-08-08T20:29:22.000Z",
+      "rolling7dCount": 1,
+      "rolling14dCount": 4,
+      "intervalsSincePreviousHours": 184.9561111111111,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 0.39621445335443306,
+          "recentWeightedExposureDays": 4.32808510694805,
+          "recentRatePerDay": 0.09744599106808582,
+          "longTermRatePerDay": 0.25502078316075727,
+          "rawRateRatio": 0.38210999848847166,
+          "regimeMultiplier": 0.5
+        },
+        "5": {
+          "recentWeightedEventCount": 1.2286459574880766,
+          "recentWeightedExposureDays": 7.21341294297773,
+          "recentRatePerDay": 0.12947147465007863,
+          "longTermRatePerDay": 0.25502078316075727,
+          "rawRateRatio": 0.5076898950955844,
+          "regimeMultiplier": 0.5076898950955844
+        },
+        "7": {
+          "recentWeightedEventCount": 2.232777973785984,
+          "recentWeightedExposureDays": 10.096426447089044,
+          "recentRatePerDay": 0.1608633247456913,
+          "longTermRatePerDay": 0.25502078316075727,
+          "rawRateRatio": 0.6307851570053723,
+          "regimeMultiplier": 0.6307851570053723
+        },
+        "10": {
+          "recentWeightedEventCount": 3.7781926456981756,
+          "recentWeightedExposureDays": 14.384565432823795,
+          "recentRatePerDay": 0.19595151936832564,
+          "longTermRatePerDay": 0.25502078316075727,
+          "rawRateRatio": 0.768374706326597,
+          "regimeMultiplier": 0.768374706326597
+        },
+        "14": {
+          "recentWeightedEventCount": 5.669902656331592,
+          "recentWeightedExposureDays": 19.883854750719777,
+          "recentRatePerDay": 0.223194186692764,
+          "longTermRatePerDay": 0.25502078316075727,
+          "rawRateRatio": 0.8751999892968302,
+          "regimeMultiplier": 0.8751999892968302
+        }
+      }
+    },
+    {
+      "id": "tibo-reset-2086972933566857393",
+      "resetAt": "2026-08-11T00:28:16.000Z",
+      "rolling7dCount": 2,
+      "rolling14dCount": 5,
+      "intervalsSincePreviousHours": 51.98166666666667,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 0.2402129477624954,
+          "recentWeightedExposureDays": 4.328085113137029,
+          "recentRatePerDay": 0.08655817842855903,
+          "longTermRatePerDay": 0.2492836221525814,
+          "rawRateRatio": 0.34722769863949804,
+          "regimeMultiplier": 0.5
+        },
+        "5": {
+          "recentWeightedEventCount": 0.9099686184180016,
+          "recentWeightedExposureDays": 7.213429091908623,
+          "recentRatePerDay": 0.11095805537757757,
+          "longTermRatePerDay": 0.2492836221525814,
+          "rawRateRatio": 0.4451076826445598,
+          "regimeMultiplier": 0.5
+        },
+        "7": {
+          "recentWeightedEventCount": 1.8017828078293274,
+          "recentWeightedExposureDays": 10.096897218428387,
+          "recentRatePerDay": 0.13941370040247592,
+          "longTermRatePerDay": 0.2492836221525814,
+          "rawRateRatio": 0.5592573599445841,
+          "regimeMultiplier": 0.5592573599445841
+        },
+        "10": {
+          "recentWeightedEventCount": 3.2515012697886654,
+          "recentWeightedExposureDays": 14.390474025491093,
+          "recentRatePerDay": 0.17430990743949112,
+          "longTermRatePerDay": 0.2492836221525814,
+          "rawRateRatio": 0.6992433194540137,
+          "regimeMultiplier": 0.6992433194540137
+        },
+        "14": {
+          "recentWeightedEventCount": 5.093356237663846,
+          "recentWeightedExposureDays": 19.91577134468815,
+          "recentRatePerDay": 0.20368374151067256,
+          "longTermRatePerDay": 0.2492836221525814,
+          "rawRateRatio": 0.8170763075080878,
+          "regimeMultiplier": 0.8170763075080878
+        }
+      }
+    },
+    {
+      "id": "tibo-reset-2087706104814023111",
+      "resetAt": "2026-08-13T03:34:43.341Z",
+      "rolling7dCount": 3,
+      "rolling14dCount": 4,
+      "intervalsSincePreviousHours": 51.107594722222224,
+      "ewmaRates": {
+        "3": {
+          "recentWeightedEventCount": 0.14686455100043933,
+          "recentWeightedExposureDays": 4.328085116840398,
+          "recentRatePerDay": 0.08004311404128117,
+          "longTermRatePerDay": 0.243889147207007,
+          "rawRateRatio": 0.32819465301316825,
+          "regimeMultiplier": 0.5
+        },
+        "5": {
+          "recentWeightedEventCount": 0.6773587679530902,
+          "recentWeightedExposureDays": 7.2134408793812135,
+          "recentRatePerDay": 0.09744471077611694,
+          "longTermRatePerDay": 0.243889147207007,
+          "rawRateRatio": 0.3995450879714968,
+          "regimeMultiplier": 0.5
+        },
+        "7": {
+          "recentWeightedEventCount": 1.4592360147910377,
+          "recentWeightedExposureDays": 10.0972713785705,
+          "recentRatePerDay": 0.12236666204414665,
+          "longTermRatePerDay": 0.243889147207007,
+          "rawRateRatio": 0.5017306569212975,
+          "regimeMultiplier": 0.5017306569212975
+        },
+        "10": {
+          "recentWeightedEventCount": 2.805305083520893,
+          "recentWeightedExposureDays": 14.395479597321097,
+          "recentRatePerDay": 0.1559840243492798,
+          "longTermRatePerDay": 0.243889147207007,
+          "rawRateRatio": 0.6395693540921871,
+          "regimeMultiplier": 0.6395693540921871
+        },
+        "14": {
+          "recentWeightedEventCount": 4.583693851371778,
+          "recentWeightedExposureDays": 19.943985356461617,
+          "recentRatePerDay": 0.1864712991574741,
+          "longTermRatePerDay": 0.243889147207007,
+          "rawRateRatio": 0.764573993115003,
+          "regimeMultiplier": 0.764573993115003
+        }
+      }
     }
   ],
   "current": {
-    "recentWeightedEventCount": 0.1430210496270805,
+    "recentWeightedEventCount": 2.073212210948166,
     "recentWeightedExposureDays": 4.328085116992881,
-    "recentRatePerDay": 0.18062668698271975,
-    "longTermRatePerDay": 0.26513437003736123,
-    "rawRateRatio": 0.6812646996964854,
-    "regimeMultiplier": 0.6812646996964854,
+    "recentRatePerDay": 0.4856464718996325,
+    "longTermRatePerDay": 0.29827616629203135,
+    "rawRateRatio": 1.6281772624908746,
+    "regimeMultiplier": 1.6281772624908746,
     "halfLifeDays": 3,
     "priorEventCount": 1,
     "priorExposureDays": 2,
-    "rawRandomEventCount": 23,
+    "rawRandomEventCount": 26,
     "observationStartAt": "2026-05-16T17:51:00.000Z"
   },
-  "currentElapsedHours": 122.8,
+  "currentElapsedHours": 2.7546275,
   "resetIntervalsHours": [
     {
       "from": null,
@@ -1600,6 +1790,21 @@
       "from": "2026-07-29T04:09:00.000Z",
       "to": "2026-08-01T03:32:00.000Z",
       "hours": 71.38333333333334
+    },
+    {
+      "from": "2026-08-01T03:32:00.000Z",
+      "to": "2026-08-08T20:29:22.000Z",
+      "hours": 184.9561111111111
+    },
+    {
+      "from": "2026-08-08T20:29:22.000Z",
+      "to": "2026-08-11T00:28:16.000Z",
+      "hours": 51.98166666666667
+    },
+    {
+      "from": "2026-08-11T00:28:16.000Z",
+      "to": "2026-08-13T03:34:43.341Z",
+      "hours": 51.107594722222224
     }
   ],
   "densitySummary": {
