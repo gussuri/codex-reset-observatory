@@ -318,9 +318,9 @@ test("automatically generated Tibo history is localized without Japanese leakage
   const japaneseCharacters = /[\u3040-\u30FF]/;
   const cases = [
     { id: "celebration", reason: "ご祝儀リセット", text: "I reset usage limits for Codex and ChatGPT Work." },
-    { id: "compensation", reason: "詫びリセット", text: "I reset usage limits for Codex." },
-    { id: "regular", reason: "定期リセット", text: "I reset usage limits for ChatGPT Work." },
-    { id: "fallback", reason: null, text: "I reset usage limits." },
+    { id: "compensation", reason: "詫びリセット", text: "I reset usage limits after a reliability incident." },
+    { id: "regular", reason: "定期更新", text: "I reset usage limits on the usual weekly cycle." },
+    { id: "fallback", reason: "ご祝儀リセット", text: "I reset usage limits." },
   ] as const;
 
   for (const testCase of cases) {
@@ -328,7 +328,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
       tweet_id: `i18n-auto-reset-${testCase.id}`,
       tweet_url: `https://x.com/thsottiaux/status/i18n-auto-reset-${testCase.id}`,
       text: testCase.text,
-      ai_reset_type_ja: testCase.reason,
+      ai_reset_type_ja: "ランダムリセット",
     });
     const data = getLocalRadarData({ formalTiboResets: [signal] });
 
@@ -339,7 +339,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
       );
 
       assert.ok(item, `${locale} Tibo history item should be present`);
-      const isRegular = testCase.reason === "定期リセット";
+      const isRegular = testCase.id === "regular";
       assert.equal(
         item.title,
         isRegular
@@ -351,20 +351,12 @@ test("automatically generated Tibo history is localized without Japanese leakage
         isRegular
           ? locale === "en" ? "Regular update" : "定期更新"
           : locale === "en"
-          ? testCase.reason === "ご祝儀リセット"
-              ? "Celebration reset"
-            : testCase.reason === "詫びリセット"
-              ? "Compensation reset"
-              : testCase.reason === "定期リセット"
-                ? "Weekly reset"
-                : "Random reset"
-          : testCase.reason === "ご祝儀リセット"
-            ? "庆祝重置"
-            : testCase.reason === "詫びリセット"
-              ? "故障补偿重置"
-              : testCase.reason === "定期リセット"
-                ? "定期重置"
-                : "随机重置",
+          ? testCase.reason === "詫びリセット"
+            ? "Compensation reset"
+            : "Celebration reset"
+          : testCase.reason === "詫びリセット"
+            ? "故障补偿重置"
+            : "庆祝重置",
       );
       assert.equal(
         item.summary,

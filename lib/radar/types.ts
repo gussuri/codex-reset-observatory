@@ -19,6 +19,16 @@ export type Locale = "ja" | "en" | "zh";
 
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
+export type ResetCycleType =
+  | "ランダムリセット"
+  | "定期リセット"
+  | "個人別リセット";
+
+export type ResetReasonType =
+  | "ご祝儀リセット"
+  | "詫びリセット"
+  | "定期更新";
+
 export type HistoryRecordKind =
   | "confirmed_global"
   | "banked_distribution"
@@ -58,6 +68,14 @@ export type ResetHistoryDetails = {
   noticeToExecution: string;
   noticeType?: string;
   note?: string | null;
+};
+
+export type CanonicalResetHistoryDetails = Omit<
+  ResetHistoryDetails,
+  "cycleType" | "reasonType"
+> & {
+  cycleType: ResetCycleType;
+  reasonType: ResetReasonType;
 };
 
 export type WindowLike = {

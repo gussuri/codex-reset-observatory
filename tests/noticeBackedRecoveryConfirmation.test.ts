@@ -95,14 +95,14 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.ok(event.sourceTweetIds?.includes("2087706104814023111"));
   });
 
-  it("未知のnotice-backed eventはreasonTypeのランダムリセットfallbackを維持する", () => {
+  it("未知のnotice-backed eventはreasonTypeをご祝儀リセットへfallbackする", () => {
     const events = findNoticeBackedRecoveryEvents(
       [sampleNotice],
       [sampleRecovery],
       [{ ...sampleEstimate, resetEventKey: "tibo-reset-unknown" }],
     );
     assert.equal(events.length, 1);
-    assert.equal(events[0].details?.reasonType, "ランダムリセット");
+    assert.equal(events[0].details?.reasonType, "ご祝儀リセット");
   });
 
   it("K. active notice/recoveryがなくてもpersisted estimateだけで残る", () => {

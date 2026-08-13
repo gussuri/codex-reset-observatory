@@ -9,6 +9,11 @@ import {
 } from "./regularResetSchedule";
 import { isBroadResetScope } from "./resetEligibility";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import {
+  inferResetCycleType,
+  normalizeResetReasonType,
+} from "./resetReason";
+import type { ResetReasonType } from "./types";
 
 export type TiboSignalType =
   | "official_notice"
@@ -49,7 +54,7 @@ const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
   "tibo-reset-2087706104814023111":
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
 };
-const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, string>> = {
+const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, ResetReasonType>> = {
   "tibo-reset-2087706104814023111": "ご祝儀リセット",
 };
 
@@ -58,7 +63,7 @@ export function getNoticeBackedRecoveryHistorySummary(resetEventKey: string) {
 }
 
 function getNoticeBackedRecoveryReasonType(resetEventKey: string) {
-  return NOTICE_BACKED_RECOVERY_REASON_TYPES[resetEventKey] ?? "ランダムリセット";
+  return NOTICE_BACKED_RECOVERY_REASON_TYPES[resetEventKey] ?? "ご祝儀リセット";
 }
 
 export type FormalTiboResetSignal = {
@@ -142,10 +147,7 @@ function getScope(text: string) {
 }
 
 function getReasonType(signal: FormalTiboResetSignal) {
-  const allowed = new Set(["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"]);
-  return signal.ai_reset_type_ja && allowed.has(signal.ai_reset_type_ja)
-    ? signal.ai_reset_type_ja
-    : "ランダムリセット";
+  return normalizeResetReasonType({ text: signal.text });
 }
 
 function formatNoticeToExecution(minutes: number) {
@@ -233,7 +235,7 @@ export function convertTiboResetSignalToHistoryEvent(
     ? Math.max(0, Math.round((getTimestamp(signal.tweet_created_at)! - getTimestamp(relatedNotice.tweet_created_at)!) / 60000))
     : 0;
   const reasonType = getReasonType(signal);
-  const cycleType = reasonType === "定期リセット" ? "定期リセット" : "ランダムリセット";
+  const cycleType = inferResetCycleType({ text: signal.text });
   const scope = getScope(signal.text);
   const summary = "Tibo氏がCodexの利用上限リセット完了を発表しました。";
   const title = "ランダムリセット";

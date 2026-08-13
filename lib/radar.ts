@@ -89,11 +89,22 @@ import {
 } from "./radar/probability";
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
+import {
+  inferResetCycleType,
+  normalizeResetReasonType,
+  type ResetReasonContext,
+} from "./radar/resetReason";
 import type { CodexRecoveryObservation } from "./codexUsageRecovery";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
 export type { Locale, ProbabilityLevel, RadarData, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel };
-export type { HistoryRecordKind, HistorySourceKind };
+export type {
+  CanonicalResetHistoryDetails,
+  HistoryRecordKind,
+  HistorySourceKind,
+  ResetCycleType,
+  ResetReasonType,
+} from "./radar/types";
 export {
   probabilityToPercent,
   getExpectationLabel,
@@ -560,6 +571,19 @@ function getHistoryText(item: WindowLike & { kind?: string }) {
   return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
 }
 
+function getHistoryReasonContext(item: WindowLike & { kind?: string }): ResetReasonContext {
+  return {
+    recordKind: item.recordKind,
+    cycleType: item.details?.cycleType,
+    reasonType: item.details?.reasonType,
+    title: item.title,
+    summary: item.summary,
+    windowHuman: item.window_human,
+    scope: item.scope ?? item.details?.scope,
+    details: item.details,
+  };
+}
+
 const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
 const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
@@ -652,61 +676,11 @@ export function getHistorySourceKind(item: WindowLike): HistorySourceKind {
 }
 
 function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Locale) {
-  const text = getHistoryText(item);
-
-  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
-    return translateDynamic("定期リセット", locale);
-  }
-
-  if (
-    text.includes("任意") ||
-    text.includes("manual reset") ||
-    text.includes("referral") ||
-    text.includes("招待")
-  ) {
-    return translateDynamic("個人別リセット", locale);
-  }
-
-  return translateDynamic("ランダムリセット", locale);
+  return translateDynamic(inferResetCycleType(getHistoryReasonContext(item)), locale);
 }
 
 function getHistoryReasonType(item: WindowLike & { kind?: string }, locale: Locale) {
-  const text = getHistoryText(item);
-
-  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
-    return translateDynamic("通常更新", locale);
-  }
-
-  if (
-    text.includes("可靠性") ||
-    text.includes("补偿") ||
-    text.includes("compensation") ||
-    text.includes("reliability") ||
-    text.includes("incident") ||
-    text.includes("障害") ||
-    text.includes("補償") ||
-    text.includes("詫び") ||
-    text.includes("不具合") ||
-    text.includes("bug") ||
-    text.includes("rate limit") ||
-    text.includes("レート制限")
-  ) {
-    return translateDynamic("詫びリセット", locale);
-  }
-
-  if (
-    text.includes("庆祝") ||
-    text.includes("celebration") ||
-    text.includes("5m") ||
-    text.includes("500 万") ||
-    text.includes("500万") ||
-    text.includes("記念") ||
-    text.includes("milestone")
-  ) {
-    return translateDynamic("ご祝儀リセット", locale);
-  }
-
-  return translateDynamic("その他", locale);
+  return translateDynamic(normalizeResetReasonType(getHistoryReasonContext(item)), locale);
 }
 
 function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Locale) {
@@ -780,7 +754,10 @@ function getHistoryDetails(
   if (item.details) {
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: translateDynamic(item.details.reasonType, locale),
+      reasonType: translateDynamic(
+        normalizeResetReasonType(getHistoryReasonContext(item)),
+        locale,
+      ),
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
@@ -805,6 +782,19 @@ function getHistoryDetails(
 }
 
 function getResetTypes(item: WindowLike & { kind?: string }, locale: Locale = "ja") {
+  const isCompleted = Boolean(
+    item.kind === "reset_completed" ||
+      item.kind === "window_closed" ||
+      item.closed_at ||
+      item.completed_at ||
+      item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "regular_completed",
+  );
+  if (isCompleted) {
+    return [translateDynamic(normalizeResetReasonType(getHistoryReasonContext(item)), locale)];
+  }
+
   const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();
 
   const types: Array<string> = [];
@@ -1051,7 +1041,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         ? getRegularResetSummary(item, resetMethod ?? "強制リセット")
         : null;
       const resetTypes = isRegular
-        ? [translateDynamic("定期リセット", locale)]
+        ? [translateDynamic("定期更新", locale)]
         : getResetTypes(item, locale);
       const details = getHistoryDetails(item, locale);
 
