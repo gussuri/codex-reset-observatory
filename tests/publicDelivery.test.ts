@@ -12,7 +12,10 @@ import {
   LocalizedDateTime,
 } from "../components/LocalizedDateTime";
 import { HistoryView } from "../components/HistoryView";
-import { groupHistoryByMonth } from "../components/LocalizedHistoryEvents";
+import {
+  getHistoryDateTimeProps,
+  groupHistoryByMonth,
+} from "../components/LocalizedHistoryEvents";
 import { RadarDashboard } from "../components/RadarDashboard";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -405,6 +408,25 @@ test("marks usage-derived execution times as approximate without changing the ti
   assert.equal(
     formatDateTimeInZone(date, "Asia/Tokyo", "ja-JP"),
     "2026年8月11日 09:02 JST",
+  );
+});
+
+test("history execution display omits approximate markers while internal precision remains available", () => {
+  const item = {
+    resetAt: "2026-08-13T03:34:43.341Z",
+    executionTimePrecision: "approximate" as const,
+  };
+
+  const props = getHistoryDateTimeProps(item);
+  assert.equal(props.approximate, false);
+  assert.equal(
+    formatDateTimeInZone(
+      new Date(item.resetAt),
+      "Asia/Tokyo",
+      "ja-JP",
+      { approximate: props.approximate },
+    ),
+    "2026年8月13日 12:34 JST",
   );
 });
 

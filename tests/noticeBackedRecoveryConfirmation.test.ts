@@ -46,6 +46,8 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     executionWindowStartAt: "2026-08-13T03:32:44.526Z",
     executionWindowEndAt: "2026-08-13T03:34:43.341Z",
     recoveryObservationId: "68e38669-199b-4e56-a5db-83ee22f1e4b9",
+    tiboAnnouncedAt: "2026-08-13T01:01:37Z",
+    tiboPrimaryTweetId: "2087706104814023111",
     officialNoticeTweetId: "2087706104814023111",
     estimatorVersion: "usage-execution-v1",
     tiboSourceTweetIds: ["2087706104814023111"],
@@ -192,7 +194,24 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
   it("J. JA / EN / ZHのPublicRadarSnapshotがcompletion UI文言を実際に翻訳する", () => {
     const baseData: RadarData = {
       recent_tibo_signals: [sampleNotice as any],
+      codex_recovery_observations: [sampleRecovery as any],
       reset_execution_estimates: [sampleEstimate as any],
+      reset_display_names: [{
+        event_key: sampleEstimate.resetEventKey,
+        source_tweet_id: sampleNotice.tweet_id,
+        manual_name_ja: "1500万人アクティブユーザー突破記念リセット",
+        ai_name_ja: "1500万突破記念リセット",
+        ai_confidence: 0.93,
+        ai_evidence: "15M",
+        ai_reason: "15M milestone",
+        ai_model: "gemini-3.5-flash-lite",
+        ai_prompt_version: "random-reset-name-v2-experiment-2",
+        ai_input_mode: "source_post_text",
+        ai_status: "accepted",
+        ai_flags: [],
+        ai_generated_at: "2026-08-13T02:00:00Z",
+        input_hash: "fixture",
+      }] as any,
     };
 
     const ja = toPublicRadarSnapshot(baseData, "ja", {
@@ -208,12 +227,24 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       limitHistory: false,
     });
 
-    assert.equal(ja.viewModel.recentHistory[0]?.title, "全体リセット完了");
-    assert.equal(en.viewModel.recentHistory[0]?.title, "Global reset completed");
-    assert.equal(zh.viewModel.recentHistory[0]?.title, "全局重置已完成");
-    assert.match(ja.viewModel.recentHistory[0]?.summary ?? "", /監視中のCodexアカウントで利用枠の回復を確認しました/);
-    assert.match(en.viewModel.recentHistory[0]?.summary ?? "", /A quota recovery was observed on the monitored Codex account/);
-    assert.match(zh.viewModel.recentHistory[0]?.summary ?? "", /监控中的 Codex 账户已观测到额度恢复/);
+    assert.equal(ja.viewModel.recentHistory[0]?.title, "1500万人アクティブユーザー突破記念リセット");
+    assert.equal(en.viewModel.recentHistory[0]?.title, "15 Million Active Users Milestone Reset");
+    assert.equal(zh.viewModel.recentHistory[0]?.title, "活跃用户突破1500万纪念重置");
+    assert.equal(
+      ja.viewModel.recentHistory[0]?.summary,
+      "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+    );
+    assert.equal(
+      en.viewModel.recentHistory[0]?.summary,
+      "To celebrate Codex surpassing 15 million active users, usage limits for ChatGPT Work and Codex were forcibly reset.",
+    );
+    assert.equal(
+      zh.viewModel.recentHistory[0]?.summary,
+      "为纪念 Codex 活跃用户数突破 1500 万，ChatGPT Work 和 Codex 的使用额度进行了强制重置。",
+    );
+    assert.equal(ja.viewModel.recentHistory[0]?.resetAt, sampleEstimate.displayExecutionAt);
+    assert.equal(ja.viewModel.recentHistory[0]?.executionTimePrecision, "approximate");
+    assert.equal(ja.viewModel.recentHistory[0]?.details?.note, ja.viewModel.recentHistory[0]?.summary);
   });
 
   it("O. notice expiry後・recovery公開期限後もestimate由来eventが残る", () => {

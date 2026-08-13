@@ -44,6 +44,16 @@ export const NOTICE_BACKED_RECOVERY_PRESENTATION = "notice_backed_recovery" as c
 export const NOTICE_BACKED_RECOVERY_TITLE_KEY = "noticeBackedRecoveryTitle";
 export const NOTICE_BACKED_RECOVERY_BODY_KEY = "noticeBackedRecoveryBody";
 
+const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの利用枠がリセットされました。";
+const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
+  "tibo-reset-2087706104814023111":
+    "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+};
+
+export function getNoticeBackedRecoveryHistorySummary(resetEventKey: string) {
+  return NOTICE_BACKED_RECOVERY_SUMMARIES[resetEventKey] ?? NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY;
+}
+
 export type FormalTiboResetSignal = {
   tweet_id: string;
   text: string;
@@ -657,7 +667,7 @@ function buildNoticeBackedRecoveryEvent(
     id: estimate.resetEventKey,
     recordKind: "confirmed_global",
     presentation: NOTICE_BACKED_RECOVERY_PRESENTATION,
-    title: NOTICE_BACKED_RECOVERY_TITLE_KEY,
+    title: "全体リセット完了",
     kind: "reset_completed",
     status: "closed",
     opened_at: openedAt,
@@ -665,7 +675,7 @@ function buildNoticeBackedRecoveryEvent(
     completed_at: completedAt,
     window_minutes: noticeMinutes,
     scope: "全有料プラン",
-    summary: NOTICE_BACKED_RECOVERY_BODY_KEY,
+    summary: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     source_url: sourceUrl,
     sourceKind: "direct_post",
     sourceTweetIds,
@@ -678,7 +688,7 @@ function buildNoticeBackedRecoveryEvent(
       scope: "全有料プラン",
       noticeToExecution: formatNoticeToExecution(noticeMinutes),
       noticeType: "公式予告あり",
-      note: NOTICE_BACKED_RECOVERY_BODY_KEY,
+      note: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     },
   };
 }

@@ -14,6 +14,7 @@ export const GENERIC_RESET_DISPLAY_TITLES = new Set([
   "ご祝儀リセット",
   "臨時リセット",
   "定期リセット",
+  "全体リセット完了",
 ]);
 
 function getSourceUrl(item: WindowEventLike) {

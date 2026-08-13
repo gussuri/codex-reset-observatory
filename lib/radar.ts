@@ -34,7 +34,11 @@ import {
   isNoticeBackedRecoveryEvent,
 } from "./radar/tiboHistory";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
-import { getResetDisplayNameEventKey, resolveResetDisplayTitle } from "./radar/resetDisplayNames";
+import {
+  getResetDisplayNameEventKey,
+  resolveJapaneseResetDisplayName,
+  resolveResetDisplayTitle,
+} from "./radar/resetDisplayNames";
 import {
   translateUI,
   translateDynamic,
@@ -261,21 +265,10 @@ export function getRadarViewModel(
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,
-      title: latestWindow && isNoticeBackedRecoveryEvent(latestWindow)
-        ? translateUI("noticeBackedRecoveryTitle", locale)
-        : translateDynamic(
-            resolveResetDisplayTitle(
-              latestWindow ?? {},
-              getResetDisplayNameRecord(source, latestWindow),
-              locale,
-            ),
-            locale,
-          ),
-      summary: latestWindow && isNoticeBackedRecoveryEvent(latestWindow)
-        ? translateUI("noticeBackedRecoveryBody", locale)
-        : latestWindow?.summary
-          ? translateDynamic(latestWindow.summary, locale)
-          : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
+      title: getHistoryDisplayTitle(source, latestWindow ?? {}, locale),
+      summary: latestWindow?.summary
+        ? translateDynamic(latestWindow.summary, locale)
+        : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
       scopeLabel: latestWindow?.scopeLabel ? translateDynamic(latestWindow.scopeLabel, locale) : undefined,
       scope: translateDynamic(latestWindow?.scope, locale),
       openedAt: latestWindow?.opened_at ?? null,
@@ -792,11 +785,9 @@ function getHistoryDetails(
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
       noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
-      note: isNoticeBackedRecoveryEvent(item)
-        ? translateUI("noticeBackedRecoveryBody", locale)
-        : item.details.note
-          ? translateDynamic(item.details.note, locale)
-          : null,
+      note: item.details.note
+        ? translateDynamic(item.details.note, locale)
+        : null,
     };
   }
 
@@ -973,6 +964,23 @@ function getResetDisplayNameRecord(
   return data?.reset_display_names?.find((record) => record.event_key === eventKey) ?? null;
 }
 
+function getHistoryDisplayTitle(
+  data: RadarData | null | undefined,
+  item: WindowEventLike,
+  locale: Locale,
+) {
+  const record = getResetDisplayNameRecord(data, item);
+
+  if (isNoticeBackedRecoveryEvent(item)) {
+    const japaneseTitle = resolveJapaneseResetDisplayName(item, record);
+    return japaneseTitle === "全体リセット完了"
+      ? translateUI("noticeBackedRecoveryTitle", locale)
+      : translateDynamic(japaneseTitle, locale);
+  }
+
+  return translateDynamic(resolveResetDisplayTitle(item, record, locale), locale);
+}
+
 function getString(
   source: Record<string, unknown> | null | undefined,
   paths: string[],
@@ -1052,12 +1060,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         recordKind,
         title: isRegular
           ? translateDynamic("定期リセット", locale)
-          : isNoticeBackedRecoveryEvent(item)
-            ? translateUI("noticeBackedRecoveryTitle", locale)
-            : translateDynamic(
-                resolveResetDisplayTitle(item, getResetDisplayNameRecord(data, item), locale),
-                locale,
-              ),
+          : getHistoryDisplayTitle(data, item, locale),
         resetType: resetTypes[0],
         resetTypes,
         status: isRegular
@@ -1081,11 +1084,9 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         sourceKind: isRegular ? "none" : sourceKind,
         summary: isRegular
           ? translateDynamic(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
-          : isNoticeBackedRecoveryEvent(item)
-            ? translateUI("noticeBackedRecoveryBody", locale)
-            : item.summary
-              ? translateDynamic(item.summary, locale)
-              : null,
+          : item.summary
+            ? translateDynamic(item.summary, locale)
+            : null,
       };
     })
     .filter((item) => {

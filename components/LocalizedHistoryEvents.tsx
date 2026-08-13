@@ -10,6 +10,13 @@ import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 
 type HistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
 
+export function getHistoryDateTimeProps(item: Pick<HistoryItem, "resetAt">) {
+  return {
+    value: item.resetAt,
+    approximate: false,
+  } as const;
+}
+
 export function getHistoryMonthLabel(
   value: string | null | undefined,
   locale: Locale,
@@ -143,7 +150,7 @@ function HistoryItemRow({ item, locale }: { item: HistoryItem; locale: Locale })
         ) : null}
         {item.resetAt ? (
           <p>
-            {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.resetAt} locale={locale} approximate={item.executionTimePrecision === "approximate"} />
+            {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime {...getHistoryDateTimeProps(item)} locale={locale} />
           </p>
         ) : null}
         <HistorySource item={item} locale={locale} />
