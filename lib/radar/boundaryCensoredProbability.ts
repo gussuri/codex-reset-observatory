@@ -10,9 +10,7 @@ import {
   MIN_BASELINE_DAILY_PROBABILITY,
 } from "@/data/shadowProbabilityConfig";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
-import {
-  combineResetHistory,
-} from "./tiboHistory";
+import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import {
   applyOddsMultiplier,
   calculateShadowProbability,
@@ -203,11 +201,15 @@ export function collectBoundaryCensoredBoundaries(
     };
   }
 
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     staticHistory,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    recoveryObservations,
+    estimates,
   );
   const seen = new Set<string>();
   const boundaries: BoundaryCensoredBoundary[] = [];

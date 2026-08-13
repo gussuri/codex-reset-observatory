@@ -28,6 +28,7 @@ import {
 } from "@/lib/codexUsageRecoveryStore";
 import {
   findRelatedTiboNotice,
+  getNoticeBackedRecoveryObservationIds,
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
   type RejectedTiboResetSignal,
@@ -544,7 +545,11 @@ export async function fetchCurrentRadarData(
   ]);
 
   const codexRecoveryObservation = codexRecovery.data.find((observation) =>
-    getPublicRecoveryObservation(observation, calculationNow),
+    getPublicRecoveryObservation(
+      observation,
+      calculationNow,
+      getNoticeBackedRecoveryObservationIds(resetExecutionEstimates.data),
+    ),
   ) ?? null;
 
   return getLocalRadarData({
@@ -569,6 +574,7 @@ export async function fetchCurrentRadarData(
     resetDisplayNames,
     resetExecutionEstimates: resetExecutionEstimates.data,
     codexRecoveryObservation,
+    codexRecoveryObservations: codexRecovery.data,
   });
 }
 

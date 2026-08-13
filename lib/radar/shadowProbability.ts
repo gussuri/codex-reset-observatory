@@ -37,7 +37,7 @@ import {
   getTeaserDecayFactor,
 } from "./probability";
 import type { RadarData, WindowEventLike } from "./types";
-import { combineResetHistory } from "./tiboHistory";
+import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getTeaserStrengthSignals } from "./teaserStrength";
 
@@ -196,11 +196,15 @@ export function getShadowCompletedResetEvents(
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     staticHistory,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    recoveryObservations,
+    estimates,
   );
   const seen = new Set<string>();
 

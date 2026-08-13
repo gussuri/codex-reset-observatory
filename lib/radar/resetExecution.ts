@@ -91,11 +91,8 @@ function isMatchedUsageObservation(
   value: CodexRecoveryObservation | null | undefined,
   sourceTweetIds: Set<string>,
 ) {
-  if (!value) return false;
-  const statusStr = (value.status ?? "") as string;
-  const isConfirmed = statusStr === "confirmed" && value.matchedTiboTweetId && sourceTweetIds.has(value.matchedTiboTweetId);
-  const isNoticeBacked = value.confidence === "strong" && value.cycleHint !== "regular" && statusStr !== "rejected" && statusStr !== "voided";
-  if (!isConfirmed && !isNoticeBacked) return false;
+  if (!value || value.status !== "confirmed" || !value.matchedTiboTweetId) return false;
+  if (!sourceTweetIds.has(value.matchedTiboTweetId)) return false;
 
   const observedAt = parseTimestamp(value.observedAt);
   const previousObservedAt = parseTimestamp(value.previousObservedAt);
@@ -163,7 +160,10 @@ function getPersistedUsageDecision(
     estimate.executionTimeConfidence !== "high" ||
     !estimate.recoveryObservationId ||
     !estimate.tiboPrimaryTweetId ||
-    !sourceTweetIds.has(estimate.tiboPrimaryTweetId)
+    !sourceTweetIds.has(estimate.tiboPrimaryTweetId) ||
+    (estimate.officialNoticeTweetId !== null &&
+      estimate.officialNoticeTweetId !== undefined &&
+      !sourceTweetIds.has(estimate.officialNoticeTweetId))
   ) {
     return null;
   }

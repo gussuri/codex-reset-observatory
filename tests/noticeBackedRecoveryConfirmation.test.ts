@@ -1,11 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { findNoticeBackedRecoveryEvents, combineResetHistory } from "@/lib/radar/tiboHistory";
+import {
+  findNoticeBackedRecoveryEvents,
+  combineResetHistory,
+  type CodexRecoveryObservationInput,
+} from "@/lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
-import { UI_TRANSLATIONS } from "@/lib/radar/i18n";
+import { resolveDisplayExecutionTime } from "@/lib/radar/resetExecution";
+import { getRandomResetHeatmapEventTimes } from "@/lib/radar";
+import { getRecoveryResetEvents } from "@/lib/radar/recoveryBoundary";
+import { getLastGlobalResetAt } from "@/lib/radar/probability";
 import type { RadarData } from "@/lib/radar/types";
 
-describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
+describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
   const sampleNotice = {
     tweet_id: "2087706104814023111",
     text: "Old news actually from a bunch of days ago, but crossed that 15M. Enjoy a nice reset everyone. Landing in the next hour or so, go /fast.",
@@ -17,7 +24,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
     expected_start_at: "2026-08-13T02:01:37Z",
   };
 
-  const sampleRecovery = {
+  const sampleRecovery: CodexRecoveryObservationInput = {
     id: "68e38669-199b-4e56-a5db-83ee22f1e4b9",
     observedAt: "2026-08-13T03:34:43.341Z",
     previousObservedAt: "2026-08-13T03:32:44.526Z",
@@ -50,13 +57,13 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
   });
 
   it("B. official_noticeあり + medium recovery -> global reset確定しない", () => {
-    const mediumRecovery = { ...sampleRecovery, confidence: "medium" };
+    const mediumRecovery: CodexRecoveryObservationInput = { ...sampleRecovery, confidence: "medium" };
     const events = findNoticeBackedRecoveryEvents([sampleNotice], [mediumRecovery]);
     assert.equal(events.length, 0);
   });
 
   it("C. official_noticeあり + strong regular recovery -> global reset確定しない", () => {
-    const regularRecovery = { ...sampleRecovery, cycleHint: "regular" };
+    const regularRecovery: CodexRecoveryObservationInput = { ...sampleRecovery, cycleHint: "regular" };
     const events = findNoticeBackedRecoveryEvents([sampleNotice], [regularRecovery]);
     assert.equal(events.length, 0);
   });
@@ -68,19 +75,52 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
   });
 
   it("E. official_noticeあり + strong unexpected recovery -> confirmed global reset", () => {
-    const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery]);
+    const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery], [sampleEstimate]);
     assert.equal(events.length, 1);
     assert.equal(events[0].recordKind, "confirmed_global");
     assert.equal(events[0].closed_at, sampleRecovery.observedAt);
   });
 
   it("F. 今回の実データ fixture (notice 2087706104814023111 & recovery 68e38669)", () => {
-    const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery]);
+    const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery], [sampleEstimate]);
     assert.equal(events.length, 1);
     const event = events[0];
-    assert.equal(event.title, "全体リセット完了");
+    assert.equal(event.recordKind, "confirmed_global");
     assert.equal(event.completed_at, "2026-08-13T03:34:43.341Z");
     assert.ok(event.sourceTweetIds?.includes("2087706104814023111"));
+  });
+
+  it("K. active notice/recoveryがなくてもpersisted estimateだけで残る", () => {
+    const events = findNoticeBackedRecoveryEvents([], [], [sampleEstimate]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].id, sampleEstimate.resetEventKey);
+    assert.equal(events[0].completed_at, sampleEstimate.displayExecutionAt);
+  });
+
+  it("L. estimateがない古いnotice/recoveryからconfirmed eventを再生成しない", () => {
+    const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery]);
+    assert.equal(events.length, 0);
+  });
+
+  it("M. official notice/recovery identityが欠けたestimateは採用しない", () => {
+    const missingOfficialNotice = { ...sampleEstimate, officialNoticeTweetId: null };
+    const missingRecovery = { ...sampleEstimate, recoveryObservationId: null };
+    assert.equal(findNoticeBackedRecoveryEvents([], [], [missingOfficialNotice]).length, 0);
+    assert.equal(findNoticeBackedRecoveryEvents([], [], [missingRecovery]).length, 0);
+  });
+
+  it("N. formal reset matchingは明示的なmatchedTiboTweetIdを要求する", () => {
+    const decision = resolveDisplayExecutionTime({
+      resetEventKey: "tibo-reset-other",
+      tiboAnnouncedAt: "2026-08-13T03:50:00Z",
+      tiboPrimaryTweetId: "2087709900000000000",
+      tiboSourceTweetIds: ["2087709900000000000"],
+      usageObservation: {
+        ...sampleRecovery,
+        matchedTiboTweetId: null,
+      } as any,
+    });
+    assert.equal(decision.executionTimeSource, "tibo_announcement_fallback");
   });
 
   it("G. 確定後の ViewModel & PublicDto 状態", () => {
@@ -126,6 +166,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
       [],
       [sampleNotice],
       [sampleRecovery],
+      [sampleEstimate],
     );
 
     const confirmedEvents = combined.filter((e) => e.recordKind === "confirmed_global");
@@ -141,19 +182,70 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - J)", () => {
       [],
       [sampleNotice],
       [sampleRecovery, sampleRecovery],
+      [sampleEstimate, sampleEstimate],
     );
 
     const confirmedEvents = combined.filter((e) => e.recordKind === "confirmed_global");
     assert.equal(confirmedEvents.length, 1);
   });
 
-  it("J. JA / EN / ZH completion UI 文言が存在すること", () => {
-    assert.equal(UI_TRANSLATIONS.noticeBackedRecoveryTitle.ja, "全体リセット完了");
-    assert.equal(UI_TRANSLATIONS.noticeBackedRecoveryTitle.en, "Global reset completed");
-    assert.equal(UI_TRANSLATIONS.noticeBackedRecoveryTitle.zh, "全局重置已完成");
+  it("J. JA / EN / ZHのPublicRadarSnapshotがcompletion UI文言を実際に翻訳する", () => {
+    const baseData: RadarData = {
+      recent_tibo_signals: [sampleNotice as any],
+      reset_execution_estimates: [sampleEstimate as any],
+    };
 
-    assert.ok(UI_TRANSLATIONS.noticeBackedRecoveryBody.ja.includes("監視中のCodexアカウントで利用枠の回復を確認しました"));
-    assert.ok(UI_TRANSLATIONS.noticeBackedRecoveryBody.en.includes("A quota recovery was observed on the monitored Codex account"));
-    assert.ok(UI_TRANSLATIONS.noticeBackedRecoveryBody.zh.includes("监控中的 Codex 账户已观测到额度恢复"));
+    const ja = toPublicRadarSnapshot(baseData, "ja", {
+      calculationNow: new Date("2026-08-13T05:10:00Z"),
+      limitHistory: false,
+    });
+    const en = toPublicRadarSnapshot(baseData, "en", {
+      calculationNow: new Date("2026-08-13T05:10:00Z"),
+      limitHistory: false,
+    });
+    const zh = toPublicRadarSnapshot(baseData, "zh", {
+      calculationNow: new Date("2026-08-13T05:10:00Z"),
+      limitHistory: false,
+    });
+
+    assert.equal(ja.viewModel.recentHistory[0]?.title, "全体リセット完了");
+    assert.equal(en.viewModel.recentHistory[0]?.title, "Global reset completed");
+    assert.equal(zh.viewModel.recentHistory[0]?.title, "全局重置已完成");
+    assert.match(ja.viewModel.recentHistory[0]?.summary ?? "", /監視中のCodexアカウントで利用枠の回復を確認しました/);
+    assert.match(en.viewModel.recentHistory[0]?.summary ?? "", /A quota recovery was observed on the monitored Codex account/);
+    assert.match(zh.viewModel.recentHistory[0]?.summary ?? "", /监控中的 Codex 账户已观测到额度恢复/);
+  });
+
+  it("O. notice expiry後・recovery公開期限後もestimate由来eventが残る", () => {
+    const data: RadarData = {
+      reset_execution_estimates: [sampleEstimate as any],
+    };
+    for (const calculationNow of ["2026-08-13T04:02:00Z", "2026-08-13T05:10:00Z"]) {
+      const snapshot = toPublicRadarSnapshot(data, "ja", {
+        calculationNow: new Date(calculationNow),
+        limitHistory: false,
+      });
+      assert.equal(snapshot.viewModel.recentHistory[0]?.recordKind, "confirmed_global");
+      assert.equal(snapshot.viewModel.activeWindow.active, false);
+      assert.equal(typeof snapshot.viewModel.probability24h, "number");
+      assert.equal(typeof snapshot.viewModel.probability48h, "number");
+      assert.equal(snapshot.recoveryObservation, null);
+      assert.equal(snapshot.viewModel.recentHistory[0]?.resetAt, sampleEstimate.displayExecutionAt);
+      assert.equal(
+        getLastGlobalResetAt(data, new Date(calculationNow))?.toISOString(),
+        sampleEstimate.displayExecutionAt,
+      );
+
+      const heatmapTimes = getRandomResetHeatmapEventTimes(data, new Date(calculationNow));
+      assert.equal(
+        heatmapTimes.filter((time) => time === sampleEstimate.displayExecutionAt).length,
+        1,
+      );
+      const boundaries = getRecoveryResetEvents(data, new Date(calculationNow));
+      assert.equal(
+        boundaries.filter((boundary) => boundary.resetAt === sampleEstimate.displayExecutionAt).length,
+        1,
+      );
+    }
   });
 });

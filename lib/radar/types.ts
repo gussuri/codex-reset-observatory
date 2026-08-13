@@ -79,6 +79,9 @@ export type WindowLike = {
   sourceKind?: HistorySourceKind;
   sourceTweetIds?: string[];
   recordKind?: HistoryRecordKind;
+  presentation?: "notice_backed_recovery";
+  officialNoticeTweetId?: string;
+  recoveryObservationId?: string;
   link?: string | null;
   sources?: Array<{
     type?: string;
@@ -267,6 +270,7 @@ export type RadarData = {
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   regular_reset_events?: Array<RegularResetEventRow>;
   codex_usage_recovery?: CodexRecoveryObservation | null;
+  codex_recovery_observations?: Array<CodexRecoveryObservation>;
   reset_execution_estimates?: Array<ResetExecutionEstimate>;
   reset_display_names?: Array<ResetDisplayNameRecord>;
   codex_environment?: {

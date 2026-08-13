@@ -28,7 +28,11 @@ import {
   resolveDisplayExecutionTime,
   type ResetExecutionEstimate,
 } from "./radar/resetExecution";
-import { combineResetHistory } from "./radar/tiboHistory";
+import {
+  combineResetHistory,
+  getNoticeBackedHistoryInputs,
+  isNoticeBackedRecoveryEvent,
+} from "./radar/tiboHistory";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import { getResetDisplayNameEventKey, resolveResetDisplayTitle } from "./radar/resetDisplayNames";
 import {
@@ -108,6 +112,7 @@ export function getLocalRadarData({
   resetDisplayNames = [],
   resetExecutionEstimates = [],
   codexRecoveryObservation = null,
+  codexRecoveryObservations = [],
 }: {
   openAIStatus?: OpenAIStatusSignals | null;
   checkedAt?: string;
@@ -121,6 +126,7 @@ export function getLocalRadarData({
   resetDisplayNames?: RadarData["reset_display_names"];
   resetExecutionEstimates?: RadarData["reset_execution_estimates"];
   codexRecoveryObservation?: CodexRecoveryObservation | null;
+  codexRecoveryObservations?: RadarData["codex_recovery_observations"];
 } = {}): RadarData {
   const now = calculationNow ?? new Date();
   const resolvedCheckedAt = checkedAt ?? now.toISOString();
@@ -151,6 +157,7 @@ export function getLocalRadarData({
     reset_display_names: resetDisplayNames,
     reset_execution_estimates: resetExecutionEstimates,
     codex_usage_recovery: codexRecoveryObservation,
+    codex_recovery_observations: codexRecoveryObservations,
   };
 }
 
@@ -254,17 +261,21 @@ export function getRadarViewModel(
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,
-      title: translateDynamic(
-        resolveResetDisplayTitle(
-          latestWindow ?? {},
-          getResetDisplayNameRecord(source, latestWindow),
-          locale,
-        ),
-        locale,
-      ),
-      summary: latestWindow?.summary
-        ? translateDynamic(latestWindow.summary, locale)
-        : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
+      title: latestWindow && isNoticeBackedRecoveryEvent(latestWindow)
+        ? translateUI("noticeBackedRecoveryTitle", locale)
+        : translateDynamic(
+            resolveResetDisplayTitle(
+              latestWindow ?? {},
+              getResetDisplayNameRecord(source, latestWindow),
+              locale,
+            ),
+            locale,
+          ),
+      summary: latestWindow && isNoticeBackedRecoveryEvent(latestWindow)
+        ? translateUI("noticeBackedRecoveryBody", locale)
+        : latestWindow?.summary
+          ? translateDynamic(latestWindow.summary, locale)
+          : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
       scopeLabel: latestWindow?.scopeLabel ? translateDynamic(latestWindow.scopeLabel, locale) : undefined,
       scope: translateDynamic(latestWindow?.scope, locale),
       openedAt: latestWindow?.opened_at ?? null,
@@ -781,7 +792,11 @@ function getHistoryDetails(
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
       noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
-      note: item.details.note ? translateDynamic(item.details.note, locale) : null,
+      note: isNoticeBackedRecoveryEvent(item)
+        ? translateUI("noticeBackedRecoveryBody", locale)
+        : item.details.note
+          ? translateDynamic(item.details.note, locale)
+          : null,
     };
   }
 
@@ -1037,10 +1052,12 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         recordKind,
         title: isRegular
           ? translateDynamic("定期リセット", locale)
-          : translateDynamic(
-              resolveResetDisplayTitle(item, getResetDisplayNameRecord(data, item), locale),
-              locale,
-            ),
+          : isNoticeBackedRecoveryEvent(item)
+            ? translateUI("noticeBackedRecoveryTitle", locale)
+            : translateDynamic(
+                resolveResetDisplayTitle(item, getResetDisplayNameRecord(data, item), locale),
+                locale,
+              ),
         resetType: resetTypes[0],
         resetTypes,
         status: isRegular
@@ -1064,9 +1081,11 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         sourceKind: isRegular ? "none" : sourceKind,
         summary: isRegular
           ? translateDynamic(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
-          : item.summary
-            ? translateDynamic(item.summary, locale)
-            : null,
+          : isNoticeBackedRecoveryEvent(item)
+            ? translateUI("noticeBackedRecoveryBody", locale)
+            : item.summary
+              ? translateDynamic(item.summary, locale)
+              : null,
       };
     })
     .filter((item) => {
@@ -1260,14 +1279,7 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     };
   });
 
-  const rawNoticeSignals = data?.active_tibo_signals ?? data?.recent_tibo_signals ?? [];
-  const noticeSignals = rawNoticeSignals.map((s) => ({
-    ...s,
-    text: s.text ?? "",
-    tweet_url: s.tweet_url ?? "",
-  })) as any[];
-  const observations = (data as any)?.codex_recovery_observations ?? (data?.codex_usage_recovery ? [data.codex_usage_recovery] : []);
-  const estimates = data?.reset_execution_estimates ?? [];
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
 
   return combineResetHistory(
     [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
@@ -1275,7 +1287,7 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
     noticeSignals,
-    observations,
+    recoveryObservations,
     estimates,
   );
 }

@@ -1,6 +1,6 @@
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { RadarData, WindowEventLike } from "./types";
-import { combineResetHistory } from "./tiboHistory";
+import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 
 const RECOVERY_BOUNDARY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
@@ -104,12 +104,7 @@ function getCombinedHistory(
   data: RadarData | null,
   staticHistory: Array<WindowEventLike>,
 ) {
-  const rawNoticeSignals = data?.active_tibo_signals ?? data?.recent_tibo_signals ?? [];
-  const noticeSignals = rawNoticeSignals.map((s) => ({
-    ...s,
-    text: s.text ?? "",
-    tweet_url: s.tweet_url ?? "",
-  })) as any[];
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
 
   return combineResetHistory(
     staticHistory,
@@ -117,8 +112,8 @@ function getCombinedHistory(
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
     noticeSignals,
-    (data as any)?.codex_recovery_observations ?? (data?.codex_usage_recovery ? [data.codex_usage_recovery] : []),
-    data?.reset_execution_estimates ?? [],
+    recoveryObservations,
+    estimates,
   );
 }
 

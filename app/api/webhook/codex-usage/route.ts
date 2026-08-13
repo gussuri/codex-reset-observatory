@@ -205,7 +205,7 @@ export async function POST(request: Request) {
       }
     } else if (notice.noticeSignal && decision.confidence === "strong" && decision.cycleHint !== "regular" && observationResult.observation) {
       try {
-        await upsertResetExecutionEstimate(client, {
+        const estimateResult = await upsertResetExecutionEstimate(client, {
           resetEventKey: `tibo-reset-${notice.noticeSignal.id}`,
           tiboAnnouncedAt: notice.noticeSignal.observedAt,
           tiboPrimaryTweetId: notice.noticeSignal.id,
@@ -214,6 +214,9 @@ export async function POST(request: Request) {
           officialNoticeTweetId: notice.noticeSignal.id,
           officialNoticeAt: notice.noticeSignal.observedAt,
         });
+        if (estimateResult.error) {
+          console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });
+        }
       } catch {
         console.warn("[Codex usage] notice-backed reset execution estimate skipped", { reason: "request_failed" });
       }

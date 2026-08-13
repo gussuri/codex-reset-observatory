@@ -7,7 +7,7 @@ import {
 } from "@/data/predictionWeights";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { OpenAIStatusSignals } from "@/lib/openaiStatus";
-import type { Locale, RadarData, WindowEventLike } from "./types";
+import type { ActiveTiboSignal, Locale, RadarData, WindowEventLike } from "./types";
 import { translateDynamic, translateUI } from "./i18n";
 import {
   deriveComplaintPressure,
@@ -26,6 +26,7 @@ import {
 import {
   combineResetHistory,
   convertTiboResetSignalToHistoryEvent,
+  getNoticeBackedHistoryInputs,
   isFormalTiboResetSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
@@ -920,12 +921,12 @@ export function getActiveOfficialNotice(
     resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
     latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
   );
-  const rawSignals: any[] = (data?.active_tibo_signals ?? (data as any)?.tibo_signals ?? []);
+  const rawSignals: Array<ActiveTiboSignal> = data?.active_tibo_signals ?? [];
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
-    .flatMap((signal: any) => {
+    .flatMap((signal) => {
       if (
         signal.signal_type !== "official_notice" ||
-        (signal.confidence ?? signal.ai_confidence ?? 0) < 0.95 ||
+        (signal.confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected"
       ) {
         return [];
@@ -1003,11 +1004,15 @@ export function getRecent7DayResetCount(
 ): number {
   const nowTime = now.getTime();
   const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    recoveryObservations,
+    estimates,
   );
 
   return combinedHistory.filter((item) => {
@@ -1090,11 +1095,15 @@ export function getLastGlobalResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ) {
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
     data?.rejected_tibo_resets ?? [],
     data?.regular_reset_events ?? [],
+    noticeSignals,
+    recoveryObservations,
+    estimates,
   );
   const candidates = combinedHistory.map((item) => {
     const time = getCompletedResetTimestamp(item);

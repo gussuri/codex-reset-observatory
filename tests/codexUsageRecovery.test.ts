@@ -332,6 +332,11 @@ test("a strong unknown observation becomes public provisional state", () => {
   assert.equal(getPublicRecoveryObservation(recovery({ cycleHint: "unknown" }), NOW)?.cycleHint, "unknown");
 });
 
+test("only the explicitly consumed recovery observation is hidden after confirmation", () => {
+  assert.equal(getPublicRecoveryObservation(recovery(), NOW, new Set(["recovery-1"])), null);
+  assert.notEqual(getPublicRecoveryObservation(recovery(), NOW, new Set(["other-recovery"])), null);
+});
+
 test("a medium observation does not become public provisional state", () => {
   assert.equal(getPublicRecoveryObservation(recovery({ confidence: "medium" }), NOW), null);
 });

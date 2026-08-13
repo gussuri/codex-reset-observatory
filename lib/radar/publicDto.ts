@@ -8,6 +8,7 @@ import {
   getUiResetTeaserSignals,
   isTeaserStrength,
 } from "./teaserStrength";
+import { getNoticeBackedRecoveryObservationIds } from "./tiboHistory";
 import type {
   Locale,
   PublicDataHealth,
@@ -291,6 +292,9 @@ export function toPublicRadarSnapshot(
     calculationNow,
   );
   const latestResetAt = getLastResetBoundaryAt(internal, calculationNow)?.toISOString() ?? null;
+  const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
+    internal.reset_execution_estimates,
+  );
 
   return {
     schemaVersion: "public-v1",
@@ -312,7 +316,7 @@ export function toPublicRadarSnapshot(
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,
       calculationNow,
-      latestResetAt,
+      consumedRecoveryObservationIds,
     ),
   };
 }
