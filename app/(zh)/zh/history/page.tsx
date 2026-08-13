@@ -20,6 +20,7 @@ export const metadata: Metadata = {
       ja: siteUrl("/history"),
       en: siteUrl("/en/history"),
       zh: siteUrl("/zh/history"),
+      "x-default": siteUrl("/history"),
     },
   },
   openGraph: {

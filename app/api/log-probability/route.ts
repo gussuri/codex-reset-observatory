@@ -146,7 +146,7 @@ async function handleLogRequest(request: NextRequest) {
 
     if (error) {
       console.error("Supabase upsert error:", error);
-      return NextResponse.json({ error: "Database save failed", details: error.message }, { status: 500 });
+      return NextResponse.json({ error: "Database save failed" }, { status: 500 });
     }
 
     const savedRecord = insertedRows && insertedRows.length > 0 ? insertedRows[0] : null;
@@ -165,7 +165,7 @@ async function handleLogRequest(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("Log probability execution error:", err);
-    return NextResponse.json({ error: "Internal Server Error", details: err?.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 

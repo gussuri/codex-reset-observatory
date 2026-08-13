@@ -252,7 +252,40 @@ test("canonical and hreflang links point to the same three localized routes", ()
       ja: siteUrl("/"),
       en: siteUrl("/en"),
       zh: siteUrl("/zh"),
+      "x-default": siteUrl("/"),
     });
+  }
+});
+
+test("all localized page clusters use the Japanese page as x-default", () => {
+  const pageClusters = [
+    {
+      path: "/",
+      metadata: [jaHomeMetadata, enHomeMetadata, zhHomeMetadata],
+    },
+    {
+      path: "/about",
+      metadata: [jaAboutMetadata, enAboutMetadata, zhAboutMetadata],
+    },
+    {
+      path: "/faq",
+      metadata: [jaFaqMetadata, enFaqMetadata, zhFaqMetadata],
+    },
+    {
+      path: "/history",
+      metadata: [jaHistoryMetadata, enHistoryMetadata, zhHistoryMetadata],
+    },
+  ];
+
+  for (const { path, metadata } of pageClusters) {
+    for (const pageMetadata of metadata) {
+      assert.deepStrictEqual(pageMetadata.alternates?.languages, {
+        ja: siteUrl(path),
+        en: siteUrl(path === "/" ? "/en" : `/en${path}`),
+        zh: siteUrl(path === "/" ? "/zh" : `/zh${path}`),
+        "x-default": siteUrl(path),
+      }, path);
+    }
   }
 });
 

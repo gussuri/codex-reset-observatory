@@ -20,6 +20,7 @@ export const metadata: Metadata = {
       ja: siteUrl("/faq"),
       en: siteUrl("/en/faq"),
       zh: siteUrl("/zh/faq"),
+      "x-default": siteUrl("/faq"),
     },
   },
   openGraph: {
