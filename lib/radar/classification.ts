@@ -17,6 +17,179 @@ export type TiboReplyClassificationMetadata = {
   isQuote?: boolean;
 };
 
+export type TiboClassificationSafetyReason =
+  | "non_usage_reset_object"
+  | "pure_hypothetical"
+  | "explicit_negation"
+  | "current_execution"
+  | "historical_reset"
+  | "historical_then_future"
+  | null;
+
+export type TiboClassificationSafetyDecision = {
+  signalType: ClassificationSignalType;
+  reasonJa: string | null;
+  reasonCode: TiboClassificationSafetyReason;
+  suppressTeaserStrength: boolean;
+};
+
+const NON_USAGE_RESET_OBJECT_PATTERN = /(?:\b(?:reset|resetting|restart|restarting|reboot|rebooting)\s+(?:the|my|our|a|an)?\s*(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\b|\b(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\s+(?:reset|restart|reboot)\b)/i;
+const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|capacity|paid\s+users?|all\s+users?|everyone(?:'s)?\s+limits?|fresh\s+limits?|topped\s+up|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)\b/i;
+const PURE_HYPOTHETICAL_PATTERN = /\b(?:what\s+if|would\s+be\s+nice\s+to|imagine\s+if|i\s+wish|if\s+only)\b|\b(?:could|would)\s+use\s+(?:a\s+)?reset\b|\bworld\s+with\s+unlimited\s+resets?\b/i;
+const INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN = /\b(?:but|however|so)\b[^.!?]{0,100}\b(?:i|we)\s+(?:will|might|may|could)\b/i;
+const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
+const FUTURE_RESET_PATTERN = /\b(?:will|going\s+to|coming|tonight|tomorrow|later|soon|next|scheduled|planned|in\s+(?:an?|one|two|half\s+an?|\d+)\s+(?:minute|minutes|hour|hours|day|days))\b/i;
+const CANCELLATION_PATTERN = /\b(?:no|not|never|cancel(?:led|ed)?|canceled|not\s+anymore|changed\s+my\s+mind|scratch\s+that)\b/i;
+const EXPLICIT_RESET_NEGATION_PATTERN =
+  /\b(?:no\s+reset|(?:will|would|going\s+to|can|could|should|do|does|did|am|is|are)\s+not\s+(?:going\s+to\s+|planning\s+to\s+)?(?:reset|restart|reboot)|(?:will|would|going\s+to)\s+not\s+(?:happen|occur)|not\s+(?:reset|happen|occur)\b)/i;
+
+const CURRENT_EXECUTION_PATTERNS = [
+  /\b(?:one\s+|a\s+)?reset\s+now\b/i,
+  /\b(?:reset|limits?|usage\s+limits?)\s+(?:is|are|was|were)\s+(?:done|complete|completed|landed|reset|refreshed)\b/i,
+  /\b(?:reset|usage\s+limits?)\s+(?:has|have|was|were|are)\s+been\s+(?:reset|completed|refreshed)\b/i,
+  /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b/i,
+  /\b(?:i|we)\s+reset\b[^.!?]{0,80}\bnow\b/i,
+  /\b(?:enjoy|go\s+use)\s+(?:a\s+)?reset\b/i,
+  /\bfresh\s+limits\b/i,
+  /\btopped\s+up\s+now\b/i,
+  /\breset\s+landed\b/i,
+];
+
+function normalizedClassificationText(text: string) {
+  return text.toLowerCase().replace(/[’‘]/g, "'");
+}
+
+export function hasExplicitNonUsageResetObject(text: string) {
+  const normalized = normalizedClassificationText(text);
+  return NON_USAGE_RESET_OBJECT_PATTERN.test(normalized) && !USAGE_LIMIT_CONTEXT_PATTERN.test(normalized);
+}
+
+export function isPureHypotheticalReset(text: string) {
+  const normalized = normalizedClassificationText(text);
+  return PURE_HYPOTHETICAL_PATTERN.test(normalized) && !INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN.test(normalized);
+}
+
+export function hasCurrentResetExecution(text: string) {
+  const normalized = normalizedClassificationText(text);
+  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized);
+  const hasHistoricalTimestampAfterFirstPersonExecution =
+    /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b[^.!?]{0,100}\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago)\b/i.test(
+      normalized,
+    );
+  if (hasHistoricalTimestampAfterFirstPersonExecution) return false;
+
+  const hasDirectExecution = CURRENT_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized));
+  const hasReconsideredExecution =
+    (/\bchanged\s+my\s+mind\b[^\r\n]{0,80}\benjoy\b/i.test(normalized) && /\breset\b/i.test(normalized)) ||
+    (/\b(?:changed\s+my\s+mind|reconsidered)\b[^\r\n]{0,80}\b(?:done|complete|reset\s+now|reset\s+(?:everyone|limits?))\b/i.test(
+      normalized,
+    ) && !/\b(?:not|no)\s+(?:reset|going\s+to\s+reset)\b/i.test(normalized));
+
+  if (
+    hasHistoricalReset &&
+    !/\b(?:now|today|just)\b/i.test(normalized) &&
+    !hasReconsideredExecution &&
+    !/\benjoy\s+(?:a\s+)?reset\b/i.test(normalized)
+  ) {
+    return false;
+  }
+
+  return hasDirectExecution || hasReconsideredExecution;
+}
+
+export function getTiboClassificationSafetyDecision(
+  text: string,
+  candidate: ClassificationSignalType,
+): TiboClassificationSafetyDecision {
+  if (hasExplicitNonUsageResetObject(text) && candidate !== "irrelevant") {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "利用枠ではなく、別の対象のresetを示しているため無関係として扱います。",
+      reasonCode: "non_usage_reset_object",
+      suppressTeaserStrength: true,
+    };
+  }
+
+  if (isPureHypotheticalReset(text) && candidate !== "irrelevant") {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "純粋な仮定や願望であり、現在のreset実施意思・予告ではないため無関係として扱います。",
+      reasonCode: "pure_hypothetical",
+      suppressTeaserStrength: true,
+    };
+  }
+
+  if (
+    EXPLICIT_RESET_NEGATION_PATTERN.test(normalizedClassificationText(text)) &&
+    !hasCurrentResetExecution(text) &&
+    candidate !== "irrelevant"
+  ) {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "resetの否定または取り消しを示しているため、現在のresetシグナルにはしません。",
+      reasonCode: "explicit_negation",
+      suppressTeaserStrength: true,
+    };
+  }
+
+  if (hasCurrentResetExecution(text)) {
+    if (candidate !== "reset_executed") {
+      return {
+        signalType: "reset_executed",
+        reasonJa: "現在のreset実施を示す表現を優先します。",
+        reasonCode: "current_execution",
+        suppressTeaserStrength: true,
+      };
+    }
+    return {
+      signalType: candidate,
+      reasonJa: null,
+      reasonCode: "current_execution",
+      suppressTeaserStrength: false,
+    };
+  }
+
+  const normalized = normalizedClassificationText(text);
+  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized);
+  if (hasHistoricalReset && candidate !== "irrelevant") {
+    const hasFutureEvent = FUTURE_RESET_PATTERN.test(normalized);
+    const isCancelled = CANCELLATION_PATTERN.test(normalized);
+    if (hasFutureEvent && !isCancelled && candidate === "reset_executed") {
+      return {
+        signalType: "official_notice",
+        reasonJa: "過去のresetではなく、後続の未来予告を現在のシグナルとして扱います。",
+        reasonCode: "historical_then_future",
+        suppressTeaserStrength: false,
+      };
+    }
+    if (!hasFutureEvent || isCancelled) {
+      return {
+        signalType: "irrelevant",
+        reasonJa: "過去または取り消されたresetの回顧であり、現在の実施ではないため無関係として扱います。",
+        reasonCode: "historical_reset",
+        suppressTeaserStrength: true,
+      };
+    }
+  }
+
+  return {
+    signalType: candidate,
+    reasonJa: null,
+    reasonCode: null,
+    suppressTeaserStrength: false,
+  };
+}
+
+function applyRuleSafetyDecision(text: string, result: ClassificationResult): ClassificationResult {
+  const decision = getTiboClassificationSafetyDecision(text, result.signalType);
+  if (decision.signalType === result.signalType && !decision.reasonJa) return result;
+  return {
+    ...result,
+    signalType: decision.signalType,
+    reason: decision.reasonJa ?? result.reason,
+  };
+}
+
 /**
  * Tibo氏のポストテキストを分類・解析し、シグナル種別・信頼度スコアを算出する
  * Supabase実データ分析に基づく高精度ルールエンジン
@@ -56,13 +229,13 @@ export function classifyTiboTweet(
 
   for (const pattern of negativeOrPastPatterns) {
     if (normalized.includes(pattern)) {
-      return {
+      return applyRuleSafetyDecision(text, {
         signalType: "irrelevant",
         confidence: 0.1,
         reason: `Matched negative, past, or retrospective pattern: "${pattern}"`,
         isReply,
         isQuote,
-      };
+      });
     }
   }
 
@@ -88,13 +261,13 @@ export function classifyTiboTweet(
 
   for (const pattern of executedPatterns) {
     if (normalized.includes(pattern)) {
-      return {
+      return applyRuleSafetyDecision(text, {
         signalType: "reset_executed",
         confidence: 0.98,
         reason: `Matched immediate reset execution pattern: "${pattern}"`,
         isReply,
         isQuote,
-      };
+      });
     }
   }
 
@@ -114,13 +287,13 @@ export function classifyTiboTweet(
 
   for (const pattern of noticePatterns) {
     if (normalized.includes(pattern)) {
-      return {
+      return applyRuleSafetyDecision(text, {
         signalType: "official_notice",
         confidence: 0.96,
         reason: `Matched official notice pattern: "${pattern}"`,
         isReply,
         isQuote,
-      };
+      });
     }
   }
 
@@ -156,22 +329,22 @@ export function classifyTiboTweet(
     const hasFutureIndicator = futureIndicators.some((ind) => normalized.includes(ind));
 
     if (hasFutureIndicator) {
-      return {
+      return applyRuleSafetyDecision(text, {
         signalType: "teaser",
         confidence: 0.85,
         reason: `Matched teaser keyword "${matchedBase}" with future indicator`,
         isReply,
         isQuote,
-      };
+      });
     }
   }
 
   // 5. デフォルト (irrelevant)
-  return {
+  return applyRuleSafetyDecision(text, {
     signalType: "irrelevant",
     confidence: 0.2,
     reason: "No reset notice or execution patterns matched.",
     isReply,
     isQuote,
-  };
+  });
 }

@@ -5,6 +5,7 @@ import {
   type ClassificationSignalType,
 } from "../lib/radar/classification";
 import {
+  applyTiboClassificationSafetyGuard,
   buildGeminiPrompt,
   type GeminiClassificationOutput,
 } from "../lib/radar/geminiClassification";
@@ -266,7 +267,9 @@ export function runTiboScenario(scenario: TiboScenario, now = getScenarioNow(sce
     isReply: scenario.isReply,
     isQuote: scenario.isQuote,
   });
-  const geminiResult = scenario.pipeline ? buildFixedGeminiOutput(scenario) : null;
+  const geminiResult = scenario.pipeline
+    ? applyTiboClassificationSafetyGuard(scenario.tweetText, buildFixedGeminiOutput(scenario))
+    : null;
   const selected = selectTiboClassification(scenario.pipeline ? "primary" : "off", ruleResult, geminiResult);
   const semantics = geminiResult ? parseTiboTemporalSemantics(geminiResult, scenario.tweetText) : null;
   const temporalResolution = selected.signalType === "official_notice" && semantics

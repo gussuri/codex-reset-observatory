@@ -1,5 +1,9 @@
 import https from "node:https";
 import {
+  getTiboClassificationSafetyDecision,
+  type ClassificationSignalType,
+} from "./classification";
+import {
   parseTeaserStrengthAssessment,
   type TeaserStrength,
 } from "./teaserStrength";
@@ -81,6 +85,33 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
 4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), feature releases, or ambiguous chatter.
    Examples: "I reset everyone yesterday" (historical -> irrelevant), "One day we created the reset button and the rest is history" (historical memory -> irrelevant), "No reset tonight" (negative -> irrelevant).
 
+Domain scope is essential: a reset-related category is valid only when the post refers to
+Codex/ChatGPT Work usage limits, quotas, allowances, or an unmistakable Tibo usage-limit
+reset context. A reset of a cache, server, benchmark, model, conversation, sleep schedule,
+laptop, database, UI, app, or test environment is unrelated unless the same post explicitly
+connects it to usage limits or quota recovery. The word "reset" by itself is never enough.
+
+Do not classify a pure hypothetical, wish, counterfactual, or thought experiment as "teaser".
+Examples that remain "irrelevant": "What if I reset everyone?", "Would be nice to reset everyone",
+"Imagine if everyone got a reset", "I wish I could reset limits", and "Could use a reset".
+"teaser" requires Tibo's present intent, discretion, willingness, or a conditional possibility
+of performing the usage-limit reset. Distinguish that from a purely imagined scenario; do not
+apply a keyword-only rule to words such as "would" or "could".
+Do not over-apply this rule to a present-tense personal inclination or near-future suggestion:
+"I am feeling like a limit reset" and "Maybe it is time to press the reset button" are existing
+teaser-style signals in the Tibo usage-limit context, not pure hypothetical thought experiments.
+An explicit first-person conditional such as "Only if the launch goes badly would I consider
+resetting limits" is also a valid teaser because it states Tibo's actual discretion; do not
+confuse it with an abstract wish or an imagined world.
+
+When one post mentions multiple reset events, select the primary event by time meaning:
+- An explicit current/completed event ("now", "done", "landed", "enjoy", "just reset", "already reset")
+  takes priority over a secondary future event in the same post, so "One reset now, another later"
+  is "reset_executed".
+- A historical-only event does not become a new execution. If it is followed by an actionable future
+  notice, classify the current signal as "official_notice"; if there is no actionable future event,
+  classify it as "irrelevant".
+
 Reply status alone is never evidence for teaser or official_notice. A short reply without visible context, such as "done", "yes", or "maybe :) ", should usually be irrelevant with low confidence. Use visible parent context only to clarify what the reply means.
 
 Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
@@ -155,6 +186,29 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
     "Use quoted context only to interpret what Tibo may be responding to; never treat it as Tibo's own assertion.",
     "Reply status alone must not raise teaser or official_notice; classify a contextless short reply conservatively.",
   ].join("\n");
+}
+
+export function applyTiboClassificationSafetyGuard(
+  text: string,
+  result: GeminiClassificationOutput,
+): GeminiClassificationOutput {
+  if (result.status !== "success" || !result.signalType) return result;
+
+  const decision = getTiboClassificationSafetyDecision(
+    text,
+    result.signalType as ClassificationSignalType,
+  );
+  if (decision.signalType === result.signalType && !decision.suppressTeaserStrength) return result;
+
+  return {
+    ...result,
+    signalType: decision.signalType,
+    reasonJa: decision.reasonJa ?? result.reasonJa,
+    teaserStrength: decision.suppressTeaserStrength ? "none" : result.teaserStrength,
+    teaserStrengthConfidence: decision.suppressTeaserStrength ? null : result.teaserStrengthConfidence,
+    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength ? null : result.teaserStrengthEvidenceQuote,
+    teaserStrengthReasonJa: decision.suppressTeaserStrength ? decision.reasonJa : result.teaserStrengthReasonJa,
+  };
 }
 
 /**
@@ -326,7 +380,7 @@ export async function classifyWithGemini(
     const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
     const temporalSemantics = parseTiboTemporalSemantics(parsed, input.text);
 
-    return {
+    return applyTiboClassificationSafetyGuard(input.text, {
       signalType: parsed.signalType,
       confidence: parsed.confidence,
       temporalDirection: parsed.temporalDirection,
@@ -351,7 +405,7 @@ export async function classifyWithGemini(
       model,
       status: "success",
       classifiedAt: nowIso,
-    };
+    });
   } catch (err: any) {
     const msg = err?.message || "";
     if (msg === "TIMEOUT") {

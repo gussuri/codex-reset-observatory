@@ -403,7 +403,7 @@ function renderReport(model: string, rows: ScenarioEvaluationRow[], metrics: Sce
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.has("help") || !args.has("live")) {
-    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- --live [--resume] [--limit N] [--output-dir DIR]");
+    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- --live [--resume] [--limit N] [--ids id1,id2] [--output-dir DIR]");
     console.log("Without --live this script performs no API calls.");
     return;
   }
@@ -420,13 +420,25 @@ async function main() {
   const outputDir = path.resolve(args.get("output-dir") ?? "scratch/tibo-scenario-evaluation");
   fs.mkdirSync(outputDir, { recursive: true });
   const limit = args.has("limit") ? Math.max(1, Number(args.get("limit"))) : fixture.scenarios.length;
+  const requestedIds = args.get("ids")
+    ?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const selectedScenarios = requestedIds?.length
+    ? fixture.scenarios.filter((scenario) => requestedIds.includes(scenario.id))
+    : fixture.scenarios.slice(0, limit);
+  if (requestedIds?.length && selectedScenarios.length !== requestedIds.length) {
+    const selectedIds = new Set(selectedScenarios.map((scenario) => scenario.id));
+    const missingIds = requestedIds.filter((id) => !selectedIds.has(id));
+    throw new Error(`Unknown scenario id(s): ${missingIds.join(", ")}`);
+  }
   const checkpoint = args.has("resume") ? readCheckpoint(outputDir) : null;
   const rowsById = new Map<string, ScenarioEvaluationRow>(
     (checkpoint?.rows ?? []).map((row) => [row.id, row]),
   );
   let stoppedAfterRateLimit = checkpoint?.stoppedAfterRateLimit ?? false;
 
-  for (const scenario of fixture.scenarios.slice(0, limit)) {
+  for (const scenario of selectedScenarios) {
     const previous = rowsById.get(scenario.id);
     if (previous?.status === "success") continue;
 
@@ -447,29 +459,35 @@ async function main() {
     }
   }
 
-  const rows = fixture.scenarios
+  const rows = selectedScenarios
     .map((scenario) => rowsById.get(scenario.id))
     .filter((row): row is ScenarioEvaluationRow => Boolean(row));
-  const complete = rows.length === fixture.scenarios.length && rows.every((row) => row.status === "success");
+  const complete = rows.length === selectedScenarios.length && rows.every((row) => row.status === "success");
   const metrics = calculateScenarioMetrics(rows);
+  const resumeCommand = [
+    "corepack pnpm run eval:tibo-scenarios -- --live --resume",
+    requestedIds?.length ? `--ids ${requestedIds.join(",")}` : "",
+    `--output-dir ${outputDir}`,
+  ].filter(Boolean).join(" ");
   const report = {
     schemaVersion: 1,
     status: complete ? "complete" : "incomplete",
     complete,
     model,
     fixtureScenarioCount: fixture.scenarios.length,
+    selectedScenarioCount: selectedScenarios.length,
     evaluatedScenarioCount: rows.length,
     existingHistoricalEvaluation23Unchanged: true,
     productionWrites: false,
     stoppedAfterRateLimit,
     metrics,
     rows,
-    resumeCommand: "corepack pnpm run eval:tibo-scenarios -- --live --resume",
+    resumeCommand,
   };
   fs.writeFileSync(path.join(outputDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
   fs.writeFileSync(path.join(outputDir, "report.md"), `${renderReport(model, rows, metrics, complete, stoppedAfterRateLimit)}\n`, "utf8");
   console.log(`Wrote ${path.join(outputDir, "report.json")}`);
-  console.log(`Status: ${report.status}; valid predictions: ${metrics.validPredictions}/${fixture.scenarios.length}`);
+  console.log(`Status: ${report.status}; valid predictions: ${metrics.validPredictions}/${selectedScenarios.length}`);
 }
 
 if (isMainModule()) {
