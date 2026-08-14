@@ -311,6 +311,34 @@ test("uses minute precision immediately after a reset", () => {
     }) ?? "",
     /Less than a minute has passed/,
   );
+  const oneMinuteReason = reasonFor({
+    locale: "en",
+    now: new Date("2026-08-03T23:31:00.000Z"),
+    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
+    probability24h: 0.1,
+    probability48h: 0.1,
+  }) ?? "";
+  assert.match(oneMinuteReason, /It has only been 1 minute since the last reset/);
+  assert.doesNotMatch(oneMinuteReason, /1 minute have passed/);
+
+  const thirtyMinuteReason = reasonFor({
+    locale: "en",
+    now: new Date("2026-08-04T00:00:00.000Z"),
+    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
+    probability24h: 0.1,
+    probability48h: 0.1,
+  }) ?? "";
+  assert.match(thirtyMinuteReason, /It has only been 30 minutes since the last reset/);
+
+  const oneHourReason = reasonFor({
+    locale: "en",
+    now: new Date("2026-08-04T00:30:00.000Z"),
+    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
+    probability24h: 0.1,
+    probability48h: 0.1,
+  }) ?? "";
+  assert.match(oneHourReason, /It has only been 1 hour since the last reset/);
+  assert.doesNotMatch(oneHourReason, /1 hour have passed/);
 });
 
 test("uses the displayed elapsed duration for high and compound-duration explanations", () => {

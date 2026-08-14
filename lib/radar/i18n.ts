@@ -141,7 +141,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   outlookLowCooldown: {
     ja: "前回のリセットから{elapsed}しか経過しておらず、過去の発生傾向でもリセット直後は起きにくいため、現在の見込みは低めです。",
-    en: "Only {elapsed} have passed since the last reset, and resets have historically been less common immediately after a reset, so the current outlook is low.",
+    en: "It has only been {elapsed} since the last reset, and resets have historically been less common immediately after a reset, so the current outlook is low.",
     zh: "距离上次重置仅过去{elapsed}，根据过去的发生趋势，重置后不久通常较少发生重置，因此目前的可能性较低。",
   },
   outlookLowCooldownSubminute: {
