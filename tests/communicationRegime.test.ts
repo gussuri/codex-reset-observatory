@@ -58,6 +58,7 @@ test("formal notice has priority over teaser and uses observed provenance", () =
 
   assert.equal(result.primaryType, "formal_notice");
   assert.equal(result.provenance, "observed_signal");
+  assert.equal(result.classificationUsable, true);
   assert.deepEqual(result.observedSignalIds, ["notice-1", "teaser-1"]);
   assert.equal(result.legacyAgreement, true);
 });
@@ -89,6 +90,19 @@ test("insufficient observed coverage falls back to the legacy history label", ()
   assert.equal(result.provenance, "legacy_history");
   assert.equal(result.legacySignalAt, "2026-08-01T12:00:00.000Z");
   assert.equal(result.signalToExecutionHours, 12);
+  assert.equal(result.classificationUsable, true);
+});
+
+test("unknown coverage without an observed or legacy label is not counted as silent evidence", () => {
+  const result = classifyCommunicationEvent(
+    event({ legacyNoticeType: null }),
+    [],
+    { previousRandomResetAt: previousResetAt, coverage: "unknown" },
+  );
+
+  assert.equal(result.primaryType, "silent");
+  assert.equal(result.provenance, "legacy_history");
+  assert.equal(result.classificationUsable, false);
 });
 
 test("observed signal remains primary and audits disagreement with legacy history", () => {
@@ -126,6 +140,7 @@ test("rejected, reply, and future signals are excluded from point-in-time classi
 
 test("legacy label normalization is explicit", () => {
   assert.equal(normalizeLegacyCommunicationType("公式予告あり"), "formal_notice");
+  assert.equal(normalizeLegacyCommunicationType("告知投稿あり"), "formal_notice");
   assert.equal(normalizeLegacyCommunicationType("匂わせ投稿あり"), "teaser");
   assert.equal(normalizeLegacyCommunicationType("なし"), "silent");
   assert.equal(normalizeLegacyCommunicationType("unknown"), null);

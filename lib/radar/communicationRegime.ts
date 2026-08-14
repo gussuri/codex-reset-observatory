@@ -32,6 +32,8 @@ export type CommunicationClassification = {
   primaryType: CommunicationType;
   provenance: CommunicationProvenance;
   coverage: CommunicationCoverage;
+  /** False means the three-way label is only a placeholder, not evidence of silence. */
+  classificationUsable: boolean;
   observedType: CommunicationType | null;
   legacyType: CommunicationType | null;
   observedSignalIds: string[];
@@ -86,7 +88,7 @@ export function normalizeLegacyCommunicationType(
 ): CommunicationType | null {
   const normalized = noticeType?.trim().toLowerCase() ?? "";
   if (!normalized) return null;
-  if (/(公式予告|official\s*notice|formal)/i.test(normalized)) return "formal_notice";
+  if (/(公式予告|告知(?:投稿)?|official\s*notice|formal)/i.test(normalized)) return "formal_notice";
   if (/(匂わせ|teaser|hint)/i.test(normalized)) return "teaser";
   if (/(^なし$|none|silent|無言)/i.test(normalized)) return "silent";
   return null;
@@ -189,11 +191,13 @@ export function classifyCommunicationEvent(
   const signalToExecutionHours = signalTime === null
     ? null
     : Math.max(0, (completedTime - signalTime) / 3_600_000);
+  const classificationUsable = observedType !== null || legacyType !== null || options.coverage === "confirmed";
 
   return {
     primaryType,
     provenance: observedType === null ? "legacy_history" : "observed_signal",
     coverage: options.coverage,
+    classificationUsable,
     observedType,
     legacyType,
     observedSignalIds: observedSignals.map((signal) => signal.tweetId),
