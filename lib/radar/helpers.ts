@@ -43,6 +43,30 @@ export function formatElapsedResetDuration(
   return hours === 0 ? `${days}日` : `${days}日${hours}時間`;
 }
 
+export function formatElapsedResetDurationPrecise(
+  elapsedMs: number,
+  locale: Locale = "ja",
+) {
+  const totalMinutes =
+    Number.isFinite(elapsedMs) && elapsedMs >= 0
+      ? Math.floor(elapsedMs / (60 * 1000))
+      : 0;
+
+  if (totalMinutes < 1) {
+    return locale === "en" ? "less than 1 minute" : locale === "zh" ? "不到1分钟" : "1分未満";
+  }
+
+  if (totalMinutes < 60) {
+    return locale === "en"
+      ? `${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"}`
+      : locale === "zh"
+        ? `${totalMinutes}分钟`
+        : `${totalMinutes}分`;
+  }
+
+  return formatElapsedResetDuration(elapsedMs, locale);
+}
+
 export function probabilityToPercent(value: number | undefined, locale: Locale = "ja") {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";

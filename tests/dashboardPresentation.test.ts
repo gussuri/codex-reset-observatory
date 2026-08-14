@@ -463,7 +463,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.match(html, /Planned reset/);
   assert.match(html, /Tibo(?:&#x27;|')s notice date and time are shown in your local time\./);
   assert.doesNotMatch(html, /An official notice says another reset is planned for Monday\. Please check the latest status\./);
-  assert.match(html, /An official reset notice is active, making a reset more likely\./);
+  assert.match(html, /An official reset notice has been confirmed\. Considering the notice, the outlook for a reset is higher\./);
   assert.doesNotMatch(html, /time not specified|Pacific Time|In the viewer(?:&#x27;|')s local time/);
   assert.equal((html.match(/I(?:&#x27;|')ll do another performative reset on Monday/g) ?? []).length, 1);
   assert.doesNotMatch(html, />[^<]*2026-08-10T07:00:00\.000Z/);
@@ -476,7 +476,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
     }),
   );
   assert.doesNotMatch(jaHtml, /月曜日に再度リセットを行う予定との予告があります。最新状況をご確認ください。/);
-  assert.match(jaHtml, /公式のリセット予告があり、リセットの見込みが高まっています。/);
+  assert.match(jaHtml, /公式のリセット予告が確認されています。予告内容を踏まえ、リセットの見込みが高まっています。/);
   assert.match(jaHtml, /リセット予定/);
   assert.match(jaHtml, /Tibo氏の予告日時をお使いの地域の時間に変換して表示しています/);
   assert.doesNotMatch(jaHtml, /Pacific Time|閲覧者の現地時刻換算|時刻未定/);
@@ -491,7 +491,7 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   );
   assert.doesNotMatch(zhHtml, /有官方预告称计划在星期一再次重置。请确认最新状态。/);
   assert.match(zhHtml, /重置安排/);
-  assert.match(zhHtml, /有官方重置预告，重置的可能性正在上升。/);
+  assert.match(zhHtml, /已确认有官方重置预告。结合预告内容，重置的可能性有所上升。/);
   assert.match(zhHtml, /Tibo 的预告日期和时间会转换为您所在地区的本地时间显示。/);
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
@@ -713,7 +713,7 @@ test("observation status row reflects an active Codex incident without changing 
   );
 
   assert.match(html, /Codex incidents[\s\S]*Active/);
-  assert.match(html, /A Codex incident is active, making a reset more likely/);
+  assert.match(html, /A Codex-related incident has been confirmed\. We are watching for a possible reset connected with recovery work\./);
 });
 
 test("observation status row reflects an active reset teaser from the latest Tibo activity", () => {

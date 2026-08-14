@@ -127,15 +127,18 @@ function getIncidentStatusFromReason(
     ? [
         "A Codex incident is active",
         "A Codex-related incident is currently active",
+        "A Codex-related incident has been confirmed",
       ]
     : locale === "zh"
       ? [
           "Codex正在发生故障",
           "当前有 Codex 相关故障正在发生",
+          "已确认有 Codex 相关故障",
         ]
       : [
           "Codexで障害が起きており",
           "現在、Codex関連の障害が発生しており",
+          "Codex関連の障害が確認されています",
         ];
 
   // The display summary already uses the evaluated incident state. Reuse its

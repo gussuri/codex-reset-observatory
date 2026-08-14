@@ -21,7 +21,10 @@ import {
   getDateTime,
   probabilityToPercent,
   getExpectationLabel,
+  getExpectationKey,
   formatElapsedResetDuration,
+  formatElapsedResetDurationPrecise,
+  type ExpectationKey,
 } from "./helpers";
 import {
   combineResetHistory,
@@ -1357,6 +1360,184 @@ type DisplayProbabilityModelContext = {
   shadow?: unknown;
 };
 
+type DisplayHazardBin = {
+  startHour: number;
+  endHour: number | null;
+  posteriorLambdaPerHour: number;
+};
+
+type DisplayElapsedDiagnostics = {
+  bins: DisplayHazardBin[];
+  globalLambdaPerHour: number;
+};
+
+type DisplayHazardReason =
+  | "cooldown"
+  | "low"
+  | "approaching"
+  | "overlap"
+  | "very_high"
+  | null;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readDisplayHazardBins(value: unknown): DisplayHazardBin[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      const record = asRecord(item);
+      const startHour = asFiniteNumber(record?.startHour);
+      const endHour = record?.endHour === null
+        ? null
+        : asFiniteNumber(record?.endHour);
+      const posteriorLambdaPerHour = asFiniteNumber(record?.posteriorLambdaPerHour);
+
+      if (
+        startHour === null ||
+        endHour === undefined ||
+        posteriorLambdaPerHour === null ||
+        posteriorLambdaPerHour < 0 ||
+        (endHour !== null && endHour <= startHour)
+      ) {
+        return null;
+      }
+
+      return { startHour, endHour, posteriorLambdaPerHour };
+    })
+    .filter((bin): bin is DisplayHazardBin => bin !== null)
+    .sort((left, right) => left.startHour - right.startHour);
+}
+
+function getPublishedElapsedDiagnostics(
+  publishedCalculation?: DisplayProbabilityModelContext,
+): DisplayElapsedDiagnostics | null {
+  if (publishedCalculation?.source !== "shadow") return null;
+
+  const shadow = asRecord(publishedCalculation.shadow);
+  const regimeElapsed = asRecord(shadow?.regimeElapsed);
+  if (regimeElapsed?.mode !== "elapsed-only") return null;
+
+  const hazard = asRecord(shadow?.hazard);
+  const bins = readDisplayHazardBins(hazard?.bins ?? regimeElapsed?.bins);
+  const globalLambdaPerHour = asFiniteNumber(hazard?.globalLambdaPerHour);
+
+  if (bins.length === 0 || globalLambdaPerHour === null || globalLambdaPerHour <= 0) {
+    return null;
+  }
+
+  return { bins, globalLambdaPerHour };
+}
+
+function getDisplayHazardRateAtAge(
+  bins: DisplayHazardBin[],
+  ageHours: number,
+) {
+  if (bins.length === 0) return null;
+
+  const normalizedAge = Math.max(0, ageHours);
+  let index = bins.findIndex(
+    (bin) => normalizedAge >= bin.startHour &&
+      (bin.endHour === null || normalizedAge < bin.endHour),
+  );
+  if (index < 0) index = normalizedAge < bins[0].startHour ? 0 : bins.length - 1;
+
+  const current = bins[index];
+  const next = bins[index + 1];
+  if (!next || current.endHour === null || current.endHour <= current.startHour) {
+    return current.posteriorLambdaPerHour;
+  }
+
+  const progress = Math.min(
+    1,
+    Math.max(0, (normalizedAge - current.startHour) / (current.endHour - current.startHour)),
+  );
+  return current.posteriorLambdaPerHour +
+    (next.posteriorLambdaPerHour - current.posteriorLambdaPerHour) * progress;
+}
+
+function getAverageDisplayHazard(
+  diagnostics: DisplayElapsedDiagnostics,
+  startHour: number,
+  endHour: number,
+) {
+  if (endHour <= startHour) return null;
+
+  const sampleCount = Math.max(4, Math.ceil((endHour - startHour) / 6));
+  let total = 0;
+  for (let index = 0; index < sampleCount; index += 1) {
+    const sampleAge = startHour + ((index + 0.5) / sampleCount) * (endHour - startHour);
+    const rate = getDisplayHazardRateAtAge(diagnostics.bins, sampleAge);
+    if (rate === null) return null;
+    total += rate;
+  }
+
+  return total / sampleCount;
+}
+
+function getDisplayHazardReason(
+  diagnostics: DisplayElapsedDiagnostics | null,
+  elapsedHours: number,
+  expectationKey: Exclude<ExpectationKey, "unknown">,
+): DisplayHazardReason {
+  if (!diagnostics) return null;
+
+  const currentRate = getDisplayHazardRateAtAge(diagnostics.bins, elapsedHours);
+  const futureRate = getAverageDisplayHazard(
+    diagnostics,
+    elapsedHours + 24,
+    elapsedHours + 48,
+  );
+  if (currentRate === null || futureRate === null) return null;
+
+  const currentRatio = currentRate / diagnostics.globalLambdaPerHour;
+  const futureRatio = futureRate / diagnostics.globalLambdaPerHour;
+
+  if (expectationKey === "low" && elapsedHours < 24 && currentRatio < 0.9) {
+    return "cooldown";
+  }
+  if (expectationKey === "low" && futureRatio <= 0.85) {
+    return "low";
+  }
+  if (expectationKey === "very_high" && futureRatio >= 1.5) {
+    return "very_high";
+  }
+  if (expectationKey === "high" && futureRatio >= 1.1) {
+    return "overlap";
+  }
+  if (expectationKey === "medium" && futureRatio >= 1.1) {
+    return "approaching";
+  }
+
+  return null;
+}
+
+function replaceElapsedPlaceholder(text: string, elapsed: string) {
+  return text.replace("{elapsed}", elapsed);
+}
+
+function getGenericOutlookKey(
+  expectationKey: Exclude<ExpectationKey, "unknown">,
+  hasElapsed: boolean,
+) {
+  const suffix = expectationKey === "very_high"
+    ? "VeryHigh"
+    : expectationKey === "high"
+      ? "High"
+      : expectationKey === "medium"
+        ? "Medium"
+        : "Low";
+  return `outlook${hasElapsed ? "Generic" : "NoElapsed"}${suffix}`;
+}
+
 export function getDisplayProbabilityReason(
   data: RadarData | null,
   probability24h: number | undefined,
@@ -1406,49 +1587,58 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookUsageAnomaly", locale);
   }
 
-  const shadow = publishedCalculation?.source === "shadow"
-    ? publishedCalculation.shadow
-    : null;
-  const regimeElapsed = shadow && typeof shadow === "object" && "regimeElapsed" in shadow
-    ? (shadow as {
-        regimeElapsed?: {
-          elapsedHours?: number;
-          mode?: "full" | "elapsed-only" | "regime-only";
-          effectiveRegimeMultiplier?: number;
-          regime?: {
-            regimeMultiplier?: number;
-          } | null;
-        } | null;
-      }).regimeElapsed
-    : null;
-  const mode = regimeElapsed?.mode;
-  const regimeMultiplier = regimeElapsed?.effectiveRegimeMultiplier ?? (
-    mode === "elapsed-only" ? 1 : regimeElapsed?.regime?.regimeMultiplier
-  );
-  const elapsedHours = regimeElapsed?.elapsedHours;
-  if (
-    typeof regimeMultiplier !== "number" ||
-    !Number.isFinite(regimeMultiplier) ||
-    typeof elapsedHours !== "number" ||
-    !Number.isFinite(elapsedHours)
-  ) {
-    return translateUI("outlookFallbackNoMajorChange", locale);
+  const expectationKey = getExpectationKey({ p24h: probability24h, p48h: probability48h });
+  if (expectationKey === "unknown") {
+    return translateUI("outlookUnavailable", locale);
   }
 
-  const regimeKey = mode === "elapsed-only"
-    ? "Normal"
-    : regimeMultiplier < 0.9
-      ? "Low"
-      : regimeMultiplier > 1.2
-        ? "High"
-        : "Normal";
-  const elapsedKey = elapsedHours < 24
-    ? "Under24h"
-    : elapsedHours < 72
-      ? "24To72h"
-      : "72hPlus";
+  const latestDisplayResetAt = getLastDisplayResetAt(data, now);
+  const elapsedMs = latestDisplayResetAt
+    ? Math.max(0, now.getTime() - latestDisplayResetAt.getTime())
+    : null;
+  const hasElapsed = elapsedMs !== null;
+  const elapsed = hasElapsed
+    ? formatElapsedResetDurationPrecise(elapsedMs, locale)
+    : null;
 
-  return translateUI(`outlook${regimeKey}${elapsedKey}`, locale);
+  if (!hasElapsed || !elapsed) {
+    return translateUI(getGenericOutlookKey(expectationKey, false), locale);
+  }
+
+  const elapsedHours = elapsedMs / (60 * 60 * 1000);
+  const hazardReason = getDisplayHazardReason(
+    getPublishedElapsedDiagnostics(publishedCalculation),
+    elapsedHours,
+    expectationKey,
+  );
+
+  if (hazardReason === "cooldown") {
+    const key = elapsedMs < 60 * 1000
+      ? "outlookLowCooldownSubminute"
+      : "outlookLowCooldown";
+    return replaceElapsedPlaceholder(translateUI(key, locale), elapsed);
+  }
+
+  if (hazardReason === "low") {
+    return replaceElapsedPlaceholder(translateUI("outlookLowHistorical", locale), elapsed);
+  }
+
+  if (hazardReason === "approaching" && expectationKey === "medium") {
+    return replaceElapsedPlaceholder(translateUI("outlookModerateApproaching", locale), elapsed);
+  }
+
+  if (hazardReason === "overlap" && expectationKey === "high") {
+    return replaceElapsedPlaceholder(translateUI("outlookHighOverlap", locale), elapsed);
+  }
+
+  if (hazardReason === "very_high" && expectationKey === "very_high") {
+    return replaceElapsedPlaceholder(translateUI("outlookVeryHighOverlap", locale), elapsed);
+  }
+
+  return replaceElapsedPlaceholder(
+    translateUI(getGenericOutlookKey(expectationKey, true), locale),
+    elapsed,
+  );
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {

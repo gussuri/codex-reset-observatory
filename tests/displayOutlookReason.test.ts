@@ -13,20 +13,52 @@ import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedPro
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
+function hazardBins(rates: number[]) {
+  const boundaries = [0, 24, 48, null] as const;
+  return rates.map((posteriorLambdaPerHour, index) => ({
+    startHour: boundaries[index],
+    endHour: boundaries[index + 1],
+    posteriorLambdaPerHour,
+  }));
+}
+
+function regularResetAt(completedAt: string): RegularResetEventRow {
+  const endAt = new Date(new Date(completedAt).getTime() + 15 * 60 * 1000).toISOString();
+  return {
+    schedule_key: `test:${completedAt}`,
+    window_start_at: completedAt,
+    window_end_at: endAt,
+    representative_at: completedAt,
+    scheduled_at: completedAt,
+    completed_at: completedAt,
+    cycle_type: "定期リセット",
+    reset_method: "強制リセット",
+    scope: "任意リセット未使用アカウント",
+    record_kind: "regular_completed",
+    status: "completed",
+  };
+}
+
 function modelContext(
   regimeMultiplier: number,
   elapsedHours: number,
   source: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback" = "shadow",
   mode?: "full" | "elapsed-only" | "regime-only",
+  bins = hazardBins([0.0002, 0.0015, 0.0015]),
 ) {
   return {
     source,
     shadow: {
+      hazard: {
+        globalLambdaPerHour: 0.001,
+        bins,
+      },
       regimeElapsed: {
         elapsedHours,
-        mode,
+        mode: mode ?? "elapsed-only",
         effectiveRegimeMultiplier: mode === "elapsed-only" ? 1 : regimeMultiplier,
         regime: { regimeMultiplier },
+        bins,
       },
     },
   } as const;
@@ -56,6 +88,9 @@ function reasonFor({
   elapsedHours = 48,
   source = "shadow" as const,
   mode,
+  bins,
+  probability24h = 0.2,
+  probability48h = 0.35,
   now = NOW,
   regularResetEvents = [],
 }: {
@@ -68,6 +103,9 @@ function reasonFor({
   elapsedHours?: number;
   source?: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback";
   mode?: "full" | "elapsed-only" | "regime-only";
+  bins?: ReturnType<typeof hazardBins>;
+  probability24h?: number;
+  probability48h?: number;
   now?: Date;
   regularResetEvents?: RegularResetEventRow[];
 } = {}) {
@@ -85,13 +123,13 @@ function reasonFor({
 
   return getDisplayProbabilityReason(
     data,
-    0.2,
-    0.35,
+    probability24h,
+    probability48h,
     locale,
     evaluation,
     notice,
     now,
-    modelContext(multiplier, elapsedHours, source, mode),
+    modelContext(multiplier, elapsedHours, source, mode, bins),
   );
 }
 
@@ -111,60 +149,61 @@ const officialNotice: ActiveOfficialNotice = {
 test("prioritizes official notice, strong teaser, incident, weak teaser, and anomaly", () => {
   assert.equal(
     reasonFor({ notice: officialNotice, signals: [signal("strong")] }),
-    "公式のリセット予告があり、リセットの見込みが高まっています。",
+    "公式のリセット予告が確認されています。予告内容を踏まえ、リセットの見込みが高まっています。",
   );
-  assert.equal(reasonFor({ signals: [signal("strong")] }), "リセットを匂わせる投稿があり、見込みが上がっています。");
-  assert.equal(reasonFor({ statusIncidents: { activeStatusIncidentCount: 1 } }), "Codexで障害が起きており、リセットの可能性が上がっています。");
-  assert.equal(reasonFor({ signals: [signal("weak")] }), "リセットを匂わせる投稿があり、見込みが少し上がっています。");
-  assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常があり、リセットの可能性が少し上がっています。");
+  assert.equal(reasonFor({ signals: [signal("strong")] }), "リセットを示唆する投稿が確認されています。通常時よりリセットの見込みが高まっています。");
+  assert.equal(reasonFor({ statusIncidents: { activeStatusIncidentCount: 1 } }), "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。");
+  assert.equal(reasonFor({ signals: [signal("weak")] }), "リセットを示唆する投稿が確認されています。リセットの見込みがやや高まっています。");
+  assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。");
 });
 
 test("uses a short official-notice outlook in English and Chinese", () => {
   assert.equal(
     reasonFor({ locale: "en", notice: officialNotice }),
-    "An official reset notice is active, making a reset more likely.",
+    "An official reset notice has been confirmed. Considering the notice, the outlook for a reset is higher.",
   );
   assert.equal(
     reasonFor({ locale: "zh", notice: officialNotice }),
-    "有官方重置预告，重置的可能性正在上升。",
+    "已确认有官方重置预告。结合预告内容，重置的可能性有所上升。",
   );
 });
 
 test("uses clear English and Chinese wording for teaser strength", () => {
   assert.equal(
     reasonFor({ locale: "en", signals: [signal("strong")] }),
-    "A post hints at a reset, making a reset more likely.",
+    "A post suggesting a reset has been confirmed. The outlook is higher than usual.",
   );
   assert.equal(
     reasonFor({ locale: "en", signals: [signal("weak")] }),
-    "A post hints at a reset, making a reset slightly more likely.",
+    "A post suggesting a reset has been confirmed. The outlook is somewhat higher.",
   );
   assert.equal(
     reasonFor({ locale: "zh", signals: [signal("strong")] }),
-    "有帖子暗示可能重置，重置的可能性有所上升。",
+    "已确认有暗示重置的帖子，重置的可能性高于平时。",
   );
   assert.equal(
     reasonFor({ locale: "zh", signals: [signal("weak")] }),
-    "有帖子暗示可能重置，重置的可能性略有上升。",
+    "已确认有暗示重置的帖子，重置的可能性略有上升。",
   );
 });
 
-test("renders all nine regime and elapsed outlook buckets", () => {
-  const cases = [
-    [0.8, 12, "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。"],
-    [0.8, 48, "前回のリセットから少し時間がたっていますが、最近のリセットが少ないため、リセットの見込みは低めです。"],
-    [0.8, 96, "前回のリセットから時間はたっていますが、最近のリセットが少ないため、リセットの見込みはやや低めです。"],
-    [1, 12, "前回のリセットから時間がたっていないため、短期のリセット見込みは低めです。"],
-    [1, 48, "前回のリセットから少し時間がたっており、リセットの見込みは中程度です。"],
-    [1, 96, "前回のリセットから時間がたっているため、リセットの見込みは高まりつつあります。"],
-    [1.3, 12, "最近はリセットが多いものの、前回のリセットから時間がたっていないため、リセットの見込みは中程度です。"],
-    [1.3, 48, "最近はリセットが多く、前回のリセットからも少し時間がたっているため、リセットの見込みは高めです。"],
-    [1.3, 96, "最近はリセットが多く、前回のリセットからも時間がたっているため、リセットの見込みは高めです。"],
-  ] as const;
-
-  for (const [multiplier, elapsedHours, expected] of cases) {
-    assert.equal(reasonFor({ multiplier, elapsedHours }), expected);
-  }
+test("matches the existing expectation level in normal explanations", () => {
+  assert.match(
+    reasonFor({ probability24h: 0.1, probability48h: 0.1 }) ?? "",
+    /見込みは低めです。$/,
+  );
+  assert.match(
+    reasonFor({ probability24h: 0.3, probability48h: 0.4, elapsedHours: 20 }) ?? "",
+    /見込みは中程度です。$/,
+  );
+  assert.match(
+    reasonFor({ probability24h: 0.3, probability48h: 0.7, elapsedHours: 48 }) ?? "",
+    /見込みは高めです。$/,
+  );
+  assert.match(
+    reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96 }) ?? "",
+    /見込みは非常に高いです。$/,
+  );
 });
 
 test("does not use indirect or technical elapsed-time wording", () => {
@@ -174,51 +213,45 @@ test("does not use indirect or technical elapsed-time wording", () => {
 });
 
 test("elapsed-only publication uses the normal outlook wording despite raw regime diagnostics", () => {
-  assert.equal(
-    reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
-    "前回のリセットから少し時間がたっており、リセットの見込みは中程度です。",
+  const regularResetEvents = [regularResetAt("2026-08-03T04:00:00.000Z")];
+  assert.match(
+    reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
+    /前回のリセットから20時間が経過し、.*中程度です。$/,
   );
-  assert.equal(
-    reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
-    "Some time has passed since the last reset, and the current reset outlook is moderate.",
+  assert.match(
+    reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
+    /It has been 20 hours since the last reset.*moderate\.$/,
   );
-  assert.equal(
-    reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only" }),
-    "距离上次重置已经过了一段时间，目前的重置可能性处于中等水平。",
+  assert.match(
+    reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
+    /距离上次重置已过去20小时.*中等水平。$/,
   );
 });
 
-test("uses the same outlook buckets in English and Chinese", () => {
+test("uses the same expectation conclusion in English and Chinese", () => {
+  const regularResetEvents = [regularResetAt("2026-08-02T00:00:00.000Z")];
   assert.equal(
-    reasonFor({ locale: "en", multiplier: 1, elapsedHours: 48 }),
-    "Some time has passed since the last reset, and the current reset outlook is moderate.",
+    reasonFor({ locale: "en", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
+    "It has been 2 days since the last reset, and the next 24–48 hours approach periods when resets have historically been more likely, so the current outlook is moderate.",
   );
   assert.equal(
-    reasonFor({ locale: "zh", multiplier: 1, elapsedHours: 48 }),
-    "距离上次重置已经过了一段时间，目前的重置可能性处于中等水平。",
-  );
-  assert.equal(
-    reasonFor({ locale: "en", multiplier: 1.3, elapsedHours: 12 }),
-    "Resets have been frequent recently, but not much time has passed since the last reset, so the current reset outlook is moderate.",
-  );
-  assert.equal(
-    reasonFor({ locale: "zh", multiplier: 1.3, elapsedHours: 12 }),
-    "近期重置较多，但距离上次重置还没过多久，因此目前的重置可能性处于中等水平。",
+    reasonFor({ locale: "zh", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
+    "距离上次重置已过去2天，未来24至48小时将逐渐接近过去较容易发生重置的时段，因此目前的可能性处于中等水平。",
   );
 });
 
 test("does not use regime diagnostics when the published model falls back", () => {
   assert.equal(
     reasonFor({ source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "現在、大きな変化は確認されていません。",
+    "前回のリセットから2日20時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
   );
   assert.equal(
     reasonFor({ locale: "en", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "No major changes are currently apparent.",
+    "It has been 2 days and 20 hours since the last reset, and the current forecast puts the outlook for a reset at moderate.",
   );
   assert.equal(
     reasonFor({ locale: "zh", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "目前未发现明显变化。",
+    "距离上次重置已过去2天20小时，根据当前预测，重置的可能性处于中等水平。",
   );
 });
 
@@ -241,9 +274,67 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       signals: [signal("strong", "2026-08-08T02:00:00.000Z")],
       multiplier: 0.8,
       elapsedHours: 0.5,
+      probability24h: 0.1,
+      probability48h: 0.1,
     }),
-    "前回のリセットから時間がたっておらず、最近のリセットも少ないため、リセットの見込みは低めです。",
+    "前回のリセットから28分しか経過しておらず、過去の発生傾向でもリセット直後は起きにくいため、現在の見込みは低めです。",
   );
+});
+
+test("uses minute precision immediately after a reset", () => {
+  const regularResetEvents = [regularResetAt("2026-08-03T23:30:00.000Z")];
+  assert.match(
+    reasonFor({
+      now: NOW,
+      regularResetEvents,
+      probability24h: 0.1,
+      probability48h: 0.1,
+    }) ?? "",
+    /前回のリセットから30分しか経過しておらず/,
+  );
+  assert.match(
+    reasonFor({
+      now: new Date("2026-08-03T23:59:30.000Z"),
+      regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
+      probability24h: 0.1,
+      probability48h: 0.1,
+    }) ?? "",
+    /前回のリセットからまだ1分も経過しておらず/,
+  );
+  assert.match(
+    reasonFor({
+      locale: "en",
+      now: new Date("2026-08-03T23:59:30.000Z"),
+      regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
+      probability24h: 0.1,
+      probability48h: 0.1,
+    }) ?? "",
+    /Less than a minute has passed/,
+  );
+});
+
+test("uses the displayed elapsed duration for high and compound-duration explanations", () => {
+  assert.match(
+    reasonFor({
+      probability24h: 0.3,
+      probability48h: 0.7,
+      regularResetEvents: [regularResetAt("2026-08-02T00:00:00.000Z")],
+    }) ?? "",
+    /前回のリセットから2日が経過し、.*見込みは高めです。$/,
+  );
+  assert.match(
+    reasonFor({
+      probability24h: 0.3,
+      probability48h: 0.4,
+      regularResetEvents: [regularResetAt("2026-08-02T21:00:00.000Z")],
+    }) ?? "",
+    /前回のリセットから1日3時間/,
+  );
+});
+
+test("does not expose raw regime wording in the normal explanation", () => {
+  const reason = reasonFor({ multiplier: 1.8, probability24h: 0.3, probability48h: 0.7 });
+  assert.doesNotMatch(reason ?? "", /最近はリセットが多い|regime|倍率|低発生帯|時間が浅い/);
 });
 
 test("regular recovery boundaries do not increase the random event count", () => {
