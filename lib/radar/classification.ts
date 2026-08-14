@@ -145,7 +145,9 @@ export function getTiboClassificationSafetyDecision(
       signalType: candidate,
       reasonJa: null,
       reasonCode: "current_execution",
-      suppressTeaserStrength: false,
+      // A completed reset is never a teaser, even when Gemini returns the
+      // correct primary class but an inconsistent auxiliary strength.
+      suppressTeaserStrength: true,
     };
   }
 

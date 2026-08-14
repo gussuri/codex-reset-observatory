@@ -8,6 +8,8 @@ import {
   applyTiboClassificationSafetyGuard,
   type GeminiClassificationOutput,
 } from "../lib/radar/geminiClassification";
+import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
 
@@ -140,4 +142,111 @@ test("Gemini safety guard applies current-event precedence", () => {
 
   assert.equal(guarded.signalType, "reset_executed");
   assert.equal(guarded.teaserStrength, "none");
+});
+
+test("completed reset never retains teaser strength even when Gemini picked reset_executed", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "One reset now and another if needed later.",
+    geminiResult("reset_executed"),
+  );
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.teaserStrength, "none");
+  assert.equal(guarded.teaserStrengthConfidence, null);
+  assert.equal(guarded.teaserStrengthEvidenceQuote, null);
+  assert.equal(guarded.teaserStrengthReasonJa, null);
+});
+
+function projectGuardedSignal(text: string, result: GeminiClassificationOutput) {
+  const guarded = applyTiboClassificationSafetyGuard(text, result);
+  const signalType = guarded.signalType ?? "irrelevant";
+  const createdAt = "2026-08-14T00:00:00.000Z";
+  const signal = {
+    tweet_id: `safety-${text.length}`,
+    signal_type: signalType,
+    text,
+    tweet_url: url,
+    tweet_created_at: createdAt,
+    detected_at: createdAt,
+    expires_at: "2026-08-15T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    confidence: guarded.confidence ?? 0,
+    teaser_strength: guarded.teaserStrength,
+    ai_temporal_expression: guarded.temporalExpression ?? null,
+    ai_temporal_kind: guarded.temporalKind ?? null,
+    ai_temporal_precision: guarded.temporalPrecision ?? null,
+    ai_temporal_timezone: guarded.explicitTimezone ?? null,
+    ai_temporal_confidence: guarded.temporalConfidence ?? null,
+    expected_start_at: null,
+    expected_end_at: null,
+    temporal_resolution_status: null,
+    temporal_resolution_version: null,
+    is_reply: false,
+  };
+  const now = new Date("2026-08-14T01:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: signalType === "irrelevant" ? [] : [signal],
+    recentTiboSignals: [signal],
+  });
+  const publicSnapshot = toPublicRadarSnapshot(data, "ja", {
+    calculationNow: now,
+    limitHistory: false,
+  });
+
+  return { guarded, signal, publicSnapshot };
+}
+
+test("safety downgrades stay out of active notice, teaser, and history state", () => {
+  const cases = [
+    "We reset the cache and the dashboard is fast again.",
+    "What if we reset everyone after the launch?",
+    "No reset tonight.",
+    "We reset everyone yesterday.",
+  ];
+
+  for (const text of cases) {
+    const projected = projectGuardedSignal(text, geminiResult("official_notice"));
+    assert.equal(projected.guarded.signalType, "irrelevant", text);
+    assert.equal(projected.guarded.teaserStrength, "none", text);
+    assert.equal(projected.publicSnapshot.resetTeaserStatus, "none", text);
+    assert.equal(projected.publicSnapshot.viewModel.activeWindow.active, false, text);
+    assert.equal(projected.publicSnapshot.latestTiboActivity?.classification, "irrelevant", text);
+  }
+});
+
+test("current execution keeps future audit metadata but cannot create an active notice", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "One reset now and another if needed later.",
+    {
+      ...geminiResult("official_notice"),
+      temporalDirection: "future",
+      temporalExpression: "later",
+    },
+  );
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.temporalDirection, "future");
+  assert.equal(guarded.temporalExpression, "later");
+  assert.equal(guarded.teaserStrength, "none");
+
+  const projected = projectGuardedSignal(
+    "One reset now and another if needed later.",
+    {
+      ...geminiResult("official_notice"),
+      temporalDirection: "future",
+      temporalExpression: "later",
+    },
+  );
+  assert.equal(projected.publicSnapshot.viewModel.activeWindow.active, false);
+  assert.equal(projected.publicSnapshot.resetTeaserStatus, "none");
+});
+
+test("historical reset followed by a future notice keeps only the future primary signal", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "We reset yesterday; another one is coming tonight.",
+    { ...geminiResult("reset_executed"), temporalDirection: "future" },
+  );
+
+  assert.equal(guarded.signalType, "official_notice");
+  assert.equal(guarded.temporalDirection, "future");
 });

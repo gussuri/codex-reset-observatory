@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import {
@@ -77,6 +79,11 @@ type Checkpoint = {
   rows: ScenarioEvaluationRow[];
   stoppedAfterRateLimit: boolean;
   updatedAt: string;
+  commitSha?: string | null;
+  fixtureHash?: string | null;
+  startedAt?: string;
+  resumeCount?: number;
+  rateLimitCount?: number;
 };
 
 function loadLocalEnvironment() {
@@ -113,6 +120,20 @@ function parseArgs(argv: string[]) {
 
 function isMainModule() {
   return Boolean(process.argv[1]) && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
+}
+
+function getCommitSha() {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function getFixtureHash() {
+  return createHash("sha256")
+    .update(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", "tibo-scenarios.json")))
+    .digest("hex");
 }
 
 function sleep(milliseconds: number) {
@@ -329,14 +350,35 @@ function percent(value: number | null) {
   return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
 }
 
-function renderReport(model: string, rows: ScenarioEvaluationRow[], metrics: ScenarioMetrics, complete: boolean, stoppedAfterRateLimit: boolean) {
+function renderReport(
+  model: string,
+  rows: ScenarioEvaluationRow[],
+  metrics: ScenarioMetrics,
+  complete: boolean,
+  stoppedAfterRateLimit: boolean,
+  metadata: {
+    commitSha: string | null;
+    fixtureHash: string;
+    startedAt: string;
+    completedAt: string | null;
+    resumeCount: number;
+    rateLimitCount: number;
+  },
+) {
   const status = complete ? "complete" : "incomplete";
   const lines = [
     "# Tibo Scenario Evaluation",
     "",
     `- status: **${status}**`,
     `- model: \`${model}\``,
+    `- commit SHA: \`${metadata.commitSha ?? "unknown"}\``,
+    `- fixture SHA-256: \`${metadata.fixtureHash}\``,
     `- scenario count: ${rows.length}`,
+    `- started at: ${metadata.startedAt}`,
+    `- completed at: ${metadata.completedAt ?? "—"}`,
+    `- resume count: ${metadata.resumeCount}`,
+    `- 429 count: ${metadata.rateLimitCount}`,
+    "- production safety guard enabled: yes",
     `- valid predictions: ${metrics.validPredictions}`,
     `- API failures / invalid predictions: ${metrics.invalidPredictions}`,
     `- rate limited stop: ${stoppedAfterRateLimit ? "yes" : "no"}`,
@@ -433,6 +475,11 @@ async function main() {
     throw new Error(`Unknown scenario id(s): ${missingIds.join(", ")}`);
   }
   const checkpoint = args.has("resume") ? readCheckpoint(outputDir) : null;
+  const commitSha = checkpoint?.commitSha ?? getCommitSha();
+  const fixtureHash = checkpoint?.fixtureHash ?? getFixtureHash();
+  const startedAt = checkpoint?.startedAt ?? new Date().toISOString();
+  const resumeCount = (checkpoint?.resumeCount ?? 0) + (checkpoint ? 1 : 0);
+  let rateLimitCount = checkpoint?.rateLimitCount ?? 0;
   const rowsById = new Map<string, ScenarioEvaluationRow>(
     (checkpoint?.rows ?? []).map((row) => [row.id, row]),
   );
@@ -444,6 +491,7 @@ async function main() {
 
     const row = await evaluateScenario(scenario, model, apiKey);
     rowsById.set(scenario.id, row);
+    if (row.status === "rate_limited") rateLimitCount += 1;
     writeCheckpoint(outputDir, {
       schemaVersion: 1,
       model,
@@ -451,6 +499,11 @@ async function main() {
       rows: Array.from(rowsById.values()),
       stoppedAfterRateLimit: row.status === "rate_limited" || stoppedAfterRateLimit,
       updatedAt: new Date().toISOString(),
+      commitSha,
+      fixtureHash,
+      startedAt,
+      resumeCount,
+      rateLimitCount,
     });
     console.log(`${row.id}: ${row.status}${row.predictedSignalType ? ` → ${row.predictedSignalType}` : ""}`);
     if (row.status === "rate_limited") {
@@ -464,6 +517,7 @@ async function main() {
     .filter((row): row is ScenarioEvaluationRow => Boolean(row));
   const complete = rows.length === selectedScenarios.length && rows.every((row) => row.status === "success");
   const metrics = calculateScenarioMetrics(rows);
+  const completedAt = complete ? new Date().toISOString() : null;
   const resumeCommand = [
     "corepack pnpm run eval:tibo-scenarios -- --live --resume",
     requestedIds?.length ? `--ids ${requestedIds.join(",")}` : "",
@@ -474,6 +528,13 @@ async function main() {
     status: complete ? "complete" : "incomplete",
     complete,
     model,
+    commitSha,
+    fixtureHash,
+    startedAt,
+    completedAt,
+    resumeCount,
+    rateLimitCount,
+    productionSafetyGuardEnabled: true,
     fixtureScenarioCount: fixture.scenarios.length,
     selectedScenarioCount: selectedScenarios.length,
     evaluatedScenarioCount: rows.length,
@@ -485,7 +546,18 @@ async function main() {
     resumeCommand,
   };
   fs.writeFileSync(path.join(outputDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  fs.writeFileSync(path.join(outputDir, "report.md"), `${renderReport(model, rows, metrics, complete, stoppedAfterRateLimit)}\n`, "utf8");
+  fs.writeFileSync(
+    path.join(outputDir, "report.md"),
+    `${renderReport(model, rows, metrics, complete, stoppedAfterRateLimit, {
+      commitSha,
+      fixtureHash,
+      startedAt,
+      completedAt,
+      resumeCount,
+      rateLimitCount,
+    })}\n`,
+    "utf8",
+  );
   console.log(`Wrote ${path.join(outputDir, "report.json")}`);
   console.log(`Status: ${report.status}; valid predictions: ${metrics.validPredictions}/${selectedScenarios.length}`);
 }
