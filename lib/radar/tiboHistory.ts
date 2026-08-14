@@ -341,14 +341,18 @@ function clusterFormalTiboResetSignals(signals: Array<FormalTiboResetSignal>) {
     const relatedNotice = representative.related_notice ??
       cluster.find((signal) => signal.related_notice)?.related_notice ??
       null;
-    const sourceTweetIds = cluster
-      .slice()
-      .sort((left, right) => {
-        const timeDifference =
-          (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
-        return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
-      })
-      .map((signal) => signal.tweet_id);
+    const sourceTweetIds = Array.from(
+      new Set(
+        cluster
+          .slice()
+          .sort((left, right) => {
+            const timeDifference =
+              (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
+            return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
+          })
+          .map((signal) => signal.tweet_id),
+      ),
+    );
 
     return {
       ...convertTiboResetSignalToHistoryEvent(

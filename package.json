@@ -17,6 +17,7 @@
     "eval:tibo-classifiers": "tsx scripts/evaluate-tibo-classifiers.ts",
     "eval:tibo-classifiers:resume": "tsx scripts/evaluate-tibo-classifiers.ts --resume",
     "eval:tibo-classifiers:fixed": "tsx scripts/evaluate-tibo-classifiers.ts --fixed-model --output-prefix tibo-classifier-eval-gemini-3.5-flash-lite",
+    "eval:tibo-scenarios": "tsx scripts/evaluate-tibo-scenarios.ts --live",
     "eval:tibo-teaser-strength": "tsx scripts/evaluate-tibo-teaser-strength.ts",
     "eval:tibo-teaser-strength:stress": "tsx scripts/evaluate-tibo-teaser-strength-stress.ts",
     "eval:random-reset-names": "tsx scripts/evaluate-random-reset-names.ts",

@@ -1,0 +1,1144 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "exec-01",
+      "category": "reset_executed",
+      "description": "Direct completion announcement",
+      "tweetText": "Enjoy a reset everyone.",
+      "tweetCreatedAt": "2026-08-14T00:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000001",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "formal-reset"
+    },
+    {
+      "id": "exec-02",
+      "category": "reset_executed",
+      "description": "Explicit limit completion",
+      "tweetText": "Limits have been reset for all paid users.",
+      "tweetCreatedAt": "2026-08-14T00:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000002",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "formal-reset"
+    },
+    {
+      "id": "exec-03",
+      "category": "reset_executed",
+      "description": "Short completion report",
+      "tweetText": "Done, enjoy.",
+      "tweetCreatedAt": "2026-08-14T00:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000003",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "ambiguous": true
+    },
+    {
+      "id": "exec-04",
+      "category": "reset_executed",
+      "description": "Reset landed wording",
+      "tweetText": "Reset landed. Go use it.",
+      "tweetCreatedAt": "2026-08-14T00:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000004",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "exec-05",
+      "category": "reset_executed",
+      "description": "Everyone topped up",
+      "tweetText": "Everyone should be topped up now.",
+      "tweetCreatedAt": "2026-08-14T00:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000005",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "exec-06",
+      "category": "reset_executed",
+      "description": "First-person usage limit reset",
+      "tweetText": "I have reset usage limits for Codex and Work.",
+      "tweetCreatedAt": "2026-08-14T00:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000006",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "exec-07",
+      "category": "reset_executed",
+      "description": "Fresh limits announcement",
+      "tweetText": "Fresh limits for everyone. Weeeee.",
+      "tweetCreatedAt": "2026-08-14T00:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000007",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+
+    {
+      "id": "notice-01",
+      "category": "official_notice",
+      "description": "One-hour notice",
+      "tweetText": "Reset landing in the next hour.",
+      "tweetCreatedAt": "2026-08-14T01:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000011",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "next-hour-or-so",
+      "mockGeminiOutput": { "temporalExpression": "in the next hour", "temporalKind": "relative_duration", "temporalPrecision": "exact_time", "relativeAmount": 1, "relativeUnit": "hours", "temporalConfidence": 0.95, "evidenceQuote": "Reset landing in the next hour." }
+    },
+    {
+      "id": "notice-02",
+      "category": "official_notice",
+      "description": "Later today notice",
+      "tweetText": "I will reset everyone later today.",
+      "tweetCreatedAt": "2026-08-14T02:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000012",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "unresolved", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true
+    },
+    {
+      "id": "notice-03",
+      "category": "official_notice",
+      "description": "Tomorrow morning commitment",
+      "tweetText": "I will reset everyone tomorrow morning.",
+      "tweetCreatedAt": "2026-08-14T02:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000013",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "daypart", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "mockGeminiOutput": { "temporalExpression": "tomorrow morning", "temporalKind": "daypart", "temporalPrecision": "daypart", "relativeDayOffset": 1, "daypart": "morning", "temporalConfidence": 0.95, "evidenceQuote": "tomorrow morning" }
+    },
+    {
+      "id": "notice-04",
+      "category": "official_notice",
+      "description": "Two-hour notice",
+      "tweetText": "Landing in about two hours.",
+      "tweetCreatedAt": "2026-08-14T02:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000014",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" }
+    },
+    {
+      "id": "notice-05",
+      "category": "official_notice",
+      "description": "Weekday notice",
+      "tweetText": "Another reset on Monday.",
+      "tweetCreatedAt": "2026-08-14T02:30:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000015",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "day" }
+    },
+    {
+      "id": "notice-06",
+      "category": "official_notice",
+      "description": "Exact clock notice",
+      "tweetText": "Reset at 6pm Pacific.",
+      "tweetCreatedAt": "2026-08-14T02:40:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000016",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" }
+    },
+    {
+      "id": "notice-07",
+      "category": "official_notice",
+      "description": "Weekend window",
+      "tweetText": "Reset coming this weekend.",
+      "tweetCreatedAt": "2026-08-14T02:50:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000017",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "range" }
+    },
+
+    {
+      "id": "teaser-01",
+      "category": "teaser",
+      "description": "Strong current reset feeling",
+      "tweetText": "I am feeling like a limit reset.",
+      "tweetCreatedAt": "2026-08-14T03:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000021",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong", "shouldCreateTeaser": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "teaser-strength"
+    },
+    {
+      "id": "teaser-02",
+      "category": "teaser",
+      "description": "Conditional discretion",
+      "tweetText": "I occasionally do oblige for really solid feedback.",
+      "tweetCreatedAt": "2026-08-14T03:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000022",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak", "shouldCreateTeaser": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "teaser-strength"
+    },
+    {
+      "id": "teaser-03",
+      "category": "teaser",
+      "description": "Possible button press",
+      "tweetText": "Maybe it is time to press the reset button.",
+      "tweetCreatedAt": "2026-08-14T03:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000023",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong" }
+    },
+    {
+      "id": "teaser-04",
+      "category": "teaser",
+      "description": "Generous mood without timing",
+      "tweetText": "Feeling generous today.",
+      "tweetCreatedAt": "2026-08-14T03:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000024",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" }
+    },
+    {
+      "id": "teaser-05",
+      "category": "teaser",
+      "description": "Good feedback discretion",
+      "tweetText": "Good bug reports can convince me to reset limits.",
+      "tweetCreatedAt": "2026-08-14T03:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000025",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" }
+    },
+    {
+      "id": "teaser-06",
+      "category": "teaser",
+      "description": "Near-future laptop hint",
+      "tweetText": "Hold tight, I will be back at the laptop in a few hours.",
+      "tweetCreatedAt": "2026-08-14T03:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000026",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong" }
+    },
+    {
+      "id": "teaser-07",
+      "category": "teaser",
+      "description": "Abstract sign without personal intent",
+      "tweetText": "There will be signs. Resets. These kinds of things.",
+      "tweetCreatedAt": "2026-08-14T03:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000027",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future", "teaserStrength": "none" },
+      "regressionGroup": "there-will-be-signs"
+    },
+
+    {
+      "id": "irrelevant-01",
+      "category": "irrelevant_reset_terms",
+      "description": "UI reset button",
+      "tweetText": "The reset button is my favorite product feature.",
+      "tweetCreatedAt": "2026-08-14T04:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000031",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "irrelevant-02",
+      "category": "irrelevant_reset_terms",
+      "description": "Sleep schedule reset",
+      "tweetText": "I need to reset my sleep schedule.",
+      "tweetCreatedAt": "2026-08-14T04:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000032",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "irrelevant-03",
+      "category": "irrelevant_reset_terms",
+      "description": "Model state reset",
+      "tweetText": "The model reset its internal state after the benchmark.",
+      "tweetCreatedAt": "2026-08-14T04:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000033",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "irrelevant-04",
+      "category": "irrelevant_reset_terms",
+      "description": "Cache reset",
+      "tweetText": "We reset the cache and the dashboard is fast again.",
+      "tweetCreatedAt": "2026-08-14T04:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000034",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "irrelevant-05",
+      "category": "irrelevant_reset_terms",
+      "description": "Server restart",
+      "tweetText": "The server reset was just a routine restart.",
+      "tweetCreatedAt": "2026-08-14T04:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000035",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "irrelevant-06",
+      "category": "irrelevant_reset_terms",
+      "description": "Conversation reset",
+      "tweetText": "Reset the conversation and start from the first question.",
+      "tweetCreatedAt": "2026-08-14T04:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000036",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "irrelevant-07",
+      "category": "irrelevant_reset_terms",
+      "description": "Benchmark reset",
+      "tweetText": "Resetting the benchmark before the next run.",
+      "tweetCreatedAt": "2026-08-14T04:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000037",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "negative-01",
+      "category": "negation",
+      "description": "Explicit no reset today",
+      "tweetText": "No reset today.",
+      "tweetCreatedAt": "2026-08-14T05:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000041",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "negative-02",
+      "category": "negation",
+      "description": "Not doing a reset",
+      "tweetText": "Not doing a reset tonight.",
+      "tweetCreatedAt": "2026-08-14T05:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000042",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negative-03",
+      "category": "negation",
+      "description": "Explicit denial",
+      "tweetText": "This is not a reset.",
+      "tweetCreatedAt": "2026-08-14T05:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000043",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "negative-04",
+      "category": "negation",
+      "description": "No reset this week",
+      "tweetText": "There will be no reset this week.",
+      "tweetCreatedAt": "2026-08-14T05:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000044",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negative-05",
+      "category": "negation",
+      "description": "Warning not to expect reset",
+      "tweetText": "Do not expect a reset.",
+      "tweetCreatedAt": "2026-08-14T05:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000045",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negative-06",
+      "category": "negation",
+      "description": "No planned reset",
+      "tweetText": "There is no reset scheduled.",
+      "tweetCreatedAt": "2026-08-14T05:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000046",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negative-07",
+      "category": "negation",
+      "description": "Won't happen",
+      "tweetText": "A reset will not happen tonight.",
+      "tweetCreatedAt": "2026-08-14T05:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000047",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "retraction-01",
+      "category": "retraction",
+      "description": "Scratch that",
+      "tweetText": "Scratch that, no reset.",
+      "tweetCreatedAt": "2026-08-14T06:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000051",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-02",
+      "category": "retraction",
+      "description": "Withdrawn earlier statement",
+      "tweetText": "I said reset earlier, but not anymore.",
+      "tweetCreatedAt": "2026-08-14T06:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000052",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-03",
+      "category": "retraction",
+      "description": "Cancelled notice",
+      "tweetText": "Cancelled: no reset tonight.",
+      "tweetCreatedAt": "2026-08-14T06:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000053",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-04",
+      "category": "retraction",
+      "description": "Never mind",
+      "tweetText": "Never mind, I am not doing it.",
+      "tweetCreatedAt": "2026-08-14T06:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000054",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-05",
+      "category": "retraction",
+      "description": "Correction with denial",
+      "tweetText": "Correction: no reset today.",
+      "tweetCreatedAt": "2026-08-14T06:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000055",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-06",
+      "category": "retraction",
+      "description": "Cancelled future plan",
+      "tweetText": "The reset planned for tomorrow is cancelled.",
+      "tweetCreatedAt": "2026-08-14T06:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000056",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "retraction-07",
+      "category": "retraction",
+      "description": "Changed mind",
+      "tweetText": "Changed my mind. I will not reset anyone.",
+      "tweetCreatedAt": "2026-08-14T06:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000057",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "conditional-01",
+      "category": "conditional",
+      "description": "Milestone condition",
+      "tweetText": "If we hit 20M, maybe I will reset everyone.",
+      "tweetCreatedAt": "2026-08-14T07:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000061",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-02",
+      "category": "conditional",
+      "description": "Bug fix condition",
+      "tweetText": "I might reset if this issue gets fixed.",
+      "tweetCreatedAt": "2026-08-14T07:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000062",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-03",
+      "category": "conditional",
+      "description": "Feedback condition",
+      "tweetText": "Maybe a reset if the feedback is good.",
+      "tweetCreatedAt": "2026-08-14T07:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000063",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-04",
+      "category": "conditional",
+      "description": "Incident condition",
+      "tweetText": "If things get worse, I will consider a reset.",
+      "tweetCreatedAt": "2026-08-14T07:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000064",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-05",
+      "category": "conditional",
+      "description": "Request condition",
+      "tweetText": "A reset is possible if enough people need it.",
+      "tweetCreatedAt": "2026-08-14T07:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000065",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-06",
+      "category": "conditional",
+      "description": "No fixed commitment",
+      "tweetText": "I could reset later, depending on the reports.",
+      "tweetCreatedAt": "2026-08-14T07:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000066",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "weak" }
+    },
+    {
+      "id": "conditional-07",
+      "category": "conditional",
+      "description": "Explicit non-notice condition",
+      "tweetText": "Only if the launch goes badly would I consider resetting limits.",
+      "tweetCreatedAt": "2026-08-14T07:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000067",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "weak" }
+    },
+
+    {
+      "id": "hypothetical-01",
+      "category": "hypothetical",
+      "description": "Wishful reset",
+      "tweetText": "Would be nice to reset everyone.",
+      "tweetCreatedAt": "2026-08-14T08:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000071",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "hypothetical-02",
+      "category": "hypothetical",
+      "description": "Imagined button press",
+      "tweetText": "Imagine if I reset everyone.",
+      "tweetCreatedAt": "2026-08-14T08:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000072",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "hypothetical-03",
+      "category": "hypothetical",
+      "description": "Wish we could reset",
+      "tweetText": "I wish we could reset limits for everyone.",
+      "tweetCreatedAt": "2026-08-14T08:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000073",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "hypothetical-04",
+      "category": "hypothetical",
+      "description": "Personal need mistaken for action",
+      "tweetText": "Could use a reset right now.",
+      "tweetCreatedAt": "2026-08-14T08:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000074",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "hypothetical-05",
+      "category": "hypothetical",
+      "description": "Counterfactual milestone",
+      "tweetText": "If only a reset solved every support request.",
+      "tweetCreatedAt": "2026-08-14T08:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000075",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "hypothetical-06",
+      "category": "hypothetical",
+      "description": "Question about possibility",
+      "tweetText": "What if we reset everyone after the launch?",
+      "tweetCreatedAt": "2026-08-14T08:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000076",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "hypothetical-07",
+      "category": "hypothetical",
+      "description": "General dream",
+      "tweetText": "A world with unlimited resets would be convenient.",
+      "tweetCreatedAt": "2026-08-14T08:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000077",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+
+    {
+      "id": "historical-01",
+      "category": "historical",
+      "description": "Yesterday reset history",
+      "tweetText": "We reset everyone yesterday.",
+      "tweetCreatedAt": "2026-08-14T09:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000081",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "historical-02",
+      "category": "historical",
+      "description": "Last week retrospective",
+      "tweetText": "That reset last week was fun.",
+      "tweetCreatedAt": "2026-08-14T09:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000082",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "historical-03",
+      "category": "historical",
+      "description": "Three days ago",
+      "tweetText": "I did a reset three days ago.",
+      "tweetCreatedAt": "2026-08-14T09:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000083",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "historical-04",
+      "category": "historical",
+      "description": "Ten million retrospective",
+      "tweetText": "Remember when we reset at 10M?",
+      "tweetCreatedAt": "2026-08-14T09:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000084",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "historical-05",
+      "category": "historical",
+      "description": "Completed reset memory",
+      "tweetText": "The reset was completed last month.",
+      "tweetCreatedAt": "2026-08-14T09:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000085",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "historical-06",
+      "category": "historical",
+      "description": "Reset button origin story",
+      "tweetText": "One day we created the reset button and the rest is history.",
+      "tweetCreatedAt": "2026-08-14T09:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000086",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" },
+      "regressionGroup": "rest-is-history"
+    },
+    {
+      "id": "historical-07",
+      "category": "historical",
+      "description": "Old announcement quote",
+      "tweetText": "Back in spring, I announced a reset and everyone celebrated.",
+      "tweetCreatedAt": "2026-08-14T09:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000087",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+
+    {
+      "id": "mixed-01",
+      "category": "mixed_timeline",
+      "description": "Old context followed by current execution",
+      "tweetText": "Old news from a few days ago, but enjoy a reset everyone.",
+      "tweetCreatedAt": "2026-08-14T10:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000091",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "mixed-02",
+      "category": "mixed_timeline",
+      "description": "Past event and future notice",
+      "tweetText": "We reset last week; another one is coming tonight.",
+      "tweetCreatedAt": "2026-08-14T10:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000092",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true
+    },
+    {
+      "id": "mixed-03",
+      "category": "mixed_timeline",
+      "description": "Yesterday plus uncertain future",
+      "tweetText": "Yesterday's reset went well. Maybe another soon.",
+      "tweetCreatedAt": "2026-08-14T10:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000093",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong" }
+    },
+    {
+      "id": "mixed-04",
+      "category": "mixed_timeline",
+      "description": "Earlier denial replaced by execution",
+      "tweetText": "I said no reset earlier, but changed my mind. Enjoy.",
+      "tweetCreatedAt": "2026-08-14T10:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000094",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "mixed-05",
+      "category": "mixed_timeline",
+      "description": "Past UI joke and current intent",
+      "tweetText": "The reset button joke is old. I am feeling like a limit reset.",
+      "tweetCreatedAt": "2026-08-14T10:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000095",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong" }
+    },
+    {
+      "id": "mixed-06",
+      "category": "mixed_timeline",
+      "description": "Completed event with no current promise",
+      "tweetText": "We reset everyone yesterday, and I have no new plans.",
+      "tweetCreatedAt": "2026-08-14T10:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000096",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical" }
+    },
+    {
+      "id": "mixed-07",
+      "category": "mixed_timeline",
+      "description": "Past notice superseded by cancellation",
+      "tweetText": "Tomorrow's reset was planned yesterday, but it is cancelled now.",
+      "tweetCreatedAt": "2026-08-14T10:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000097",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "reply-01",
+      "category": "reply_context",
+      "description": "Reply denies parent request",
+      "tweetText": "No.",
+      "tweetCreatedAt": "2026-08-14T11:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001001",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset please?",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none" },
+      "pipeline": true
+    },
+    {
+      "id": "reply-02",
+      "category": "reply_context",
+      "description": "Reply with uncertain willingness",
+      "tweetText": "Maybe.",
+      "tweetCreatedAt": "2026-08-14T11:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001002",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset please?",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" },
+      "ambiguous": true
+    },
+    {
+      "id": "reply-03",
+      "category": "reply_context",
+      "description": "Reply reports completion",
+      "tweetText": "Done.",
+      "tweetCreatedAt": "2026-08-14T11:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001003",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset us please!",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "pipeline": true,
+      "ambiguous": true
+    },
+    {
+      "id": "reply-04",
+      "category": "reply_context",
+      "description": "Reply says soon",
+      "tweetText": "Soon.",
+      "tweetCreatedAt": "2026-08-14T11:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001004",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset us please!",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" },
+      "ambiguous": true
+    },
+    {
+      "id": "reply-05",
+      "category": "reply_context",
+      "description": "Reply joke only",
+      "tweetText": "lol",
+      "tweetCreatedAt": "2026-08-14T11:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001005",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset us please!",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
+      "pipeline": true,
+      "ambiguous": true
+    },
+    {
+      "id": "reply-06",
+      "category": "reply_context",
+      "description": "Reply explicitly says not today",
+      "tweetText": "Not today.",
+      "tweetCreatedAt": "2026-08-14T11:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001006",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Reset tonight?",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "reply-07",
+      "category": "reply_context",
+      "description": "Reply confirms already completed",
+      "tweetText": "Already did.",
+      "tweetCreatedAt": "2026-08-14T11:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001007",
+      "isReply": true,
+      "replyToHandles": ["@alice"],
+      "replyContextText": "Did you reset everyone?",
+      "sourceTimeline": "with_replies",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "ambiguous": true
+    },
+
+    {
+      "id": "quote-01",
+      "category": "quote_context",
+      "description": "Quoted request with neutral author text",
+      "tweetText": "lol",
+      "tweetCreatedAt": "2026-08-14T12:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001011",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "We need a reset.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000001",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
+      "pipeline": true
+    },
+    {
+      "id": "quote-02",
+      "category": "quote_context",
+      "description": "Quoted request and author says no",
+      "tweetText": "No.",
+      "tweetCreatedAt": "2026-08-14T12:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001012",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "We need a reset.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000002",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
+      "pipeline": true
+    },
+    {
+      "id": "quote-03",
+      "category": "quote_context",
+      "description": "Quoted request and author says done",
+      "tweetText": "Done.",
+      "tweetCreatedAt": "2026-08-14T12:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001013",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "We need a reset.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000003",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "pipeline": true,
+      "ambiguous": true
+    },
+    {
+      "id": "quote-04",
+      "category": "quote_context",
+      "description": "Quoted request and author says maybe",
+      "tweetText": "Maybe :) ",
+      "tweetCreatedAt": "2026-08-14T12:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001014",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "We need a reset.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000004",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak" },
+      "ambiguous": true
+    },
+    {
+      "id": "quote-05",
+      "category": "quote_context",
+      "description": "Quoted future notice not author text",
+      "tweetText": "Good point.",
+      "tweetCreatedAt": "2026-08-14T12:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001015",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "Reset landing in the next hour.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000005",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+    {
+      "id": "quote-06",
+      "category": "quote_context",
+      "description": "Author makes independent teaser",
+      "tweetText": "I am feeling like a limit reset.",
+      "tweetCreatedAt": "2026-08-14T12:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001016",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "We need a reset.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000006",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong" }
+    },
+    {
+      "id": "quote-07",
+      "category": "quote_context",
+      "description": "Author rejects quoted request",
+      "tweetText": "Not happening.",
+      "tweetCreatedAt": "2026-08-14T12:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001017",
+      "isQuote": true,
+      "quoteAuthorHandle": "@alice",
+      "quoteContextText": "Please reset everyone.",
+      "quoteTweetUrl": "https://x.com/alice/status/990000000000000007",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" }
+    },
+
+    {
+      "id": "time-01",
+      "category": "time_expression",
+      "description": "In an hour",
+      "tweetText": "Reset in an hour.",
+      "tweetCreatedAt": "2026-08-14T13:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001021",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "metamorphicGroup": "positive-next-hour",
+      "regressionGroup": "natural-language-number",
+      "mockGeminiOutput": { "temporalExpression": "in an hour", "temporalKind": "relative_duration", "temporalPrecision": "exact_time", "relativeAmount": 1, "relativeUnit": "hours", "temporalConfidence": 0.95, "evidenceQuote": "Reset in an hour." }
+    },
+    {
+      "id": "time-02",
+      "category": "time_expression",
+      "description": "In one hour",
+      "tweetText": "Reset in one hour.",
+      "tweetCreatedAt": "2026-08-14T13:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001022",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "metamorphicGroup": "positive-next-hour",
+      "regressionGroup": "natural-language-number"
+    },
+    {
+      "id": "time-03",
+      "category": "time_expression",
+      "description": "In numeric one hour",
+      "tweetText": "Reset in 1 hour.",
+      "tweetCreatedAt": "2026-08-14T13:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001023",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" },
+      "metamorphicGroup": "positive-next-hour",
+      "regressionGroup": "natural-language-number"
+    },
+    {
+      "id": "time-04",
+      "category": "time_expression",
+      "description": "Next hour or so",
+      "tweetText": "Reset in the next hour or so.",
+      "tweetCreatedAt": "2026-08-14T13:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001024",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" },
+      "metamorphicGroup": "positive-next-hour",
+      "regressionGroup": "next-hour-or-so"
+    },
+    {
+      "id": "time-05",
+      "category": "time_expression",
+      "description": "Two hours",
+      "tweetText": "Landing in two hours.",
+      "tweetCreatedAt": "2026-08-14T13:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001025",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "mockGeminiOutput": { "temporalExpression": "in two hours", "temporalKind": "relative_duration", "temporalPrecision": "exact_time", "relativeAmount": 2, "relativeUnit": "hours", "temporalConfidence": 0.95, "evidenceQuote": "two hours" }
+    },
+    {
+      "id": "time-06",
+      "category": "time_expression",
+      "description": "Half an hour",
+      "tweetText": "Reset in half an hour.",
+      "tweetCreatedAt": "2026-08-14T13:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001026",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" }
+    },
+    {
+      "id": "time-07",
+      "category": "time_expression",
+      "description": "Tomorrow afternoon",
+      "tweetText": "Reset tomorrow afternoon.",
+      "tweetCreatedAt": "2026-08-14T13:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001027",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "daypart" }
+    },
+
+    {
+      "id": "negtime-01",
+      "category": "negated_time",
+      "description": "Not in the next hour",
+      "tweetText": "Not in the next hour.",
+      "tweetCreatedAt": "2026-08-14T14:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001031",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "metamorphicGroup": "negative-next-hour"
+    },
+    {
+      "id": "negtime-02",
+      "category": "negated_time",
+      "description": "No reset until tomorrow",
+      "tweetText": "No reset until tomorrow.",
+      "tweetCreatedAt": "2026-08-14T14:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001032",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negtime-03",
+      "category": "negated_time",
+      "description": "Definitely not tonight",
+      "tweetText": "Definitely not tonight.",
+      "tweetCreatedAt": "2026-08-14T14:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001033",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negtime-04",
+      "category": "negated_time",
+      "description": "Tomorrow but not today",
+      "tweetText": "Maybe tomorrow, but not today.",
+      "tweetCreatedAt": "2026-08-14T14:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001034",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negtime-05",
+      "category": "negated_time",
+      "description": "Minimum delay",
+      "tweetText": "It will not happen for at least two hours.",
+      "tweetCreatedAt": "2026-08-14T14:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001035",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negtime-06",
+      "category": "negated_time",
+      "description": "No schedule this weekend",
+      "tweetText": "There is no reset planned this weekend.",
+      "tweetCreatedAt": "2026-08-14T14:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001036",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+    {
+      "id": "negtime-07",
+      "category": "negated_time",
+      "description": "No immediate reset",
+      "tweetText": "No reset shortly.",
+      "tweetCreatedAt": "2026-08-14T14:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001037",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "multi-01",
+      "category": "multiple_events",
+      "description": "Immediate reset and possible later reset",
+      "tweetText": "Reset now, maybe another tomorrow.",
+      "tweetCreatedAt": "2026-08-14T15:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001041",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "multi-02",
+      "category": "multiple_events",
+      "description": "No today and possible next week",
+      "tweetText": "No reset today, maybe next week.",
+      "tweetCreatedAt": "2026-08-14T15:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001042",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "multi-03",
+      "category": "multiple_events",
+      "description": "Past and tonight",
+      "tweetText": "We reset yesterday; the next one is tonight.",
+      "tweetCreatedAt": "2026-08-14T15:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001043",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" }
+    },
+    {
+      "id": "multi-04",
+      "category": "multiple_events",
+      "description": "Two possible reset actions",
+      "tweetText": "One reset now and another if needed later.",
+      "tweetCreatedAt": "2026-08-14T15:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001044",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "multi-05",
+      "category": "multiple_events",
+      "description": "Notice with unrelated future event",
+      "tweetText": "Reset coming tonight, and the launch is tomorrow.",
+      "tweetCreatedAt": "2026-08-14T15:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001045",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" }
+    },
+    {
+      "id": "multi-06",
+      "category": "multiple_events",
+      "description": "Execution followed by no further plan",
+      "tweetText": "Reset done. No more resets planned this week.",
+      "tweetCreatedAt": "2026-08-14T15:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001046",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "multi-07",
+      "category": "multiple_events",
+      "description": "Two notices with different windows",
+      "tweetText": "Maybe tonight, definitely tomorrow morning if not.",
+      "tweetCreatedAt": "2026-08-14T15:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001047",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" }
+    },
+
+    {
+      "id": "noise-01",
+      "category": "noise_normalization",
+      "description": "Lowercase equivalent",
+      "tweetText": "reset in the next hour",
+      "tweetCreatedAt": "2026-08-14T16:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001051",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "shouldCreateActiveNotice": true, "shouldRemainActive": true },
+      "pipeline": true,
+      "metamorphicGroup": "positive-next-hour"
+    },
+    {
+      "id": "noise-02",
+      "category": "noise_normalization",
+      "description": "Uppercase equivalent",
+      "tweetText": "RESET IN THE NEXT HOUR",
+      "tweetCreatedAt": "2026-08-14T16:02:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001052",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" },
+      "metamorphicGroup": "positive-next-hour"
+    },
+    {
+      "id": "noise-03",
+      "category": "noise_normalization",
+      "description": "Trailing emoji",
+      "tweetText": "Reset in the next hour :) ",
+      "tweetCreatedAt": "2026-08-14T16:04:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001053",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" },
+      "metamorphicGroup": "positive-next-hour"
+    },
+    {
+      "id": "noise-04",
+      "category": "noise_normalization",
+      "description": "Line break equivalent",
+      "tweetText": "Reset in the next hour.\nGo fast.",
+      "tweetCreatedAt": "2026-08-14T16:06:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001054",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" },
+      "metamorphicGroup": "positive-next-hour"
+    },
+    {
+      "id": "noise-05",
+      "category": "noise_normalization",
+      "description": "Extra whitespace",
+      "tweetText": "Reset   in   the next   hour.",
+      "tweetCreatedAt": "2026-08-14T16:08:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001055",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future" },
+      "metamorphicGroup": "positive-next-hour"
+    },
+    {
+      "id": "noise-06",
+      "category": "noise_normalization",
+      "description": "Typo requiring ambiguity",
+      "tweetText": "Resettt in the next hour.",
+      "tweetCreatedAt": "2026-08-14T16:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001056",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
+      "ambiguous": true
+    },
+    {
+      "id": "noise-07",
+      "category": "noise_normalization",
+      "description": "Separated letters requiring ambiguity",
+      "tweetText": "R e s e t in the next hour.",
+      "tweetCreatedAt": "2026-08-14T16:12:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001057",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
+      "ambiguous": true
+    }
+  ]
+}
