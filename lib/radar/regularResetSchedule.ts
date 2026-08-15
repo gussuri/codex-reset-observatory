@@ -1,25 +1,28 @@
+import { isBroadResetScope } from "./resetEligibility";
 import type { WindowEventLike } from "./types";
 
 export type RegularResetScheduleDefinition = {
   schedule_id: string;
-  anchor_window_start_at: string;
-  anchor_window_end_at: string;
-  anchor_representative_at: string;
   cycle_days: number;
   cycle_type: "定期リセット";
   reset_method: string;
   scope: string;
+  window_start_offset_minutes: number;
+  window_end_offset_minutes: number;
 };
 
+/**
+ * The weekly schedule describes the recurring shape only. Its anchor must be
+ * supplied by the latest qualifying recovery event at runtime.
+ */
 export const DEFAULT_REGULAR_RESET_SCHEDULE: RegularResetScheduleDefinition = {
   schedule_id: "weekly-regular-reset",
-  anchor_window_start_at: "2026-08-08T03:30:00.000Z",
-  anchor_window_end_at: "2026-08-08T03:45:00.000Z",
-  anchor_representative_at: "2026-08-08T03:32:00.000Z",
   cycle_days: 7,
   cycle_type: "定期リセット",
   reset_method: "強制リセット",
   scope: "任意リセット未使用アカウント",
+  window_start_offset_minutes: -2,
+  window_end_offset_minutes: 13,
 };
 
 export type RegularResetEventStatus = "completed" | "corrected" | "voided";
@@ -42,7 +45,8 @@ export type RegularResetEventRow = {
 
 const MAX_SCHEDULED_OCCURRENCES = 520;
 
-function parseFiniteDate(value: string): Date | null {
+function parseFiniteDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
 }
@@ -51,25 +55,113 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function createScheduledRow(
-  definition: RegularResetScheduleDefinition,
-  offsetDays: number,
-): RegularResetEventRow {
-  const anchorWindowStart = parseFiniteDate(definition.anchor_window_start_at);
-  const anchorWindowEnd = parseFiniteDate(definition.anchor_window_end_at);
-  const anchorRepresentative = parseFiniteDate(definition.anchor_representative_at);
+function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
 
-  if (!anchorWindowStart || !anchorWindowEnd || !anchorRepresentative) {
-    throw new Error("Invalid regular reset schedule definition");
+function isPendingEvent(item: WindowEventLike) {
+  const status = item.status?.toLowerCase();
+  return (
+    item.kind === "window_opened" ||
+    status === "open" ||
+    status === "active" ||
+    status === "pending" ||
+    status === "scheduled" ||
+    status === "announced"
+  );
+}
+
+function getCanonicalCompletedAt(item: WindowEventLike) {
+  if (isPendingEvent(item)) return null;
+  return parseFiniteDate(item.closed_at ?? item.completed_at ?? null);
+}
+
+function isQualifyingScheduleAnchor(item: WindowEventLike) {
+  const status = item.status?.toLowerCase();
+  if (status === "rejected" || status === "voided") return false;
+
+  const cycleType = item.details?.cycleType;
+  if (item.recordKind === "regular_completed") {
+    return true;
   }
 
-  const representativeAt = addDays(anchorRepresentative, offsetDays);
+  // Older local records did not use regular_completed yet. Preserve those
+  // records only when their regular cycle and broad scope are explicit.
+  if (
+    cycleType === "定期リセット" &&
+    (item.recordKind === "confirmed_global" ||
+      item.recordKind === "banked_distribution" ||
+      item.recordKind === "reference") &&
+    isBroadResetScope(item)
+  ) {
+    return true;
+  }
+
+  if (
+    item.recordKind !== "confirmed_global" &&
+    item.recordKind !== "banked_distribution"
+  ) {
+    return false;
+  }
+
+  return (
+    cycleType === "ランダムリセット" &&
+    item.details?.resetMethod === "強制リセット" &&
+    isBroadResetScope(item)
+  );
+}
+
+/**
+ * Finds the latest known completed regular or broad forced-reset boundary.
+ * The caller supplies already-normalized history so this helper remains pure
+ * and cannot accidentally read future or raw notice timestamps.
+ */
+export function getLatestRegularScheduleAnchorAt(
+  events: readonly WindowEventLike[],
+  now: Date = new Date(),
+): string | null {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return null;
+
+  let latestTime = 0;
+  let latestAt: string | null = null;
+
+  for (const event of events) {
+    if (!isQualifyingScheduleAnchor(event)) continue;
+
+    const completedAt = getCanonicalCompletedAt(event);
+    if (!completedAt || completedAt.getTime() > nowTime) continue;
+
+    if (completedAt.getTime() > latestTime) {
+      latestTime = completedAt.getTime();
+      latestAt = event.closed_at ?? event.completed_at ?? null;
+    }
+  }
+
+  return latestAt;
+}
+
+function createScheduledRow(
+  definition: RegularResetScheduleDefinition,
+  anchorAt: Date,
+  occurrenceIndex: number,
+): RegularResetEventRow {
+  const representativeAt = addDays(
+    anchorAt,
+    occurrenceIndex * definition.cycle_days,
+  );
   const scheduledAt = representativeAt.toISOString();
 
   return {
     schedule_key: `${definition.schedule_id}:${scheduledAt}`,
-    window_start_at: addDays(anchorWindowStart, offsetDays).toISOString(),
-    window_end_at: addDays(anchorWindowEnd, offsetDays).toISOString(),
+    window_start_at: addMinutes(
+      representativeAt,
+      definition.window_start_offset_minutes,
+    ).toISOString(),
+    window_end_at: addMinutes(
+      representativeAt,
+      definition.window_end_offset_minutes,
+    ).toISOString(),
     representative_at: scheduledAt,
     scheduled_at: scheduledAt,
     completed_at: scheduledAt,
@@ -82,31 +174,39 @@ function createScheduledRow(
 }
 
 /**
- * Returns only scheduled occurrences whose representative time has arrived.
- * The route persists these rows idempotently; this function never mutates data.
+ * Returns only weekly occurrences after the supplied anchor whose
+ * representative time has arrived. The route persists these rows idempotently;
+ * this function never mutates data.
  */
 export function getDueRegularResetEventRows(
   now: Date,
+  latestAnchorAt: string | null | undefined,
   definition: RegularResetScheduleDefinition = DEFAULT_REGULAR_RESET_SCHEDULE,
 ): RegularResetEventRow[] {
   const nowMs = now.getTime();
-  const anchor = parseFiniteDate(definition.anchor_representative_at);
+  const anchor = parseFiniteDate(latestAnchorAt);
 
-  if (!Number.isFinite(nowMs) || !anchor || definition.cycle_days <= 0) {
+  if (
+    !Number.isFinite(nowMs) ||
+    !anchor ||
+    definition.cycle_days <= 0 ||
+    !Number.isFinite(definition.window_start_offset_minutes) ||
+    !Number.isFinite(definition.window_end_offset_minutes)
+  ) {
     return [];
   }
 
   const rows: RegularResetEventRow[] = [];
-  let offsetDays = 0;
+  let occurrenceIndex = 1;
 
   while (rows.length < MAX_SCHEDULED_OCCURRENCES) {
-    const row = createScheduledRow(definition, offsetDays);
+    const row = createScheduledRow(definition, anchor, occurrenceIndex);
     if (new Date(row.representative_at).getTime() > nowMs) {
       break;
     }
 
     rows.push(row);
-    offsetDays += definition.cycle_days;
+    occurrenceIndex += 1;
   }
 
   return rows;

@@ -697,7 +697,10 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
       calculationNow,
-      regularResetEvents: getDueRegularResetEventRows(calculationNow),
+      regularResetEvents: getDueRegularResetEventRows(
+        calculationNow,
+        "2026-08-01T03:32:00.000Z",
+      ),
     }),
     "ja",
     {
@@ -773,7 +776,10 @@ test("regular reset supplement is localized without changing the history summary
     const calculationNow = new Date("2026-08-08T05:00:00.000Z");
     const snapshot = toPublicRadarSnapshot(getLocalRadarData({
       calculationNow,
-      regularResetEvents: getDueRegularResetEventRows(calculationNow),
+      regularResetEvents: getDueRegularResetEventRows(
+        calculationNow,
+        "2026-08-01T03:32:00.000Z",
+      ),
     }), locale, {
       calculationNow,
       limitHistory: false,

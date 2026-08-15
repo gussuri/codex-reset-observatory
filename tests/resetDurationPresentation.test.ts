@@ -160,7 +160,10 @@ test("uses persisted regular_completed as the display boundary and not the older
   withLocalHistory(
     [resetEvent("random", "2026-08-01T03:32:00.000Z", "confirmed_global", "ランダムリセット", "全有料プラン")],
     () => {
-      const regularRow = getDueRegularResetEventRows(new Date(regularAt))[0];
+      const regularRow = getDueRegularResetEventRows(
+        new Date(regularAt),
+        "2026-08-01T03:32:00.000Z",
+      )[0];
       const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
 
       assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
@@ -177,7 +180,10 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
   withLocalHistory(
     [resetEvent("random", "2026-08-01T03:32:00.000Z", "confirmed_global", "ランダムリセット", "全有料プラン")],
     () => {
-      const regularRow = getDueRegularResetEventRows(new Date(regularAt))[0];
+      const regularRow = getDueRegularResetEventRows(
+        new Date(regularAt),
+        "2026-08-01T03:32:00.000Z",
+      )[0];
       const data = getLocalRadarData({ calculationNow: NOW, regularResetEvents: [regularRow] });
 
       assert.equal(

@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { getLatestRegularScheduleAnchorAt } from "@/lib/radar";
+import { fetchCurrentRadarData } from "@/lib/radarFetch";
 import { getDueRegularResetEventRows } from "@/lib/radar/regularResetSchedule";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 
@@ -27,7 +29,25 @@ async function syncRegularResetEvents(request: NextRequest) {
   }
 
   try {
-    const dueRows = getDueRegularResetEventRows(new Date());
+    const now = new Date();
+    const radarData = await fetchCurrentRadarData({
+      cache: "no-store",
+      bypassCache: true,
+      calculationNow: now,
+    });
+    const supabaseHealth = radarData.data_health?.sources.supabaseSignals;
+    if (!supabaseHealth || supabaseHealth.state !== "ok") {
+      console.error("Regular reset event sync skipped", { detail: "source_unavailable" });
+      return response({ ok: false, error: "source_unavailable" }, 503);
+    }
+
+    const latestAnchorAt = getLatestRegularScheduleAnchorAt(radarData, now);
+    if (!latestAnchorAt) {
+      console.error("Regular reset event sync skipped", { detail: "anchor_unavailable" });
+      return response({ ok: false, error: "anchor_unavailable" }, 503);
+    }
+
+    const dueRows = getDueRegularResetEventRows(now, latestAnchorAt);
     if (dueRows.length > 0) {
       const supabase = createClient(supabaseUrl, serviceRoleKey, {
         auth: { persistSession: false },

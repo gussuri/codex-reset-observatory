@@ -220,7 +220,10 @@ test("rejected signals stay out of the public teaser state", () => {
 
 test("regular reset rows do not enter random-reset heatmap events", () => {
   const now = new Date("2026-08-14T00:00:00.000Z");
-  const regularRows = getDueRegularResetEventRows(now);
+  const regularRows = getDueRegularResetEventRows(
+    now,
+    "2026-08-01T03:32:00.000Z",
+  );
   const withoutRegular = getLocalRadarData({ calculationNow: now });
   const withRegular = getLocalRadarData({ calculationNow: now, regularResetEvents: regularRows });
   assert.deepEqual(

@@ -33,6 +33,9 @@ import {
   getNoticeBackedHistoryInputs,
   isNoticeBackedRecoveryEvent,
 } from "./radar/tiboHistory";
+import {
+  getLatestRegularScheduleAnchorAt as getLatestRegularScheduleAnchorFromEvents,
+} from "./radar/regularResetSchedule";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
   getResetDisplayNameEventKey,
@@ -299,61 +302,14 @@ export function getRadarViewModel(
   };
 }
 
-function getLatestRegularOrForcedResetAt(
+export function getLatestRegularScheduleAnchorAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ): string | null {
-  let latestTime = 0;
-  let latestDateStr: string | null = null;
-
-  const nowTime = now.getTime();
-
-  // 全体履歴から、周期の基準にできる完了済みイベントだけを拾う。
-  const combinedHistory = getCombinedResetHistory(data);
-  for (const item of combinedHistory) {
-    const isPersistedRegular = getHistoryRecordKind(item) === "regular_completed";
-    if (
-      item.status?.toLowerCase() === "rejected" ||
-      item.status?.toLowerCase() === "voided" ||
-      (!isPersistedRegular && !isBroadResetScope(item))
-    ) {
-      continue;
-    }
-
-    const legacyItem = item as WindowEventLike & {
-      cycleType?: string;
-      resetMethod?: string;
-      resetType?: string;
-    };
-    const resetMethod = item.details?.resetMethod ?? legacyItem.resetMethod ?? "";
-    const cycleType =
-      item.details?.cycleType ??
-      legacyItem.cycleType ??
-      legacyItem.resetType ??
-      (item.title?.includes("定期リセット") ? "定期リセット" : "");
-    if (resetMethod !== "強制リセット" && cycleType !== "定期リセット") {
-      continue;
-    }
-
-    const completedTime = getCompletedResetTimestamp(item);
-    const dateStr = item.closed_at ?? item.completed_at ?? null;
-    if (
-      !dateStr ||
-      completedTime === null ||
-      !Number.isFinite(completedTime) ||
-      !Number.isFinite(nowTime) ||
-      completedTime > nowTime
-    ) {
-      continue;
-    }
-
-    if (completedTime > latestTime) {
-      latestTime = completedTime;
-      latestDateStr = dateStr;
-    }
-  }
-
-  return latestDateStr;
+  return getLatestRegularScheduleAnchorFromEvents(
+    getCombinedResetHistory(data),
+    now,
+  );
 }
 
 function getRegularResetForecast(
@@ -363,7 +319,7 @@ function getRegularResetForecast(
   now: Date = new Date(),
 ) {
   // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
-  const autoLatestResetAt = getLatestRegularOrForcedResetAt(data, now);
+  const autoLatestResetAt = getLatestRegularScheduleAnchorAt(data, now);
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
