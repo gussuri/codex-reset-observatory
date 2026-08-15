@@ -234,7 +234,27 @@ test("excludes banked, narrow, voided, and future reset candidates", () => {
   );
 });
 
-test("completed regular rows remain valid anchors, including a Banked Reset delivery", () => {
+test("does not use a legacy regular banked distribution as a schedule anchor", () => {
+  const legacyBankedDistribution = resetEvent("2026-06-12T00:11:00.000Z", {
+    recordKind: "banked_distribution",
+    scope: "全有料プラン",
+    details: {
+      cycleType: "定期リセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+    },
+  });
+
+  assert.equal(
+    getLatestAnchorFromEvents(
+      [legacyBankedDistribution],
+      new Date("2026-06-13T00:00:00.000Z"),
+    ),
+    null,
+  );
+});
+
+test("canonical regular_completed rows remain valid anchors, including a Banked Reset delivery", () => {
   assert.equal(
     getLatestAnchorFromEvents([
       regularEvent(INITIAL_ANCHOR_AT, {

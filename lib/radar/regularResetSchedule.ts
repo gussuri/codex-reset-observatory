@@ -82,16 +82,20 @@ function isQualifyingScheduleAnchor(item: WindowEventLike) {
 
   const cycleType = item.details?.cycleType;
   if (item.recordKind === "regular_completed") {
+    // This record kind is reserved for a canonical scheduled regular wave.
+    // Its delivery method may be Banked Reset, but the record itself proves
+    // that the weekly boundary was completed; a banked_distribution record
+    // only proves that reset credit was distributed.
     return true;
   }
 
   // Older local records did not use regular_completed yet. Preserve those
-  // records only when their regular cycle and broad scope are explicit.
+  // records only when their regular cycle and broad scope are explicit. A
+  // legacy banked_distribution is deliberately excluded: it may be only a
+  // manual reset-credit distribution, not an actual weekly boundary.
   if (
     cycleType === "定期リセット" &&
-    (item.recordKind === "confirmed_global" ||
-      item.recordKind === "banked_distribution" ||
-      item.recordKind === "reference") &&
+    (item.recordKind === "confirmed_global" || item.recordKind === "reference") &&
     isBroadResetScope(item)
   ) {
     return true;
