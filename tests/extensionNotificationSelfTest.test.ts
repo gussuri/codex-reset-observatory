@@ -61,6 +61,7 @@ test("options page exposes a safe notification test and reports its result", asy
     "saveBtn",
     "testBtn",
     "notificationTestBtn",
+    "saveRepliesDomBtn",
     "statusMessage",
     "diagnosticsEnabled",
     "diagnosticsMaskText",

@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const saveBtn = document.getElementById("saveBtn");
   const testBtn = document.getElementById("testBtn");
   const notificationTestBtn = document.getElementById("notificationTestBtn");
+  const saveRepliesDomBtn = document.getElementById("saveRepliesDomBtn");
   const statusMsg = document.getElementById("statusMessage");
   const diagnosticsEnabled = document.getElementById("diagnosticsEnabled");
   const diagnosticsMaskText = document.getElementById("diagnosticsMaskText");
@@ -32,6 +33,87 @@ document.addEventListener("DOMContentLoaded", async () => {
     statusMsg.innerText = message;
     statusMsg.className = isError ? "error" : "success";
   }
+
+  const repliesTabPatterns = [
+    "https://x.com/thsottiaux/with_replies*",
+    "https://twitter.com/thsottiaux/with_replies*",
+  ];
+
+  async function findRepliesTab() {
+    if (!chrome.tabs || typeof chrome.tabs.query !== "function") {
+      throw new Error("tabs_unavailable");
+    }
+
+    const tabs = await chrome.tabs.query({ url: repliesTabPatterns });
+    const matchingTabs = (Array.isArray(tabs) ? tabs : []).filter(
+      (tab) =>
+        Number.isInteger(tab?.id)
+        && TiboMonitorScan.getTimelineSource(tab.url) === "with_replies",
+    );
+    return matchingTabs.find((tab) => tab.active) || matchingTabs[0] || null;
+  }
+
+  function sendDomCaptureMessage(tabId) {
+    return new Promise((resolve) => {
+      try {
+        chrome.tabs.sendMessage(
+          tabId,
+          { action: "CAPTURE_WITH_REPLIES_DOM" },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: "content_script_unavailable" });
+              return;
+            }
+            resolve(response || { success: false, error: "dom_capture_failed" });
+          },
+        );
+      } catch {
+        resolve({ success: false, error: "content_script_unavailable" });
+      }
+    });
+  }
+
+  function getDomCaptureErrorMessage(errorCode) {
+    if (errorCode === "content_script_unavailable" || errorCode === "not_replies_page") {
+      return "拡張機能更新後は Tibo の返信ページを一度再読み込みしてください。";
+    }
+    if (errorCode === "tabs_unavailable") {
+      return "Tibo の返信ページを確認できませんでした。";
+    }
+    return "返信ページのDOM保存に失敗しました。ページを再読み込みしてから再実行してください。";
+  }
+
+  saveRepliesDomBtn.addEventListener("click", async () => {
+    showStatus("返信ページのDOMを保存中...");
+    saveRepliesDomBtn.disabled = true;
+
+    try {
+      const tab = await findRepliesTab();
+      if (!tab) {
+        showStatus("Tibo の返信ページを開いてから再実行してください。", true);
+        return;
+      }
+
+      const response = await sendDomCaptureMessage(tab.id);
+      if (!response?.success) {
+        showStatus(getDomCaptureErrorMessage(response?.error), true);
+        return;
+      }
+
+      const filename = typeof response.data?.filename === "string"
+        ? response.data.filename
+        : "tibo-with-replies-dom.html";
+      const characterCount = Number(response.data?.characterCount);
+      const formattedCount = Number.isFinite(characterCount)
+        ? Math.max(0, Math.floor(characterCount)).toLocaleString()
+        : "不明";
+      showStatus(`返信ページのDOM保存を開始しました: ${filename}（${formattedCount}文字）`);
+    } catch {
+      showStatus("返信ページのDOM保存に失敗しました。ページを再読み込みしてから再実行してください。", true);
+    } finally {
+      saveRepliesDomBtn.disabled = false;
+    }
+  });
 
   function safeNotificationError(value) {
     const text = typeof value === "string" ? value : "notifications API is unavailable";

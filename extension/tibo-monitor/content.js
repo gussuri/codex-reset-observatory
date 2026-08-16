@@ -115,6 +115,33 @@
     });
   }
 
+  function isCurrentRepliesTimeline() {
+    return TiboMonitorScan.getTimelineSource(window.location.href) === "with_replies";
+  }
+
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+      if (request?.action !== "CAPTURE_WITH_REPLIES_DOM") return false;
+
+      if (!isCurrentRepliesTimeline()) {
+        sendResponse({ success: false, error: "not_replies_page" });
+        return false;
+      }
+
+      try {
+        const data = TiboMonitorScan.captureRawDomToDownload(
+          document,
+          URL,
+          Blob,
+        );
+        sendResponse({ success: true, data });
+      } catch {
+        sendResponse({ success: false, error: "dom_capture_failed" });
+      }
+      return false;
+    });
+  }
+
   function getMonitorState(keys) {
     return requestServiceWorker("GET_CONTENT_MONITOR_STATE", { keys });
   }

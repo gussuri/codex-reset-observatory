@@ -145,6 +145,17 @@
       padding-top: 20px;
       border-top: 1px solid var(--border);
     }
+    .dom-investigation-panel {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .dom-investigation-description {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 6px 0 12px;
+    }
     .notification-test-description {
       color: var(--muted);
       font-size: 0.8rem;
@@ -205,6 +216,12 @@
       <button id="notificationTestBtn" class="btn-secondary">通知をテスト</button>
     </div>
 
+    <div class="dom-investigation-panel">
+      <label for="saveRepliesDomBtn">DOM investigation</label>
+      <p class="dom-investigation-description">現在開いている Tibo の返信ページの生DOMをローカル保存します。調査用のため、投稿本文など画面内の情報を加工せず保存します。</p>
+      <button id="saveRepliesDomBtn" class="btn-secondary">返信ページHTMLを保存</button>
+    </div>
+
     <div class="diagnostic-panel">
       <label>Diagnostic log</label>
       <div id="diagnosticCount">読み込み中...</div>
@@ -219,6 +236,7 @@
   </div>
 
   <script src="diagnostics.js"></script>
+  <script src="scan-utils.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

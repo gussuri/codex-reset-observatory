@@ -76,6 +76,83 @@
     };
   }
 
+  function getDocumentTypeDeclaration(documentRef) {
+    const doctype = documentRef?.doctype;
+    if (!doctype) return "";
+
+    const name = String(doctype.name || "html");
+    if (doctype.publicId) {
+      const systemId = doctype.systemId ? ` "${doctype.systemId}"` : "";
+      return `<!DOCTYPE ${name} PUBLIC "${doctype.publicId}"${systemId}>`;
+    }
+    if (doctype.systemId) {
+      return `<!DOCTYPE ${name} SYSTEM "${doctype.systemId}">`;
+    }
+    return `<!DOCTYPE ${name}>`;
+  }
+
+  function captureRawDomToDownload(
+    documentRef,
+    urlApi,
+    BlobConstructor,
+    nowValue,
+    scheduleRevoke,
+  ) {
+    const documentObject = documentRef || global.document;
+    const objectUrlApi = urlApi || global.URL;
+    const BlobClass = BlobConstructor || global.Blob;
+    const documentElement = documentObject?.documentElement;
+
+    if (!documentElement || typeof documentElement.outerHTML !== "string") {
+      throw new Error("dom_unavailable");
+    }
+    if (
+      !objectUrlApi
+      || typeof objectUrlApi.createObjectURL !== "function"
+      || typeof objectUrlApi.revokeObjectURL !== "function"
+    ) {
+      throw new Error("download_api_unavailable");
+    }
+    if (typeof BlobClass !== "function") {
+      throw new Error("blob_api_unavailable");
+    }
+
+    const doctype = getDocumentTypeDeclaration(documentObject);
+    const html = `${doctype ? `${doctype}\n` : ""}${documentElement.outerHTML}`;
+    const date = nowValue == null ? new Date() : new Date(nowValue);
+    if (Number.isNaN(date.getTime())) throw new Error("invalid_capture_time");
+
+    const filename = `tibo-with-replies-dom-${date.toISOString().replace(/[:.]/g, "-")}.html`;
+    const blob = new BlobClass([html], { type: "text/html;charset=utf-8" });
+    const objectUrl = objectUrlApi.createObjectURL(blob);
+    const link = documentObject.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+
+    try {
+      const parent = documentObject.body || documentElement;
+      parent.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      objectUrlApi.revokeObjectURL(objectUrl);
+      throw error;
+    }
+
+    const revoke = () => objectUrlApi.revokeObjectURL(objectUrl);
+    if (typeof scheduleRevoke === "function") {
+      scheduleRevoke(revoke, 1000);
+    } else if (typeof global.setTimeout === "function") {
+      global.setTimeout(revoke, 1000);
+    }
+
+    return {
+      filename,
+      characterCount: html.length,
+    };
+  }
+
   function getReplyMarker(article) {
     if (!article || typeof article.querySelector !== "function") return null;
     const selectors = [
@@ -247,6 +324,8 @@
     isTiboStatusUrl,
     shouldRestoreMonitoredTimeline,
     createTimelineRestoreGate,
+    getDocumentTypeDeclaration,
+    captureRawDomToDownload,
     extractReplyMetadata,
     extractQuoteMetadata,
   };
