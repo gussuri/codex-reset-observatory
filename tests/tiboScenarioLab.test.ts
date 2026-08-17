@@ -18,6 +18,7 @@ import {
 } from "../lib/radar/tiboHistory";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const fixture = fixtureJson as TiboScenarioFixture;
 const scenarios = fixture.scenarios;
@@ -148,6 +149,104 @@ test("reply and quote context remain separate from author text", () => {
   assert.match(quotePrompt, /not Tibo's own text/);
   assert.equal(runTiboScenario(reply).formalAccepted, false);
   assert.equal(runTiboScenario(quote).formalAccepted, false);
+});
+
+test("historical conditional Maybe reply is a weak teaser without formal adoption or probability impact", () => {
+  const scenario: TiboScenario = {
+    id: "historical-maybe-20m-repair",
+    category: "reply_context",
+    description: "Conditional 20M-user reset question answered by Tibo",
+    tweetText: "Maybe",
+    tweetCreatedAt: "2026-08-16T18:57:17.000Z",
+    tweetUrl: "https://x.com/thsottiaux/status/2089063967301730789",
+    isReply: true,
+    replyToHandles: ["@Ananth7e"],
+    replyContextText: "are we going to get a reset when codex crosses 20M users?",
+    sourceTimeline: "with_replies",
+    expected: {
+      signalType: "teaser",
+      temporalDirection: "future",
+      teaserStrength: "weak",
+      shouldCreateActiveNotice: false,
+      shouldCreateTeaser: true,
+      shouldCreateResetHistoryEvent: false,
+      shouldAffectProbability: false,
+    },
+    pipeline: true,
+    mockGeminiOutput: {
+      signalType: "teaser",
+      confidence: 0.95,
+      temporalDirection: "future",
+      teaserStrength: "weak",
+      teaserStrengthConfidence: 0.8,
+      teaserStrengthEvidenceQuote: "Maybe",
+    },
+  };
+  const run = runTiboScenario(scenario);
+  const baseline = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow: run.now }),
+    "ja",
+    { calculationNow: run.now, limitHistory: false },
+  );
+
+  assert.equal(run.selected.signalType, "teaser");
+  assert.equal(run.teaserStatus, "weak");
+  assert.equal(run.activeSignal.is_reply, true);
+  assert.equal(run.formalAccepted, false);
+  assert.equal(run.historyEvent, null);
+  assert.equal(run.publicSnapshot.viewModel.activeWindow.active, false);
+  assert.equal(run.publicSnapshot.viewModel.probability24h, baseline.viewModel.probability24h);
+  assert.equal(run.publicSnapshot.viewModel.probability48h, baseline.viewModel.probability48h);
+
+  const prompt = buildScenarioPrompt(scenario);
+  assert.match(prompt, /Replying to: @Ananth7e/);
+  assert.match(prompt, /Parent context shown in the same article: are we going to get a reset when codex crosses 20M users\?/);
+});
+
+test("derivative Maybe reply remains non-independent and short replies stay irrelevant", () => {
+  const derivative: TiboScenario = {
+    id: "historical-maybe-echo-repair",
+    category: "reply_context",
+    description: "Derivative echo of the earlier Maybe reply",
+    tweetText: "Maybe",
+    tweetCreatedAt: "2026-08-16T19:54:10.000Z",
+    tweetUrl: "https://x.com/thsottiaux/status/2089078284487139347",
+    isReply: true,
+    replyContextText: '"maybe" from tibo is basically a confirmed reset',
+    sourceTimeline: "with_replies",
+    expected: {
+      signalType: "irrelevant",
+      temporalDirection: "unclear",
+      teaserStrength: "none",
+      shouldCreateTeaser: false,
+      shouldCreateResetHistoryEvent: false,
+      shouldAffectProbability: false,
+    },
+    pipeline: true,
+    mockGeminiOutput: {
+      signalType: "irrelevant",
+      confidence: 0.95,
+      temporalDirection: "unclear",
+      teaserStrength: "none",
+    },
+  };
+  const run = runTiboScenario(derivative);
+  assert.equal(run.selected.signalType, "irrelevant");
+  assert.equal(run.teaserStatus, "none");
+  assert.equal(run.formalAccepted, false);
+  assert.equal(run.historyEvent, null);
+  assert.equal(run.publicSnapshot.viewModel.activeWindow.active, false);
+
+  const shortReplies = ["Yes", "No way", "Indeed", "Welcome", "Legend", "Always improving"];
+  for (let index = 0; index < shortReplies.length; index += 1) {
+    const text = shortReplies[index];
+    const result = classifyTiboTweet(
+      text,
+      `https://x.com/thsottiaux/status/${920000000000000000 + index}`,
+      { isReply: true },
+    );
+    assert.equal(result.signalType, "irrelevant", text);
+  }
 });
 
 test("metamorphic formatting variants keep the same fixed semantic result", () => {
