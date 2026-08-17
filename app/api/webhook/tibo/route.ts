@@ -100,7 +100,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid tweetId" }, { status: 400 });
     }
 
-    if (!text || typeof text !== "string" || text.length > 2000) {
+    if (
+      typeof text !== "string" ||
+      text.trim().length === 0 ||
+      text.length > 2000
+    ) {
       return NextResponse.json({ error: "Invalid text" }, { status: 400 });
     }
 

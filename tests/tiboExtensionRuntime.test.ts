@@ -31,6 +31,18 @@ test("recognizes Chrome extension context invalidation without matching ordinary
     true,
   );
   assert.equal(
+    runtime.isExtensionContextInvalidated(
+      new TypeError("Cannot read properties of undefined (reading 'sendMessage')"),
+    ),
+    true,
+  );
+  assert.equal(
+    runtime.isExtensionContextInvalidated(
+      new Error("chrome.runtime.sendMessage is unavailable"),
+    ),
+    true,
+  );
+  assert.equal(
     runtime.isExtensionContextInvalidated(new Error("Network request failed")),
     false,
   );

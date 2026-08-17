@@ -16,6 +16,7 @@
     "article_missing",
     "time_element_missing",
     "tweet_text_missing",
+    "tweet_text_empty",
     "tibo_status_url_missing",
     "tweet_datetime_missing",
     "no_parse_success",
@@ -30,6 +31,7 @@
     "articleCount",
     "timeElementCount",
     "tweetTextCount",
+    "nonEmptyTweetTextCount",
     "matchingTiboStatusCount",
     "translatedTweetCount",
   ];
@@ -154,6 +156,10 @@
       articleCount: count("articleCount"),
       timeElementCount: count("timeElementCount"),
       tweetTextCount: count("tweetTextCount"),
+      nonEmptyTweetTextCount:
+        Object.prototype.hasOwnProperty.call(source, "nonEmptyTweetTextCount")
+          ? count("nonEmptyTweetTextCount")
+          : count("tweetTextCount"),
       matchingTiboStatusCount: count("matchingTiboStatusCount"),
       translatedTweetCount: count("translatedTweetCount"),
       tweetDatetimeCount: count("tweetDatetimeCount"),
@@ -171,6 +177,12 @@
       articleCount: list.length,
       timeElementCount: list.filter((record) => record && record.hasTime).length,
       tweetTextCount: list.filter((record) => record && record.hasTweetText).length,
+      nonEmptyTweetTextCount: list.filter(
+        (record) =>
+          record &&
+          record.hasTweetText &&
+          record.hasNonEmptyTweetText !== false,
+      ).length,
       matchingTiboStatusCount: list.filter(
         (record) => record && record.hasMatchingTiboStatus,
       ).length,
@@ -189,6 +201,7 @@
     if (summary.articleCount === 0) return "article_missing";
     if (summary.timeElementCount === 0) return "time_element_missing";
     if (summary.tweetTextCount === 0) return "tweet_text_missing";
+    if (summary.nonEmptyTweetTextCount === 0) return "tweet_text_empty";
     if (summary.matchingTiboStatusCount === 0) return "tibo_status_url_missing";
     if (summary.translatedTweetCount > 0) return "translated_text_detected";
     if (summary.tweetDatetimeCount === 0) return "tweet_datetime_missing";
@@ -274,6 +287,7 @@
         "articleCount",
         "timeElementCount",
         "tweetTextCount",
+        "nonEmptyTweetTextCount",
         "matchingTiboStatusCount",
         "translatedTweetCount",
         "tweetDatetimeCount",

@@ -6,6 +6,8 @@
 importScripts("diagnostics.js", "scan-utils.js");
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
+const QUARANTINE_KEY = "tibo_quarantined_tweet_ids";
+const MAX_QUARANTINE_ENTRIES = 100;
 const FORMAL_ADOPTION_NOTIFIED_KEY = "tibo_formal_adoption_notified_ids";
 const FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_notification_urls";
 const TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_test_notification_urls";
@@ -53,6 +55,58 @@ function saveServiceDiagnostic(entry) {
     type: "service_worker",
     ...entry,
   }).catch(() => {});
+}
+
+function getExtensionVersion() {
+  try {
+    return chrome.runtime?.getManifest?.().version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getTweetPayloadMetadata(payload) {
+  const text = payload?.text;
+  const length = typeof text === "string" ? text.length : null;
+  const trimmedLength = typeof text === "string" ? text.trim().length : null;
+  const contextLength = (value) => (typeof value === "string" ? value.length : null);
+
+  return {
+    tweetId: typeof payload?.tweetId === "string" ? payload.tweetId.slice(0, 120) : null,
+    textType: typeof text,
+    textLength: length,
+    trimmedTextLength: trimmedLength,
+    sourceTimeline:
+      payload?.sourceTimeline === "profile" || payload?.sourceTimeline === "with_replies"
+        ? payload.sourceTimeline
+        : null,
+    isReply: payload?.isReply === true,
+    replyContextLength: contextLength(payload?.replyContextText),
+    quoteContextLength: contextLength(payload?.quoteContextText),
+  };
+}
+
+async function quarantineTweet(tweetId, status, reasonCode) {
+  const data = await chrome.storage.local.get([QUARANTINE_KEY]);
+  const current = data[QUARANTINE_KEY];
+  const entries = current && typeof current === "object" ? { ...current } : {};
+  entries[tweetId] = {
+    extensionVersion: getExtensionVersion(),
+    httpStatus: Number.isInteger(status) ? status : null,
+    reasonCode,
+    quarantinedAt: new Date().toISOString(),
+  };
+
+  const keys = Object.keys(entries);
+  while (keys.length > MAX_QUARANTINE_ENTRIES) {
+    const oldestKey = keys.shift();
+    if (oldestKey) delete entries[oldestKey];
+  }
+  await chrome.storage.local.set({ [QUARANTINE_KEY]: entries });
+}
+
+function isRetryableWebhookStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 // Setup alarms on Service Worker initialization
@@ -486,13 +540,28 @@ async function executePostTweet(payload) {
   }
 
   // 1. Get processed IDs from chrome.storage.local
-  const storageData = await chrome.storage.local.get([QUEUE_KEY]);
+  const storageData = await chrome.storage.local.get([QUEUE_KEY, QUARANTINE_KEY]);
   const processedIds = storageData[QUEUE_KEY] || [];
 
   // 2. Skip if already processed in storage
   if (processedIds.includes(tweetId)) {
     console.log(`[Service Worker] Tweet ${tweetId} already processed. Skipping fetch.`);
     return { success: true, skipped: true };
+  }
+
+  // Payload rejections are terminal for this extension version. They remain
+  // retryable after an extension update, which lets a collector fix be tested
+  // without a mutation observer resend storm.
+  const quarantine = storageData[QUARANTINE_KEY];
+  const quarantineEntry =
+    quarantine && typeof quarantine === "object" ? quarantine[tweetId] : null;
+  if (quarantineEntry?.extensionVersion === getExtensionVersion()) {
+    return {
+      success: false,
+      quarantined: true,
+      httpStatus: quarantineEntry.httpStatus || null,
+      error: "Tweet payload is quarantined until the extension is updated.",
+    };
   }
 
   // 3. Fetch Webhook
@@ -516,8 +585,13 @@ async function executePostTweet(payload) {
       reasonCode: "webhook_network_error",
       messages: ["The tweet webhook request failed before receiving a response."],
       error: err?.message || String(err),
+      payloadMetadata: getTweetPayloadMetadata(payload),
     });
-    throw new Error("Tweet webhook request failed.");
+    return {
+      success: false,
+      retryable: true,
+      error: "Tweet webhook request failed.",
+    };
   }
 
   if (!response.ok) {
@@ -531,9 +605,21 @@ async function executePostTweet(payload) {
       reasonCode: "webhook_http_error",
       httpStatus: response.status,
       responseBody: errorText,
+      failureClass: isRetryableWebhookStatus(response.status) ? "retryable" : "quarantined",
+      payloadMetadata: getTweetPayloadMetadata(payload),
       messages: ["The tweet webhook returned a non-2xx response."],
     });
-    throw new Error(`Tweet webhook returned HTTP ${response.status}.`);
+    const error = `Tweet webhook returned HTTP ${response.status}.`;
+    if (isRetryableWebhookStatus(response.status)) {
+      return { success: false, retryable: true, httpStatus: response.status, error };
+    }
+
+    await quarantineTweet(
+      tweetId,
+      response.status,
+      response.status === 400 ? "payload_rejected" : "webhook_rejected",
+    );
+    return { success: false, quarantined: true, httpStatus: response.status, error };
   }
 
   const json = await response.json();

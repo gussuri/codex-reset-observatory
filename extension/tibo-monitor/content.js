@@ -15,6 +15,10 @@
   const inFlightTweetIds = new Set();
   // Session-level Set of processed tweet IDs for this tab so scans skip silently
   const processedTweetIds = new Set();
+  // A terminal payload rejection is kept out of mutation-triggered retries.
+  const quarantinedTweetIds = new Set();
+  const retryBlockedUntil = new Map();
+  const RETRY_COOLDOWN_MS = 30 * 1000;
 
   // Persistent Session ID across page reloads in single tab
   let sessionId = typeof sessionStorage !== "undefined" ? sessionStorage.getItem(SESSION_KEY) : null;
@@ -84,6 +88,38 @@
     console.warn(`[Tibo Extension] ${operation} failed:`, error);
   }
 
+  function getExtensionRuntime() {
+    try {
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        typeof chrome.runtime.sendMessage !== "function"
+      ) {
+        throw new Error(
+          "Extension context invalidated: chrome.runtime.sendMessage is unavailable.",
+        );
+      }
+      return chrome.runtime;
+    } catch (error) {
+      if (TiboExtensionRuntime.isExtensionContextInvalidated(error)) throw error;
+      throw new Error(
+        "Extension context invalidated: chrome.runtime.sendMessage is unavailable.",
+      );
+    }
+  }
+
+  function isRetryBlocked(tweetId) {
+    const blockedUntil = retryBlockedUntil.get(tweetId);
+    if (!blockedUntil) return false;
+    if (blockedUntil > Date.now()) return true;
+    retryBlockedUntil.delete(tweetId);
+    return false;
+  }
+
+  function blockRetry(tweetId) {
+    retryBlockedUntil.set(tweetId, Date.now() + RETRY_COOLDOWN_MS);
+  }
+
   function runExtensionTask(task, operation) {
     if (extensionContextInvalidated) return Promise.resolve();
     return TiboExtensionRuntime.runSafely(task, (error) => {
@@ -92,6 +128,7 @@
   }
 
   function scheduleExtensionInterval(task, delay, operation) {
+    if (extensionContextInvalidated) return null;
     const intervalId = setInterval(() => {
       runExtensionTask(task, operation);
     }, delay);
@@ -101,9 +138,10 @@
 
   function requestServiceWorker(action, payload = {}) {
     return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action, ...payload }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
+      const runtime = getExtensionRuntime();
+      runtime.sendMessage({ action, ...payload }, (response) => {
+        if (runtime.lastError) {
+          reject(new Error(runtime.lastError.message));
           return;
         }
         if (!response?.success) {
@@ -119,27 +157,32 @@
     return TiboMonitorScan.getTimelineSource(window.location.href) === "with_replies";
   }
 
-  if (chrome.runtime?.onMessage) {
-    chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-      if (request?.action !== "CAPTURE_WITH_REPLIES_DOM") return false;
+  try {
+    const runtime = getExtensionRuntime();
+    if (runtime.onMessage) {
+      runtime.onMessage.addListener((request, _sender, sendResponse) => {
+        if (request?.action !== "CAPTURE_WITH_REPLIES_DOM") return false;
 
-      if (!isCurrentRepliesTimeline()) {
-        sendResponse({ success: false, error: "not_replies_page" });
+        if (!isCurrentRepliesTimeline()) {
+          sendResponse({ success: false, error: "not_replies_page" });
+          return false;
+        }
+
+        try {
+          const data = TiboMonitorScan.captureRawDomToDownload(
+            document,
+            URL,
+            Blob,
+          );
+          sendResponse({ success: true, data });
+        } catch {
+          sendResponse({ success: false, error: "dom_capture_failed" });
+        }
         return false;
-      }
-
-      try {
-        const data = TiboMonitorScan.captureRawDomToDownload(
-          document,
-          URL,
-          Blob,
-        );
-        sendResponse({ success: true, data });
-      } catch {
-        sendResponse({ success: false, error: "dom_capture_failed" });
-      }
-      return false;
-    });
+      });
+    }
+  } catch (error) {
+    handleExtensionError(error, "content message listener");
   }
 
   function getMonitorState(keys) {
@@ -211,11 +254,12 @@
       last_page_reload_error: storageData.tibo_last_page_reload_error || null,
     };
 
-    chrome.runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
+    const runtime = getExtensionRuntime();
+    runtime.sendMessage({ action: "POST_HEARTBEAT", payload }, (response) => {
       try {
-        if (chrome.runtime.lastError) {
+        if (runtime.lastError) {
           handleExtensionError(
-            new Error(chrome.runtime.lastError.message),
+            new Error(runtime.lastError.message),
             "heartbeat message",
           );
         } else if (response && response.success) {
@@ -344,10 +388,13 @@
         const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
         const datetime = timeEl?.getAttribute("datetime") || "";
         const hasValidDatetime = Boolean(datetime && !Number.isNaN(new Date(datetime).getTime()));
+        const text = typeof textEl?.innerText === "string" ? textEl.innerText : "";
+        const hasNonEmptyTweetText = text.trim().length > 0;
 
         const record = {
           hasTime: Boolean(timeEl),
           hasTweetText: Boolean(textEl),
+          hasNonEmptyTweetText,
           hasMatchingTiboStatus: Boolean(match),
           isTranslated: translated,
           hasValidDatetime,
@@ -373,6 +420,10 @@
           continue;
         }
 
+        // X can render the tweetText element before its text content. Treat
+        // that transient state as incomplete and wait for a later scan.
+        if (!hasNonEmptyTweetText) continue;
+
         // A valid DOM parse is useful even when the webhook deduplicator skips the tweet.
         record.isParseSuccess = true;
 
@@ -383,6 +434,10 @@
           tweetId,
           createdAt,
         });
+
+        if (quarantinedTweetIds.has(tweetId) || isRetryBlocked(tweetId)) {
+          continue;
+        }
 
         const replyMetadata = TiboMonitorScan.extractReplyMetadata(article, {
           sourceTimeline,
@@ -397,9 +452,8 @@
         }
 
         const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
-        const text = textEl.innerText || "";
 
-        console.log(`[Tibo Extension] New Tweet Found (${tweetId}): ${text.substring(0, 50)}...`);
+        console.log(`[Tibo Extension] New Tweet Found (${tweetId}), textLength=${text.length}.`);
 
         // Add to inFlight Set and delegate deduplication to Service Worker
         inFlightTweetIds.add(tweetId);
@@ -472,19 +526,30 @@
     };
 
     try {
-      chrome.runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
+      const runtime = getExtensionRuntime();
+      runtime.sendMessage({ action: "POST_TWEET", payload }, (response) => {
         inFlightTweetIds.delete(tweetId);
 
         try {
-          if (chrome.runtime.lastError) {
+          if (runtime.lastError) {
+            blockRetry(tweetId);
             handleExtensionError(
-              new Error(chrome.runtime.lastError.message),
+              new Error(runtime.lastError.message),
               `Webhook for ${tweetId}`,
             );
             return;
           }
 
-          if (response && response.success) {
+          if (response?.quarantined) {
+            quarantinedTweetIds.add(tweetId);
+            retryBlockedUntil.delete(tweetId);
+            console.warn(
+              `[Tibo Extension] Tweet ${tweetId} was quarantined after a terminal webhook rejection.`,
+            );
+          } else if (response?.retryable) {
+            blockRetry(tweetId);
+            console.warn(`[Tibo Extension] Tweet ${tweetId} will be retried after a temporary webhook failure.`);
+          } else if (response && response.success) {
             processedTweetIds.add(tweetId);
             if (response.skipped) {
               console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
@@ -505,16 +570,18 @@
   }
 
   // Initial Scan & MutationObserver Integration
-  runExtensionTask(scanTweets, "initial scan");
+  if (!extensionContextInvalidated) {
+    mutationObserver = new MutationObserver(() => {
+      runExtensionTask(scanTweets, "DOM scan");
+    });
 
-  mutationObserver = new MutationObserver(() => {
-    runExtensionTask(scanTweets, "DOM scan");
-  });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
 
-  mutationObserver.observe(document.body, { childList: true, subtree: true });
+    runExtensionTask(scanTweets, "initial scan");
 
-  // 60-second fallback polling interval
-  scheduleExtensionInterval(scanTweets, 60 * 1000, "polling scan");
+    // 60-second fallback polling interval
+    scheduleExtensionInterval(scanTweets, 60 * 1000, "polling scan");
+  }
 
   console.log("[Tibo Extension] Content script initialized with Service Worker Deduplication Delegation.");
 })();

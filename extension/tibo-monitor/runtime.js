@@ -7,7 +7,9 @@
   }
 
   function isExtensionContextInvalidated(error) {
-    return /extension context invalidated|context invalidated/i.test(errorMessage(error));
+    return /extension context invalidated|context invalidated|chrome\.runtime(?:\.sendMessage)?[^\n]*(?:unavailable|undefined)|reading ['"]sendMessage['"]/i.test(
+      errorMessage(error),
+    );
   }
 
   function runSafely(task, onError) {

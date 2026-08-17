@@ -218,6 +218,7 @@ test("persists only the safe scan summary and never raw diagnostic content", () 
     articleCount: 3,
     timeElementCount: 2,
     tweetTextCount: 2,
+    nonEmptyTweetTextCount: 2,
     matchingTiboStatusCount: 1,
     translatedTweetCount: 1,
     tweetDatetimeCount: 1,

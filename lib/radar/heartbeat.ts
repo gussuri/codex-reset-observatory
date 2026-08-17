@@ -2,6 +2,7 @@ export interface HeartbeatScanSummary {
   articleCount: number;
   timeElementCount: number;
   tweetTextCount: number;
+  nonEmptyTweetTextCount: number;
   matchingTiboStatusCount: number;
   translatedTweetCount: number;
   tweetDatetimeCount: number;
@@ -66,6 +67,7 @@ const SAFE_SCAN_ERROR_CODES = new Set([
   "article_missing",
   "time_element_missing",
   "tweet_text_missing",
+  "tweet_text_empty",
   "tibo_status_url_missing",
   "tweet_datetime_missing",
   "no_parse_success",
@@ -106,6 +108,11 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
     articleCount: normalizeCount(summary.articleCount),
     timeElementCount: normalizeCount(summary.timeElementCount),
     tweetTextCount: normalizeCount(summary.tweetTextCount),
+    nonEmptyTweetTextCount: normalizeCount(
+      Object.prototype.hasOwnProperty.call(summary, "nonEmptyTweetTextCount")
+        ? summary.nonEmptyTweetTextCount
+        : summary.tweetTextCount,
+    ),
     matchingTiboStatusCount: normalizeCount(summary.matchingTiboStatusCount),
     translatedTweetCount: normalizeCount(summary.translatedTweetCount),
     tweetDatetimeCount: normalizeCount(summary.tweetDatetimeCount),

@@ -153,6 +153,42 @@ test("content.js resolves reply metadata before deduplication and skips pending 
   assert.match(source, /sourceTimeline/);
 });
 
+test("content.js reads non-empty tweet text before marking a parse successful", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const textReadIndex = source.indexOf("const hasNonEmptyTweetText");
+  const emptyGuardIndex = source.indexOf("if (!hasNonEmptyTweetText) continue;");
+  const parseSuccessIndex = source.indexOf("record.isParseSuccess = true");
+  const sendIndex = source.indexOf('sendWebhook(\n          tweetId');
+
+  assert.ok(textReadIndex >= 0);
+  assert.ok(emptyGuardIndex > textReadIndex);
+  assert.ok(parseSuccessIndex > emptyGuardIndex);
+  assert.ok(sendIndex > parseSuccessIndex);
+  assert.match(source, /textLength=\$\{text\.length\}/);
+});
+
+test("content.js quarantines terminal webhook failures and cools down retryable failures", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+
+  assert.match(source, /quarantinedTweetIds/);
+  assert.match(source, /response\?\.quarantined/);
+  assert.match(source, /response\?\.retryable/);
+  assert.match(source, /RETRY_COOLDOWN_MS/);
+});
+
+test("content.js does not create timers after the extension context is invalidated", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+
+  const schedulerIndex = source.indexOf("function scheduleExtensionInterval");
+  const invalidationGuardIndex = source.indexOf(
+    "if (extensionContextInvalidated) return null;",
+    schedulerIndex,
+  );
+
+  assert.ok(schedulerIndex >= 0);
+  assert.ok(invalidationGuardIndex > schedulerIndex);
+});
+
 test("content.js does not access storage.local directly after trusted-context hardening", () => {
   const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
 

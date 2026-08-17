@@ -12,7 +12,9 @@ type Diagnostics = {
     records: ReadonlyArray<{
       hasTime?: boolean;
       hasTweetText?: boolean;
+      hasNonEmptyTweetText?: boolean;
       hasMatchingTiboStatus?: boolean;
+      hasValidDatetime?: boolean;
       isTranslated?: boolean;
       isParseSuccess?: boolean;
     }>,
@@ -152,6 +154,29 @@ test("summarizes empty, incomplete, mismatched, translated, and successful scans
   );
   assert.equal(successful.parseSuccessCount, 1);
   assert.equal(diagnostics.getScanFailureReason(successful), null);
+});
+
+test("does not treat an empty tweetText element as a successful parse", () => {
+  const diagnostics = loadDiagnostics();
+  const summary = diagnostics.buildScanSummary(
+    [
+      {
+        hasTime: true,
+        hasTweetText: true,
+        hasNonEmptyTweetText: false,
+        hasMatchingTiboStatus: true,
+        hasValidDatetime: true,
+      },
+    ],
+    "https://x.com/thsottiaux",
+    "v1.8-thread-replies",
+    "2026-08-17T00:00:00.000Z",
+  );
+
+  assert.equal(summary.tweetTextCount, 1);
+  assert.equal(summary.nonEmptyTweetTextCount, 0);
+  assert.equal(summary.parseSuccessCount, 0);
+  assert.equal(diagnostics.getScanFailureReason(summary), "tweet_text_empty");
 });
 
 test("diagnostic summaries distinguish profile and with-replies timelines", () => {

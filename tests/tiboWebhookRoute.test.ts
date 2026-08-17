@@ -85,6 +85,32 @@ test("Tibo state SELECT failure fails closed before upsert or formal adoption", 
   }
 });
 
+test("empty and whitespace-only source text are rejected before any database call", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    for (const text of ["", "   \n\t"]) {
+      const response = await POST(buildRequest({ text }));
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "Invalid text" });
+    }
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
 test("new reply metadata is validated and persisted while old payload fields remain compatible", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
