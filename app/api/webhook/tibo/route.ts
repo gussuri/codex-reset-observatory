@@ -16,14 +16,18 @@ import {
 } from "@/lib/radar/tiboHistory";
 import {
   confirmNearestCodexRecoveryObservation,
+  findNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
+  readCodexUsageMonitorState,
   upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
 import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
+import { getUsageMonitorCoverage } from "@/lib/codexUsageMonitorCoverage";
 import {
   buildFormalAdoptionResult,
   hasExistingFormalResetCluster,
   isNewFormalAdoption,
+  shouldDeferFormalTiboReset,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
@@ -335,13 +339,13 @@ export async function POST(req: NextRequest) {
       translated_text_ja: translationResult?.textJa ?? existingTranslationJa,
       translated_text_zh: translationResult?.textZh ?? existingTranslationZh,
     };
-    const persistedPayload = preserveTiboWebhookState(
+    let persistedPayload = preserveTiboWebhookState(
       payloadWithTranslations,
       existingSignal,
       receivedAt,
     );
 
-    const formalCandidate: FormalTiboResetSignal = {
+    let formalCandidate: FormalTiboResetSignal = {
       tweet_id: persistedPayload.tweet_id,
       text: persistedPayload.text,
       tweet_url: persistedPayload.tweet_url,
@@ -363,6 +367,48 @@ export async function POST(req: NextRequest) {
       quote_tweet_url: persistedPayload.quote_tweet_url,
       quote_author_handle: persistedPayload.quote_author_handle,
     };
+
+    // A fresh local quota observation is the only state in which absence of
+    // recovery can safely defer an unverified Tibo completion. If the monitor
+    // or recovery lookup is unavailable, preserve the existing non-blocking
+    // behavior because absence is not evidence there.
+    if (isFormalTiboResetSignal(formalCandidate)) {
+      const monitorState = await readCodexUsageMonitorState(supabase);
+      if (monitorState.error) {
+        console.warn("[Tibo Warning] Usage monitor coverage lookup unavailable", {
+          reason: "lookup_failed",
+        });
+      } else {
+        const coverage = getUsageMonitorCoverage(monitorState.state, new Date(receivedAt));
+        if (coverage.state === "fresh") {
+          const recoveryLookup = await findNearestCodexRecoveryObservation(
+            supabase,
+            formalCandidate.tweet_created_at,
+            USAGE_TIBO_MATCH_WINDOW_MS,
+          );
+          const shouldDefer = shouldDeferFormalTiboReset(
+            formalCandidate,
+            coverage,
+            {
+              available: !recoveryLookup.error,
+              matched: Boolean(recoveryLookup.observation),
+            },
+          );
+          if (shouldDefer) {
+            persistedPayload = {
+              ...persistedPayload,
+              signal_type: "irrelevant",
+              classification_reason: "Usage Monitorがfreshですが、quota recoveryが未確認のため正式resetとして保留しています。",
+            };
+            formalCandidate = {
+              ...formalCandidate,
+              signal_type: "irrelevant",
+            };
+          }
+        }
+      }
+    }
+
     let existingFormalCluster = false;
     const adoptionEligible = isNewFormalAdoption(formalCandidate, existingSignal);
     if (adoptionEligible) {
@@ -492,7 +538,7 @@ export async function POST(req: NextRequest) {
     // Display-name generation is deliberately best-effort. The formal reset
     // row is already durable, and a naming failure must never turn collection
     // into a failed webhook delivery.
-    if (formalCandidate.is_reply !== true) {
+    if (formalCandidate.is_reply !== true && isFormalTiboResetSignal(formalCandidate)) {
       try {
         await ensureResetDisplayNameForEvent(
           convertTiboResetSignalToHistoryEvent(formalCandidate),

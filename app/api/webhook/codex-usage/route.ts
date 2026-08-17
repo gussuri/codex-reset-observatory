@@ -16,6 +16,7 @@ import {
   findFormalTiboResetCluster,
   findRecentFormalTiboReset,
   insertCodexRecoveryObservation,
+  promoteDeferredTiboReset,
   readCodexUsageMonitorState,
   upsertResetExecutionEstimate,
   upsertCodexUsageMonitorState,
@@ -160,6 +161,18 @@ export async function POST(request: Request) {
     if (matchingTibo.error) {
       console.warn("[Codex usage] Tibo match lookup failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+    }
+
+    if (matchingTibo.tweetId && matchingTibo.needsPromotion) {
+      const promotion = await promoteDeferredTiboReset(
+        client,
+        matchingTibo.tweetId,
+        matchingTibo.confidence ?? 0.95,
+      );
+      if (promotion.error) {
+        console.warn("[Codex usage] deferred Tibo reset promotion failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+      }
     }
 
     const confirmedAt = matchingTibo.tweetId ? now.toISOString() : null;

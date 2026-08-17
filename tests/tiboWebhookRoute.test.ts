@@ -145,6 +145,76 @@ test("new reply metadata is validated and persisted while old payload fields rem
   }
 });
 
+test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+  const fetchMethods: string[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  const receivedAt = Date.now();
+  globalThis.fetch = async (input, init) => {
+    fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    if (fetchMethods.length === 1) {
+      return new Response(JSON.stringify({ data: null, error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (fetchMethods.length === 2) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: new Date(receivedAt - 30_000).toISOString(),
+        received_at: new Date(receivedAt - 29_000).toISOString(),
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 32,
+        window_duration_mins: 10080,
+        resets_at: 1787198370,
+        updated_at: new Date(receivedAt - 29_000).toISOString(),
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (fetchMethods.length === 3) {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(fetchMethods, ["GET", "GET", "GET", "POST"]);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "irrelevant");
+    assert.equal(upsertBody.rule_signal_type, "reset_executed");
+    assert.equal(upsertBody.classification_reason, "Usage Monitorがfreshですが、quota recoveryが未確認のため正式resetとして保留しています。");
+    const responseBody = await response.json();
+    assert.equal(responseBody.formalAdoption.newlyAdopted, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
 test("automatically stores Gemini Japanese and Chinese translations without changing the webhook response", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
@@ -204,7 +274,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "POST", "GET", "POST", "GET", "GET", "POST", "POST"]);
+    assert.deepEqual(fetchMethods, ["GET", "POST", "GET", "GET", "POST", "GET", "GET", "POST", "POST"]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");

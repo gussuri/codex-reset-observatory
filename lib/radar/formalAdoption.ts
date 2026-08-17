@@ -4,6 +4,7 @@ import {
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "./tiboHistory";
+import type { UsageMonitorCoverage } from "../codexUsageMonitorCoverage";
 
 export type FormalAdoptionResult = {
   newlyAdopted: boolean;
@@ -12,6 +13,30 @@ export type FormalAdoptionResult = {
   confidence: number | null;
   sourceUrl: string | null;
 };
+
+export type UsageMonitorRecoveryLookup = {
+  available: boolean;
+  matched: boolean;
+};
+
+/**
+ * Fresh monitor coverage can use the absence of a meaningful quota recovery
+ * as a safety signal for an unverified Tibo completion. Stale or unavailable
+ * coverage is deliberately non-blocking: absence there is not evidence.
+ */
+export function shouldDeferFormalTiboReset(
+  candidate: FormalTiboResetSignal,
+  coverage: UsageMonitorCoverage,
+  recoveryLookup: UsageMonitorRecoveryLookup,
+) {
+  return (
+    candidate.verification_status !== "confirmed" &&
+    isFormalTiboResetSignal(candidate) &&
+    coverage.state === "fresh" &&
+    recoveryLookup.available &&
+    !recoveryLookup.matched
+  );
+}
 
 function hasStaticHistoryTweet(tweetId: string) {
   return LOCAL_RESET_HISTORY.some((item) =>

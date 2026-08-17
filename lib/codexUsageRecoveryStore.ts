@@ -6,6 +6,8 @@ import {
   type CodexRecoveryObservation,
   type CodexUsageSnapshot,
 } from "./codexUsageRecovery";
+import type { UsageMonitorState } from "./codexUsageMonitorCoverage";
+import { getTiboClassificationSafetyDecision } from "./radar/classification";
 import {
   buildResetExecutionEstimate,
   type ResetExecutionEstimate,
@@ -72,6 +74,22 @@ export type ResetExecutionEstimateRow = {
 const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,updated_at";
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
+
+export function toCodexUsageMonitorState(
+  row: CodexUsageMonitorStateRow | null | undefined,
+): UsageMonitorState | null {
+  if (!row) return null;
+  return {
+    sourceKey: row.source_key,
+    observedAt: row.observed_at,
+    receivedAt: row.received_at,
+    limitId: row.limit_id,
+    planType: row.plan_type,
+    usedPercent: row.used_percent,
+    windowDurationMins: row.window_duration_mins,
+    resetsAt: row.resets_at,
+  };
+}
 
 export function toCodexUsageSnapshot(row: CodexUsageMonitorStateRow | null | undefined): CodexUsageSnapshot | null {
   if (!row || row.source_key !== CODEX_USAGE_SOURCE_KEY || row.limit_id !== "codex") return null;
@@ -154,6 +172,7 @@ export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {
     .maybeSingle();
   return {
     row: toCodexUsageSnapshot(result.data as CodexUsageMonitorStateRow | null),
+    state: toCodexUsageMonitorState(result.data as CodexUsageMonitorStateRow | null),
     error: result.error,
   };
 }
@@ -214,12 +233,14 @@ export async function findRecentFormalTiboReset(
   matchWindowMs: number,
 ) {
   const time = Date.parse(observedAt);
-  if (!Number.isFinite(time)) return { tweetId: null, tweetCreatedAt: null, error: null };
+  if (!Number.isFinite(time)) {
+    return { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null };
+  }
 
   const result = await client
     .from("tibo_signals")
-    .select("tweet_id,tweet_created_at,signal_type,confidence,verification_status,is_reply")
-    .eq("signal_type", "reset_executed")
+    .select("tweet_id,text,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply")
+    .or("signal_type.eq.reset_executed,rule_signal_type.eq.reset_executed,ai_signal_type.eq.reset_executed")
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
     .gte("tweet_created_at", new Date(time - matchWindowMs).toISOString())
@@ -227,16 +248,84 @@ export async function findRecentFormalTiboReset(
     .order("tweet_created_at", { ascending: true })
     .limit(20);
 
-  if (result.error) return { tweetId: null, tweetCreatedAt: null, error: result.error };
+  if (result.error) {
+    return { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: result.error };
+  }
 
   const candidates = (result.data ?? [])
-    .filter((row) => typeof row.tweet_id === "string" && typeof row.tweet_created_at === "string" && Number(row.confidence) >= 0.95)
+    .filter((row) => {
+      if (typeof row.tweet_id !== "string" || typeof row.tweet_created_at !== "string") return false;
+      if (getTiboClassificationSafetyDecision(String(row.text ?? ""), "reset_executed").signalType !== "reset_executed") {
+        return false;
+      }
+
+      const finalReset = row.signal_type === "reset_executed" && Number(row.confidence) >= 0.95;
+      const deferredReset = row.signal_type === "irrelevant" && (
+        (row.ai_signal_type === "reset_executed" && Number(row.ai_confidence) >= 0.95) ||
+        (row.rule_signal_type === "reset_executed" && Number(row.rule_confidence) >= 0.95)
+      );
+      return finalReset || deferredReset;
+    })
     .sort((left, right) => Math.abs(Date.parse(left.tweet_created_at) - time) - Math.abs(Date.parse(right.tweet_created_at) - time));
+  const candidate = candidates[0];
   return {
-    tweetId: candidates[0]?.tweet_id ?? null,
-    tweetCreatedAt: candidates[0]?.tweet_created_at ?? null,
+    tweetId: candidate?.tweet_id ?? null,
+    tweetCreatedAt: candidate?.tweet_created_at ?? null,
+    needsPromotion: candidate?.signal_type === "irrelevant",
+    confidence: candidate
+      ? candidate.signal_type === "irrelevant"
+        ? candidate.ai_signal_type === "reset_executed"
+          ? Number(candidate.ai_confidence)
+          : Number(candidate.rule_confidence)
+        : Number(candidate.confidence)
+      : null,
     error: null,
   };
+}
+
+export async function findNearestCodexRecoveryObservation(
+  client: SupabaseClient<any>,
+  tiboTweetCreatedAt: string,
+  matchWindowMs: number,
+) {
+  const time = Date.parse(tiboTweetCreatedAt);
+  if (!Number.isFinite(time)) return { observation: null, error: null };
+
+  const result = await client
+    .from("codex_recovery_observations")
+    .select(OBSERVATION_COLUMNS)
+    .in("status", ["observed", "confirmed"])
+    .neq("cycle_hint", "regular")
+    .gte("observed_at", new Date(time - matchWindowMs).toISOString())
+    .lte("observed_at", new Date(time + matchWindowMs).toISOString())
+    .order("observed_at", { ascending: true })
+    .limit(20);
+
+  if (result.error) return { observation: null, error: result.error };
+
+  const candidates = (result.data ?? [])
+    .map((row) => toCodexRecoveryObservation(row as CodexRecoveryObservationRow))
+    .filter((row): row is CodexRecoveryObservation => Boolean(row))
+    .sort((left, right) => Math.abs(Date.parse(left.observedAt) - time) - Math.abs(Date.parse(right.observedAt) - time));
+
+  return { observation: candidates[0] ?? null, error: null };
+}
+
+export async function promoteDeferredTiboReset(
+  client: SupabaseClient<any>,
+  tweetId: string,
+  confidence: number,
+) {
+  return client
+    .from("tibo_signals")
+    .update({
+      signal_type: "reset_executed",
+      confidence,
+      classification_reason: "Usage Monitorで意味のあるquota recoveryが確認されたため、正式resetとして採用しました。",
+    })
+    .eq("tweet_id", tweetId)
+    .eq("signal_type", "irrelevant")
+    .neq("verification_status", "rejected");
 }
 
 export async function confirmNearestCodexRecoveryObservation(
