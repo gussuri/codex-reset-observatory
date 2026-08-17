@@ -123,7 +123,7 @@ test("the first valid snapshot is stored as a baseline only", async () => {
     const response = await POST(buildRequest());
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "baseline" });
-    assert.deepEqual(methods, ["GET", "PATCH", "POST"]);
+    assert.deepEqual(methods, ["GET", "POST", "PATCH"]);
     assert.deepEqual(bodies[0], {
       source_key: "local-codex-app-server",
       observed_at: "2026-08-11T00:02:00.000Z",
@@ -136,6 +136,59 @@ test("the first valid snapshot is stored as a baseline only", async () => {
       coverage_started_at: "2026-08-11T00:02:00.000Z",
       updated_at: bodies[0] && typeof bodies[0] === "object" ? (bodies[0] as Record<string, unknown>).updated_at : undefined,
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("an unapplied coverage migration falls back without failing the first snapshot", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      if (url.includes("coverage_started_at")) {
+        return new Response(JSON.stringify({
+          code: "PGRST204",
+          message: "Could not find the 'coverage_started_at' column of 'codex_usage_monitor_state'",
+        }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("codex_usage_monitor_state")) {
+      if (body && "coverage_started_at" in body) {
+        return new Response(JSON.stringify({
+          code: "PGRST204",
+          message: "Could not find the 'coverage_started_at' column of 'codex_usage_monitor_state'",
+        }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    if (method === "PATCH" && url.includes("codex_usage_monitor_state")) {
+      assert.equal(body && "coverage_started_at" in body, false);
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest());
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "baseline" });
+    assert.deepEqual(
+      requests.map((request) => request.method),
+      ["GET", "GET", "POST", "POST", "PATCH"],
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restore();

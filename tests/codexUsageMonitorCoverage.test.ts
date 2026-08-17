@@ -70,6 +70,10 @@ test("a valid state older than the freshness window is stale", () => {
 
 test("missing, malformed, or future usage state is unavailable", () => {
   assert.deepEqual(getUsageMonitorCoverage(null, now), { state: "unavailable" });
+  assert.deepEqual(
+    getUsageMonitorCoverage(state({ coverageStartedAt: null }), now),
+    { state: "unavailable" },
+  );
   assert.deepEqual(getUsageMonitorCoverage(state({ usedPercent: "32" }), now), { state: "unavailable" });
   assert.deepEqual(
     getUsageMonitorCoverage(
@@ -168,7 +172,7 @@ test("a gap starts a new coverage interval instead of inferring continuity", () 
       coverageStartedAt: "2026-08-17T00:00:00.000Z",
     }),
     {
-      observedAt: "2026-08-17T00:20:01.000Z",
+      observedAt: "2026-08-17T00:26:00.000Z",
       limitId: "codex",
       planType: "plus",
       usedPercent: 30,
@@ -177,7 +181,7 @@ test("a gap starts a new coverage interval instead of inferring continuity", () 
     },
   );
 
-  assert.equal(next, "2026-08-17T00:20:01.000Z");
+  assert.equal(next, "2026-08-17T00:26:00.000Z");
 });
 
 test("a manually confirmed Tibo reset remains eligible even without monitor recovery", () => {

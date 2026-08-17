@@ -77,8 +77,19 @@ export type ResetExecutionEstimateRow = {
 };
 
 const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,coverage_started_at,updated_at";
+const LEGACY_STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,updated_at";
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
+
+function isMissingCoverageColumnError(
+  error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined,
+) {
+  return Boolean(
+    error &&
+      (error.code === "42703" || error.code === "PGRST204") &&
+      /coverage_started_at/i.test(`${error.message ?? ""} ${error.details ?? ""}`),
+  );
+}
 
 export async function insertObservedRegularResetEvent(
   client: SupabaseClient<any>,
@@ -183,11 +194,23 @@ export function toResetExecutionEstimate(
 }
 
 export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {
-  const result = await client
+  let result = await client
     .from("codex_usage_monitor_state")
     .select(STATE_COLUMNS)
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
     .maybeSingle();
+
+  // Keep the rollout safe if Vercel starts before the additive migration has
+  // reached the production schema. Missing continuity is intentionally treated
+  // as unknown; the next post-migration snapshot starts a new interval.
+  if (isMissingCoverageColumnError(result.error)) {
+    result = await client
+      .from("codex_usage_monitor_state")
+      .select(LEGACY_STATE_COLUMNS)
+      .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+      .maybeSingle();
+  }
+
   return {
     row: toCodexUsageSnapshot(result.data as CodexUsageMonitorStateRow | null),
     state: toCodexUsageMonitorState(result.data as CodexUsageMonitorStateRow | null),
@@ -214,21 +237,49 @@ export async function upsertCodexUsageMonitorState(
     coverage_started_at: coverageStartedAt,
     updated_at: receivedAt,
   };
+  const legacyPayload = {
+    source_key: CODEX_USAGE_SOURCE_KEY,
+    observed_at: snapshot.observedAt,
+    received_at: receivedAt,
+    limit_id: snapshot.limitId,
+    plan_type: snapshot.planType,
+    used_percent: snapshot.usedPercent,
+    window_duration_mins: snapshot.windowDurationMins,
+    resets_at: snapshot.resetsAt,
+    updated_at: receivedAt,
+  };
 
-  // Do not let an out-of-order webhook overwrite a newer observation. The
-  // follow-up insert is only for the no-row case and ignores a concurrent
-  // insert, so a race cannot replace the newer row either.
-  const updateResult = await client
-    .from("codex_usage_monitor_state")
-    .update(payload)
-    .eq("source_key", CODEX_USAGE_SOURCE_KEY)
-    .lt("observed_at", snapshot.observedAt);
-  if (updateResult.error) return updateResult.error;
-
-  const insertResult = await client
+  // Insert first so a concurrent first snapshot cannot leave the table with
+  // whichever request happened to run its fallback insert last. The following
+  // conditional UPDATE is evaluated atomically by Postgres and only advances
+  // observed_at, so an older webhook cannot roll the state back.
+  let writePayload: typeof payload | typeof legacyPayload = payload;
+  let insertResult = await client
     .from("codex_usage_monitor_state")
     .upsert(payload, { onConflict: "source_key", ignoreDuplicates: true });
-  return insertResult.error;
+  if (isMissingCoverageColumnError(insertResult.error)) {
+    writePayload = legacyPayload;
+    insertResult = await client
+      .from("codex_usage_monitor_state")
+      .upsert(legacyPayload, { onConflict: "source_key", ignoreDuplicates: true });
+  }
+  if (insertResult.error) return insertResult.error;
+
+  let updateResult = await client
+    .from("codex_usage_monitor_state")
+    .update(writePayload)
+    .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+    .lt("observed_at", snapshot.observedAt);
+  if (writePayload === payload && isMissingCoverageColumnError(updateResult.error)) {
+    writePayload = legacyPayload;
+    updateResult = await client
+      .from("codex_usage_monitor_state")
+      .update(legacyPayload)
+      .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+      .lt("observed_at", snapshot.observedAt);
+  }
+  if (updateResult.error) return updateResult.error;
+  return null;
 }
 
 export async function insertCodexRecoveryObservation(
