@@ -88,7 +88,7 @@ test("manual final classification and reply context survive webhook reprocessing
     detected_at: "2026-08-16T19:06:58.000Z",
     verification_status: "confirmed",
     signal_type: "teaser",
-    confidence: null,
+    confidence: 0.95,
     classification_reason: "手動修正: 親投稿への条件付き返信としてweak teaserと確認。",
     classification_source: "manual",
     teaser_strength: "weak",
@@ -99,7 +99,7 @@ test("manual final classification and reply context survive webhook reprocessing
   }, receivedAt);
 
   assert.equal(result.signal_type, "teaser");
-  assert.equal(result.confidence, null);
+  assert.equal(result.confidence, 0.95);
   assert.equal(result.classification_source, "manual");
   assert.equal(result.teaser_strength, "weak");
   assert.equal(result.is_reply, true);

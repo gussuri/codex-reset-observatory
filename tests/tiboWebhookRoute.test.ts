@@ -197,7 +197,7 @@ test("webhook reprocessing preserves a manual final teaser state", async () => {
         detected_at: "2026-08-16T19:06:58.000Z",
         expires_at: "2026-08-17T18:57:17.000Z",
         signal_type: "teaser",
-        confidence: null,
+        confidence: 0.95,
         classification_reason: "手動修正: 親投稿への条件付き返信としてweak teaserと確認。",
         verification_status: "confirmed",
         classification_source: "manual",
@@ -236,7 +236,7 @@ test("webhook reprocessing preserves a manual final teaser state", async () => {
     assert.equal(response.status, 200);
     const upsertBody = requestBodies[0] as Record<string, unknown>;
     assert.equal(upsertBody.signal_type, "teaser");
-    assert.equal(upsertBody.confidence, null);
+    assert.equal(upsertBody.confidence, 0.95);
     assert.equal(upsertBody.classification_source, "manual");
     assert.equal(upsertBody.teaser_strength, "weak");
     assert.equal(upsertBody.is_reply, true);
