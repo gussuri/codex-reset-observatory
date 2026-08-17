@@ -171,7 +171,10 @@ test("content.js quarantines terminal webhook failures and cools down retryable 
   const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
 
   assert.match(source, /quarantinedTweetIds/);
+  assert.match(source, /authBlockedTweetIds/);
   assert.match(source, /response\?\.quarantined/);
+  assert.match(source, /CLEAR_AUTH_QUARANTINE/);
+  assert.match(source, /quarantineReason === "auth_blocked"/);
   assert.match(source, /response\?\.retryable/);
   assert.match(source, /RETRY_COOLDOWN_MS/);
 });

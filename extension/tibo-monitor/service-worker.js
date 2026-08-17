@@ -8,6 +8,13 @@ importScripts("diagnostics.js", "scan-utils.js");
 const QUEUE_KEY = "tibo_processed_tweet_ids";
 const QUARANTINE_KEY = "tibo_quarantined_tweet_ids";
 const MAX_QUARANTINE_ENTRIES = 100;
+const AUTH_BLOCKED_REASON = "auth_blocked";
+const MONITORED_TAB_PATTERNS = [
+  "https://x.com/thsottiaux*",
+  "https://x.com/notifications*",
+  "https://twitter.com/thsottiaux*",
+  "https://twitter.com/notifications*",
+];
 const FORMAL_ADOPTION_NOTIFIED_KEY = "tibo_formal_adoption_notified_ids";
 const FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_notification_urls";
 const TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_test_notification_urls";
@@ -103,6 +110,73 @@ async function quarantineTweet(tweetId, status, reasonCode) {
     if (oldestKey) delete entries[oldestKey];
   }
   await chrome.storage.local.set({ [QUARANTINE_KEY]: entries });
+}
+
+function isAuthBlockedQuarantineEntry(entry) {
+  return Boolean(
+    entry &&
+      (entry.reasonCode === AUTH_BLOCKED_REASON ||
+        entry.httpStatus === 401 ||
+        entry.httpStatus === 403),
+  );
+}
+
+async function broadcastAuthQuarantineCleared() {
+  if (
+    !chrome.tabs ||
+    typeof chrome.tabs.query !== "function" ||
+    typeof chrome.tabs.sendMessage !== "function"
+  ) {
+    return;
+  }
+
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: MONITORED_TAB_PATTERNS });
+  } catch {
+    return;
+  }
+
+  await Promise.all(
+    (Array.isArray(tabs) ? tabs : [])
+      .filter((tab) => Number.isInteger(tab?.id))
+      .map(
+        (tab) =>
+          new Promise((resolve) => {
+            try {
+              chrome.tabs.sendMessage(
+                tab.id,
+                { action: "CLEAR_AUTH_QUARANTINE" },
+                () => {
+                  void chrome.runtime?.lastError;
+                  resolve();
+                },
+              );
+            } catch {
+              resolve();
+            }
+          }),
+      ),
+  );
+}
+
+async function clearAuthBlockedQuarantine() {
+  const data = await chrome.storage.local.get([QUARANTINE_KEY]);
+  const current = data[QUARANTINE_KEY];
+  const entries = current && typeof current === "object" ? { ...current } : {};
+  let clearedCount = 0;
+
+  for (const [tweetId, entry] of Object.entries(entries)) {
+    if (!isAuthBlockedQuarantineEntry(entry)) continue;
+    delete entries[tweetId];
+    clearedCount += 1;
+  }
+
+  if (clearedCount > 0) {
+    await chrome.storage.local.set({ [QUARANTINE_KEY]: entries });
+  }
+  await broadcastAuthQuarantineCleared();
+  return { clearedCount };
 }
 
 function isRetryableWebhookStatus(status) {
@@ -461,6 +535,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "CLEAR_AUTH_QUARANTINE") {
+    clearAuthBlockedQuarantine()
+      .then((data) => sendResponse({ success: true, data }))
+      .catch(() => sendResponse({ success: false, error: "quarantine_clear_failed" }));
+    return true;
+  }
+
   if (request.action === "SAVE_CONTENT_SCAN_DIAGNOSTIC") {
     saveContentScanDiagnostic(request.entry)
       .then(() => sendResponse({ success: true }))
@@ -556,11 +637,18 @@ async function executePostTweet(payload) {
   const quarantineEntry =
     quarantine && typeof quarantine === "object" ? quarantine[tweetId] : null;
   if (quarantineEntry?.extensionVersion === getExtensionVersion()) {
+    const quarantineReason = isAuthBlockedQuarantineEntry(quarantineEntry)
+      ? AUTH_BLOCKED_REASON
+      : quarantineEntry.reasonCode || "payload_rejected";
     return {
       success: false,
       quarantined: true,
+      quarantineReason,
       httpStatus: quarantineEntry.httpStatus || null,
-      error: "Tweet payload is quarantined until the extension is updated.",
+      error:
+        quarantineReason === AUTH_BLOCKED_REASON
+          ? "Tweet is quarantined until webhook authentication is recovered."
+          : "Tweet payload is quarantined until the extension is updated.",
     };
   }
 
@@ -617,9 +705,22 @@ async function executePostTweet(payload) {
     await quarantineTweet(
       tweetId,
       response.status,
-      response.status === 400 ? "payload_rejected" : "webhook_rejected",
+      response.status === 401 || response.status === 403
+        ? AUTH_BLOCKED_REASON
+        : response.status === 400
+          ? "payload_rejected"
+          : "webhook_rejected",
     );
-    return { success: false, quarantined: true, httpStatus: response.status, error };
+    return {
+      success: false,
+      quarantined: true,
+      quarantineReason:
+        response.status === 401 || response.status === 403
+          ? AUTH_BLOCKED_REASON
+          : "payload_rejected",
+      httpStatus: response.status,
+      error,
+    };
   }
 
   const json = await response.json();
@@ -1240,5 +1341,11 @@ async function handleTestConnection() {
     throw new Error(`Connection test returned HTTP ${response.status}.`);
   }
 
-  return await response.json();
+  const result = await response.json();
+  try {
+    await clearAuthBlockedQuarantine();
+  } catch {
+    // A successful connection test remains successful if local cleanup fails.
+  }
+  return result;
 }

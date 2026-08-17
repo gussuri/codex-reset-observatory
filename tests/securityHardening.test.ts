@@ -23,6 +23,7 @@ test("history table grant migration revokes only public client roles", () => {
 });
 
 test("webhook secret remains persistent and trusted-context-only", () => {
+  const optionsScript = readFileSync("extension/tibo-monitor/options.js", "utf8");
   const options = readFileSync("extension/tibo-monitor/options.js", "utf8");
   const serviceWorker = readFileSync(
     "extension/tibo-monitor/service-worker.js",
@@ -34,4 +35,11 @@ test("webhook secret remains persistent and trusted-context-only", () => {
   assert.match(serviceWorker, /chrome\.storage\.local\.get\(\[\s*"webhook_secret"/);
   assert.match(serviceWorker, /Authorization.*Bearer.*secret/);
   assert.doesNotMatch(content, /webhook_secret|TIBO_WEBHOOK_SECRET|Authorization/);
+  const settingsWrite = optionsScript.indexOf("await chrome.storage.local.set");
+  const quarantineClear = optionsScript.indexOf(
+    "await clearAuthBlockedQuarantine()",
+    settingsWrite,
+  );
+  assert.ok(settingsWrite >= 0);
+  assert.ok(quarantineClear > settingsWrite);
 });

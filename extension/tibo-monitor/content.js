@@ -17,6 +17,7 @@
   const processedTweetIds = new Set();
   // A terminal payload rejection is kept out of mutation-triggered retries.
   const quarantinedTweetIds = new Set();
+  const authBlockedTweetIds = new Set();
   const retryBlockedUntil = new Map();
   const RETRY_COOLDOWN_MS = 30 * 1000;
 
@@ -161,6 +162,12 @@
     const runtime = getExtensionRuntime();
     if (runtime.onMessage) {
       runtime.onMessage.addListener((request, _sender, sendResponse) => {
+        if (request?.action === "CLEAR_AUTH_QUARANTINE") {
+          authBlockedTweetIds.clear();
+          runExtensionTask(scanTweets, "auth quarantine cleared");
+          return false;
+        }
+
         if (request?.action !== "CAPTURE_WITH_REPLIES_DOM") return false;
 
         if (!isCurrentRepliesTimeline()) {
@@ -435,7 +442,11 @@
           createdAt,
         });
 
-        if (quarantinedTweetIds.has(tweetId) || isRetryBlocked(tweetId)) {
+        if (
+          quarantinedTweetIds.has(tweetId) ||
+          authBlockedTweetIds.has(tweetId) ||
+          isRetryBlocked(tweetId)
+        ) {
           continue;
         }
 
@@ -541,7 +552,11 @@
           }
 
           if (response?.quarantined) {
-            quarantinedTweetIds.add(tweetId);
+            if (response.quarantineReason === "auth_blocked") {
+              authBlockedTweetIds.add(tweetId);
+            } else {
+              quarantinedTweetIds.add(tweetId);
+            }
             retryBlockedUntil.delete(tweetId);
             console.warn(
               `[Tibo Extension] Tweet ${tweetId} was quarantined after a terminal webhook rejection.`,

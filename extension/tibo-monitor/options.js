@@ -34,6 +34,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     statusMsg.className = isError ? "error" : "success";
   }
 
+  function clearAuthBlockedQuarantine() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(
+          { action: "CLEAR_AUTH_QUARANTINE" },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve(false);
+              return;
+            }
+            resolve(response?.success === true);
+          },
+        );
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+
   const repliesTabPatterns = [
     "https://x.com/thsottiaux/with_replies*",
     "https://twitter.com/thsottiaux/with_replies*",
@@ -152,6 +171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       [TiboDiagnostics.ENABLED_KEY]: diagnosticsEnabled.checked,
       [TiboDiagnostics.MASK_TEXT_KEY]: diagnosticsMaskText.checked,
     });
+    await clearAuthBlockedQuarantine();
 
     showStatus("設定を正常に保存しました！");
   });

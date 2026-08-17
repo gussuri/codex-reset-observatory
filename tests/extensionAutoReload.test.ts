@@ -4,6 +4,13 @@ import vm from "node:vm";
 import fs from "node:fs";
 import path from "node:path";
 
+type MockFetchResponse = {
+  ok: boolean;
+  status: number;
+  text?: () => Promise<string>;
+  json?: () => Promise<unknown>;
+};
+
 // Helper to load service-worker.js with custom mocked chrome API
 function setupServiceWorkerContext(
   customTabs: Array<{ id: number; url: string }> = [],
@@ -24,12 +31,9 @@ function setupServiceWorkerContext(
     observatoryDomain?: string;
     extensionVersion?: string;
     fetchError?: string;
-    fetchResponse?: {
-      ok: boolean;
-      status: number;
-      text?: () => Promise<string>;
-      json?: () => Promise<unknown>;
-    };
+    fetchResponse?:
+      | MockFetchResponse
+      | ((url: string, fetchOpts: any, callIndex: number) => MockFetchResponse);
   } = {}
 ) {
   const localStore: Record<string, any> = {};
@@ -37,6 +41,7 @@ function setupServiceWorkerContext(
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
   const reloadedTabIds: number[] = [];
   const updatedTabs: Array<{ tabId: number; updateProperties: any }> = [];
+  const contentMessages: Array<{ tabId: number; message: any }> = [];
   const openedTabs: Array<{ url: string }> = [];
   const createdNotifications: Array<{ id: string; options: any }> = [];
   const activeNotificationIds: Record<string, boolean> = {};
@@ -108,6 +113,10 @@ function setupServiceWorkerContext(
       create: async (tab: { url: string }) => {
         openedTabs.push(tab);
         return { id: openedTabs.length };
+      },
+      sendMessage: (tabId: number, message: any, callback?: Function) => {
+        contentMessages.push({ tabId, message });
+        callback?.({ success: true });
       },
     },
     notifications: {
@@ -186,12 +195,16 @@ function setupServiceWorkerContext(
     if (opts.fetchError) {
       throw new Error(opts.fetchError);
     }
-    if (opts.fetchResponse) {
+    const configuredResponse =
+      typeof opts.fetchResponse === "function"
+        ? opts.fetchResponse(url, fetchOpts, mockFetchCalls.length)
+        : opts.fetchResponse;
+    if (configuredResponse) {
       return {
-        ok: opts.fetchResponse.ok,
-        status: opts.fetchResponse.status,
-        text: opts.fetchResponse.text || (async () => ""),
-        json: opts.fetchResponse.json || (async () => ({})),
+        ok: configuredResponse.ok,
+        status: configuredResponse.status,
+        text: configuredResponse.text || (async () => ""),
+        json: configuredResponse.json || (async () => ({})),
       };
     }
     return {
@@ -237,6 +250,7 @@ function setupServiceWorkerContext(
     alarmsCreated,
     reloadedTabIds,
     updatedTabs,
+    contentMessages,
     openedTabs,
     createdNotifications,
     getNotificationCreateCalls: () => notificationCreateCalls,
@@ -559,6 +573,7 @@ test("Service Worker keeps non-2xx response details local and redacts secrets", 
   });
 
   assert.equal(result.success, false);
+  assert.equal(result.retryable, true);
   assert.match(result.error, /HTTP 500/);
   assert.doesNotMatch(JSON.stringify(localStore["tibo_diagnostic_logs"] || []), /secret-token|private-key/);
   assert.match(JSON.stringify(localStore["tibo_diagnostic_logs"] || []), /webhook_http_error|REDACTED/);
@@ -592,6 +607,97 @@ test("HTTP 400 is quarantined and does not trigger an immediate second fetch", a
   const diagnostics = JSON.stringify(localStore.tibo_diagnostic_logs || []);
   assert.match(diagnostics, /textLength.*0/);
   assert.doesNotMatch(diagnostics, /Invalid text payload/);
+
+  const authRecovery = await sendMessage({ action: "CLEAR_AUTH_QUARANTINE" });
+  assert.equal(authRecovery.data.clearedCount, 0);
+  const afterAuthRecovery = await sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(afterAuthRecovery.quarantined, true);
+  assert.equal(mockFetchCalls.length, 1);
+});
+
+test("401 is quarantined without a retry storm and clears after saving auth settings", async () => {
+  const context = setupServiceWorkerContext(
+    [{ id: 21, url: "https://x.com/thsottiaux" }],
+    {
+      fetchResponse: {
+        ok: false,
+        status: 401,
+        text: async () => "Unauthorized",
+      },
+    },
+  );
+  context.localStore.webhook_secret = "old-secret";
+  const payload = {
+    tweetId: "2088501704849534995",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2088501704849534995",
+    tweetCreatedAt: "2026-08-15T05:43:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+  const second = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.quarantined, true);
+  assert.equal(first.quarantineReason, "auth_blocked");
+  assert.equal(second.quarantined, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  assert.equal(
+    context.localStore.tibo_quarantined_tweet_ids[payload.tweetId].reasonCode,
+    "auth_blocked",
+  );
+
+  context.localStore.webhook_secret = "new-secret";
+  const cleared = await context.sendMessage({ action: "CLEAR_AUTH_QUARANTINE" });
+  assert.equal(cleared.success, true);
+  assert.equal(cleared.data.clearedCount, 1);
+  assert.deepEqual(context.localStore.tibo_quarantined_tweet_ids, {});
+  assert.deepEqual(context.contentMessages, [
+    { tabId: 21, message: { action: "CLEAR_AUTH_QUARANTINE" } },
+  ]);
+
+  const afterSettingsChange = await context.sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(afterSettingsChange.quarantined, true);
+  assert.equal(context.mockFetchCalls.length, 2);
+});
+
+test("403 is cleared by a successful connection test and can be sent again", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: (url) => {
+      if (url.endsWith("/api/webhook/tibo")) {
+        return {
+          ok: false,
+          status: 403,
+          text: async () => "Forbidden",
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      };
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2088501704849534996",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2088501704849534996",
+    tweetCreatedAt: "2026-08-15T05:43:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+  const blocked = await context.sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(first.quarantineReason, "auth_blocked");
+  assert.equal(blocked.quarantined, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+
+  const connection = await context.sendMessage({ action: "TEST_CONNECTION" });
+  assert.equal(connection.success, true);
+  assert.deepEqual(context.localStore.tibo_quarantined_tweet_ids, {});
+
+  const afterRecovery = await context.sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(afterRecovery.quarantineReason, "auth_blocked");
+  assert.equal(context.mockFetchCalls.length, 3);
 });
 
 test("retryable webhook statuses are retried and are not quarantined", async () => {
