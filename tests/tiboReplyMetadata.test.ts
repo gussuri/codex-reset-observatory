@@ -17,6 +17,12 @@ type FakeElementOptions = {
   throwOnQuote?: boolean;
 };
 
+type StructuralElementOptions = {
+  tagName?: string;
+  text?: string;
+  attributes?: Record<string, string>;
+};
+
 class FakeElement {
   innerText: string;
   private readonly attributes: Record<string, string>;
@@ -63,6 +69,153 @@ class FakeElement {
   }
 }
 
+class StructuralElement {
+  readonly tagName: string;
+  innerText: string;
+  readonly children: StructuralElement[] = [];
+  parentElement: StructuralElement | null = null;
+  private readonly attributes: Record<string, string>;
+
+  constructor(options: StructuralElementOptions = {}) {
+    this.tagName = options.tagName || "div";
+    this.innerText = options.text || "";
+    this.attributes = options.attributes || {};
+  }
+
+  appendChild(child: StructuralElement) {
+    child.parentElement = this;
+    this.children.push(child);
+    return child;
+  }
+
+  get previousElementSibling(): StructuralElement | null {
+    if (!this.parentElement) return null;
+    const index = this.parentElement.children.indexOf(this);
+    return index > 0 ? this.parentElement.children[index - 1] : null;
+  }
+
+  getAttribute(name: string) {
+    return this.attributes[name] ?? null;
+  }
+
+  contains(candidate: StructuralElement | null) {
+    if (!candidate) return false;
+    let current: StructuralElement | null = candidate;
+    while (current) {
+      if (current === this) return true;
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  closest(selector: string) {
+    let current: StructuralElement | null = this;
+    while (current) {
+      if (matchesSelector(current, selector)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  querySelector(selector: string) {
+    return this.querySelectorAll(selector)[0] || null;
+  }
+
+  querySelectorAll(selector: string) {
+    const matches: StructuralElement[] = [];
+    const visit = (node: StructuralElement) => {
+      for (const child of node.children) {
+        if (matchesSelector(child, selector)) matches.push(child);
+        visit(child);
+      }
+    };
+    visit(this);
+    return matches;
+  }
+}
+
+function matchesSelector(element: StructuralElement, selector: string) {
+  if (selector === "time") return element.tagName === "time";
+  if (selector === 'article[data-testid="tweet"]') {
+    return element.tagName === "article" && element.getAttribute("data-testid") === "tweet";
+  }
+  const testIdMatch = selector.match(/^\[data-testid="([^"]+)"\]$/);
+  if (testIdMatch) return element.getAttribute("data-testid") === testIdMatch[1];
+  if (selector === 'a[href]') {
+    return element.tagName === "a" && Boolean(element.getAttribute("href"));
+  }
+  if (selector === 'a[href*="/status/"]') {
+    return element.tagName === "a" && (element.getAttribute("href") || "").includes("/status/");
+  }
+  return false;
+}
+
+function element(options: StructuralElementOptions = {}) {
+  return new StructuralElement(options);
+}
+
+function makeThreadArticle(options: {
+  id: string;
+  handle?: string;
+  text?: string;
+  incoming?: boolean;
+  outgoing?: boolean;
+  quoteText?: string;
+}) {
+  const cell = element({ attributes: { "data-testid": "cellInnerDiv" } });
+  const article = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
+  const outer = element();
+  const body = element();
+  const threadRow = element();
+  threadRow.appendChild(element());
+  if (options.incoming) threadRow.appendChild(element());
+
+  const bodyRow = element();
+  const avatarColumn = element();
+  avatarColumn.appendChild(element({ attributes: { "data-testid": "Tweet-User-Avatar" } }));
+  if (options.outgoing) avatarColumn.appendChild(element());
+
+  const contentColumn = element();
+  const userName = element({ attributes: { "data-testid": "User-Name" } });
+  userName.appendChild(element({
+    tagName: "a",
+    attributes: { href: `/${options.handle || "parent"}` },
+  }));
+  contentColumn.appendChild(userName);
+
+  if (options.quoteText) {
+    const quoteArticle = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
+    const quoteText = element({ attributes: { "data-testid": "tweetText" }, text: options.quoteText });
+    quoteArticle.appendChild(quoteText);
+    contentColumn.appendChild(quoteArticle);
+  }
+
+  contentColumn.appendChild(element({
+    attributes: { "data-testid": "tweetText" },
+    text: options.text || "",
+  }));
+  contentColumn.appendChild(element({
+    tagName: "a",
+    attributes: { href: `/${options.handle || "parent"}/status/${options.id}` },
+  }));
+  contentColumn.appendChild(element({ tagName: "time" }));
+
+  bodyRow.appendChild(avatarColumn);
+  bodyRow.appendChild(contentColumn);
+  body.appendChild(threadRow);
+  body.appendChild(bodyRow);
+  outer.appendChild(body);
+  article.appendChild(outer);
+  cell.appendChild(article);
+  return { cell, article };
+}
+
+function makeTimeline(...cells: StructuralElement[]) {
+  const timeline = element();
+  cells.forEach((cell) => timeline.appendChild(cell));
+  return timeline;
+}
+
 function loadScanUtils() {
   const code = fs.readFileSync(
     path.join(process.cwd(), "extension/tibo-monitor/scan-utils.js"),
@@ -73,10 +226,11 @@ function loadScanUtils() {
   return (context as typeof context & {
     TiboMonitorScan: {
       getTimelineSource: (url: string) => string | null;
-      extractReplyMetadata: (article: FakeElement) => {
+      extractReplyMetadata: (article: FakeElement | StructuralElement, options?: { sourceTimeline?: string | null }) => {
         isReply: boolean;
         replyToHandles: string[];
         replyContextText: string | null;
+        needsRetry?: boolean;
         isQuote: boolean;
         quoteContextText: string | null;
         quoteTweetUrl: string | null;
@@ -233,4 +387,111 @@ test("a normal post or contextless reply does not invent reply context", () => {
     quoteTweetUrl: null,
     quoteAuthorHandle: null,
   }));
+});
+
+test("with-replies sibling connectors recover the two observed Tibo reply parents", () => {
+  const scan = loadScanUtils();
+  const cases = [
+    {
+      id: "2089063967301730789",
+      parentText: "are we going to get a reset when codex crosses 20M users?",
+    },
+    {
+      id: "2089078284487139347",
+      parentText: '"maybe" from tibo is basically a confirmed reset',
+    },
+  ];
+
+  for (const testCase of cases) {
+    const parent = makeThreadArticle({
+      id: `parent-${testCase.id}`,
+      handle: "Ananth7e",
+      text: testCase.parentText,
+      outgoing: true,
+    });
+    const child = makeThreadArticle({
+      id: testCase.id,
+      handle: "thsottiaux",
+      text: "Maybe",
+      incoming: true,
+    });
+    makeTimeline(parent.cell, child.cell);
+
+    assert.equal(JSON.stringify(scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" })), JSON.stringify({
+      isReply: true,
+      replyToHandles: ["@Ananth7e"],
+      replyContextText: testCase.parentText,
+      isQuote: false,
+      quoteContextText: null,
+      quoteTweetUrl: null,
+      quoteAuthorHandle: null,
+    }));
+  }
+});
+
+test("adjacent ordinary posts and connector mismatches are not treated as replies", () => {
+  const scan = loadScanUtils();
+  const ordinaryParent = makeThreadArticle({ id: "parent", handle: "alice", text: "ordinary" });
+  const ordinaryChild = makeThreadArticle({ id: "child", handle: "thsottiaux", text: "Maybe" });
+  makeTimeline(ordinaryParent.cell, ordinaryChild.cell);
+  assert.equal(scan.extractReplyMetadata(ordinaryChild.article, { sourceTimeline: "with_replies" }).isReply, false);
+
+  const incomingWithoutOutgoing = makeThreadArticle({ id: "child-2", handle: "thsottiaux", text: "Maybe", incoming: true });
+  makeTimeline(ordinaryParent.cell, incomingWithoutOutgoing.cell);
+  const mismatch = scan.extractReplyMetadata(incomingWithoutOutgoing.article, { sourceTimeline: "with_replies" });
+  assert.equal(mismatch.isReply, false);
+  assert.equal(mismatch.needsRetry, true);
+
+  const outgoingWithoutIncoming = makeThreadArticle({ id: "parent-2", handle: "alice", text: "ordinary", outgoing: true });
+  const noIncomingChild = makeThreadArticle({ id: "child-3", handle: "thsottiaux", text: "Maybe" });
+  makeTimeline(outgoingWithoutIncoming.cell, noIncomingChild.cell);
+  assert.equal(scan.extractReplyMetadata(noIncomingChild.article, { sourceTimeline: "with_replies" }).isReply, false);
+});
+
+test("an incoming connector without a rendered parent requests a retry", () => {
+  const scan = loadScanUtils();
+  const child = makeThreadArticle({ id: "partial", handle: "thsottiaux", text: "Maybe", incoming: true });
+
+  assert.equal(JSON.stringify(scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" })), JSON.stringify({
+    isReply: false,
+    replyToHandles: [],
+    replyContextText: null,
+    needsRetry: true,
+    isQuote: false,
+    quoteContextText: null,
+    quoteTweetUrl: null,
+    quoteAuthorHandle: null,
+  }));
+});
+
+test("sibling parent context uses its own text, not nested quote text", () => {
+  const scan = loadScanUtils();
+  const parent = makeThreadArticle({
+    id: "parent-with-quote",
+    handle: "alice",
+    text: "The parent's own post",
+    quoteText: "Quoted text must not become the parent context",
+    outgoing: true,
+  });
+  const child = makeThreadArticle({ id: "child-with-quote", handle: "thsottiaux", text: "Maybe", incoming: true });
+  makeTimeline(parent.cell, child.cell);
+
+  assert.equal(
+    scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" }).replyContextText,
+    "The parent's own post",
+  );
+});
+
+test("multi-level thread connectors use the immediate parent and profile pages do not infer siblings", () => {
+  const scan = loadScanUtils();
+  const grandParent = makeThreadArticle({ id: "grand-parent", handle: "root", text: "root", outgoing: true });
+  const parent = makeThreadArticle({ id: "parent-level", handle: "middle", text: "middle", incoming: true, outgoing: true });
+  const child = makeThreadArticle({ id: "child-level", handle: "thsottiaux", text: "Maybe", incoming: true });
+  makeTimeline(grandParent.cell, parent.cell, child.cell);
+
+  assert.equal(
+    scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" }).replyContextText,
+    "middle",
+  );
+  assert.equal(scan.extractReplyMetadata(child.article, { sourceTimeline: "profile" }).isReply, false);
 });

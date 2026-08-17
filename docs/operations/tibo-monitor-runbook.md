@@ -22,7 +22,7 @@ Chromeの通知ページは投稿スキャンの対象になり得ます。通�
 1. Service WorkerのChrome Alarmが約10分ごとに動きます。
 2. プロフィールと返信の各URLについて、見つかったタブを最大1つずつ再読み込みします。タブを自動で新規作成・閉鎖することはありません。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
 3. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
-4. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域から返信先ハンドルを取得し、同じ投稿記事内に親投稿が明確に表示される場合だけ親文脈も保存します。
+4. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信先を復元します。後者では、親cell自身の本文とauthorだけを親文脈として保存します。
 5. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
 6. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
 7. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
@@ -80,7 +80,7 @@ LIMIT 1;
 - `tweet_created_at`: 投稿本文から取得したX投稿時刻。履歴の実施時刻の基準です。
 - `is_reply`: Tibo氏自身の返信投稿なら `true`。返信も保存・分類しますが、正式履歴・公開確率には自動反映しません。
 - `reply_to_handles`: Xの返信先領域から取得した安全なハンドル配列です。取得できない場合は空です。
-- `reply_context_text`: 同じ投稿記事内で明確に表示された親文脈だけが入り、取得できない場合は空です。
+- `reply_context_text`: 明示的な返信先領域、またはconnectorで確実に対応付けた親article自身の本文だけが入り、取得できない場合は空です。
 - `source_timeline`: `profile` または `with_replies`。どの監視タブで取得したかを示します。
 - `is_quote`: Xが同じ記事内に引用投稿を明示した場合に `true` です。引用カードの取得失敗は通常投稿の収集を妨げません。
 - `quote_context_text`: 同じ記事内で明確に表示された引用本文だけが入り、取得できない場合は空です。

@@ -10,15 +10,15 @@ Collect posts authored by `@thsottiaux` from both the profile and `with_replies`
 - The ten-minute reload alarm reloads at most one profile tab and one `with_replies` tab.
 - The existing notifications content-script path remains supported as a legacy profile source.
 - Tweet IDs are deduplicated in the service-worker queue, so the same post found in both timelines is sent once.
-- Only explicit reply UI metadata in the current article is used for reply detection. No parent navigation or extra network request is added.
-- Parent context is copied only when a nested tweet article visibly contains the parent text; otherwise it is `null`.
+- Explicit reply UI metadata in the current article is preferred for reply detection. On the `with_replies` timeline, sibling reconstruction is allowed only when the child incoming connector, immediate previous `cellInnerDiv`, and parent outgoing connector all match. No parent navigation or extra network request is added.
+- Parent context is copied only from the current article's explicit parent or the connector-paired parent article itself; nested quote text is excluded and unresolved context remains `null`.
 - Webhook metadata is optional for old extensions, validated when present, and stored in nullable columns.
 - Replies are stored and classified for observation, but `is_reply = true` rows are excluded from active signals and formal reset history.
 - No public DTO, probability model, dashboard UI, or existing classification threshold changes.
 
 ## Data flow
 
-1. `scan-utils.js` classifies the current URL and extracts explicit reply metadata from an article.
+1. `scan-utils.js` classifies the current URL and extracts explicit or verified `with_replies` thread metadata from an article.
 2. `content.js` adds `isReply`, safe reply handles, optional visible parent context, and `sourceTimeline` to the existing webhook payload.
 3. `service-worker.js` reloads each available timeline once per alarm and uses the existing tweet-ID queue for deduplication and retry behavior.
 4. `app/api/webhook/tibo/route.ts` validates optional metadata, passes it to rule and Gemini classification, and writes nullable metadata columns without changing formal adoption rules.

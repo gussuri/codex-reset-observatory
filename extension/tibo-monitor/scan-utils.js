@@ -261,7 +261,141 @@
     };
   }
 
-  function extractReplyMetadata(article) {
+  function getElementChildren(element) {
+    return element?.children ? Array.from(element.children) : [];
+  }
+
+  function hasStableTweetContent(element) {
+    if (!element || typeof element.querySelector !== "function") return false;
+    return Boolean(
+      element.querySelector('[data-testid="User-Name"]')
+      || element.querySelector('[data-testid="tweetText"]')
+      || element.querySelector("time")
+      || element.querySelector('a[href*="/status/"]'),
+    );
+  }
+
+  function isEmptyThreadStructure(element) {
+    if (!element) return false;
+    if (String(element.innerText || "").trim()) return false;
+    if (typeof element.querySelector !== "function") return false;
+    return !(
+      element.querySelector('[data-testid="User-Name"]')
+      || element.querySelector('[data-testid="tweetText"]')
+      || element.querySelector('[data-testid="Tweet-User-Avatar"]')
+      || element.querySelector("time")
+      || element.querySelector("a")
+      || element.querySelector("button")
+      || element.querySelector("img")
+      || element.querySelector("svg")
+    );
+  }
+
+  // X has no stable connector test id; use the stable avatar/content rows around it instead.
+  function findAvatarLayout(article) {
+    if (!article || typeof article.querySelector !== "function") return null;
+    const avatar = article.querySelector('[data-testid="Tweet-User-Avatar"]');
+    if (!avatar) return null;
+
+    let current = avatar;
+    while (current && current.parentElement && current.parentElement !== article) {
+      const parent = current.parentElement;
+      const children = getElementChildren(parent);
+      const avatarColumn = children.find((child) => (
+        child === current
+        || (typeof child.contains === "function" && child.contains(avatar))
+      ));
+      const contentColumn = children.find((child) => (
+        child !== avatarColumn && hasStableTweetContent(child)
+      ));
+
+      if (avatarColumn && contentColumn) {
+        return { bodyRow: parent, avatarColumn };
+      }
+      current = parent;
+    }
+    return null;
+  }
+
+  function hasIncomingThreadConnector(article) {
+    const layout = findAvatarLayout(article);
+    if (!layout) return false;
+    const parent = layout.bodyRow?.parentElement;
+    const rows = getElementChildren(parent);
+    if (rows.length < 2 || rows.indexOf(layout.bodyRow) !== 1) return false;
+    const precedingRow = rows[0];
+    const candidates = [precedingRow, ...getElementChildren(precedingRow)];
+    return candidates.some((candidate) => {
+      const connectorChildren = getElementChildren(candidate);
+      return connectorChildren.length >= 2 && connectorChildren.every(isEmptyThreadStructure);
+    });
+  }
+
+  function hasOutgoingThreadConnector(article) {
+    const layout = findAvatarLayout(article);
+    if (!layout) return false;
+    const avatarChildren = getElementChildren(layout.avatarColumn);
+    return avatarChildren.length >= 2 && avatarChildren.slice(1).some(isEmptyThreadStructure);
+  }
+
+  function getOwnTweetText(article) {
+    if (!article || typeof article.querySelector !== "function") return null;
+    const candidates = typeof article.querySelectorAll === "function"
+      ? Array.from(article.querySelectorAll('[data-testid="tweetText"]'))
+      : [article.querySelector('[data-testid="tweetText"]')].filter(Boolean);
+    for (const candidate of candidates) {
+      const owner = candidate.closest?.('article[data-testid="tweet"]');
+      if (owner && owner !== article) continue;
+      const text = String(candidate.innerText || "").trim();
+      if (text) return text.slice(0, 1000);
+    }
+    return null;
+  }
+
+  function getParentHandle(article) {
+    if (!article || typeof article.querySelectorAll !== "function") return null;
+    const statusLinks = Array.from(article.querySelectorAll('a[href*="/status/"]'));
+    for (const link of statusLinks) {
+      const owner = link.closest?.('article[data-testid="tweet"]');
+      if (owner && owner !== article) continue;
+      const parsed = extractQuoteTweetUrl(link.getAttribute?.("href"));
+      if (parsed?.handle) return parsed.handle;
+    }
+
+    const userNames = article.querySelectorAll('[data-testid="User-Name"]');
+    for (const userName of Array.from(userNames)) {
+      const owner = userName.closest?.('article[data-testid="tweet"]');
+      if (owner && owner !== article) continue;
+      const profileLinks = userName.querySelectorAll?.("a[href]") || [];
+      for (const link of Array.from(profileLinks)) {
+        const handle = extractHandleFromHref(link.getAttribute?.("href"));
+        if (handle) return handle;
+      }
+    }
+    return null;
+  }
+
+  function resolveSiblingReplyMetadata(article) {
+    if (!hasIncomingThreadConnector(article)) return null;
+
+    const cell = article.closest?.('[data-testid="cellInnerDiv"]');
+    const previousCell = cell?.previousElementSibling;
+    if (!previousCell || previousCell.getAttribute?.("data-testid") !== "cellInnerDiv") {
+      return { needsRetry: true };
+    }
+
+    const parentArticle = previousCell.querySelector?.('article[data-testid="tweet"]');
+    if (!parentArticle) return { needsRetry: true };
+    if (!hasOutgoingThreadConnector(parentArticle)) return { needsRetry: true };
+
+    return {
+      isReply: true,
+      replyToHandles: [getParentHandle(parentArticle)].filter(Boolean),
+      replyContextText: getOwnTweetText(parentArticle),
+    };
+  }
+
+  function extractReplyMetadata(article, options = {}) {
     let quoteMetadata;
     try {
       quoteMetadata = extractQuoteMetadata(article);
@@ -271,6 +405,25 @@
     }
     const marker = getReplyMarker(article);
     if (!marker) {
+      const sourceTimeline = typeof options === "string" ? options : options?.sourceTimeline;
+      if (sourceTimeline === "with_replies") {
+        const siblingMetadata = resolveSiblingReplyMetadata(article);
+        if (siblingMetadata?.needsRetry) {
+          return {
+            isReply: false,
+            replyToHandles: [],
+            replyContextText: null,
+            needsRetry: true,
+            ...quoteMetadata,
+          };
+        }
+        if (siblingMetadata?.isReply) {
+          return {
+            ...siblingMetadata,
+            ...quoteMetadata,
+          };
+        }
+      }
       return {
         isReply: false,
         replyToHandles: [],

@@ -140,6 +140,19 @@ test("content.js selects after a valid parse and before deduplication", () => {
   assert.match(source, /newestSeenTweetCreatedAt/);
 });
 
+test("content.js resolves reply metadata before deduplication and skips pending thread captures", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const metadataIndex = source.indexOf("TiboMonitorScan.extractReplyMetadata(article");
+  const processedCheckIndex = source.indexOf("processedTweetIds.has(tweetId)");
+  const inFlightIndex = source.indexOf("inFlightTweetIds.add(tweetId)");
+
+  assert.ok(metadataIndex >= 0);
+  assert.ok(processedCheckIndex > metadataIndex);
+  assert.ok(inFlightIndex > metadataIndex);
+  assert.match(source, /replyMetadata\?\.needsRetry === true/);
+  assert.match(source, /sourceTimeline/);
+});
+
 test("content.js does not access storage.local directly after trusted-context hardening", () => {
   const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
 

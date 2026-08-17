@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.7-replies-quotes";
+  const SELECTOR_VERSION = "v1.8-thread-replies";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -330,6 +330,7 @@
     const scanMessages = [];
     let scanError = null;
     let newestParsedTweet = null;
+    const sourceTimeline = getSourceTimeline();
 
     try {
       tweetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
@@ -383,6 +384,13 @@
           createdAt,
         });
 
+        const replyMetadata = TiboMonitorScan.extractReplyMetadata(article, {
+          sourceTimeline,
+        });
+        if (replyMetadata?.needsRetry === true) {
+          continue;
+        }
+
         // Silent skip if already processed or currently in-flight
         if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
           continue;
@@ -395,14 +403,13 @@
 
         // Add to inFlight Set and delegate deduplication to Service Worker
         inFlightTweetIds.add(tweetId);
-        const replyMetadata = TiboMonitorScan.extractReplyMetadata(article);
         sendWebhook(
           tweetId,
           text,
           tweetUrl,
           createdAt,
           replyMetadata,
-          getSourceTimeline(),
+          sourceTimeline,
         );
       }
     } catch (err) {
