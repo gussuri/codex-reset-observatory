@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
-import { aggregateResetTeaserStatus } from "../lib/radar/teaserStrength";
+import {
+  aggregateResetTeaserStatus,
+  getEffectiveTeaserStrength,
+} from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
@@ -60,6 +63,21 @@ test("aggregates strong over a newer none within the 48-hour window", () => {
       signal("none", "2026-08-03T23:30:00.000Z", "none"),
     ], null, NOW),
     "strong",
+  );
+});
+
+test("manual final teaser strength takes precedence over the raw AI strength", () => {
+  assert.equal(
+    getEffectiveTeaserStrength({ teaser_strength: "weak", ai_teaser_strength: "strong" }),
+    "weak",
+  );
+  assert.equal(
+    getEffectiveTeaserStrength({ teaser_strength: null, ai_teaser_strength: "weak" }),
+    "weak",
+  );
+  assert.equal(
+    getEffectiveTeaserStrength({ teaser_strength: null, ai_teaser_strength: null }),
+    null,
   );
 });
 

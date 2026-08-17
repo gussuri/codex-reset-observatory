@@ -153,7 +153,7 @@ test("prioritizes official notice, strong teaser, incident, weak teaser, and ano
   );
   assert.equal(reasonFor({ signals: [signal("strong")] }), "リセットを示唆する投稿が確認されています。通常時よりリセットの見込みが高まっています。");
   assert.equal(reasonFor({ statusIncidents: { activeStatusIncidentCount: 1 } }), "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。");
-  assert.equal(reasonFor({ signals: [signal("weak")] }), "リセットを示唆する投稿が確認されています。リセットの見込みがやや高まっています。");
+  assert.equal(reasonFor({ signals: [signal("weak")] }), "弱い匂わせ投稿があります。");
   assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。");
 });
 
@@ -175,7 +175,7 @@ test("uses clear English and Chinese wording for teaser strength", () => {
   );
   assert.equal(
     reasonFor({ locale: "en", signals: [signal("weak")] }),
-    "A post suggesting a reset has been confirmed. The outlook is somewhat higher.",
+    "A weak reset hint is present.",
   );
   assert.equal(
     reasonFor({ locale: "zh", signals: [signal("strong")] }),
@@ -183,7 +183,7 @@ test("uses clear English and Chinese wording for teaser strength", () => {
   );
   assert.equal(
     reasonFor({ locale: "zh", signals: [signal("weak")] }),
-    "已确认有暗示重置的帖子，重置的可能性略有上升。",
+    "目前有一条较弱的重置暗示。",
   );
 });
 

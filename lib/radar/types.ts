@@ -137,9 +137,11 @@ export type ActiveTiboSignal = {
   verification_status?: "auto_unverified" | "confirmed" | "rejected";
   confidence?: number;
   classification_reason?: string;
+  classification_source?: string | null;
+  teaser_strength?: TeaserStrength | null;
+  ai_teaser_strength?: TeaserStrength | null;
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
-  teaser_strength?: TeaserStrength | null;
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_precision?: TemporalPrecision | null;

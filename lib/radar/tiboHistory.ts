@@ -29,6 +29,7 @@ export type TiboClassificationSource =
   | "shadow"
   | "gemini"
   | "rule_fallback"
+  | "manual"
   | string;
 
 export type TiboNoticeSignal = {
@@ -76,6 +77,7 @@ export type FormalTiboResetSignal = {
   signal_type: TiboSignalType;
   confidence: number | null;
   verification_status: TiboVerificationStatus;
+  classification_reason?: string | null;
   classification_source?: TiboClassificationSource | null;
   rule_signal_type?: TiboSignalType | null;
   ai_signal_type?: TiboSignalType | null;
@@ -83,6 +85,7 @@ export type FormalTiboResetSignal = {
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
   ai_teaser_strength?: TeaserStrength | null;
+  teaser_strength?: TeaserStrength | null;
   ai_teaser_strength_confidence?: number | null;
   ai_teaser_strength_evidence_quote?: string | null;
   ai_teaser_strength_reason_ja?: string | null;

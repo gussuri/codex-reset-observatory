@@ -72,6 +72,42 @@ test("a null detection time is initialized on the next delivery", () => {
   assert.equal(result.detected_at, receivedAt);
 });
 
+test("manual final classification and reply context survive webhook reprocessing", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    signal_type: "irrelevant",
+    confidence: 0.95,
+    classification_reason: "Gemini saw no parent context.",
+    classification_source: "gemini",
+    teaser_strength: null,
+    is_reply: false,
+    reply_to_handles: [],
+    reply_context_text: null,
+    source_timeline: "with_replies",
+  }, {
+    detected_at: "2026-08-16T19:06:58.000Z",
+    verification_status: "confirmed",
+    signal_type: "teaser",
+    confidence: null,
+    classification_reason: "手動修正: 親投稿への条件付き返信としてweak teaserと確認。",
+    classification_source: "manual",
+    teaser_strength: "weak",
+    is_reply: true,
+    reply_to_handles: ["@Ananth7e"],
+    reply_context_text: "are we going to get a reset when codex crosses 20M users?",
+    source_timeline: "with_replies",
+  }, receivedAt);
+
+  assert.equal(result.signal_type, "teaser");
+  assert.equal(result.confidence, null);
+  assert.equal(result.classification_source, "manual");
+  assert.equal(result.teaser_strength, "weak");
+  assert.equal(result.is_reply, true);
+  assert.deepEqual(result.reply_to_handles, ["@Ananth7e"]);
+  assert.equal(result.reply_context_text, "are we going to get a reset when codex crosses 20M users?");
+  assert.equal(result.verification_status, "confirmed");
+});
+
 test("preserved confirmed and rejected states cannot trigger formal adoption again", () => {
   const confirmedPayload = preserveTiboWebhookState(payload(), {
     verification_status: "confirmed",
@@ -88,6 +124,13 @@ test("preserved confirmed and rejected states cannot trigger formal adoption aga
   );
   assert.equal(
     isNewFormalAdoption(formalCandidate(rejectedPayload.verification_status), formalCandidate("rejected")),
+    false,
+  );
+  assert.equal(
+    isNewFormalAdoption(
+      formalCandidate("confirmed"),
+      { ...formalCandidate("confirmed"), classification_source: "manual" },
+    ),
     false,
   );
 });

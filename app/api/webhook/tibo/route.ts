@@ -53,7 +53,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -226,6 +226,7 @@ export async function POST(req: NextRequest) {
       expires_at: expiresAt.toISOString(),
       verification_status: "auto_unverified" as const,
       classification_reason: selectedClassification.reason,
+      teaser_strength: null,
       is_reply: ruleResult.isReply,
       reply_to_handles: replyMetadata.replyToHandles ?? null,
       reply_context_text: replyMetadata.replyContextText ?? null,
@@ -271,7 +272,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -282,7 +283,7 @@ export async function POST(req: NextRequest) {
         if (isMissingTiboOptionalColumnError(lookupError)) {
           const legacyLookup = await supabase
             .from("tibo_signals")
-            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,verification_status,classification_source")
+            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,is_reply,reply_to_handles,reply_context_text,source_timeline")
             .eq("tweet_id", tweetId)
             .maybeSingle();
           if (legacyLookup.error) {
@@ -460,6 +461,7 @@ export async function POST(req: NextRequest) {
       const {
         translated_text_ja: _translatedTextJa,
         translated_text_zh: _translatedTextZh,
+        teaser_strength: _teaserStrength,
         ai_teaser_strength: _aiTeaserStrength,
         ai_teaser_strength_confidence: _aiTeaserStrengthConfidence,
         ai_teaser_strength_evidence_quote: _aiTeaserStrengthEvidenceQuote,

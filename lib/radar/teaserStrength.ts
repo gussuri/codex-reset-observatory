@@ -18,6 +18,13 @@ export type TeaserStrengthWindowOptions = {
   includeReplies?: boolean;
 };
 
+export function getEffectiveTeaserStrength(signal: {
+  teaser_strength?: TeaserStrength | null;
+  ai_teaser_strength?: TeaserStrength | null;
+}) {
+  return signal.teaser_strength ?? signal.ai_teaser_strength ?? null;
+}
+
 export function isTeaserStrength(value: unknown): value is TeaserStrength {
   return typeof value === "string" &&
     (TIBO_TEASER_STRENGTHS as readonly string[]).includes(value);
