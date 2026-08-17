@@ -58,10 +58,32 @@ test("usage-limit reset positive controls remain eligible", () => {
     ["Codex limits are reset.", "reset_executed"],
     ["Everyone's usage should be topped up now.", "reset_executed"],
     ["Reset landing in the next hour.", "official_notice"],
+    ["We just flipped the switch and reset everyone's usage limits.", "reset_executed"],
   ];
 
   for (const [text, expected] of cases) {
     assert.equal(getTiboClassificationSafetyDecision(text, expected).signalType, expected, text);
+  }
+});
+
+test("non-reset feature activation and rollout completions are irrelevant", () => {
+  const cases = [
+    "GPT-X 1M context in Codex. This used to only work for API keys, but we just flipped the switch and it works through ChatGPT accounts now too.",
+    "We just flipped the switch. The larger context window works for ChatGPT accounts now.",
+    "The new Codex feature is now live for everyone.",
+    "We just enabled Model X in Codex.",
+  ];
+
+  for (const text of cases) {
+    assert.equal(
+      getTiboClassificationSafetyDecision(text, "reset_executed").signalType,
+      "irrelevant",
+      text,
+    );
+
+    const guarded = applyTiboClassificationSafetyGuard(text, geminiResult("reset_executed"));
+    assert.equal(guarded.signalType, "irrelevant", text);
+    assert.equal(guarded.teaserStrength, "none", text);
   }
 });
 

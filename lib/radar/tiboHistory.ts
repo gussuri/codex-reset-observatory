@@ -13,6 +13,7 @@ import {
   inferResetCycleType,
   normalizeResetReasonType,
 } from "./resetReason";
+import { getTiboClassificationSafetyDecision } from "./classification";
 import type { ResetReasonType } from "./types";
 
 export type TiboSignalType =
@@ -162,6 +163,9 @@ function formatNoticeToExecution(minutes: number) {
 export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
   if (signal.is_reply === true) return false;
   if (signal.signal_type !== "reset_executed") return false;
+  if (getTiboClassificationSafetyDecision(signal.text, signal.signal_type).signalType !== "reset_executed") {
+    return false;
+  }
   if ((signal.confidence ?? 0) < FORMAL_RESET_CONFIDENCE) return false;
   if (signal.verification_status === "rejected") return false;
   if (!getTimestamp(signal.tweet_created_at)) return false;

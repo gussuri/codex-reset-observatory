@@ -137,7 +137,7 @@ export function buildFixedGeminiOutput(scenario: TiboScenario): GeminiClassifica
   const evidenceQuote = mock.evidenceQuote ?? defaultEvidence(scenario.tweetText);
 
   return {
-    signalType: expectedSignal,
+    signalType: mock.signalType ?? expectedSignal,
     confidence: mock.confidence ?? 0.98,
     temporalDirection: mock.temporalDirection ?? expectedDirection,
     evidenceQuote,

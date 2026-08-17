@@ -19,6 +19,7 @@ export type TiboReplyClassificationMetadata = {
 
 export type TiboClassificationSafetyReason =
   | "non_usage_reset_object"
+  | "non_usage_activation"
   | "pure_hypothetical"
   | "explicit_negation"
   | "current_execution"
@@ -35,6 +36,9 @@ export type TiboClassificationSafetyDecision = {
 
 const NON_USAGE_RESET_OBJECT_PATTERN = /(?:\b(?:reset|resetting|restart|restarting|reboot|rebooting)\s+(?:the|my|our|a|an)?\s*(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\b|\b(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\s+(?:reset|restart|reboot)\b)/i;
 const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|capacity|paid\s+users?|all\s+users?|everyone(?:'s)?\s+limits?|fresh\s+limits?|topped\s+up|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)\b/i;
+const NON_USAGE_ACTIVATION_OBJECT_PATTERN = /\b(?:context\s+windows?|features?|models?(?:\s+availability)?|api\s+keys?|chatgpt\s+accounts?|account\s+support|rollouts?|deployments?|availability|products?|settings?|switch)\b/i;
+const NON_USAGE_ACTIVATION_ACTION_PATTERN = /\b(?:flipped\s+the\s+switch|turned\s+(?:it|that|this|the)\s+on|enabled|activated|now\s+live|is\s+live|are\s+live|works?\s+(?:through|for|with)|support(?:s|ed)?|rolled\s+out|deployed|released|expanded|extended)\b/i;
+const EXPLICIT_USAGE_LIMIT_RESET_PATTERN = /(?:\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b[^.!?]{0,100}\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b|\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b[^.!?]{0,100}\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b)/i;
 const PURE_HYPOTHETICAL_PATTERN = /\b(?:what\s+if|would\s+be\s+nice\s+to|imagine\s+if|i\s+wish|if\s+only)\b|\b(?:could|would)\s+use\s+(?:a\s+)?reset\b|\bworld\s+with\s+unlimited\s+resets?\b/i;
 const INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN = /\b(?:but|however|so)\b[^.!?]{0,100}\b(?:i|we)\s+(?:will|might|may|could)\b/i;
 const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
@@ -62,6 +66,23 @@ function normalizedClassificationText(text: string) {
 export function hasExplicitNonUsageResetObject(text: string) {
   const normalized = normalizedClassificationText(text);
   return NON_USAGE_RESET_OBJECT_PATTERN.test(normalized) && !USAGE_LIMIT_CONTEXT_PATTERN.test(normalized);
+}
+
+/**
+ * Feature, model, account-support, rollout, and deployment completions are
+ * not usage-limit resets. Keep this semantic guard broad enough to cover
+ * product activations, but let an explicit quota/limit reset take priority.
+ */
+export function hasNonUsageActivationCompletion(text: string) {
+  const normalized = normalizedClassificationText(text);
+  if (hasCurrentResetExecution(normalized) || EXPLICIT_USAGE_LIMIT_RESET_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  return (
+    NON_USAGE_ACTIVATION_OBJECT_PATTERN.test(normalized) &&
+    NON_USAGE_ACTIVATION_ACTION_PATTERN.test(normalized)
+  );
 }
 
 export function isPureHypotheticalReset(text: string) {
@@ -106,6 +127,15 @@ export function getTiboClassificationSafetyDecision(
       signalType: "irrelevant",
       reasonJa: "利用枠ではなく、別の対象のresetを示しているため無関係として扱います。",
       reasonCode: "non_usage_reset_object",
+      suppressTeaserStrength: true,
+    };
+  }
+
+  if (hasNonUsageActivationCompletion(text) && candidate !== "irrelevant") {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "利用上限のresetではなく、機能・モデル・アカウント対応などの有効化完了を示しているため無関係として扱います。",
+      reasonCode: "non_usage_activation",
       suppressTeaserStrength: true,
     };
   }

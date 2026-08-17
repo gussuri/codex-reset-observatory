@@ -71,6 +71,55 @@
     },
 
     {
+      "id": "activation-01",
+      "category": "non_reset_activation",
+      "description": "Context window activation through ChatGPT accounts",
+      "tweetText": "GPT-X 1M context in Codex. This used to only work for API keys, but we just flipped the switch and it works through ChatGPT accounts now too.",
+      "tweetCreatedAt": "2026-08-14T00:14:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000008",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "non-reset-activation",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "activation-02",
+      "category": "non_reset_activation",
+      "description": "Context window rollout",
+      "tweetText": "We just flipped the switch. The larger context window works for ChatGPT accounts now.",
+      "tweetCreatedAt": "2026-08-14T00:16:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000009",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "non-reset-activation",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "activation-03",
+      "category": "non_reset_activation",
+      "description": "Feature rollout",
+      "tweetText": "The new Codex feature is now live for everyone.",
+      "tweetCreatedAt": "2026-08-14T00:18:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000010",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "non-reset-activation",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "completed_now" }
+    },
+    {
+      "id": "activation-04",
+      "category": "non_reset_activation",
+      "description": "Model availability",
+      "tweetText": "We just enabled Model X in Codex.",
+      "tweetCreatedAt": "2026-08-14T00:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000018",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "non-reset-activation",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "completed_now" }
+    },
+
+    {
       "id": "notice-01",
       "category": "official_notice",
       "description": "One-hour notice",
