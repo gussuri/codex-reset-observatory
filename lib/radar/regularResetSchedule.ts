@@ -145,15 +145,11 @@ export function getLatestRegularScheduleAnchorAt(
   return latestAt;
 }
 
-function createScheduledRow(
+function createRegularResetEventRow(
   definition: RegularResetScheduleDefinition,
-  anchorAt: Date,
-  occurrenceIndex: number,
+  representativeAt: Date,
+  completedAt: string,
 ): RegularResetEventRow {
-  const representativeAt = addDays(
-    anchorAt,
-    occurrenceIndex * definition.cycle_days,
-  );
   const scheduledAt = representativeAt.toISOString();
 
   return {
@@ -168,7 +164,7 @@ function createScheduledRow(
     ).toISOString(),
     representative_at: scheduledAt,
     scheduled_at: scheduledAt,
-    completed_at: scheduledAt,
+    completed_at: completedAt,
     cycle_type: definition.cycle_type,
     reset_method: definition.reset_method,
     scope: definition.scope,
@@ -177,10 +173,41 @@ function createScheduledRow(
   };
 }
 
+function createScheduledRow(
+  definition: RegularResetScheduleDefinition,
+  anchorAt: Date,
+  occurrenceIndex: number,
+): RegularResetEventRow {
+  const representativeAt = addDays(
+    anchorAt,
+    occurrenceIndex * definition.cycle_days,
+  );
+  return createRegularResetEventRow(definition, representativeAt, representativeAt.toISOString());
+}
+
+/**
+ * Creates a canonical regular event only after the Usage Monitor has observed
+ * the recovery. scheduled_at remains the expected boundary; completed_at is
+ * the measured quota recovery time.
+ */
+export function createObservedRegularResetEventRow(
+  scheduledAt: string,
+  completedAt: string,
+  definition: RegularResetScheduleDefinition = DEFAULT_REGULAR_RESET_SCHEDULE,
+): RegularResetEventRow {
+  const representativeAt = parseFiniteDate(scheduledAt);
+  const completedDate = parseFiniteDate(completedAt);
+  if (!representativeAt || !completedDate) {
+    throw new Error("Invalid regular reset observation timestamp");
+  }
+  return createRegularResetEventRow(definition, representativeAt, completedDate.toISOString());
+}
+
 /**
  * Returns only weekly occurrences after the supplied anchor whose
- * representative time has arrived. The route persists these rows idempotently;
- * this function never mutates data.
+ * representative time has arrived. These are projections used to report a
+ * due schedule; they are not completed history until Usage Monitor observes
+ * the recovery and creates an observed row.
  */
 export function getDueRegularResetEventRows(
   now: Date,

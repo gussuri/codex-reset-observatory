@@ -6,13 +6,17 @@ import {
   type CodexRecoveryObservation,
   type CodexUsageSnapshot,
 } from "./codexUsageRecovery";
-import type { UsageMonitorState } from "./codexUsageMonitorCoverage";
+import {
+  getNextUsageMonitorCoverageStartedAt,
+  type UsageMonitorState,
+} from "./codexUsageMonitorCoverage";
 import { getTiboClassificationSafetyDecision } from "./radar/classification";
 import {
   buildResetExecutionEstimate,
   type ResetExecutionEstimate,
   type ResolveDisplayExecutionTimeInput,
 } from "./radar/resetExecution";
+import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
 
 export type CodexUsageMonitorStateRow = {
   source_key: string;
@@ -23,6 +27,7 @@ export type CodexUsageMonitorStateRow = {
   used_percent: number;
   window_duration_mins: number;
   resets_at: number;
+  coverage_started_at: string | null;
   updated_at: string;
 };
 
@@ -71,9 +76,21 @@ export type ResetExecutionEstimateRow = {
   updated_at: string;
 };
 
-const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,updated_at";
+const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,coverage_started_at,updated_at";
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
+
+export async function insertObservedRegularResetEvent(
+  client: SupabaseClient<any>,
+  scheduledAt: string,
+  completedAt: string,
+) {
+  const row = createObservedRegularResetEventRow(scheduledAt, completedAt);
+  const result = await client
+    .from("regular_reset_events")
+    .upsert(row, { onConflict: "schedule_key", ignoreDuplicates: true });
+  return result.error;
+}
 
 export function toCodexUsageMonitorState(
   row: CodexUsageMonitorStateRow | null | undefined,
@@ -88,6 +105,7 @@ export function toCodexUsageMonitorState(
     usedPercent: row.used_percent,
     windowDurationMins: row.window_duration_mins,
     resetsAt: row.resets_at,
+    coverageStartedAt: row.coverage_started_at ?? null,
   };
 }
 
@@ -181,21 +199,36 @@ export async function upsertCodexUsageMonitorState(
   client: SupabaseClient<any>,
   snapshot: CodexUsageSnapshot,
   receivedAt: string,
+  previousState: UsageMonitorState | null | undefined = null,
 ) {
-  const result = await client
+  const coverageStartedAt = getNextUsageMonitorCoverageStartedAt(previousState, snapshot);
+  const payload = {
+    source_key: CODEX_USAGE_SOURCE_KEY,
+    observed_at: snapshot.observedAt,
+    received_at: receivedAt,
+    limit_id: snapshot.limitId,
+    plan_type: snapshot.planType,
+    used_percent: snapshot.usedPercent,
+    window_duration_mins: snapshot.windowDurationMins,
+    resets_at: snapshot.resetsAt,
+    coverage_started_at: coverageStartedAt,
+    updated_at: receivedAt,
+  };
+
+  // Do not let an out-of-order webhook overwrite a newer observation. The
+  // follow-up insert is only for the no-row case and ignores a concurrent
+  // insert, so a race cannot replace the newer row either.
+  const updateResult = await client
     .from("codex_usage_monitor_state")
-    .upsert({
-      source_key: CODEX_USAGE_SOURCE_KEY,
-      observed_at: snapshot.observedAt,
-      received_at: receivedAt,
-      limit_id: snapshot.limitId,
-      plan_type: snapshot.planType,
-      used_percent: snapshot.usedPercent,
-      window_duration_mins: snapshot.windowDurationMins,
-      resets_at: snapshot.resetsAt,
-      updated_at: receivedAt,
-    }, { onConflict: "source_key" });
-  return result.error;
+    .update(payload)
+    .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+    .lt("observed_at", snapshot.observedAt);
+  if (updateResult.error) return updateResult.error;
+
+  const insertResult = await client
+    .from("codex_usage_monitor_state")
+    .upsert(payload, { onConflict: "source_key", ignoreDuplicates: true });
+  return insertResult.error;
 }
 
 export async function insertCodexRecoveryObservation(
@@ -295,7 +328,7 @@ export async function findNearestCodexRecoveryObservation(
     .from("codex_recovery_observations")
     .select(OBSERVATION_COLUMNS)
     .in("status", ["observed", "confirmed"])
-    .neq("cycle_hint", "regular")
+    .eq("cycle_hint", "unexpected")
     .gte("observed_at", new Date(time - matchWindowMs).toISOString())
     .lte("observed_at", new Date(time + matchWindowMs).toISOString())
     .order("observed_at", { ascending: true })
@@ -343,7 +376,7 @@ export async function confirmNearestCodexRecoveryObservation(
     .select(OBSERVATION_COLUMNS)
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
     .eq("status", "observed")
-    .neq("cycle_hint", "regular")
+    .eq("cycle_hint", "unexpected")
     .gte("observed_at", new Date(time - matchWindowMs).toISOString())
     .lte("observed_at", new Date(time + matchWindowMs).toISOString())
     .order("observed_at", { ascending: true })
@@ -362,7 +395,7 @@ export async function confirmNearestCodexRecoveryObservation(
       .select(OBSERVATION_COLUMNS)
       .eq("source_key", CODEX_USAGE_SOURCE_KEY)
       .eq("status", "confirmed")
-      .neq("cycle_hint", "regular")
+      .eq("cycle_hint", "unexpected")
       .order("observed_at", { ascending: false })
       .limit(100);
     if (confirmedResult.error) {

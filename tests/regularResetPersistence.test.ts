@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_REGULAR_RESET_SCHEDULE,
+  createObservedRegularResetEventRow,
   getLatestRegularScheduleAnchorAt as getLatestAnchorFromEvents,
   getDueRegularResetEventRows,
   toRegularResetHistoryEvent,
@@ -77,6 +78,18 @@ test("creates one completed regular event seven days after the latest anchor", (
   assert.equal(rows[0].cycle_type, "定期リセット");
   assert.equal(rows[0].record_kind, "regular_completed");
   assert.equal(rows[0].status, "completed");
+});
+
+test("an observed regular recovery uses the monitor observation time, not the schedule time", () => {
+  const row = createObservedRegularResetEventRow(
+    "2026-08-20T03:34:43.341Z",
+    "2026-08-20T03:40:00.000Z",
+  );
+
+  assert.equal(row.scheduled_at, "2026-08-20T03:34:43.341Z");
+  assert.equal(row.completed_at, "2026-08-20T03:40:00.000Z");
+  assert.notEqual(row.completed_at, row.scheduled_at);
+  assert.equal(row.status, "completed");
 });
 
 test("generates each missed weekly occurrence with a stable key", () => {

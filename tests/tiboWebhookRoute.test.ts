@@ -178,6 +178,7 @@ test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async (
         used_percent: 32,
         window_duration_mins: 10080,
         resets_at: 1787198370,
+        coverage_started_at: new Date(receivedAt - 10 * 60_000).toISOString(),
         updated_at: new Date(receivedAt - 29_000).toISOString(),
       }), {
         status: 200,
@@ -198,7 +199,7 @@ test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async (
 
   try {
     const response = await POST(buildRequest({
-      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+      tweetCreatedAt: new Date(receivedAt - 60_000).toISOString(),
     }));
 
     assert.equal(response.status, 200);

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CODEX_WEEKLY_WINDOW_MINUTES,
+  canCorroborateTiboReset,
   MAX_USAGE_COMPARISON_GAP_MS,
   RESET_AT_MEANINGFUL_FORWARD_SEC,
   REGULAR_RESET_PROXIMITY_MS,
@@ -291,6 +292,28 @@ test("a regular-proximate recovery with notice is unknown strong", () => {
   if (result.kind !== "recovery") throw new Error(`expected recovery, got ${result.kind}`);
   assert.equal(result.cycleHint, "unknown");
   assert.equal(result.confidence, "strong");
+});
+
+test("only a clearly unexpected recovery can corroborate a Tibo reset", () => {
+  const regular = evaluateCodexUsageRecovery(
+    previous({ resetsAt: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000) }),
+    snapshot({ usedPercent: 0 }),
+    { activeOfficialNotice: false },
+  );
+  const regularWithNotice = evaluateCodexUsageRecovery(
+    previous({ resetsAt: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000) }),
+    snapshot({ usedPercent: 0 }),
+    { activeOfficialNotice: true },
+  );
+  const unexpected = evaluateCodexUsageRecovery(
+    previous({ resetsAt: Math.floor(Date.parse("2026-08-12T00:00:00.000Z") / 1000) }),
+    snapshot({ usedPercent: 0 }),
+    { activeOfficialNotice: true },
+  );
+
+  assert.equal(canCorroborateTiboReset(regular), false);
+  assert.equal(canCorroborateTiboReset(regularWithNotice), false);
+  assert.equal(canCorroborateTiboReset(unexpected), true);
 });
 
 test("an unexpected recovery with notice is unexpected strong", () => {

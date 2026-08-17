@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import {
   CODEX_USAGE_SOURCE_KEY,
   USAGE_TIBO_MATCH_WINDOW_MS,
+  canCorroborateTiboReset,
   evaluateCodexUsageRecovery,
   isCodexUsageAuthorizationValid,
   parseCodexUsageWebhookPayload,
@@ -15,6 +16,7 @@ import {
   confirmNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
   findRecentFormalTiboReset,
+  insertObservedRegularResetEvent,
   insertCodexRecoveryObservation,
   promoteDeferredTiboReset,
   readCodexUsageMonitorState,
@@ -126,7 +128,7 @@ export async function POST(request: Request) {
       initialDecision.kind === "invalid" ||
       initialDecision.kind === "no_recovery"
     ) {
-      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString());
+      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
       if (stateError) {
         console.warn("[Codex usage] state update failed", { reason: "database_error" });
         return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
@@ -148,16 +150,21 @@ export async function POST(request: Request) {
       activeOfficialNotice: notice.active,
     });
     if (decision.kind !== "recovery") {
-      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString());
+      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
       if (stateError) return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
       return recoveryResponse(decision.kind);
     }
 
-    const matchingTibo = await findRecentFormalTiboReset(
-      client,
-      snapshot.observedAt,
-      USAGE_TIBO_MATCH_WINDOW_MS,
-    );
+    // A recovery near the regular schedule is not Tibo evidence. This also
+    // covers the `unknown` near-regular case where an official notice exists:
+    // a notice must not turn a regular quota recovery into a Tibo confirmation.
+    const matchingTibo = !canCorroborateTiboReset(decision)
+      ? { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null }
+      : await findRecentFormalTiboReset(
+          client,
+          snapshot.observedAt,
+          USAGE_TIBO_MATCH_WINDOW_MS,
+        );
     if (matchingTibo.error) {
       console.warn("[Codex usage] Tibo match lookup failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
@@ -193,6 +200,18 @@ export async function POST(request: Request) {
     if (observationResult.error) {
       console.warn("[Codex usage] recovery observation write failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+
+    if (decision.nearRegularSchedule) {
+      const regularError = await insertObservedRegularResetEvent(
+        client,
+        new Date(decision.previous.resetsAt * 1000).toISOString(),
+        snapshot.observedAt,
+      );
+      if (regularError) {
+        console.warn("[Codex usage] regular reset completion write failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      }
     }
 
     const noticeSignal = notice.noticeSignal;
@@ -237,7 +256,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString());
+    const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
     if (stateError) {
       console.warn("[Codex usage] state update failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });

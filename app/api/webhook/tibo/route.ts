@@ -22,7 +22,7 @@ import {
   upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
 import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
-import { getUsageMonitorCoverage } from "@/lib/codexUsageMonitorCoverage";
+import { getUsageMonitorCoverageAtEvent } from "@/lib/codexUsageMonitorCoverage";
 import {
   buildFormalAdoptionResult,
   hasExistingFormalResetCluster,
@@ -379,7 +379,11 @@ export async function POST(req: NextRequest) {
           reason: "lookup_failed",
         });
       } else {
-        const coverage = getUsageMonitorCoverage(monitorState.state, new Date(receivedAt));
+        const coverage = getUsageMonitorCoverageAtEvent(
+          monitorState.state,
+          formalCandidate.tweet_created_at,
+          new Date(receivedAt),
+        );
         if (coverage.state === "fresh") {
           const recoveryLookup = await findNearestCodexRecoveryObservation(
             supabase,

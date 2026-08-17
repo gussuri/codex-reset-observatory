@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { getLatestRegularScheduleAnchorAt } from "@/lib/radar";
 import { fetchCurrentRadarData } from "@/lib/radarFetch";
@@ -23,8 +22,7 @@ async function syncRegularResetEvents(request: NextRequest) {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return response({ ok: false, error: "configuration_unavailable" }, 503);
   }
 
@@ -48,24 +46,21 @@ async function syncRegularResetEvents(request: NextRequest) {
     }
 
     const dueRows = getDueRegularResetEventRows(now, latestAnchorAt);
+    // Schedule polling must not turn an expected timestamp into a factual
+    // completed reset. The Usage Monitor webhook persists a completed row
+    // only after it observes the corresponding quota recovery.
     if (dueRows.length > 0) {
-      const supabase = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { persistSession: false },
+      console.info("Regular reset is awaiting Usage Monitor confirmation", {
+        dueCount: dueRows.length,
       });
-      const { error } = await supabase
-        .from("regular_reset_events")
-        .upsert(dueRows, {
-          onConflict: "schedule_key",
-          ignoreDuplicates: true,
-        });
-
-      if (error) {
-        console.error("Regular reset event sync failed", { detail: "database_error" });
-        return response({ ok: false, error: "database_unavailable" }, 503);
-      }
     }
 
-    return response({ ok: true, dueCount: dueRows.length });
+    return response({
+      ok: true,
+      dueCount: dueRows.length,
+      persistedCount: 0,
+      awaitingUsageObservation: dueRows.length > 0,
+    });
   } catch {
     console.error("Regular reset event sync failed", { detail: "request_failed" });
     return response({ ok: false, error: "database_unavailable" }, 503);

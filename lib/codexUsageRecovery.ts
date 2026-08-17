@@ -74,6 +74,19 @@ export type CodexUsageRecoveryDecision =
       current: CodexUsageSnapshot;
     };
 
+/**
+ * Only a clearly non-regular recovery can corroborate a Tibo reset. A nearby
+ * regular boundary remains regular evidence even when an official notice is
+ * also present.
+ */
+export function canCorroborateTiboReset(
+  decision: CodexUsageRecoveryDecision,
+) {
+  return decision.kind === "recovery" &&
+    decision.cycleHint === "unexpected" &&
+    !decision.nearRegularSchedule;
+}
+
 const MAX_PLAN_TYPE_LENGTH = 64;
 const MAX_LIMIT_ID_LENGTH = 64;
 

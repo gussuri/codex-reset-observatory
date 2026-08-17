@@ -11,6 +11,7 @@ export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
 export const NOTIFICATION_DEBOUNCE_MS = 2_000;
 export const APP_SERVER_REQUEST_TIMEOUT_MS = 15_000;
+export const APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD = 3;
 export const MONITOR_WEBHOOK_TIMEOUT_MS = 15_000;
 export const MAX_JSON_LINE_LENGTH = 1_000_000;
 
@@ -93,6 +94,11 @@ export function getRestartBackoffMs(attempt: number) {
     ? Math.min(Math.max(0, Math.floor(attempt)), RESTART_BACKOFF_MS.length - 1)
     : 0;
   return RESTART_BACKOFF_MS[index];
+}
+
+export function shouldRestartAppServerAfterRpcFailure(consecutiveFailures: number) {
+  return Number.isInteger(consecutiveFailures) &&
+    consecutiveFailures >= APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD;
 }
 
 export function toSafeMonitorPayload(snapshot: CodexUsageSnapshot) {
@@ -266,6 +272,7 @@ async function runAppServerSession(
     let initialized = false;
     let nextRequestId = 1;
     let refreshInFlight = false;
+    let consecutiveRpcFailures = 0;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     const pending = new Map<string, PendingRequest>();
 
@@ -318,8 +325,16 @@ async function runAppServerSession(
     const refresh = async () => {
       if (settled || !initialized || refreshInFlight) return;
       refreshInFlight = true;
+      let rpcFailed = false;
       try {
-        const response = await sendRequest("account/rateLimits/read");
+        let response: JsonObject;
+        try {
+          response = await sendRequest("account/rateLimits/read");
+        } catch (error) {
+          rpcFailed = true;
+          throw error;
+        }
+        consecutiveRpcFailures = 0;
         const snapshot = parseCodexRateLimitsResponse(response, new Date());
         if (!snapshot) {
           logger("snapshot_rejected", { reason: "invalid_weekly_window" });
@@ -335,6 +350,12 @@ async function runAppServerSession(
         });
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
+        if (rpcFailed) {
+          consecutiveRpcFailures += 1;
+          if (!signal.aborted && shouldRestartAppServerAfterRpcFailure(consecutiveRpcFailures)) {
+            finish(new Error("app_server_rpc_unhealthy"));
+          }
+        }
       } finally {
         refreshInFlight = false;
       }

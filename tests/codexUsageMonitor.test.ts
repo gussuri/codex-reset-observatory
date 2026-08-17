@@ -8,6 +8,7 @@ import {
   getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
   getRestartBackoffMs,
+  shouldRestartAppServerAfterRpcFailure,
   toSafeMonitorPayload,
 } from "../tools/codex-usage-monitor";
 
@@ -50,6 +51,13 @@ test("polling never falls below the sixty second minimum", () => {
 
 test("restart backoff caps at two minutes", () => {
   assert.deepEqual([0, 1, 2, 3].map(getRestartBackoffMs), [5_000, 30_000, 120_000, 120_000]);
+});
+
+test("app-server restarts only after three consecutive RPC failures", () => {
+  assert.equal(shouldRestartAppServerAfterRpcFailure(1), false);
+  assert.equal(shouldRestartAppServerAfterRpcFailure(2), false);
+  assert.equal(shouldRestartAppServerAfterRpcFailure(3), true);
+  assert.equal(shouldRestartAppServerAfterRpcFailure(4), true);
 });
 
 test("monitor payload contains only safe rate-limit fields", () => {

@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   USAGE_MONITOR_FRESH_MAX_AGE_SECONDS,
+  getNextUsageMonitorCoverageStartedAt,
   getUsageMonitorCoverage,
+  getUsageMonitorCoverageAtEvent,
 } from "../lib/codexUsageMonitorCoverage";
 import {
   shouldDeferFormalTiboReset,
@@ -22,6 +24,7 @@ function state(overrides: Record<string, unknown> = {}) {
     usedPercent: 32,
     windowDurationMins: 10080,
     resetsAt: 1787198370,
+    coverageStartedAt: "2026-08-17T00:50:00.000Z",
     ...overrides,
   };
 }
@@ -49,6 +52,7 @@ test("a recent valid usage monitor state is fresh", () => {
   assert.equal(result.resetsAt, 1787198370);
   assert.equal(result.observedAt.toISOString(), "2026-08-17T00:59:00.000Z");
   assert.equal(result.receivedAt.toISOString(), "2026-08-17T00:59:01.000Z");
+  assert.equal(result.coverageStartedAt.toISOString(), "2026-08-17T00:50:00.000Z");
 });
 
 test("a valid state older than the freshness window is stale", () => {
@@ -56,6 +60,7 @@ test("a valid state older than the freshness window is stale", () => {
     state({
       observedAt: new Date(now.getTime() - (USAGE_MONITOR_FRESH_MAX_AGE_SECONDS + 1) * 1000).toISOString(),
       receivedAt: new Date(now.getTime() - (USAGE_MONITOR_FRESH_MAX_AGE_SECONDS + 1) * 1000).toISOString(),
+      coverageStartedAt: new Date(now.getTime() - (USAGE_MONITOR_FRESH_MAX_AGE_SECONDS + 2) * 1000).toISOString(),
     }),
     now,
   );
@@ -113,6 +118,66 @@ test("stale, unavailable, or unavailable recovery lookup never turns absence int
   assert.equal(shouldDeferFormalTiboReset(resetSignal(), stale, { available: true, matched: false }), false);
   assert.equal(shouldDeferFormalTiboReset(resetSignal(), unavailable, { available: true, matched: false }), false);
   assert.equal(shouldDeferFormalTiboReset(resetSignal(), fresh, { available: false, matched: false }), false);
+});
+
+test("coverage can defer only when the Tibo event is inside continuous monitor coverage", () => {
+  const coverage = getUsageMonitorCoverageAtEvent(
+    state(),
+    "2026-08-17T00:58:00.000Z",
+    now,
+  );
+
+  assert.equal(coverage.state, "fresh");
+  assert.equal(
+    shouldDeferFormalTiboReset(resetSignal(), coverage, {
+      available: true,
+      matched: false,
+    }),
+    true,
+  );
+});
+
+test("a Tibo event before monitor startup is not deferred by a fresh current state", () => {
+  const coverage = getUsageMonitorCoverageAtEvent(
+    state(),
+    "2026-08-17T00:49:59.000Z",
+    now,
+  );
+
+  assert.deepEqual(coverage, { state: "unavailable" });
+  assert.equal(
+    shouldDeferFormalTiboReset(resetSignal({ tweet_created_at: "2026-08-17T00:49:59.000Z" }), coverage, {
+      available: true,
+      matched: false,
+    }),
+    false,
+  );
+});
+
+test("a current fresh state does not cover an event after the last observed snapshot", () => {
+  assert.deepEqual(
+    getUsageMonitorCoverageAtEvent(state(), "2026-08-17T01:00:01.000Z", now),
+    { state: "unavailable" },
+  );
+});
+
+test("a gap starts a new coverage interval instead of inferring continuity", () => {
+  const next = getNextUsageMonitorCoverageStartedAt(
+    state({
+      observedAt: "2026-08-17T00:10:00.000Z",
+      coverageStartedAt: "2026-08-17T00:00:00.000Z",
+    }),
+    {
+      observedAt: "2026-08-17T00:20:01.000Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 30,
+      windowDurationMins: 10080,
+      resetsAt: 1787198370,
+    },
+  );
+
+  assert.equal(next, "2026-08-17T00:20:01.000Z");
 });
 
 test("a manually confirmed Tibo reset remains eligible even without monitor recovery", () => {
