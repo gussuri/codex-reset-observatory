@@ -153,7 +153,7 @@ test("prioritizes official notice, strong teaser, incident, weak teaser, and ano
   );
   assert.equal(reasonFor({ signals: [signal("strong")] }), "リセットを示唆する投稿が確認されています。通常時よりリセットの見込みが高まっています。");
   assert.equal(reasonFor({ statusIncidents: { activeStatusIncidentCount: 1 } }), "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。");
-  assert.equal(reasonFor({ signals: [signal("weak")] }), "弱い匂わせ投稿があります。");
+  assert.equal(reasonFor({ signals: [signal("weak")] }), "弱いリセット匂わせ投稿があります。");
   assert.equal(reasonFor({ environment: { issue_or_limit_anomalies_24h: 1 } }), "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。");
 });
 

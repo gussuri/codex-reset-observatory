@@ -130,7 +130,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "已确认有 Codex 相关故障，我们也在关注是否会因恢复处理等情况而发生重置。",
   },
   outlookWeakTeaser: {
-    ja: "弱い匂わせ投稿があります。",
+    ja: "弱いリセット匂わせ投稿があります。",
     en: "A weak reset hint is present.",
     zh: "目前有一条较弱的重置暗示。",
   },

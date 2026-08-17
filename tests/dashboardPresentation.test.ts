@@ -833,7 +833,7 @@ test("the existing reset teaser status row displays weak and none without adding
   );
 
   assert.match(weakHtml, /リセット匂わせ投稿[\s\S]*あり（弱）/);
-  assert.equal((weakHtml.match(/リセット匂わせ投稿/g) ?? []).length, 1);
+  assert.equal((weakHtml.match(/弱いリセット匂わせ投稿があります。/g) ?? []).length, 1);
   assert.match(noneHtml, /リセット匂わせ投稿[\s\S]*なし/);
   assert.doesNotMatch(noneHtml, /リセットへの前向き発言/);
 });
