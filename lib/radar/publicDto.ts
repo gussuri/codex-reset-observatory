@@ -5,6 +5,7 @@ import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getPublicRecoveryObservation } from "../codexUsageRecovery";
 import {
   aggregateResetTeaserStatus,
+  getEffectiveTeaserStrength,
   getUiResetTeaserSignals,
   isTeaserStrength,
 } from "./teaserStrength";
@@ -47,6 +48,36 @@ const PUBLIC_TIBO_CLASSIFICATIONS = new Set<PublicTiboActivity["classification"]
 function normalizePublicPostText(value: string | null | undefined) {
   const normalized = value?.replace(/\r\n?/g, "\n").trim();
   return normalized || null;
+}
+
+const PUBLIC_REPLY_CONTEXT_MAX_CHARS = 1000;
+const PUBLIC_REPLY_HANDLES_MAX = 20;
+const PUBLIC_REPLY_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
+
+function normalizePublicReplyContext(value: string | null | undefined) {
+  return normalizePublicPostText(value)?.slice(0, PUBLIC_REPLY_CONTEXT_MAX_CHARS) ?? null;
+}
+
+function normalizePublicReplyHandles(value: string[] | null | undefined) {
+  if (!Array.isArray(value)) return [];
+
+  const handles: string[] = [];
+  for (const handle of value) {
+    if (typeof handle !== "string" || !PUBLIC_REPLY_HANDLE_PATTERN.test(handle.trim())) continue;
+    const normalized = `@${handle.trim().replace(/^@/, "")}`;
+    if (!handles.includes(normalized)) handles.push(normalized);
+    if (handles.length >= PUBLIC_REPLY_HANDLES_MAX) break;
+  }
+  return handles;
+}
+
+function isUnexpiredSignal(
+  signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
+  nowTime: number,
+) {
+  if (!signal.expires_at) return true;
+  const expiresTime = Date.parse(signal.expires_at);
+  return !Number.isFinite(expiresTime) || expiresTime > nowTime;
 }
 
 function getLocalizedTiboPostText(
@@ -136,27 +167,42 @@ export function toPublicTiboActivity(
     sourceSignals,
     latestResetAt,
     now,
-  ).filter((signal) => signal.teaser_strength === "strong" || signal.teaser_strength === "weak");
-  const relatedCandidates = sourceSignals.filter((signal) =>
-    signal.is_reply !== true &&
-    (eligibleTeaserSignals.includes(signal) ||
-      isCurrentOfficialNotice(signal, latestResetAt, nowTime)),
-  ).sort(
-    (left, right) =>
-      Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
-  );
+  ).filter((signal) => {
+    const strength = getEffectiveTeaserStrength(signal);
+    return strength === "strong" || strength === "weak";
+  });
+  const eligibleTeaserSet = new Set(eligibleTeaserSignals);
+  const relatedCandidates = sourceSignals
+    .filter((signal) => {
+      const strength = getEffectiveTeaserStrength(signal);
+      return isCurrentOfficialNotice(signal, latestResetAt, nowTime) ||
+        (eligibleTeaserSet.has(signal) &&
+          (strength === "strong" || strength === "weak") &&
+          isUnexpiredSignal(signal, nowTime));
+    })
+    .sort(
+      (left, right) =>
+        Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
+    );
 
   const latest = relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
 
   return {
     classification: latest.signal_type as PublicTiboActivity["classification"],
-    teaserStrength: isTeaserStrength(latest.teaser_strength)
-      ? latest.teaser_strength
+    teaserStrength: isTeaserStrength(getEffectiveTeaserStrength(latest))
+      ? getEffectiveTeaserStrength(latest)
       : null,
     text: normalizePublicPostText(getLocalizedTiboPostText(latest, locale)),
     createdAt: latest.tweet_created_at,
     sourceUrl: safeHttpUrl(latest.tweet_url),
+    isReply: latest.is_reply === true,
+    replyContextText: latest.is_reply === true
+      ? normalizePublicReplyContext(latest.reply_context_text)
+      : null,
+    replyToHandles: latest.is_reply === true
+      ? normalizePublicReplyHandles(latest.reply_to_handles)
+      : [],
   };
 }
 

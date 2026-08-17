@@ -156,6 +156,8 @@ export type ActiveTiboSignal = {
   quote_context_text?: string | null;
   quote_tweet_url?: string | null;
   quote_author_handle?: string | null;
+  reply_to_handles?: string[] | null;
+  reply_context_text?: string | null;
 };
 
 export type PublicTiboActivity = {
@@ -164,6 +166,9 @@ export type PublicTiboActivity = {
   text: string | null;
   createdAt: string;
   sourceUrl: string | null;
+  isReply: boolean;
+  replyContextText: string | null;
+  replyToHandles: string[];
 };
 
 export type DataSourceState = "ok" | "degraded" | "misconfigured";

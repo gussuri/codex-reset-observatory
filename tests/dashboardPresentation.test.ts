@@ -89,13 +89,13 @@ test("dashboard shows the latest Tibo activity below history for the experiment"
   assert.ok(activityIndex > historyIndex && activityIndex > heatmapIndex);
   assert.doesNotMatch(html, /Latest post/);
   assert.match(html, /A reset hint from Tibo/);
-  assert.match(html, /Automated observation/);
+  assert.match(html, /Observed classification/);
   assert.match(html, /Reset hint/);
   assert.match(html, /href="https:\/\/x\.com\/thsottiaux\/status\/123"/);
   assert.doesNotMatch(html, /private-tweet-id|private internal reason|classification_reason/);
 
   const postIndex = html.indexOf("A reset hint from Tibo");
-  const classificationIndex = html.indexOf("Automated observation");
+  const classificationIndex = html.indexOf("Observed classification");
   assert.ok(postIndex >= 0 && postIndex < classificationIndex);
 });
 
@@ -109,6 +109,9 @@ test("uses clear Japanese labels for the Tibo post card and unrelated classifica
         text: "リセットとは関係のない投稿です。",
         createdAt: "2026-08-07T05:23:00.000Z",
         sourceUrl: "https://x.com/thsottiaux/status/123",
+        isReply: false,
+        replyContextText: null,
+        replyToHandles: [],
       },
     }),
   );
@@ -133,12 +136,42 @@ test("uses the UI teaser strength for card classification without changing signa
         text: "I feel Theo is in need of a reset",
         createdAt: "2026-08-07T21:46:56.000Z",
         sourceUrl: "https://x.com/thsottiaux/status/2085845171363791135",
+        isReply: false,
+        replyContextText: null,
+        replyToHandles: [],
       },
     }),
   );
 
   assert.match(html, /弱いリセット匂わせ/);
   assert.doesNotMatch(html, /リセットとは無関係/);
+});
+
+test("renders reply context and the observed classification label", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TiboActivityCard, {
+      locale: "ja",
+      variant: "related",
+      activity: {
+        classification: "teaser",
+        teaserStrength: "weak",
+        text: "Maybe",
+        createdAt: "2026-08-16T18:57:17.000Z",
+        sourceUrl: "https://x.com/thsottiaux/status/2089063967301730789",
+        isReply: true,
+        replyContextText: "are we going to get a reset when codex crosses 20M users?",
+        replyToHandles: ["@Ananth7e"],
+      },
+    }),
+  );
+
+  assert.match(html, /返信先の投稿/);
+  assert.match(html, /@Ananth7e/);
+  assert.match(html, /are we going to get a reset when codex crosses 20M users\?/);
+  assert.match(html, /Tiboの返信/);
+  assert.match(html, />Maybe<\/span>/);
+  assert.match(html, /観測分類/);
+  assert.match(html, /弱いリセット匂わせ/);
 });
 
 test("renders a related Tibo heading when the card uses the related variant", () => {
@@ -152,6 +185,9 @@ test("renders a related Tibo heading when the card uses the related variant", ()
         text: "A current notice",
         createdAt: "2026-08-07T21:46:56.000Z",
         sourceUrl: "https://x.com/thsottiaux/status/related-variant",
+        isReply: false,
+        replyContextText: null,
+        replyToHandles: [],
       },
     }),
   );
@@ -173,11 +209,15 @@ test("keeps the Tibo handle unchanged across supported locales", () => {
           text: "A current notice",
           createdAt: "2026-08-07T21:46:56.000Z",
           sourceUrl: "https://x.com/thsottiaux/status/locale-handle",
+          isReply: false,
+          replyContextText: null,
+          replyToHandles: [],
         },
       }),
     );
 
     assert.match(html, /Tibo \(@thsottiaux\)/);
+    assert.match(html, locale === "ja" ? /観測分類/ : locale === "en" ? /Observed classification/ : /观测分类/);
   }
 });
 

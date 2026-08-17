@@ -113,11 +113,49 @@ test("public Tibo activity exposes the post projection and classification", () =
     text: "There will be signs... Resets soon.",
     createdAt: "2026-08-03T23:00:00.000Z",
     sourceUrl: "https://x.com/thsottiaux/status/123",
+    isReply: false,
+    replyContextText: null,
+    replyToHandles: [],
   });
   assert.doesNotMatch(
     serialized,
     /private-tweet-id|private internal reason|confidence|classification_reason/,
   );
+});
+
+test("public reply activity exposes bounded parent context without audit fields", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [
+        {
+          tweet_id: "reply-public-tweet",
+          signal_type: "teaser",
+          teaser_strength: "weak",
+          text: "Maybe",
+          tweet_url: "https://x.com/thsottiaux/status/reply-public-tweet",
+          tweet_created_at: "2026-08-03T23:00:00.000Z",
+          expires_at: "2026-08-05T00:00:00.000Z",
+          verification_status: "confirmed",
+          is_reply: true,
+          reply_to_handles: ["@Ananth7e", "invalid handle", "@Ananth7e"],
+          reply_context_text: `  ${"x".repeat(1200)}  `,
+          classification_reason: "private reason",
+        },
+      ],
+    }),
+    "ja",
+    { calculationNow },
+  );
+  const activity = snapshot.latestTiboActivity;
+  const serialized = JSON.stringify(activity);
+
+  assert.equal(activity?.isReply, true);
+  assert.deepEqual(activity?.replyToHandles, ["@Ananth7e"]);
+  assert.equal(activity?.replyContextText?.length, 1000);
+  assert.doesNotMatch(serialized, /private reason|ai_reason_ja/);
+  assert.equal("tweet_id" in (activity ?? {}), false);
 });
 
 test("public recovery projection exposes only the provisional status fields", () => {
@@ -286,6 +324,9 @@ test("public Tibo activity uses the newest stored post even when it is irrelevan
     text: "A newer Tibo post unrelated to resets.",
     createdAt: "2026-08-06T23:00:00.000Z",
     sourceUrl: "https://x.com/thsottiaux/status/789",
+    isReply: false,
+    replyContextText: null,
+    replyToHandles: [],
   });
 });
 

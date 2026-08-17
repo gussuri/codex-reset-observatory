@@ -495,6 +495,8 @@ async function getTiboSignalBundle(
     temporal_resolution_status: signal.temporal_resolution_status ?? null,
     temporal_resolution_version: signal.temporal_resolution_version ?? null,
     is_reply: signal.is_reply ?? undefined,
+    reply_to_handles: signal.reply_to_handles ?? null,
+    reply_context_text: signal.reply_context_text ?? null,
   }));
   const rejectedResets = signals
     .filter(

@@ -501,11 +501,17 @@ export function RadarDashboard({
   const resetTeaserStatus = isDataUnavailable
     ? "unknown" as const
     : getResetTeaserStatus(state.data?.resetTeaserStatus);
-  const shouldRenderRelatedTibo = !isDataUnavailable && (
-    hasOfficialNotice ||
-    resetTeaserStatus === "strong" ||
-    resetTeaserStatus === "weak"
+  const selectedTiboActivity = state.data?.latestTiboActivity;
+  const hasSelectedRelatedTibo = Boolean(
+    selectedTiboActivity && (
+      selectedTiboActivity.classification === "official_notice" ||
+      selectedTiboActivity.teaserStrength === "strong" ||
+      selectedTiboActivity.teaserStrength === "weak"
+    ),
   );
+  const shouldRenderRelatedTibo = !isDataUnavailable &&
+    hasSelectedRelatedTibo &&
+    (hasOfficialNotice || resetTeaserStatus === "strong" || resetTeaserStatus === "weak");
   const tiboActivityCard = state.data?.latestTiboActivity ? (
     <TiboActivityCard
       activity={state.data.latestTiboActivity}

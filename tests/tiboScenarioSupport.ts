@@ -215,6 +215,8 @@ function buildActiveSignal(
     quote_context_text: scenario.quoteContextText ?? null,
     quote_tweet_url: scenario.quoteTweetUrl ?? null,
     quote_author_handle: scenario.quoteAuthorHandle ?? null,
+    reply_to_handles: scenario.replyToHandles ?? null,
+    reply_context_text: scenario.replyContextText ?? null,
   } satisfies ActiveTiboSignal;
 }
 

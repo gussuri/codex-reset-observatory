@@ -424,10 +424,20 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Related Tibo post",
     zh: "相关的 Tibo 帖子",
   },
-  tiboAutoClassification: {
-    ja: "自動観測分類",
-    en: "Automated observation",
-    zh: "自动观测分类",
+  tiboObservedClassification: {
+    ja: "観測分類",
+    en: "Observed classification",
+    zh: "观测分类",
+  },
+  tiboReplyToPost: {
+    ja: "返信先の投稿",
+    en: "Replying to",
+    zh: "回复的帖子",
+  },
+  tiboReply: {
+    ja: "Tiboの返信",
+    en: "Tibo's reply",
+    zh: "Tibo 的回复",
   },
   tiboPostDate: {
     ja: "投稿時刻",
