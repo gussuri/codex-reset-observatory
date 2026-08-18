@@ -297,18 +297,32 @@ test("falls back to the latest normal post when no related post is valid", () =>
   ]);
   assert.equal(rejected.latestTiboActivity?.text, "accepted-none post text");
 
-  const expiredReply = snapshotFor([
-    activitySignal("expired-reply", "2026-08-03T23:00:00.000Z", "weak", {
-      is_reply: true,
-      expires_at: "2026-08-03T23:30:00.000Z",
-      reply_to_handles: ["@Ananth7e"],
-      reply_context_text: "An expired parent context.",
+});
+
+test("keeps an eligible UI teaser related after its expires_at", () => {
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow: NOW,
+      recentTiboSignals: [
+        activitySignal("expired-reply", "2026-08-03T23:00:00.000Z", "weak", {
+          is_reply: true,
+          expires_at: "2026-08-03T23:30:00.000Z",
+          reply_to_handles: ["@Ananth7e"],
+          reply_context_text: "An expired parent context.",
+        }),
+        activitySignal("newest-normal", "2026-08-03T23:30:00.000Z", "none"),
+      ],
     }),
-    activitySignal("newest-normal", "2026-08-03T23:30:00.000Z", "none"),
-  ]);
-  assert.equal(expiredReply.latestTiboActivity?.text, "newest-normal post text");
-  assert.equal(expiredReply.latestTiboActivity?.isReply, false);
-  assert.equal(expiredReply.latestTiboActivity?.teaserStrength, "none");
+    "en",
+    { calculationNow: NOW },
+  );
+
+  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.equal(snapshot.latestTiboActivity?.text, "expired-reply post text");
+  assert.equal(snapshot.latestTiboActivity?.isReply, true);
+  assert.equal(snapshot.latestTiboActivity?.replyContextText, "An expired parent context.");
+  assert.deepEqual(snapshot.latestTiboActivity?.replyToHandles, ["@Ananth7e"]);
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "weak");
 });
 
 test("changing teaser strength updates published probabilities while preserving the UI status", () => {

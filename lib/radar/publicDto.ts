@@ -71,15 +71,6 @@ function normalizePublicReplyHandles(value: string[] | null | undefined) {
   return handles;
 }
 
-function isUnexpiredSignal(
-  signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
-  nowTime: number,
-) {
-  if (!signal.expires_at) return true;
-  const expiresTime = Date.parse(signal.expires_at);
-  return !Number.isFinite(expiresTime) || expiresTime > nowTime;
-}
-
 function getLocalizedTiboPostText(
   signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
   locale: Locale,
@@ -172,13 +163,14 @@ export function toPublicTiboActivity(
     return strength === "strong" || strength === "weak";
   });
   const eligibleTeaserSet = new Set(eligibleTeaserSignals);
+  // UI teaser eligibility is the source of truth here; unlike official notices,
+  // teaser expiry is intentionally not reapplied to the related card.
   const relatedCandidates = sourceSignals
     .filter((signal) => {
       const strength = getEffectiveTeaserStrength(signal);
       return isCurrentOfficialNotice(signal, latestResetAt, nowTime) ||
         (eligibleTeaserSet.has(signal) &&
-          (strength === "strong" || strength === "weak") &&
-          isUnexpiredSignal(signal, nowTime));
+          (strength === "strong" || strength === "weak"));
     })
     .sort(
       (left, right) =>
