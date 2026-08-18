@@ -3,13 +3,13 @@
 - Status: insufficient_data
 - Evaluation mode: prospective
 - Backfilled: false
-- Evaluation start: not started
+- Evaluation start: 2026-08-18T16:41:58.716Z
 - Active model: hazard-regime-random-continuous-v1
 - Baseline model: hazard-regime-random-elapsed-v1
 - Freeze at: 2026-08-18T16:14:21.000Z
-- As of: 2026-08-18T16:33:40.431Z
+- As of: 2026-08-18T16:43:27.681Z
 - Canonical random boundaries: 26
-- Saved forecasts: active=0, baseline=0, comparable=0
+- Saved forecasts: active=1, baseline=1, comparable=1
 - Source: prediction_history.debug_info.experimentalProbabilityForecasts
 
 ## Daily first forecast comparison

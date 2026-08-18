@@ -1,8 +1,8 @@
 {
   "schemaVersion": "prospective-random-continuous-model-evaluation-v1",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-18T16:33:40.431Z",
-  "asOf": "2026-08-18T16:33:40.431Z",
+  "generatedAt": "2026-08-18T16:43:27.681Z",
+  "asOf": "2026-08-18T16:43:27.681Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
@@ -10,12 +10,12 @@
   "activeModelVersion": "hazard-regime-random-continuous-v1",
   "baselineModelVersion": "hazard-regime-random-elapsed-v1",
   "freezeAt": "2026-08-18T16:14:21.000Z",
-  "evaluationStartAt": null,
+  "evaluationStartAt": "2026-08-18T16:41:58.716Z",
   "canonicalBoundaryCount": 26,
   "forecastCounts": {
-    "active": 0,
-    "baseline": 0,
-    "comparable": 0
+    "active": 1,
+    "baseline": 1,
+    "comparable": 1
   },
   "comparison": {
     "resolved24h": 0,
