@@ -15,6 +15,19 @@ export const RANDOM_ELAPSED_SHADOW_FREEZE_POLICY =
   "A single reset, miss, or new observation must not trigger retuning.";
 export const RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION =
   "Broad-scope random reset probability modeled by elapsed time since the latest broad-scope random reset and the existing point-in-time random-reset regime. Regular resets remain recovery boundaries for product/state logic but do not reset the random-event hazard clock.";
+// Preregistered prospective-only continuous estimator. The implementation is intentionally
+// added separately after this configuration is committed; do not fit or backfill it before
+// RANDOM_CONTINUOUS_SHADOW_FREEZE_AT.
+export const RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION = "hazard-regime-random-continuous-v1";
+export const RANDOM_CONTINUOUS_SHADOW_FREEZE_AT = "2026-08-18T16:14:21.000Z";
+export const RANDOM_CONTINUOUS_SHADOW_FREEZE_POLICY =
+  "A single reset, miss, or new observation must not trigger retuning.";
+export const RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION = RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION;
+export const RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS = 24;
+export const RANDOM_CONTINUOUS_SHADOW_GRID_HOURS = 1;
+export const RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS = 72;
+export const RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS = 2;
+export const RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_WINDOW_HOURS = 48;
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const REGIME_ELAPSED_SELECTED_BIN_SCHEME = "A" as const;
 export const REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS = 2;
