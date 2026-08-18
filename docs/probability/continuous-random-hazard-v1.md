@@ -37,6 +37,8 @@ Production's later three boundaries for this preregistration.
   integration semantics are reused from the existing random shadow.
 - Future horizons are integrated numerically at a step no larger than 10 minutes and must
   satisfy `12h <= 24h <= 48h <= 72h`.
+- The stored diagnostic probes are fixed at ages `96h`, `120h`, `132h`, `144h`, `156h`,
+  `168h`, `192h`, and `216h`; the probe set is descriptive only and is not fit or tuned.
 
 ## Evaluation protocol
 

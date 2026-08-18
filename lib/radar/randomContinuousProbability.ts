@@ -1,0 +1,433 @@
+import {
+  GLOBAL_PRIOR_EVENT_COUNT,
+  GLOBAL_PRIOR_EXPOSURE_DAYS,
+  MAX_BASELINE_DAILY_PROBABILITY,
+  MIN_BASELINE_DAILY_PROBABILITY,
+  RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS,
+  RANDOM_CONTINUOUS_SHADOW_FREEZE_AT,
+  RANDOM_CONTINUOUS_SHADOW_FREEZE_POLICY,
+  RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
+  RANDOM_CONTINUOUS_SHADOW_KERNEL,
+  RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS,
+  RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_WINDOW_HOURS,
+  RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION,
+  RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS,
+  RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
+  RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS,
+} from "@/data/shadowProbabilityConfig";
+import type { RadarData } from "./types";
+import {
+  applyOddsMultiplier,
+  type ShadowHazard,
+  type ShadowProbabilityHorizons,
+  type ShadowProbabilityOptions,
+  type ShadowProbabilityResult,
+} from "./shadowProbability";
+import {
+  calculateRegimeElapsedProbability,
+} from "./regimeElapsedProbability";
+import {
+  getRecoveryBoundaryAudit,
+  getRecoveryResetEvents,
+  type RecoveryResetBoundary,
+} from "./recoveryBoundary";
+import { getRandomElapsedBoundaries } from "./randomElapsedProbability";
+
+const HOUR_MS = 60 * 60 * 1000;
+const INTEGRATION_STEP_HOURS = 10 / 60;
+
+type ExposureCell = {
+  centerHours: number;
+  exposureHours: number;
+  eventCount: number;
+};
+
+export type RandomContinuousHazard = ShadowHazard & {
+  eventAgesHours: number[];
+  exposureCells: ExposureCell[];
+  censoredExposureHours: number;
+  bandwidthHours: number;
+  gridHours: number;
+  gridStepHours: number;
+  truncationHours: number;
+  priorExposureDays: number;
+  localPriorExposureDays: number;
+  localPriorWindowHours: number;
+};
+
+export type RandomContinuousAudit = {
+  clock: "random";
+  mode: "full";
+  latestRandomResetAt: string | null;
+  latestRecoveryResetAt: string | null;
+  randomElapsedHours: number;
+  recoveryElapsedHours: number;
+  regimeMultiplier: number;
+  effectiveRegimeMultiplier: number;
+  recentRatePerDay: number;
+  longTermRatePerDay: number;
+  rawRateRatio: number;
+  selectedBinScheme: string;
+  selectedPriorExposureDays: number;
+  selectedRegimeHalfLifeDays: number;
+  selectedRegimeRatioExponent: number;
+  recoveryBoundaryCount: number;
+  randomBoundaryCount: number;
+  regularBoundaryCount: number;
+  randomBoundaryIds: string[];
+  exposureCellCount: number;
+  instantaneousHazardPerHour: number;
+  instantaneousDailyProbability: number;
+  currentKernelWeightedEvents: number;
+  currentKernelWeightedExposureHours: number;
+  kernelType: typeof RANDOM_CONTINUOUS_SHADOW_KERNEL;
+  probeDailyProbabilities: Array<{
+    ageHours: number;
+    dailyProbability: number;
+  }>;
+  bandwidthHours: number;
+  gridHours: number;
+  gridStepHours: number;
+  truncationHours: number;
+  priorExposureDays: number;
+  localPriorExposureDays: number;
+  localPriorWindowHours: number;
+  freezeAt: string;
+  freezePolicy: string;
+  boundaryAudit: ReturnType<typeof getRecoveryBoundaryAudit>;
+};
+
+export type RandomContinuousProbabilityResult = ShadowProbabilityResult & {
+  randomContinuous: RandomContinuousAudit;
+};
+
+function getTimestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function clamp01(value: number) {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+function clamp(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function kernelWeight(ageHours: number, targetAgeHours: number) {
+  const distance = Math.abs(ageHours - targetAgeHours);
+  if (!Number.isFinite(distance) || distance > RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS) return 0;
+  const normalized = (ageHours - targetAgeHours) / RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS;
+  return Math.exp(-0.5 * normalized ** 2);
+}
+
+function addExposureCells(
+  cells: ExposureCell[],
+  endHours: number,
+  eventAgeHours: number | null = null,
+) {
+  if (!Number.isFinite(endHours) || endHours <= 0) return;
+  let cursor = 0;
+  while (cursor < endHours) {
+    const duration = Math.min(RANDOM_CONTINUOUS_SHADOW_GRID_HOURS, endHours - cursor);
+    if (!Number.isFinite(duration) || duration <= 0) break;
+    cells.push({
+      centerHours: cursor + duration / 2,
+      exposureHours: duration,
+      eventCount: eventAgeHours !== null
+        && eventAgeHours >= cursor
+        && eventAgeHours <= cursor + duration
+        ? 1
+        : 0,
+    });
+    cursor += duration;
+  }
+}
+
+function getLatestElapsedHours(boundaries: RecoveryResetBoundary[], now: Date) {
+  const latest = boundaries.at(-1);
+  const latestTime = getTimestamp(latest?.resetAt);
+  return latestTime === null
+    ? 0
+    : Math.max(0, (now.getTime() - latestTime) / HOUR_MS);
+}
+
+export function buildRandomContinuousHazard(
+  boundaries: RecoveryResetBoundary[],
+  now: Date,
+): RandomContinuousHazard {
+  const eventAgesHours: number[] = [];
+  const exposureCells: ExposureCell[] = [];
+  let completedIntervalCount = 0;
+  let totalExposureHours = 0;
+
+  for (let index = 1; index < boundaries.length; index += 1) {
+    const previousTime = getTimestamp(boundaries[index - 1].resetAt);
+    const currentTime = getTimestamp(boundaries[index].resetAt);
+    if (previousTime === null || currentTime === null || currentTime <= previousTime) continue;
+
+    const intervalHours = (currentTime - previousTime) / HOUR_MS;
+    addExposureCells(exposureCells, intervalHours, intervalHours);
+    totalExposureHours += intervalHours;
+    completedIntervalCount += 1;
+    eventAgesHours.push(intervalHours);
+  }
+
+  const latestBoundaryTime = boundaries.at(-1)
+    ? getTimestamp(boundaries.at(-1)!.resetAt)
+    : null;
+  const censoredExposureHours = latestBoundaryTime === null
+    ? 0
+    : Math.max(0, (now.getTime() - latestBoundaryTime) / HOUR_MS);
+  if (censoredExposureHours > 0) {
+    addExposureCells(exposureCells, censoredExposureHours);
+    totalExposureHours += censoredExposureHours;
+  }
+
+  const globalLambdaPerHour = (
+    eventAgesHours.length + GLOBAL_PRIOR_EVENT_COUNT
+  ) / (
+    totalExposureHours + GLOBAL_PRIOR_EXPOSURE_DAYS * 24
+  );
+
+  return {
+    globalLambdaPerHour,
+    observedEventCount: eventAgesHours.length,
+    weightedEventCount: eventAgesHours.length,
+    completedEventCount: boundaries.length,
+    completedIntervalCount,
+    totalExposureHours,
+    weightedExposureHours: totalExposureHours,
+    totalExposureDays: totalExposureHours / 24,
+    bins: [],
+    eventAgesHours,
+    exposureCells,
+    censoredExposureHours,
+    bandwidthHours: RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS,
+    gridHours: RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
+    gridStepHours: RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
+    truncationHours: RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS,
+    priorExposureDays: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS,
+    localPriorExposureDays: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS,
+    localPriorWindowHours: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_WINDOW_HOURS,
+  };
+}
+
+function getKernelPosterior(hazard: RandomContinuousHazard, ageHours: number) {
+  const weightedEventCount = hazard.exposureCells.reduce(
+    (sum, cell) => sum + cell.eventCount * kernelWeight(cell.centerHours, ageHours),
+    0,
+  );
+  const weightedExposureHours = hazard.exposureCells.reduce(
+    (sum, cell) => sum + cell.exposureHours * kernelWeight(cell.centerHours, ageHours),
+    0,
+  );
+  const priorEventEquivalent = hazard.globalLambdaPerHour * hazard.localPriorWindowHours;
+  const posteriorLambdaPerHour = (
+    weightedEventCount + priorEventEquivalent
+  ) / (
+    weightedExposureHours + hazard.localPriorWindowHours
+  );
+  const impliedDailyProbability = clamp01(1 - Math.exp(-posteriorLambdaPerHour * 24));
+  const dailyProbability = clamp(
+    impliedDailyProbability,
+    MIN_BASELINE_DAILY_PROBABILITY,
+    MAX_BASELINE_DAILY_PROBABILITY,
+  );
+
+  return {
+    weightedEventCount,
+    weightedExposureHours,
+    priorEventEquivalent,
+    posteriorLambdaPerHour: -Math.log(1 - dailyProbability) / 24,
+    dailyProbability,
+  };
+}
+
+export function getRandomContinuousHazardAtAge(
+  hazard: RandomContinuousHazard,
+  ageHours: number,
+) {
+  if (!Number.isFinite(ageHours)) return 0;
+  return getKernelPosterior(hazard, Math.max(0, ageHours)).posteriorLambdaPerHour;
+}
+
+export function getRandomContinuousHazardDiagnosticsAtAge(
+  hazard: RandomContinuousHazard,
+  ageHours: number,
+) {
+  return getKernelPosterior(hazard, Math.max(0, ageHours));
+}
+
+export function integrateRandomContinuousHazard(
+  hazard: RandomContinuousHazard,
+  startAgeHours: number,
+  horizonHours: number,
+  regimeMultiplier = 1,
+) {
+  if (!Number.isFinite(startAgeHours) || !Number.isFinite(horizonHours) || horizonHours <= 0) return 0;
+
+  const start = Math.max(0, startAgeHours);
+  const end = start + horizonHours;
+  let cursor = start;
+  let cumulativeHazard = 0;
+  let currentLambda = getRandomContinuousHazardAtAge(hazard, cursor);
+  while (cursor < end) {
+    const stepEnd = Math.min(end, cursor + INTEGRATION_STEP_HOURS);
+    if (!Number.isFinite(stepEnd) || stepEnd <= cursor) break;
+    const stepHours = stepEnd - cursor;
+    const nextLambda = getRandomContinuousHazardAtAge(hazard, stepEnd);
+    cumulativeHazard += (
+      (currentLambda + nextLambda) / 2
+    ) * stepHours * Math.max(0, regimeMultiplier);
+    cursor = stepEnd;
+    currentLambda = nextLambda;
+  }
+
+  return clamp01(1 - Math.exp(-Math.max(0, cumulativeHazard)));
+}
+
+function makeHorizons(
+  hazard: RandomContinuousHazard,
+  randomElapsedHours: number,
+  regimeMultiplier: number,
+): ShadowProbabilityHorizons {
+  return {
+    probability12h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 12, regimeMultiplier),
+    probability24h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 24, regimeMultiplier),
+    probability48h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 48, regimeMultiplier),
+    probability72h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 72, regimeMultiplier),
+  };
+}
+
+function makeConfidence(hazard: RandomContinuousHazard, officialNoticeActive: boolean) {
+  if (officialNoticeActive) {
+    return {
+      level: "high" as const,
+      reason: "An active official notice overrides the normal confidence tier.",
+    };
+  }
+  if (hazard.completedIntervalCount >= 30 && hazard.totalExposureDays >= 120) {
+    return {
+      level: "medium" as const,
+      reason: "The completed random-reset intervals and exposure meet the medium-confidence floor.",
+    };
+  }
+  return {
+    level: "low" as const,
+    reason: "The available random-reset intervals or exposure are below the medium-confidence floor.",
+  };
+}
+
+export function calculateRandomContinuousProbability(
+  data: RadarData | null,
+  options: ShadowProbabilityOptions = {},
+): RandomContinuousProbabilityResult {
+  const now = options.now ?? new Date();
+  const recoveryResult = calculateRegimeElapsedProbability(
+    data,
+    options,
+  );
+  const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
+  const randomBoundaries = getRandomElapsedBoundaries(boundaries);
+  const hazard = buildRandomContinuousHazard(randomBoundaries, now);
+  const latestRandomResetAt = randomBoundaries.at(-1)?.resetAt ?? null;
+  const latestRecoveryResetAt = boundaries.at(-1)?.resetAt ?? null;
+  const randomElapsedHours = getLatestElapsedHours(randomBoundaries, now);
+  const recoveryElapsedHours = getLatestElapsedHours(boundaries, now);
+  const regimeMultiplier = recoveryResult.regimeElapsed.regime.regimeMultiplier;
+  const baseline = makeHorizons(hazard, randomElapsedHours, regimeMultiplier);
+  const adjusted: ShadowProbabilityHorizons = {
+    probability12h: applyOddsMultiplier(
+      baseline.probability12h,
+      recoveryResult.multipliers.combinedAfterCap.probability24h,
+    ),
+    probability24h: applyOddsMultiplier(
+      baseline.probability24h,
+      recoveryResult.multipliers.combinedAfterCap.probability24h,
+    ),
+    probability48h: applyOddsMultiplier(
+      baseline.probability48h,
+      recoveryResult.multipliers.combinedAfterCap.probability48h,
+    ),
+    probability72h: applyOddsMultiplier(
+      baseline.probability72h,
+      recoveryResult.multipliers.combinedAfterCap.probability48h,
+    ),
+  };
+  const predictions = recoveryResult.officialNoticeOverride.active
+    ? {
+        probability12h: recoveryResult.officialNoticeOverride.probability12h ?? 0.9,
+        probability24h: recoveryResult.officialNoticeOverride.probability24h ?? 0.9,
+        probability48h: recoveryResult.officialNoticeOverride.probability48h ?? 0.96,
+        probability72h: recoveryResult.officialNoticeOverride.probability72h ?? 0.96,
+      }
+    : adjusted;
+  const currentDiagnostics = getRandomContinuousHazardDiagnosticsAtAge(hazard, randomElapsedHours);
+  const confidence = makeConfidence(hazard, recoveryResult.officialNoticeOverride.active);
+  const warnings: string[] = [];
+  if (hazard.completedIntervalCount < 2) {
+    warnings.push("Random-reset intervals are sparse; treat this shadow result as exploratory.");
+  }
+  warnings.push("Regular recovery boundaries remain in the audit but do not reset the random-event hazard clock.");
+
+  return {
+    modelVersion: RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION,
+    calculatedAt: now.toISOString(),
+    targetDefinition: RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
+    predictions,
+    baseline,
+    confidence: {
+      ...confidence,
+      completedIntervalCount: hazard.completedIntervalCount,
+      totalExposureDays: hazard.totalExposureDays,
+    },
+    hazard,
+    multipliers: recoveryResult.multipliers,
+    officialNoticeOverride: recoveryResult.officialNoticeOverride,
+    warnings,
+    randomContinuous: {
+      clock: "random",
+      mode: "full",
+      latestRandomResetAt,
+      latestRecoveryResetAt,
+      randomElapsedHours,
+      recoveryElapsedHours,
+      regimeMultiplier,
+      effectiveRegimeMultiplier: regimeMultiplier,
+      recentRatePerDay: recoveryResult.regimeElapsed.regime.recentRatePerDay,
+      longTermRatePerDay: recoveryResult.regimeElapsed.regime.longTermRatePerDay,
+      rawRateRatio: recoveryResult.regimeElapsed.regime.rawRateRatio,
+      selectedBinScheme: recoveryResult.regimeElapsed.binScheme,
+      selectedPriorExposureDays: recoveryResult.regimeElapsed.priorExposureDays,
+      selectedRegimeHalfLifeDays: recoveryResult.regimeElapsed.regimeHalfLifeDays,
+      selectedRegimeRatioExponent: recoveryResult.regimeElapsed.regimeRatioExponent,
+      recoveryBoundaryCount: boundaries.length,
+      randomBoundaryCount: randomBoundaries.length,
+      regularBoundaryCount: boundaries.filter((boundary) => boundary.isRegular).length,
+      randomBoundaryIds: randomBoundaries.map((boundary) => boundary.id),
+      exposureCellCount: hazard.exposureCells.length,
+      instantaneousHazardPerHour: currentDiagnostics.posteriorLambdaPerHour,
+      instantaneousDailyProbability: currentDiagnostics.dailyProbability,
+      currentKernelWeightedEvents: currentDiagnostics.weightedEventCount,
+      currentKernelWeightedExposureHours: currentDiagnostics.weightedExposureHours,
+      kernelType: RANDOM_CONTINUOUS_SHADOW_KERNEL,
+      probeDailyProbabilities: RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS.map((ageHours) => ({
+        ageHours,
+        dailyProbability: getRandomContinuousHazardDiagnosticsAtAge(hazard, ageHours).dailyProbability,
+      })),
+      bandwidthHours: hazard.bandwidthHours,
+      gridHours: hazard.gridHours,
+      gridStepHours: hazard.gridHours,
+      truncationHours: hazard.truncationHours,
+      priorExposureDays: hazard.localPriorExposureDays,
+      localPriorExposureDays: hazard.localPriorExposureDays,
+      localPriorWindowHours: hazard.localPriorWindowHours,
+      freezeAt: RANDOM_CONTINUOUS_SHADOW_FREEZE_AT,
+      freezePolicy: RANDOM_CONTINUOUS_SHADOW_FREEZE_POLICY,
+      boundaryAudit: getRecoveryBoundaryAudit(data, now, options.staticHistory),
+    },
+  };
+}

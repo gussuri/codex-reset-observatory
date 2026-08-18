@@ -9,6 +9,8 @@ import {
   SHADOW_PROBABILITY_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION,
+  RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION,
+  RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
 } from "../data/shadowProbabilityConfig";
 import { buildExperimentalProbabilityForecasts, buildProbabilityDebugInfo } from "../lib/logProbability";
 import { calculateShadowProbability } from "../lib/radar/shadowProbability";
@@ -35,6 +37,7 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     ELAPSED_ONLY_MODEL_VERSION,
     "hazard-regime-elapsed-v1",
     RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
+    RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION,
     "hazard-odds-v4-logit-calibrated-prequential-v2",
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
@@ -81,6 +84,34 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(typeof randomElapsed.randomBoundaryCount, "number");
   assert.equal(typeof randomElapsed.regularBoundaryCount, "number");
   assert.equal(randomElapsed.freezeAt, "2026-08-11T18:38:51.000Z");
+  const randomContinuous = forecasts[RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION];
+  assert.equal(randomContinuous.modelVersion, RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION);
+  assert.equal(randomContinuous.estimator, "gaussian-kernel");
+  assert.equal(randomContinuous.mode, "full");
+  assert.equal(randomContinuous.kernelBandwidthHours, 24);
+  assert.equal(randomContinuous.kernelGridHours, 1);
+  assert.equal(randomContinuous.kernelTruncationHours, 72);
+  assert.equal(randomContinuous.localPriorExposureDays, 2);
+  assert.equal(randomContinuous.localPriorWindowHours, 48);
+  assert.equal(randomContinuous.kernelType, "gaussian");
+  assert.equal(randomContinuous.gridStepHours, 1);
+  assert.equal(randomContinuous.priorExposureDays, 2);
+  assert.equal(randomContinuous.currentKernelWeightedEvents !== undefined, true);
+  assert.equal(randomContinuous.currentKernelWeightedExposureHours !== undefined, true);
+  assert.deepEqual(
+    randomContinuous.probeDailyProbabilities?.map((probe) => probe.ageHours),
+    [96, 120, 132, 144, 156, 168, 192, 216],
+  );
+  assert.equal(
+    randomContinuous.probeDailyProbabilities?.every((probe) =>
+      Number.isFinite(probe.dailyProbability)
+      && probe.dailyProbability >= 0
+      && probe.dailyProbability <= 1,
+    ),
+    true,
+  );
+  assert.equal(randomContinuous.effectiveRegimeMultiplier, randomContinuous.regimeMultiplier);
+  assert.equal(randomContinuous.freezeAt, "2026-08-18T16:14:21.000Z");
   const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");
@@ -116,6 +147,8 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
       assert.match(forecast.targetDefinition, /recovery-boundary/);
     } else if (forecast.modelVersion === RANDOM_ELAPSED_SHADOW_MODEL_VERSION) {
       assert.equal(forecast.targetDefinition, RANDOM_ELAPSED_SHADOW_TARGET_DEFINITION);
+    } else if (forecast.modelVersion === RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION) {
+      assert.equal(forecast.targetDefinition, RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION);
     } else {
       assert.equal(forecast.targetDefinition, shadow.targetDefinition);
     }

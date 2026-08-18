@@ -29,6 +29,10 @@ import {
   calculateRandomElapsedProbability,
   type RandomElapsedProbabilityResult,
 } from "@/lib/radar/randomElapsedProbability";
+import {
+  calculateRandomContinuousProbability,
+  type RandomContinuousProbabilityResult,
+} from "@/lib/radar/randomContinuousProbability";
 
 export function hasOfficialNoticeForLog(
   viewModel: Pick<RadarViewModel, "activeWindow">,
@@ -99,6 +103,24 @@ export type ExperimentalProbabilityForecast = {
     observedEvents: number;
     posteriorLambdaPerHour: number;
     impliedDailyProbability: number;
+  }>;
+  estimator?: "piecewise" | "gaussian-kernel";
+  kernelBandwidthHours?: number;
+  kernelGridHours?: number;
+  gridStepHours?: number;
+  kernelTruncationHours?: number;
+  priorExposureDays?: number;
+  localPriorExposureDays?: number;
+  localPriorWindowHours?: number;
+  exposureCellCount?: number;
+  instantaneousHazardPerHour?: number;
+  instantaneousDailyProbability?: number;
+  currentKernelWeightedEvents?: number;
+  currentKernelWeightedExposureHours?: number;
+  kernelType?: "gaussian";
+  probeDailyProbabilities?: Array<{
+    ageHours: number;
+    dailyProbability: number;
   }>;
   freezeAt?: string;
   freezePolicy?: string;
@@ -221,6 +243,49 @@ function toRandomElapsedExperimentalProbabilityForecast(
   };
 }
 
+function toRandomContinuousExperimentalProbabilityForecast(
+  result: RandomContinuousProbabilityResult,
+): ExperimentalProbabilityForecast {
+  const forecast = toExperimentalProbabilityForecast(result, null);
+  return {
+    ...forecast,
+    estimator: "gaussian-kernel",
+    mode: result.randomContinuous.mode,
+    regimeMultiplier: result.randomContinuous.regimeMultiplier,
+    effectiveRegimeMultiplier: result.randomContinuous.effectiveRegimeMultiplier,
+    recentRatePerDay: result.randomContinuous.recentRatePerDay,
+    longTermRatePerDay: result.randomContinuous.longTermRatePerDay,
+    selectedBinScheme: result.randomContinuous.selectedBinScheme,
+    selectedPriorExposureDays: result.randomContinuous.selectedPriorExposureDays,
+    selectedRegimeHalfLifeDays: result.randomContinuous.selectedRegimeHalfLifeDays,
+    selectedRegimeRatioExponent: result.randomContinuous.selectedRegimeRatioExponent,
+    elapsedHoursSinceRecovery: result.randomContinuous.recoveryElapsedHours,
+    elapsedHoursSinceRandom: result.randomContinuous.randomElapsedHours,
+    randomElapsedHours: result.randomContinuous.randomElapsedHours,
+    recoveryElapsedHours: result.randomContinuous.recoveryElapsedHours,
+    latestRandomResetAt: result.randomContinuous.latestRandomResetAt,
+    latestRecoveryResetAt: result.randomContinuous.latestRecoveryResetAt,
+    randomBoundaryCount: result.randomContinuous.randomBoundaryCount,
+    regularBoundaryCount: result.randomContinuous.regularBoundaryCount,
+    kernelBandwidthHours: result.randomContinuous.bandwidthHours,
+    kernelGridHours: result.randomContinuous.gridHours,
+    gridStepHours: result.randomContinuous.gridStepHours,
+    kernelTruncationHours: result.randomContinuous.truncationHours,
+    priorExposureDays: result.randomContinuous.priorExposureDays,
+    localPriorExposureDays: result.randomContinuous.localPriorExposureDays,
+    localPriorWindowHours: result.randomContinuous.localPriorWindowHours,
+    exposureCellCount: result.randomContinuous.exposureCellCount,
+    instantaneousHazardPerHour: result.randomContinuous.instantaneousHazardPerHour,
+    instantaneousDailyProbability: result.randomContinuous.instantaneousDailyProbability,
+    currentKernelWeightedEvents: result.randomContinuous.currentKernelWeightedEvents,
+    currentKernelWeightedExposureHours: result.randomContinuous.currentKernelWeightedExposureHours,
+    kernelType: result.randomContinuous.kernelType,
+    probeDailyProbabilities: result.randomContinuous.probeDailyProbabilities,
+    freezeAt: result.randomContinuous.freezeAt,
+    freezePolicy: result.randomContinuous.freezePolicy,
+  };
+}
+
 export function buildExperimentalProbabilityForecasts(
   data: Parameters<typeof calculateShadowProbability>[0],
   options: ShadowProbabilityOptions & {
@@ -240,6 +305,7 @@ export function buildExperimentalProbabilityForecasts(
     PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   );
   const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions);
+  const randomContinuous = calculateRandomContinuousProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
   const calibrated = calculateCalibratedShadowProbability(data, {
     ...calculationOptions,
@@ -257,6 +323,7 @@ export function buildExperimentalProbabilityForecasts(
   forecasts[elapsedOnly.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(elapsedOnly);
   forecasts[regimeElapsed.modelVersion] = toRegimeElapsedExperimentalProbabilityForecast(regimeElapsed);
   forecasts[randomElapsed.modelVersion] = toRandomElapsedExperimentalProbabilityForecast(randomElapsed);
+  forecasts[randomContinuous.modelVersion] = toRandomContinuousExperimentalProbabilityForecast(randomContinuous);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
   return forecasts;
 }
