@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import https from "node:https";
 import test from "node:test";
 
 import { NextRequest } from "next/server";
@@ -106,6 +108,104 @@ test("empty and whitespace-only source text are rejected before any database cal
     }
     assert.equal(fetchCalls, 0);
   } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
+test("context-only item receipt does not persist Gemini teaser as an effective teaser", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  globalThis.fetch = async (_input, init) => {
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    const method = init?.method ?? "GET";
+    if (method === "GET") {
+      return new Response(JSON.stringify({ data: null, error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const originalHttpsRequest = https.request;
+  https.request = ((...args: any[]) => {
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const request = new EventEmitter() as EventEmitter & {
+      write: (body: string) => boolean;
+      end: () => void;
+    };
+    request.write = () => true;
+    request.end = () => {
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      response.statusCode = 200;
+      callback(response);
+      queueMicrotask(() => {
+        response.emit("data", JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({
+                  signalType: "teaser",
+                  confidence: 0.91,
+                  temporalDirection: "unclear",
+                  evidenceQuote: "me receiving this very important item",
+                  reasonJa: "意味深な受領投稿です。",
+                  resetTypeJa: null,
+                  noticeToExecution: null,
+                  teaserStrength: "strong",
+                  teaserStrengthConfidence: 0.9,
+                  teaserStrengthEvidenceQuote: "very important item",
+                  teaserStrengthReasonJa: "強い匂わせです。",
+                }),
+              }],
+            },
+          }],
+        }));
+        response.emit("end");
+      });
+    };
+    return request;
+  }) as typeof https.request;
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2089999999999999999",
+      text: "me receiving this very important item",
+      tweetUrl: "https://x.com/thsottiaux/status/2089999999999999999",
+      tweetCreatedAt: "2026-08-19T05:03:00.000Z",
+      isReply: true,
+      replyToHandles: ["@someone"],
+      replyContextText: "haven't used it yet, but I'll take a look. Codex for scale.",
+      sourceTimeline: "with_replies",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "irrelevant");
+    assert.equal(upsertBody.teaser_strength, "none");
+    assert.equal(upsertBody.ai_signal_type, "teaser");
+    assert.equal(upsertBody.ai_teaser_strength, "strong");
+    assert.match(String(upsertBody.classification_reason), /context|文脈|物品/);
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "irrelevant");
+    assert.equal(responseBody.teaserStrength, "none");
+  } finally {
+    https.request = originalHttpsRequest;
     globalThis.fetch = originalFetch;
     restoreEnvironment(previous);
   }

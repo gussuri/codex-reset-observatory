@@ -31,6 +31,7 @@ import {
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
+import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
 import {
   ensureResetDisplayNameForEvent,
@@ -192,14 +193,35 @@ export async function POST(req: NextRequest) {
     }
 
     const selectedClassification = selectTiboClassification(mode, ruleResult, aiResult);
-    const classificationResponse = buildTiboClassificationResponse(mode, ruleResult, aiResult);
+    const contextSafetyDecision = getTiboContextSafetyDecision({
+      authorText: text,
+      replyContextText: replyMetadata.replyContextText,
+      quoteContextText: replyMetadata.quoteContextText,
+      selectedSignalType: selectedClassification.signalType,
+      aiTeaserStrength: aiResult?.teaserStrength,
+    });
+    const effectiveClassification = contextSafetyDecision
+      ? {
+          ...selectedClassification,
+          signalType: contextSafetyDecision.signalType,
+          reason: contextSafetyDecision.reasonJa,
+        }
+      : selectedClassification;
+    const baseClassificationResponse = buildTiboClassificationResponse(mode, ruleResult, aiResult);
+    const classificationResponse = contextSafetyDecision
+      ? {
+          ...baseClassificationResponse,
+          signalType: effectiveClassification.signalType,
+          teaserStrength: contextSafetyDecision.teaserStrength,
+        }
+      : baseClassificationResponse;
 
-    const temporalSemantics = selectedClassification.signalType === "official_notice" &&
+    const temporalSemantics = effectiveClassification.signalType === "official_notice" &&
       aiResult?.status === "success" &&
       aiResult.temporalDirection === "future"
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
-    const temporalResolution = selectedClassification.signalType === "official_notice"
+    const temporalResolution = effectiveClassification.signalType === "official_notice"
       ? resolveTiboTemporalSchedule(
           temporalSemantics,
           createdDate.toISOString(),
@@ -217,16 +239,16 @@ export async function POST(req: NextRequest) {
     // 6. Build Supabase Payload
     const payload = {
       tweet_id: tweetId,
-      signal_type: selectedClassification.signalType,
-      confidence: selectedClassification.confidence,
+      signal_type: effectiveClassification.signalType,
+      confidence: effectiveClassification.confidence,
       text: text.trim(),
       tweet_url: tweetUrl,
       tweet_created_at: createdDate.toISOString(),
       detected_at: receivedAt,
       expires_at: expiresAt.toISOString(),
       verification_status: "auto_unverified" as const,
-      classification_reason: selectedClassification.reason,
-      teaser_strength: null,
+      classification_reason: effectiveClassification.reason,
+      teaser_strength: contextSafetyDecision?.teaserStrength ?? null,
       is_reply: ruleResult.isReply,
       reply_to_handles: replyMetadata.replyToHandles ?? null,
       reply_context_text: replyMetadata.replyContextText ?? null,
