@@ -46,6 +46,11 @@ const FUTURE_RESET_PATTERN = /\b(?:will|going\s+to|coming|tonight|tomorrow|later
 const CANCELLATION_PATTERN = /\b(?:no|not|never|cancel(?:led|ed)?|canceled|not\s+anymore|changed\s+my\s+mind|scratch\s+that)\b/i;
 const EXPLICIT_RESET_NEGATION_PATTERN =
   /\b(?:no\s+reset|(?:will|would|going\s+to|can|could|should|do|does|did|am|is|are)\s+not\s+(?:going\s+to\s+|planning\s+to\s+)?(?:reset|restart|reboot)|(?:will|would|going\s+to)\s+not\s+(?:happen|occur)|not\s+(?:reset|happen|occur)\b)/i;
+const RECENT_RESET_BUTTON_ACQUISITION_PATTERN =
+  /\b(?:i|we)\s+(?:(?:was|were)\s+)?(?:just\s+)?(?:gifted|given|got|received|acquired)\b[^.!?]{0,100}\b(?:new\s+)?reset\s+button\b/i;
+const RECENT_RESET_BUTTON_CUE_PATTERN = /\b(?:just|today|recently|new)\b/i;
+const HISTORICAL_RESET_BUTTON_ACQUISITION_PATTERN =
+  /\b(?:years?|months?|long)\s+ago\b|\blast\s+(?:year|month)\b/i;
 
 const CURRENT_EXECUTION_PATTERNS = [
   /\b(?:one\s+|a\s+)?reset\s+now\b/i,
@@ -61,6 +66,15 @@ const CURRENT_EXECUTION_PATTERNS = [
 
 function normalizedClassificationText(text: string) {
   return text.toLowerCase().replace(/[’‘]/g, "'");
+}
+
+function hasRecentResetButtonAcquisition(text: string) {
+  const normalized = normalizedClassificationText(text);
+  return (
+    RECENT_RESET_BUTTON_ACQUISITION_PATTERN.test(normalized) &&
+    RECENT_RESET_BUTTON_CUE_PATTERN.test(normalized) &&
+    !HISTORICAL_RESET_BUTTON_ACQUISITION_PATTERN.test(normalized)
+  );
 }
 
 export function hasExplicitNonUsageResetObject(text: string) {
@@ -329,6 +343,18 @@ export function classifyTiboTweet(
     }
   }
 
+  // A recent first-person acquisition of the reset mechanism is a narrow
+  // teaser case; it does not assert that the reset has already been used.
+  if (hasRecentResetButtonAcquisition(text)) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "teaser",
+      confidence: 0.85,
+      reason: "Matched recent first-person reset button acquisition",
+      isReply,
+      isQuote,
+    });
+  }
+
   // 4. 将来の可能性の示唆 (teaser) - 未来志向表現の同居を必須化
   const teaserBaseKeywords = [
     "reset button",
@@ -344,6 +370,7 @@ export function classifyTiboTweet(
     "incoming",
     "soon",
     "should we",
+    "time to press",
     "tonight",
     "tomorrow",
     "cooking something",

@@ -68,7 +68,7 @@ export type GeminiClassificationOutput = {
   classifiedAt: string | null;
 };
 
-const SYSTEM_PROMPT = `
+export const TIBO_GEMINI_SYSTEM_PROMPT = `
 You are an AI classifier for the OpenAI Codex Reset Observatory system.
 You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex team.
 
@@ -81,6 +81,14 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
 
 3. "teaser": Forward-looking post suggesting a reset within 24-48 hours. Merely containing the words "reset" or "reset button" without a future-oriented indicator does NOT qualify.
    Example: "Should we press the reset button tonight?"
+
+A narrow exception applies to a recent first-person acquisition of the reset mechanism:
+when Tibo says that he was gifted, got, or received a new reset button recently (for example,
+"I was gifted a very fancy new reset button today" or "I just got a new reset button"),
+classify it as a strong teaser. The reset button was acquired, not used: the past tense describes
+receiving the button, not a completed reset, so this is neither "reset_executed" nor an official
+scheduled notice. Do not apply this exception to "years ago" or other historical memories,
+UI/product-feature mentions, device or third-party buttons, or unrelated technical resets.
 
 4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), feature releases, or ambiguous chatter.
    Examples: "I reset everyone yesterday" (historical -> irrelevant), "One day we created the reset button and the rest is history" (historical memory -> irrelevant), "No reset tonight" (negative -> irrelevant).
@@ -116,6 +124,7 @@ Reply status alone is never evidence for teaser or official_notice. A short repl
 
 Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
 - "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset.
+  The recent first-person acquisition exception above is also strong.
 - "weak": Tibo explicitly states present-tense, first-person discretion or willingness to perform a reset under conditions, such as sometimes responding to reset requests or occasionally obliging for strong feedback. Do not use weak for abstract signs, historical/general discussion, UI jokes, completed resets, or a reset word alone.
 - "none": no current personal willingness or near-future indication, including completed, historical, negative, UI, general, or unrelated posts.
 If the auxiliary signal cannot be determined, use null rather than guessing "none".
@@ -279,7 +288,7 @@ export async function classifyWithGemini(
       {
         role: "user",
         parts: [
-          { text: SYSTEM_PROMPT },
+          { text: TIBO_GEMINI_SYSTEM_PROMPT },
           { text: buildGeminiPrompt(input) },
         ],
       },

@@ -67,6 +67,45 @@ test("classifyTiboTweet correctly classifies teaser tweets with future indicator
   assert.ok(todayRealTweet.confidence >= 0.80);
 });
 
+test("classify recent first-person reset button acquisition as a teaser without broadening reset button matches", () => {
+  const positiveCases = [
+    "I was gifted a very fancy new reset button today",
+    "I just got a new reset button",
+    "I just received a new reset button",
+  ];
+
+  for (const text of positiveCases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2089941380336644295").signalType,
+      "teaser",
+      text,
+    );
+  }
+
+  const negativeCases = [
+    "The reset button is my favorite product feature.",
+    "We added a new reset button to the UI today.",
+    "I was gifted a reset button years ago.",
+    "My laptop has a reset button.",
+  ];
+
+  for (const text of negativeCases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2089941380336644295").signalType,
+      "irrelevant",
+      text,
+    );
+  }
+
+  assert.equal(
+    classifyTiboTweet(
+      "Maybe it is time to press the reset button.",
+      "https://x.com/thsottiaux/status/2056806923391877438",
+    ).signalType,
+    "teaser",
+  );
+});
+
 test("classifyTiboTweet classifies standalone reset button and retrospective past mentions as irrelevant", () => {
   const cases = [
     "I already reset everyone yesterday.",

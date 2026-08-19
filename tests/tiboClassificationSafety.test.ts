@@ -6,6 +6,7 @@ import {
 } from "../lib/radar/classification";
 import {
   applyTiboClassificationSafetyGuard,
+  TIBO_GEMINI_SYSTEM_PROMPT,
   type GeminiClassificationOutput,
 } from "../lib/radar/geminiClassification";
 import { getLocalRadarData } from "../lib/radar";
@@ -99,6 +100,26 @@ test("pure hypothetical and wish speech acts do not become teaser", () => {
   for (const text of cases) {
     assert.equal(getTiboClassificationSafetyDecision(text, "teaser").signalType, "irrelevant", text);
   }
+});
+
+test("Gemini prompt distinguishes recent reset-button acquisition from historical or UI mentions", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /gifted.*new reset button|received.*new reset button/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /past tense describes/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /receiving the button/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /years ago|UI\/product|product feature/i);
+});
+
+test("recent reset-button acquisition keeps a strong teaser result", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "I was gifted a very fancy new reset button today",
+    {
+      ...geminiResult("teaser"),
+      teaserStrength: "strong",
+    },
+  );
+
+  assert.equal(guarded.signalType, "teaser");
+  assert.equal(guarded.teaserStrength, "strong");
 });
 
 test("conditional present discretion remains distinct from pure hypothetical speech", () => {

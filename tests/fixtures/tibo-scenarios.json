@@ -257,6 +257,28 @@
       "expected": { "signalType": "irrelevant", "temporalDirection": "future", "teaserStrength": "none" },
       "regressionGroup": "there-will-be-signs"
     },
+    {
+      "id": "teaser-08",
+      "category": "teaser",
+      "description": "Recent gifted reset button",
+      "tweetText": "I was gifted a very fancy new reset button today",
+      "tweetCreatedAt": "2026-08-19T05:03:48.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2089941380336644295",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "recent-reset-button-acquisition"
+    },
+    {
+      "id": "teaser-09",
+      "category": "teaser",
+      "description": "Recent acquired reset button",
+      "tweetText": "I just got a new reset button",
+      "tweetCreatedAt": "2026-08-19T05:05:48.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000028",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "recent-reset-button-acquisition"
+    },
 
     {
       "id": "irrelevant-01",
@@ -266,6 +288,36 @@
       "tweetCreatedAt": "2026-08-14T04:00:00.000Z",
       "tweetUrl": "https://x.com/thsottiaux/status/910000000000000031",
       "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "irrelevant-08",
+      "category": "irrelevant_reset_terms",
+      "description": "UI reset button added today",
+      "tweetText": "We added a new reset button to the UI today.",
+      "tweetCreatedAt": "2026-08-19T05:07:48.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000038",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "completed_now", "teaserStrength": "none", "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "irrelevant-09",
+      "category": "irrelevant_reset_terms",
+      "description": "Historical gifted reset button",
+      "tweetText": "I was gifted a reset button years ago.",
+      "tweetCreatedAt": "2026-08-19T05:09:48.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000039",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "teaserStrength": "none", "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true
+    },
+    {
+      "id": "irrelevant-10",
+      "category": "irrelevant_reset_terms",
+      "description": "Device reset button",
+      "tweetText": "My laptop has a reset button.",
+      "tweetCreatedAt": "2026-08-19T05:11:48.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000000040",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
       "pipeline": true
     },
     {
