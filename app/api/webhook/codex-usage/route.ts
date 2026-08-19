@@ -16,7 +16,6 @@ import {
   confirmNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
   findRecentFormalTiboReset,
-  insertObservedRegularResetEvent,
   insertCodexRecoveryObservation,
   promoteDeferredTiboReset,
   readCodexUsageMonitorState,
@@ -202,18 +201,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
     }
 
-    if (decision.nearRegularSchedule) {
-      const regularError = await insertObservedRegularResetEvent(
-        client,
-        new Date(decision.previous.resetsAt * 1000).toISOString(),
-        snapshot.observedAt,
-      );
-      if (regularError) {
-        console.warn("[Codex usage] regular reset completion write failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    }
-
+    // local-codex-app-server observes one account's personal weekly window.
+    // Keep its recovery observation for audit, but never promote a personal
+    // near-regular recovery into the global regular reset history.
     const noticeSignal = notice.noticeSignal;
     if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
       try {

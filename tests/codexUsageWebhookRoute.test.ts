@@ -217,7 +217,7 @@ test("notice-backed estimate is created for a strong unexpected recovery", () =>
   );
 });
 
-test("regular recovery records the observation without matching or promoting a nearby Tibo reset", async () => {
+test("local regular recovery remains a personal observation and does not create a global regular event", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -276,9 +276,88 @@ test("regular recovery records the observation without matching or promoting a n
     const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
     assert.equal(observation?.body?.matched_tibo_tweet_id, null);
     assert.equal(observation?.body?.status, "observed");
-    const regularCompletion = requests.find((request) => request.url.includes("regular_reset_events") && request.method !== "GET");
-    assert.equal(regularCompletion?.body?.completed_at, "2026-08-11T00:30:00.000Z");
-    assert.notEqual(regularCompletion?.body?.completed_at, regularCompletion?.body?.scheduled_at);
+    assert.equal(observation?.body?.cycle_hint, "regular");
+    assert.equal(observation?.body?.confidence, "medium");
+    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
+    assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("local regular recovery with an official notice stays personal and does not promote a global reset", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-11T00:22:00.000Z",
+        received_at: "2026-08-11T00:22:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 69,
+        window_duration_mins: 10080,
+        resets_at: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000),
+        coverage_started_at: "2026-08-10T23:00:00.000Z",
+        updated_at: "2026-08-11T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: "official-notice-personal-test",
+        text: "A reset is planned",
+        tweet_url: "https://x.com/thsottiaux/status/official-notice-personal-test",
+        tweet_created_at: "2026-08-10T00:00:00.000Z",
+        expires_at: "2026-08-12T00:00:00.000Z",
+        signal_type: "official_notice",
+        confidence: 0.99,
+        verification_status: "auto_unverified",
+        is_reply: false,
+      }]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "POST" && url.includes("codex_recovery_observations")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    if (method === "POST" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    if (method === "POST" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-08-11T00:30:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-08-18T00:00:00.000Z") / 1000),
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
+    const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
+    assert.equal(observation?.body?.cycle_hint, "unknown");
+    assert.equal(observation?.body?.confidence, "strong");
+    assert.equal(observation?.body?.status, "observed");
+    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
+    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
+    assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
