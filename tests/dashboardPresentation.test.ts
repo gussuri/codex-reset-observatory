@@ -221,8 +221,8 @@ test("keeps the Tibo handle unchanged across supported locales", () => {
   }
 });
 
-test("places a related Tibo card after current status and before history", () => {
-  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+test("places a related Tibo card before the next regular reference and history", () => {
+  const calculationNow = new Date("2026-08-05T03:32:00.000Z");
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
       calculationNow,
@@ -233,7 +233,7 @@ test("places a related Tibo card after current status and before history", () =>
           text: "A reset notice from Tibo",
           tweet_url: "https://x.com/thsottiaux/status/presentation-related-official",
           tweet_created_at: "2026-08-03T23:00:00.000Z",
-          expires_at: "2026-08-05T00:00:00.000Z",
+          expires_at: "2026-08-06T00:00:00.000Z",
           confidence: 0.96,
           verification_status: "auto_unverified",
         },
@@ -243,7 +243,7 @@ test("places a related Tibo card after current status and before history", () =>
           text: "I might reset limits for good feedback.",
           tweet_url: "https://x.com/thsottiaux/status/presentation-related-weak",
           tweet_created_at: "2026-08-03T22:00:00.000Z",
-          expires_at: "2026-08-05T00:00:00.000Z",
+          expires_at: "2026-08-06T00:00:00.000Z",
           verification_status: "auto_unverified",
           teaser_strength: "weak",
         },
@@ -259,10 +259,11 @@ test("places a related Tibo card after current status and before history", () =>
   const noticeIndex = html.indexOf("Reset-related notice");
   const relatedIndex = html.indexOf("Related Tibo post");
   const statusIndex = html.indexOf("Current status");
+  const referenceIndex = html.indexOf("Next regular reset reference");
   const historyIndex = html.indexOf("Recent reset events");
 
   assert.ok(noticeIndex >= 0 && noticeIndex < statusIndex);
-  assert.ok(statusIndex < relatedIndex && relatedIndex < historyIndex);
+  assert.ok(statusIndex < relatedIndex && relatedIndex < referenceIndex && referenceIndex < historyIndex);
   assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
   assert.doesNotMatch(html, /Latest Tibo post/);
 });

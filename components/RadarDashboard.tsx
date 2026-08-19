@@ -776,6 +776,8 @@ export function RadarDashboard({
 
         </section>
 
+        {shouldRenderRelatedTibo ? tiboActivityCard : null}
+
         {!isDataUnavailable &&
         viewModel.regularResetForecast.isNoticeWindow &&
         viewModel.regularResetForecast.expectedAt ? (
@@ -803,8 +805,6 @@ export function RadarDashboard({
             </div>
           </section>
         ) : null}
-
-        {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
