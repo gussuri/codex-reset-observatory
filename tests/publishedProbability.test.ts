@@ -472,10 +472,10 @@ test("the regime-elapsed public model keeps the fixed-time forecast deterministi
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.source, "shadow");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.13934647286119084);
-  assert.equal(published.probability24h, 0.26417185751966454);
-  assert.equal(published.probability48h, 0.4727318880937301);
-  assert.equal(published.probability72h, 0.6320698917516959);
+  assert.equal(published.probability12h, 0.12039160798947111);
+  assert.equal(published.probability24h, 0.23333032746195995);
+  assert.equal(published.probability48h, 0.43332416976375354);
+  assert.equal(published.probability72h, 0.5961880351614156);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(unweightedBaseline.predictions.probability24h, 0.26063284833834355);
   assert.equal(unweightedBaseline.predictions.probability48h, 0.44994539803274325);

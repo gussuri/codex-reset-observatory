@@ -625,7 +625,7 @@ test("regular forecast accepts broad forced or regular records, including refere
   );
 });
 
-test("regular forecast advances by seven-day steps after the expected date", () => {
+test("regular forecast keeps the next unconfirmed occurrence after its expected date", () => {
   const calculationNow = new Date("2026-07-22T00:00:00.000Z");
 
   withLocalHistory(
@@ -644,8 +644,8 @@ test("regular forecast advances by seven-day steps after the expected date", () 
         calculationNow,
       ).regularResetForecast;
 
-      assert.equal(forecast.expectedAt, "2026-07-29T00:00:00.000Z");
-      assert.equal(forecast.isNoticeWindow, false);
+      assert.equal(forecast.expectedAt, "2026-07-08T00:00:00.000Z");
+      assert.equal(forecast.isNoticeWindow, true);
     },
   );
 });

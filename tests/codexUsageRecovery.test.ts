@@ -351,8 +351,8 @@ test("a strong unexpected observation becomes public provisional state", () => {
   });
 });
 
-test("a strong unknown observation becomes public provisional state", () => {
-  assert.equal(getPublicRecoveryObservation(recovery({ cycleHint: "unknown" }), NOW)?.cycleHint, "unknown");
+test("a strong unknown observation is withheld from public provisional state", () => {
+  assert.equal(getPublicRecoveryObservation(recovery({ cycleHint: "unknown" }), NOW), null);
 });
 
 test("only the explicitly consumed recovery observation is hidden after confirmation", () => {

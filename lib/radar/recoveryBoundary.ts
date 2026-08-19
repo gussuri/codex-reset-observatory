@@ -184,7 +184,11 @@ export function getRecoveryResetEvents(
   const boundaries: RecoveryResetBoundary[] = [];
   for (const candidate of candidates) {
     const previous = boundaries.at(-1);
+    const crossTypeBoundary = previous &&
+      ((previous.isRegular && !previous.isRandom && candidate.isRandom && !candidate.isRegular) ||
+        (previous.isRandom && !previous.isRegular && candidate.isRegular && !candidate.isRandom));
     const sameBoundary = previous &&
+      !crossTypeBoundary &&
       candidate.time - new Date(previous.resetAt).getTime() <= RECOVERY_BOUNDARY_DEDUPE_WINDOW_MS;
     if (sameBoundary) {
       previous.isRandom ||= candidate.isRandom;

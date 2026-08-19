@@ -403,6 +403,15 @@ function isSameReset(left: WindowEventLike, right: WindowEventLike) {
   const rightMethod = right.details?.resetMethod;
   const leftTime = getTimestamp(getCompletedAt(left));
   const rightTime = getTimestamp(getCompletedAt(right));
+  const leftCycleType = left.details?.cycleType;
+  const rightCycleType = right.details?.cycleType;
+
+  // A time-only fuzzy match must not collapse distinct regular and random
+  // reset events. Explicit identities above still prove that two records are
+  // the same event even when their normalized cycle types differ.
+  if (leftCycleType && rightCycleType && leftCycleType !== rightCycleType) {
+    return false;
+  }
 
   return Boolean(
     leftMethod === "強制リセット" &&
@@ -454,6 +463,16 @@ function matchesRejected(item: WindowEventLike, rejectedSignals: Array<RejectedT
     const signalTweetId = getTweetId(signal.tweet_url);
     if (itemTweetId && signalTweetId && itemTweetId === signalTweetId) return true;
     if (item.source_url && item.source_url === signal.tweet_url) return true;
+
+    // A rejected Tibo signal can only suppress a canonical regular row when
+    // its identity explicitly matches. Time-only proximity belongs to Tibo
+    // candidates and must not erase an independently observed regular reset.
+    if (
+      item.recordKind === "regular_completed" &&
+      item.details?.cycleType === "定期リセット"
+    ) {
+      return false;
+    }
 
     const itemTime = getTimestamp(getCompletedAt(item));
     const signalTime = getTimestamp(signal.tweet_created_at);

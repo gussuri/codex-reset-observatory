@@ -328,9 +328,10 @@ function getRegularResetForecast(
   const lastCompletedAt = autoLatestResetAt;
   const current = now;
 
-  // 基準イベントから7日後を起点にし、過ぎていれば7日ずつ次へ進める。
+  // 基準イベントの次の1回だけを予測する。予定時刻を過ぎても
+  // Usage Monitorによる完了観測がない限り、次週へ先送りしない。
   const nextRegularReset = autoLatestResetAt
-    ? rollResetDateForward(new Date(autoLatestResetAt), current)
+    ? getNextRegularResetDate(new Date(autoLatestResetAt))
     : null;
 
   if (!nextRegularReset) {
@@ -407,14 +408,8 @@ function rollRegularResetForward(
   };
 }
 
-function rollResetDateForward(reset: Date, current: Date) {
-  let nextReset = new Date(reset);
-
-  while (nextReset.getTime() <= current.getTime()) {
-    nextReset = new Date(nextReset.getTime() + 7 * DAY_MS);
-  }
-
-  return nextReset;
+function getNextRegularResetDate(reset: Date) {
+  return new Date(reset.getTime() + 7 * DAY_MS);
 }
 
 function getDisplayResetNotice(

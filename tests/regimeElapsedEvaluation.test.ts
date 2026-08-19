@@ -260,7 +260,7 @@ test("point-in-time projection excludes future dynamic records and strips future
   assert.deepEqual(futureForecast.predictions, baselineForecast.predictions);
 });
 
-test("production point-in-time fixture preserves dynamic boundaries and dedupes the static 8/1 event", () => {
+test("production point-in-time fixture preserves dynamic boundaries and separates cross-type events", () => {
   const report = evaluateRegimeElapsedProbability(
     createProductionPointInTimeRadarData(),
     PRODUCTION_PARITY_ORIGIN,
@@ -271,12 +271,12 @@ test("production point-in-time fixture preserves dynamic boundaries and dedupes 
   assert.equal(report.evaluationReport.futureLeakagePolicyVersion, "availability-timestamps-v1");
   assert.equal(report.evaluationReport.backfilled, false);
   assert.equal(report.evaluationReport.eventCount, 26);
-  assert.equal(report.evaluationReport.recoveryBoundaryCount, 30);
+  assert.equal(report.evaluationReport.recoveryBoundaryCount, 31);
   assert.equal(report.evaluationReport.currentSnapshot.latestRandomResetAt, "2026-08-13T03:34:43.341Z");
   assert.equal(report.evaluationReport.currentSnapshot.latestRecoveryResetAt, "2026-08-13T03:34:43.341Z");
   assert.equal(full.regimeDiagnostics.rawRandomEventCount, 26);
   assert.ok(Math.abs(full.regimeDiagnostics.regimeMultiplier - 1.6281772625) < 1e-9);
-  assert.ok(Math.abs(full.predictions.probability24h - 0.3299967574) < 1e-9);
-  assert.ok(Math.abs(full.predictions.probability48h - 0.6598501670) < 1e-9);
+  assert.ok(Math.abs(full.predictions.probability24h - 0.3287456050) < 1e-9);
+  assert.ok(Math.abs(full.predictions.probability48h - 0.6584455811) < 1e-9);
   assert.equal(typeof report.evaluationReport.currentSnapshot.elapsedOnly.probability24h, "number");
 });

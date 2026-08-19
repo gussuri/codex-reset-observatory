@@ -297,7 +297,12 @@ export function getPublicRecoveryObservation(
   now: Date = new Date(),
   consumedRecoveryObservationIds: ReadonlySet<string> = new Set<string>(),
 ): PublicRecoveryObservation | null {
-  if (!observation || observation.status !== "observed" || observation.confidence !== "strong" || observation.cycleHint === "regular") {
+  if (
+    !observation ||
+    observation.status !== "observed" ||
+    observation.confidence !== "strong" ||
+    observation.cycleHint !== "unexpected"
+  ) {
     return null;
   }
 

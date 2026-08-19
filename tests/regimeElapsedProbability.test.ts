@@ -91,7 +91,7 @@ test("narrow, rejected, voided, pending, future, and invalid records are exclude
   assert.deepEqual(boundaries.map((boundary) => boundary.id), ["valid"]);
 });
 
-test("same-time regular and random records create one recovery boundary with one random event", () => {
+test("near-time regular and random records create separate recovery boundaries", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const boundaries = getRecoveryResetEvents(data, NOW, [
     resetEvent("regular", "2026-08-05T00:00:00.000Z", "定期リセット"),
@@ -107,10 +107,10 @@ test("same-time regular and random records create one recovery boundary with one
     }),
   ]);
 
-  assert.equal(boundaries.length, 1);
-  assert.equal(boundaries[0].isRandom, true);
-  assert.equal(boundaries[0].isRegular, true);
-  assert.equal(boundaries[0].sourceIds.length, 2);
+  assert.equal(boundaries.length, 2);
+  assert.deepEqual(boundaries.map((boundary) => boundary.isRandom), [false, true]);
+  assert.deepEqual(boundaries.map((boundary) => boundary.isRegular), [true, false]);
+  assert.deepEqual(boundaries.map((boundary) => boundary.sourceIds.length), [1, 1]);
 });
 
 test("a regular boundary resets elapsed age without increasing random event count", () => {
