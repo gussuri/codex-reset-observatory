@@ -24,9 +24,9 @@ import {
   SITE_URL,
   siteUrl,
 } from "../lib/siteMetadata";
-import { metadata as jaHomeMetadata } from "../app/(ja)/page";
-import { metadata as enHomeMetadata } from "../app/(en)/en/page";
-import { metadata as zhHomeMetadata } from "../app/(zh)/zh/page";
+import { metadata as jaHomeMetadata, revalidate as jaHomeRevalidate } from "../app/(ja)/page";
+import { metadata as enHomeMetadata, revalidate as enHomeRevalidate } from "../app/(en)/en/page";
+import { metadata as zhHomeMetadata, revalidate as zhHomeRevalidate } from "../app/(zh)/zh/page";
 import { metadata as jaAboutMetadata } from "../app/(ja)/about/page";
 import { metadata as enAboutMetadata } from "../app/(en)/en/about/page";
 import { metadata as zhAboutMetadata } from "../app/(zh)/zh/about/page";
@@ -115,6 +115,13 @@ test("home metadata preserves exact localized SEO contracts", () => {
     assert.strictEqual(item.metadata.twitter?.description, item.expectedDescription, item.locale);
     assert.deepStrictEqual(item.metadata.twitter?.images, [SITE_OG_IMAGE_URL], item.locale);
   }
+});
+
+test("localized home pages use a 15-minute ISR interval", () => {
+  assert.deepStrictEqual(
+    [jaHomeRevalidate, enHomeRevalidate, zhHomeRevalidate],
+    [900, 900, 900],
+  );
 });
 
 test("home SEO descriptions expose only the public 24-hour and 48-hour horizons", () => {

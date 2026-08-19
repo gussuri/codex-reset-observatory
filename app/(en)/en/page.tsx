@@ -9,7 +9,7 @@ import {
   siteUrl,
 } from "@/lib/siteMetadata";
 
-export const revalidate = 60;
+export const revalidate = 900;
 
 export const metadata: Metadata = {
   applicationName: SITE_NAME,
