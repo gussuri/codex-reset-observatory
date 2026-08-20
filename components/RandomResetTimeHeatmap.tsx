@@ -141,7 +141,7 @@ export function RandomResetTimeHeatmap({
   const intervalMaxRawCount = intervalDistribution
     ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
     : 0;
-  const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount + 1 : 0;
+  const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount * 1.2 : 0;
   const desktopTimeAxisTicks = getHeatmapTimeAxisTicks(1);
   const mobileTimeAxisTicks = getHeatmapTimeAxisTicks(2);
 
@@ -363,7 +363,7 @@ function RandomResetIntervalSection({
                   <ResetCountBar
                     ariaLabel={formatRandomResetIntervalBarLabel(bin, locale)}
                     barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
-                    countLabelMode="above"
+                    stretchToParent
                     rawCount={bin.rawCount}
                   />
                 </div>
@@ -448,43 +448,18 @@ function TimeHeatmapChart({
 function ResetCountBar({
   ariaLabel,
   barHeight,
-  countLabelMode = "overlay",
   rawCount,
+  stretchToParent = false,
 }: {
   ariaLabel: string;
   barHeight: number;
-  countLabelMode?: "above" | "overlay";
   rawCount: number;
+  stretchToParent?: boolean;
 }) {
-  const bar = (
-    <span
-      aria-hidden="true"
-      className="absolute inset-x-0.5 bottom-0 rounded-t bg-teal-600 sm:inset-x-1"
-      style={{ height: `${barHeight}%` }}
-    />
-  );
-
-  if (countLabelMode === "above") {
-    return (
-      <div
-        aria-label={ariaLabel}
-        className="flex h-full min-w-0 flex-col px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
-        role="img"
-        tabIndex={0}
-        title={ariaLabel}
-      >
-        <span aria-hidden="true" className="h-5 shrink-0 text-center text-xs font-semibold tabular-nums text-slate-700 sm:text-[0.65rem]">
-          {rawCount > 0 ? rawCount : null}
-        </span>
-        <div className="relative min-h-0 flex-1">{bar}</div>
-      </div>
-    );
-  }
-
   return (
     <div
       aria-label={ariaLabel}
-      className="relative h-32 min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 sm:h-28"
+      className={`relative min-w-0 px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 ${stretchToParent ? "h-full" : "h-32 sm:h-28"}`}
       role="img"
       tabIndex={0}
       title={ariaLabel}
@@ -498,7 +473,11 @@ function ResetCountBar({
           {rawCount}
         </span>
       ) : null}
-      {bar}
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0.5 bottom-0 rounded-t bg-teal-600 sm:inset-x-1"
+        style={{ height: `${barHeight}%` }}
+      />
     </div>
   );
 }
