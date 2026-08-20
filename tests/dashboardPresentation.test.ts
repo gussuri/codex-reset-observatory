@@ -739,7 +739,7 @@ test("keeps probability cards compact while showing the full random reset label"
     }),
   );
 
-  assert.ok(html.includes("lg:grid-cols-[minmax(0,1.2fr)_minmax(24rem,1fr)]"));
+  assert.ok(html.includes("lg:grid-cols-[minmax(0,1fr)_minmax(30rem,1.2fr)]"));
   assert.equal((html.match(/aria-label="24時間以内"/g) ?? []).length, 1);
   assert.equal((html.match(/aria-label="48時間以内"/g) ?? []).length, 1);
 
