@@ -725,6 +725,34 @@ test("dashboard elapsed indicator uses the latest random reset across regular bo
   }
 });
 
+test("keeps probability cards compact while showing the full random reset label", () => {
+  const calculationNow = new Date("2026-08-10T12:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: snapshot,
+      locale: "ja",
+    }),
+  );
+
+  assert.ok(html.includes("lg:grid-cols-[minmax(0,1.2fr)_minmax(24rem,1fr)]"));
+  assert.equal((html.match(/aria-label="24時間以内"/g) ?? []).length, 1);
+  assert.equal((html.match(/aria-label="48時間以内"/g) ?? []).length, 1);
+
+  const labelIndex = html.indexOf(
+    "前回のランダムリセットから",
+    html.indexOf("Codex関連障害"),
+  );
+  assert.ok(labelIndex >= 0);
+  const statusLabel = html.slice(html.lastIndexOf("<dt", labelIndex), html.indexOf("</dt>", labelIndex) + 5);
+  assert.match(statusLabel, /whitespace-normal/);
+  assert.doesNotMatch(statusLabel, /truncate/);
+});
+
 test("aligns reset history notice and execution timestamps in a desktop grid", () => {
   const calculationNow = new Date("2026-08-12T00:00:00.000Z");
   const baseSnapshot = toPublicRadarSnapshot(getLocalRadarData({ calculationNow }), "ja", { calculationNow });

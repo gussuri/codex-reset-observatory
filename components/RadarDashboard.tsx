@@ -221,7 +221,7 @@ function ObservationStatusItem({
     <div className="min-w-0 rounded-md bg-slate-50/80 px-3 py-2.5">
       <dt className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
         <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
-        <span className="truncate">{label}</span>
+        <span className="min-w-0 whitespace-normal break-words leading-snug">{label}</span>
       </dt>
       <dd className="mt-1 truncate text-base font-semibold text-slate-800">{value}</dd>
     </div>
@@ -724,7 +724,7 @@ export function RadarDashboard({
               <Gauge className="h-7 w-7 text-teal-700" />
             </div>
 
-            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,1fr)]">
+            <div className="mt-4 grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(24rem,1fr)]">
               <ProbabilityMetrics
                 className="grid w-full grid-cols-2 gap-3"
                 locale={locale}
