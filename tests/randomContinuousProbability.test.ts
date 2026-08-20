@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
 import type { RecoveryResetBoundary } from "../lib/radar/recoveryBoundary";
 import type { WindowEventLike } from "../lib/radar/types";
@@ -12,6 +13,7 @@ import {
 } from "../lib/radar/randomContinuousProbability";
 import { getRandomElapsedBoundaries } from "../lib/radar/randomElapsedProbability";
 import { calculateRandomElapsedProbability } from "../lib/radar/randomElapsedProbability";
+import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 
@@ -156,6 +158,52 @@ test("continuous and coarse random shadows share boundary, regime, signal, and n
   assert.equal(continuous.randomContinuous.regimeMultiplier, coarse.randomElapsed.regime.regimeMultiplier);
   assert.deepEqual(continuous.multipliers, coarse.multipliers);
   assert.deepEqual(continuous.officialNoticeOverride, coarse.officialNoticeOverride);
+});
+
+test("random shadows reuse a supplied regime-elapsed result", () => {
+  const now = new Date("2026-08-03T01:00:00.000Z");
+  const options = {
+    now,
+    activeOfficialNotice: null,
+  };
+  const data = getLocalRadarData({ calculationNow: now });
+  const regimeElapsed = calculateRegimeElapsedProbability(
+    data,
+    options,
+    PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  );
+  const supplied = {
+    ...regimeElapsed,
+    multipliers: {
+      ...regimeElapsed.multipliers,
+      combinedAfterCap: {
+        ...regimeElapsed.multipliers.combinedAfterCap,
+        probability24h: regimeElapsed.multipliers.combinedAfterCap.probability24h + 0.1,
+        probability48h: regimeElapsed.multipliers.combinedAfterCap.probability48h + 0.1,
+      },
+    },
+    regimeElapsed: {
+      ...regimeElapsed.regimeElapsed,
+      regime: {
+        ...regimeElapsed.regimeElapsed.regime,
+        regimeMultiplier: regimeElapsed.regimeElapsed.regime.regimeMultiplier + 0.1,
+      },
+    },
+  };
+
+  const continuous = calculateRandomContinuousProbability(data, options, supplied);
+  const coarse = calculateRandomElapsedProbability(data, options, {}, supplied);
+
+  assert.deepEqual(continuous.multipliers, supplied.multipliers);
+  assert.equal(
+    continuous.randomContinuous.regimeMultiplier,
+    supplied.regimeElapsed.regime.regimeMultiplier,
+  );
+  assert.deepEqual(coarse.multipliers, supplied.multipliers);
+  assert.equal(
+    coarse.randomElapsed.regime.regimeMultiplier,
+    supplied.regimeElapsed.regime.regimeMultiplier,
+  );
 });
 
 test("continuous integration is finite, smooth across adjacent ages, and horizon-monotone", () => {

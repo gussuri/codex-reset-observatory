@@ -90,3 +90,10 @@ test("all external workflow actions are pinned to full commit SHAs", () => {
     );
   }
 });
+
+test("probability logging keeps a six-hour research cadence", () => {
+  const workflow = readFileSync(resolve(".github/workflows/log-probability.yml"), "utf8")
+    .replace(/\r\n/g, "\n");
+
+  assert.match(workflow, /cron:\s*'34 \*\/6 \* \* \*'/);
+});

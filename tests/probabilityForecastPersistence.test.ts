@@ -193,6 +193,23 @@ test("the calibrated experimental forecast matches the published 24h and 48h val
   assert.equal(calibrated.fallbackUsed, published.calibrated?.fallbackUsed);
 });
 
+test("reusing the published raw shadow preserves the experimental forecast output", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const published = calculatePublishedProbability(data, { now }, { logFallback: false });
+  const calculated = buildExperimentalProbabilityForecasts(data, {
+    now,
+    calibratedProbability: published.calibrated,
+  });
+  const reused = buildExperimentalProbabilityForecasts(data, {
+    now,
+    shadowProbability: published.rawShadow ?? published.shadow,
+    calibratedProbability: published.calibrated,
+  });
+
+  assert.deepEqual(reused, calculated);
+});
+
 test("the calibrated forecast records the canonical raw teaser multiplier", () => {
   const now = new Date("2026-08-04T12:00:00.000Z");
   const data = getLocalRadarData({

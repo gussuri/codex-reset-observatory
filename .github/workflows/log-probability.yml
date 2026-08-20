@@ -2,9 +2,9 @@ name: Log Reset Probability
 
 on:
   schedule:
-    # 毎時34分に実行 (0分など混雑する時間帯を避けるための設定)
+    # 6時間ごとの34分に実行 (0分など混雑する時間帯を避けるための設定)
     # ※GitHub Actionsのcronスケジュールは標準時 (UTC) 基準で設定されます。
-    - cron: '34 * * * *'
+    - cron: '34 */6 * * *'
   # GitHubの管理画面から手動で即時実行（テスト）することも可能にします
   workflow_dispatch:
 

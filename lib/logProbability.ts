@@ -313,8 +313,8 @@ export function buildExperimentalProbabilityForecasts(
     calculationOptions,
     PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   );
-  const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions);
-  const randomContinuous = calculateRandomContinuousProbability(data, calculationOptions);
+  const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions, {}, regimeElapsed);
+  const randomContinuous = calculateRandomContinuousProbability(data, calculationOptions, regimeElapsed);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
   const calibrated = calibratedProbability ?? calculateCalibratedShadowProbability(data, {
     ...calculationOptions,

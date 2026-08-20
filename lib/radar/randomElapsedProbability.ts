@@ -15,6 +15,7 @@ import {
   integrateRegimeElapsedHazard,
   type RegimeElapsedHazard,
   type RegimeElapsedModelOptions,
+  type RegimeElapsedProbabilityResult,
 } from "./regimeElapsedProbability";
 import {
   getRecoveryBoundaryAudit,
@@ -144,9 +145,10 @@ export function calculateRandomElapsedProbability(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
   modelOptions: RegimeElapsedModelOptions = {},
+  precomputedRecoveryResult?: RegimeElapsedProbabilityResult,
 ): RandomElapsedProbabilityResult {
   const now = options.now ?? new Date();
-  const recoveryResult = calculateRegimeElapsedProbability(data, options, modelOptions);
+  const recoveryResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(data, options, modelOptions);
   const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomElapsedHazard(boundaries, now, modelOptions);

@@ -25,6 +25,7 @@ import {
 } from "./shadowProbability";
 import {
   calculateRegimeElapsedProbability,
+  type RegimeElapsedProbabilityResult,
 } from "./regimeElapsedProbability";
 import {
   getRecoveryBoundaryAudit,
@@ -246,6 +247,33 @@ function getKernelPosterior(hazard: RandomContinuousHazard, ageHours: number) {
   };
 }
 
+type ContinuousHazardEvaluator = {
+  getHazardAtAge: (ageHours: number) => number;
+  getDiagnosticsAtAge: (ageHours: number) => ReturnType<typeof getKernelPosterior>;
+};
+
+function createContinuousHazardEvaluator(hazard: RandomContinuousHazard): ContinuousHazardEvaluator {
+  const cache = new Map<number, ReturnType<typeof getKernelPosterior>>();
+
+  const getDiagnosticsAtAge = (ageHours: number) => {
+    const normalizedAge = Math.max(0, ageHours);
+    const cached = cache.get(normalizedAge);
+    if (cached) return cached;
+
+    const diagnostics = getKernelPosterior(hazard, normalizedAge);
+    cache.set(normalizedAge, diagnostics);
+    return diagnostics;
+  };
+
+  return {
+    getHazardAtAge: (ageHours) => {
+      if (!Number.isFinite(ageHours)) return 0;
+      return getDiagnosticsAtAge(ageHours).posteriorLambdaPerHour;
+    },
+    getDiagnosticsAtAge,
+  };
+}
+
 export function getRandomContinuousHazardAtAge(
   hazard: RandomContinuousHazard,
   ageHours: number,
@@ -267,18 +295,32 @@ export function integrateRandomContinuousHazard(
   horizonHours: number,
   regimeMultiplier = 1,
 ) {
+  return integrateRandomContinuousHazardWithGetter(
+    startAgeHours,
+    horizonHours,
+    regimeMultiplier,
+    (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
+  );
+}
+
+function integrateRandomContinuousHazardWithGetter(
+  startAgeHours: number,
+  horizonHours: number,
+  regimeMultiplier: number,
+  getHazardAtAge: (ageHours: number) => number,
+) {
   if (!Number.isFinite(startAgeHours) || !Number.isFinite(horizonHours) || horizonHours <= 0) return 0;
 
   const start = Math.max(0, startAgeHours);
   const end = start + horizonHours;
   let cursor = start;
   let cumulativeHazard = 0;
-  let currentLambda = getRandomContinuousHazardAtAge(hazard, cursor);
+  let currentLambda = getHazardAtAge(cursor);
   while (cursor < end) {
     const stepEnd = Math.min(end, cursor + INTEGRATION_STEP_HOURS);
     if (!Number.isFinite(stepEnd) || stepEnd <= cursor) break;
     const stepHours = stepEnd - cursor;
-    const nextLambda = getRandomContinuousHazardAtAge(hazard, stepEnd);
+    const nextLambda = getHazardAtAge(stepEnd);
     cumulativeHazard += (
       (currentLambda + nextLambda) / 2
     ) * stepHours * Math.max(0, regimeMultiplier);
@@ -293,12 +335,13 @@ function makeHorizons(
   hazard: RandomContinuousHazard,
   randomElapsedHours: number,
   regimeMultiplier: number,
+  getHazardAtAge: (ageHours: number) => number = (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
 ): ShadowProbabilityHorizons {
   return {
-    probability12h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 12, regimeMultiplier),
-    probability24h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 24, regimeMultiplier),
-    probability48h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 48, regimeMultiplier),
-    probability72h: integrateRandomContinuousHazard(hazard, randomElapsedHours, 72, regimeMultiplier),
+    probability12h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 12, regimeMultiplier, getHazardAtAge),
+    probability24h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 24, regimeMultiplier, getHazardAtAge),
+    probability48h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 48, regimeMultiplier, getHazardAtAge),
+    probability72h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 72, regimeMultiplier, getHazardAtAge),
   };
 }
 
@@ -324,12 +367,10 @@ function makeConfidence(hazard: RandomContinuousHazard, officialNoticeActive: bo
 export function calculateRandomContinuousProbability(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
+  precomputedRecoveryResult?: RegimeElapsedProbabilityResult,
 ): RandomContinuousProbabilityResult {
   const now = options.now ?? new Date();
-  const recoveryResult = calculateRegimeElapsedProbability(
-    data,
-    options,
-  );
+  const recoveryResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(data, options);
   const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomContinuousHazard(randomBoundaries, now);
@@ -338,7 +379,13 @@ export function calculateRandomContinuousProbability(
   const randomElapsedHours = getLatestElapsedHours(randomBoundaries, now);
   const recoveryElapsedHours = getLatestElapsedHours(boundaries, now);
   const regimeMultiplier = recoveryResult.regimeElapsed.regime.regimeMultiplier;
-  const baseline = makeHorizons(hazard, randomElapsedHours, regimeMultiplier);
+  const evaluator = createContinuousHazardEvaluator(hazard);
+  const baseline = makeHorizons(
+    hazard,
+    randomElapsedHours,
+    regimeMultiplier,
+    evaluator.getHazardAtAge,
+  );
   const adjusted: ShadowProbabilityHorizons = {
     probability12h: applyOddsMultiplier(
       baseline.probability12h,
@@ -365,7 +412,7 @@ export function calculateRandomContinuousProbability(
         probability72h: recoveryResult.officialNoticeOverride.probability72h ?? 0.96,
       }
     : adjusted;
-  const currentDiagnostics = getRandomContinuousHazardDiagnosticsAtAge(hazard, randomElapsedHours);
+  const currentDiagnostics = evaluator.getDiagnosticsAtAge(randomElapsedHours);
   const confidence = makeConfidence(hazard, recoveryResult.officialNoticeOverride.active);
   const warnings: string[] = [];
   if (hazard.completedIntervalCount < 2) {
@@ -416,7 +463,7 @@ export function calculateRandomContinuousProbability(
       kernelType: RANDOM_CONTINUOUS_SHADOW_KERNEL,
       probeDailyProbabilities: RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS.map((ageHours) => ({
         ageHours,
-        dailyProbability: getRandomContinuousHazardDiagnosticsAtAge(hazard, ageHours).dailyProbability,
+        dailyProbability: evaluator.getDiagnosticsAtAge(ageHours).dailyProbability,
       })),
       bandwidthHours: hazard.bandwidthHours,
       gridHours: hazard.gridHours,

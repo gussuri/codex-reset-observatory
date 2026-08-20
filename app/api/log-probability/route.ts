@@ -83,6 +83,7 @@ async function handleLogRequest(request: NextRequest) {
       activeOfficialNotice,
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
       calibratedProbability: publishedProbability.calibrated,
+      shadowProbability: publishedProbability.rawShadow ?? publishedProbability.shadow,
     });
 
     // 3. パラメータや各種フラグの抽出

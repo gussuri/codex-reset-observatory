@@ -28,6 +28,18 @@ test("internal 500 responses do not include exception details", () => {
   assert.doesNotMatch(heartbeatRoute, /error:\s*err\.message/);
 });
 
+test("log probability reuses the published raw model for experimental forecasts", () => {
+  const logProbabilityRoute = readFileSync(
+    join(root, "app/api/log-probability/route.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    logProbabilityRoute,
+    /calibratedProbability:\s*publishedProbability\.calibrated,[\s\S]*?shadowProbability:\s*publishedProbability\.rawShadow \?\? publishedProbability\.shadow/,
+  );
+});
+
 test("log probability unexpected errors use a generic runtime response", async () => {
   const previous = {
     CRON_SECRET: process.env.CRON_SECRET,
