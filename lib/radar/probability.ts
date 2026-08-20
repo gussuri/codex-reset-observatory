@@ -33,7 +33,7 @@ import {
   isFormalTiboResetSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
-import { getLastRecoveryResetAt } from "./recoveryBoundary";
+import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
@@ -1592,9 +1592,9 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookUnavailable", locale);
   }
 
-  const latestDisplayResetAt = getLastDisplayResetAt(data, now);
-  const elapsedMs = latestDisplayResetAt
-    ? Math.max(0, now.getTime() - latestDisplayResetAt.getTime())
+  const latestRandomResetAt = getLastRandomRecoveryResetAt(data, now);
+  const elapsedMs = latestRandomResetAt
+    ? Math.max(0, now.getTime() - new Date(latestRandomResetAt).getTime())
     : null;
   const hasElapsed = elapsedMs !== null;
   const elapsed = hasElapsed

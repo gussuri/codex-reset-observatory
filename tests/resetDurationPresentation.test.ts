@@ -8,6 +8,7 @@ import {
   getLastDisplayResetAt,
   getLocalSignalEvaluation,
 } from "../lib/radar/probability";
+import { getLastRandomRecoveryResetAt } from "../lib/radar/recoveryBoundary";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import { formatElapsedResetDuration } from "../lib/radar/helpers";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
@@ -56,7 +57,8 @@ function getReasonForData(
   locale: "ja" | "en" | "zh",
   regimeMultiplier = 1,
 ) {
-  const lastReset = getLastDisplayResetAt(data, NOW);
+  const lastResetAt = getLastRandomRecoveryResetAt(data, NOW);
+  const lastReset = lastResetAt ? new Date(lastResetAt) : null;
   const elapsedHours = lastReset
     ? Math.max(0, (NOW.getTime() - lastReset.getTime()) / HOUR_MS)
     : 0;
@@ -121,7 +123,7 @@ test("uses the latest broad regular recovery boundary, ignoring newer narrow rec
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから1日1時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから1日3時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
       );
     },
   );
@@ -137,7 +139,7 @@ test("uses a broad regular reference when it is the latest recovery boundary", (
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから1日2時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから1日3時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
       );
     },
   );
@@ -169,7 +171,7 @@ test("uses persisted regular_completed as the display boundary and not the older
       assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のリセットから2日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから9日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
       );
     },
   );
@@ -188,15 +190,15 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
 
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のリセットから2日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから9日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
       );
       assert.equal(
         getReasonForData(data, "en"),
-        "It has been 2 days and 8 hours since the last reset, and the current forecast puts the outlook for a reset at moderate.",
+        "It has been 9 days and 8 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
       );
       assert.equal(
         getReasonForData(data, "zh"),
-        "距离上次重置已过去2天8小时，根据当前预测，重置的可能性处于中等水平。",
+        "距离上次随机重置已过去9天8小时，根据当前预测，重置的可能性处于中等水平。",
       );
     },
   );
@@ -249,19 +251,22 @@ test("display boundary calculation does not change published probability values"
 
 test("renders the normal outlook sentence in all supported locales", () => {
   withLocalHistory(
-    [resetEvent("regular", "2026-08-09T10:00:00.000Z", "confirmed_global", "定期リセット", "全有料プラン")],
+    [
+      resetEvent("random", "2026-08-08T10:00:00.000Z", "confirmed_global", "ランダムリセット", "全有料プラン"),
+      resetEvent("regular", "2026-08-09T10:00:00.000Z", "confirmed_global", "定期リセット", "全有料プラン"),
+    ],
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のリセットから1日2時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから2日2時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
       );
       assert.equal(
         getReason("en"),
-        "It has been 1 day and 2 hours since the last reset, and the current forecast puts the outlook for a reset at moderate.",
+        "It has been 2 days and 2 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
       );
       assert.equal(
         getReason("zh"),
-        "距离上次重置已过去1天2小时，根据当前预测，重置的可能性处于中等水平。",
+        "距离上次随机重置已过去2天2小时，根据当前预测，重置的可能性处于中等水平。",
       );
     },
   );

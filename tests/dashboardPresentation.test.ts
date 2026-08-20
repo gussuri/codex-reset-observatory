@@ -633,7 +633,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /現在の見込み/);
   assert.doesNotMatch(html, /現在、目立った観測変化はありません。/);
-  assert.match(outlookText, /前回のリセット|最近はリセット|現在、大きな変化/);
+  assert.match(outlookText, /前回のランダムリセット|最近はリセット|現在、大きな変化/);
   assert.doesNotMatch(outlookText, /直近のリセットから2日20時間経過しています。/);
   assert.doesNotMatch(outlookText, /公式予告や発生中のCodex関連障害はありません。/);
   assert.doesNotMatch(outlookText, /直近7日間でリセットが3回/);
@@ -739,7 +739,7 @@ test("keeps probability cards compact while showing the full random reset label"
     }),
   );
 
-  assert.ok(html.includes("lg:grid-cols-[minmax(0,1fr)_minmax(30rem,1.2fr)]"));
+  assert.ok(html.includes("lg:grid-cols-[minmax(0,1fr)_minmax(28rem,1.1fr)]"));
   assert.equal((html.match(/aria-label="24時間以内"/g) ?? []).length, 1);
   assert.equal((html.match(/aria-label="48時間以内"/g) ?? []).length, 1);
 

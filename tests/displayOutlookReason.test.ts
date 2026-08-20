@@ -10,6 +10,7 @@ import {
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
+import type { RadarData } from "../lib/radar/types";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
@@ -36,6 +37,18 @@ function regularResetAt(completedAt: string): RegularResetEventRow {
     scope: "任意リセット未使用アカウント",
     record_kind: "regular_completed",
     status: "completed",
+  };
+}
+
+function randomResetAt(completedAt: string): NonNullable<RadarData["formal_tibo_resets"]>[number] {
+  return {
+    tweet_id: `test-random-${completedAt}`,
+    text: "Reset completed",
+    tweet_url: "https://x.com/thsottiaux/status/2000000000000000000",
+    tweet_created_at: completedAt,
+    signal_type: "reset_executed",
+    confidence: 1,
+    verification_status: "confirmed",
   };
 }
 
@@ -92,6 +105,7 @@ function reasonFor({
   probability24h = 0.2,
   probability48h = 0.35,
   now = NOW,
+  formalTiboResets = [],
   regularResetEvents = [],
 }: {
   locale?: "ja" | "en" | "zh";
@@ -107,11 +121,13 @@ function reasonFor({
   probability24h?: number;
   probability48h?: number;
   now?: Date;
+  formalTiboResets?: RadarData["formal_tibo_resets"];
   regularResetEvents?: RegularResetEventRow[];
 } = {}) {
   const data = getLocalRadarData({
     calculationNow: now,
     activeTiboSignals: signals,
+    formalTiboResets,
     regularResetEvents,
   });
   const baseEvaluation = getLocalSignalEvaluation(data, now);
@@ -216,15 +232,15 @@ test("elapsed-only publication uses the normal outlook wording despite raw regim
   const regularResetEvents = [regularResetAt("2026-08-03T04:00:00.000Z")];
   assert.match(
     reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /前回のリセットから20時間が経過し、.*中程度です。$/,
+    /前回のランダムリセットから2日20時間が経過し、.*中程度です。$/,
   );
   assert.match(
     reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /It has been 20 hours since the last reset.*moderate\.$/,
+    /It has been 2 days and 20 hours since the last random reset.*moderate\.$/,
   );
   assert.match(
     reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /距离上次重置已过去20小时.*中等水平。$/,
+    /距离上次随机重置已过去2天20小时.*中等水平。$/,
   );
 });
 
@@ -232,26 +248,26 @@ test("uses the same expectation conclusion in English and Chinese", () => {
   const regularResetEvents = [regularResetAt("2026-08-02T00:00:00.000Z")];
   assert.equal(
     reasonFor({ locale: "en", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "It has been 2 days since the last reset, and the next 24–48 hours approach periods when resets have historically been more likely, so the current outlook is moderate.",
+    "It has been 2 days and 20 hours since the last random reset, and the next 24–48 hours approach periods when resets have historically been more likely, so the current outlook is moderate.",
   );
   assert.equal(
     reasonFor({ locale: "zh", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "距离上次重置已过去2天，未来24至48小时将逐渐接近过去较容易发生重置的时段，因此目前的可能性处于中等水平。",
+    "距离上次随机重置已过去2天20小时，未来24至48小时将逐渐接近过去较容易发生重置的时段，因此目前的可能性处于中等水平。",
   );
 });
 
 test("does not use regime diagnostics when the published model falls back", () => {
   assert.equal(
     reasonFor({ source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "前回のリセットから2日20時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+    "前回のランダムリセットから2日20時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
   );
   assert.equal(
     reasonFor({ locale: "en", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "It has been 2 days and 20 hours since the last reset, and the current forecast puts the outlook for a reset at moderate.",
+    "It has been 2 days and 20 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
   );
   assert.equal(
     reasonFor({ locale: "zh", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "距离上次重置已过去2天20小时，根据当前预测，重置的可能性处于中等水平。",
+    "距离上次随机重置已过去2天20小时，根据当前预测，重置的可能性处于中等水平。",
   );
 });
 
@@ -280,67 +296,74 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       probability24h: 0.1,
       probability48h: 0.1,
     }),
-    "前回のリセットから28分しか経過しておらず、過去の発生傾向でもリセット直後は起きにくいため、現在の見込みは低めです。",
+    "前回のランダムリセットから7日が経過しており、現在の予測ではリセットの見込みは低めです。",
   );
 });
 
-test("uses minute precision immediately after a reset", () => {
+test("uses minute precision immediately after a random reset despite a regular boundary", () => {
+  const randomResetEvents = [randomResetAt("2026-08-03T23:30:00.000Z")];
   const regularResetEvents = [regularResetAt("2026-08-03T23:30:00.000Z")];
   assert.match(
     reasonFor({
       now: NOW,
+      formalTiboResets: randomResetEvents,
       regularResetEvents,
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /前回のリセットから30分しか経過しておらず/,
+    /前回のランダムリセットから30分しか経過しておらず/,
   );
   assert.match(
     reasonFor({
       now: new Date("2026-08-03T23:59:30.000Z"),
+      formalTiboResets: [randomResetAt("2026-08-03T23:59:00.000Z")],
       regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /前回のリセットからまだ1分も経過しておらず/,
+    /前回のランダムリセットからまだ1分も経過しておらず/,
   );
   assert.match(
     reasonFor({
       locale: "en",
       now: new Date("2026-08-03T23:59:30.000Z"),
+      formalTiboResets: [randomResetAt("2026-08-03T23:59:00.000Z")],
       regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /Less than a minute has passed/,
+    /Less than a minute has passed since the last random reset/,
   );
   const oneMinuteReason = reasonFor({
     locale: "en",
     now: new Date("2026-08-03T23:31:00.000Z"),
+    formalTiboResets: randomResetEvents,
     regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(oneMinuteReason, /It has only been 1 minute since the last reset/);
+  assert.match(oneMinuteReason, /It has only been 1 minute since the last random reset/);
   assert.doesNotMatch(oneMinuteReason, /1 minute have passed/);
 
   const thirtyMinuteReason = reasonFor({
     locale: "en",
     now: new Date("2026-08-04T00:00:00.000Z"),
+    formalTiboResets: randomResetEvents,
     regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(thirtyMinuteReason, /It has only been 30 minutes since the last reset/);
+  assert.match(thirtyMinuteReason, /It has only been 30 minutes since the last random reset/);
 
   const oneHourReason = reasonFor({
     locale: "en",
     now: new Date("2026-08-04T00:30:00.000Z"),
+    formalTiboResets: randomResetEvents,
     regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(oneHourReason, /It has only been 1 hour since the last reset/);
+  assert.match(oneHourReason, /It has only been 1 hour since the last random reset/);
   assert.doesNotMatch(oneHourReason, /1 hour have passed/);
 });
 
@@ -351,7 +374,7 @@ test("uses the displayed elapsed duration for high and compound-duration explana
       probability48h: 0.7,
       regularResetEvents: [regularResetAt("2026-08-02T00:00:00.000Z")],
     }) ?? "",
-    /前回のリセットから2日が経過し、.*見込みは高めです。$/,
+    /前回のランダムリセットから2日20時間が経過し、.*見込みは高めです。$/,
   );
   assert.match(
     reasonFor({
@@ -359,7 +382,7 @@ test("uses the displayed elapsed duration for high and compound-duration explana
       probability48h: 0.4,
       regularResetEvents: [regularResetAt("2026-08-02T21:00:00.000Z")],
     }) ?? "",
-    /前回のリセットから1日3時間/,
+    /前回のランダムリセットから2日20時間/,
   );
 });
 
