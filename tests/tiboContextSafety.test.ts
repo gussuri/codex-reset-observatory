@@ -80,3 +80,116 @@ test("an irrelevant result with an AI weak strength is also suppressed", () => {
     "none",
   );
 });
+
+test("physical-item showcase language is suppressed without reset context", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "It has not been used yet, but would you look at that. Codex for scale.",
+    selectedSignalType: "teaser",
+    aiTeaserStrength: "strong",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "none");
+});
+
+test("physical-item showcase remains positive with explicit reset context", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "It has not been used yet, but would you look at that. Codex for scale.",
+      replyContextText: "Here is your new reset button",
+      selectedSignalType: "teaser",
+      aiTeaserStrength: "strong",
+    }),
+    null,
+  );
+});
+
+test("showcase cues do not suppress a direct reset-button acquisition", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "I was gifted a very fancy new reset button today",
+      selectedSignalType: "teaser",
+      aiTeaserStrength: "strong",
+    }),
+    null,
+  );
+});
+
+test("ambiguous future surprise downgrades an official notice to a strong teaser", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "I previously promised a reset for every 1M in additional active users for Codex, until 10M. We blew past that and have been silent since 10M. Little surprise for you tomorrow.",
+    selectedSignalType: "official_notice",
+    aiTeaserStrength: "strong",
+  });
+
+  assert.equal(decision?.signalType, "teaser");
+  assert.equal(decision?.teaserStrength, "strong");
+});
+
+test("explicit future reset notices remain official", () => {
+  for (const authorText of [
+    "I'll do another performative reset on Monday",
+    "Enjoy a nice reset everyone. Landing in the next hour or so",
+  ]) {
+    assert.equal(
+      getTiboContextSafetyDecision({
+        authorText,
+        selectedSignalType: "official_notice",
+        aiTeaserStrength: "strong",
+      }),
+      null,
+      authorText,
+    );
+  }
+});
+
+test("a person-targeted reset is irrelevant even when AI strength is weak", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "I feel Theo is in need of a reset",
+    selectedSignalType: "irrelevant",
+    aiTeaserStrength: "weak",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "none");
+});
+
+test("historical reset-button retrospectives are not active teasers", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "One day we created the reset button and the rest is history.",
+    selectedSignalType: "teaser",
+    aiTeaserStrength: "weak",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "none");
+});
+
+test("historical reset context with an independent future reset intent remains positive", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "One day we created the reset button. Tomorrow I'll use it to reset the limits.",
+      selectedSignalType: "teaser",
+      aiTeaserStrength: "strong",
+    }),
+    null,
+  );
+});
+
+test("isolated showcase phrases do not trigger the physical-item guard", () => {
+  for (const authorText of [
+    "It has not been used yet.",
+    "Would you look at that.",
+    "Codex for scale.",
+  ]) {
+    assert.equal(
+      getTiboContextSafetyDecision({
+        authorText,
+        selectedSignalType: "teaser",
+        aiTeaserStrength: "strong",
+      }),
+      null,
+      authorText,
+    );
+  }
+});

@@ -46,6 +46,60 @@ function buildRequest(overrides: Record<string, unknown> = {}) {
   });
 }
 
+function installGeminiClassificationMock(result: Record<string, unknown>) {
+  const originalHttpsRequest = https.request;
+  https.request = ((...args: any[]) => {
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const request = new EventEmitter() as EventEmitter & {
+      write: (body: string) => boolean;
+      end: () => void;
+    };
+    request.write = () => true;
+    request.end = () => {
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      response.statusCode = 200;
+      callback(response);
+      queueMicrotask(() => {
+        response.emit("data", JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{ text: JSON.stringify(result) }],
+            },
+          }],
+        }));
+        response.emit("end");
+      });
+    };
+    return request;
+  }) as typeof https.request;
+
+  return () => {
+    https.request = originalHttpsRequest;
+  };
+}
+
+function installSupabaseWebhookMock(requestBodies: unknown[]) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    const method = init?.method ?? "GET";
+    if (method === "GET") {
+      return new Response(JSON.stringify({ data: null, error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  return () => {
+    globalThis.fetch = originalFetch;
+  };
+}
+
 test("Tibo state SELECT failure fails closed before upsert or formal adoption", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
@@ -207,6 +261,118 @@ test("context-only item receipt does not persist Gemini teaser as an effective t
   } finally {
     https.request = originalHttpsRequest;
     globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
+test("physical-item showcase is persisted as irrelevant while raw Gemini teaser is retained", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "teaser",
+    confidence: 0.95,
+    temporalDirection: "unclear",
+    evidenceQuote: "Codex for scale",
+    reasonJa: "物品の展示です。",
+    teaserStrength: "strong",
+    teaserStrengthConfidence: 0.95,
+    teaserStrengthEvidenceQuote: "Codex for scale",
+    teaserStrengthReasonJa: "強い匂わせです。",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2090116476414136830",
+      text: "It has not been used yet, but would you look at that. Codex for scale.",
+      tweetUrl: "https://x.com/thsottiaux/status/2090116476414136830",
+      tweetCreatedAt: "2026-08-19T17:52:30.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "irrelevant");
+    assert.equal(upsertBody.teaser_strength, "none");
+    assert.equal(upsertBody.ai_signal_type, "teaser");
+    assert.equal(upsertBody.ai_teaser_strength, "strong");
+    assert.equal(upsertBody.expected_start_at, null);
+    assert.equal(upsertBody.expected_end_at, null);
+    assert.equal(upsertBody.temporal_resolution_status, null);
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "irrelevant");
+    assert.equal(responseBody.teaserStrength, "none");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("ambiguous future surprise is persisted as a teaser without official temporal schedule", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.97,
+    temporalDirection: "future",
+    evidenceQuote: "Little surprise for you tomorrow",
+    reasonJa: "明日の予告です。",
+    teaserStrength: "strong",
+    teaserStrengthConfidence: 0.95,
+    teaserStrengthEvidenceQuote: "surprise",
+    teaserStrengthReasonJa: "強い匂わせです。",
+    temporalExpression: "tomorrow",
+    temporalKind: "relative_day",
+    temporalPrecision: "day",
+    relativeDayOffset: 1,
+    temporalConfidence: 0.95,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2087423996115681767",
+      text: "I previously promised a reset for every 1M in additional active users for Codex, until 10M. We blew past that and have been silent since 10M. Little surprise for you tomorrow.",
+      tweetUrl: "https://x.com/thsottiaux/status/2087423996115681767",
+      tweetCreatedAt: "2026-08-19T00:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "teaser");
+    assert.equal(upsertBody.teaser_strength, "strong");
+    assert.equal(upsertBody.ai_signal_type, "official_notice");
+    assert.equal(upsertBody.ai_teaser_strength, "strong");
+    assert.equal(upsertBody.ai_temporal_expression, "tomorrow");
+    assert.equal(upsertBody.expected_start_at, null);
+    assert.equal(upsertBody.expected_end_at, null);
+    assert.equal(upsertBody.temporal_resolution_status, null);
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "teaser");
+    assert.equal(responseBody.teaserStrength, "strong");
+  } finally {
+    restoreGemini();
+    restoreFetch();
     restoreEnvironment(previous);
   }
 });
