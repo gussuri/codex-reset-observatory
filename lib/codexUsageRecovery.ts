@@ -3,7 +3,7 @@ import { isBearerAuthorizationValid } from "./security/bearerAuth";
 export const CODEX_WEEKLY_WINDOW_MINUTES = 7 * 24 * 60;
 export const MAX_USAGE_COMPARISON_GAP_MS = 10 * 60 * 1000;
 export const RESET_AT_MEANINGFUL_FORWARD_SEC = 60 * 60;
-export const REGULAR_RESET_PROXIMITY_MS = 60 * 60 * 1000;
+export const REGULAR_RESET_PROXIMITY_MS = 5 * 60 * 1000;
 export const UNCONFIRMED_RECOVERY_ACTIVE_MS = 90 * 60 * 1000;
 export const USAGE_TIBO_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const CODEX_USAGE_SOURCE_KEY = "local-codex-app-server";

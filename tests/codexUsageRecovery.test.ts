@@ -279,8 +279,8 @@ test("a less than one point usage change is not recovery", () => {
   assert.equal(result.kind, "no_recovery");
 });
 
-test("a regular-proximate recovery without notice is regular medium", () => {
-  const result = evaluateCodexUsageRecovery(previous({ observedAt: "2026-08-11T00:22:00.000Z", resetsAt: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000) }), snapshot({ observedAt: "2026-08-11T00:30:00.000Z", usedPercent: 0 }), { activeOfficialNotice: false });
+test("a near-regular recovery two minutes after schedule is regular medium", () => {
+  const result = evaluateCodexUsageRecovery(previous({ observedAt: "2026-08-10T23:58:00.000Z", resetsAt: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000) }), snapshot({ observedAt: "2026-08-11T00:02:00.000Z", usedPercent: 0 }), { activeOfficialNotice: false });
   if (result.kind !== "recovery") throw new Error(`expected recovery, got ${result.kind}`);
   assert.equal(result.cycleHint, "regular");
   assert.equal(result.confidence, "medium");
@@ -330,11 +330,32 @@ test("an unexpected recovery without notice is unexpected medium", () => {
   assert.equal(result.confidence, "medium");
 });
 
-test("regular proximity uses the one hour boundary", () => {
-  const currentTime = Date.parse("2026-08-11T01:00:00.000Z");
-  const result = evaluateCodexUsageRecovery(previous({ observedAt: "2026-08-11T00:55:00.000Z", resetsAt: Math.floor(Date.parse("2026-08-11T00:00:00.000Z") / 1000) }), snapshot({ observedAt: new Date(currentTime).toISOString(), usedPercent: 0 }), { activeOfficialNotice: false });
-  if (result.kind !== "recovery") throw new Error(`expected recovery, got ${result.kind}`);
-  assert.equal(result.nearRegularSchedule, true);
+test("regular proximity uses an inclusive five-minute boundary", () => {
+  const resetAt = Date.parse("2026-08-11T13:00:00.000Z");
+  const cases = [
+    { label: "minus five minutes", offsetMs: -5 * 60 * 1000, expected: true },
+    { label: "plus five minutes", offsetMs: 5 * 60 * 1000, expected: true },
+    { label: "minus five minutes and one second", offsetMs: -(5 * 60 * 1000 + 1_000), expected: false },
+    { label: "plus five minutes and one second", offsetMs: 5 * 60 * 1000 + 1_000, expected: false },
+  ];
+
+  for (const { label, offsetMs, expected } of cases) {
+    const currentTime = resetAt + offsetMs;
+    const result = evaluateCodexUsageRecovery(
+      previous({
+        observedAt: new Date(currentTime - 2 * 60 * 1000).toISOString(),
+        resetsAt: Math.floor(resetAt / 1000),
+      }),
+      snapshot({
+        observedAt: new Date(currentTime).toISOString(),
+        usedPercent: 0,
+        resetsAt: Math.floor((resetAt + 60 * 60 * 1000) / 1000),
+      }),
+      { activeOfficialNotice: false },
+    );
+    if (result.kind !== "recovery") throw new Error(`${label}: expected recovery, got ${result.kind}`);
+    assert.equal(result.nearRegularSchedule, expected, label);
+  }
 });
 
 test("the first observation never produces a recovery event", () => {
@@ -402,6 +423,6 @@ test("comparison gap constant is ten minutes", () => {
   assert.equal(MAX_USAGE_COMPARISON_GAP_MS, 10 * 60 * 1000);
 });
 
-test("regular proximity constant is one hour", () => {
-  assert.equal(REGULAR_RESET_PROXIMITY_MS, 60 * 60 * 1000);
+test("regular proximity constant is five minutes", () => {
+  assert.equal(REGULAR_RESET_PROXIMITY_MS, 5 * 60 * 1000);
 });
