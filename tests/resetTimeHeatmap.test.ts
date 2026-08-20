@@ -15,6 +15,8 @@ import {
   formatHeatmapWeekdayLabel,
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
+  formatRandomResetIntervalCompactLabel,
+  formatRandomResetIntervalSummary,
   formatRandomResetDuration,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
@@ -272,18 +274,60 @@ test("assigns exact duration boundaries to the required interval bins", () => {
     48,
     71.999,
     72,
+    95.999,
+    96,
     119.999,
     120,
+    143.999,
+    144,
     167.999,
     168,
+    191.999,
+    192,
+    215.999,
+    216,
     239.999,
     240,
   ];
-  const eventTimes = [addHours(INTERVAL_NOW, -2200)];
+  const eventTimes = [addHours(INTERVAL_NOW, -3000)];
   for (const duration of durations) eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
 
   const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
-  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 2, 2, 1]);
+  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]);
+  assert.deepEqual(
+    distribution.bins.map((bin) => [bin.key, bin.minHours, bin.maxHours]),
+    [
+      ["0-12h", 0, 12],
+      ["12-24h", 12, 24],
+      ["24-48h", 24, 48],
+      ["48-72h", 48, 72],
+      ["3-4d", 72, 96],
+      ["4-5d", 96, 120],
+      ["5-6d", 120, 144],
+      ["6-7d", 144, 168],
+      ["7-8d", 168, 192],
+      ["8-9d", 192, 216],
+      ["9-10d", 216, 240],
+      ["10d-plus", 240, null],
+    ],
+  );
+});
+
+test("summarizes the historical seven-day tail without changing interval statistics", () => {
+  const eventTimes = [addHours(INTERVAL_NOW, -1200)];
+  for (const duration of [168, 192, 239.999, 240, 300]) {
+    eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
+  }
+
+  const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
+  assert.equal(distribution.totalCount, 5);
+  assert.equal(distribution.sevenDaysOrMoreCount, 5);
+  assert.equal(distribution.sevenToTenDaysCount, 3);
+  assert.equal(distribution.medianMs, 239.999 * HOUR_MS);
+  assert.equal(distribution.averageMs, (168 + 192 + 239.999 + 240 + 300) * HOUR_MS / 5);
+  assert.equal(formatRandomResetIntervalSummary(distribution, "ja"), "過去の間隔では、7日以上に到達した5件のうち、3件（60%）は10日以内にランダムリセットが発生しています。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。");
+  assert.equal(formatRandomResetIntervalSummary(distribution, "en"), "In the historical intervals, 3 of 5 cases that reached 7 days (60%) saw another random reset within 10 days. This is a conditional summary of past history, not the current public forecast probability.");
+  assert.equal(formatRandomResetIntervalSummary(distribution, "zh"), "在历史间隔中，达到7天的5个案例里，有3个（60%）在10天内发生了下一次随机重置。这是对历史记录的条件汇总，不是当前公开预测概率。");
 });
 
 test("calculates odd and even medians, arithmetic average, minimum, and maximum", () => {
@@ -346,18 +390,35 @@ test("formats random reset interval durations and localized bar labels", () => {
     "12-24h",
     "24-48h",
     "48-72h",
-    "3-5d",
-    "5-7d",
-    "7-10d",
+    "3-4d",
+    "4-5d",
+    "5-6d",
+    "6-7d",
+    "7-8d",
+    "8-9d",
+    "9-10d",
     "10d-plus",
   ] as const;
   assert.deepEqual(
     intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "ja")),
-    ["0–12時間", "12–24時間", "24–48時間", "48–72時間", "3–5日", "5–7日", "7–10日", "10日以上"],
+    ["0–12時間", "12–24時間", "24–48時間", "48–72時間", "3–4日", "4–5日", "5–6日", "6–7日", "7–8日", "8–9日", "9–10日", "10日以上"],
   );
-  assert.equal(formatRandomResetIntervalBinLabel({ key: "3-5d" }, "en"), "3–5d");
+  assert.deepEqual(
+    intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "en")),
+    ["0–12h", "12–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
+  );
+  assert.deepEqual(
+    intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "zh")),
+    ["0–12小时", "12–24小时", "24–48小时", "48–72小时", "3–4天", "4–5天", "5–6天", "6–7天", "7–8天", "8–9天", "9–10天", "10天以上"],
+  );
+  assert.deepEqual(
+    intervalBinKeys.map((key) => formatRandomResetIntervalCompactLabel({ key }, "ja")),
+    ["0–12h", "12–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
+  );
+  assert.equal(formatRandomResetIntervalBinLabel({ key: "3-4d" }, "en"), "3–4d");
+  assert.equal(formatRandomResetIntervalCompactLabel({ key: "7-8d" }, "zh"), "7–8d");
   assert.equal(formatRandomResetIntervalBinLabel({ key: "10d-plus" }, "zh"), "10天以上");
-  assert.equal(formatRandomResetIntervalBarLabel({ key: "3-5d", rawCount: 5 }, "ja"), "3–5日・5件");
+  assert.equal(formatRandomResetIntervalBarLabel({ key: "3-4d", rawCount: 5 }, "ja"), "3–4日・5件");
   assert.equal(formatRandomResetIntervalBarLabel({ key: "10d-plus", rawCount: 2 }, "en"), "10d+, 2 intervals");
   assert.equal(formatRandomResetIntervalBarLabel({ key: "10d-plus", rawCount: 2 }, "zh"), "10天以上，2个间隔");
   assert.equal(formatRandomResetIntervalBarLabel(bin, "ja"), "24–48時間・3件");

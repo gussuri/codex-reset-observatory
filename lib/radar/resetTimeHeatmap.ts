@@ -3,7 +3,7 @@ import { DISPLAY_TIME_ZONE } from "./helpers";
 export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
 export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
 export const RANDOM_RESET_WEEKDAY_BIN_COUNT = 7;
-export const RANDOM_RESET_INTERVAL_BIN_COUNT = 8;
+export const RANDOM_RESET_INTERVAL_BIN_COUNT = 12;
 
 export type RandomResetTimeHeatmapRange = "all" | "lastMonth";
 
@@ -18,9 +18,13 @@ export type RandomResetIntervalBinKey =
   | "12-24h"
   | "24-48h"
   | "48-72h"
-  | "3-5d"
-  | "5-7d"
-  | "7-10d"
+  | "3-4d"
+  | "4-5d"
+  | "5-6d"
+  | "6-7d"
+  | "7-8d"
+  | "8-9d"
+  | "9-10d"
   | "10d-plus";
 
 export type RandomResetIntervalBin = {
@@ -37,6 +41,8 @@ export type RandomResetIntervalDistribution = {
   averageMs: number | null;
   minMs: number | null;
   maxMs: number | null;
+  sevenDaysOrMoreCount: number;
+  sevenToTenDaysCount: number;
 };
 
 export type RandomResetTimeHeatmapBin = {
@@ -260,6 +266,8 @@ export function buildRandomResetIntervalDistribution(
       averageMs: null,
       minMs: null,
       maxMs: null,
+      sevenDaysOrMoreCount: 0,
+      sevenToTenDaysCount: 0,
     };
   }
 
@@ -268,6 +276,11 @@ export function buildRandomResetIntervalDistribution(
     ? durations[middle]
     : (durations[middle - 1] + durations[middle]) / 2;
 
+  const sevenDaysOrMoreCount = durations.filter((durationMs) => durationMs >= 168 * 60 * 60 * 1000).length;
+  const sevenToTenDaysCount = durations.filter(
+    (durationMs) => durationMs >= 168 * 60 * 60 * 1000 && durationMs < 240 * 60 * 60 * 1000,
+  ).length;
+
   return {
     bins,
     totalCount: durations.length,
@@ -275,6 +288,8 @@ export function buildRandomResetIntervalDistribution(
     averageMs: durations.reduce((sum, durationMs) => sum + durationMs, 0) / durations.length,
     minMs: durations[0],
     maxMs: durations[durations.length - 1],
+    sevenDaysOrMoreCount,
+    sevenToTenDaysCount,
   };
 }
 
@@ -288,9 +303,13 @@ export function formatRandomResetIntervalBinLabel(
       "12-24h": "12–24時間",
       "24-48h": "24–48時間",
       "48-72h": "48–72時間",
-      "3-5d": "3–5日",
-      "5-7d": "5–7日",
-      "7-10d": "7–10日",
+      "3-4d": "3–4日",
+      "4-5d": "4–5日",
+      "5-6d": "5–6日",
+      "6-7d": "6–7日",
+      "7-8d": "7–8日",
+      "8-9d": "8–9日",
+      "9-10d": "9–10日",
       "10d-plus": "10日以上",
     },
     en: {
@@ -298,9 +317,13 @@ export function formatRandomResetIntervalBinLabel(
       "12-24h": "12–24h",
       "24-48h": "24–48h",
       "48-72h": "48–72h",
-      "3-5d": "3–5d",
-      "5-7d": "5–7d",
-      "7-10d": "7–10d",
+      "3-4d": "3–4d",
+      "4-5d": "4–5d",
+      "5-6d": "5–6d",
+      "6-7d": "6–7d",
+      "7-8d": "7–8d",
+      "8-9d": "8–9d",
+      "9-10d": "9–10d",
       "10d-plus": "10d+",
     },
     zh: {
@@ -308,14 +331,66 @@ export function formatRandomResetIntervalBinLabel(
       "12-24h": "12–24小时",
       "24-48h": "24–48小时",
       "48-72h": "48–72小时",
-      "3-5d": "3–5天",
-      "5-7d": "5–7天",
-      "7-10d": "7–10天",
+      "3-4d": "3–4天",
+      "4-5d": "4–5天",
+      "5-6d": "5–6天",
+      "6-7d": "6–7天",
+      "7-8d": "7–8天",
+      "8-9d": "8–9天",
+      "9-10d": "9–10天",
       "10d-plus": "10天以上",
     },
   } as const;
 
   return labels[locale][bin.key];
+}
+
+export function formatRandomResetIntervalCompactLabel(
+  bin: Pick<RandomResetIntervalBin, "key">,
+  locale: "ja" | "en" | "zh",
+) {
+  const labels = {
+    "0-12h": "0–12h",
+    "12-24h": "12–24h",
+    "24-48h": "24–48h",
+    "48-72h": "48–72h",
+    "3-4d": "3–4d",
+    "4-5d": "4–5d",
+    "5-6d": "5–6d",
+    "6-7d": "6–7d",
+    "7-8d": "7–8d",
+    "8-9d": "8–9d",
+    "9-10d": "9–10d",
+    "10d-plus": "10d+",
+  } satisfies Record<RandomResetIntervalBinKey, string>;
+
+  return labels[bin.key];
+}
+
+export function formatRandomResetIntervalSummary(
+  distribution: Pick<RandomResetIntervalDistribution, "sevenDaysOrMoreCount" | "sevenToTenDaysCount">,
+  locale: "ja" | "en" | "zh",
+) {
+  const sevenDaysOrMoreCount = distribution.sevenDaysOrMoreCount;
+  const sevenToTenDaysCount = distribution.sevenToTenDaysCount;
+  if (sevenDaysOrMoreCount === 0) {
+    if (locale === "en") {
+      return "No historical intervals reached 7 days. This is a conditional summary of past history, not the current public forecast probability.";
+    }
+    if (locale === "zh") {
+      return "历史间隔中没有达到7天的案例。这是对历史记录的条件汇总，不是当前公开预测概率。";
+    }
+    return "過去の間隔では、7日以上に到達したケースはありません。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。";
+  }
+
+  const percentage = Math.round((sevenToTenDaysCount / sevenDaysOrMoreCount) * 100);
+  if (locale === "en") {
+    return `In the historical intervals, ${sevenToTenDaysCount} of ${sevenDaysOrMoreCount} cases that reached 7 days (${percentage}%) saw another random reset within 10 days. This is a conditional summary of past history, not the current public forecast probability.`;
+  }
+  if (locale === "zh") {
+    return `在历史间隔中，达到7天的${sevenDaysOrMoreCount}个案例里，有${sevenToTenDaysCount}个（${percentage}%）在10天内发生了下一次随机重置。这是对历史记录的条件汇总，不是当前公开预测概率。`;
+  }
+  return `過去の間隔では、7日以上に到達した${sevenDaysOrMoreCount}件のうち、${sevenToTenDaysCount}件（${percentage}%）は10日以内にランダムリセットが発生しています。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。`;
 }
 
 export function formatRandomResetIntervalBarLabel(
@@ -350,9 +425,13 @@ function buildRandomResetIntervalBins(): RandomResetIntervalBin[] {
     { key: "12-24h", minHours: 12, maxHours: 24, rawCount: 0 },
     { key: "24-48h", minHours: 24, maxHours: 48, rawCount: 0 },
     { key: "48-72h", minHours: 48, maxHours: 72, rawCount: 0 },
-    { key: "3-5d", minHours: 72, maxHours: 120, rawCount: 0 },
-    { key: "5-7d", minHours: 120, maxHours: 168, rawCount: 0 },
-    { key: "7-10d", minHours: 168, maxHours: 240, rawCount: 0 },
+    { key: "3-4d", minHours: 72, maxHours: 96, rawCount: 0 },
+    { key: "4-5d", minHours: 96, maxHours: 120, rawCount: 0 },
+    { key: "5-6d", minHours: 120, maxHours: 144, rawCount: 0 },
+    { key: "6-7d", minHours: 144, maxHours: 168, rawCount: 0 },
+    { key: "7-8d", minHours: 168, maxHours: 192, rawCount: 0 },
+    { key: "8-9d", minHours: 192, maxHours: 216, rawCount: 0 },
+    { key: "9-10d", minHours: 216, maxHours: 240, rawCount: 0 },
     { key: "10d-plus", minHours: 240, maxHours: null, rawCount: 0 },
   ];
 }
@@ -363,10 +442,14 @@ function getRandomResetIntervalBinIndex(durationMs: number) {
   if (durationHours < 24) return 1;
   if (durationHours < 48) return 2;
   if (durationHours < 72) return 3;
-  if (durationHours < 120) return 4;
-  if (durationHours < 168) return 5;
-  if (durationHours < 240) return 6;
-  return 7;
+  if (durationHours < 96) return 4;
+  if (durationHours < 120) return 5;
+  if (durationHours < 144) return 6;
+  if (durationHours < 168) return 7;
+  if (durationHours < 192) return 8;
+  if (durationHours < 216) return 9;
+  if (durationHours < 240) return 10;
+  return 11;
 }
 
 function toTimestamp(value: Date | number) {
