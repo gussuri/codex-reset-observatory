@@ -123,11 +123,28 @@ When one post mentions multiple reset events, select the primary event by time m
 Reply status alone is never evidence for teaser or official_notice. A short reply without visible context, such as "done", "yes", or "maybe :) ", should usually be irrelevant with low confidence. Use visible parent context only to clarify what the reply means.
 
 Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
+teaserStrength MUST be judged independently from signalType. An "irrelevant" signalType does NOT imply teaserStrength="none".
+A post may be too ambiguous to qualify as a formal teaser signal while still carrying a weak reset hint for UI purposes.
+When signalType is uncertain or irrelevant but the visible text or visible conversational context contains a genuine,
+intentional-looking reset implication, teaserStrength may be "weak". Do not force teaserStrength to "none" merely because
+signalType is "irrelevant".
 - "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset.
   The recent first-person acquisition exception above is also strong.
-- "weak": Tibo explicitly states present-tense, first-person discretion or willingness to perform a reset under conditions, such as sometimes responding to reset requests or occasionally obliging for strong feedback. Do not use weak for abstract signs, historical/general discussion, UI jokes, completed resets, or a reset word alone.
+- "weak": This label is intentionally high-recall. Use it when the post gives even a slight suggestion that Tibo might perform a usage-limit reset, but the indication is too indirect, playful, joking, metaphorical, vague, cryptic, or context-dependent to qualify as strong. A weak teaser does not require explicit future tense, a concrete schedule, a direct statement of intent, or a clear conditional commitment. Very indirect jokes, wordplay, suggestive one-liners, and short replies may be weak when their visible reply context makes a possible usage-limit reset a reasonable interpretation. When choosing between weak and none, prefer weak if there is a genuine reset-related implication that a human reader could reasonably regard as intentional teasing.
+- Do not use weak for mere keyword occurrence, historical memories, ordinary UI/product features, unrelated technical resets, third-party discussion with no implication that Tibo may reset usage limits, or explicit denial/cancellation.
 - "none": no current personal willingness or near-future indication, including completed, historical, negative, UI, general, or unrelated posts.
 If the auxiliary signal cannot be determined, use null rather than guessing "none".
+
+Contrast example for the independent strength label:
+Parent context: "are we going to get a reset when codex crosses 20M users?"
+Tibo reply: "Maybe"
+The reply alone is too ambiguous for a formal teaser and signalType may remain "irrelevant", but this visible
+reset-related parent context makes the reply an intentional-looking weak reset hint. For this exact pattern,
+teaserStrength = "weak". Reply status alone is not enough; the explicit reset-related parent context is required.
+
+Strong contrast: "I was gifted a very fancy new reset button today" remains signalType = "teaser" and
+teaserStrength = "strong". None contrast: "The reset button is my favorite product feature." remains
+signalType = "irrelevant" and teaserStrength = "none".
 
 Also extract the semantic meaning of any forward-looking time expression for an official_notice.
 Do not generate UTC timestamps. Return temporalExpression as an exact contiguous substring of the
