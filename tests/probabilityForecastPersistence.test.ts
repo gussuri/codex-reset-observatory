@@ -13,6 +13,7 @@ import {
   RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
 } from "../data/shadowProbabilityConfig";
 import { buildExperimentalProbabilityForecasts, buildProbabilityDebugInfo } from "../lib/logProbability";
+import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 import { calculateShadowProbability } from "../lib/radar/shadowProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import { getLocalRadarData } from "../lib/radar";
@@ -168,4 +169,20 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     JSON.stringify(toPublicRadarSnapshot(data, "en", { calculationNow: now })),
     /hazard-odds-v3-recency|hazard-odds-v4-logit-calibrated|hazard-regime-random-elapsed|alpha24h|alpha48h|calibrationSampleCount/,
   );
+});
+
+test("the calibrated experimental forecast matches the published 24h and 48h values", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const published = calculatePublishedProbability(data, { now }, { logFallback: false });
+  const forecasts = buildExperimentalProbabilityForecasts(data, {
+    now,
+    calibratedProbability: published.calibrated,
+  });
+  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
+
+  assert.equal(published.adoptedModel, "hazard-odds-v4-logit-calibrated-prequential-v2");
+  assert.equal(calibrated.probability24h, published.probability24h);
+  assert.equal(calibrated.probability48h, published.probability48h);
+  assert.equal(calibrated.fallbackUsed, published.calibrated?.fallbackUsed);
 });

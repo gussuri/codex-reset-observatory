@@ -5,7 +5,6 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   ELAPSED_ONLY_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -832,7 +831,7 @@ export function evaluateRegimeElapsedProbability(sourceData: RadarData, asOf: Da
       },
     },
     regularPhaseDiagnostics: {
-      modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+      modelVersion: ELAPSED_ONLY_MODEL_VERSION,
       horizon: "24h",
       phases: buildRegularPhaseDiagnostics(elapsedRows, boundaries),
       note: "Origins whose horizon crosses a regular recovery boundary without a random event are censored and excluded from scored metrics.",
@@ -843,7 +842,7 @@ export function evaluateRegimeElapsedProbability(sourceData: RadarData, asOf: Da
       "A horizon with a regular recovery boundary and no random event is censored rather than scored as a simple negative.",
       "The 24-hour and 48-hour non-overlapping subsets are lower-sample references; overlapping 6-hour origins are dependent.",
       "The selected configuration is chosen from past-origin scores only; no future label is used at the origin where a choice is made.",
-      `The public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; ${REGIME_ELAPSED_FULL_MODEL_VERSION} remains the full-regime shadow and ${RECENCY_H30_PROBABILITY_MODEL_VERSION} remains the comparison and fallback model.`,
+      `This historical evaluation reports ${ELAPSED_ONLY_MODEL_VERSION}; the calibrated public model is evaluated through the prospective prediction_history path. ${REGIME_ELAPSED_FULL_MODEL_VERSION} remains the full-regime shadow and ${RECENCY_H30_PROBABILITY_MODEL_VERSION} remains the comparison and fallback model.`,
       "The published model uses elapsed-only hazard with an effective regime multiplier of 1; full regime diagnostics remain shadow-only.",
       `The current model uses bin scheme ${selectedConfig.binScheme}, prior exposure ${selectedConfig.priorExposureDays} days, regime half-life ${selectedConfig.regimeHalfLifeDays} days, and ratio exponent ${selectedConfig.regimeRatioExponent}.`,
       "No fixed 14%/27% display cap is included in these predictions.",
@@ -949,7 +948,7 @@ function writeMarkdown(evaluationReport: ReturnType<typeof evaluateRegimeElapsed
   const lines = [
     "# Reset Regime × Elapsed Probability Evaluation",
     "",
-    `- model: ${PUBLISHED_PROBABILITY_MODEL_VERSION}`,
+    `- model: ${ELAPSED_ONLY_MODEL_VERSION}`,
     `- asOf: ${evaluationReport.asOf}`,
     `- input mode: ${evaluationReport.inputMode}`,
     `- source asOf: ${evaluationReport.sourceAsOf}`,

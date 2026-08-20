@@ -1,6 +1,10 @@
 import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_ADOPTION_DATE,
+  PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
@@ -414,7 +418,8 @@ export function evaluatePublishedModelProspectively(
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
-      "The frozen hazard-elapsed-v1 publication parameters and the hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",
+      `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
+      `The calibrated ${CALIBRATED_SHADOW_MODEL_VERSION} public model was manually adopted on ${PUBLISHED_PROBABILITY_ADOPTION_DATE}; the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS} and never auto-publishes a model.`,
     ],
   };
 }

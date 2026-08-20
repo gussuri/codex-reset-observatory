@@ -17,6 +17,11 @@ import {
   getRecent7DayResetCount,
 } from "../lib/radar/probability";
 import type { WindowEventLike } from "../lib/radar/types";
+import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
+} from "../data/shadowProbabilityConfig";
+import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -85,18 +90,23 @@ test("fixed calculation time makes probability and audit output reproducible", (
   );
 });
 
-test("strict history classification preserves the fixed public regime-elapsed probability", () => {
+test("strict history classification uses the adopted calibrated public probability", () => {
   const now = new Date("2026-08-04T03:32:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
   const viewModel = getRadarViewModel(
-    getLocalRadarData({ calculationNow: now }),
+    data,
     "ja",
     false,
     undefined,
     now,
   );
+  const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(viewModel.probability24h, 0.23333032746195995);
-  assert.equal(viewModel.probability48h, 0.43332416976375354);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(published.source, "calibrated");
+  assert.equal(viewModel.probability24h, published.probability24h);
+  assert.equal(viewModel.probability48h, published.probability48h);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

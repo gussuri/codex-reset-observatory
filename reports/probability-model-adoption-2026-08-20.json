@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "probability-model-adoption-v1",
+  "adoptionDate": "2026-08-20",
+  "adoptionMode": "manual",
+  "adoptedPublicModel": "hazard-odds-v4-logit-calibrated-prequential-v2",
+  "previousPublicModel": "hazard-elapsed-v1",
+  "stableFallbackModel": "hazard-elapsed-v1",
+  "retainedFullShadowModel": "hazard-regime-elapsed-v1",
+  "prospectiveGateStatus": "not_met",
+  "automaticPublication": false,
+  "historicalPredictionRowsRelabeled": false,
+  "backfill": false,
+  "prospectiveSource": "prediction_history.debug_info.experimentalProbabilityForecasts",
+  "publicProbabilityHorizonSource": {
+    "probability24h": "calibrated",
+    "probability48h": "calibrated",
+    "probability12h": "derived_from_calibrated_24h",
+    "probability72h": "derived_from_calibrated_48h"
+  },
+  "officialNoticeOverride": {
+    "probability24h": 0.9,
+    "probability48h": 0.96,
+    "changed": false
+  }
+}

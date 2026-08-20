@@ -118,7 +118,7 @@ test("random shadow resets its clock after a random event", () => {
   assert.ok(result.randomElapsed.recoveryElapsedHours < 2);
 });
 
-test("random shadow preserves the public model output and target separation", () => {
+test("random shadow preserves target separation from the adopted calibrated public model", () => {
   const now = new Date("2026-08-06T01:00:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });
   const before = calculateRegimeElapsedProbability(data, {
@@ -142,9 +142,10 @@ test("random shadow preserves the public model output and target separation", ()
   assert.match(random.targetDefinition, /random reset.*regular resets remain recovery boundaries/i);
   assert.ok(before.predictions.probability24h >= 0);
   assert.ok(before.predictions.probability48h >= before.predictions.probability24h);
-  assert.equal(published.adoptedModel, "hazard-elapsed-v1");
-  assert.equal(published.probability12h, publicClock.predictions.probability12h);
-  assert.equal(published.probability24h, publicClock.predictions.probability24h);
-  assert.equal(published.probability48h, publicClock.predictions.probability48h);
-  assert.equal(published.probability72h, publicClock.predictions.probability72h);
+  assert.equal(published.adoptedModel, "hazard-odds-v4-logit-calibrated-prequential-v2");
+  assert.equal(published.source, "calibrated");
+  assert.equal(published.probability24h, published.calibrated?.probability24h);
+  assert.equal(published.probability48h, published.calibrated?.probability48h);
+  assert.notEqual(published.probability24h, publicClock.predictions.probability24h);
+  assert.notEqual(published.probability48h, publicClock.predictions.probability48h);
 });

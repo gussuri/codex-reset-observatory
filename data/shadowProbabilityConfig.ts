@@ -1,12 +1,23 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
 export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
+export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
+  "hazard-odds-v4-logit-calibrated-prequential-v1";
+export const CALIBRATED_SHADOW_MODEL_VERSION =
+  "hazard-odds-v4-logit-calibrated-prequential-v2";
+export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
+  CALIBRATED_SHADOW_MODEL_VERSION_V1,
+] as const;
 // Freeze the shared elapsed-hazard parameters for the public elapsed-only model
 // and the full-regime shadow until their prospective samples are sufficient.
 // A single reset, miss, or new observation must not trigger retuning.
 export const REGIME_ELAPSED_FULL_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const ELAPSED_ONLY_MODEL_VERSION = "hazard-elapsed-v1";
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
+export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
+export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-20";
+export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.
 export const RANDOM_ELAPSED_SHADOW_MODEL_VERSION = "hazard-regime-random-elapsed-v1";
@@ -70,13 +81,6 @@ export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
 export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;
 export const REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES = [3, 5, 7, 10, 14] as const;
 export const REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES = [0.25, 0.5, 0.75, 1] as const;
-export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
-  "hazard-odds-v4-logit-calibrated-prequential-v1";
-export const CALIBRATED_SHADOW_MODEL_VERSION =
-  "hazard-odds-v4-logit-calibrated-prequential-v2";
-export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
-  CALIBRATED_SHADOW_MODEL_VERSION_V1,
-] as const;
 export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION =
   "status-conservative-v2";
 export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS =

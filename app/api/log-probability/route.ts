@@ -78,6 +78,7 @@ async function handleLogRequest(request: NextRequest) {
       signalEvaluation,
       activeOfficialNotice,
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+      calibratedProbability: publishedProbability.calibrated,
     });
 
     // 3. パラメータや各種フラグの抽出
@@ -136,7 +137,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.shadow, publishedProbability, experimentalProbabilityForecasts),
+          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.rawShadow ?? publishedProbability.shadow, publishedProbability, experimentalProbabilityForecasts),
         },
         {
           onConflict: "logged_hour",

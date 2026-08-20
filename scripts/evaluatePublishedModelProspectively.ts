@@ -8,6 +8,8 @@ import {
 } from "../lib/radar/shadowProbability";
 import {
   evaluatePublishedModelProspectively,
+  PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+  PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
@@ -123,7 +125,7 @@ async function main() {
       ? history.reason
       : history.reason?.includes("query")
         ? history.reason
-        : "No prediction_history rows contain both the published hazard-elapsed-v1 and h30-r3 forecasts yet."
+        : `No prediction_history rows contain both the published ${PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION} and ${PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION} forecasts yet.`
     : null;
   const report = availabilityReason
     ? {

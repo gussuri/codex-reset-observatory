@@ -1356,8 +1356,14 @@ export function getLocalProbabilityReason(
 }
 
 type DisplayProbabilityModelContext = {
-  source: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback";
+  source:
+    | "calibrated"
+    | "shadow"
+    | "stable-shadow-fallback"
+    | "legacy-shadow-fallback"
+    | "heuristic-fallback";
   shadow?: unknown;
+  stableShadow?: unknown;
 };
 
 type DisplayHazardBin = {
@@ -1420,9 +1426,13 @@ function readDisplayHazardBins(value: unknown): DisplayHazardBin[] {
 function getPublishedElapsedDiagnostics(
   publishedCalculation?: DisplayProbabilityModelContext,
 ): DisplayElapsedDiagnostics | null {
-  if (publishedCalculation?.source !== "shadow") return null;
+  if (
+    publishedCalculation?.source !== "calibrated" &&
+    publishedCalculation?.source !== "shadow" &&
+    publishedCalculation?.source !== "stable-shadow-fallback"
+  ) return null;
 
-  const shadow = asRecord(publishedCalculation.shadow);
+  const shadow = asRecord(publishedCalculation.stableShadow ?? publishedCalculation.shadow);
   const regimeElapsed = asRecord(shadow?.regimeElapsed);
   if (regimeElapsed?.mode !== "elapsed-only") return null;
 

@@ -1,4 +1,7 @@
 import {
+  PUBLISHED_PROBABILITY_ADOPTION_DATE,
+  PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
+  PUBLISHED_PROBABILITY_ADOPTION_MODE,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   RECENCY_SHADOW_MODEL_CONFIG,
@@ -290,9 +293,10 @@ export function buildExperimentalProbabilityForecasts(
   data: Parameters<typeof calculateShadowProbability>[0],
   options: ShadowProbabilityOptions & {
     shadowProbability?: ShadowProbabilityResult | null;
+    calibratedProbability?: CalibratedShadowProbabilityResult | null;
   } = {},
 ): ExperimentalProbabilityForecasts {
-  const { shadowProbability, ...calculationOptions } = options;
+  const { shadowProbability, calibratedProbability, ...calculationOptions } = options;
   const v2 = shadowProbability ?? calculateShadowProbability(data, calculationOptions);
   const elapsedOnly = calculateRegimeElapsedProbability(
     data,
@@ -307,7 +311,7 @@ export function buildExperimentalProbabilityForecasts(
   const randomElapsed = calculateRandomElapsedProbability(data, calculationOptions);
   const randomContinuous = calculateRandomContinuousProbability(data, calculationOptions);
   const recencyResults = calculateAllRecencyWeightedShadowProbabilities(data, calculationOptions);
-  const calibrated = calculateCalibratedShadowProbability(data, {
+  const calibrated = calibratedProbability ?? calculateCalibratedShadowProbability(data, {
     ...calculationOptions,
     shadowProbability: v2,
   });
@@ -338,6 +342,7 @@ export function buildProbabilityDebugInfo(
   experimentalProbabilityForecasts?: ExperimentalProbabilityForecasts,
 ) {
   const calculatedAtIso = calculatedAt.toISOString();
+  const rawShadow = publishedProbability?.rawShadow ?? publishedProbability?.shadow ?? null;
 
   return {
     ...base,
@@ -363,9 +368,20 @@ export function buildProbabilityDebugInfo(
             probability48h: publishedProbability.probability48h,
             probability72h: publishedProbability.probability72h,
             fallbackReason: publishedProbability.fallbackReason,
-            confidence: publishedProbability.shadow?.confidence.level ?? null,
-            completedIntervalCount: publishedProbability.shadow?.confidence.completedIntervalCount ?? null,
-            totalExposureDays: publishedProbability.shadow?.confidence.totalExposureDays ?? null,
+            confidence: rawShadow?.confidence.level ?? null,
+            completedIntervalCount: rawShadow?.confidence.completedIntervalCount ?? null,
+            totalExposureDays: rawShadow?.confidence.totalExposureDays ?? null,
+            adoptionMode: PUBLISHED_PROBABILITY_ADOPTION_MODE,
+            adoptionDate: PUBLISHED_PROBABILITY_ADOPTION_DATE,
+            adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
+            rawModelVersion: rawShadow?.modelVersion ?? null,
+            calibratedFallbackUsed: publishedProbability.calibrated?.fallbackUsed ?? null,
+            calibrationAlpha24h: publishedProbability.calibrated?.alpha24h ?? null,
+            calibrationAlpha48h: publishedProbability.calibrated?.alpha48h ?? null,
+            calibrationSampleCount24h: publishedProbability.calibrated?.calibrationSampleCount24h ?? null,
+            calibrationSampleCount48h: publishedProbability.calibrated?.calibrationSampleCount48h ?? null,
+            positiveCalibrationCount24h: publishedProbability.calibrated?.positiveCalibrationCount24h ?? null,
+            positiveCalibrationCount48h: publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
           },
         }
       : {}),

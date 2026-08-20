@@ -62,7 +62,10 @@ export type CalibratedShadowCalculationOptions = ShadowProbabilityOptions & {
   shadowProbability?: ShadowProbabilityResult | null;
 };
 
-const CALIBRATION_CACHE_TTL_MS = 5 * 60 * 1000;
+// Keep the fitted audit for at least one public ten-minute calculation bucket.
+// The fit inputs and point-in-time sample selection remain unchanged; this only
+// prevents the same public bucket from repeating the walk-forward fit.
+const CALIBRATION_CACHE_TTL_MS = 10 * 60 * 1000;
 const CALIBRATION_CACHE_MAX_ENTRIES = 4;
 const calibrationCache = new Map<string, {
   expiresAt: number;

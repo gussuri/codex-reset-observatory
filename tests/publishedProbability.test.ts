@@ -13,6 +13,7 @@ import {
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
 import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
@@ -24,7 +25,6 @@ import {
 import {
   calculateShadowProbability,
   getShadowCompletedResetEvents,
-  probabilityToOdds,
 } from "../lib/radar/shadowProbability";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
@@ -56,7 +56,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
     published.primary,
     data.checked_at,
     NOW,
-    published.shadow,
+    published.rawShadow ?? published.shadow,
     published,
   );
   const publishedDebug = debugInfo.publishedProbabilityModel as {
@@ -68,10 +68,11 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
     probability72h: number;
   };
 
-  assert.equal(published.source, "shadow");
-  assert.ok(published.shadow);
+  assert.equal(published.source, "calibrated");
+  assert.ok(published.calibrated);
+  assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, "hazard-elapsed-v1");
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -88,14 +89,14 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
     now: roundPublicProbabilityTime(NOW),
     regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
   }, PUBLISHED_ELAPSED_MODEL_OPTIONS);
-  assert.deepEqual(published.shadow?.predictions, elapsedOnly.predictions);
-  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.priorExposureDays, 2);
-  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.mode, "elapsed-only");
-  assert.equal((published.shadow as typeof elapsedOnly).regimeElapsed.effectiveRegimeMultiplier, 1);
-  assert.equal(
-    (published.shadow as typeof elapsedOnly).regimeElapsed.regime.priorExposureDays,
-    2,
-  );
+  assert.deepEqual(published.calibrated && {
+    probability24h: published.calibrated.probability24h,
+    probability48h: published.calibrated.probability48h,
+  }, {
+    probability24h: published.probability24h,
+    probability48h: published.probability48h,
+  });
+  assert.equal(published.calibrated?.rawModelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(elapsedOnly.regimeElapsed.regime.priorExposureDays, 2);
   const regimeElapsed = calculateRegimeElapsedProbability(data, {
     now: roundPublicProbabilityTime(NOW),
@@ -104,7 +105,8 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(regimeElapsed.modelVersion, "hazard-regime-elapsed-v1");
   assert.equal(regimeElapsed.regimeElapsed.mode, "full");
   assert.notDeepEqual(regimeElapsed.predictions, elapsedOnly.predictions);
-  assert.equal(published.probability72h, published.shadow?.predictions.probability72h);
+  assert.equal(published.probability12h, 1 - Math.pow(1 - published.probability24h, 12 / 24));
+  assert.equal(published.probability72h, 1 - Math.pow(1 - published.probability48h, 72 / 48));
   const recency = calculateRecencyWeightedShadowProbability(
     data,
     PUBLISHED_RECENCY_HALF_LIFE_DAYS,
@@ -113,7 +115,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
       regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
     },
   );
-  assert.notEqual(published.shadow?.modelVersion, recency.modelVersion);
+  assert.notEqual(published.rawShadow?.modelVersion, recency.modelVersion);
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
   assert.equal(viewModel.probability12h, published.probability12h);
@@ -124,7 +126,10 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
   assert.equal(snapshot.viewModel.probability72h, published.probability72h);
   assert.equal(publishedDebug.version, PUBLISHED_PROBABILITY_MODEL_VERSION);
-  assert.equal(publishedDebug.source, "shadow");
+  assert.equal(publishedDebug.source, "calibrated");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionMode: string }).adoptionMode, "manual");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionGateStatus: string }).adoptionGateStatus, "not_met");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string }).adoptionDate, "2026-08-20");
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
@@ -150,7 +155,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.probability48h <= published.probability72h);
  });
 
-test("public regime-elapsed calculations are stable within a ten-minute display interval", () => {
+test("calibrated public calculations are stable within a ten-minute display interval", () => {
   const first = calculatePublishedProbability(getLocalRadarData({ calculationNow: NOW }), {
     now: new Date("2026-08-04T00:01:00.000Z"),
     activeOfficialNotice: null,
@@ -164,10 +169,12 @@ test("public regime-elapsed calculations are stable within a ten-minute display 
     activeOfficialNotice: null,
   });
 
-  assert.equal(first.shadow?.calculatedAt, "2026-08-04T00:00:00.000Z");
-  assert.equal(sameInterval.shadow?.calculatedAt, first.shadow?.calculatedAt);
+  assert.equal(first.calibrated?.calculatedAt, "2026-08-04T00:00:00.000Z");
+  assert.equal(sameInterval.calibrated?.calculatedAt, first.calibrated?.calculatedAt);
   assert.equal(sameInterval.probability24h, first.probability24h);
-  assert.equal(nextInterval.shadow?.calculatedAt, "2026-08-04T00:10:00.000Z");
+  assert.equal(sameInterval.calibrated?.alpha24h, first.calibrated?.alpha24h);
+  assert.equal(sameInterval.calibrated?.alpha48h, first.calibrated?.alpha48h);
+  assert.equal(nextInterval.calibrated?.calculatedAt, "2026-08-04T00:10:00.000Z");
 });
 
 function dataWithTeaserStrength(
@@ -194,7 +201,7 @@ function dataWithTeaserStrength(
   });
 }
 
-test("published h30 model applies teaser strength as a weak odds multiplier", () => {
+test("calibrated public model does not mix the legacy h30 teaser-strength adjustment", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -208,31 +215,15 @@ test("published h30 model applies teaser strength as a weak odds multiplier", ()
     { now: NOW, activeOfficialNotice: null },
   );
 
-  assert.ok(weak.probability24h > baseline.probability24h);
-  assert.ok(strong.probability24h > weak.probability24h);
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(weak.probability24h) / probabilityToOdds(baseline.probability24h) - 1.15,
-    ) < 1e-9,
-  );
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(weak.probability48h) / probabilityToOdds(baseline.probability48h) - 1.2,
-    ) < 1e-9,
-  );
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(strong.probability24h) / probabilityToOdds(baseline.probability24h) - 1.35,
-    ) < 1e-9,
-  );
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(strong.probability48h) / probabilityToOdds(baseline.probability48h) - 1.5,
-    ) < 1e-9,
-  );
+  assert.equal(weak.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(strong.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(weak.probability24h, baseline.probability24h);
+  assert.equal(weak.probability48h, baseline.probability48h);
+  assert.equal(strong.probability24h, baseline.probability24h);
+  assert.equal(strong.probability48h, baseline.probability48h);
 });
 
-test("teaser strength decays over 48 hours and ignores replies, rejected, and future posts", () => {
+test("calibrated public model ignores legacy teaser-strength-only inputs", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -258,16 +249,9 @@ test("teaser strength decays over 48 hours and ignores replies, rejected, and fu
     { now: NOW, activeOfficialNotice: null },
   );
 
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(halfLife.probability24h) / probabilityToOdds(baseline.probability24h) - 1.075,
-    ) < 1e-9,
-  );
-  assert.ok(
-    Math.abs(
-      probabilityToOdds(halfLife.probability48h) / probabilityToOdds(baseline.probability48h) - 1.1,
-    ) < 1e-9,
-  );
+  assert.equal(halfLife.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(halfLife.probability24h, baseline.probability24h);
+  assert.equal(halfLife.probability48h, baseline.probability48h);
   assert.equal(expiredEffect.probability24h, baseline.probability24h);
   assert.equal(expiredEffect.probability48h, baseline.probability48h);
   assert.equal(excluded.probability24h, baseline.probability24h);
@@ -344,7 +328,7 @@ test("teaser strength is isolated from the unweighted, h14, and h60 comparison m
   }
 });
 
-test("the strongest decayed strength wins without multiplying multiple posts", () => {
+test("calibrated public model does not multiply multiple legacy strength posts", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -373,18 +357,9 @@ test("the strongest decayed strength wins without multiplying multiple posts", (
     ],
   });
   const result = calculatePublishedProbability(data, { now: NOW, activeOfficialNotice: null });
-  const expected24h = 1 + (1.15 - 1) * (47 / 48);
-  const expected48h = 1 + (1.2 - 1) * (47 / 48);
-
-  assert.ok(
-    Math.abs(probabilityToOdds(result.probability24h) / probabilityToOdds(baseline.probability24h) - expected24h) < 1e-9,
-  );
-  assert.ok(
-    Math.abs(probabilityToOdds(result.probability48h) / probabilityToOdds(baseline.probability48h) - expected48h) < 1e-9,
-  );
-  assert.ok(
-    probabilityToOdds(result.probability24h) / probabilityToOdds(baseline.probability24h) < 1.35 * 1.15,
-  );
+  assert.equal(result.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(result.probability24h, baseline.probability24h);
+  assert.equal(result.probability48h, baseline.probability48h);
 });
 
 test("formal teaser owns its existing multiplier instead of double-counting teaser strength", () => {
@@ -460,56 +435,48 @@ test("the published model uses broad random distributions and excludes regular o
   assert.ok(eventIds.has("personal-tibo-7m-users-banked-reset-2026-07-14"));
   assert.ok(!eventIds.has("personal-reset-credit-2026-06-11"));
   assert.ok(!eventIds.has("personal-tibo-500k-compensation-reset-2026-07-13"));
-  assert.equal(published.shadow?.hazard.completedEventCount, events.length);
+  assert.equal(published.rawShadow?.hazard.completedEventCount, events.length);
 });
 
-test("the regime-elapsed public model keeps the fixed-time forecast deterministic", () => {
+test("the calibrated public model keeps the fixed-time forecast deterministic", () => {
   const fixedNow = new Date("2026-08-04T03:32:00.000Z");
   const data = getLocalRadarData({ calculationNow: fixedNow });
   const published = calculatePublishedProbability(data, { now: fixedNow }, { logFallback: false });
   const unweightedBaseline = calculateShadowProbability(data, { now: fixedNow });
 
   assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
-  assert.equal(published.source, "shadow");
+  assert.equal(published.source, "calibrated");
   assert.equal(published.fallbackReason, null);
-  assert.equal(published.probability12h, 0.12039160798947111);
-  assert.equal(published.probability24h, 0.23333032746195995);
-  assert.equal(published.probability48h, 0.43332416976375354);
-  assert.equal(published.probability72h, 0.5961880351614156);
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(published.probability24h, published.calibrated?.probability24h);
+  assert.equal(published.probability48h, published.calibrated?.probability48h);
+  assert.ok(published.probability12h <= published.probability24h);
+  assert.ok(published.probability48h <= published.probability72h);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(unweightedBaseline.predictions.probability24h, 0.26063284833834355);
   assert.equal(unweightedBaseline.predictions.probability48h, 0.44994539803274325);
 });
 
-test("valid Shadow values are adopted at every confidence level", () => {
+test("valid calibrated values are adopted as the published model", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const primary = getLocalProbabilityCalculation(data, { now: NOW });
-  const shadow = calculatePublishedProbability(data, { now: NOW }, { logFallback: false }).shadow;
-  assert.ok(shadow);
+  const calibrated = calculatePublishedProbability(data, { now: NOW }, { logFallback: false }).calibrated;
+  assert.ok(calibrated);
 
-  for (const level of ["low", "medium", "high"] as const) {
-    const selected = selectPublishedProbability(primary, {
-      ...shadow,
-      confidence: {
-        ...shadow.confidence,
-        level,
-      },
-      predictions: {
-        probability12h: 0.09,
-        probability24h: 0.18,
-        probability48h: 0.31,
-        probability72h: 0.45,
-      },
-    });
+  const selected = selectPublishedProbability(primary, {
+    ...calibrated,
+    fallbackUsed: false,
+    probability24h: 0.18,
+    probability48h: 0.31,
+  }, null);
 
-    assert.equal(selected.source, "shadow");
-    assert.equal(selected.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
-    assert.equal(selected.fallbackReason, null);
-    assert.equal(selected.probability24h, 0.18);
-    assert.equal(selected.probability48h, 0.31);
-    assert.equal(selected.probability12h, 0.09);
-    assert.equal(selected.probability72h, 0.45);
-  }
+  assert.equal(selected.source, "calibrated");
+  assert.equal(selected.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(selected.fallbackReason, null);
+  assert.equal(selected.probability24h, 0.18);
+  assert.equal(selected.probability48h, 0.31);
+  assert.equal(selected.probability12h, 1 - Math.pow(1 - 0.18, 12 / 24));
+  assert.equal(selected.probability72h, 1 - Math.pow(1 - 0.31, 72 / 48));
 });
 
 test("valid low-confidence Shadow values do not emit a fallback warning", () => {
@@ -525,7 +492,7 @@ test("valid low-confidence Shadow values do not emit a fallback warning", () => 
       { now: NOW },
     );
 
-    assert.equal(published.source, "shadow");
+    assert.equal(published.source, "calibrated");
     assert.equal(published.fallbackReason, null);
   } finally {
     console.warn = originalWarn;
@@ -552,7 +519,7 @@ test("official notice keeps the existing 90% and 96% override in the public mode
   const published = calculatePublishedProbability(data, { now: NOW });
   const snapshot = toPublicRadarSnapshot(data, "en", { calculationNow: NOW });
 
-  assert.equal(published.source, "shadow");
+  assert.equal(published.source, "calibrated");
   assert.equal(published.probability24h, 0.9);
   assert.equal(published.probability48h, 0.96);
   assert.equal(published.probability12h, 1 - Math.pow(1 - 0.9, 12 / 24));
@@ -564,84 +531,77 @@ test("official notice keeps the existing 90% and 96% override in the public mode
   assert.equal(snapshot.viewModel.probability72h, published.probability72h);
 });
 
-test("invalid Shadow predictions fall back to the old heuristic model", () => {
+test("invalid calibrated predictions use the stable elapsed model before recency and heuristic fallbacks", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const primary = getLocalProbabilityCalculation(data, { now: NOW });
-  const validShadow = calculatePublishedProbability(data, { now: NOW }).shadow;
-  assert.ok(validShadow);
-
-  for (const predictions of [
-    { probability12h: 0.1, probability24h: Number.NaN, probability48h: 0.4, probability72h: 0.5 },
-    { probability12h: 0.1, probability24h: -0.01, probability48h: 0.4, probability72h: 0.5 },
-    { probability12h: 0.1, probability24h: 0.8, probability48h: 1.01, probability72h: 1.01 },
-    { probability12h: 0.7, probability24h: 0.8, probability48h: 0.3, probability72h: 0.5 },
-    { probability12h: 0.3, probability24h: 0.2, probability48h: 0.4, probability72h: 0.5 },
-    { probability12h: 0.1, probability24h: 0.2, probability48h: 0.4, probability72h: Number.NaN },
-    { probability12h: 0.1, probability24h: 0.2, probability48h: 0.6, probability72h: 0.5 },
-  ]) {
-    const selected = selectPublishedProbability(primary, {
-      ...validShadow,
-      predictions,
-    });
-
-    assert.equal(selected.source, "heuristic-fallback");
-    assert.equal(selected.adoptedModel, primary.modelVersion);
-    assert.equal(selected.fallbackReason, "shadow_invalid_prediction");
-    assert.equal(selected.probability24h, primary.probability24h);
-    assert.equal(selected.probability48h, primary.probability48h);
-    assert.equal(selected.probability12h, 1 - Math.pow(1 - primary.probability24h, 12 / 24));
-    assert.equal(selected.probability72h, 1 - Math.pow(1 - primary.probability48h, 72 / 48));
-  }
-
-  const exceptionFallback = selectPublishedProbability(primary, null, "shadow_exception");
-  assert.equal(exceptionFallback.source, "heuristic-fallback");
-  assert.equal(exceptionFallback.fallbackReason, "shadow_exception");
-
-  const lowConfidence = selectPublishedProbability(primary, {
-    ...validShadow,
-    confidence: {
-      ...validShadow.confidence,
-      level: "low",
-    },
-  });
-  assert.equal(lowConfidence.source, "shadow");
-  assert.equal(lowConfidence.fallbackReason, null);
-
-  const mismatchedModel = selectPublishedProbability(primary, {
-    ...validShadow,
-    modelVersion: SHADOW_PROBABILITY_MODEL_VERSION,
-  });
-  assert.equal(mismatchedModel.source, "heuristic-fallback");
-  assert.equal(mismatchedModel.fallbackReason, "shadow_invalid_prediction");
-});
-
-test("an invalid regime-elapsed prediction uses the valid h30 model before heuristic fallback", () => {
-  const data = getLocalRadarData({ calculationNow: NOW });
-  const primary = getLocalProbabilityCalculation(data, { now: NOW });
-  const oldShadow = calculateRecencyWeightedShadowProbability(data, PUBLISHED_RECENCY_HALF_LIFE_DAYS, {
-    now: NOW,
+  const published = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
+  const calibrated = published.calibrated;
+  assert.ok(calibrated);
+  const stableShadow = calculateRegimeElapsedProbability(data, {
+    now: roundPublicProbabilityTime(NOW),
+    activeOfficialNotice: null,
+  }, PUBLISHED_ELAPSED_MODEL_OPTIONS);
+  const legacyShadow = calculateRecencyWeightedShadowProbability(data, PUBLISHED_RECENCY_HALF_LIFE_DAYS, {
+    now: roundPublicProbabilityTime(NOW),
     activeOfficialNotice: null,
   });
-  const invalidNewShadow = {
-    ...oldShadow,
-    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
-    predictions: {
-      ...oldShadow.predictions,
-      probability24h: Number.NaN,
-    },
+
+  const invalidCalibrated = {
+    ...calibrated,
+    probability24h: Number.NaN,
   };
   const selected = selectPublishedProbability(
     primary,
-    invalidNewShadow,
-    "shadow_invalid_prediction",
-    oldShadow,
+    invalidCalibrated,
+    stableShadow,
+    "calibrated_invalid_prediction",
+    legacyShadow,
   );
 
-  assert.equal(selected.source, "legacy-shadow-fallback");
-  assert.equal(selected.adoptedModel, oldShadow.modelVersion);
-  assert.equal(selected.probability24h, oldShadow.predictions.probability24h);
-  assert.equal(selected.probability48h, oldShadow.predictions.probability48h);
-  assert.equal(selected.fallbackReason, "shadow_invalid_prediction");
+  assert.equal(selected.source, "stable-shadow-fallback");
+  assert.equal(selected.adoptedModel, ELAPSED_ONLY_MODEL_VERSION);
+  assert.notEqual(selected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(selected.fallbackReason, "calibrated_invalid_prediction");
+  assert.equal(selected.probability24h, stableShadow.predictions.probability24h);
+
+  const explicitlyFallbackCalibrated = {
+    ...calibrated,
+    fallbackUsed: true,
+  };
+  const explicitFallbackSelected = selectPublishedProbability(
+    primary,
+    explicitlyFallbackCalibrated,
+    stableShadow,
+    "calibrated_fallback",
+    legacyShadow,
+  );
+  assert.equal(explicitFallbackSelected.source, "stable-shadow-fallback");
+  assert.equal(explicitFallbackSelected.fallbackReason, "calibrated_fallback");
+  assert.equal(explicitFallbackSelected.adoptedModel, ELAPSED_ONLY_MODEL_VERSION);
+
+  const invalidStable = {
+    ...stableShadow,
+    predictions: { ...stableShadow.predictions, probability24h: Number.NaN },
+  };
+  const legacySelected = selectPublishedProbability(
+    primary,
+    invalidCalibrated,
+    invalidStable,
+    "calibrated_fallback",
+    legacyShadow,
+  );
+  assert.equal(legacySelected.source, "legacy-shadow-fallback");
+  assert.equal(legacySelected.adoptedModel, legacyShadow.modelVersion);
+
+  const heuristicSelected = selectPublishedProbability(
+    primary,
+    invalidCalibrated,
+    invalidStable,
+    "calibrated_fallback",
+    null,
+  );
+  assert.equal(heuristicSelected.source, "heuristic-fallback");
+  assert.equal(heuristicSelected.adoptedModel, primary.modelVersion);
 });
 
 test("public probability fields stay aligned in Japanese, English, and Chinese", () => {

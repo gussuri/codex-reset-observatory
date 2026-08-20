@@ -7,7 +7,7 @@ import {
 } from "../data/resetHistory";
 import {
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  ELAPSED_ONLY_MODEL_VERSION,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
@@ -438,7 +438,7 @@ export function classifyModelResult(input: {
 
 const MODEL_DEFINITIONS: Array<ProbabilityModelDefinition> = [
   {
-    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    modelVersion: ELAPSED_ONLY_MODEL_VERSION,
     halfLifeDays: null,
     kind: "regime_elapsed",
   },
@@ -657,7 +657,7 @@ function writeMarkdown(report: ProbabilityModelEvaluationReport) {
     `- ${report.notes.join("\n- ")}`,
     "- Daily evaluation origins overlap, so daily metric differences are not independent.",
     "- The non-overlapping 48h section is a lower-sample reference analysis.",
-    `- The public model is ${PUBLISHED_PROBABILITY_MODEL_VERSION}; ${SHADOW_PROBABILITY_MODEL_VERSION} remains the unweighted comparison baseline.`,
+    `- This historical comparison uses ${ELAPSED_ONLY_MODEL_VERSION}; the calibrated public model is evaluated only from prospective prediction_history rows. ${SHADOW_PROBABILITY_MODEL_VERSION} remains the unweighted comparison baseline.`,
     "- Benchmark results do not change API responses, UI, DTOs, Supabase, or stored Shadow forecasts.",
     "- No automatic winner is selected from an inconclusive result.",
   );
@@ -714,7 +714,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     });
   }
 
-  const currentRows = rowsByModel.get(PUBLISHED_PROBABILITY_MODEL_VERSION) ?? [];
+  const currentRows = rowsByModel.get(ELAPSED_ONLY_MODEL_VERSION) ?? [];
   const currentNonOverlappingRows = currentRows.filter((row) => nonOverlappingOriginSet.has(row.recordedAt));
   const current24h = calculateMetric(currentRows, "24h");
   const current48h = calculateMetric(currentRows, "48h");
@@ -725,7 +725,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     const metrics24h = calculateMetric(rows, "24h");
     const metrics48h = calculateMetric(rows, "48h");
     const nonOverlapping48h = calculateMetric(nonOverlappingRows, "48h");
-    if (model.modelVersion === PUBLISHED_PROBABILITY_MODEL_VERSION) {
+    if (model.modelVersion === ELAPSED_ONLY_MODEL_VERSION) {
       return {
         modelVersion: model.modelVersion,
         halfLifeDays: model.halfLifeDays,
@@ -770,7 +770,7 @@ export function evaluateProbabilityModels(asOf: Date = new Date(LOCAL_MODEL_UPDA
     };
   });
 
-  const currentModel = models.find((model) => model.modelVersion === PUBLISHED_PROBABILITY_MODEL_VERSION)!;
+  const currentModel = models.find((model) => model.modelVersion === ELAPSED_ONLY_MODEL_VERSION)!;
   const constantHazardModel = models.find((model) => model.modelVersion === CONSTANT_HAZARD_MODEL_VERSION)!;
   const calibratedV2Model = models.find((model) => model.modelVersion === CALIBRATED_V2_MODEL_VERSION)!;
   const constantDirection = getBrierDirection(constantHazardModel.nonOverlapping48h, currentModel.nonOverlapping48h);

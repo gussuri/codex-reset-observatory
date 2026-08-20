@@ -30,6 +30,7 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
+  ELAPSED_ONLY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
@@ -277,13 +278,14 @@ test("event contribution counts the origins made positive by each event", () => 
   ]);
 });
 
-test("benchmark models remain evaluation-only and the h30 recency model is public", () => {
+test("historical benchmark keeps hazard-elapsed-v1 as its baseline", () => {
   const report: ProbabilityModelEvaluationReport = evaluateProbabilityModels(
     new Date("2026-08-01T03:32:00.000Z"),
   );
   assert.ok(report.models.some((model) => model.modelVersion === CONSTANT_HAZARD_MODEL_VERSION));
   assert.ok(report.models.some((model) => model.modelVersion === CALIBRATED_V2_MODEL_VERSION));
-  assert.equal(report.models[0].modelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(report.models[0].modelVersion, ELAPSED_ONLY_MODEL_VERSION);
+  assert.notEqual(report.models[0].modelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.ok(report.models.some((model) => model.modelVersion === SHADOW_PROBABILITY_MODEL_VERSION));
   assert.equal(report.eventCount, 23);
   assert.match(report.targetDefinition, /Banked Reset distributions/);
