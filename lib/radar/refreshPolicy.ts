@@ -2,8 +2,8 @@ import { getRefreshIntervalMs } from "./helpers";
 import type { PublicRadarSnapshot } from "./types";
 
 export const RADAR_FETCH_TIMEOUT_MS = 15_000;
-export const MAX_VISIBLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-export const ACTIVE_NOTICE_REFRESH_INTERVAL_MS = 60 * 1000;
+export const OFFICIAL_NOTICE_NO_TIME_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+export const STRONG_RECOVERY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 export const REFRESH_EVENT_MIN_INTERVAL_MS = 30 * 1000;
 
 const REFRESH_RETRY_INTERVALS_MS = [
@@ -30,6 +30,20 @@ function getValidTime(value: string | null | undefined) {
   return Number.isFinite(time) ? time : null;
 }
 
+function getOfficialNoticeRefreshIntervalMs(
+  activeWindow: PublicRadarSnapshot["viewModel"]["activeWindow"],
+  nowMs: number,
+) {
+  const expectedTime = getValidTime(activeWindow.expectedAt) ?? getValidTime(activeWindow.expectedEndAt);
+  if (expectedTime === null) return OFFICIAL_NOTICE_NO_TIME_REFRESH_INTERVAL_MS;
+
+  const remainingMs = expectedTime - nowMs;
+  if (remainingMs >= 6 * 60 * 60 * 1000) return 60 * 60 * 1000;
+  if (remainingMs >= 2 * 60 * 60 * 1000) return 30 * 60 * 1000;
+  if (remainingMs >= 30 * 60 * 1000) return 10 * 60 * 1000;
+  return 5 * 60 * 1000;
+}
+
 function getFreshDataRemainingMs(
   data: PublicRadarSnapshot | null | undefined,
   fetchedAt: string | null | undefined,
@@ -49,13 +63,11 @@ function getFreshDataRemainingMs(
     data.viewModel.activeWindow.active && data.viewModel.activeWindow.kind === "official";
   const hasActiveStrongRecovery = data.recoveryObservation?.status === "observed_unconfirmed" &&
     data.recoveryObservation.confidence === "strong";
-  const maxIntervalMs = hasActiveOfficialNotice || hasActiveStrongRecovery
-    ? ACTIVE_NOTICE_REFRESH_INTERVAL_MS
-    : MAX_VISIBLE_REFRESH_INTERVAL_MS;
-  const intervalMs = Math.min(
-    getRefreshIntervalMs(data.viewModel.probability24h),
-    maxIntervalMs,
-  );
+  const intervalMs = hasActiveOfficialNotice
+    ? getOfficialNoticeRefreshIntervalMs(data.viewModel.activeWindow, nowMs)
+    : hasActiveStrongRecovery
+      ? STRONG_RECOVERY_REFRESH_INTERVAL_MS
+      : getRefreshIntervalMs(data.viewModel.probability24h);
   return Math.max(0, intervalMs - elapsedMs);
 }
 
@@ -95,11 +107,12 @@ export function getEventRefreshPlan(
     };
   }
 
-  if (!data || data.dataHealth.stale || data.dataHealth.overall === "degraded") {
+  const remainingMs = getFreshDataRemainingMs(data, fetchedAt, nowMs);
+  if (remainingMs === null || remainingMs === 0) {
     return { action: "fetch", delayMs: 0 };
   }
 
-  return { action: "fetch", delayMs: 0 };
+  return { action: "wait", delayMs: remainingMs };
 }
 
 export function getRefreshRetryDelayMs(failureCount: number) {

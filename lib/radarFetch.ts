@@ -39,7 +39,7 @@ import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
-export const RADAR_CORE_CACHE_TTL_SECONDS = 60;
+export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
 
 export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
   "official_notice",

@@ -5,6 +5,7 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
+  RADAR_CORE_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
 import type { FormalTiboResetSignal, TiboNoticeSignal } from "../lib/radar/tiboHistory";
 
@@ -32,6 +33,10 @@ function noticeSignal(tweetId: string, createdAt: string): TiboNoticeSignal {
     verification_status: "auto_unverified",
   };
 }
+
+test("shared Radar core uses a fifteen-minute normal cache TTL", () => {
+  assert.equal(RADAR_CORE_CACHE_TTL_SECONDS, 15 * 60);
+});
 
 test("active Tibo filters are applied before ordering and limit", () => {
   const calls: string[] = [];
