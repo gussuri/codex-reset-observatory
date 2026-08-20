@@ -102,6 +102,13 @@ An off-schedule recovery is `unexpected`; it is strong only when an active
 official notice corroborates it. Medium observations are stored for audit but do
 not change the public display.
 
+When a measured recovery is near the regular schedule, the webhook stores a
+canonical `regular_completed` history row. Its `scheduled_at` comes from the
+previous snapshot's `resetsAt`, while `completed_at` is the recovery snapshot's
+`observedAt`. This advances the site's regular-reset reference for the next
+cycle; it does not assume that every user's reset occurred at exactly the same
+instant and does not promote the recovery to a Tibo or global random reset.
+
 Strong, non-regular observations without a prior official notice are public only as a provisional derived state for 90 minutes. The UI says that usage recovery was observed on the monitored Codex account and that Tibo confirmation is pending.
 
 When a valid prior `official_notice` exists and a strong, unexpected usage recovery is observed during its active/grace window, it is immediately confirmed as a `confirmed global reset`. The canonical execution time uses the local observation window (`observedAt`, `approximate`). A strong recovery classified as `unknown` is not immediately promoted to a global confirmation.

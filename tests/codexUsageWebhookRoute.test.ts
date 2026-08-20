@@ -217,7 +217,7 @@ test("notice-backed estimate is created for a strong unexpected recovery", () =>
   );
 });
 
-test("local regular recovery remains a personal observation and does not create a global regular event", async () => {
+test("regular recovery records the observation and canonical event without matching or promoting a nearby Tibo reset", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -278,7 +278,12 @@ test("local regular recovery remains a personal observation and does not create 
     assert.equal(observation?.body?.status, "observed");
     assert.equal(observation?.body?.cycle_hint, "regular");
     assert.equal(observation?.body?.confidence, "medium");
-    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
+    const regularCompletion = requests.find((request) => request.url.includes("regular_reset_events") && request.method !== "GET");
+    assert.equal(regularCompletion?.body?.scheduled_at, "2026-08-11T00:00:00.000Z");
+    assert.equal(regularCompletion?.body?.completed_at, "2026-08-11T00:30:00.000Z");
+    assert.notEqual(regularCompletion?.body?.scheduled_at, regularCompletion?.body?.completed_at);
+    assert.equal(requests.filter((request) => request.url.includes("regular_reset_events") && request.method !== "GET").length, 1);
+    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
     assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
   } finally {
     globalThis.fetch = originalFetch;
@@ -286,7 +291,7 @@ test("local regular recovery remains a personal observation and does not create 
   }
 });
 
-test("local regular recovery with an official notice stays personal and does not promote a global reset", async () => {
+test("regular recovery with an official notice records regular history without promoting a global reset", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -356,7 +361,11 @@ test("local regular recovery with an official notice stays personal and does not
     assert.equal(observation?.body?.confidence, "strong");
     assert.equal(observation?.body?.status, "observed");
     assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
-    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
+    const regularCompletion = requests.find((request) => request.url.includes("regular_reset_events") && request.method !== "GET");
+    assert.equal(regularCompletion?.body?.scheduled_at, "2026-08-11T00:00:00.000Z");
+    assert.equal(regularCompletion?.body?.completed_at, "2026-08-11T00:30:00.000Z");
+    assert.notEqual(regularCompletion?.body?.scheduled_at, regularCompletion?.body?.completed_at);
+    assert.equal(requests.filter((request) => request.url.includes("regular_reset_events") && request.method !== "GET").length, 1);
     assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
   } finally {
     globalThis.fetch = originalFetch;
