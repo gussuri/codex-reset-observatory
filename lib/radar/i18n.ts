@@ -269,6 +269,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Since last reset",
     zh: "距上次重置",
   },
+  elapsedSinceRandomResetShort: {
+    ja: "前回のランダムリセットから",
+    en: "Since the last random reset",
+    zh: "距上次随机重置",
+  },
   resetTeaserStatus: {
     ja: "リセット匂わせ投稿",
     en: "Reset teaser",

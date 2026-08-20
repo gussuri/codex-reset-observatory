@@ -614,7 +614,10 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   const probabilityIndex = html.indexOf("24時間以内");
   const noticeIndex = html.indexOf("公式リセット予告");
   const incidentIndex = html.indexOf("Codex関連障害");
-  const elapsedIndex = html.indexOf("前回のリセットから");
+  const elapsedIndex = html.indexOf(
+    "前回のランダムリセットから",
+    html.indexOf("Codex関連障害"),
+  );
   const teaserIndex = html.indexOf("リセット匂わせ投稿");
   const outlookIndex = html.indexOf("現在の見込み");
   const historyIndex = html.indexOf("リセット履歴", outlookIndex);
@@ -626,7 +629,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.ok(outlookIndex >= 0);
   assert.match(html, /公式リセット予告[\s\S]*なし/);
   assert.match(html, /Codex関連障害[\s\S]*なし/);
-  assert.match(html, /前回のリセットから[\s\S]*2日20時間/);
+  assert.match(html, /前回のランダムリセットから[\s\S]*2日20時間/);
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /現在の見込み/);
   assert.doesNotMatch(html, /現在、目立った観測変化はありません。/);
@@ -643,6 +646,83 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.doesNotMatch(html, /非公式の予測です。実際の実施時期は公式情報をご確認ください。/);
   assert.doesNotMatch(html, /今日、全体リセットはありましたか？|次のリセットはいつですか？|予測のしくみを見る →/);
   assert.doesNotMatch(html, /border-amber-300 bg-amber-50/);
+});
+
+test("dashboard elapsed indicator uses the latest random reset across regular boundaries", () => {
+  const calculationNow = new Date("2026-08-10T12:00:00.000Z");
+  const regularAt = "2026-08-08T12:00:00.000Z";
+  const randomAt = "2026-08-01T12:00:00.000Z";
+
+  function renderElapsed(
+    locale: "ja" | "en" | "zh",
+    lastRandomResetAt: string | null,
+    sourceResetAt: string,
+  ) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow },
+    );
+    snapshot.viewModel.regularResetForecast = {
+      ...snapshot.viewModel.regularResetForecast,
+      sourceResetAt,
+    };
+    (snapshot as unknown as { lastRandomResetAt: string | null }).lastRandomResetAt = lastRandomResetAt;
+    return renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: snapshot,
+        locale,
+      }),
+    );
+  }
+
+  const cases = [
+    {
+      name: "random then regular",
+      html: renderElapsed("ja", randomAt, regularAt),
+      label: "前回のランダムリセットから",
+      elapsed: "9日",
+    },
+    {
+      name: "new random reset",
+      html: renderElapsed("ja", "2026-08-10T11:00:00.000Z", regularAt),
+      label: "前回のランダムリセットから",
+      elapsed: "1時間",
+    },
+    {
+      name: "random only despite a newer regular reset",
+      html: renderElapsed("ja", randomAt, regularAt),
+      label: "前回のランダムリセットから",
+      elapsed: "9日",
+    },
+    {
+      name: "random newer than regular",
+      html: renderElapsed("ja", "2026-08-10T10:00:00.000Z", regularAt),
+      label: "前回のランダムリセットから",
+      elapsed: "2時間",
+    },
+    {
+      name: "no random reset",
+      html: renderElapsed("ja", null, regularAt),
+      label: "前回のランダムリセットから",
+      elapsed: "不明",
+    },
+  ];
+
+  for (const item of cases) {
+    const labelIndex = item.html.indexOf(item.label, item.html.indexOf("Codex関連障害"));
+    assert.ok(labelIndex >= 0, item.name);
+    assert.match(item.html.slice(labelIndex, labelIndex + 240), new RegExp(item.elapsed), item.name);
+  }
+
+  const localized = [
+    ["en", "Since the last random reset"],
+    ["zh", "距上次随机重置"],
+  ] as const;
+  for (const [locale, label] of localized) {
+    const html = renderElapsed(locale, randomAt, regularAt);
+    assert.match(html, new RegExp(label), locale);
+  }
 });
 
 test("aligns reset history notice and execution timestamps in a desktop grid", () => {

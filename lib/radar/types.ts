@@ -432,6 +432,7 @@ export type PublicRadarSnapshot = {
   schemaVersion: string;
   checkedAt: string;
   updatedAt: string | null;
+  lastRandomResetAt: string | null;
   dataHealth: PublicDataHealth;
   viewModel: PublicRadarViewModel;
   resetTeaserStatus?: TeaserStrength | "unknown";

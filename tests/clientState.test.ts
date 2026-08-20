@@ -14,6 +14,7 @@ function snapshot(checkedAt: string, overall: "ok" | "degraded" = "ok"): PublicR
     schemaVersion: "public-v1",
     checkedAt,
     updatedAt: null,
+    lastRandomResetAt: null,
     dataHealth: {
       overall,
       stale: false,

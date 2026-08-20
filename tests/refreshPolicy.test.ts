@@ -20,6 +20,7 @@ function snapshot(
     schemaVersion: "public-v1",
     checkedAt,
     updatedAt: null,
+    lastRandomResetAt: null,
     dataHealth: {
       overall: options.overall ?? "ok",
       stale: options.stale ?? false,

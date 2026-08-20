@@ -146,7 +146,7 @@ function getIncidentStatusFromReason(
   return activePhrases.some((phrase) => reason.includes(phrase)) ? "active" : "none";
 }
 
-function getElapsedSinceLastReset(
+function getElapsedSinceLastRandomReset(
   sourceResetAt: string | null | undefined,
   fetchedAt: string | null | undefined,
   locale: Locale,
@@ -521,8 +521,8 @@ export function RadarDashboard({
   ) : null;
   const elapsedSinceLastReset = isDataUnavailable
     ? translateUI("unknownProbability", locale)
-    : getElapsedSinceLastReset(
-        viewModel.regularResetForecast.sourceResetAt,
+    : getElapsedSinceLastRandomReset(
+        state.data?.lastRandomResetAt,
         state.fetchedAt,
         locale,
       );
@@ -750,7 +750,7 @@ export function RadarDashboard({
                 />
                 <ObservationStatusItem
                   icon={Clock3}
-                  label={translateUI("elapsedSinceResetShort", locale)}
+                  label={translateUI("elapsedSinceRandomResetShort", locale)}
                   value={elapsedSinceLastReset}
                 />
               </dl>

@@ -17,10 +17,13 @@ import {
   groupHistoryByMonth,
 } from "../components/LocalizedHistoryEvents";
 import { RadarDashboard } from "../components/RadarDashboard";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
-import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
+import {
+  createObservedRegularResetEventRow,
+  getDueRegularResetEventRows,
+} from "../lib/radar/regularResetSchedule";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -83,6 +86,60 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   });
   assert.equal(staleSnapshot.dataHealth.stale, true);
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
+});
+
+test("public snapshot exposes a random-only last reset timestamp", () => {
+  const calculationNow = new Date("2026-08-10T12:00:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    regularResetEvents: [
+      createObservedRegularResetEventRow("2026-08-08T03:00:00.000Z", "2026-08-08T03:00:00.000Z"),
+    ],
+  });
+  const snapshot = toPublicRadarSnapshot(
+    internal,
+    "ja",
+    { calculationNow },
+  );
+  const publicSnapshot = snapshot as typeof snapshot & { lastRandomResetAt: string | null };
+  const expectedViewModel = getRadarViewModel(internal, "ja", true, undefined, calculationNow);
+
+  assert.equal(publicSnapshot.lastRandomResetAt, "2026-08-01T03:32:00.000Z");
+  assert.equal(snapshot.viewModel.regularResetForecast.sourceResetAt, "2026-08-08T03:00:00.000Z");
+  assert.notEqual(publicSnapshot.lastRandomResetAt, snapshot.viewModel.regularResetForecast.sourceResetAt);
+  assert.deepEqual(
+    {
+      probability12h: snapshot.viewModel.probability12h,
+      probability24h: snapshot.viewModel.probability24h,
+      probability48h: snapshot.viewModel.probability48h,
+      probability72h: snapshot.viewModel.probability72h,
+      displayReasoningSummary: snapshot.viewModel.displayReasoningSummary,
+    },
+    {
+      probability12h: expectedViewModel.probability12h,
+      probability24h: expectedViewModel.probability24h,
+      probability48h: expectedViewModel.probability48h,
+      probability72h: expectedViewModel.probability72h,
+      displayReasoningSummary: expectedViewModel.displayReasoningSummary,
+    },
+  );
+});
+
+test("public snapshot returns null when only a regular boundary is available", () => {
+  const calculationNow = new Date("2026-05-02T12:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      regularResetEvents: [
+        createObservedRegularResetEventRow("2026-04-25T12:00:00.000Z", "2026-04-25T12:00:00.000Z"),
+      ],
+    }),
+    "en",
+    { calculationNow },
+  );
+  const publicSnapshot = snapshot as typeof snapshot & { lastRandomResetAt: string | null };
+
+  assert.equal(publicSnapshot.lastRandomResetAt, null);
 });
 
 test("public Tibo activity exposes the post projection and classification", () => {

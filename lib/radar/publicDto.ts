@@ -341,6 +341,7 @@ export function toPublicRadarSnapshot(
     schemaVersion: "public-v1",
     checkedAt,
     updatedAt: internal.updated_at ?? null,
+    lastRandomResetAt: latestTeaserConsumingResetAt,
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
     resetTeaserStatus: aggregateResetTeaserStatus(
