@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { createObservedRegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
@@ -144,6 +145,30 @@ test("clears pre-reset strengths and keeps post-reset strengths", () => {
 
   assert.equal(toPublicRadarSnapshot(beforeReset, "ja", { calculationNow: NOW }).resetTeaserStatus, "none");
   assert.equal(toPublicRadarSnapshot(afterReset, "ja", { calculationNow: NOW }).resetTeaserStatus, "strong");
+});
+
+test("a later random reset consumes a teaser even after a regular boundary", () => {
+  const regular = createObservedRegularResetEventRow(
+    "2026-08-03T12:00:00.000Z",
+    "2026-08-03T12:00:00.000Z",
+  );
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow: NOW,
+      regularResetEvents: [regular],
+      formalTiboResets: [formalReset("2026-08-03T13:00:00.000Z")],
+      recentTiboSignals: [
+        signal("before-both-resets", "2026-08-03T11:00:00.000Z", "strong", {
+          text: "A reset hint before both boundaries.",
+          tweet_url: "https://x.com/thsottiaux/status/before-both-resets",
+        }),
+      ],
+    }),
+    "ja",
+    { calculationNow: NOW },
+  );
+
+  assert.equal(snapshot.resetTeaserStatus, "none");
 });
 
 test("returns unknown for unclassified posts, none for no posts, and accepts replies", () => {

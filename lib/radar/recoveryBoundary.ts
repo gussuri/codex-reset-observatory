@@ -216,3 +216,13 @@ export function getLastRecoveryResetAt(
 ) {
   return getRecoveryResetEvents(data, now, staticHistory).at(-1)?.resetAt ?? null;
 }
+
+export function getLastRandomRecoveryResetAt(
+  data: RadarData | null,
+  now: Date = new Date(),
+  staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+) {
+  return getRecoveryResetEvents(data, now, staticHistory)
+    .filter((boundary) => boundary.isRandom)
+    .at(-1)?.resetAt ?? null;
+}

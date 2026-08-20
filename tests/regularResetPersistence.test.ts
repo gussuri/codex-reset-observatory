@@ -143,7 +143,7 @@ test("persisted regular reset restarts the elapsed-time boundary without becomin
   assert.equal(viewModel.regularResetForecast.lastCompletedAt, "2026-08-15T03:32:00.000Z");
 });
 
-test("a regular boundary consumes earlier teaser strength but allows a later teaser", () => {
+test("a regular boundary does not consume earlier teaser strength and allows a later teaser", () => {
   const now = new Date("2026-08-15T05:00:00.000Z");
   const row = getDueRegularResetEventRows(now, INITIAL_ANCHOR_AT)[0];
   const baseSignal = {
@@ -164,10 +164,9 @@ test("a regular boundary consumes earlier teaser strength but allows a later tea
     regularResetEvents: [row],
     recentTiboSignals: [baseSignal],
   });
-  assert.equal(
-    toPublicRadarSnapshot(beforeBoundary, "ja", { calculationNow: now }).resetTeaserStatus,
-    "none",
-  );
+  const beforeSnapshot = toPublicRadarSnapshot(beforeBoundary, "ja", { calculationNow: now });
+  assert.equal(beforeSnapshot.resetTeaserStatus, "strong");
+  assert.equal(beforeSnapshot.latestTiboActivity?.text, "A possible reset");
 
   const afterBoundary = getLocalRadarData({
     calculationNow: now,

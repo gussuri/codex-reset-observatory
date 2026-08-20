@@ -1,6 +1,7 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
+import { getLastRandomRecoveryResetAt } from "./recoveryBoundary";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getPublicRecoveryObservation } from "../codexUsageRecovery";
 import {
@@ -125,6 +126,7 @@ export function toPublicTiboActivity(
   now: Date = new Date(),
   locale: Locale = "ja",
   latestResetAt: string | null = getLastResetBoundaryAt(internal, now)?.toISOString() ?? null,
+  latestTeaserConsumingResetAt: string | null = getLastRandomRecoveryResetAt(internal, now),
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
@@ -156,7 +158,7 @@ export function toPublicTiboActivity(
 
   const eligibleTeaserSignals = getUiResetTeaserSignals(
     sourceSignals,
-    latestResetAt,
+    latestTeaserConsumingResetAt,
     now,
   ).filter((signal) => {
     const strength = getEffectiveTeaserStrength(signal);
@@ -330,6 +332,7 @@ export function toPublicRadarSnapshot(
     calculationNow,
   );
   const latestResetAt = getLastResetBoundaryAt(internal, calculationNow)?.toISOString() ?? null;
+  const latestTeaserConsumingResetAt = getLastRandomRecoveryResetAt(internal, calculationNow);
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
   );
@@ -342,7 +345,7 @@ export function toPublicRadarSnapshot(
     viewModel: toPublicViewModel(viewModel),
     resetTeaserStatus: aggregateResetTeaserStatus(
       internal.recent_tibo_signals ?? internal.active_tibo_signals,
-      latestResetAt,
+      latestTeaserConsumingResetAt,
       calculationNow,
     ),
     latestTiboActivity: toPublicTiboActivity(
@@ -350,6 +353,7 @@ export function toPublicRadarSnapshot(
       calculationNow,
       locale,
       latestResetAt,
+      latestTeaserConsumingResetAt,
     ),
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,

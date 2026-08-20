@@ -7,7 +7,10 @@ import {
   createObservedRegularResetEventRow,
   type RegularResetEventRow,
 } from "../lib/radar/regularResetSchedule";
-import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
+import {
+  getLastRandomRecoveryResetAt,
+  getRecoveryResetEvents,
+} from "../lib/radar/recoveryBoundary";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { getLatestRegularScheduleAnchorAt } from "../lib/radar";
 import { getLastResetBoundaryAt } from "../lib/radar/probability";
@@ -108,6 +111,23 @@ test("regular and random resets remain separate across history and recovery boun
   assert.equal(boundaries.length, 2);
   assert.equal(boundaries.filter((boundary) => boundary.isRandom).length, 1);
   assert.equal(boundaries.filter((boundary) => boundary.isRegular).length, 1);
+});
+
+test("random teaser cutoff ignores regular-only boundaries and uses the latest random boundary", () => {
+  const regularOnly = getLastRandomRecoveryResetAt(
+    radarData([regularEvent()], []),
+    NOW,
+    [],
+  );
+  assert.equal(regularOnly, null);
+
+  const random = randomSignal("2026-08-20T03:37:00.000Z", "random-cutoff");
+  const withBoth = getLastRandomRecoveryResetAt(
+    radarData([regularEvent()], [random]),
+    NOW,
+    [],
+  );
+  assert.equal(withBoth, "2026-08-20T03:37:00.000Z");
 });
 
 test("cross-type recovery boundaries never use the time-only five-minute merge", () => {
