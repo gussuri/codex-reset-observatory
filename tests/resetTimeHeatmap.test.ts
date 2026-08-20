@@ -16,8 +16,8 @@ import {
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
   formatRandomResetIntervalCompactLabel,
-  formatRandomResetIntervalSummary,
   formatRandomResetDuration,
+  getCompactHeatmapTimeBins,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   getHeatmapHour,
@@ -73,7 +73,7 @@ test("uses the same random broad reset population as the probability model", () 
   assert.equal(eventTimes.length, 23);
   assert.deepEqual(
     heatmap.bins.map((bin) => bin.rawCount),
-    [1, 6, 4, 2, 3, 0, 6, 1, 0, 0, 0, 0],
+    [1, 0, 2, 4, 1, 3, 0, 2, 0, 3, 0, 0, 4, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
   );
   assert.equal(heatmap.totalCount, 23);
 });
@@ -114,8 +114,8 @@ test("uses the viewer IANA timezone and applies daylight saving time per event",
 
   const tokyo = buildRandomResetTimeHeatmap([instant], "Asia/Tokyo", NOW);
   const losAngeles = buildRandomResetTimeHeatmap([instant], "America/Los_Angeles", NOW);
-  assert.equal(tokyo.bins[4].rawCount, 1);
-  assert.equal(losAngeles.bins[8].rawCount, 1);
+  assert.equal(tokyo.bins[9].rawCount, 1);
+  assert.equal(losAngeles.bins[17].rawCount, 1);
 });
 
 test("groups reset records by the viewer's local weekday", () => {
@@ -151,19 +151,23 @@ test("uses raw record counts for bar heights and keeps empty bins", () => {
 
   assert.equal(bin.rawCount, 3);
   assert.equal(heatmap.totalCount, 3);
-  assert.equal(heatmap.bins.filter((item) => item.rawCount === 0).length, 11);
+  assert.equal(heatmap.bins.filter((item) => item.rawCount === 0).length, 23);
   assert.equal(getRawBarHeightPercent(3, 6), 50);
   assert.equal(getRawBarHeightPercent(6, 6), 100);
   assert.ok(getRawBarHeightPercent(6, 7) < 100);
   assert.equal(getRawBarHeightPercent(0, 6), 0);
   assert.deepEqual(getHeatmapTimeAxisTicks(), [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]);
-  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜02:00・3件");
-  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–02:00, 3 recorded resets");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "ja"), "00:00〜01:00・3件");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "en"), "00:00–01:00, 3 recorded resets");
   assert.equal(
-    formatHeatmapBarLabel({ startHour: 2, endHour: 4, rawCount: 1 }, "en"),
-    "02:00–04:00, 1 recorded reset",
+    formatHeatmapBarLabel({ startHour: 2, endHour: 3, rawCount: 1 }, "en"),
+    "02:00–03:00, 1 recorded reset",
   );
-  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜02:00，3条记录");
+  assert.equal(formatHeatmapBarLabel(heatmap.bins[0], "zh"), "00:00〜01:00，3条记录");
+  assert.deepEqual(
+    getCompactHeatmapTimeBins(heatmap.bins).map((item) => item.rawCount),
+    [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  );
   assert.equal(Object.hasOwn(bin, "weightedCount"), false);
 });
 
@@ -311,23 +315,6 @@ test("assigns exact duration boundaries to the required interval bins", () => {
       ["10d-plus", 240, null],
     ],
   );
-});
-
-test("summarizes the historical seven-day tail without changing interval statistics", () => {
-  const eventTimes = [addHours(INTERVAL_NOW, -1200)];
-  for (const duration of [168, 192, 239.999, 240, 300]) {
-    eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
-  }
-
-  const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
-  assert.equal(distribution.totalCount, 5);
-  assert.equal(distribution.sevenDaysOrMoreCount, 5);
-  assert.equal(distribution.sevenToTenDaysCount, 3);
-  assert.equal(distribution.medianMs, 239.999 * HOUR_MS);
-  assert.equal(distribution.averageMs, (168 + 192 + 239.999 + 240 + 300) * HOUR_MS / 5);
-  assert.equal(formatRandomResetIntervalSummary(distribution, "ja"), "過去の間隔では、7日以上に到達した5件のうち、3件（60%）は10日以内にランダムリセットが発生しています。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。");
-  assert.equal(formatRandomResetIntervalSummary(distribution, "en"), "In the historical intervals, 3 of 5 cases that reached 7 days (60%) saw another random reset within 10 days. This is a conditional summary of past history, not the current public forecast probability.");
-  assert.equal(formatRandomResetIntervalSummary(distribution, "zh"), "在历史间隔中，达到7天的5个案例里，有3个（60%）在10天内发生了下一次随机重置。这是对历史记录的条件汇总，不是当前公开预测概率。");
 });
 
 test("calculates odd and even medians, arithmetic average, minimum, and maximum", () => {

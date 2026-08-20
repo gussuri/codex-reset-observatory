@@ -14,13 +14,16 @@ import {
   formatRandomResetIntervalBinLabel,
   formatRandomResetIntervalCompactLabel,
   formatRandomResetDuration,
-  formatRandomResetIntervalSummary,
+  getCompactHeatmapTimeBins,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   RANDOM_RESET_INTERVAL_BIN_COUNT,
+  RANDOM_RESET_TIME_HEATMAP_BIN_COUNT,
+  RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT,
 } from "@/lib/radar/resetTimeHeatmap";
 import type {
   RandomResetIntervalDistribution,
+  RandomResetTimeHeatmapBin,
   RandomResetTimeHeatmapRange,
 } from "@/lib/radar/resetTimeHeatmap";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
@@ -28,7 +31,7 @@ import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット時刻",
-    description: "過去のランダムリセット時刻を2時間ごとに集計しています。",
+    description: "過去のランダムリセット時刻を、PCでは1時間ごと、モバイルでは2時間ごとに集計しています。",
     timezone: "タイムゾーン",
     timeAxis: "時刻",
     period: "集計期間",
@@ -49,7 +52,7 @@ const CONTENT = {
   },
   en: {
     heading: "Past random reset times",
-    description: "Past random reset times are grouped into two-hour intervals.",
+    description: "Past random reset times are grouped by hour on desktop and by two-hour blocks on mobile.",
     timezone: "Time zone",
     timeAxis: "Time",
     period: "Time range",
@@ -70,7 +73,7 @@ const CONTENT = {
   },
   zh: {
     heading: "过去的随机重置时刻",
-    description: "过去的随机重置时刻按每两小时汇总。",
+    description: "过去的随机重置时间在桌面端按1小时、移动端按2小时进行汇总。",
     timezone: "时区",
     timeAxis: "时间",
     period: "统计期间",
@@ -120,6 +123,7 @@ export function RandomResetTimeHeatmap({
     [eventTimes, range, timeZone],
   );
   const timeHeatmap = heatmap?.time ?? null;
+  const mobileTimeBins = timeHeatmap ? getCompactHeatmapTimeBins(timeHeatmap.bins) : [];
   const weekdayDistribution = heatmap?.weekday ?? null;
   const intervalDistribution = heatmap?.interval ?? null;
   const maxRawCount = timeHeatmap
@@ -129,6 +133,10 @@ export function RandomResetTimeHeatmap({
     ? Math.max(...weekdayDistribution.bins.map((item) => item.rawCount))
     : 0;
   const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
+  const mobileTimeMaxRawCount = mobileTimeBins.length > 0
+    ? Math.max(...mobileTimeBins.map((item) => item.rawCount))
+    : 0;
+  const mobileTimeBarScaleMax = mobileTimeMaxRawCount > 0 ? mobileTimeMaxRawCount + 1 : 0;
   const weekdayBarScaleMax = weekdayMaxRawCount > 0 ? weekdayMaxRawCount + 1 : 0;
   const intervalMaxRawCount = intervalDistribution
     ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
@@ -181,8 +189,19 @@ export function RandomResetTimeHeatmap({
 
       {!heatmap ? (
         <div className="mt-5 space-y-5" role="status" aria-label={content.ariaBusy}>
-          <div className="grid grid-cols-12 gap-1" aria-hidden="true">
-            {Array.from({ length: 12 }, (_, index) => (
+          <div className="grid grid-cols-12 gap-1 md:hidden" aria-hidden="true">
+            {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT }, (_, index) => (
+              <span
+                className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+                key={index}
+              />
+            ))}
+          </div>
+          <div
+            className="hidden gap-1 md:grid md:grid-cols-[repeat(24,minmax(0,1fr))]"
+            aria-hidden="true"
+          >
+            {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT }, (_, index) => (
               <span
                 className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
                 key={index}
@@ -233,47 +252,25 @@ export function RandomResetTimeHeatmap({
       ) : (
         <>
           <div className="mt-5 min-w-0">
-            <div className="grid h-32 grid-cols-12 sm:h-28" role="list" aria-label={content.heading}>
-              {(timeHeatmap?.bins ?? []).map((bin) => {
-                const label = formatHeatmapBarLabel(bin, locale);
-                const barHeight = getRawBarHeightPercent(bin.rawCount, timeBarScaleMax);
-
-                return (
-                  <div className="min-w-0 px-0.5 sm:px-1" key={bin.startHour} role="listitem">
-                    <ResetCountBar
-                      ariaLabel={label}
-                      barHeight={barHeight}
-                      rawCount={bin.rawCount}
-                    />
-                  </div>
-                );
-              })}
+            <div className="hidden md:block">
+              <TimeHeatmapChart
+                ariaLabel={content.heading}
+                barScaleMax={timeBarScaleMax}
+                bins={timeHeatmap?.bins ?? []}
+                gridClassName="grid-cols-[repeat(24,minmax(0,1fr))]"
+                locale={locale}
+                timeAxisTicks={timeAxisTicks}
+              />
             </div>
-            <div aria-hidden="true" className="relative h-7 border-t border-slate-200">
-              {timeAxisTicks.map((hour, index) => {
-                const isFirst = index === 0;
-                const isLast = index === timeAxisTicks.length - 1;
-                const position = isFirst
-                  ? "left-0 items-start"
-                  : isLast
-                    ? "right-0 items-end"
-                    : "-translate-x-1/2 items-center";
-
-                return (
-                  <span
-                    className={`absolute top-0 flex flex-col gap-0.5 text-[0.7rem] font-medium leading-none tabular-nums text-slate-500 sm:text-[0.65rem] ${position}`}
-                    key={hour}
-                    style={
-                      isFirst || isLast
-                        ? undefined
-                        : { left: `${(index / (timeAxisTicks.length - 1)) * 100}%` }
-                    }
-                  >
-                    <span aria-hidden="true" className="h-1.5 border-l border-slate-300" />
-                    <span>{hour}</span>
-                  </span>
-                );
-              })}
+            <div className="md:hidden">
+              <TimeHeatmapChart
+                ariaLabel={content.heading}
+                barScaleMax={mobileTimeBarScaleMax}
+                bins={mobileTimeBins}
+                gridClassName="grid-cols-12"
+                locale={locale}
+                timeAxisTicks={timeAxisTicks}
+              />
             </div>
           </div>
           <p aria-hidden="true" className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
@@ -351,50 +348,98 @@ function RandomResetIntervalSection({
         ))}
       </dl>
       {distribution.totalCount === 0 ? (
-        <>
-          <p className="mt-5 text-sm leading-6 text-slate-600">{content.intervalEmpty}</p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {formatRandomResetIntervalSummary(distribution, locale)}
-          </p>
-        </>
+        <p className="mt-5 text-sm leading-6 text-slate-600">{content.intervalEmpty}</p>
       ) : (
-        <>
-          <div className="mt-5 overflow-x-auto pb-1">
-            <div className="min-w-[36rem] md:min-w-0">
-              <div
-                aria-label={content.intervalHeading}
-                className="grid h-32 grid-cols-12 gap-1 sm:h-28"
-                role="list"
-              >
-                {distribution.bins.map((bin) => (
-                  <div className="min-w-0 px-0.5 sm:px-1" key={bin.key} role="listitem">
-                    <ResetCountBar
-                      ariaLabel={formatRandomResetIntervalBarLabel(bin, locale)}
-                      barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
-                      rawCount={bin.rawCount}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div
-                aria-hidden="true"
-                className="mt-1 grid grid-cols-12 gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
-              >
-                {distribution.bins.map((bin) => (
-                  <span className="min-w-0 break-words" key={bin.key}>
-                    <span className="md:hidden">{formatRandomResetIntervalCompactLabel(bin, locale)}</span>
-                    <span className="hidden md:inline">{formatRandomResetIntervalBinLabel(bin, locale)}</span>
-                  </span>
-                ))}
-              </div>
+        <div className="mt-5 overflow-x-auto pb-1">
+          <div className="min-w-[36rem] md:min-w-0">
+            <div
+              aria-label={content.intervalHeading}
+              className="grid h-32 grid-cols-12 gap-1 sm:h-28"
+              role="list"
+            >
+              {distribution.bins.map((bin) => (
+                <div className="min-w-0 px-0.5 sm:px-1" key={bin.key} role="listitem">
+                  <ResetCountBar
+                    ariaLabel={formatRandomResetIntervalBarLabel(bin, locale)}
+                    barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
+                    rawCount={bin.rawCount}
+                  />
+                </div>
+              ))}
+            </div>
+            <div
+              aria-hidden="true"
+              className="mt-1 grid grid-cols-12 gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
+            >
+              {distribution.bins.map((bin) => (
+                <span className="min-w-0 break-words" key={bin.key}>
+                  <span className="md:hidden">{formatRandomResetIntervalCompactLabel(bin, locale)}</span>
+                  <span className="hidden md:inline">{formatRandomResetIntervalBinLabel(bin, locale)}</span>
+                </span>
+              ))}
             </div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {formatRandomResetIntervalSummary(distribution, locale)}
-          </p>
-        </>
+        </div>
       )}
     </div>
+  );
+}
+
+function TimeHeatmapChart({
+  ariaLabel,
+  barScaleMax,
+  bins,
+  gridClassName,
+  locale,
+  timeAxisTicks,
+}: {
+  ariaLabel: string;
+  barScaleMax: number;
+  bins: RandomResetTimeHeatmapBin[];
+  gridClassName: string;
+  locale: Locale;
+  timeAxisTicks: number[];
+}) {
+  return (
+    <>
+      <div className={`grid h-32 ${gridClassName} sm:h-28`} role="list" aria-label={ariaLabel}>
+        {bins.map((bin) => (
+          <div className="min-w-0 px-0.5 sm:px-1" key={bin.startHour} role="listitem">
+            <ResetCountBar
+              ariaLabel={formatHeatmapBarLabel(bin, locale)}
+              barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
+              rawCount={bin.rawCount}
+            />
+          </div>
+        ))}
+      </div>
+      <div aria-hidden="true" className="relative h-7 border-t border-slate-200">
+        {timeAxisTicks.map((hour, index) => {
+          const isFirst = index === 0;
+          const isLast = index === timeAxisTicks.length - 1;
+          const position = isFirst
+            ? "left-0 items-start"
+            : isLast
+              ? "right-0 items-end"
+              : "-translate-x-1/2 items-center";
+
+          return (
+            <span
+              className={`absolute top-0 flex flex-col gap-0.5 text-[0.7rem] font-medium leading-none tabular-nums text-slate-500 sm:text-[0.65rem] ${position}`}
+              key={hour}
+              style={
+                isFirst || isLast
+                  ? undefined
+                  : { left: `${(index / (timeAxisTicks.length - 1)) * 100}%` }
+              }
+            >
+              <span aria-hidden="true" className="h-1.5 border-l border-slate-300" />
+              <span>{hour}</span>
+            </span>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

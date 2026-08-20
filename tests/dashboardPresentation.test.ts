@@ -351,9 +351,9 @@ test("renders the random reset time heatmap after history with a timezone-free S
     zh: "过去的随机重置时刻",
   } as const;
   const descriptions = {
-    ja: "過去のランダムリセット時刻を2時間ごとに集計しています。",
-    en: "Past random reset times are grouped into two-hour intervals.",
-    zh: "过去的随机重置时刻按每两小时汇总。",
+    ja: "過去のランダムリセット時刻を、PCでは1時間ごと、モバイルでは2時間ごとに集計しています。",
+    en: "Past random reset times are grouped by hour on desktop and by two-hour blocks on mobile.",
+    zh: "过去的随机重置时间在桌面端按1小时、移动端按2小时进行汇总。",
   } as const;
   const weekdayHeadings = {
     ja: "過去のランダムリセット曜日",

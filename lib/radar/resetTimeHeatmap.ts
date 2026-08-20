@@ -1,6 +1,7 @@
 import { DISPLAY_TIME_ZONE } from "./helpers";
 
-export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 12;
+export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 24;
+export const RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT = 12;
 export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
 export const RANDOM_RESET_WEEKDAY_BIN_COUNT = 7;
 export const RANDOM_RESET_INTERVAL_BIN_COUNT = 12;
@@ -41,8 +42,6 @@ export type RandomResetIntervalDistribution = {
   averageMs: number | null;
   minMs: number | null;
   maxMs: number | null;
-  sevenDaysOrMoreCount: number;
-  sevenToTenDaysCount: number;
 };
 
 export type RandomResetTimeHeatmapBin = {
@@ -91,8 +90,8 @@ export function buildRandomResetTimeHeatmap(
 ): RandomResetTimeHeatmap {
   const nowTime = typeof now === "number" ? now : now.getTime();
   const bins = Array.from({ length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT }, (_, index) => ({
-    startHour: index * 2,
-    endHour: (index + 1) * 2,
+    startHour: index,
+    endHour: index + 1,
     rawCount: 0,
   }));
 
@@ -109,12 +108,24 @@ export function buildRandomResetTimeHeatmap(
     const hour = getHeatmapHour(eventTime, timeZone);
     if (hour === null) continue;
 
-    const bin = bins[Math.floor(hour / 2)];
+    const bin = bins[hour];
     bin.rawCount += 1;
     totalCount += 1;
   }
 
   return { bins, totalCount };
+}
+
+export function getCompactHeatmapTimeBins(bins: RandomResetTimeHeatmapBin[]) {
+  return Array.from({ length: RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT }, (_, index) => {
+    const first = bins[index * 2];
+    const second = bins[index * 2 + 1];
+    return {
+      startHour: first?.startHour ?? index * 2,
+      endHour: second?.endHour ?? index * 2 + 2,
+      rawCount: (first?.rawCount ?? 0) + (second?.rawCount ?? 0),
+    };
+  });
 }
 
 export function getHeatmapWeekday(value: string, timeZone: string) {
@@ -266,8 +277,6 @@ export function buildRandomResetIntervalDistribution(
       averageMs: null,
       minMs: null,
       maxMs: null,
-      sevenDaysOrMoreCount: 0,
-      sevenToTenDaysCount: 0,
     };
   }
 
@@ -276,11 +285,6 @@ export function buildRandomResetIntervalDistribution(
     ? durations[middle]
     : (durations[middle - 1] + durations[middle]) / 2;
 
-  const sevenDaysOrMoreCount = durations.filter((durationMs) => durationMs >= 168 * 60 * 60 * 1000).length;
-  const sevenToTenDaysCount = durations.filter(
-    (durationMs) => durationMs >= 168 * 60 * 60 * 1000 && durationMs < 240 * 60 * 60 * 1000,
-  ).length;
-
   return {
     bins,
     totalCount: durations.length,
@@ -288,8 +292,6 @@ export function buildRandomResetIntervalDistribution(
     averageMs: durations.reduce((sum, durationMs) => sum + durationMs, 0) / durations.length,
     minMs: durations[0],
     maxMs: durations[durations.length - 1],
-    sevenDaysOrMoreCount,
-    sevenToTenDaysCount,
   };
 }
 
@@ -365,32 +367,6 @@ export function formatRandomResetIntervalCompactLabel(
   } satisfies Record<RandomResetIntervalBinKey, string>;
 
   return labels[bin.key];
-}
-
-export function formatRandomResetIntervalSummary(
-  distribution: Pick<RandomResetIntervalDistribution, "sevenDaysOrMoreCount" | "sevenToTenDaysCount">,
-  locale: "ja" | "en" | "zh",
-) {
-  const sevenDaysOrMoreCount = distribution.sevenDaysOrMoreCount;
-  const sevenToTenDaysCount = distribution.sevenToTenDaysCount;
-  if (sevenDaysOrMoreCount === 0) {
-    if (locale === "en") {
-      return "No historical intervals reached 7 days. This is a conditional summary of past history, not the current public forecast probability.";
-    }
-    if (locale === "zh") {
-      return "历史间隔中没有达到7天的案例。这是对历史记录的条件汇总，不是当前公开预测概率。";
-    }
-    return "過去の間隔では、7日以上に到達したケースはありません。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。";
-  }
-
-  const percentage = Math.round((sevenToTenDaysCount / sevenDaysOrMoreCount) * 100);
-  if (locale === "en") {
-    return `In the historical intervals, ${sevenToTenDaysCount} of ${sevenDaysOrMoreCount} cases that reached 7 days (${percentage}%) saw another random reset within 10 days. This is a conditional summary of past history, not the current public forecast probability.`;
-  }
-  if (locale === "zh") {
-    return `在历史间隔中，达到7天的${sevenDaysOrMoreCount}个案例里，有${sevenToTenDaysCount}个（${percentage}%）在10天内发生了下一次随机重置。这是对历史记录的条件汇总，不是当前公开预测概率。`;
-  }
-  return `過去の間隔では、7日以上に到達した${sevenDaysOrMoreCount}件のうち、${sevenToTenDaysCount}件（${percentage}%）は10日以内にランダムリセットが発生しています。これは過去履歴の条件付き集計であり、現在の公開予測確率ではありません。`;
 }
 
 export function formatRandomResetIntervalBarLabel(
@@ -471,7 +447,7 @@ export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
 
 export function getHeatmapTimeAxisTicks() {
   return Array.from(
-    { length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT + 1 },
+    { length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT / 2 + 1 },
     (_, index) => index * 2,
   );
 }
