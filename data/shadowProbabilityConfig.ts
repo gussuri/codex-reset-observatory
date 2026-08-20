@@ -17,6 +17,7 @@ export const PUBLISHED_PROBABILITY_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSI
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
 export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-20";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-20T09:28:17.000Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.

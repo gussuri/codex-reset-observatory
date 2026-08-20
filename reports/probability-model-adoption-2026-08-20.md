@@ -2,6 +2,7 @@
 
 - Adoption date: 2026-08-20
 - Adoption mode: manual
+- Adoption boundary: 2026-08-20T09:28:17.000Z
 - Adopted public model: `hazard-odds-v4-logit-calibrated-prequential-v2`
 - Previous public model: `hazard-elapsed-v1`
 - Stable fallback: `hazard-elapsed-v1`

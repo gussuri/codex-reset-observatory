@@ -1,5 +1,6 @@
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -111,6 +112,10 @@ export type PublishedProspectiveEvaluationReport = {
     eligibleForManualReview: boolean;
   };
   notes: string[];
+};
+
+export type PublishedProspectiveEvaluationOptions = {
+  adoptionAt?: string | null;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -314,16 +319,27 @@ export function evaluatePublishedModelProspectively(
   rows: Array<ProspectiveForecastRow>,
   events: Array<ShadowResetEvent>,
   asOf: Date,
+  options: PublishedProspectiveEvaluationOptions = {},
 ): PublishedProspectiveEvaluationReport {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
 
+  const adoptionAt = timestamp(
+    options.adoptionAt === undefined
+      ? PUBLISHED_PROBABILITY_ADOPTION_AT
+      : options.adoptionAt,
+  );
+  const isAfterAdoption = (generatedAt: string) => {
+    const generatedTime = timestamp(generatedAt);
+    return generatedTime !== null && (adoptionAt === null || generatedTime >= adoptionAt!);
+  };
+
   const comparableRows = selectComparablePublishedForecasts(rows).filter((row) => {
     const generatedAt = timestamp(row.generatedAt);
-    return generatedAt !== null && generatedAt <= asOf.getTime();
+    return generatedAt !== null && generatedAt <= asOf.getTime() && isAfterAdoption(row.generatedAt);
   });
   const eligibleRows = rows.filter((row) => {
     const generatedAt = timestamp(row.generatedAt);
-    return generatedAt !== null && generatedAt <= asOf.getTime();
+    return generatedAt !== null && generatedAt <= asOf.getTime() && isAfterAdoption(row.generatedAt);
   });
   const dailyRows = selectDailyFirstPublishedForecasts(comparableRows);
   const active = createModelEvaluation(
@@ -417,6 +433,7 @@ export function evaluatePublishedModelProspectively(
       "Rows before the first comparable forecast are not backfilled and are not relabeled.",
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
+      `Only forecasts generated at or after the manual adoption boundary ${PUBLISHED_PROBABILITY_ADOPTION_AT} are evaluated as public; earlier v2 rows remain experimental and are not relabeled.`,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
       `The calibrated ${CALIBRATED_SHADOW_MODEL_VERSION} public model was manually adopted on ${PUBLISHED_PROBABILITY_ADOPTION_DATE}; the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS} and never auto-publishes a model.`,

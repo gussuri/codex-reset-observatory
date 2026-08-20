@@ -1,6 +1,7 @@
 {
   "schemaVersion": "probability-model-adoption-v1",
   "adoptionDate": "2026-08-20",
+  "adoptionAt": "2026-08-20T09:28:17.000Z",
   "adoptionMode": "manual",
   "adoptedPublicModel": "hazard-odds-v4-logit-calibrated-prequential-v2",
   "previousPublicModel": "hazard-elapsed-v1",

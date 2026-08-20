@@ -41,7 +41,7 @@ function forecastRow(
 }
 
 function emptyReport(rows: ProspectiveForecastRow[] = []) {
-  return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"));
+  return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
 test("only rows containing both published models are comparable and evaluation starts there", () => {
@@ -92,6 +92,7 @@ test("does not score unresolved horizons and treats only supplied random events 
     rows,
     [{ id: "random-reset", resetAt: "2026-08-01T12:00:00.000Z" }],
     new Date("2026-08-02T12:00:00.000Z"),
+    { adoptionAt: null },
   );
 
   assert.equal(report.comparison.resolved24h, 1);
@@ -143,9 +144,23 @@ test("a comparable forecast after asOf is excluded from the prospective start an
     [future],
     [],
     new Date("2026-08-05T00:00:00.000Z"),
+    { adoptionAt: null },
   );
 
   assert.equal(report.evaluationStartAt, null);
   assert.equal(report.comparison.resolved24h, 0);
   assert.equal(report.comparison.resolved48h, 0);
+});
+
+test("pre-adoption experimental v2 rows are not counted as public forecasts", () => {
+  const preAdoption = forecastRow("2026-08-20T09:00:00.000Z");
+  const adopted = forecastRow("2026-08-20T09:30:00.000Z");
+  const report = evaluatePublishedModelProspectively(
+    [preAdoption, adopted],
+    [],
+    new Date("2026-08-21T00:00:00.000Z"),
+  );
+
+  assert.deepEqual(report.forecastCounts, { active: 1, baseline: 1, comparable: 1 });
+  assert.equal(report.evaluationStartAt, adopted.generatedAt);
 });
