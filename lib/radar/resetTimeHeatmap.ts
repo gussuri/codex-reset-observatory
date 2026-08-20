@@ -445,10 +445,10 @@ export function getRawBarHeightPercent(rawCount: number, maxRawCount: number) {
   return Math.min(100, (rawCount / maxRawCount) * 100);
 }
 
-export function getHeatmapTimeAxisTicks() {
+export function getHeatmapTimeAxisTicks(stepHours: 1 | 2 = 2) {
   return Array.from(
-    { length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT / 2 + 1 },
-    (_, index) => index * 2,
+    { length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT / stepHours + 1 },
+    (_, index) => index * stepHours,
   );
 }
 

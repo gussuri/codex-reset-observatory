@@ -142,7 +142,8 @@ export function RandomResetTimeHeatmap({
     ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
     : 0;
   const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount + 1 : 0;
-  const timeAxisTicks = getHeatmapTimeAxisTicks();
+  const desktopTimeAxisTicks = getHeatmapTimeAxisTicks(1);
+  const mobileTimeAxisTicks = getHeatmapTimeAxisTicks(2);
 
   return (
     <section
@@ -259,7 +260,7 @@ export function RandomResetTimeHeatmap({
                 bins={timeHeatmap?.bins ?? []}
                 gridClassName="grid-cols-[repeat(24,minmax(0,1fr))]"
                 locale={locale}
-                timeAxisTicks={timeAxisTicks}
+                timeAxisTicks={desktopTimeAxisTicks}
               />
             </div>
             <div className="md:hidden">
@@ -269,7 +270,7 @@ export function RandomResetTimeHeatmap({
                 bins={mobileTimeBins}
                 gridClassName="grid-cols-12"
                 locale={locale}
-                timeAxisTicks={timeAxisTicks}
+                timeAxisTicks={mobileTimeAxisTicks}
               />
             </div>
           </div>
@@ -354,7 +355,7 @@ function RandomResetIntervalSection({
           <div className="min-w-[36rem] md:min-w-0">
             <div
               aria-label={content.intervalHeading}
-              className="grid h-32 grid-cols-12 gap-1 sm:h-28"
+              className="grid h-40 grid-cols-12 gap-1 sm:h-36"
               role="list"
             >
               {distribution.bins.map((bin) => (
@@ -362,6 +363,7 @@ function RandomResetIntervalSection({
                   <ResetCountBar
                     ariaLabel={formatRandomResetIntervalBarLabel(bin, locale)}
                     barHeight={getRawBarHeightPercent(bin.rawCount, barScaleMax)}
+                    countLabelMode="above"
                     rawCount={bin.rawCount}
                   />
                 </div>
@@ -446,12 +448,39 @@ function TimeHeatmapChart({
 function ResetCountBar({
   ariaLabel,
   barHeight,
+  countLabelMode = "overlay",
   rawCount,
 }: {
   ariaLabel: string;
   barHeight: number;
+  countLabelMode?: "above" | "overlay";
   rawCount: number;
 }) {
+  const bar = (
+    <span
+      aria-hidden="true"
+      className="absolute inset-x-0.5 bottom-0 rounded-t bg-teal-600 sm:inset-x-1"
+      style={{ height: `${barHeight}%` }}
+    />
+  );
+
+  if (countLabelMode === "above") {
+    return (
+      <div
+        aria-label={ariaLabel}
+        className="flex h-full min-w-0 flex-col px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+        role="img"
+        tabIndex={0}
+        title={ariaLabel}
+      >
+        <span aria-hidden="true" className="h-5 shrink-0 text-center text-xs font-semibold tabular-nums text-slate-700 sm:text-[0.65rem]">
+          {rawCount > 0 ? rawCount : null}
+        </span>
+        <div className="relative min-h-0 flex-1">{bar}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       aria-label={ariaLabel}
@@ -469,11 +498,7 @@ function ResetCountBar({
           {rawCount}
         </span>
       ) : null}
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0.5 bottom-0 rounded-t bg-teal-600 sm:inset-x-1"
-        style={{ height: `${barHeight}%` }}
-      />
+      {bar}
     </div>
   );
 }
