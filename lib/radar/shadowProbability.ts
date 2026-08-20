@@ -836,7 +836,12 @@ export function calculateShadowProbability(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
 ) {
-  return calculateShadowProbabilityForModel(data, options);
+  return calculateShadowProbabilityForModel(data, options, {
+    // The canonical random-inclusive model shares the UI's eligible teaser
+    // strength signal. Formal teasers still suppress this auxiliary multiplier
+    // inside getTeaserStrengthMultiplier to prevent double counting.
+    includeTeaserStrengthBoost: true,
+  });
 }
 
 export function getConstantProbabilityBaseline(

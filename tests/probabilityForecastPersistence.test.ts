@@ -186,3 +186,44 @@ test("the calibrated experimental forecast matches the published 24h and 48h val
   assert.equal(calibrated.probability48h, published.probability48h);
   assert.equal(calibrated.fallbackUsed, published.calibrated?.fallbackUsed);
 });
+
+test("the calibrated forecast records the canonical raw teaser multiplier", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    recentTiboSignals: [{
+      tweet_id: "forecast-strength",
+      signal_type: "irrelevant",
+      text: "I might reset later.",
+      tweet_url: "https://x.com/thsottiaux/status/forecast-strength",
+      tweet_created_at: now.toISOString(),
+      verification_status: "auto_unverified",
+      teaser_strength: "strong",
+      is_reply: false,
+    }],
+  });
+  const published = calculatePublishedProbability(data, {
+    now,
+    activeOfficialNotice: null,
+  });
+  const raw = published.rawShadow;
+  assert.ok(raw);
+  const forecasts = buildExperimentalProbabilityForecasts(data, {
+    now,
+    shadowProbability: raw,
+    calibratedProbability: published.calibrated,
+  });
+  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
+
+  assert.ok(calibrated.combinedSignalMultiplier24h > 1);
+  assert.ok(calibrated.combinedSignalMultiplier48h > 1);
+  assert.equal(
+    calibrated.combinedSignalMultiplier24h,
+    raw.multipliers.combinedAfterCap.probability24h,
+  );
+  assert.equal(
+    calibrated.combinedSignalMultiplier48h,
+    raw.multipliers.combinedAfterCap.probability48h,
+  );
+  assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
+});

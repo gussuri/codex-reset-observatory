@@ -24,6 +24,7 @@ import {
 } from "../data/shadowProbabilityConfig";
 import {
   calculateShadowProbability,
+  calculateShadowProbabilityForModel,
   getShadowCompletedResetEvents,
 } from "../lib/radar/shadowProbability";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
@@ -201,7 +202,7 @@ function dataWithTeaserStrength(
   });
 }
 
-test("calibrated public model does not mix the legacy h30 teaser-strength adjustment", () => {
+test("calibrated public model reflects eligible teaser strength with existing decay", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -217,13 +218,23 @@ test("calibrated public model does not mix the legacy h30 teaser-strength adjust
 
   assert.equal(weak.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(strong.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(weak.probability24h, baseline.probability24h);
-  assert.equal(weak.probability48h, baseline.probability48h);
-  assert.equal(strong.probability24h, baseline.probability24h);
-  assert.equal(strong.probability48h, baseline.probability48h);
+  assert.equal(weak.source, "calibrated");
+  assert.equal(strong.source, "calibrated");
+  assert.equal(weak.calibrated?.fallbackUsed, false);
+  assert.equal(strong.calibrated?.fallbackUsed, false);
+  assert.ok(weak.rawShadow);
+  assert.ok(strong.rawShadow);
+  assert.ok(weak.rawShadow.multipliers.combinedAfterCap.probability24h > 1);
+  assert.ok(weak.rawShadow.multipliers.combinedAfterCap.probability48h > 1);
+  assert.ok(strong.rawShadow.multipliers.combinedAfterCap.probability24h > 1);
+  assert.ok(strong.rawShadow.multipliers.combinedAfterCap.probability48h > 1);
+  assert.ok(weak.probability24h > baseline.probability24h);
+  assert.ok(weak.probability48h > baseline.probability48h);
+  assert.ok(strong.probability24h > weak.probability24h);
+  assert.ok(strong.probability48h > weak.probability48h);
 });
 
-test("calibrated public model ignores legacy teaser-strength-only inputs", () => {
+test("calibrated public model applies teaser-strength windows and eligibility", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -250,13 +261,35 @@ test("calibrated public model ignores legacy teaser-strength-only inputs", () =>
   );
 
   assert.equal(halfLife.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(halfLife.probability24h, baseline.probability24h);
-  assert.equal(halfLife.probability48h, baseline.probability48h);
-  assert.equal(expiredEffect.probability24h, baseline.probability24h);
-  assert.equal(expiredEffect.probability48h, baseline.probability48h);
-  assert.equal(excluded.probability24h, baseline.probability24h);
-  assert.equal(rejected.probability24h, baseline.probability24h);
-  assert.equal(future.probability24h, baseline.probability24h);
+  assert.ok(halfLife.rawShadow);
+  assert.ok(halfLife.rawShadow.multipliers.teaserStrength.probability24h > 1);
+  assert.ok(halfLife.rawShadow.multipliers.teaserStrength.probability48h > 1);
+  assert.ok(halfLife.probability24h > baseline.probability24h);
+  assert.ok(halfLife.probability48h > baseline.probability48h);
+  assert.ok(halfLife.probability24h < calculatePublishedProbability(
+    dataWithTeaserStrength("strong", NOW.toISOString()),
+    { now: NOW, activeOfficialNotice: null },
+  ).probability24h);
+  assert.ok(halfLife.probability48h < calculatePublishedProbability(
+    dataWithTeaserStrength("strong", NOW.toISOString()),
+    { now: NOW, activeOfficialNotice: null },
+  ).probability48h);
+  assert.ok(expiredEffect.rawShadow);
+  assert.deepEqual(expiredEffect.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
+  assert.ok(baseline.rawShadow);
+  assert.deepEqual(expiredEffect.rawShadow.predictions, baseline.rawShadow.predictions);
+  // The current raw signal is back at baseline. The calibrated intercept may
+  // still differ because the expired post was available in earlier
+  // point-in-time calibration origins.
+  assert.ok(excluded.rawShadow);
+  assert.deepEqual(excluded.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
+  assert.deepEqual(excluded.rawShadow.predictions, baseline.rawShadow.predictions);
+  assert.ok(rejected.rawShadow);
+  assert.deepEqual(rejected.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
+  assert.deepEqual(rejected.rawShadow.predictions, baseline.rawShadow.predictions);
+  assert.ok(future.rawShadow);
+  assert.deepEqual(future.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
+  assert.deepEqual(future.rawShadow.predictions, baseline.rawShadow.predictions);
 });
 
 test("teaser strength before the latest formal reset has no probability effect", () => {
@@ -304,12 +337,16 @@ test("teaser strength before the latest formal reset has no probability effect",
   assert.equal(oldStrengthPublished.probability48h, basePublished.probability48h);
 });
 
-test("teaser strength is isolated from the unweighted, h14, and h60 comparison models", () => {
+test("teaser strength stays isolated from explicit no-boost, h14, and h60 comparison models", () => {
   const baseline = getLocalRadarData({ calculationNow: NOW });
   const withStrength = dataWithTeaserStrength("strong", NOW.toISOString());
 
-  const unweightedBaseline = calculateShadowProbability(baseline, { now: NOW });
-  const unweightedWithStrength = calculateShadowProbability(withStrength, { now: NOW });
+  const unweightedBaseline = calculateShadowProbabilityForModel(baseline, { now: NOW }, {
+    includeTeaserStrengthBoost: false,
+  });
+  const unweightedWithStrength = calculateShadowProbabilityForModel(withStrength, { now: NOW }, {
+    includeTeaserStrengthBoost: false,
+  });
   assert.deepEqual(unweightedWithStrength.predictions, unweightedBaseline.predictions);
 
   for (const halfLifeDays of [14, 60]) {
@@ -328,7 +365,7 @@ test("teaser strength is isolated from the unweighted, h14, and h60 comparison m
   }
 });
 
-test("calibrated public model does not multiply multiple legacy strength posts", () => {
+test("calibrated public model uses the strongest eligible teaser strength without multiplying posts", () => {
   const baseline = calculatePublishedProbability(
     dataWithTeaserStrength("none", NOW.toISOString()),
     { now: NOW, activeOfficialNotice: null },
@@ -356,10 +393,28 @@ test("calibrated public model does not multiply multiple legacy strength posts",
       },
     ],
   });
+  const weakOnly = calculatePublishedProbability(
+    getLocalRadarData({
+      calculationNow: NOW,
+      recentTiboSignals: [
+        {
+          tweet_id: "new-weak",
+          signal_type: "irrelevant",
+          tweet_created_at: oneHourWeak,
+          verification_status: "auto_unverified",
+          teaser_strength: "weak",
+          is_reply: false,
+        },
+      ],
+    }),
+    { now: NOW, activeOfficialNotice: null },
+  );
   const result = calculatePublishedProbability(data, { now: NOW, activeOfficialNotice: null });
   assert.equal(result.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(result.probability24h, baseline.probability24h);
-  assert.equal(result.probability48h, baseline.probability48h);
+  assert.equal(result.probability24h, weakOnly.probability24h);
+  assert.equal(result.probability48h, weakOnly.probability48h);
+  assert.ok(result.probability24h > baseline.probability24h);
+  assert.ok(result.probability48h > baseline.probability48h);
 });
 
 test("formal teaser owns its existing multiplier instead of double-counting teaser strength", () => {
@@ -391,6 +446,10 @@ test("formal teaser owns its existing multiplier instead of double-counting teas
 
   const formal = calculatePublishedProbability(formalOnly, { now: NOW, activeOfficialNotice: null });
   const combined = calculatePublishedProbability(formalAndStrength, { now: NOW, activeOfficialNotice: null });
+  assert.ok(formal.rawShadow);
+  assert.ok(combined.rawShadow);
+  assert.deepEqual(formal.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
+  assert.deepEqual(combined.rawShadow.multipliers.teaserStrength, { probability24h: 1, probability48h: 1 });
   assert.equal(combined.probability24h, formal.probability24h);
   assert.equal(combined.probability48h, formal.probability48h);
 });
