@@ -1,6 +1,6 @@
 # 公開モデルのprospective評価
 
-2026-08-20までは`hazard-elapsed-v1`が公開モデルでした。現在の公開モデルは、`hazard-odds-v4-logit-calibrated-prequential-v3`を2026-08-20T11:30:00Zに手動採用する境界として記録したものです。採用時点ではprospective gateは未達で、自動公開や過去rowの書き換えは行いません。
+2026-08-20までは`hazard-elapsed-v1`が公開モデルでした。現在の公開モデルは、`hazard-odds-v4-logit-calibrated-prequential-v3`を2026-08-20T11:21:37.105Z（最初のProduction deploymentがREADYになった時刻）に手動採用する境界として記録したものです。採用時点ではprospective gateは未達で、自動公開や過去rowの書き換えは行いません。
 
 v3は、v2と同じ校正・prequential仕様を使い、teaserStrengthを反映したraw forecastとhorizon-awareな公式予告処理を持ちます。v2の旧手動採用時刻`2026-08-20T09:28:17Z`は履歴metadataとして保持します。v3の採用境界以後は、`prediction_history.debug_info.experimentalProbabilityForecasts`へv3と旧v2のforecastを同一originで保存し、v3を公開モデル、v2を比較用baselineとして評価できます。境界前のv2 forecastは保持し、v3の公開実績へ再分類しません。`hazard-elapsed-v1`は安定フォールバックおよび過去比較用に保持し、`hazard-regime-elapsed-v1`は同じ固定設定のfull regime shadowとして並行保存・評価します。
 
