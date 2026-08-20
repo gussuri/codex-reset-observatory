@@ -3,6 +3,7 @@ import {
   CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS,
   CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import {
@@ -21,7 +22,7 @@ import {
 } from "./prequentialCalibration";
 import { getEffectiveSignalStatus } from "./probability";
 import {
-  calculateShadowProbability,
+  calculateShadowProbabilityForModel,
   getShadowCompletedResetEvents,
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
@@ -32,7 +33,7 @@ export { CALIBRATED_SHADOW_MODEL_VERSION } from "@/data/shadowProbabilityConfig"
 export { getPointInTimeRadarData } from "./prequentialCalibration";
 
 export type CalibratedShadowProbabilityResult = {
-  modelVersion: typeof CALIBRATED_SHADOW_MODEL_VERSION;
+  modelVersion: typeof CALIBRATED_SHADOW_MODEL_VERSION | typeof CALIBRATED_SHADOW_MODEL_VERSION_V2;
   calculatedAt: string;
   rawModelVersion: typeof SHADOW_PROBABILITY_MODEL_VERSION;
   rawProbability24h: number;
@@ -60,6 +61,9 @@ export type CalibratedShadowProbabilityResult = {
 
 export type CalibratedShadowCalculationOptions = ShadowProbabilityOptions & {
   shadowProbability?: ShadowProbabilityResult | null;
+  modelVersion?: CalibratedShadowProbabilityResult["modelVersion"];
+  includeTeaserStrengthBoost?: boolean;
+  legacyOfficialNoticeOverride?: boolean;
 };
 
 // Keep the fitted audit for at least one public ten-minute calculation bucket.
@@ -145,6 +149,7 @@ function getLastCalibrationAudit(
     staticHistory,
     localObservationSignals,
     currentRaw,
+    options.includeTeaserStrengthBoost !== false,
   );
   const cached = calibrationCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -157,12 +162,14 @@ function getLastCalibrationAudit(
   for (const recordedAt of origins) {
     const origin = new Date(recordedAt);
     const pointInTimeData = getPointInTimeRadarData(data, origin);
-    const raw = calculateShadowProbability(pointInTimeData, {
+    const raw = calculateShadowProbabilityForModel(pointInTimeData, {
       now: origin,
       staticHistory,
       regularResetExpectedAt: null,
       activeOfficialNotice: undefined,
       localObservationSignals: getPointInTimeLocalObservationSignals(origin, localObservationSignals),
+    }, {
+      includeTeaserStrengthBoost: options.includeTeaserStrengthBoost !== false,
     });
     const row: PrequentialCalibrationRow = {
       recordedAt,
@@ -211,11 +218,13 @@ function getCalibrationCacheKey(
   staticHistory: Array<WindowEventLike>,
   localObservationSignals: Array<LocalObservationSignal>,
   currentRaw: ShadowProbabilityPair,
+  includeTeaserStrengthBoost: boolean,
 ) {
   return JSON.stringify({
     modelVersion: CALIBRATED_SHADOW_MODEL_VERSION,
     currentJstDate: getJstDayKey(now),
     currentRaw,
+    includeTeaserStrengthBoost,
     staticHistory: staticHistory.map((item) => [item.id, item.closed_at, item.completed_at, item.opened_at]),
     formalResets: (data?.formal_tibo_resets ?? []).map((signal) => [signal.tweet_id, signal.tweet_created_at, signal.detected_at, signal.verification_status]),
     activeSignals: (data?.active_tibo_signals ?? []).map((signal) => [signal.tweet_id, signal.tweet_created_at, signal.detected_at, signal.expires_at, signal.signal_type]),
@@ -238,11 +247,20 @@ export function calculateCalibratedShadowProbability(
   options: CalibratedShadowCalculationOptions = {},
 ): CalibratedShadowProbabilityResult {
   const now = options.now ?? new Date();
-  const { shadowProbability, ...rawOptions } = options;
-  const rawV2 = shadowProbability ?? calculateShadowProbability(data, rawOptions);
+  const {
+    shadowProbability,
+    modelVersion = CALIBRATED_SHADOW_MODEL_VERSION,
+    includeTeaserStrengthBoost = true,
+    legacyOfficialNoticeOverride = false,
+    ...rawOptions
+  } = options;
+  const rawV2 = shadowProbability ?? calculateShadowProbabilityForModel(data, rawOptions, {
+    includeTeaserStrengthBoost,
+    legacyOfficialNoticeOverride,
+  });
   const rawPair = rawV2.predictions;
   const baseResult: CalibratedShadowProbabilityResult = {
-    modelVersion: CALIBRATED_SHADOW_MODEL_VERSION,
+    modelVersion,
     calculatedAt: now.toISOString(),
     rawModelVersion: SHADOW_PROBABILITY_MODEL_VERSION,
     rawProbability24h: rawPair.probability24h,
@@ -296,8 +314,13 @@ export function calculateCalibratedShadowProbability(
     baseResult.horizonCoherenceAdjusted = coherent.adjusted;
 
     if (baseResult.officialNoticeOverride) {
-      baseResult.probability24h = 0.9;
-      baseResult.probability48h = 0.96;
+      if (legacyOfficialNoticeOverride) {
+        baseResult.probability24h = 0.9;
+        baseResult.probability48h = 0.96;
+      } else {
+        baseResult.probability24h = rawV2.officialNoticeOverride.probability24h ?? baseResult.probability24h;
+        baseResult.probability48h = rawV2.officialNoticeOverride.probability48h ?? baseResult.probability48h;
+      }
       baseResult.horizonCoherenceAdjusted = false;
     }
 

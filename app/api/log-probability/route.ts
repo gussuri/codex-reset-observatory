@@ -14,6 +14,10 @@ import {
   hasOfficialNoticeForLog,
 } from "@/lib/logProbability";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
+import {
+  savePredictionHistoryOnce,
+  type PredictionHistorySaveResult,
+} from "@/lib/predictionHistoryPersistence";
 
 export const dynamic = "force-dynamic";
 
@@ -98,12 +102,11 @@ async function handleLogRequest(request: NextRequest) {
     loggedHour.setMinutes(0, 0, 0);
     loggedHour.setMilliseconds(0);
 
-    // 5. Supabase への保存 (logged_hour が衝突した場合は upsert で上書き)
+    // 5. Supabase への保存。logged_hour の最初の予測を保持し、後続実行では再利用する。
     const supabase = getSupabaseClient();
-    const { data: insertedRows, error } = await supabase
-      .from("prediction_history")
-      .upsert(
-        {
+    let savedRecord: PredictionHistorySaveResult;
+    try {
+      savedRecord = await savePredictionHistoryOnce(supabase, {
           logged_hour: loggedHour.toISOString(),
           probability_24h: viewModel.probability24h,
           probability_48h: viewModel.probability48h,
@@ -138,26 +141,17 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
           }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.rawShadow ?? publishedProbability.shadow, publishedProbability, experimentalProbabilityForecasts),
-        },
-        {
-          onConflict: "logged_hour",
-        }
-      )
-      .select();
-
-    if (error) {
-      console.error("Supabase upsert error:", error);
+      });
+    } catch (error) {
+      console.error("Supabase prediction history save failed", error);
       return NextResponse.json({ error: "Database save failed" }, { status: 500 });
     }
 
-    const savedRecord = insertedRows && insertedRows.length > 0 ? insertedRows[0] : null;
-    const recordedAt = savedRecord?.recorded_at || calculationNow.toISOString();
-
     return NextResponse.json({
       ok: true,
-      action: "upserted",
-      logged_hour: loggedHour.toISOString(),
-      recorded_at: recordedAt,
+      action: savedRecord.action,
+      logged_hour: savedRecord.loggedHour,
+      recorded_at: savedRecord.recordedAt,
       probability_12h: viewModel.probability12h,
       probability_24h: viewModel.probability24h,
       probability_48h: viewModel.probability48h,

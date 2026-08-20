@@ -40,6 +40,7 @@ import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getTeaserStrengthSignals } from "./teaserStrength";
+import { getTemporalNoticeCoverage } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -154,6 +155,7 @@ export type ShadowProbabilityModelOptions = {
   modelVersion?: string;
   hazardOptions?: ShadowHazardBuildOptions;
   includeTeaserStrengthBoost?: boolean;
+  legacyOfficialNoticeOverride?: boolean;
 };
 
 function clamp01(value: number) {
@@ -732,6 +734,58 @@ function getConfidence(
   };
 }
 
+function applyOfficialNoticeTimingPolicy(
+  baseline: ShadowProbabilityHorizons,
+  notice: ActiveOfficialNotice | null,
+  now: Date,
+  legacyOfficialNoticeOverride: boolean,
+) {
+  if (!notice) return null;
+  if (legacyOfficialNoticeOverride) {
+    return {
+      probability12h: derive12hFrom24hProbability(0.9),
+      probability24h: 0.9,
+      probability48h: 0.96,
+      probability72h: derive72hFrom48hProbability(0.96),
+    } satisfies ShadowProbabilityHorizons;
+  }
+
+  const temporalResolution = {
+    status: notice.temporalResolutionStatus ?? "unresolved",
+    temporalPrecision: notice.temporalPrecision ?? "unknown",
+    confidence: notice.temporalConfidence ?? null,
+    expectedStartAt: notice.expectedAt,
+    expectedEndAt: notice.expectedEndAt,
+  };
+  const coverage24 = getTemporalNoticeCoverage(temporalResolution, now, 24);
+  const coverage48 = getTemporalNoticeCoverage(temporalResolution, now, 48);
+  if (coverage24 === null || coverage48 === null) {
+    return {
+      probability12h: derive12hFrom24hProbability(0.9),
+      probability24h: 0.9,
+      probability48h: 0.96,
+      probability72h: derive72hFrom48hProbability(0.96),
+    } satisfies ShadowProbabilityHorizons;
+  }
+
+  const probability24h = clamp01(
+    baseline.probability24h + coverage24 * (0.9 - baseline.probability24h),
+  );
+  const probability48h = Math.min(
+    1,
+    Math.max(
+      probability24h,
+      baseline.probability48h + coverage48 * (0.96 - baseline.probability48h),
+    ),
+  );
+  return {
+    probability12h: derive12hFrom24hProbability(probability24h),
+    probability24h,
+    probability48h,
+    probability72h: Math.max(probability48h, derive72hFrom48hProbability(probability48h)),
+  } satisfies ShadowProbabilityHorizons;
+}
+
 export function calculateShadowProbabilityForModel(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
@@ -791,12 +845,18 @@ export function calculateShadowProbabilityForModel(
     ),
   };
   const officialNoticeActive = Boolean(resolvedOfficialNotice);
+  const officialNoticePredictions = applyOfficialNoticeTimingPolicy(
+    baseline,
+    resolvedOfficialNotice,
+    now,
+    modelOptions.legacyOfficialNoticeOverride === true,
+  );
   const officialNoticeOverride = {
     active: officialNoticeActive,
-    probability12h: officialNoticeActive ? derive12hFrom24hProbability(0.9) : null,
-    probability24h: officialNoticeActive ? 0.9 : null,
-    probability48h: officialNoticeActive ? 0.96 : null,
-    probability72h: officialNoticeActive ? derive72hFrom48hProbability(0.96) : null,
+    probability12h: officialNoticePredictions?.probability12h ?? null,
+    probability24h: officialNoticePredictions?.probability24h ?? null,
+    probability48h: officialNoticePredictions?.probability48h ?? null,
+    probability72h: officialNoticePredictions?.probability72h ?? null,
   };
   const confidence = getConfidence(hazard, officialNoticeActive);
   const warnings: string[] = [];
@@ -811,14 +871,7 @@ export function calculateShadowProbabilityForModel(
     modelVersion: modelOptions.modelVersion ?? SHADOW_PROBABILITY_MODEL_VERSION,
     calculatedAt: now.toISOString(),
     targetDefinition: SHADOW_TARGET_DEFINITION,
-    predictions: officialNoticeActive
-      ? {
-          probability12h: officialNoticeOverride.probability12h!,
-          probability24h: officialNoticeOverride.probability24h!,
-          probability48h: officialNoticeOverride.probability48h!,
-          probability72h: officialNoticeOverride.probability72h!,
-        }
-      : adjusted,
+    predictions: officialNoticeActive ? officialNoticePredictions! : adjusted,
     baseline,
     confidence: {
       ...confidence,

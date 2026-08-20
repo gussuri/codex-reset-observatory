@@ -3,10 +3,13 @@ export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive
 export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
   "hazard-odds-v4-logit-calibrated-prequential-v1";
-export const CALIBRATED_SHADOW_MODEL_VERSION =
+export const CALIBRATED_SHADOW_MODEL_VERSION_V2 =
   "hazard-odds-v4-logit-calibrated-prequential-v2";
+export const CALIBRATED_SHADOW_MODEL_VERSION =
+  "hazard-odds-v4-logit-calibrated-prequential-v3";
 export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
   CALIBRATED_SHADOW_MODEL_VERSION_V1,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
 ] as const;
 // Freeze the shared elapsed-hazard parameters for the public elapsed-only model
 // and the full-regime shadow until their prospective samples are sufficient.
@@ -14,10 +17,12 @@ export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
 export const REGIME_ELAPSED_FULL_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const ELAPSED_ONLY_MODEL_VERSION = "hazard-elapsed-v1";
 export const PUBLISHED_PROBABILITY_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION_V2;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
 export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-20";
-export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-20T09:28:17.000Z";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-20T11:30:00.000Z";
+export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-20T09:28:17.000Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.

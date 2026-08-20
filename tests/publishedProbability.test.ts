@@ -14,11 +14,15 @@ import {
 } from "../lib/radar/publishedProbability";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
   ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
@@ -34,6 +38,13 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
+
+test("the calibrated public model has a new v3 boundary with v2 retained as baseline", () => {
+  assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
+  assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION_V2);
+});
 
 test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
@@ -131,6 +142,8 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionMode: string }).adoptionMode, "manual");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionGateStatus: string }).adoptionGateStatus, "not_met");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string }).adoptionDate, "2026-08-20");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionAt: string }).adoptionAt, PUBLISHED_PROBABILITY_ADOPTION_AT);
+  assert.equal((debugInfo.publishedProbabilityModel as { previousAdoptionAt: string }).previousAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT);
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
   assert.equal(publishedDebug.probability24h, snapshot.viewModel.probability24h);
   assert.equal(publishedDebug.probability48h, snapshot.viewModel.probability48h);
@@ -588,6 +601,34 @@ test("official notice keeps the existing 90% and 96% override in the public mode
   assert.equal(snapshot.viewModel.probability48h, 0.96);
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
   assert.equal(snapshot.viewModel.probability72h, published.probability72h);
+});
+
+test("resolved official schedules are horizon-aware in the calibrated public model", () => {
+  const now = NOW;
+  const data = getLocalRadarData({ calculationNow: now });
+  const notice = {
+    origin: "dynamic" as const,
+    id: "scheduled-public-notice",
+    title: "Scheduled reset",
+    summary: "Scheduled reset",
+    observedAt: now.toISOString(),
+    expectedAt: new Date(now.getTime() + 34 * 60 * 60 * 1000).toISOString(),
+    expectedEndAt: new Date(now.getTime() + 35 * 60 * 60 * 1000).toISOString(),
+    expiresAt: new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString(),
+    source: null,
+    sourceLabel: "test",
+    temporalPrecision: "day" as const,
+    temporalConfidence: 1,
+    temporalResolutionStatus: "resolved" as const,
+  };
+  const published = calculatePublishedProbability(data, {
+    now,
+    activeOfficialNotice: notice,
+  });
+
+  assert.notEqual(published.probability24h, 0.9);
+  assert.equal(published.probability48h, 0.96);
+  assert.ok(published.probability24h < published.probability48h);
 });
 
 test("invalid calibrated predictions use the stable elapsed model before recency and heuristic fallbacks", () => {

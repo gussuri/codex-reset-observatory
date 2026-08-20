@@ -1,9 +1,13 @@
 import {
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
+  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_MODE,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
   RECENCY_SHADOW_MODEL_CONFIG,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
@@ -15,6 +19,7 @@ import {
 } from "@/lib/radar/recencyWeightedProbability";
 import {
   calculateShadowProbability,
+  calculateShadowProbabilityForModel,
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
 } from "@/lib/radar/shadowProbability";
@@ -315,6 +320,17 @@ export function buildExperimentalProbabilityForecasts(
     ...calculationOptions,
     shadowProbability: v2,
   });
+  const previousRaw = calculateShadowProbabilityForModel(data, calculationOptions, {
+    includeTeaserStrengthBoost: false,
+    legacyOfficialNoticeOverride: true,
+  });
+  const previousCalibrated = calculateCalibratedShadowProbability(data, {
+    ...calculationOptions,
+    shadowProbability: previousRaw,
+    modelVersion: CALIBRATED_SHADOW_MODEL_VERSION_V2,
+    includeTeaserStrengthBoost: false,
+    legacyOfficialNoticeOverride: true,
+  });
   const forecasts: ExperimentalProbabilityForecasts = {
     [SHADOW_PROBABILITY_MODEL_VERSION]: toExperimentalProbabilityForecast(v2, null),
   };
@@ -329,6 +345,7 @@ export function buildExperimentalProbabilityForecasts(
   forecasts[randomElapsed.modelVersion] = toRandomElapsedExperimentalProbabilityForecast(randomElapsed);
   forecasts[randomContinuous.modelVersion] = toRandomContinuousExperimentalProbabilityForecast(randomContinuous);
   forecasts[CALIBRATED_SHADOW_MODEL_VERSION] = toCalibratedExperimentalProbabilityForecast(calibrated, v2);
+  forecasts[CALIBRATED_SHADOW_MODEL_VERSION_V2] = toCalibratedExperimentalProbabilityForecast(previousCalibrated, previousRaw);
   return forecasts;
 }
 
@@ -373,6 +390,9 @@ export function buildProbabilityDebugInfo(
             totalExposureDays: rawShadow?.confidence.totalExposureDays ?? null,
             adoptionMode: PUBLISHED_PROBABILITY_ADOPTION_MODE,
             adoptionDate: PUBLISHED_PROBABILITY_ADOPTION_DATE,
+            adoptionAt: PUBLISHED_PROBABILITY_ADOPTION_AT,
+            previousModelVersion: PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+            previousAdoptionAt: PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
             rawModelVersion: rawShadow?.modelVersion ?? null,
             calibratedFallbackUsed: publishedProbability.calibrated?.fallbackUsed ?? null,

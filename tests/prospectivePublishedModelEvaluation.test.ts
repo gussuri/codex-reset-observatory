@@ -9,6 +9,11 @@ import {
   selectDailyFirstPublishedForecasts,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
+import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
+} from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
 
 function forecastRow(
@@ -43,6 +48,11 @@ function forecastRow(
 function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
+
+test("published prospective evaluation uses v3 after its boundary and v2 as the baseline", () => {
+  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION_V2);
+});
 
 test("only rows containing both published models are comparable and evaluation starts there", () => {
   const prePublished = forecastRow(
@@ -153,8 +163,9 @@ test("a comparable forecast after asOf is excluded from the prospective start an
 });
 
 test("pre-adoption experimental v2 rows are not counted as public forecasts", () => {
-  const preAdoption = forecastRow("2026-08-20T09:00:00.000Z");
-  const adopted = forecastRow("2026-08-20T09:30:00.000Z");
+  const adoptionAt = Date.parse(PUBLISHED_PROBABILITY_ADOPTION_AT);
+  const preAdoption = forecastRow(new Date(adoptionAt - 60_000).toISOString());
+  const adopted = forecastRow(new Date(adoptionAt + 60_000).toISOString());
   const report = evaluatePublishedModelProspectively(
     [preAdoption, adopted],
     [],

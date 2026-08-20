@@ -142,7 +142,7 @@ test("random shadow preserves target separation from the adopted calibrated publ
   assert.match(random.targetDefinition, /random reset.*regular resets remain recovery boundaries/i);
   assert.ok(before.predictions.probability24h >= 0);
   assert.ok(before.predictions.probability48h >= before.predictions.probability24h);
-  assert.equal(published.adoptedModel, "hazard-odds-v4-logit-calibrated-prequential-v2");
+  assert.equal(published.adoptedModel, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(published.source, "calibrated");
   assert.equal(published.probability24h, published.calibrated?.probability24h);
   assert.equal(published.probability48h, published.calibrated?.probability48h);

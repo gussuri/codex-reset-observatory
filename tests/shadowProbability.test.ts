@@ -412,6 +412,83 @@ test("shadow calculation discovers the same active official notice when no overr
   assert.equal(result.predictions.probability72h, 1 - Math.pow(1 - 0.96, 72 / 48));
 });
 
+test("shadow official notice probabilities follow a resolved schedule window per horizon", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const notice = (startHours: number, endHours = startHours): ActiveOfficialNotice => ({
+    origin: "dynamic",
+    id: `scheduled-notice-${startHours}`,
+    title: "Scheduled reset",
+    summary: "Scheduled reset",
+    observedAt: now.toISOString(),
+    expectedAt: new Date(now.getTime() + startHours * HOUR_MS).toISOString(),
+    expectedEndAt: new Date(now.getTime() + endHours * HOUR_MS).toISOString(),
+    expiresAt: new Date(now.getTime() + 72 * HOUR_MS).toISOString(),
+    source: null,
+    sourceLabel: "test",
+    temporalPrecision: "exact_time",
+    temporalConfidence: 1,
+    temporalResolutionStatus: "resolved",
+  });
+
+  const within24 = calculateShadowProbability(data, {
+    now,
+    activeOfficialNotice: notice(6),
+  });
+  assert.equal(within24.predictions.probability24h, 0.9);
+  assert.equal(within24.predictions.probability48h, 0.96);
+
+  const within48Only = calculateShadowProbability(data, {
+    now,
+    activeOfficialNotice: notice(34),
+  });
+  assert.notEqual(within48Only.predictions.probability24h, 0.9);
+  assert.equal(within48Only.predictions.probability48h, 0.96);
+  assert.ok(within48Only.predictions.probability24h < within48Only.predictions.probability48h);
+
+  const outside48 = calculateShadowProbability(data, {
+    now,
+    activeOfficialNotice: notice(60),
+  });
+  assert.notEqual(outside48.predictions.probability24h, 0.9);
+  assert.notEqual(outside48.predictions.probability48h, 0.96);
+});
+
+test("shadow official notice schedule boundaries are inclusive and respect a crossing window", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const makeNotice = (startHours: number, endHours = startHours): ActiveOfficialNotice => ({
+    origin: "dynamic",
+    id: `boundary-notice-${startHours}-${endHours}`,
+    title: "Scheduled reset",
+    summary: "Scheduled reset",
+    observedAt: now.toISOString(),
+    expectedAt: new Date(now.getTime() + startHours * HOUR_MS).toISOString(),
+    expectedEndAt: new Date(now.getTime() + endHours * HOUR_MS).toISOString(),
+    expiresAt: new Date(now.getTime() + 72 * HOUR_MS).toISOString(),
+    source: null,
+    sourceLabel: "test",
+    temporalPrecision: "exact_time",
+    temporalConfidence: 1,
+    temporalResolutionStatus: "resolved",
+  });
+
+  const at24 = calculateShadowProbability(data, { now, activeOfficialNotice: makeNotice(24) });
+  assert.equal(at24.predictions.probability24h, 0.9);
+  assert.equal(at24.predictions.probability48h, 0.96);
+
+  const at48 = calculateShadowProbability(data, { now, activeOfficialNotice: makeNotice(48) });
+  assert.notEqual(at48.predictions.probability24h, 0.9);
+  assert.equal(at48.predictions.probability48h, 0.96);
+
+  const crossing = calculateShadowProbability(data, {
+    now,
+    activeOfficialNotice: makeNotice(20, 28),
+  });
+  assert.equal(crossing.predictions.probability24h, 0.9);
+  assert.equal(crossing.predictions.probability48h, 0.96);
+});
+
 test("72-hour shadow probability integrates the hazard and reuses the 48-hour multiplier", () => {
   const now = new Date("2026-08-04T12:00:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  CALIBRATED_SHADOW_MODEL_VERSION_V2,
   ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
@@ -39,7 +41,8 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
     "hazard-regime-elapsed-v1",
     RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
     RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION,
-    "hazard-odds-v4-logit-calibrated-prequential-v2",
+    CALIBRATED_SHADOW_MODEL_VERSION,
+    CALIBRATED_SHADOW_MODEL_VERSION_V2,
   ]);
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].generatedAt, now.toISOString());
   assert.equal(forecasts[SHADOW_PROBABILITY_MODEL_VERSION].probability24h, shadow.predictions.probability24h);
@@ -113,7 +116,8 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   );
   assert.equal(randomContinuous.effectiveRegimeMultiplier, randomContinuous.regimeMultiplier);
   assert.equal(randomContinuous.freezeAt, "2026-08-18T16:14:21.000Z");
-  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
+  const calibrated = forecasts[CALIBRATED_SHADOW_MODEL_VERSION];
+  const previousCalibrated = forecasts[CALIBRATED_SHADOW_MODEL_VERSION_V2];
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
   assert.equal(calibrated.evaluationMode, "prospective");
   assert.equal(typeof calibrated.alpha24h, "number");
@@ -123,6 +127,8 @@ test("internal forecast audit stores the inclusive model and all fixed recency m
   assert.equal(typeof calibrated.horizonCoherenceAdjusted, "boolean");
   assert.equal(typeof calibrated.fallbackUsed, "boolean");
   assert.equal(calibrated.pointInTimeProjectionVersion, "status-conservative-v2");
+  assert.equal(previousCalibrated.modelVersion, CALIBRATED_SHADOW_MODEL_VERSION_V2);
+  assert.equal(previousCalibrated.officialNoticeOverride, false);
   assert.equal(
     forecasts["hazard-odds-v4-logit-calibrated-prequential-v1"],
     undefined,
@@ -179,9 +185,9 @@ test("the calibrated experimental forecast matches the published 24h and 48h val
     now,
     calibratedProbability: published.calibrated,
   });
-  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
+  const calibrated = forecasts[CALIBRATED_SHADOW_MODEL_VERSION];
 
-  assert.equal(published.adoptedModel, "hazard-odds-v4-logit-calibrated-prequential-v2");
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(calibrated.probability24h, published.probability24h);
   assert.equal(calibrated.probability48h, published.probability48h);
   assert.equal(calibrated.fallbackUsed, published.calibrated?.fallbackUsed);
@@ -213,7 +219,8 @@ test("the calibrated forecast records the canonical raw teaser multiplier", () =
     shadowProbability: raw,
     calibratedProbability: published.calibrated,
   });
-  const calibrated = forecasts["hazard-odds-v4-logit-calibrated-prequential-v2"];
+  const calibrated = forecasts[CALIBRATED_SHADOW_MODEL_VERSION];
+  const previousCalibrated = forecasts[CALIBRATED_SHADOW_MODEL_VERSION_V2];
 
   assert.ok(calibrated.combinedSignalMultiplier24h > 1);
   assert.ok(calibrated.combinedSignalMultiplier48h > 1);
@@ -226,4 +233,8 @@ test("the calibrated forecast records the canonical raw teaser multiplier", () =
     raw.multipliers.combinedAfterCap.probability48h,
   );
   assert.equal(calibrated.rawModelVersion, "hazard-odds-v3-random-inclusive");
+  assert.equal(previousCalibrated.combinedSignalMultiplier24h, 1);
+  assert.equal(previousCalibrated.combinedSignalMultiplier48h, 1);
+  assert.ok(calibrated.probability24h > previousCalibrated.probability24h);
+  assert.ok(calibrated.probability48h > previousCalibrated.probability48h);
 });
