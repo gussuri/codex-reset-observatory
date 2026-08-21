@@ -147,11 +147,13 @@ export function selectNextGenerationCalibrationRows(
   const sorted = rows
     .filter((row) => {
       const generatedAt = timestamp(row.generatedAt);
+      const actual = horizonHours === 24 ? row.actual24h : row.actual48h;
       return row.modelVersion === NEXT_GENERATION_B_MODEL_VERSION
         && generatedAt !== null
         && generatedAt >= freezeTime
         && generatedAt < asOfTime
         && generatedAt + horizonHours * 60 * 60 * 1000 <= asOfTime
+        && typeof actual === "boolean"
         && isFiniteProbability(row.rawProbability24h)
         && isFiniteProbability(row.rawProbability48h);
     })

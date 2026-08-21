@@ -135,6 +135,35 @@ function getLogits(row: NextGenerationEnsembleTrainingRow, horizon: EnsembleHori
   });
 }
 
+function getJstDayKey(value: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp(value)!));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function selectDailyResolvedTrainingRows(
+  rows: Array<NextGenerationEnsembleTrainingRow>,
+  horizon: EnsembleHorizon,
+) {
+  const selected = new Map<string, NextGenerationEnsembleTrainingRow>();
+  for (const row of rows
+    .filter((candidate) => {
+      const actual = horizon === "24h" ? candidate.actual24h : candidate.actual48h;
+      return timestamp(candidate.generatedAt) !== null && typeof actual === "boolean";
+    })
+    .slice()
+    .sort((left, right) => timestamp(left.generatedAt)! - timestamp(right.generatedAt)!)) {
+    const dayKey = getJstDayKey(row.generatedAt);
+    if (!selected.has(dayKey)) selected.set(dayKey, row);
+  }
+  return Array.from(selected.values());
+}
+
 function getObjective(
   samples: Array<{ logits: number[]; actual: boolean }>,
   alpha: number,
@@ -192,9 +221,7 @@ export function fitNextGenerationEnsemble(
   rows: Array<NextGenerationEnsembleTrainingRow>,
   horizon: EnsembleHorizon,
 ): NextGenerationEnsembleFit {
-  const resolvedRows = rows.filter((row) =>
-    typeof (horizon === "24h" ? row.actual24h : row.actual48h) === "boolean",
-  );
+  const resolvedRows = selectDailyResolvedTrainingRows(rows, horizon);
   const samples = resolvedRows.map((row) => ({
     logits: getLogits(row, horizon),
     actual: (horizon === "24h" ? row.actual24h : row.actual48h) as boolean,

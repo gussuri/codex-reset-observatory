@@ -105,6 +105,18 @@ function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilit
   };
 }
 
+function isValidBResult(result: NextGenerationBResult) {
+  return [
+    result.rawProbability24h,
+    result.rawProbability48h,
+    result.predictions.probability12h,
+    result.predictions.probability24h,
+    result.predictions.probability48h,
+    result.predictions.probability72h,
+  ].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.predictions.probability48h >= result.predictions.probability24h;
+}
+
 function toEnsembleForecast(
   result: NextGenerationAResult,
   bResult: NextGenerationBResult,
@@ -206,6 +218,7 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     trainingRows: options.trainingState.bRows,
     trainingReadStatus: options.trainingState.status,
   });
+  if (!isValidBResult(bResult)) return options.existingForecasts;
   const bForecast = toCommonForecast(bResult);
   const withB = {
     ...options.existingForecasts,
