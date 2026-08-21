@@ -261,8 +261,18 @@ function evaluateModel(
   };
 }
 
-function difference(candidate: number, current: number) {
-  return Number.isFinite(candidate) && Number.isFinite(current) ? candidate - current : null;
+function difference(
+  candidate: number,
+  current: number,
+  candidateCount = 1,
+  currentCount = 1,
+) {
+  return candidateCount > 0
+    && currentCount > 0
+    && Number.isFinite(candidate)
+    && Number.isFinite(current)
+    ? candidate - current
+    : null;
 }
 
 function getNonOverlappingCount(rows: Array<ProspectiveForecastRow>, horizonHours: 24 | 48) {
@@ -282,10 +292,10 @@ function getGate(
   publicEvaluation: { metrics24h: ProspectiveMetric; metrics48h: ProspectiveMetric },
   targetResetCount: number,
 ) {
-  const brier24h = difference(evaluation.metrics24h.brier, publicEvaluation.metrics24h.brier);
-  const brier48h = difference(evaluation.metrics48h.brier, publicEvaluation.metrics48h.brier);
-  const logLoss24h = difference(evaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss);
-  const logLoss48h = difference(evaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss);
+  const brier24h = difference(evaluation.metrics24h.brier, publicEvaluation.metrics24h.brier, evaluation.metrics24h.count, publicEvaluation.metrics24h.count);
+  const brier48h = difference(evaluation.metrics48h.brier, publicEvaluation.metrics48h.brier, evaluation.metrics48h.count, publicEvaluation.metrics48h.count);
+  const logLoss24h = difference(evaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss, evaluation.metrics24h.count, publicEvaluation.metrics24h.count);
+  const logLoss48h = difference(evaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss, evaluation.metrics48h.count, publicEvaluation.metrics48h.count);
   const enoughData = targetResetCount >= NEXT_GENERATION_GATE_THRESHOLDS.targetResetCount
     && evaluation.metrics24h.count >= NEXT_GENERATION_GATE_THRESHOLDS.resolvedDaily24h
     && evaluation.metrics48h.count >= NEXT_GENERATION_GATE_THRESHOLDS.resolvedDaily48h;
@@ -376,16 +386,16 @@ export function evaluateNextGenerationModelsProspectively(
       targetResetCount,
       pairwise: {
         aMinusPublic: {
-          brier24h: difference(aEvaluation.metrics24h.brier, publicEvaluation.metrics24h.brier),
-          brier48h: difference(aEvaluation.metrics48h.brier, publicEvaluation.metrics48h.brier),
-          logLoss24h: difference(aEvaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss),
-          logLoss48h: difference(aEvaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss),
+          brier24h: difference(aEvaluation.metrics24h.brier, publicEvaluation.metrics24h.brier, aEvaluation.metrics24h.count, publicEvaluation.metrics24h.count),
+          brier48h: difference(aEvaluation.metrics48h.brier, publicEvaluation.metrics48h.brier, aEvaluation.metrics48h.count, publicEvaluation.metrics48h.count),
+          logLoss24h: difference(aEvaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss, aEvaluation.metrics24h.count, publicEvaluation.metrics24h.count),
+          logLoss48h: difference(aEvaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss, aEvaluation.metrics48h.count, publicEvaluation.metrics48h.count),
         },
         bMinusPublic: {
-          brier24h: difference(bEvaluation.metrics24h.brier, publicEvaluation.metrics24h.brier),
-          brier48h: difference(bEvaluation.metrics48h.brier, publicEvaluation.metrics48h.brier),
-          logLoss24h: difference(bEvaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss),
-          logLoss48h: difference(bEvaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss),
+          brier24h: difference(bEvaluation.metrics24h.brier, publicEvaluation.metrics24h.brier, bEvaluation.metrics24h.count, publicEvaluation.metrics24h.count),
+          brier48h: difference(bEvaluation.metrics48h.brier, publicEvaluation.metrics48h.brier, bEvaluation.metrics48h.count, publicEvaluation.metrics48h.count),
+          logLoss24h: difference(bEvaluation.metrics24h.logLoss, publicEvaluation.metrics24h.logLoss, bEvaluation.metrics24h.count, publicEvaluation.metrics24h.count),
+          logLoss48h: difference(bEvaluation.metrics48h.logLoss, publicEvaluation.metrics48h.logLoss, bEvaluation.metrics48h.count, publicEvaluation.metrics48h.count),
         },
       },
       nonOverlapping24h: getNonOverlappingCount(dailyRows, 24),

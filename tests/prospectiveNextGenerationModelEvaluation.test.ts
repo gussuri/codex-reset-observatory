@@ -85,4 +85,12 @@ test("evaluation does not use a partial origin or an unresolved horizon", () => 
   assert.equal(report.comparison.resolved24h, 1);
   assert.equal(report.comparison.resolved48h, 1);
   assert.equal(report.status, "insufficient_data");
+
+  const empty = evaluateNextGenerationModelsProspectively(
+    [],
+    [],
+    new Date("2026-08-24T12:00:00.000Z"),
+  );
+  assert.equal(empty.comparison.pairwise.aMinusPublic.brier24h, null);
+  assert.equal(empty.comparison.pairwise.bMinusPublic.logLoss48h, null);
 });
