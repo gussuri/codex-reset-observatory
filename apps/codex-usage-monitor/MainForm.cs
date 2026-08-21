@@ -335,7 +335,7 @@ internal sealed class MainForm : Form
     private static string FormatBankedResetCount(JsonElement root)
     {
         const long maxAvailableCount = 1_000;
-        if (!root.TryGetProperty("bankedResetAvailableCount", out var countValue) ||
+        if (!root.TryGetProperty("bankedResetDisplayCount", out var countValue) ||
             countValue.ValueKind != JsonValueKind.Number ||
             !countValue.TryGetInt64(out var count) ||
             count < 0 ||

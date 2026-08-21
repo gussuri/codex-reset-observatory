@@ -10,6 +10,11 @@ export const USAGE_TIBO_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const CODEX_USAGE_SOURCE_KEY = "local-codex-app-server";
 export const MAX_BANKED_RESET_AVAILABLE_COUNT = 1_000;
 
+export type BankedResetCountSource =
+  | "explicit"
+  | "availability_fallback"
+  | "unavailable";
+
 export function shouldCreateNoticeBackedEstimate<T extends { id: string }>(
   noticeSignal: T | null | undefined,
   decision: { confidence: string; cycleHint: string },
@@ -33,6 +38,8 @@ export type CodexUsageSnapshot = {
   bankedCredit?: BankedCreditState | null;
   bankedCreditChange?: boolean;
   bankedResetAvailableCount?: number | null;
+  bankedResetDisplayCount?: number | null;
+  bankedResetCountSource?: BankedResetCountSource;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";
@@ -175,17 +182,52 @@ function getRateLimitSnapshots(root: Record<string, unknown>) {
   return [{ key: null, value: isRecord(rateLimits) ? rateLimits : null }];
 }
 
+type ExplicitBankedResetCount = {
+  present: boolean;
+  count: number | null;
+};
+
 function getExplicitBankedResetAvailableCount(
   result: Record<string, unknown>,
   rateLimit: Record<string, unknown>,
-) {
+): ExplicitBankedResetCount {
   if (Object.prototype.hasOwnProperty.call(result, "rateLimitResetCredits")) {
-    return readBankedResetAvailableCount(result.rateLimitResetCredits);
+    return {
+      present: true,
+      count: readBankedResetAvailableCount(result.rateLimitResetCredits),
+    };
   }
   if (Object.prototype.hasOwnProperty.call(rateLimit, "rateLimitResetCredits")) {
-    return readBankedResetAvailableCount(rateLimit.rateLimitResetCredits);
+    return {
+      present: true,
+      count: readBankedResetAvailableCount(rateLimit.rateLimitResetCredits),
+    };
   }
-  return null;
+  return { present: false, count: null };
+}
+
+function normalizeBankedResetCount(
+  explicit: ExplicitBankedResetCount,
+  bankedCredit: BankedCreditState | null,
+): { displayCount: number | null; source: BankedResetCountSource } {
+  if (explicit.present) {
+    return {
+      displayCount: explicit.count,
+      source: explicit.count === null ? "unavailable" : "explicit",
+    };
+  }
+
+  if (bankedCredit?.unlimited === false) {
+    return {
+      displayCount: bankedCredit.available ? 1 : 0,
+      source: "availability_fallback",
+    };
+  }
+
+  return {
+    displayCount: null,
+    source: "unavailable",
+  };
 }
 
 /**
@@ -210,6 +252,8 @@ export function parseCodexRateLimitsResponse(
     window: { usedPercent: number; windowDurationMins: number; resetsAt: number };
     bankedCredit: BankedCreditState | null;
     bankedResetAvailableCount: number | null;
+    bankedResetDisplayCount: number | null;
+    bankedResetCountSource: BankedResetCountSource;
   }> = [];
 
   for (const snapshot of snapshots) {
@@ -225,7 +269,11 @@ export function parseCodexRateLimitsResponse(
     const bankedCredit = snapshot.value.credits === undefined
       ? null
       : readBankedCredit(snapshot.value.credits);
-    const bankedResetAvailableCount = getExplicitBankedResetAvailableCount(result, snapshot.value);
+    const explicitBankedResetCount = getExplicitBankedResetAvailableCount(result, snapshot.value);
+    const normalizedBankedResetCount = normalizeBankedResetCount(
+      explicitBankedResetCount,
+      bankedCredit,
+    );
 
     for (const windowKey of ["primary", "secondary"] as const) {
       const rawWindow = snapshot.value[windowKey];
@@ -239,7 +287,9 @@ export function parseCodexRateLimitsResponse(
           planType,
           window,
           bankedCredit,
-          bankedResetAvailableCount,
+          bankedResetAvailableCount: explicitBankedResetCount.count,
+          bankedResetDisplayCount: normalizedBankedResetCount.displayCount,
+          bankedResetCountSource: normalizedBankedResetCount.source,
         });
       }
     }
@@ -264,6 +314,8 @@ export function parseCodexRateLimitsResponse(
     resetsAt: selected.window.resetsAt,
     bankedCredit: selected.bankedCredit,
     bankedResetAvailableCount: selected.bankedResetAvailableCount,
+    bankedResetDisplayCount: selected.bankedResetDisplayCount,
+    bankedResetCountSource: selected.bankedResetCountSource,
   };
 }
 

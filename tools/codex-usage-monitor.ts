@@ -111,10 +111,54 @@ export type MonitorSnapshotPostReason =
   | "structure_change"
   | "heartbeat";
 
+export type PendingMonitorPostReason = Exclude<MonitorSnapshotPostReason, "heartbeat">;
+
+export type PendingMonitorPost = {
+  reason: PendingMonitorPostReason;
+  snapshot: CodexUsageSnapshot;
+};
+
 export type MonitorSnapshotState = {
   previousLocalSnapshot: CodexUsageSnapshot | null;
   lastSuccessfulPostAt: number | null;
+  pendingPosts?: PendingMonitorPost[];
 };
+
+export function getPendingMonitorPosts(state: MonitorSnapshotState) {
+  return [...(state.pendingPosts ?? [])];
+}
+
+export function enqueueMonitorSnapshotPost(
+  state: MonitorSnapshotState,
+  reason: PendingMonitorPostReason,
+  snapshot: CodexUsageSnapshot,
+): MonitorSnapshotState {
+  const pendingPosts = getPendingMonitorPosts(state);
+  if (pendingPosts.some((pending) => pending.reason === "initial" && reason === "initial") ||
+    pendingPosts.some((pending) =>
+      pending.reason === reason && pending.snapshot.observedAt === snapshot.observedAt
+    )) {
+    return { ...state, pendingPosts };
+  }
+  return {
+    ...state,
+    pendingPosts: [...pendingPosts, { reason, snapshot }],
+  };
+}
+
+export function markMonitorSnapshotPostSucceeded(
+  state: MonitorSnapshotState,
+  completedAtMs = Date.now(),
+): MonitorSnapshotState {
+  const pendingPosts = getPendingMonitorPosts(state);
+  return {
+    ...state,
+    pendingPosts: pendingPosts.slice(1),
+    lastSuccessfulPostAt: Number.isFinite(completedAtMs)
+      ? completedAtMs
+      : state.lastSuccessfulPostAt,
+  };
+}
 
 export function getMonitorSnapshotPostReason(
   snapshot: CodexUsageSnapshot,
@@ -166,6 +210,7 @@ export function updateMonitorSnapshotState(
     lastSuccessfulPostAt: postSucceeded && Number.isFinite(postCompletedAtMs)
       ? postCompletedAtMs
       : state.lastSuccessfulPostAt,
+    pendingPosts: getPendingMonitorPosts(state),
   };
 }
 
@@ -253,9 +298,9 @@ export function createJsonMonitorLogger(
   return (event, details = {}) => {
     const safeDetails: Record<string, unknown> = {};
     const allowedKeys = event === "snapshot_observed"
-      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetAvailableCount"]
+      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount"]
       : event === "snapshot_sent"
-        ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange", "bankedResetAvailableCount"]
+        ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange", "bankedResetDisplayCount"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -268,7 +313,7 @@ export function createJsonMonitorLogger(
 
     for (const key of allowedKeys) {
       const value = details[key];
-      if (key === "bankedResetAvailableCount" &&
+      if (key === "bankedResetDisplayCount" &&
         (typeof value !== "number" ||
           !Number.isSafeInteger(value) ||
           value < 0 ||
@@ -363,6 +408,7 @@ async function runAppServerSession(
     let monitorSnapshotState: MonitorSnapshotState = {
       previousLocalSnapshot: null,
       lastSuccessfulPostAt: null,
+      pendingPosts: [],
     };
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     const pending = new Map<string, PendingRequest>();
@@ -413,7 +459,36 @@ async function runAppServerSession(
       }
     });
 
-    const refresh = async () => {
+    const logSnapshotSent = (
+      reason: MonitorSnapshotPostReason,
+      snapshot: CodexUsageSnapshot,
+    ) => {
+      logger("snapshot_sent", {
+        reason,
+        observedAt: snapshot.observedAt,
+        usedPercent: snapshot.usedPercent,
+        resetsAt: snapshot.resetsAt,
+        planType: snapshot.planType,
+        windowDurationMins: snapshot.windowDurationMins,
+        bankedCreditChange: reason === "banked_credit_change",
+        bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
+      });
+    };
+
+    const postSnapshotSafely = async (
+      snapshot: CodexUsageSnapshot,
+      reason: MonitorSnapshotPostReason,
+    ) => {
+      try {
+        await postUsageSnapshot(config, snapshot, reason);
+        return true;
+      } catch (error) {
+        logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
+        return false;
+      }
+    };
+
+    const refresh = async (retryPending = true) => {
       if (settled || !initialized || refreshInFlight) return;
       refreshInFlight = true;
       let rpcFailed = false;
@@ -438,36 +513,66 @@ async function runAppServerSession(
           resetsAt: snapshot.resetsAt,
           planType: snapshot.planType,
           windowDurationMins: snapshot.windowDurationMins,
-          bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
+          bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
         });
+
+        const previousLocalSnapshot = monitorSnapshotState.previousLocalSnapshot;
+        const pendingBefore = getPendingMonitorPosts(monitorSnapshotState);
+        let pendingRetryFailed = false;
+        const pendingToRetry = retryPending ? pendingBefore[0] : undefined;
+        if (pendingToRetry) {
+          if (await postSnapshotSafely(pendingToRetry.snapshot, pendingToRetry.reason)) {
+            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
+            logSnapshotSent(pendingToRetry.reason, pendingToRetry.snapshot);
+          } else {
+            pendingRetryFailed = true;
+          }
+        }
 
         const postReason = getMonitorSnapshotPostReason(
           snapshot,
-          monitorSnapshotState,
+          { ...monitorSnapshotState, previousLocalSnapshot },
         );
         monitorSnapshotState = updateMonitorSnapshotState(
           monitorSnapshotState,
           snapshot,
           false,
         );
+
+        if (pendingRetryFailed) {
+          if (postReason && postReason !== "heartbeat") {
+            monitorSnapshotState = enqueueMonitorSnapshotPost(
+              monitorSnapshotState,
+              postReason,
+              snapshot,
+            );
+          }
+          return;
+        }
         if (!postReason) return;
 
-        await postUsageSnapshot(config, snapshot, postReason);
-        monitorSnapshotState = updateMonitorSnapshotState(
+        if (postReason === "heartbeat") {
+          if (getPendingMonitorPosts(monitorSnapshotState).length > 0) return;
+          if (await postSnapshotSafely(snapshot, postReason)) {
+            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
+            logSnapshotSent(postReason, snapshot);
+          }
+          return;
+        }
+
+        monitorSnapshotState = enqueueMonitorSnapshotPost(
           monitorSnapshotState,
+          postReason,
           snapshot,
-          true,
         );
-        logger("snapshot_sent", {
-          reason: postReason,
-          observedAt: snapshot.observedAt,
-          usedPercent: snapshot.usedPercent,
-          resetsAt: snapshot.resetsAt,
-          planType: snapshot.planType,
-          windowDurationMins: snapshot.windowDurationMins,
-          bankedCreditChange: postReason === "banked_credit_change",
-          bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
-        });
+        const pendingPosts = getPendingMonitorPosts(monitorSnapshotState);
+        if (pendingPosts.length !== 1 || !pendingPosts[0]) return;
+
+        const pendingPost = pendingPosts[0];
+        if (await postSnapshotSafely(pendingPost.snapshot, pendingPost.reason)) {
+          monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
+          logSnapshotSent(pendingPost.reason, pendingPost.snapshot);
+        }
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
         if (rpcFailed) {
@@ -482,7 +587,7 @@ async function runAppServerSession(
     };
 
     const notificationDebouncer = createNotificationDebouncer(() => {
-      void refresh();
+      void refresh(false);
     }, NOTIFICATION_DEBOUNCE_MS);
 
     const parser = createJsonLineParser(
