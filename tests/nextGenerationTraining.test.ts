@@ -120,7 +120,7 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.deepEqual(calls.slice(0, 3), [
     "from:prediction_history",
     "select:logged_hour,debug_info",
-    `gte:logged_hour:${NEXT_GENERATION_FREEZE_AT}`,
+    "gte:logged_hour:2026-08-21T03:00:00.000Z",
   ]);
 
   const failed = await loadNextGenerationTrainingState({

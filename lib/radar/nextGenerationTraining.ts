@@ -20,6 +20,11 @@ import type {
 
 const HOUR_MS = 60 * 60 * 1000;
 
+function getLoggedHourQueryStart() {
+  const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
+  return new Date(Math.floor(freezeTime / HOUR_MS) * HOUR_MS).toISOString();
+}
+
 export type NextGenerationTrainingHistoryRow = {
   logged_hour?: string | null;
   debug_info?: unknown;
@@ -228,7 +233,7 @@ export async function loadNextGenerationTrainingState(
     const result = await client
       .from("prediction_history")
       .select("logged_hour,debug_info")
-      .gte("logged_hour", NEXT_GENERATION_FREEZE_AT)
+      .gte("logged_hour", getLoggedHourQueryStart())
       .lt("logged_hour", options.asOf.toISOString())
       .order("logged_hour", { ascending: true })
       .limit(10_000);
