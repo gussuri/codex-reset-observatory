@@ -37,6 +37,19 @@ import { getRandomElapsedBoundaries } from "./randomElapsedProbability";
 const HOUR_MS = 60 * 60 * 1000;
 const INTEGRATION_STEP_HOURS = 10 / 60;
 
+export type RandomContinuousModelOptions = {
+  bandwidthHours?: number;
+  gridHours?: number;
+  truncationHours?: number;
+  localPriorExposureDays?: number;
+  localPriorWindowHours?: number;
+  integrationStepMinutes?: number;
+  globalPriorEventCount?: number;
+  globalPriorExposureDays?: number;
+  minimumDailyProbability?: number;
+  maximumDailyProbability?: number;
+};
+
 type ExposureCell = {
   centerHours: number;
   exposureHours: number;
@@ -54,6 +67,9 @@ export type RandomContinuousHazard = ShadowHazard & {
   priorExposureDays: number;
   localPriorExposureDays: number;
   localPriorWindowHours: number;
+  integrationStepHours: number;
+  minimumDailyProbability: number;
+  maximumDailyProbability: number;
 };
 
 export type RandomContinuousAudit = {
@@ -117,10 +133,15 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function kernelWeight(ageHours: number, targetAgeHours: number) {
+function kernelWeight(
+  ageHours: number,
+  targetAgeHours: number,
+  bandwidthHours: number,
+  truncationHours: number,
+) {
   const distance = Math.abs(ageHours - targetAgeHours);
-  if (!Number.isFinite(distance) || distance > RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS) return 0;
-  const normalized = (ageHours - targetAgeHours) / RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS;
+  if (!Number.isFinite(distance) || distance > truncationHours) return 0;
+  const normalized = (ageHours - targetAgeHours) / bandwidthHours;
   return Math.exp(-0.5 * normalized ** 2);
 }
 
@@ -128,11 +149,12 @@ function addExposureCells(
   cells: ExposureCell[],
   endHours: number,
   eventAgeHours: number | null = null,
+  gridHours = RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
 ) {
   if (!Number.isFinite(endHours) || endHours <= 0) return;
   let cursor = 0;
   while (cursor < endHours) {
-    const duration = Math.min(RANDOM_CONTINUOUS_SHADOW_GRID_HOURS, endHours - cursor);
+    const duration = Math.min(gridHours, endHours - cursor);
     if (!Number.isFinite(duration) || duration <= 0) break;
     cells.push({
       centerHours: cursor + duration / 2,
@@ -158,7 +180,38 @@ function getLatestElapsedHours(boundaries: RecoveryResetBoundary[], now: Date) {
 export function buildRandomContinuousHazard(
   boundaries: RecoveryResetBoundary[],
   now: Date,
+  options: RandomContinuousModelOptions = {},
 ): RandomContinuousHazard {
+  const bandwidthHours = Number.isFinite(options.bandwidthHours) && options.bandwidthHours! > 0
+    ? options.bandwidthHours!
+    : RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS;
+  const gridHours = Number.isFinite(options.gridHours) && options.gridHours! > 0
+    ? options.gridHours!
+    : RANDOM_CONTINUOUS_SHADOW_GRID_HOURS;
+  const truncationHours = Number.isFinite(options.truncationHours) && options.truncationHours! > 0
+    ? options.truncationHours!
+    : RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS;
+  const localPriorExposureDays = Number.isFinite(options.localPriorExposureDays) && options.localPriorExposureDays! > 0
+    ? options.localPriorExposureDays!
+    : RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS;
+  const localPriorWindowHours = Number.isFinite(options.localPriorWindowHours) && options.localPriorWindowHours! > 0
+    ? options.localPriorWindowHours!
+    : RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_WINDOW_HOURS;
+  const integrationStepHours = Number.isFinite(options.integrationStepMinutes) && options.integrationStepMinutes! > 0
+    ? options.integrationStepMinutes! / 60
+    : INTEGRATION_STEP_HOURS;
+  const globalPriorEventCount = Number.isFinite(options.globalPriorEventCount) && options.globalPriorEventCount! >= 0
+    ? options.globalPriorEventCount!
+    : GLOBAL_PRIOR_EVENT_COUNT;
+  const globalPriorExposureDays = Number.isFinite(options.globalPriorExposureDays) && options.globalPriorExposureDays! > 0
+    ? options.globalPriorExposureDays!
+    : GLOBAL_PRIOR_EXPOSURE_DAYS;
+  const minimumDailyProbability = Number.isFinite(options.minimumDailyProbability)
+    ? Math.max(0, Math.min(1, options.minimumDailyProbability!))
+    : MIN_BASELINE_DAILY_PROBABILITY;
+  const maximumDailyProbability = Number.isFinite(options.maximumDailyProbability)
+    ? Math.max(minimumDailyProbability, Math.min(1, options.maximumDailyProbability!))
+    : MAX_BASELINE_DAILY_PROBABILITY;
   const eventAgesHours: number[] = [];
   const exposureCells: ExposureCell[] = [];
   let completedIntervalCount = 0;
@@ -170,7 +223,7 @@ export function buildRandomContinuousHazard(
     if (previousTime === null || currentTime === null || currentTime <= previousTime) continue;
 
     const intervalHours = (currentTime - previousTime) / HOUR_MS;
-    addExposureCells(exposureCells, intervalHours, intervalHours);
+    addExposureCells(exposureCells, intervalHours, intervalHours, gridHours);
     totalExposureHours += intervalHours;
     completedIntervalCount += 1;
     eventAgesHours.push(intervalHours);
@@ -183,14 +236,14 @@ export function buildRandomContinuousHazard(
     ? 0
     : Math.max(0, (now.getTime() - latestBoundaryTime) / HOUR_MS);
   if (censoredExposureHours > 0) {
-    addExposureCells(exposureCells, censoredExposureHours);
+    addExposureCells(exposureCells, censoredExposureHours, null, gridHours);
     totalExposureHours += censoredExposureHours;
   }
 
   const globalLambdaPerHour = (
-    eventAgesHours.length + GLOBAL_PRIOR_EVENT_COUNT
+    eventAgesHours.length + globalPriorEventCount
   ) / (
-    totalExposureHours + GLOBAL_PRIOR_EXPOSURE_DAYS * 24
+    totalExposureHours + globalPriorExposureDays * 24
   );
 
   return {
@@ -206,23 +259,36 @@ export function buildRandomContinuousHazard(
     eventAgesHours,
     exposureCells,
     censoredExposureHours,
-    bandwidthHours: RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS,
-    gridHours: RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
-    gridStepHours: RANDOM_CONTINUOUS_SHADOW_GRID_HOURS,
-    truncationHours: RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS,
-    priorExposureDays: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS,
-    localPriorExposureDays: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_EXPOSURE_DAYS,
-    localPriorWindowHours: RANDOM_CONTINUOUS_SHADOW_LOCAL_PRIOR_WINDOW_HOURS,
+    bandwidthHours,
+    gridHours,
+    gridStepHours: gridHours,
+    truncationHours,
+    priorExposureDays: localPriorExposureDays,
+    localPriorExposureDays,
+    localPriorWindowHours,
+    integrationStepHours,
+    minimumDailyProbability,
+    maximumDailyProbability,
   };
 }
 
 function getKernelPosterior(hazard: RandomContinuousHazard, ageHours: number) {
   const weightedEventCount = hazard.exposureCells.reduce(
-    (sum, cell) => sum + cell.eventCount * kernelWeight(cell.centerHours, ageHours),
+    (sum, cell) => sum + cell.eventCount * kernelWeight(
+      cell.centerHours,
+      ageHours,
+      hazard.bandwidthHours,
+      hazard.truncationHours,
+    ),
     0,
   );
   const weightedExposureHours = hazard.exposureCells.reduce(
-    (sum, cell) => sum + cell.exposureHours * kernelWeight(cell.centerHours, ageHours),
+    (sum, cell) => sum + cell.exposureHours * kernelWeight(
+      cell.centerHours,
+      ageHours,
+      hazard.bandwidthHours,
+      hazard.truncationHours,
+    ),
     0,
   );
   const priorEventEquivalent = hazard.globalLambdaPerHour * hazard.localPriorWindowHours;
@@ -234,8 +300,8 @@ function getKernelPosterior(hazard: RandomContinuousHazard, ageHours: number) {
   const impliedDailyProbability = clamp01(1 - Math.exp(-posteriorLambdaPerHour * 24));
   const dailyProbability = clamp(
     impliedDailyProbability,
-    MIN_BASELINE_DAILY_PROBABILITY,
-    MAX_BASELINE_DAILY_PROBABILITY,
+    hazard.minimumDailyProbability,
+    hazard.maximumDailyProbability,
   );
 
   return {
@@ -300,6 +366,7 @@ export function integrateRandomContinuousHazard(
     horizonHours,
     regimeMultiplier,
     (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
+    hazard.integrationStepHours,
   );
 }
 
@@ -308,6 +375,7 @@ function integrateRandomContinuousHazardWithGetter(
   horizonHours: number,
   regimeMultiplier: number,
   getHazardAtAge: (ageHours: number) => number,
+  integrationStepHours = INTEGRATION_STEP_HOURS,
 ) {
   if (!Number.isFinite(startAgeHours) || !Number.isFinite(horizonHours) || horizonHours <= 0) return 0;
 
@@ -317,7 +385,7 @@ function integrateRandomContinuousHazardWithGetter(
   let cumulativeHazard = 0;
   let currentLambda = getHazardAtAge(cursor);
   while (cursor < end) {
-    const stepEnd = Math.min(end, cursor + INTEGRATION_STEP_HOURS);
+    const stepEnd = Math.min(end, cursor + integrationStepHours);
     if (!Number.isFinite(stepEnd) || stepEnd <= cursor) break;
     const stepHours = stepEnd - cursor;
     const nextLambda = getHazardAtAge(stepEnd);
@@ -338,10 +406,10 @@ function makeHorizons(
   getHazardAtAge: (ageHours: number) => number = (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
 ): ShadowProbabilityHorizons {
   return {
-    probability12h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 12, regimeMultiplier, getHazardAtAge),
-    probability24h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 24, regimeMultiplier, getHazardAtAge),
-    probability48h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 48, regimeMultiplier, getHazardAtAge),
-    probability72h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 72, regimeMultiplier, getHazardAtAge),
+    probability12h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 12, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
+    probability24h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 24, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
+    probability48h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 48, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
+    probability72h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 72, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
   };
 }
 
@@ -368,12 +436,13 @@ export function calculateRandomContinuousProbability(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
   precomputedRecoveryResult?: RegimeElapsedProbabilityResult,
+  modelOptions: RandomContinuousModelOptions = {},
 ): RandomContinuousProbabilityResult {
   const now = options.now ?? new Date();
   const recoveryResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(data, options);
   const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
-  const hazard = buildRandomContinuousHazard(randomBoundaries, now);
+  const hazard = buildRandomContinuousHazard(randomBoundaries, now, modelOptions);
   const latestRandomResetAt = randomBoundaries.at(-1)?.resetAt ?? null;
   const latestRecoveryResetAt = boundaries.at(-1)?.resetAt ?? null;
   const randomElapsedHours = getLatestElapsedHours(randomBoundaries, now);

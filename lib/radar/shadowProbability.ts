@@ -151,11 +151,39 @@ export type ShadowProbabilityOptions = {
   localObservationSignals?: Array<LocalObservationSignal>;
 };
 
+export type ShadowSignalMultiplierConfig = {
+  teaser: {
+    probability24h: number;
+    probability48h: number;
+  };
+  teaserStrength: {
+    lookbackHours: number;
+    weak: { multiplier24h: number; multiplier48h: number };
+    strong: { multiplier24h: number; multiplier48h: number };
+  };
+  statusSignal: { probability24h: number; probability48h: number };
+  officialIncidentHint: {
+    one: { probability24h: number; probability48h: number };
+    twoOrMore: { probability24h: number; probability48h: number };
+  };
+  officialUpdate: {
+    probability24hPerItem: number;
+    probability48hPerItem: number;
+    maxItems: number;
+  };
+  communitySignal: { probability24h: number; probability48h: number };
+  usageLimitAnomaly: { probability24h: number; probability48h: number };
+  complaintPressure: { medium: number; high: number };
+  maximumCombinedOddsMultiplier24h: number;
+  maximumCombinedOddsMultiplier48h: number;
+};
+
 export type ShadowProbabilityModelOptions = {
   modelVersion?: string;
   hazardOptions?: ShadowHazardBuildOptions;
   includeTeaserStrengthBoost?: boolean;
   legacyOfficialNoticeOverride?: boolean;
+  signalMultiplierConfig?: ShadowSignalMultiplierConfig;
 };
 
 function clamp01(value: number) {
@@ -424,7 +452,10 @@ function multiplyPairs(values: Array<ShadowProbabilityPair>) {
   );
 }
 
-export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): ShadowSignalMultipliers {
+export function calculateShadowSignalMultipliers(
+  input: ShadowSignalInputs,
+  config: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
+): ShadowSignalMultipliers {
   // hazard-odds-v3-random-inclusive estimates the random-reset process. Recent
   // reset frequency and regular-reset proximity remain in the input shape for
   // audit compatibility, but must not change the public random-reset odds.
@@ -436,7 +467,7 @@ export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): Sha
   const anomalyScore = clamp01(input.usageLimitAnomalyScore);
   const hintCount = finiteNonNegative(input.officialIncidentHintCount);
   const updateCount = Math.min(
-    SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialUpdate.maxItems,
+    config.officialUpdate.maxItems,
     finiteNonNegative(input.officialUpdateCount),
   );
 
@@ -444,53 +475,53 @@ export function calculateShadowSignalMultipliers(input: ShadowSignalInputs): Sha
     recentResetMomentum: pair(recentResetMultiplier, recentResetMultiplier),
     regularResetProximity: pair(regularResetMultiplier, regularResetMultiplier),
     teaser: pair(
-      1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability24h,
-      1 + teaserScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaser.probability48h,
+      1 + teaserScore * config.teaser.probability24h,
+      1 + teaserScore * config.teaser.probability48h,
     ),
     teaserStrength: input.teaserStrengthMultiplier ?? pair(1, 1),
     statusSignal: pair(
-      1 + statusScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.statusSignal.probability24h,
-      1 + statusScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.statusSignal.probability48h,
+      1 + statusScore * config.statusSignal.probability24h,
+      1 + statusScore * config.statusSignal.probability48h,
     ),
     officialIncidentHint: hintCount >= 2
       ? pair(
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialIncidentHint.twoOrMore.probability24h,
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialIncidentHint.twoOrMore.probability48h,
+            config.officialIncidentHint.twoOrMore.probability24h,
+            config.officialIncidentHint.twoOrMore.probability48h,
         )
       : hintCount >= 1
         ? pair(
-            SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialIncidentHint.one.probability24h,
-            SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialIncidentHint.one.probability48h,
+            config.officialIncidentHint.one.probability24h,
+            config.officialIncidentHint.one.probability48h,
           )
         : pair(1, 1),
     officialUpdate: pair(
-      1 + updateCount * SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialUpdate.probability24hPerItem,
-      1 + updateCount * SHADOW_SIGNAL_MULTIPLIER_CONFIG.officialUpdate.probability48hPerItem,
+      1 + updateCount * config.officialUpdate.probability24hPerItem,
+      1 + updateCount * config.officialUpdate.probability48hPerItem,
     ),
     communitySignal: pair(
-      1 + communityScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.communitySignal.probability24h,
-      1 + communityScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.communitySignal.probability48h,
+      1 + communityScore * config.communitySignal.probability24h,
+      1 + communityScore * config.communitySignal.probability48h,
     ),
     usageLimitAnomaly: pair(
-      1 + anomalyScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.usageLimitAnomaly.probability24h,
-      1 + anomalyScore * SHADOW_SIGNAL_MULTIPLIER_CONFIG.usageLimitAnomaly.probability48h,
+      1 + anomalyScore * config.usageLimitAnomaly.probability24h,
+      1 + anomalyScore * config.usageLimitAnomaly.probability48h,
     ),
     complaintPressure: input.complaintPressure === "high"
       ? pair(
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.complaintPressure.high,
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.complaintPressure.high,
+            config.complaintPressure.high,
+            config.complaintPressure.high,
         )
       : input.complaintPressure === "medium"
         ? pair(
-            SHADOW_SIGNAL_MULTIPLIER_CONFIG.complaintPressure.medium,
-            SHADOW_SIGNAL_MULTIPLIER_CONFIG.complaintPressure.medium,
+            config.complaintPressure.medium,
+            config.complaintPressure.medium,
           )
         : pair(1, 1),
   };
   const combinedBeforeCap = multiplyPairs(Object.values(multipliersWithoutCombined));
   const combinedAfterCap = pair(
-    Math.min(MAX_TOTAL_ODDS_MULTIPLIER_24H, combinedBeforeCap.probability24h),
-    Math.min(MAX_TOTAL_ODDS_MULTIPLIER_48H, combinedBeforeCap.probability48h),
+    Math.min(config.maximumCombinedOddsMultiplier24h, combinedBeforeCap.probability24h),
+    Math.min(config.maximumCombinedOddsMultiplier48h, combinedBeforeCap.probability48h),
   );
 
   return {
@@ -609,6 +640,7 @@ function getTeaserStrengthMultiplier(
   data: RadarData | null,
   now: Date,
   latestResetTime: number | null,
+  config: ShadowSignalMultiplierConfig,
 ) {
   // A formal teaser already owns this signal slot. Do not multiply its
   // established 1.8x/2.2x effect by the weaker strength signal.
@@ -633,11 +665,11 @@ function getTeaserStrengthMultiplier(
       ...eligibleSignals.map((signal) => {
         const strength = signal.teaser_strength;
         if (strength !== "strong" && strength !== "weak") return 1;
-        const initial = SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength[strength];
+        const initial = config.teaserStrength[strength];
         const progress = getTeaserDecayFactor(
           signal.tweet_created_at,
           now,
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength.lookbackHours,
+          config.teaserStrength.lookbackHours,
         );
         return 1 + (initial.multiplier24h - 1) * progress;
       }),
@@ -646,11 +678,11 @@ function getTeaserStrengthMultiplier(
       ...eligibleSignals.map((signal) => {
         const strength = signal.teaser_strength;
         if (strength !== "strong" && strength !== "weak") return 1;
-        const initial = SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength[strength];
+        const initial = config.teaserStrength[strength];
         const progress = getTeaserDecayFactor(
           signal.tweet_created_at,
           now,
-          SHADOW_SIGNAL_MULTIPLIER_CONFIG.teaserStrength.lookbackHours,
+          config.teaserStrength.lookbackHours,
         );
         return 1 + (initial.multiplier48h - 1) * progress;
       }),
@@ -682,6 +714,7 @@ export function getShadowSignalInputs(
   regularResetExpectedAt: string | null | undefined,
   includeTeaserStrengthBoost: boolean,
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
+  signalMultiplierConfig: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
   return {
@@ -689,7 +722,7 @@ export function getShadowSignalInputs(
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
     teaserScore: getTeaserScore(data, now, latestResetTime, localObservationSignals),
     teaserStrengthMultiplier: includeTeaserStrengthBoost
-      ? getTeaserStrengthMultiplier(data, now, latestResetTime)
+      ? getTeaserStrengthMultiplier(data, now, latestResetTime, signalMultiplierConfig)
       : pair(1, 1),
     normalizedStatusScore: clamp01(
       signalEvaluation.statusIncidents.weightedStatusScore /
@@ -824,8 +857,9 @@ export function calculateShadowProbabilityForModel(
     options.regularResetExpectedAt,
     modelOptions.includeTeaserStrengthBoost === true,
     localObservationSignals,
+    modelOptions.signalMultiplierConfig,
   );
-  const multipliers = calculateShadowSignalMultipliers(inputs);
+  const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const adjusted: ShadowProbabilityHorizons = {
     probability12h: applyOddsMultiplier(
       baseline.probability12h,

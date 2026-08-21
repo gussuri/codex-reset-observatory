@@ -33,6 +33,7 @@ import {
   type ShadowProbabilityHorizons,
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
+  type ShadowSignalMultiplierConfig,
 } from "./shadowProbability";
 import {
   getRecoveryBoundaryAudit,
@@ -62,6 +63,7 @@ export type RegimeElapsedModelOptions = {
   minRegimeMultiplier?: number;
   maxRegimeMultiplier?: number;
   mode?: RegimeElapsedMode;
+  signalMultiplierConfig?: ShadowSignalMultiplierConfig;
 };
 
 export type RegimeElapsedHazardBin = ShadowHazardBin;
@@ -437,7 +439,7 @@ function makeHorizons(
   } satisfies ShadowProbabilityHorizons;
 }
 
-function applyOfficialNoticeTimingPolicy(
+export function applyOfficialNoticeTimingPolicy(
   baseline: ShadowProbabilityHorizons,
   notice: ActiveOfficialNotice | null,
   now: Date,
@@ -512,8 +514,9 @@ export function calculateRegimeElapsedProbability(
     null,
     true,
     localObservationSignals,
+    modelOptions.signalMultiplierConfig,
   );
-  const multipliers = calculateShadowSignalMultipliers(inputs);
+  const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const regimeMultiplier = mode === "elapsed-only" ? 1 : regime.regimeMultiplier;
   const baseline = makeHorizons(hazard, mode, elapsedHours, regimeMultiplier);
   const adjusted: ShadowProbabilityHorizons = {

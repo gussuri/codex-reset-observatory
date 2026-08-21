@@ -56,6 +56,78 @@ export const RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS = [
   192,
   216,
 ] as const;
+
+// Next-generation shadows are independently preregistered. Keep their
+// identity and freeze boundary separate from the existing model aliases.
+export const NEXT_GENERATION_A_MODEL_VERSION = "hazard-ensemble-logit-stack-v1";
+export const NEXT_GENERATION_B_MODEL_VERSION = "hazard-regime-random-continuous-calibrated-v1";
+export const NEXT_GENERATION_B_RAW_MODEL_VERSION = RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION;
+export const NEXT_GENERATION_FREEZE_AT = "2026-08-21T03:27:00.000Z";
+export const NEXT_GENERATION_FREEZE_POLICY =
+  "A single reset, miss, or new observation must not trigger retuning.";
+export const NEXT_GENERATION_EVALUATION_MODE = "prospective" as const;
+export const NEXT_GENERATION_BACKFILL = false as const;
+export const NEXT_GENERATION_AUTO_PUBLISH = false as const;
+
+export const NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG = {
+  bandwidthHours: 24,
+  gridHours: 1,
+  truncationHours: 72,
+  localPriorExposureDays: 2,
+  localPriorWindowHours: 48,
+  integrationStepMinutes: 10,
+  globalPriorEventCount: 1,
+  globalPriorExposureDays: 10,
+  minimumDailyProbability: 0.01,
+  maximumDailyProbability: 0.35,
+} as const;
+
+export const NEXT_GENERATION_B_FROZEN_REGIME_CONFIG = {
+  binScheme: "A" as const,
+  priorExposureDays: 2,
+  regimeHalfLifeDays: 3,
+  regimeRatioExponent: 1,
+  minRegimeMultiplier: 0.5,
+  maxRegimeMultiplier: 2,
+} as const;
+
+export const NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG = {
+  teaser: { probability24h: 0.8, probability48h: 1.2 },
+  teaserStrength: {
+    lookbackHours: 48,
+    weak: { multiplier24h: 1.15, multiplier48h: 1.2 },
+    strong: { multiplier24h: 1.35, multiplier48h: 1.5 },
+  },
+  statusSignal: { probability24h: 0.5, probability48h: 0.7 },
+  officialIncidentHint: {
+    one: { probability24h: 1.75, probability48h: 1.9 },
+    twoOrMore: { probability24h: 2.5, probability48h: 2.8 },
+  },
+  officialUpdate: { probability24hPerItem: 0.2, probability48hPerItem: 0.25, maxItems: 2 },
+  communitySignal: { probability24h: 0.15, probability48h: 0.2 },
+  usageLimitAnomaly: { probability24h: 0.25, probability48h: 0.35 },
+  complaintPressure: { medium: 1.1, high: 1.25 },
+  maximumCombinedOddsMultiplier24h: 5,
+  maximumCombinedOddsMultiplier48h: 6,
+} as const;
+
+export const NEXT_GENERATION_A_COMPONENT_VERSIONS = [
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  NEXT_GENERATION_B_MODEL_VERSION,
+  REGIME_ELAPSED_FULL_MODEL_VERSION,
+  RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
+  RECENCY_H30_PROBABILITY_MODEL_VERSION,
+] as const;
+export const NEXT_GENERATION_A_COMPONENT_LOGIT_EPSILON = 1e-4;
+export const NEXT_GENERATION_A_ALPHA_PRIOR_STD_DEV = 0.5;
+export const NEXT_GENERATION_A_WEIGHT_PRIOR_MEAN = 0.2;
+export const NEXT_GENERATION_A_WEIGHT_PRIOR_STD_DEV = 0.15;
+export const NEXT_GENERATION_A_MINIMUM_SAMPLES = 10;
+export const NEXT_GENERATION_A_SOLVER_MAX_ITERATIONS = 200;
+export const NEXT_GENERATION_A_SOLVER_TOLERANCE = 1e-7;
+export const NEXT_GENERATION_A_SOLVER_INITIAL_STEP = 1;
+export const NEXT_GENERATION_A_SOLVER_BACKTRACKING_FACTOR = 0.5;
+export const NEXT_GENERATION_A_SOLVER_MAX_BACKTRACKING_STEPS = 20;
 export const PUBLISHED_RECENCY_HALF_LIFE_DAYS = 30;
 export const REGIME_ELAPSED_SELECTED_BIN_SCHEME = "A" as const;
 export const REGIME_ELAPSED_SELECTED_PRIOR_EXPOSURE_DAYS = 2;
@@ -158,6 +230,8 @@ export const SHADOW_SIGNAL_MULTIPLIER_CONFIG = {
     medium: 1.1,
     high: 1.25,
   },
+  maximumCombinedOddsMultiplier24h: MAX_TOTAL_ODDS_MULTIPLIER_24H,
+  maximumCombinedOddsMultiplier48h: MAX_TOTAL_ODDS_MULTIPLIER_48H,
 } as const;
 
 export const SHADOW_TARGET_DEFINITION =
