@@ -61,12 +61,30 @@ test("B calibration rows are freeze-boundary and JST daily-first only", () => {
       rawProbability24h: 0.4,
       rawProbability48h: 0.5,
     },
-  ], new Date("2026-08-22T03:00:00.000Z"));
+  ], new Date("2026-08-23T02:00:00.000Z"), 24);
 
   assert.deepEqual(rows.map((row) => row.generatedAt), [
     "2026-08-21T04:00:00.000Z",
     "2026-08-22T01:00:00.000Z",
   ]);
+  assert.deepEqual(
+    selectNextGenerationCalibrationRows([
+      {
+        generatedAt: "2026-08-21T04:00:00.000Z",
+        modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+        rawProbability24h: 0.2,
+        rawProbability48h: 0.3,
+      },
+      {
+        generatedAt: "2026-08-22T01:00:00.000Z",
+        modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+        rawProbability24h: 0.4,
+        rawProbability48h: 0.5,
+      },
+    ], new Date("2026-08-23T05:00:00.000Z"), 48).map((row) => row.generatedAt), [
+      "2026-08-21T04:00:00.000Z",
+    ],
+  );
 });
 
 test("B cold start uses zero alpha and keeps the random clock across regular recovery", () => {
@@ -85,3 +103,16 @@ test("B cold start uses zero alpha and keeps the random clock across regular rec
   assert.equal(result.randomContinuous.randomElapsedHours >= 0, true);
 });
 
+test("B calibration selection keeps 24h and 48h horizon cutoffs strict", () => {
+  const row = {
+    generatedAt: "2026-08-21T04:00:00.000Z",
+    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+    rawProbability24h: 0.2,
+    rawProbability48h: 0.3,
+    actual24h: true,
+    actual48h: false,
+  };
+  const asOf = new Date("2026-08-22T10:00:00.000Z");
+  assert.equal(selectNextGenerationCalibrationRows([row], asOf, 24).length, 1);
+  assert.equal(selectNextGenerationCalibrationRows([row], asOf, 48).length, 0);
+});

@@ -72,3 +72,17 @@ test("A fitted 24h and 48h models are deterministic constrained fits", () => {
   assert.equal(Number.isFinite(first.alpha), true);
   assert.equal(first.solver.converged, true);
 });
+
+test("A fits each horizon only from rows whose own label is resolved", () => {
+  const trainingRows = Array.from({ length: 10 }, (_, index) => ({
+    generatedAt: new Date(Date.UTC(2026, 7, 1 + index, 3)).toISOString(),
+    components,
+    actual24h: index % 2 === 0,
+    actual48h: undefined,
+  }));
+  const fit24h = fitNextGenerationEnsemble(trainingRows, "24h");
+  const fit48h = fitNextGenerationEnsemble(trainingRows, "48h");
+  assert.equal(fit24h.sampleCount, 10);
+  assert.equal(fit48h.sampleCount, 0);
+  assert.equal(fit48h.trainingMode, "equal");
+});

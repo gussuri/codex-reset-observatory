@@ -26,8 +26,8 @@ export type NextGenerationComponentForecast = {
 export type NextGenerationEnsembleTrainingRow = {
   generatedAt: string;
   components: Record<string, NextGenerationComponentForecast>;
-  actual24h: boolean;
-  actual48h: boolean;
+  actual24h?: boolean;
+  actual48h?: boolean;
 };
 
 type EnsembleHorizon = "24h" | "48h";
@@ -44,6 +44,7 @@ export type NextGenerationEnsembleFit = {
     objective: number | null;
     reason: string | null;
   };
+  lastResolvedOrigin: string | null;
 };
 
 export type NextGenerationAResult = {
@@ -173,13 +174,14 @@ function getGradient(
   return { alphaGradient, weightGradient };
 }
 
-function failedFit(sampleCount: number, positiveCount: number, reason: string): NextGenerationEnsembleFit {
+function failedFit(sampleCount: number, positiveCount: number, lastResolvedOrigin: string | null, reason: string): NextGenerationEnsembleFit {
   return {
     trainingMode: "solver_failed",
     alpha: 0,
     weights: [],
     sampleCount,
     positiveCount,
+    lastResolvedOrigin,
     solver: { converged: false, iterations: 0, objective: null, reason },
   };
 }
@@ -188,11 +190,15 @@ export function fitNextGenerationEnsemble(
   rows: Array<NextGenerationEnsembleTrainingRow>,
   horizon: EnsembleHorizon,
 ): NextGenerationEnsembleFit {
-  const samples = rows.map((row) => ({
+  const resolvedRows = rows.filter((row) =>
+    typeof (horizon === "24h" ? row.actual24h : row.actual48h) === "boolean",
+  );
+  const samples = resolvedRows.map((row) => ({
     logits: getLogits(row, horizon),
-    actual: horizon === "24h" ? row.actual24h : row.actual48h,
+    actual: (horizon === "24h" ? row.actual24h : row.actual48h) as boolean,
   }));
   const positiveCount = samples.filter((sample) => sample.actual).length;
+  const lastResolvedOrigin = resolvedRows.at(-1)?.generatedAt ?? null;
   if (samples.length < NEXT_GENERATION_A_MINIMUM_SAMPLES) {
     return {
       trainingMode: "equal",
@@ -200,6 +206,7 @@ export function fitNextGenerationEnsemble(
       weights: NEXT_GENERATION_A_COMPONENT_VERSIONS.map(() => NEXT_GENERATION_A_WEIGHT_PRIOR_MEAN),
       sampleCount: samples.length,
       positiveCount,
+      lastResolvedOrigin,
       solver: { converged: true, iterations: 0, objective: null, reason: null },
     };
   }
@@ -207,7 +214,7 @@ export function fitNextGenerationEnsemble(
   let alpha = 0;
   let weights = NEXT_GENERATION_A_COMPONENT_VERSIONS.map(() => NEXT_GENERATION_A_WEIGHT_PRIOR_MEAN);
   let objective = getObjective(samples, alpha, weights);
-  if (!Number.isFinite(objective)) return failedFit(samples.length, positiveCount, "initial_objective_non_finite");
+  if (!Number.isFinite(objective)) return failedFit(samples.length, positiveCount, lastResolvedOrigin, "initial_objective_non_finite");
 
   for (let iteration = 1; iteration <= NEXT_GENERATION_A_SOLVER_MAX_ITERATIONS; iteration += 1) {
     const gradient = getGradient(samples, alpha, weights);
@@ -230,7 +237,7 @@ export function fitNextGenerationEnsemble(
       }
       step *= NEXT_GENERATION_A_SOLVER_BACKTRACKING_FACTOR;
     }
-    if (!accepted) return failedFit(samples.length, positiveCount, "backtracking_failed");
+    if (!accepted) return failedFit(samples.length, positiveCount, lastResolvedOrigin, "backtracking_failed");
     const maxDelta = Math.max(
       Math.abs(accepted.alpha - alpha),
       ...accepted.weights.map((value, index) => Math.abs(value - weights[index])),
@@ -245,12 +252,13 @@ export function fitNextGenerationEnsemble(
         weights,
         sampleCount: samples.length,
         positiveCount,
+        lastResolvedOrigin,
         solver: { converged: true, iterations: iteration, objective, reason: null },
       };
     }
   }
 
-  return failedFit(samples.length, positiveCount, "max_iterations_exceeded");
+  return failedFit(samples.length, positiveCount, lastResolvedOrigin, "max_iterations_exceeded");
 }
 
 function getComponentSet(components: Record<string, NextGenerationComponentForecast>) {
@@ -320,8 +328,8 @@ export function calculateNextGenerationAEnsemble(
     trainingSampleCount48h: fit48h.sampleCount,
     positiveTrainingCount24h: fit24h.positiveCount,
     positiveTrainingCount48h: fit48h.positiveCount,
-    fitCutoff24h: fit24h.sampleCount > 0 ? rows.at(-1)?.generatedAt ?? null : null,
-    fitCutoff48h: fit48h.sampleCount > 0 ? rows.at(-1)?.generatedAt ?? null : null,
+    fitCutoff24h: fit24h.lastResolvedOrigin,
+    fitCutoff48h: fit48h.lastResolvedOrigin,
     horizonCoherenceAdjusted: coherent.adjusted,
     regularization: {
       alphaPriorStdDev: NEXT_GENERATION_A_ALPHA_PRIOR_STD_DEV,

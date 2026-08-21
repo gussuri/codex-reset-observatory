@@ -140,6 +140,7 @@ export function enforceNextGenerationHorizonCoherence(
 export function selectNextGenerationCalibrationRows(
   rows: Array<NextGenerationCalibrationRow>,
   asOf: Date,
+  horizonHours: 24 | 48 = 48,
 ) {
   const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
   const asOfTime = asOf.getTime();
@@ -150,6 +151,7 @@ export function selectNextGenerationCalibrationRows(
         && generatedAt !== null
         && generatedAt >= freezeTime
         && generatedAt < asOfTime
+        && generatedAt + horizonHours * 60 * 60 * 1000 <= asOfTime
         && isFiniteProbability(row.rawProbability24h)
         && isFiniteProbability(row.rawProbability48h);
     })
@@ -163,15 +165,16 @@ export function selectNextGenerationCalibrationRows(
   return Array.from(selected.values());
 }
 
-function toCalibrationRows(rows: Array<NextGenerationCalibrationRow>) {
+function toCalibrationRows(rows: Array<NextGenerationCalibrationRow>, horizonHours: 24 | 48) {
   return rows.flatMap((row): Array<PrequentialCalibrationRow> => {
-    if (typeof row.actual24h !== "boolean" || typeof row.actual48h !== "boolean") return [];
+    const actual = horizonHours === 24 ? row.actual24h : row.actual48h;
+    if (typeof actual !== "boolean") return [];
     return [{
       recordedAt: row.generatedAt,
       probability24h: row.rawProbability24h,
       probability48h: row.rawProbability48h,
-      actual24h: row.actual24h,
-      actual48h: row.actual48h,
+      actual24h: horizonHours === 24 ? actual : false,
+      actual48h: horizonHours === 48 ? actual : false,
     }];
   });
 }
@@ -204,8 +207,8 @@ export function calculateNextGenerationBProbability(
     NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
   );
   const rawHorizons = getRawSignalAdjustedHorizons(randomContinuousResult);
-  const selectedRows = selectNextGenerationCalibrationRows(options.trainingRows ?? [], now);
-  const calibrationRows = toCalibrationRows(selectedRows);
+  const selectedRows24h = selectNextGenerationCalibrationRows(options.trainingRows ?? [], now, 24);
+  const selectedRows48h = selectNextGenerationCalibrationRows(options.trainingRows ?? [], now, 48);
   const currentCalibrationRow: PrequentialCalibrationRow = {
     recordedAt: now.toISOString(),
     probability24h: rawHorizons.probability24h,
@@ -213,10 +216,17 @@ export function calculateNextGenerationBProbability(
     actual24h: false,
     actual48h: false,
   };
-  const calibration = calculatePrequentialLogitCalibration(currentCalibrationRow, calibrationRows);
+  const calibration24h = calculatePrequentialLogitCalibration(
+    currentCalibrationRow,
+    toCalibrationRows(selectedRows24h, 24),
+  );
+  const calibration48h = calculatePrequentialLogitCalibration(
+    currentCalibrationRow,
+    toCalibrationRows(selectedRows48h, 48),
+  );
   const calibrated = enforceNextGenerationHorizonCoherence(
-    calibration.calibratedProbability24h,
-    calibration.calibratedProbability48h,
+    calibration24h.calibratedProbability24h,
+    calibration48h.calibratedProbability48h,
   );
   const latestRecoveryResetAt = randomContinuousResult.randomContinuous.latestRecoveryResetAt;
   const notice = options.activeOfficialNotice === undefined
@@ -257,14 +267,14 @@ export function calculateNextGenerationBProbability(
     rawProbability24h: rawHorizons.probability24h,
     rawProbability48h: rawHorizons.probability48h,
     predictions: finalHorizons,
-    alpha24h: fallbackUsed ? 0 : calibration.alpha24h,
-    alpha48h: fallbackUsed ? 0 : calibration.alpha48h,
-    calibrationSampleCount24h: fallbackUsed ? 0 : calibration.calibrationSampleCount24h,
-    calibrationSampleCount48h: fallbackUsed ? 0 : calibration.calibrationSampleCount48h,
-    positiveCalibrationCount24h: fallbackUsed ? 0 : calibration.positiveCalibrationCount24h,
-    positiveCalibrationCount48h: fallbackUsed ? 0 : calibration.positiveCalibrationCount48h,
-    lastResolvedOrigin24h: fallbackUsed ? null : calibration.lastResolvedOrigin24h,
-    lastResolvedOrigin48h: fallbackUsed ? null : calibration.lastResolvedOrigin48h,
+    alpha24h: fallbackUsed ? 0 : calibration24h.alpha24h,
+    alpha48h: fallbackUsed ? 0 : calibration48h.alpha48h,
+    calibrationSampleCount24h: fallbackUsed ? 0 : calibration24h.calibrationSampleCount24h,
+    calibrationSampleCount48h: fallbackUsed ? 0 : calibration48h.calibrationSampleCount48h,
+    positiveCalibrationCount24h: fallbackUsed ? 0 : calibration24h.positiveCalibrationCount24h,
+    positiveCalibrationCount48h: fallbackUsed ? 0 : calibration48h.positiveCalibrationCount48h,
+    lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
+    lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
     horizonCoherenceAdjusted: calibrated.adjusted || (noticeHorizons ? finalPair.adjusted : false),
     trainingReadStatus,
     fallbackUsed,
