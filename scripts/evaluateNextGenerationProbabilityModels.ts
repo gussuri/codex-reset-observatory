@@ -161,7 +161,13 @@ async function main() {
     ...report,
     notes: [
       ...report.notes,
-      ...(history.reason ? [`Prediction history availability: ${history.reason}`] : []),
+      ...(history.rows.length === 0 && history.reason?.includes("environment")
+        ? [`Prediction history availability: ${history.reason}`]
+        : history.rows.length === 0 && history.reason?.includes("query")
+          ? [`Prediction history availability: ${history.reason}`]
+          : report.forecastCounts.comparable === 0
+            ? ["Prediction history availability: no row contains the public model and both exact next-generation forecasts at the same origin yet."]
+            : []),
       ...(production.reason ? [`Boundary availability: ${production.reason}`] : []),
       "Boundary source: Production Supabase recovery inputs normalized into RadarData; only random boundaries are passed to this evaluator.",
     ],

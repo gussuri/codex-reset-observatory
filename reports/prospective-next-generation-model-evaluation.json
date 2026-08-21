@@ -1,0 +1,348 @@
+{
+  "schemaVersion": "prospective-next-generation-model-evaluation-v1",
+  "status": "insufficient_data",
+  "generatedAt": "2026-08-21T04:26:38.460Z",
+  "asOf": "2026-08-21T04:26:38.460Z",
+  "evaluationMode": "prospective",
+  "backfilled": false,
+  "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+  "targetDefinition": "Broad-scope random reset probability modeled by elapsed time since the latest broad-scope random reset and the existing point-in-time random-reset regime. Regular resets remain recovery boundaries for product/state logic but do not reset the random-event hazard clock.",
+  "freezeAt": "2026-08-21T03:27:00.000Z",
+  "evaluationStartAt": null,
+  "forecastCounts": {
+    "public": 0,
+    "a": 0,
+    "b": 0,
+    "comparable": 0
+  },
+  "comparison": {
+    "resolved24h": 0,
+    "resolved48h": 0,
+    "targetResetCount": 0,
+    "pairwise": {
+      "aMinusPublic": {
+        "brier24h": null,
+        "brier48h": null,
+        "logLoss24h": null,
+        "logLoss48h": null
+      },
+      "bMinusPublic": {
+        "brier24h": null,
+        "brier48h": null,
+        "logLoss24h": null,
+        "logLoss48h": null
+      }
+    },
+    "nonOverlapping24h": 0,
+    "nonOverlapping48h": 0
+  },
+  "models": {
+    "public": {
+      "modelVersion": "hazard-odds-v4-logit-calibrated-prequential-v3",
+      "metrics24h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      },
+      "metrics48h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      }
+    },
+    "a": {
+      "modelVersion": "hazard-ensemble-logit-stack-v1",
+      "metrics24h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      },
+      "metrics48h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      }
+    },
+    "b": {
+      "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+      "metrics24h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      },
+      "metrics48h": {
+        "count": 0,
+        "positiveCount": 0,
+        "actualRate": 0,
+        "averagePrediction": 0,
+        "brier": 0,
+        "logLoss": 0,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          }
+        ],
+        "periodStart": null,
+        "periodEnd": null,
+        "targetResetCount": 0
+      }
+    }
+  },
+  "availability": {
+    "aRate": 0,
+    "bRate": 0,
+    "comparableRate": 0,
+    "skipReasons": {}
+  },
+  "gate": {
+    "autoPublish": false,
+    "manualReviewOnly": true,
+    "thresholds": {
+      "targetResetCount": 5,
+      "resolvedDaily24h": 20,
+      "resolvedDaily48h": 15,
+      "maxLogLossWorsening": 0.05
+    },
+    "targetResetCount": 0,
+    "resolvedDaily24h": 0,
+    "resolvedDaily48h": 0,
+    "a": {
+      "brier24hNotWorse": false,
+      "brier48hNotWorse": false,
+      "logLossNotExtremelyWorse": true,
+      "eligibleForManualReview": false
+    },
+    "b": {
+      "brier24hNotWorse": false,
+      "brier48hNotWorse": false,
+      "logLossNotExtremelyWorse": true,
+      "eligibleForManualReview": false
+    }
+  },
+  "notes": [
+    "Only prediction_history rows containing the public model and both exact next-generation models at the same origin are compared.",
+    "Rows before 2026-08-21T03:27:00.000Z are excluded; no forecast is backfilled, regenerated, or relabeled.",
+    "The primary sample is the first comparable forecast in each Asia/Tokyo calendar day.",
+    "Only broad eligible random reset boundaries are targets; regular resets are neither targets nor censoring events.",
+    "Gate results are manual-review diagnostics only and never auto-publish or retune a model.",
+    "Prediction history availability: no row contains the public model and both exact next-generation forecasts at the same origin yet.",
+    "Boundary source: Production Supabase recovery inputs normalized into RadarData; only random boundaries are passed to this evaluator."
+  ]
+}
