@@ -73,7 +73,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       titleConstant: HOME_TITLE_EN,
       descriptionConstant: HOME_DESCRIPTION_EN,
       path: "/en",
-      expectedTitle: "Codex Usage Limit Reset Status, History and Forecast",
+      expectedTitle: "Codex Reset Observatory | Reset Timing, Forecasts & History",
       expectedDescription: "Check the latest Codex reset time, recent history, official notices, and reset forecasts for the next 24 and 48 hours.",
     },
     {

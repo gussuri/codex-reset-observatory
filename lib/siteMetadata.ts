@@ -9,7 +9,7 @@ export const HOME_TITLE_JA = "Codexリセット観測所｜タイミング・履
 export const HOME_DESCRIPTION_JA =
   "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。";
 export const HOME_TITLE_EN =
-  "Codex Usage Limit Reset Status, History and Forecast";
+  "Codex Reset Observatory | Reset Timing, Forecasts & History";
 export const HOME_DESCRIPTION_EN =
   "Check the latest Codex reset time, recent history, official notices, and reset forecasts for the next 24 and 48 hours.";
 export const HOME_TITLE_ZH = "Codex 重置观测站｜使用额度、时间、历史与预测";
