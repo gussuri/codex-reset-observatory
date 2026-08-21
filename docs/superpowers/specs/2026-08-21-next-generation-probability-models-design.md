@@ -57,14 +57,14 @@ Bは既存 `hazard-regime-random-continuous-v1` のrandom-clock continuous estim
 3. recent random-reset activity regimeをhazardへ適用する。
 4. ordinary Tibo / Status / usage signalsをodds multiplierとして適用する。
 5. 24h/48hをprospective logit calibrationする。
-6. active official noticeがある場合、最後に既存official-notice timing policyを適用する。
+6. active official noticeがある場合、最後に `official-notice-window-v3` policyを適用する。
 7. 12hはfinal 24h、72hはfinal 48hから既存derive ruleで生成する。
 
 regular resetは `randomElapsedHours` を0へ戻さない。
 
 ## B continuous hazard
 
-既存preregistered random-continuous設定をそのまま継承する。
+既存preregistered random-continuous estimatorの現在値をB v1専用設定としてfreezeする。将来共有configが変更されてもB v1の値を追随変更しない。
 
 - kernel: Gaussian
 - bandwidth: 24h
@@ -73,37 +73,46 @@ regular resetは `randomElapsedHours` を0へ戻さない。
 - local prior exposure: 2d
 - local prior window: 48h
 - integration step: 10m
-- global prior、daily probability floor/cap: 現行random-continuous implementationを継承
+- global prior event count: 1
+- global prior exposure: 10d
+- minimum implied daily probability: 1%
+- maximum implied daily probability: 35%
 
-B導入を理由にこれらを再fitしない。
+B導入を理由にこれらを再fitしない。実装ではmodel-specific frozen configまたは同等のversioned snapshotを使い、mutableな共有定数の将来変更でB v1の意味が変わらないようにする。
 
 ## B activity regime
 
-既存full regime設定を継承する。
+既存full regime設定の現在値をB v1としてfreezeする。
 
 - recent-rate half-life: 3d
 - ratio exponent: 1
 - multiplier clamp: 0.5–2.0
+- prior event count: 1
 - prior exposure: 2d
 
 recent rateとlong-term rateのevent countはeligible random resetだけを使う。regular resetはregime event countへ入れない。
 
 ## B ordinary signals
 
-v1では既存の監査可能なsignal slotだけを使用する。
+v1では既存の監査可能なsignal slotだけを使用し、以下の現在値をB v1へfreezeする。
 
-- formal Tibo teaser
-- teaser strength
-- OpenAI Status signal
-- official incident hint
-- official update
-- community signal
-- usage-limit anomaly
-- complaint pressure
+- formal teaser score: 24h `1 + score * 0.8`、48h `1 + score * 1.2`
+- teaser strength lookback: 48h
+- teaser strength weak: 24h 1.15x、48h 1.20x
+- teaser strength strong: 24h 1.35x、48h 1.50x
+- Status score: 24h `1 + score * 0.5`、48h `1 + score * 0.7`
+- official incident hint 1件: 24h 1.75x、48h 1.90x
+- official incident hint 2件以上: 24h 2.50x、48h 2.80x
+- official update: 1件あたり24h +0.20、48h +0.25、最大2件
+- community score: 24h `1 + score * 0.15`、48h `1 + score * 0.20`
+- usage-limit anomaly: 24h `1 + score * 0.25`、48h `1 + score * 0.35`
+- complaint pressure medium: 1.10x
+- complaint pressure high: 1.25x
+- combined odds multiplier cap: 24h 5x、48h 6x
 
-既存odds multiplierとcombined capを再利用する。recent-reset momentumとregular-reset proximityがrandom-reset oddsを変えない現行policyも維持する。formal teaserとteaser strengthの二重計上防止も維持する。
+recent-reset momentumとregular-reset proximityはrandom-reset oddsへ影響させず常に1xとする。formal teaserが有効な場合はteaser strengthを追加乗算せず、現行の二重計上防止を維持する。teaser decay、signal eligibility、point-in-time availabilityは実装時点の既存v3 policyをversioned testで固定する。
 
-official noticeはordinary multiplierへ混ぜず、calibration後に既存timing-aware override/policyを適用する。
+official noticeはordinary multiplierへ混ぜず、calibration後に `official-notice-window-v3` を1回だけ適用する。
 
 ## B prospective calibration
 
@@ -117,6 +126,8 @@ BのcalibrationはB freeze以後に**実際に保存されたB raw forecast**だ
 - samples < 10: `alpha = 0`
 - input probability: 保存済み `rawProbability24h` / `rawProbability48h`
 - teacher label: shared random-reset target definition
+
+`rawProbability24h/48h` はcontinuous hazard × regime × ordinary signalsまでを含み、calibrationとofficial notice policyを適用する前の値と定義する。
 
 calibration済みfinal probabilityを次回のcalibration inputへ再利用しない。これにより自己再校正feedback loopを防ぐ。
 
@@ -144,6 +155,7 @@ Bのcalibration fit cutoff、sample count、positive count、last resolved origi
 - `positiveCalibrationCount24h/48h`
 - `lastResolvedOrigin24h/48h`
 - `officialNoticeOverride`
+- `officialNoticeTimingPolicyVersion`
 - `freezeAt`
 - `freezePolicy`
 
@@ -159,7 +171,7 @@ A v1は次の**exact model versions**のみをcomponentとする。`current publ
 4. `hazard-regime-random-elapsed-v1`
 5. `hazard-odds-v3-recency-bayes-h30-r3`
 
-将来public modelが変更されてもA v1のcomponent 1はv3のままshadow計算・保存する。
+将来public modelが変更されてもA v1のcomponent 1はv3のままshadow計算・保存する。各componentにはそのmodel versionがそのoriginで実際に生成した**final 24h/48h probability**を使う。component内部で既にofficial notice policyが適用されている場合もその保存値をそのまま入力し、A自身は追加のofficial-notice overrideを行わない。
 
 ## A prediction equation
 
@@ -258,7 +270,7 @@ forecast生成前に、A/B freeze以後かつcurrent originより前の `predict
 
 ## Three-way comparison
 
-Current public / A / Bの3モデルが同一rowに存在するoriginだけを正式比較へ使う。
+Current public / A / Bの3モデルが同一rowに存在するoriginだけを正式比較へ使う。Current publicは比較rowに実際に保存されたpublished model forecastを使い、後日再計算しない。
 
 primary metrics:
 
@@ -344,8 +356,9 @@ public `calculatePublishedProbability` のselection/fallback chainにはA/Bを�
 ### B
 
 - regular reset後もrandomElapsedHoursが変わらない
-- existing continuous hazard設定を継承する
+- frozen continuous hazard / regime / signal constantsが期待値どおり
 - ordinary signals → calibration → official noticeの順序
+- official notice policyを1回だけ適用する
 - freeze前rowをcalibrationへ使わない
 - unresolved rowを使わない
 - daily-firstだけをcalibrationへ使う
@@ -357,6 +370,7 @@ public `calculatePublishedProbability` のselection/fallback chainにはA/Bを�
 
 - 5 exact versions以外を受け付けない
 - 1component欠損でAを生成しない
+- component final probabilityを使いA側でofficial noticeを再適用しない
 - freeze前/backfilled rowをtrainingへ使わない
 - daily-first / horizon-resolvedのみを使う
 - sample < 10でequal weights + alpha0
