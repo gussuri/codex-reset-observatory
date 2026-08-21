@@ -537,6 +537,66 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 
+test("renders a BANKED notice separately and does not recommend exhausting the quota", () => {
+  const openedAt = "2026-08-21T12:30:00.000Z";
+  const data = getLocalRadarData({
+    calculationNow: new Date(openedAt),
+    activeTiboSignals: [
+      {
+        tweet_id: "presentation-banked-notice",
+        signal_type: "official_notice",
+        text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+        tweet_url: "https://x.com/thsottiaux/status/presentation-banked-notice",
+        tweet_created_at: openedAt,
+        expires_at: "2026-08-22T09:00:00.000Z",
+        confidence: 0.96,
+        verification_status: "auto_unverified",
+        expected_start_at: openedAt,
+        expected_end_at: "2026-08-22T07:00:00.000Z",
+        temporal_resolution_status: "resolved",
+        ai_temporal_precision: "daypart",
+        ai_temporal_timezone: "America/Los_Angeles",
+      },
+    ],
+  });
+
+  const expected = {
+    ja: {
+      notice: "BANKEDリセット（任意リセット権）の配布が予告されています。",
+      advice: "任意のタイミングで使用できるため、無理にCodexの使用量を使い切る必要はありません。",
+    },
+    en: {
+      notice: "A BANKED Reset distribution has been announced.",
+      advice: "Because it can be used at any time, you do not need to use up your Codex quota.",
+    },
+    zh: {
+      notice: "已发布 BANKED 重置发放预告。",
+      advice: "由于可以在任意时间使用，无需为了重置而用完 Codex 的使用额度。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(data, locale, { calculationNow: new Date(openedAt) }),
+        initialFetchedAt: openedAt,
+        locale,
+      }),
+    );
+    assert.match(html, new RegExp(expected[locale].notice));
+    assert.match(html, new RegExp(expected[locale].advice));
+  }
+
+  const jaHtml = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: toPublicRadarSnapshot(data, "ja", { calculationNow: new Date(openedAt) }),
+      initialFetchedAt: openedAt,
+      locale: "ja",
+    }),
+  );
+  assert.doesNotMatch(jaHtml, /リセット前に残り枠を使う/);
+});
+
 test("shows the local-time note only for resolved Tibo notices", () => {
   const renderNotice = (tweetUrl: string, overrides: Partial<ActiveTiboSignal> = {}) => {
     const openedAt = "2026-08-08T20:34:50.000Z";

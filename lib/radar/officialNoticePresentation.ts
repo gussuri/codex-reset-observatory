@@ -7,6 +7,7 @@ export type OfficialNoticePresentationInput = {
   temporalPrecision?: TemporalPrecision | null;
   temporalResolutionStatus?: TemporalResolutionStatus | null;
   temporalTimezone?: string | null;
+  isBankedDistribution?: boolean;
 };
 
 type NoticeTimingWindow = "24h" | "48h" | "outside";
@@ -98,6 +99,12 @@ export function formatOfficialNoticeSummary(
   notice: OfficialNoticePresentationInput,
   locale: Locale,
 ) {
+  if (notice.isBankedDistribution) {
+    if (locale === "en") return "A BANKED Reset distribution has been announced.";
+    if (locale === "zh") return "已发布 BANKED 重置发放预告。";
+    return "BANKEDリセット（任意リセット権）の配布が予告されています。";
+  }
+
   const subject = formatOfficialNoticeScheduleSubject(notice, locale);
 
   if (locale === "en") {

@@ -20,10 +20,15 @@ import {
   insertCodexRecoveryObservation,
   promoteDeferredTiboReset,
   readCodexUsageMonitorState,
+  upsertBankedDistributionEstimate,
   upsertResetExecutionEstimate,
   upsertCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
 import { getActiveOfficialNotice } from "@/lib/radar/probability";
+import {
+  isBankedObservationWithinNoticeWindow,
+  isBroadBankedDistributionNotice,
+} from "@/lib/radar/bankedReset";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
 const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_precision,expected_start_at,expected_end_at,temporal_resolution_status,ai_temporal_timezone,ai_temporal_confidence";
@@ -80,6 +85,36 @@ async function hasActiveOfficialNotice(
   };
 }
 
+type OfficialNoticeLookup = Awaited<ReturnType<typeof hasActiveOfficialNotice>>;
+
+async function persistCorroboratedBankedDistribution(
+  client: SupabaseClient<any>,
+  snapshot: CodexUsageSnapshot,
+  lookup: OfficialNoticeLookup | null,
+) {
+  const notice = lookup?.noticeSignal;
+  if (
+    snapshot.bankedCreditChange !== true ||
+    !snapshot.bankedCredit ||
+    !notice?.isBankedDistribution ||
+    !isBroadBankedDistributionNotice(notice.text) ||
+    !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt)
+  ) {
+    return { observed: false, error: null };
+  }
+
+  const result = await upsertBankedDistributionEstimate(client, {
+    resetEventKey: `banked-reset-${notice.id}`,
+    displayExecutionAt: snapshot.observedAt,
+    tiboAnnouncedAt: notice.observedAt,
+    tiboPrimaryTweetId: notice.id,
+    tiboSourceTweetIds: [notice.id],
+    officialNoticeTweetId: notice.id,
+    officialNoticeAt: notice.observedAt,
+  });
+  return { observed: true, error: result.error };
+}
+
 function recoveryResponse(status: string) {
   return NextResponse.json({ accepted: true, recovery: status });
 }
@@ -119,6 +154,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
     }
 
+    const bankedNotice = snapshot.bankedCreditChange === true
+      ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
+      : null;
+    if (bankedNotice?.error) {
+      console.warn("[Codex usage] BANKED notice lookup failed", { reason: "database_error" });
+      return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+    }
+
     const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot);
     if (initialDecision.kind === "stale") return recoveryResponse("ignored_stale");
 
@@ -128,6 +171,15 @@ export async function POST(request: Request) {
       initialDecision.kind === "invalid" ||
       initialDecision.kind === "no_recovery"
     ) {
+      const bankedResult = await persistCorroboratedBankedDistribution(
+        client,
+        snapshot,
+        bankedNotice,
+      );
+      if (bankedResult.error) {
+        console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      }
       const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
       if (stateError) {
         console.warn("[Codex usage] state update failed", { reason: "database_error" });
@@ -136,11 +188,19 @@ export async function POST(request: Request) {
       console.info("[Codex usage] snapshot accepted", {
         source: CODEX_USAGE_SOURCE_KEY,
         recovery: initialDecision.kind,
+        bankedDistributionObserved: bankedResult.observed,
       });
-      return recoveryResponse(initialDecision.kind);
+      if (bankedResult.observed) {
+        try {
+          revalidateTag("radar-data");
+        } catch {
+          console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+        }
+      }
+      return recoveryResponse(bankedResult.observed ? "banked_distribution_observed" : initialDecision.kind);
     }
 
-    const notice = await hasActiveOfficialNotice(client, new Date(snapshot.observedAt));
+    const notice = bankedNotice ?? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt));
     if (notice.error) {
       console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
@@ -260,6 +320,16 @@ export async function POST(request: Request) {
       }
     }
 
+    const bankedResult = await persistCorroboratedBankedDistribution(
+      client,
+      snapshot,
+      notice,
+    );
+    if (bankedResult.error) {
+      console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });
+      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+
     const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
     if (stateError) {
       console.warn("[Codex usage] state update failed", { reason: "database_error" });
@@ -270,13 +340,20 @@ export async function POST(request: Request) {
       cycleHint: decision.cycleHint,
       confidence: decision.confidence,
       matchedTibo: Boolean(matchingTibo.tweetId),
+      bankedDistributionObserved: bankedResult.observed,
     });
     try {
       revalidateTag("radar-data");
     } catch {
       console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
     }
-    return recoveryResponse(matchingTibo.tweetId ? "confirmed" : "observed_unconfirmed");
+    return recoveryResponse(
+      bankedResult.observed
+        ? "banked_distribution_observed"
+        : matchingTibo.tweetId
+          ? "confirmed"
+          : "observed_unconfirmed",
+    );
   } catch {
     console.warn("[Codex usage] request failed", { reason: "request_failed" });
     return NextResponse.json({ error: "Usage monitor unavailable" }, { status: 503 });

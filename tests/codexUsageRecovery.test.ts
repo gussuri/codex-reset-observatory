@@ -88,6 +88,42 @@ test("selects the weekly window instead of assuming primary or secondary", () =>
   assert.equal(parsed?.resetsAt, 1787012727);
 });
 
+test("retains only the safe credit fields exposed by app-server", () => {
+  const parsed = parseCodexRateLimitsResponse({
+    result: {
+      rateLimits: {
+        ...validRateLimitResponse().result.rateLimits,
+        credits: { hasCredits: true, unlimited: false, balance: "1" },
+      },
+    },
+  }, NOW);
+
+  assert.deepEqual(parsed?.bankedCredit, {
+    available: true,
+    unlimited: false,
+    balance: "1",
+  });
+});
+
+test("keeps the weekly usage snapshot valid when app-server has no credit object", () => {
+  const parsed = parseCodexRateLimitsResponse(validRateLimitResponse(), NOW);
+  assert.equal(parsed?.bankedCredit, null);
+});
+
+test("ignores malformed credit metadata without rejecting the weekly usage window", () => {
+  const parsed = parseCodexRateLimitsResponse({
+    result: {
+      rateLimits: {
+        ...validRateLimitResponse().result.rateLimits,
+        credits: { hasCredits: "yes", unlimited: false, balance: "1" },
+      },
+    },
+  }, NOW);
+
+  assert.ok(parsed);
+  assert.equal(parsed.bankedCredit, null);
+});
+
 test("selects a weekly secondary window when primary is short", () => {
   const parsed = parseCodexRateLimitsResponse({
     result: {
@@ -168,6 +204,21 @@ test("validates the monitor payload and preserves only safe fields", () => {
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt: 1787012727,
   });
+});
+
+test("accepts a bounded banked credit change marker and safe credit state", () => {
+  const parsed = parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    bankedCredit: { available: true, unlimited: false, balance: "1" },
+    bankedCreditChange: true,
+  }, NOW);
+
+  assert.deepEqual(parsed?.bankedCredit, {
+    available: true,
+    unlimited: false,
+    balance: "1",
+  });
+  assert.equal(parsed?.bankedCreditChange, true);
 });
 
 test("rejects unknown webhook fields", () => {

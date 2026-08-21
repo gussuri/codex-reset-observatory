@@ -231,6 +231,9 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
     activeWindow: {
       active: viewModel.activeWindow.active,
       kind: viewModel.activeWindow.kind,
+      ...(viewModel.activeWindow.noticeKind
+        ? { noticeKind: viewModel.activeWindow.noticeKind }
+        : {}),
       label: viewModel.activeWindow.label,
       summary: viewModel.activeWindow.summary,
       openedAt: viewModel.activeWindow.openedAt ?? null,

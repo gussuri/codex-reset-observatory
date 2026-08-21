@@ -6,6 +6,7 @@ import {
   parseCodexRateLimitsResponse,
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
+import { isBankedCreditGrant } from "../lib/radar/bankedReset";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
@@ -105,6 +106,7 @@ export function shouldRestartAppServerAfterRpcFailure(consecutiveFailures: numbe
 export type MonitorSnapshotPostReason =
   | "initial"
   | "recovery_candidate"
+  | "banked_credit_change"
   | "structure_change"
   | "heartbeat";
 
@@ -122,6 +124,10 @@ export function getMonitorSnapshotPostReason(
 
   const previous = state.previousLocalSnapshot;
   if (previous) {
+    if (isBankedCreditGrant(previous.bankedCredit, snapshot.bankedCredit)) {
+      return "banked_credit_change";
+    }
+
     const usageDecrease = previous.usedPercent - snapshot.usedPercent;
     const resetsAtAdvance = snapshot.resetsAt - previous.resetsAt;
     if (usageDecrease >= 1 && resetsAtAdvance >= 60 * 60) {
@@ -162,7 +168,10 @@ export function updateMonitorSnapshotState(
   };
 }
 
-export function toSafeMonitorPayload(snapshot: CodexUsageSnapshot) {
+export function toSafeMonitorPayload(
+  snapshot: CodexUsageSnapshot,
+  postReason?: MonitorSnapshotPostReason,
+) {
   return {
     observedAt: snapshot.observedAt,
     limitId: snapshot.limitId,
@@ -170,6 +179,12 @@ export function toSafeMonitorPayload(snapshot: CodexUsageSnapshot) {
     usedPercent: snapshot.usedPercent,
     windowDurationMins: snapshot.windowDurationMins,
     resetsAt: snapshot.resetsAt,
+    ...(postReason === "banked_credit_change" && snapshot.bankedCredit
+      ? {
+          bankedCredit: snapshot.bankedCredit,
+          bankedCreditChange: true,
+        }
+      : {}),
   };
 }
 
@@ -237,7 +252,7 @@ export function createJsonMonitorLogger(
   return (event, details = {}) => {
     const safeDetails: Record<string, unknown> = {};
     const allowedKeys = event === "snapshot_sent"
-      ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins"]
+      ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -284,6 +299,7 @@ function waitFor(ms: number, signal: AbortSignal) {
 async function postUsageSnapshot(
   config: CodexUsageMonitorConfig,
   snapshot: CodexUsageSnapshot,
+  postReason?: MonitorSnapshotPostReason,
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MONITOR_WEBHOOK_TIMEOUT_MS);
@@ -294,7 +310,7 @@ async function postUsageSnapshot(
         "Authorization": `Bearer ${config.secret}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(toSafeMonitorPayload(snapshot)),
+      body: JSON.stringify(toSafeMonitorPayload(snapshot, postReason)),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`webhook_http_${response.status}`);
@@ -417,7 +433,7 @@ async function runAppServerSession(
         );
         if (!postReason) return;
 
-        await postUsageSnapshot(config, snapshot);
+        await postUsageSnapshot(config, snapshot, postReason);
         monitorSnapshotState = updateMonitorSnapshotState(
           monitorSnapshotState,
           snapshot,
@@ -430,6 +446,7 @@ async function runAppServerSession(
           resetsAt: snapshot.resetsAt,
           planType: snapshot.planType,
           windowDurationMins: snapshot.windowDurationMins,
+          bankedCreditChange: postReason === "banked_credit_change",
         });
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });

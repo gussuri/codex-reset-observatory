@@ -69,6 +69,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Notice available",
     zh: "已有预告",
   },
+  bankedNoticeLabel: {
+    ja: "BANKEDリセット（任意リセット権）の配布が予告されています。",
+    en: "A BANKED Reset distribution has been announced.",
+    zh: "已发布 BANKED 重置发放预告。",
+  },
+  bankedNoticeAdvice: {
+    ja: "任意のタイミングで使用できるため、無理にCodexの使用量を使い切る必要はありません。",
+    en: "Because it can be used at any time, you do not need to use up your Codex quota.",
+    zh: "由于可以在任意时间使用，无需为了重置而用完 Codex 的使用额度。",
+  },
   noNoticeLabel: {
     ja: "予告なし",
     en: "No notice",
@@ -1251,6 +1261,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "アクティブユーザー数1000万人到達を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 10 million active users.",
     zh: "为庆祝活跃用户数达到 1000 万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
+  },
+  "BANKEDリセット配布": {
+    ja: "BANKEDリセット配布",
+    en: "BANKED Reset distribution",
+    zh: "BANKED 重置发放",
+  },
+  "任意リセット権の配布が確認されました。": {
+    ja: "任意リセット権の配布が確認されました。",
+    en: "A BANKED Reset distribution was observed.",
+    zh: "已观测到 BANKED 重置发放。",
   },
   "1500万人アクティブユーザー突破記念リセット": {
     ja: "1500万人アクティブユーザー突破記念リセット",

@@ -14,6 +14,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 export const TIBO_DAYPARTS = {
+  day: [0, 24],
   morning: [6, 12],
   afternoon: [12, 17],
   evening: [17, 21],
@@ -32,7 +33,7 @@ const TEMPORAL_KINDS = [
 ] as const;
 const TEMPORAL_PRECISIONS = ["exact_time", "day", "daypart", "range", "unknown"] as const;
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
-const DAYPART_NAMES = ["morning", "afternoon", "evening", "tonight"] as const;
+const DAYPART_NAMES = ["day", "morning", "afternoon", "evening", "tonight"] as const;
 const RANGE_KINDS = ["this_week", "this_weekend", "next_week"] as const;
 
 export type TemporalKind = (typeof TEMPORAL_KINDS)[number];
@@ -447,6 +448,7 @@ function resolveDay(
   const lower = expression.toLowerCase();
   if (lower.includes("tomorrow")) return addLocalDays(createdLocal, 1);
   if (lower.includes("today")) return createdLocal;
+  if (semantics.daypart === "day") return createdLocal;
   if (semantics.weekday) {
     return resolveWeekdayDate(
       createdLocal,
@@ -584,10 +586,21 @@ export function resolveTiboTemporalSchedule(
     const day = resolveDay(semantics, createdLocal, createdWeekday);
     if (day && semantics.temporalKind === "daypart" && semantics.daypart) {
       const [startHour, endHour] = TIBO_DAYPARTS[semantics.daypart];
-      const endDay = endHour === 24 ? addLocalDays(day, 1) : day;
-      const window = buildWindow(atLocalTime(day, startHour), atLocalTime(endDay, endHour === 24 ? 0 : endHour), timeZone);
-      expectedStart = window?.expectedStart ?? null;
-      expectedEnd = window?.expectedEnd ?? null;
+      if (semantics.daypart === "day") {
+        // "During the day" starts when the post is made, then ends at the
+        // next midnight in Tibo's source-local calendar. The start remains
+        // the original instant so seconds are not silently discarded.
+        expectedStart = created;
+        expectedEnd = localDateTimeToInstant(
+          atLocalTime(addLocalDays(day, 1), 0),
+          timeZone,
+        );
+      } else {
+        const endDay = endHour === 24 ? addLocalDays(day, 1) : day;
+        const window = buildWindow(atLocalTime(day, startHour), atLocalTime(endDay, endHour === 24 ? 0 : endHour), timeZone);
+        expectedStart = window?.expectedStart ?? null;
+        expectedEnd = window?.expectedEnd ?? null;
+      }
       precision = "daypart";
     } else if (day && semantics.temporalKind === "weekday") {
       if (semantics.explicitTimeParts) {

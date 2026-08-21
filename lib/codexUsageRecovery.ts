@@ -1,4 +1,5 @@
 import { isBearerAuthorizationValid } from "./security/bearerAuth";
+import type { BankedCreditState } from "./radar/bankedReset";
 
 export const CODEX_WEEKLY_WINDOW_MINUTES = 7 * 24 * 60;
 export const MAX_USAGE_COMPARISON_GAP_MS = 10 * 60 * 1000;
@@ -28,6 +29,8 @@ export type CodexUsageSnapshot = {
   usedPercent: number;
   windowDurationMins: typeof CODEX_WEEKLY_WINDOW_MINUTES;
   resetsAt: number;
+  bankedCredit?: BankedCreditState | null;
+  bankedCreditChange?: boolean;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";
@@ -128,6 +131,23 @@ function readWindow(value: unknown) {
   return { usedPercent, windowDurationMins, resetsAt };
 }
 
+function readBankedCredit(value: unknown): BankedCreditState | null {
+  if (!isRecord(value)) return null;
+  const available = value.hasCredits;
+  const unlimited = value.unlimited;
+  const balance = value.balance;
+  if (
+    typeof available !== "boolean" ||
+    typeof unlimited !== "boolean" ||
+    typeof balance !== "string" ||
+    balance.length > 64 ||
+    !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(balance)
+  ) {
+    return null;
+  }
+  return { available, unlimited, balance };
+}
+
 function getRateLimitSnapshots(root: Record<string, unknown>) {
   const result = isRecord(root.result) ? root.result : root;
   const byLimitId = result.rateLimitsByLimitId ?? result.rate_limits_by_limit_id;
@@ -161,6 +181,7 @@ export function parseCodexRateLimitsResponse(
     limitId: string | null;
     planType: string;
     window: { usedPercent: number; windowDurationMins: number; resetsAt: number };
+    bankedCredit: BankedCreditState | null;
   }> = [];
 
   for (const snapshot of snapshots) {
@@ -173,6 +194,9 @@ export function parseCodexRateLimitsResponse(
     const planType = typeof planValue === "string" && planValue.length <= MAX_PLAN_TYPE_LENGTH
       ? planValue || "unknown"
       : "unknown";
+    const bankedCredit = snapshot.value.credits === undefined
+      ? null
+      : readBankedCredit(snapshot.value.credits);
 
     for (const windowKey of ["primary", "secondary"] as const) {
       const rawWindow = snapshot.value[windowKey];
@@ -180,7 +204,7 @@ export function parseCodexRateLimitsResponse(
       const window = readWindow(rawWindow);
       if (!window) return null;
       if (window.windowDurationMins === CODEX_WEEKLY_WINDOW_MINUTES) {
-        candidates.push({ key: snapshot.key, limitId, planType, window });
+        candidates.push({ key: snapshot.key, limitId, planType, window, bankedCredit });
       }
     }
   }
@@ -202,6 +226,7 @@ export function parseCodexRateLimitsResponse(
     usedPercent: selected.window.usedPercent,
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt: selected.window.resetsAt,
+    bankedCredit: selected.bankedCredit,
   };
 }
 
@@ -225,6 +250,8 @@ export function parseCodexUsageWebhookPayload(
     "usedPercent",
     "windowDurationMins",
     "resetsAt",
+    "bankedCredit",
+    "bankedCreditChange",
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) return null;
 
@@ -239,6 +266,22 @@ export function parseCodexUsageWebhookPayload(
   const resetsAt = getPositiveInteger(value.resetsAt);
   if (resetsAt === null) return null;
 
+  let bankedCredit: BankedCreditState | null | undefined;
+  if (value.bankedCredit !== undefined) {
+    if (value.bankedCredit === null) {
+      bankedCredit = null;
+    } else {
+      bankedCredit = readBankedCredit({
+        ...(isRecord(value.bankedCredit) ? value.bankedCredit : {}),
+        hasCredits: isRecord(value.bankedCredit) ? value.bankedCredit.available : undefined,
+      });
+      if (!bankedCredit) return null;
+    }
+  }
+  if (value.bankedCreditChange !== undefined && typeof value.bankedCreditChange !== "boolean") {
+    return null;
+  }
+
   return {
     observedAt: observedAt.toISOString(),
     limitId: "codex",
@@ -246,6 +289,8 @@ export function parseCodexUsageWebhookPayload(
     usedPercent: value.usedPercent,
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt,
+    ...(value.bankedCredit !== undefined ? { bankedCredit } : {}),
+    ...(value.bankedCreditChange === true ? { bankedCreditChange: true } : {}),
   };
 }
 

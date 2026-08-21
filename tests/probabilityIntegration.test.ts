@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert";
 import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import {
   getActiveOfficialNotice,
   getLocalResetProbability,
@@ -94,7 +94,33 @@ test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", 
   assert.strictEqual(p48, 0.96, "New notice after execution must trigger 48h 96% Notice Mode");
 });
 
-import { getRadarViewModel } from "../lib/radar";
+test("a BANKED official notice keeps the existing 90%/96% override and dedicated action", () => {
+  const now = new Date("2026-08-21T12:00:00.000Z");
+  const data = getLocalRadarData({
+    activeTiboSignals: [{
+      tweet_id: "banked-probability-test",
+      text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      tweet_created_at: "2026-08-21T11:00:00.000Z",
+      expires_at: "2026-08-22T12:00:00.000Z",
+      verification_status: "auto_unverified",
+      expected_start_at: "2026-08-21T12:00:00.000Z",
+      expected_end_at: "2026-08-22T07:00:00.000Z",
+      ai_temporal_precision: "daypart",
+      temporal_resolution_status: "resolved",
+    }],
+    calculationNow: now,
+  });
+
+  const notice = getActiveOfficialNotice(data, null, now);
+  assert.equal(notice?.isBankedDistribution, true);
+  assert.equal(getLocalResetProbability(data, "24h", undefined, notice, now), 0.9);
+  assert.equal(getLocalResetProbability(data, "48h", undefined, notice, now), 0.96);
+  const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
+  assert.equal(viewModel.activeWindow.noticeKind, "banked");
+  assert.match(viewModel.action, /無理に使い切る必要はありません/);
+});
 
 test("getLocalResetProbabilityReason formats English summary without un-translated Japanese text for Tibo Teaser", () => {
   const teaserSignal = LOCAL_OBSERVATION_SIGNALS.find(

@@ -175,6 +175,52 @@ test("resolves dayparts and ranges in the source-local calendar", () => {
   assert.equal(weekend.expectedEndAt, "2026-08-10T07:00:00.000Z");
 });
 
+test("resolves during the day from the post instant to the source-local day boundary", () => {
+  const result = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "during the day",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      weekday: null,
+      daypart: "day",
+    }) as never,
+    "2026-08-21T12:30:00.000Z",
+  );
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.timezone, TIBO_SOURCE_TIME_ZONE);
+  assert.equal(result.temporalPrecision, "daypart");
+  assert.equal(result.expectedStartAt, "2026-08-21T12:30:00.000Z");
+  assert.equal(result.expectedEndAt, "2026-08-22T07:00:00.000Z");
+});
+
+test("resolves during the day across a Pacific DST boundary and local date boundary", () => {
+  const beforeDst = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "during the day",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      weekday: null,
+      daypart: "day",
+    }) as never,
+    "2026-03-08T08:30:00.000Z",
+  );
+  assert.equal(beforeDst.expectedEndAt, "2026-03-09T07:00:00.000Z");
+
+  const beforeLocalMidnight = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "during the day",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      weekday: null,
+      daypart: "day",
+    }) as never,
+    "2026-08-22T06:30:00.000Z",
+  );
+  assert.equal(beforeLocalMidnight.expectedStartAt, "2026-08-22T06:30:00.000Z");
+  assert.equal(beforeLocalMidnight.expectedEndAt, "2026-08-22T07:00:00.000Z");
+});
+
 test("ambiguous, vague, and hallucinated temporal fields fail safely", () => {
   const soon = resolveTiboTemporalSchedule(
     semantics({ temporalExpression: "soon", temporalKind: "vague", temporalPrecision: "unknown", weekday: null }) as never,

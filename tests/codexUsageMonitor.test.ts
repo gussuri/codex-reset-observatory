@@ -22,6 +22,11 @@ function snapshot(overrides: Partial<{
   usedPercent: number;
   windowDurationMins: 10080;
   resetsAt: number;
+  bankedCredit?: {
+    available: boolean;
+    unlimited: boolean;
+    balance: string;
+  } | null;
 }> = {}) {
   return {
     observedAt: "2026-08-21T00:00:00.000Z",
@@ -123,6 +128,50 @@ test("a meaningful recovery is posted immediately as a recovery candidate", () =
       lastSuccessfulPostAt: 0,
     }, 120_000),
     "recovery_candidate",
+  );
+});
+
+test("a newly observed local BANKED credit is posted as an explicit credit change", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+    }), {
+      previousLocalSnapshot: snapshot({
+        bankedCredit: { available: false, unlimited: false, balance: "0" },
+      }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_credit_change",
+  );
+});
+
+test("a BANKED credit change remains explicit when it coincides with weekly recovery", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({
+      usedPercent: 19,
+      resetsAt: 1_787_016_327,
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+    }), {
+      previousLocalSnapshot: snapshot({
+        bankedCredit: { available: false, unlimited: false, balance: "0" },
+      }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_credit_change",
+  );
+});
+
+test("a consumed local BANKED credit does not look like a distribution", () => {
+  assert.notEqual(
+    getMonitorSnapshotPostReason(snapshot({
+      bankedCredit: { available: false, unlimited: false, balance: "0" },
+    }), {
+      previousLocalSnapshot: snapshot({
+        bankedCredit: { available: true, unlimited: false, balance: "1" },
+      }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_credit_change",
   );
 });
 
@@ -267,6 +316,30 @@ test("monitor payload contains only safe rate-limit fields", () => {
       usedPercent: 0,
       windowDurationMins: 10080,
       resetsAt: 1787012727,
+    },
+  );
+});
+
+test("monitor payload includes credit state only for an explicit credit change", () => {
+  assert.deepEqual(
+    toSafeMonitorPayload({
+      observedAt: "2026-08-21T00:02:00.000Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1787012727,
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+    }, "banked_credit_change"),
+    {
+      observedAt: "2026-08-21T00:02:00.000Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1787012727,
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedCreditChange: true,
     },
   );
 });

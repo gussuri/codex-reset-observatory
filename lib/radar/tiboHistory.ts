@@ -15,6 +15,10 @@ import {
 } from "./resetReason";
 import { getTiboClassificationSafetyDecision } from "./classification";
 import type { ResetReasonType } from "./types";
+import {
+  BANKED_CREDIT_ESTIMATOR_VERSION,
+  isBroadBankedDistributionNotice,
+} from "./bankedReset";
 
 export type TiboSignalType =
   | "official_notice"
@@ -750,6 +754,85 @@ export function findNoticeBackedRecoveryEvents(
   });
 }
 
+function buildBankedDistributionEvent(
+  estimate: ResetExecutionEstimate,
+  notice: TiboNoticeSignal | FormalTiboResetSignal,
+): WindowEventLike | null {
+  const displayTime = getTimestamp(estimate.displayExecutionAt);
+  const noticeTime = getTimestamp(notice.tweet_created_at);
+  if (
+    estimate.estimatorVersion !== BANKED_CREDIT_ESTIMATOR_VERSION ||
+    estimate.executionTimeSource !== "usage_observation" ||
+    estimate.executionTimeConfidence !== "high" ||
+    estimate.executionTimePrecision !== "approximate" ||
+    estimate.recoveryObservationId ||
+    !estimate.officialNoticeTweetId ||
+    estimate.officialNoticeTweetId !== notice.tweet_id ||
+    !estimate.tiboSourceTweetIds.includes(notice.tweet_id) ||
+    notice.signal_type !== "official_notice" ||
+    notice.verification_status === "rejected" ||
+    (notice.confidence ?? 0) < FORMAL_RESET_CONFIDENCE ||
+    !isBroadBankedDistributionNotice(notice.text) ||
+    displayTime === null ||
+    noticeTime === null ||
+    displayTime < noticeTime
+  ) {
+    return null;
+  }
+
+  const openedAt = new Date(noticeTime).toISOString();
+  const completedAt = new Date(displayTime).toISOString();
+  const noticeMinutes = Math.max(0, Math.round((displayTime - noticeTime) / 60000));
+  const summary = "任意リセット権の配布が確認されました。";
+
+  return {
+    id: estimate.resetEventKey,
+    recordKind: "banked_distribution",
+    title: "BANKEDリセット配布",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: openedAt,
+    closed_at: completedAt,
+    completed_at: completedAt,
+    window_minutes: noticeMinutes,
+    scope: "全有料プラン",
+    summary,
+    source_url: notice.tweet_url,
+    sourceKind: "direct_post",
+    sourceTweetIds: Array.from(new Set([
+      ...estimate.tiboSourceTweetIds,
+      notice.tweet_id,
+    ])),
+    officialNoticeTweetId: notice.tweet_id,
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "任意リセット権1回配布",
+      scope: "全有料プラン",
+      noticeToExecution: formatNoticeToExecution(noticeMinutes),
+      noticeType: "公式予告あり",
+      note: summary,
+    },
+  };
+}
+
+export function findBankedDistributionEvents(
+  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal>,
+  estimates: Array<ResetExecutionEstimate> = [],
+): Array<WindowEventLike> {
+  const seen = new Set<string>();
+  return estimates.flatMap((estimate) => {
+    if (seen.has(estimate.resetEventKey)) return [];
+    seen.add(estimate.resetEventKey);
+    const notice = noticeSignals.find((signal) =>
+      signal.signal_type === "official_notice" &&
+      signal.tweet_id === estimate.officialNoticeTweetId,
+    );
+    const event = notice ? buildBankedDistributionEvent(estimate, notice) : null;
+    return event ? [event] : [];
+  });
+}
+
 export function combineResetHistory(
   staticHistory: Array<WindowEventLike>,
   formalTiboResets: Array<FormalTiboResetSignal>,
@@ -767,6 +850,7 @@ export function combineResetHistory(
     recoveryObservations,
     estimates,
   );
+  const bankedDistributionEvents = findBankedDistributionEvents(noticeSignals, estimates);
 
   const dynamicItems: Array<WindowEventLike> = [];
   for (const noticeEvent of noticeBackedEvents) {
@@ -786,6 +870,7 @@ export function combineResetHistory(
       dynamicItems.push(noticeEvent);
     }
   }
+  dynamicItems.push(...bankedDistributionEvents);
   dynamicItems.push(...tiboItems);
 
   const regularMergedHistory = mergePersistedRegularEvents(staticHistory, regularResetRows);

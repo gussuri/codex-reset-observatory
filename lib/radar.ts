@@ -1075,8 +1075,14 @@ function getActiveWindow(
     return {
       active,
       kind: "official",
-      label: translateUI("activeNoticeLabel", locale),
-      summary: formatOfficialNoticeSummary(officialNotice ?? {}, locale),
+      noticeKind: officialNotice?.isBankedDistribution ? "banked" : "forced",
+      label: officialNotice?.isBankedDistribution
+        ? translateUI("bankedNoticeLabel", locale)
+        : translateUI("activeNoticeLabel", locale),
+      summary: formatOfficialNoticeSummary({
+        ...(officialNotice ?? {}),
+        isBankedDistribution: officialNotice?.isBankedDistribution,
+      }, locale),
       openedAt,
       expectedAt,
       expectedEndAt,
@@ -1116,6 +1122,13 @@ function getRecommendedAction(
   locale: Locale = "ja",
 ) {
   if (activeWindow.active) {
+    if (activeWindow.noticeKind === "banked") {
+      return locale === "en"
+        ? "A BANKED Reset can be used at any time; you do not need to use up your Codex quota."
+        : locale === "zh"
+          ? "BANKED 重置可在任意时间使用，无需为了重置而用完 Codex 的使用额度。"
+          : "BANKEDリセットは任意のタイミングで使えるため、Codexの使用量を無理に使い切る必要はありません。";
+    }
     return locale === "en"
       ? "An official reset notice is active. Prioritize using up your remaining quota or plan your work ahead."
       : locale === "zh"

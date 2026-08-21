@@ -638,8 +638,15 @@ export function RadarDashboard({
                   {translateUI("officialNotice", locale)}
                 </p>
                 <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
-                  {translateUI("activeNoticeLabel", locale)}
+                  {viewModel.activeWindow.noticeKind === "banked"
+                    ? translateUI("bankedNoticeLabel", locale)
+                    : translateUI("activeNoticeLabel", locale)}
                 </h2>
+                {viewModel.activeWindow.noticeKind === "banked" ? (
+                  <p className="mt-2 text-base font-normal leading-6 text-slate-700">
+                    {translateUI("bankedNoticeAdvice", locale)}
+                  </p>
+                ) : null}
               </div>
             </div>
 

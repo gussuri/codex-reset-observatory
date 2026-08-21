@@ -147,6 +147,9 @@ teaserStrength = "strong". None contrast: "The reset button is my favorite produ
 signalType = "irrelevant" and teaserStrength = "none".
 
 Also extract the semantic meaning of any forward-looking time expression for an official_notice.
+For phrases such as "during the day" or "sometime during the day", use
+temporalKind="daypart", temporalPrecision="daypart", and daypart="day". This means
+the source-local day in which the post was made; do not generate a timestamp.
 Do not generate UTC timestamps. Return temporalExpression as an exact contiguous substring of the
 original Tibo text, or null. Use the source timezone supplied below only as context; explicitTimezone
 must be null unless the tweet itself contains a timezone. If the tweet has no explicit clock time,
@@ -179,7 +182,7 @@ Respond ONLY with a JSON object strictly matching this schema:
   "relativeUnit": "minutes" | "hours" | "days" | null,
   "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
   "explicitTimeParts": {"hour": number, "minute": number} | null,
-  "daypart": "morning" | "afternoon" | "evening" | "tonight" | null,
+  "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
   "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
   "explicitTimezone": string | null,
   "temporalConfidence": number (between 0.0 and 1.0)

@@ -345,6 +345,7 @@ export type RadarViewModel = {
   activeWindow: {
     active: boolean;
     kind: "official" | "regular" | "none";
+    noticeKind?: "forced" | "banked";
     label: string;
     summary: string;
     openedAt?: string | null;

@@ -16,6 +16,7 @@ import {
   type ResetExecutionEstimate,
   type ResolveDisplayExecutionTimeInput,
 } from "./radar/resetExecution";
+import { BANKED_CREDIT_ESTIMATOR_VERSION } from "./radar/bankedReset";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
 
 export type CodexUsageMonitorStateRow = {
@@ -643,6 +644,94 @@ export async function upsertResetExecutionEstimate(
   return {
     estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null) ?? estimate,
     error: result.error,
+  };
+}
+
+export type BankedDistributionEstimateInput = {
+  resetEventKey: string;
+  displayExecutionAt: string;
+  tiboAnnouncedAt: string;
+  tiboPrimaryTweetId: string;
+  tiboSourceTweetIds: string[];
+  officialNoticeTweetId: string;
+  officialNoticeAt: string;
+};
+
+/**
+ * Persist one first-writer-wins BANKED observation in the existing execution
+ * estimate table. The row is deliberately separate from recovery estimates:
+ * it has no recovery observation and remains approximate because app-server
+ * exposes no grant timestamp.
+ */
+export async function upsertBankedDistributionEstimate(
+  client: SupabaseClient<any>,
+  input: BankedDistributionEstimateInput,
+) {
+  const existingResult = await client
+    .from("reset_execution_estimates")
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .eq("reset_event_key", input.resetEventKey)
+    .maybeSingle();
+  if (existingResult.error) return { estimate: null, error: existingResult.error, inserted: false };
+
+  const existingEstimate = toResetExecutionEstimate(
+    existingResult.data as ResetExecutionEstimateRow | null,
+  );
+  if (existingEstimate) {
+    return { estimate: existingEstimate, error: null, inserted: false };
+  }
+
+  const values = {
+    reset_event_key: input.resetEventKey,
+    display_execution_at: input.displayExecutionAt,
+    execution_time_source: "usage_observation" as const,
+    execution_time_confidence: "high" as const,
+    execution_time_precision: "approximate" as const,
+    execution_window_start_at: null,
+    execution_window_end_at: null,
+    recovery_observation_id: null,
+    recovery_previous_observed_at: null,
+    recovery_observed_at: null,
+    tibo_announced_at: input.tiboAnnouncedAt,
+    tibo_primary_tweet_id: input.tiboPrimaryTweetId,
+    tibo_source_tweet_ids: Array.from(new Set(input.tiboSourceTweetIds)),
+    official_notice_tweet_id: input.officialNoticeTweetId,
+    official_notice_at: input.officialNoticeAt,
+    estimator_version: BANKED_CREDIT_ESTIMATOR_VERSION,
+    manual_override_at: null,
+    manual_override_by: null,
+    manual_override_reason: null,
+    manual_execution_at: null,
+    manual_execution_precision: null,
+    updated_at: new Date().toISOString(),
+  };
+  const result = await client
+    .from("reset_execution_estimates")
+    .upsert(values, { onConflict: "reset_event_key", ignoreDuplicates: true })
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .maybeSingle();
+
+  return {
+    estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null) ?? {
+      resetEventKey: input.resetEventKey,
+      displayExecutionAt: input.displayExecutionAt,
+      executionTimeSource: "usage_observation" as const,
+      executionTimeConfidence: "high" as const,
+      executionTimePrecision: "approximate" as const,
+      executionWindowStartAt: null,
+      executionWindowEndAt: null,
+      recoveryObservationId: null,
+      recoveryPreviousObservedAt: null,
+      recoveryObservedAt: null,
+      tiboAnnouncedAt: input.tiboAnnouncedAt,
+      tiboPrimaryTweetId: input.tiboPrimaryTweetId,
+      tiboSourceTweetIds: Array.from(new Set(input.tiboSourceTweetIds)),
+      officialNoticeTweetId: input.officialNoticeTweetId,
+      officialNoticeAt: input.officialNoticeAt,
+      estimatorVersion: BANKED_CREDIT_ESTIMATOR_VERSION,
+    },
+    error: result.error,
+    inserted: !result.error,
   };
 }
 

@@ -28,9 +28,7 @@ import {
 } from "./helpers";
 import {
   combineResetHistory,
-  convertTiboResetSignalToHistoryEvent,
   getNoticeBackedHistoryInputs,
-  isFormalTiboResetSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
@@ -38,6 +36,7 @@ import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
+import { isBankedDistributionNotice } from "./bankedReset";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -57,6 +56,8 @@ export type ActiveOfficialNotice = {
   expiresAt: string | null;
   source: string | null;
   sourceLabel: string;
+  text?: string | null;
+  isBankedDistribution?: boolean;
   temporalPrecision?: TemporalPrecision | null;
   temporalConfidence?: number | null;
   temporalResolutionStatus?: TemporalResolutionStatus | null;
@@ -596,17 +597,16 @@ export function getHistoricalResetPressure(
 }
 
 function getRandomResetIntervals(data: RadarData | null, now: Date) {
-  const dynamicHistory = (data?.formal_tibo_resets ?? [])
-    .filter(isFormalTiboResetSignal)
-    .map((signal) => convertTiboResetSignalToHistoryEvent(signal));
-  const staticHistory = LOCAL_RESET_HISTORY.filter(
-    (item) =>
-      !data?.rejected_tibo_resets?.some((signal) => isRejectedHistoricalReset(item, signal)) &&
-      !dynamicHistory.some((itemFromDynamicHistory) =>
-        isDuplicateHistoricalReset(item, itemFromDynamicHistory),
-      ),
+  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const historicalItems = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    data?.formal_tibo_resets ?? [],
+    data?.rejected_tibo_resets ?? [],
+    data?.regular_reset_events ?? [],
+    noticeSignals,
+    recoveryObservations,
+    estimates,
   );
-  const historicalItems = [...staticHistory, ...dynamicHistory];
   const resetTimes = historicalItems
     .filter((item) => isEligibleRandomResetEvent(
       item,
@@ -644,60 +644,6 @@ export function getCompletedResetTimestamp(item: WindowEventLike) {
 
   const timestamp = getHistoricalResetTime(item);
   return timestamp > 0 ? timestamp : null;
-}
-
-function getTweetId(sourceUrl: string | null | undefined) {
-  return sourceUrl?.match(/\/status\/(\d+)/i)?.[1] ?? null;
-}
-
-function isDuplicateHistoricalReset(left: WindowEventLike, right: WindowEventLike) {
-  const leftTweetId = getTweetId(left.source_url);
-  const rightTweetId = getTweetId(right.source_url);
-  if (leftTweetId && rightTweetId && leftTweetId === rightTweetId) {
-    return true;
-  }
-
-  if (
-    left.source_url &&
-    right.source_url &&
-    left.source_url === right.source_url &&
-    left.source_url.includes("/status/")
-  ) {
-    return true;
-  }
-
-  const leftTime = getHistoricalResetTime(left);
-  const rightTime = getHistoricalResetTime(right);
-  return Boolean(
-    (leftTweetId || rightTweetId) &&
-    leftTime > 0 &&
-    rightTime > 0 &&
-    Math.abs(leftTime - rightTime) <= 5 * 60 * 1000,
-  );
-}
-
-function isRejectedHistoricalReset(
-  item: WindowEventLike,
-  rejectedSignal: NonNullable<RadarData["rejected_tibo_resets"]>[number],
-) {
-  const itemTweetId = getTweetId(item.source_url);
-  const signalTweetId = getTweetId(rejectedSignal.tweet_url);
-  if (itemTweetId && signalTweetId && itemTweetId === signalTweetId) {
-    return true;
-  }
-
-  if (item.source_url && item.source_url === rejectedSignal.tweet_url) {
-    return true;
-  }
-
-  const itemTime = getHistoricalResetTime(item);
-  const signalTime = getDateTime(rejectedSignal.tweet_created_at);
-  return Boolean(
-    item.details?.resetMethod === "強制リセット" &&
-    itemTime > 0 &&
-    signalTime > 0 &&
-    Math.abs(itemTime - signalTime) <= 5 * 60 * 1000,
-  );
 }
 
 export function getLocalSignalEnvironment(
@@ -969,6 +915,8 @@ export function getActiveOfficialNotice(
         expiresAt: signal.expires_at ?? null,
         source: signal.tweet_url ?? null,
         sourceLabel: getTiboDisplayLabel(signal.tweet_url),
+        text: signal.text ?? null,
+        isBankedDistribution: isBankedDistributionNotice(signal.text),
         temporalPrecision: signal.ai_temporal_precision ?? null,
         temporalConfidence: signal.ai_temporal_confidence ?? null,
         temporalResolutionStatus: signal.temporal_resolution_status ?? null,
@@ -994,6 +942,7 @@ export function getActiveOfficialNotice(
       expiresAt: signal.expiresAt ?? null,
       source: signal.source ?? null,
       sourceLabel: signal.sourceLabel,
+      isBankedDistribution: false,
     }));
 
   return [...dynamicNotices, ...localNotices]

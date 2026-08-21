@@ -64,6 +64,13 @@ Only these fields leave the machine:
 - `resetsAt`
 - `observedAt`
 
+When the read-only app-server response reports a positive BANKED credit
+transition, the monitor additionally sends only `bankedCredit.available`,
+`bankedCredit.unlimited`, `bankedCredit.balance`, and the boolean
+`bankedCreditChange` marker. The current app-server does not expose a stable
+credit id or grant timestamp, so a local credit change is never treated as a
+global distribution by itself.
+
 The monitor selects the weekly window by `windowDurationMins = 10080`, preferring
 the `codex` limit id. It does not assume that the weekly window is `primary` or
 `secondary`. Ambiguous or invalid responses are rejected without creating a
@@ -78,9 +85,16 @@ by a fresh `account/rateLimits/read`. A notification by itself is never treated
 as a reset.
 
 The local monitor reads every two minutes but sends a webhook only for the initial
-snapshot, a recovery candidate, a monitoring-structure change, or an eight-minute
-heartbeat after the last successful send. Ordinary unchanged usage snapshots stay
-local, so the server still receives a heartbeat before its ten-minute comparison gap.
+snapshot, a recovery candidate, a positive BANKED credit change, a
+monitoring-structure change, or an eight-minute heartbeat after the last
+successful send. Ordinary unchanged usage snapshots stay local, so the server
+still receives a heartbeat before its ten-minute comparison gap.
+
+A BANKED history event is created only when that explicit local credit change
+matches an active broad Tibo BANKED notice within the existing time-matching
+window. The notice is shown and affects the official probability window before
+the distribution is observed; the random-reset history clock changes only after
+the corroborated observation is stored.
 
 The monitor sends the safe snapshot to:
 
