@@ -6,7 +6,6 @@ import { NextRequest } from "next/server";
 import { POST as postCodexUsage } from "../app/api/webhook/codex-usage/route";
 import { GET as getMonitorHealth } from "../app/api/monitor/health/route";
 import { POST as postLogProbability } from "../app/api/log-probability/route";
-import { GET as getRegularResetSync } from "../app/api/regular-reset/sync/route";
 import { POST as postTibo } from "../app/api/webhook/tibo/route";
 import { POST as postTiboHeartbeat } from "../app/api/webhook/tibo/heartbeat/route";
 import { isBearerAuthorizationValid } from "../lib/security/bearerAuth";
@@ -69,7 +68,6 @@ test("unauthorized server endpoints reject before storage, Gemini, or expensive 
     assert.equal((await postCodexUsage(request("/api/webhook/codex-usage"))).status, 401);
     assert.equal((await postLogProbability(request("/api/log-probability"))).status, 401);
     assert.equal((await getMonitorHealth(request("/api/monitor/health", "GET"))).status, 401);
-    assert.equal((await getRegularResetSync(request("/api/regular-reset/sync", "GET"))).status, 401);
     assert.equal(fetchCount, 0);
   } finally {
     globalThis.fetch = originalFetch;

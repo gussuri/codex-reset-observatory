@@ -24,11 +24,9 @@ test("monitor health workflow checks the production endpoint every ten minutes",
     workflow,
     /https:\/\/codex\.gussuriworks\.com\/api\/monitor\/health/,
   );
-  assert.match(
-    workflow,
-    /https:\/\/codex\.gussuriworks\.com\/api\/regular-reset\/sync/,
-  );
-  assert.match(workflow, /regular-reset-sync:/);
+  assert.doesNotMatch(workflow, /regular-reset-sync/);
+  assert.doesNotMatch(workflow, /\/api\/regular-reset\/sync/);
+  assert.equal(existsSync(resolve("app/api/regular-reset/sync/route.ts")), false);
   assert.match(workflow, /secrets\.CRON_SECRET/);
   assert.match(workflow, /^permissions:\n  contents: read\n  issues: write$/m);
   assert.match(workflow, /HTTP_STATUS.*503/);
@@ -52,7 +50,6 @@ test("health warnings and unhealthy states do not fail the health-check job", ()
   const workflow = readWorkflow(healthWorkflowPath);
   const healthJob = workflow.slice(
     workflow.indexOf("  health-check:"),
-    workflow.indexOf("  regular-reset-sync:"),
   );
 
   assert.match(healthJob, /HTTP_STATUS.*503/);
@@ -84,16 +81,6 @@ test("health issue handling deduplicates alerts and closes only after recovery",
   assert.doesNotMatch(
     workflow,
     /steps\.monitor-health\.outputs\.status == 'warning'[\s\S]*issues\.create/,
-  );
-});
-
-test("regular reset synchronization still fails on a non-200 response", () => {
-  const workflow = readWorkflow(healthWorkflowPath);
-  const regularResetJob = workflow.slice(workflow.indexOf("  regular-reset-sync:"));
-
-  assert.match(
-    regularResetJob,
-    /if \[ "\$HTTP_STATUS" != "200" \]; then\s+exit 1/,
   );
 });
 
