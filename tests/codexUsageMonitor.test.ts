@@ -27,6 +27,7 @@ function snapshot(overrides: Partial<{
     unlimited: boolean;
     balance: string;
   } | null;
+  bankedResetAvailableCount?: number | null;
 }> = {}) {
   return {
     observedAt: "2026-08-21T00:00:00.000Z",
@@ -173,6 +174,19 @@ test("a consumed local BANKED credit does not look like a distribution", () => {
     }, 120_000),
     "banked_credit_change",
   );
+});
+
+test("a BANKED reset count change remains local-only and does not trigger a webhook post", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 1 }), {
+      previousLocalSnapshot: snapshot({ bankedResetAvailableCount: 0 }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    null,
+  );
+
+  const payload = toSafeMonitorPayload(snapshot({ bankedResetAvailableCount: 1 }), "heartbeat");
+  assert.equal("bankedResetAvailableCount" in payload, false);
 });
 
 test("plan changes are posted as a structure change", () => {
@@ -377,6 +391,44 @@ test("GUI event output exposes safe snapshot state without credentials", () => {
     windowDurationMins: 10080,
   });
   assert.equal(lines[0].includes("must-not-leak"), false);
+});
+
+test("local GUI snapshot events expose an explicit BANKED reset count without credentials", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  for (const availableCount of [0, 1, 2]) {
+    logger("snapshot_observed", {
+      observedAt: "2026-08-21T00:02:00.000Z",
+      usedPercent: 6,
+      resetsAt: 1787012727,
+      planType: "plus",
+      windowDurationMins: 10080,
+      bankedResetAvailableCount: availableCount,
+      secret: "must-not-leak",
+    });
+  }
+
+  const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.deepEqual(events.map((event) => event.bankedResetAvailableCount), [0, 1, 2]);
+  assert.equal(lines.every((line) => line.includes("must-not-leak") === false), true);
+});
+
+test("local GUI snapshot events omit an unavailable BANKED reset count", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  logger("snapshot_observed", {
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 6,
+    resetsAt: 1787012727,
+    planType: "plus",
+    windowDurationMins: 10080,
+    bankedResetAvailableCount: null,
+  });
+
+  const event = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.equal("bankedResetAvailableCount" in event, false);
 });
 
 test("GUI-safe error codes preserve only known machine-readable reasons", () => {

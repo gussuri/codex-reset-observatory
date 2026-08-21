@@ -8,6 +8,7 @@ export const REGULAR_RESET_PROXIMITY_MS = 5 * 60 * 1000;
 export const UNCONFIRMED_RECOVERY_ACTIVE_MS = 90 * 60 * 1000;
 export const USAGE_TIBO_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const CODEX_USAGE_SOURCE_KEY = "local-codex-app-server";
+export const MAX_BANKED_RESET_AVAILABLE_COUNT = 1_000;
 
 export function shouldCreateNoticeBackedEstimate<T extends { id: string }>(
   noticeSignal: T | null | undefined,
@@ -31,6 +32,7 @@ export type CodexUsageSnapshot = {
   resetsAt: number;
   bankedCredit?: BankedCreditState | null;
   bankedCreditChange?: boolean;
+  bankedResetAvailableCount?: number | null;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";
@@ -148,6 +150,17 @@ function readBankedCredit(value: unknown): BankedCreditState | null {
   return { available, unlimited, balance };
 }
 
+function readBankedResetAvailableCount(value: unknown) {
+  if (!isRecord(value)) return null;
+  const availableCount = value.availableCount;
+  return typeof availableCount === "number" &&
+    Number.isSafeInteger(availableCount) &&
+    availableCount >= 0 &&
+    availableCount <= MAX_BANKED_RESET_AVAILABLE_COUNT
+    ? availableCount
+    : null;
+}
+
 function getRateLimitSnapshots(root: Record<string, unknown>) {
   const result = isRecord(root.result) ? root.result : root;
   const byLimitId = result.rateLimitsByLimitId ?? result.rate_limits_by_limit_id;
@@ -160,6 +173,19 @@ function getRateLimitSnapshots(root: Record<string, unknown>) {
 
   const rateLimits = result.rateLimits ?? result.rate_limits;
   return [{ key: null, value: isRecord(rateLimits) ? rateLimits : null }];
+}
+
+function getExplicitBankedResetAvailableCount(
+  result: Record<string, unknown>,
+  rateLimit: Record<string, unknown>,
+) {
+  if (Object.prototype.hasOwnProperty.call(result, "rateLimitResetCredits")) {
+    return readBankedResetAvailableCount(result.rateLimitResetCredits);
+  }
+  if (Object.prototype.hasOwnProperty.call(rateLimit, "rateLimitResetCredits")) {
+    return readBankedResetAvailableCount(rateLimit.rateLimitResetCredits);
+  }
+  return null;
 }
 
 /**
@@ -175,6 +201,7 @@ export function parseCodexRateLimitsResponse(
   const observedDate = getObservedTime(observedAt);
   if (!observedDate) return null;
 
+  const result = isRecord(value.result) ? value.result : value;
   const snapshots = getRateLimitSnapshots(value);
   const candidates: Array<{
     key: string | null;
@@ -182,6 +209,7 @@ export function parseCodexRateLimitsResponse(
     planType: string;
     window: { usedPercent: number; windowDurationMins: number; resetsAt: number };
     bankedCredit: BankedCreditState | null;
+    bankedResetAvailableCount: number | null;
   }> = [];
 
   for (const snapshot of snapshots) {
@@ -197,6 +225,7 @@ export function parseCodexRateLimitsResponse(
     const bankedCredit = snapshot.value.credits === undefined
       ? null
       : readBankedCredit(snapshot.value.credits);
+    const bankedResetAvailableCount = getExplicitBankedResetAvailableCount(result, snapshot.value);
 
     for (const windowKey of ["primary", "secondary"] as const) {
       const rawWindow = snapshot.value[windowKey];
@@ -204,7 +233,14 @@ export function parseCodexRateLimitsResponse(
       const window = readWindow(rawWindow);
       if (!window) return null;
       if (window.windowDurationMins === CODEX_WEEKLY_WINDOW_MINUTES) {
-        candidates.push({ key: snapshot.key, limitId, planType, window, bankedCredit });
+        candidates.push({
+          key: snapshot.key,
+          limitId,
+          planType,
+          window,
+          bankedCredit,
+          bankedResetAvailableCount,
+        });
       }
     }
   }
@@ -227,6 +263,7 @@ export function parseCodexRateLimitsResponse(
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt: selected.window.resetsAt,
     bankedCredit: selected.bankedCredit,
+    bankedResetAvailableCount: selected.bankedResetAvailableCount,
   };
 }
 

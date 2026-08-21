@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  MAX_BANKED_RESET_AVAILABLE_COUNT,
   parseCodexRateLimitsResponse,
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
@@ -251,8 +252,10 @@ export function createJsonMonitorLogger(
 ): MonitorLogger {
   return (event, details = {}) => {
     const safeDetails: Record<string, unknown> = {};
-    const allowedKeys = event === "snapshot_sent"
-      ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange"]
+    const allowedKeys = event === "snapshot_observed"
+      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetAvailableCount"]
+      : event === "snapshot_sent"
+        ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange", "bankedResetAvailableCount"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -265,6 +268,13 @@ export function createJsonMonitorLogger(
 
     for (const key of allowedKeys) {
       const value = details[key];
+      if (key === "bankedResetAvailableCount" &&
+        (typeof value !== "number" ||
+          !Number.isSafeInteger(value) ||
+          value < 0 ||
+          value > MAX_BANKED_RESET_AVAILABLE_COUNT)) {
+        continue;
+      }
       if (typeof value === "string" || typeof value === "number") {
         safeDetails[key] = value;
       }
@@ -422,6 +432,15 @@ async function runAppServerSession(
           return;
         }
 
+        logger("snapshot_observed", {
+          observedAt: snapshot.observedAt,
+          usedPercent: snapshot.usedPercent,
+          resetsAt: snapshot.resetsAt,
+          planType: snapshot.planType,
+          windowDurationMins: snapshot.windowDurationMins,
+          bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
+        });
+
         const postReason = getMonitorSnapshotPostReason(
           snapshot,
           monitorSnapshotState,
@@ -447,6 +466,7 @@ async function runAppServerSession(
           planType: snapshot.planType,
           windowDurationMins: snapshot.windowDurationMins,
           bankedCreditChange: postReason === "banked_credit_change",
+          bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
         });
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });

@@ -10,6 +10,7 @@ internal sealed class MainForm : Form
     private readonly Label _usedValue = CreateValueLabel();
     private readonly Label _remainingValue = CreateValueLabel();
     private readonly Label _resetValue = CreateValueLabel();
+    private readonly Label _bankedResetValue = CreateValueLabel();
     private readonly Label _lastSuccessValue = CreateValueLabel();
     private readonly Label _webhookValue = CreateValueLabel();
     private readonly Button _toggleButton = new();
@@ -25,7 +26,7 @@ internal sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(430, 315);
+        ClientSize = new Size(430, 350);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.White;
 
@@ -41,7 +42,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 8,
+            RowCount = 9,
             Padding = new Padding(24, 22, 24, 20),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
@@ -57,20 +58,22 @@ internal sealed class MainForm : Form
         AddRow(table, 2, "週間使用率", _usedValue);
         AddRow(table, 3, "週間残量", _remainingValue);
         AddRow(table, 4, "次回通常リセット", _resetValue);
-        AddRow(table, 5, "最終確認", _lastSuccessValue);
-        AddRow(table, 6, "送信", _webhookValue);
+        AddRow(table, 5, "BANKEDリセット", _bankedResetValue);
+        AddRow(table, 6, "最終確認", _lastSuccessValue);
+        AddRow(table, 7, "送信", _webhookValue);
 
         _toggleButton.Text = "監視停止";
         _toggleButton.AutoSize = true;
         _toggleButton.Anchor = AnchorStyles.Right;
         _toggleButton.Click += (_, _) => ToggleMonitor();
-        table.Controls.Add(_toggleButton, 1, 7);
+        table.Controls.Add(_toggleButton, 1, 8);
 
         Controls.Add(table);
         _statusValue.Text = "○ 起動中";
         _usedValue.Text = "--";
         _remainingValue.Text = "--";
         _resetValue.Text = "--";
+        _bankedResetValue.Text = "--";
         _lastSuccessValue.Text = "--";
         _webhookValue.Text = "未送信";
 
@@ -238,15 +241,12 @@ internal sealed class MainForm : Form
                 SetStatus("● 監視中");
                 _webhookValue.Text = "正常";
                 _lastSuccessValue.Text = FormatLocalClock(at);
-                if (root.TryGetProperty("usedPercent", out var usedValue) && usedValue.TryGetDouble(out var used))
-                {
-                    _usedValue.Text = FormatPercent(used);
-                    _remainingValue.Text = FormatPercent(Math.Max(0, 100 - used));
-                }
-                if (root.TryGetProperty("resetsAt", out var resetValue) && resetValue.TryGetInt64(out var resetsAt))
-                {
-                    _resetValue.Text = FormatTokyoTime(resetsAt);
-                }
+                UpdateSnapshotValues(root);
+                break;
+            case "snapshot_observed":
+                SetStatus("● 監視中");
+                _lastSuccessValue.Text = FormatLocalClock(ReadString(root, "observedAt") ?? at);
+                UpdateSnapshotValues(root);
                 break;
             case "snapshot_failed":
                 SetStatus("△ 一時取得不能");
@@ -315,6 +315,35 @@ internal sealed class MainForm : Form
         return root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
+
+    private void UpdateSnapshotValues(JsonElement root)
+    {
+        if (root.TryGetProperty("usedPercent", out var usedValue) && usedValue.TryGetDouble(out var used))
+        {
+            _usedValue.Text = FormatPercent(used);
+            _remainingValue.Text = FormatPercent(Math.Max(0, 100 - used));
+        }
+        if (root.TryGetProperty("resetsAt", out var resetValue) && resetValue.TryGetInt64(out var resetsAt))
+        {
+            _resetValue.Text = FormatTokyoTime(resetsAt);
+        }
+
+        _bankedResetValue.Text = FormatBankedResetCount(root);
+    }
+
+    private static string FormatBankedResetCount(JsonElement root)
+    {
+        const long maxAvailableCount = 1_000;
+        if (!root.TryGetProperty("bankedResetAvailableCount", out var countValue) ||
+            countValue.ValueKind != JsonValueKind.Number ||
+            !countValue.TryGetInt64(out var count) ||
+            count < 0 ||
+            count > maxAvailableCount)
+        {
+            return "--";
+        }
+        return $"{count}回";
     }
 
     private static string FormatPercent(double value)

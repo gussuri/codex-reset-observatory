@@ -103,6 +103,47 @@ test("retains only the safe credit fields exposed by app-server", () => {
     unlimited: false,
     balance: "1",
   });
+  assert.equal(parsed?.bankedResetAvailableCount, null);
+});
+
+test("parses an explicit BANKED reset available count without inferring it from credits", () => {
+  for (const availableCount of [0, 1, 2]) {
+    const parsed = parseCodexRateLimitsResponse({
+      result: {
+        rateLimitResetCredits: { availableCount },
+        rateLimits: {
+          ...validRateLimitResponse().result.rateLimits,
+          credits: { hasCredits: true, unlimited: false, balance: "1" },
+        },
+      },
+    }, NOW);
+
+    assert.equal(parsed?.bankedResetAvailableCount, availableCount);
+  }
+});
+
+test("keeps the weekly snapshot valid and returns no BANKED count for missing or unsupported fields", () => {
+  const values: unknown[] = [
+    undefined,
+    null,
+    {},
+    { availableCount: -1 },
+    { availableCount: 1.5 },
+    { availableCount: "1" },
+    { availableCount: Number.NaN },
+  ];
+
+  for (const rateLimitResetCredits of values) {
+    const rateLimits = {
+      ...validRateLimitResponse().result.rateLimits,
+    };
+    const parsed = parseCodexRateLimitsResponse({
+      result: { rateLimits, rateLimitResetCredits },
+    }, NOW);
+
+    assert.ok(parsed);
+    assert.equal(parsed.bankedResetAvailableCount, null);
+  }
 });
 
 test("keeps the weekly usage snapshot valid when app-server has no credit object", () => {
