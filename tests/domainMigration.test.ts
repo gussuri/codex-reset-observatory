@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-import { NextRequest } from "next/server";
-
-import { middleware } from "../middleware";
 import { SITE_URL, siteUrl } from "../lib/siteMetadata";
 import robots from "../app/robots";
 
@@ -13,39 +10,54 @@ const legacyHost = "codex-reset-observatory.vercel.app";
 // TODO(test-cleanup): Remove this compatibility suite when the legacy Vercel host
 // is no longer supported by the redirect and extension migration paths.
 const newHost = "codex.gussuriworks.com";
+const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8")) as {
+  redirects: Array<{
+    source: string;
+    destination: string;
+    permanent?: boolean;
+    has?: Array<{ type: string; value?: string }>;
+  }>;
+};
 
-function responseFor(url: string) {
-  return middleware(new NextRequest(url));
+function legacyRedirect() {
+  const redirect = vercelConfig.redirects.find((candidate) =>
+    candidate.has?.some((condition) => condition.type === "host" && condition.value === legacyHost),
+  );
+  assert.ok(redirect, "legacy host redirect must be configured");
+  return redirect;
 }
 
-test("legacy page requests permanently redirect to the fixed new domain", () => {
-  const response = responseFor(`https://${legacyHost}/history?x=1`);
+test("legacy non-API requests use a Vercel host redirect without middleware", () => {
+  const redirect = legacyRedirect();
 
-  assert.equal(response.status, 308);
-  assert.equal(
-    response.headers.get("location"),
-    `https://${newHost}/history?x=1`,
-  );
+  assert.equal(existsSync("middleware.ts"), false);
+  assert.equal(redirect.source, "/:path((?!api(?:/|$)).*)");
+  assert.equal(redirect.destination, `https://${newHost}/:path*`);
+  assert.equal(redirect.permanent, true);
+  assert.deepEqual(redirect.has, [{ type: "host", value: legacyHost }]);
 });
 
-test("legacy API requests remain available during the extension migration", () => {
-  for (const path of ["/api/current", "/api/webhook/tibo", "/api"]) {
-    const response = responseFor(`https://${legacyHost}${path}`);
-    assert.equal(response.status, 200, path);
-    assert.equal(response.headers.get("location"), null, path);
+test("the legacy redirect source excludes the API path and preserves deep paths", () => {
+  legacyRedirect();
+  const sourceMatcher = /^\/((?!api(?:\/|$)).*)$/;
+
+  for (const path of ["/", "/en", "/en/history", "/en/history?foo=bar"]) {
+    assert.equal(sourceMatcher.test(path.split("?")[0]), true, path);
+  }
+
+  for (const path of ["/api", "/api/current", "/api/webhook/tibo", "/apiary"]) {
+    assert.equal(sourceMatcher.test(path), path === "/apiary", path);
   }
 });
 
-test("new, preview, and localhost hosts are never redirected", () => {
-  for (const url of [
-    `https://${newHost}/`,
-    "https://preview-codex-reset-observatory.vercel.app/en",
-    "http://localhost:3000/history",
-  ]) {
-    const response = responseFor(url);
-    assert.equal(response.status, 200, url);
-    assert.equal(response.headers.get("location"), null, url);
-  }
+test("only the exact legacy host activates the redirect", () => {
+  const redirect = legacyRedirect();
+  const hostCondition = redirect.has?.find((condition) => condition.type === "host");
+
+  assert.equal(hostCondition?.value, legacyHost);
+  assert.notEqual(hostCondition?.value, newHost);
+  assert.notEqual(hostCondition?.value, "preview-codex-reset-observatory.vercel.app");
+  assert.notEqual(hostCondition?.value, "localhost:3000");
 });
 
 test("published site URLs and robots sitemap use the new domain", () => {

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path((?!api(?:/|$)).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "codex-reset-observatory.vercel.app"
+        }
+      ],
+      "destination": "https://codex.gussuriworks.com/:path*",
+      "permanent": true
+    }
+  ]
+}
