@@ -77,6 +77,11 @@ The normal poll interval is 120 seconds and cannot be lower than 60 seconds.
 by a fresh `account/rateLimits/read`. A notification by itself is never treated
 as a reset.
 
+The local monitor reads every two minutes but sends a webhook only for the initial
+snapshot, a recovery candidate, a monitoring-structure change, or an eight-minute
+heartbeat after the last successful send. Ordinary unchanged usage snapshots stay
+local, so the server still receives a heartbeat before its ten-minute comparison gap.
+
 The monitor sends the safe snapshot to:
 
 `https://codex.gussuriworks.com/api/webhook/codex-usage`

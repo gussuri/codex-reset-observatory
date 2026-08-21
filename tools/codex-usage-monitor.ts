@@ -10,6 +10,7 @@ import {
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
 export const NOTIFICATION_DEBOUNCE_MS = 2_000;
+export const MONITOR_HEARTBEAT_INTERVAL_MS = 8 * 60 * 1000;
 export const APP_SERVER_REQUEST_TIMEOUT_MS = 15_000;
 export const APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD = 3;
 export const MONITOR_WEBHOOK_TIMEOUT_MS = 15_000;
@@ -101,6 +102,66 @@ export function shouldRestartAppServerAfterRpcFailure(consecutiveFailures: numbe
     consecutiveFailures >= APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD;
 }
 
+export type MonitorSnapshotPostReason =
+  | "initial"
+  | "recovery_candidate"
+  | "structure_change"
+  | "heartbeat";
+
+export type MonitorSnapshotState = {
+  previousLocalSnapshot: CodexUsageSnapshot | null;
+  lastSuccessfulPostAt: number | null;
+};
+
+export function getMonitorSnapshotPostReason(
+  snapshot: CodexUsageSnapshot,
+  state: MonitorSnapshotState,
+  nowMs = Date.now(),
+): MonitorSnapshotPostReason | null {
+  if (state.lastSuccessfulPostAt === null) return "initial";
+
+  const previous = state.previousLocalSnapshot;
+  if (previous) {
+    const usageDecrease = previous.usedPercent - snapshot.usedPercent;
+    const resetsAtAdvance = snapshot.resetsAt - previous.resetsAt;
+    if (usageDecrease >= 1 && resetsAtAdvance >= 60 * 60) {
+      return "recovery_candidate";
+    }
+
+    if (
+      previous.limitId !== snapshot.limitId ||
+      previous.planType !== snapshot.planType ||
+      previous.windowDurationMins !== snapshot.windowDurationMins
+    ) {
+      return "structure_change";
+    }
+  }
+
+  if (
+    Number.isFinite(nowMs) &&
+    Number.isFinite(state.lastSuccessfulPostAt) &&
+    nowMs - state.lastSuccessfulPostAt >= MONITOR_HEARTBEAT_INTERVAL_MS
+  ) {
+    return "heartbeat";
+  }
+
+  return null;
+}
+
+export function updateMonitorSnapshotState(
+  state: MonitorSnapshotState,
+  snapshot: CodexUsageSnapshot,
+  postSucceeded: boolean,
+  postCompletedAtMs = Date.now(),
+): MonitorSnapshotState {
+  return {
+    previousLocalSnapshot: snapshot,
+    lastSuccessfulPostAt: postSucceeded && Number.isFinite(postCompletedAtMs)
+      ? postCompletedAtMs
+      : state.lastSuccessfulPostAt,
+  };
+}
+
 export function toSafeMonitorPayload(snapshot: CodexUsageSnapshot) {
   return {
     observedAt: snapshot.observedAt,
@@ -176,7 +237,7 @@ export function createJsonMonitorLogger(
   return (event, details = {}) => {
     const safeDetails: Record<string, unknown> = {};
     const allowedKeys = event === "snapshot_sent"
-      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins"]
+      ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -273,6 +334,10 @@ async function runAppServerSession(
     let nextRequestId = 1;
     let refreshInFlight = false;
     let consecutiveRpcFailures = 0;
+    let monitorSnapshotState: MonitorSnapshotState = {
+      previousLocalSnapshot: null,
+      lastSuccessfulPostAt: null,
+    };
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     const pending = new Map<string, PendingRequest>();
 
@@ -340,8 +405,26 @@ async function runAppServerSession(
           logger("snapshot_rejected", { reason: "invalid_weekly_window" });
           return;
         }
+
+        const postReason = getMonitorSnapshotPostReason(
+          snapshot,
+          monitorSnapshotState,
+        );
+        monitorSnapshotState = updateMonitorSnapshotState(
+          monitorSnapshotState,
+          snapshot,
+          false,
+        );
+        if (!postReason) return;
+
         await postUsageSnapshot(config, snapshot);
+        monitorSnapshotState = updateMonitorSnapshotState(
+          monitorSnapshotState,
+          snapshot,
+          true,
+        );
         logger("snapshot_sent", {
+          reason: postReason,
           observedAt: snapshot.observedAt,
           usedPercent: snapshot.usedPercent,
           resetsAt: snapshot.resetsAt,

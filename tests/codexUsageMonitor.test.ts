@@ -7,10 +7,32 @@ import {
   createNotificationDebouncer,
   getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
+  getMonitorSnapshotPostReason,
   getRestartBackoffMs,
+  MONITOR_HEARTBEAT_INTERVAL_MS,
   shouldRestartAppServerAfterRpcFailure,
   toSafeMonitorPayload,
+  updateMonitorSnapshotState,
 } from "../tools/codex-usage-monitor";
+
+function snapshot(overrides: Partial<{
+  observedAt: string;
+  limitId: "codex";
+  planType: string;
+  usedPercent: number;
+  windowDurationMins: 10080;
+  resetsAt: number;
+}> = {}) {
+  return {
+    observedAt: "2026-08-21T00:00:00.000Z",
+    limitId: "codex" as const,
+    planType: "plus",
+    usedPercent: 20,
+    windowDurationMins: 10080 as const,
+    resetsAt: 1_787_012_727,
+    ...overrides,
+  };
+}
 
 test("JSONL parser emits complete messages and fails closed on malformed lines", () => {
   const messages: unknown[] = [];
@@ -47,6 +69,174 @@ test("polling never falls below the sixty second minimum", () => {
   assert.equal(getMonitorPollIntervalMs("180000"), 180_000);
   assert.equal(getMonitorPollIntervalMs("500"), 60_000);
   assert.equal(getMonitorPollIntervalMs("invalid"), 120_000);
+});
+
+test("the monitor heartbeat is shorter than the server comparison gap", () => {
+  assert.equal(MONITOR_HEARTBEAT_INTERVAL_MS, 8 * 60 * 1000);
+  assert.ok(MONITOR_HEARTBEAT_INTERVAL_MS < 10 * 60 * 1000);
+});
+
+test("the first valid snapshot is posted immediately", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot(), {
+      previousLocalSnapshot: null,
+      lastSuccessfulPostAt: null,
+    }, 0),
+    "initial",
+  );
+});
+
+test("ordinary used-percent increases are suppressed", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ usedPercent: 21 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    null,
+  );
+});
+
+test("a used-percent decrease without a reset-at advance is suppressed", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ usedPercent: 19 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    null,
+  );
+});
+
+test("a reset-at advance without a used-percent decrease is suppressed", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ resetsAt: 1_787_016_327 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    null,
+  );
+});
+
+test("a meaningful recovery is posted immediately as a recovery candidate", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "recovery_candidate",
+  );
+});
+
+test("plan changes are posted as a structure change", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ planType: "team" }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "structure_change",
+  );
+});
+
+test("limit and window changes are also structure changes", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason({
+      ...snapshot(),
+      limitId: "other",
+    } as unknown as ReturnType<typeof snapshot>, {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "structure_change",
+  );
+  assert.equal(
+    getMonitorSnapshotPostReason({
+      ...snapshot(),
+      windowDurationMins: 300,
+    } as unknown as ReturnType<typeof snapshot>, {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "structure_change",
+  );
+});
+
+test("a snapshot before the heartbeat deadline is suppressed", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot(), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, MONITOR_HEARTBEAT_INTERVAL_MS - 1),
+    null,
+  );
+});
+
+test("a snapshot at the heartbeat deadline is posted as a heartbeat", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot(), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, MONITOR_HEARTBEAT_INTERVAL_MS),
+    "heartbeat",
+  );
+});
+
+test("a failed post advances the local snapshot but not the successful-post time", () => {
+  const state = updateMonitorSnapshotState({
+    previousLocalSnapshot: snapshot(),
+    lastSuccessfulPostAt: 0,
+  }, snapshot({ usedPercent: 19 }), false, MONITOR_HEARTBEAT_INTERVAL_MS);
+
+  assert.equal(state.previousLocalSnapshot?.usedPercent, 19);
+  assert.equal(state.lastSuccessfulPostAt, 0);
+});
+
+test("a successful post records its completion time", () => {
+  const state = updateMonitorSnapshotState({
+    previousLocalSnapshot: snapshot(),
+    lastSuccessfulPostAt: 0,
+  }, snapshot(), true, MONITOR_HEARTBEAT_INTERVAL_MS);
+
+  assert.equal(state.lastSuccessfulPostAt, MONITOR_HEARTBEAT_INTERVAL_MS);
+});
+
+test("a failed initial post remains eligible for retry on the next poll", () => {
+  const state = updateMonitorSnapshotState({
+    previousLocalSnapshot: null,
+    lastSuccessfulPostAt: null,
+  }, snapshot(), false, 0);
+
+  assert.equal(getMonitorSnapshotPostReason(snapshot({ observedAt: "2026-08-21T00:02:00.000Z" }), state, 120_000), "initial");
+});
+
+test("a notification-triggered recovery uses the same post policy as polling", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, 2_000),
+    "recovery_candidate",
+  );
+});
+
+test("the strongest reason wins when recovery, structure, and heartbeat coincide", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ planType: "team", usedPercent: 19, resetsAt: 1_787_016_327 }), {
+      previousLocalSnapshot: snapshot(),
+      lastSuccessfulPostAt: 0,
+    }, MONITOR_HEARTBEAT_INTERVAL_MS),
+    "recovery_candidate",
+  );
+});
+
+test("successful heartbeats keep the server comparison interval below ten minutes", () => {
+  const first = snapshot();
+  let state = updateMonitorSnapshotState({
+    previousLocalSnapshot: null,
+    lastSuccessfulPostAt: null,
+  }, first, true, 0);
+  const heartbeatAt = MONITOR_HEARTBEAT_INTERVAL_MS;
+  assert.equal(getMonitorSnapshotPostReason(snapshot({ observedAt: "2026-08-21T00:08:00.000Z" }), state, heartbeatAt), "heartbeat");
+  state = updateMonitorSnapshotState(state, snapshot({ observedAt: "2026-08-21T00:08:00.000Z" }), true, heartbeatAt);
+  assert.ok(heartbeatAt - (state.lastSuccessfulPostAt ?? 0) <= 10 * 60 * 1000);
 });
 
 test("restart backoff caps at two minutes", () => {
@@ -86,6 +276,7 @@ test("GUI event output exposes safe snapshot state without credentials", () => {
   const logger = createJsonMonitorLogger((line) => lines.push(line));
 
   logger("snapshot_sent", {
+    reason: "initial",
     observedAt: "2026-08-11T00:02:00.000Z",
     usedPercent: 6,
     resetsAt: 1787012727,
@@ -98,12 +289,14 @@ test("GUI event output exposes safe snapshot state without credentials", () => {
   assert.equal(event.event, "snapshot_sent");
   assert.equal(typeof event.at, "string");
   assert.deepEqual({
+    reason: event.reason,
     observedAt: event.observedAt,
     usedPercent: event.usedPercent,
     resetsAt: event.resetsAt,
     planType: event.planType,
     windowDurationMins: event.windowDurationMins,
   }, {
+    reason: "initial",
     observedAt: "2026-08-11T00:02:00.000Z",
     usedPercent: 6,
     resetsAt: 1787012727,
