@@ -13,6 +13,12 @@ import {
   buildProbabilityDebugInfo,
   hasOfficialNoticeForLog,
 } from "@/lib/logProbability";
+import { buildNextGenerationExperimentalProbabilityForecasts } from "@/lib/nextGenerationLogging";
+import {
+  getNextGenerationRandomTargetEvents,
+  loadNextGenerationTrainingState,
+} from "@/lib/radar/nextGenerationTraining";
+import { NEXT_GENERATION_FREEZE_AT } from "@/data/shadowProbabilityConfig";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
   savePredictionHistoryOnce,
@@ -86,7 +92,28 @@ async function handleLogRequest(request: NextRequest) {
       shadowProbability: publishedProbability.rawShadow ?? publishedProbability.shadow,
     });
 
-    // 3. パラメータや各種フラグの抽出
+    // 3. Next-generation A/B shadows are logging-only and never run on public requests.
+    const supabase = getSupabaseClient();
+    let forecastsForLogging = experimentalProbabilityForecasts;
+    if (calculationNow.getTime() >= new Date(NEXT_GENERATION_FREEZE_AT).getTime()) {
+      const trainingState = await loadNextGenerationTrainingState(supabase, {
+        asOf: calculationNow,
+        randomEvents: getNextGenerationRandomTargetEvents(rawData, calculationNow),
+      });
+      forecastsForLogging = buildNextGenerationExperimentalProbabilityForecasts({
+        data: rawData,
+        calculationOptions: {
+          now: calculationNow,
+          signalEvaluation,
+          activeOfficialNotice,
+          regularResetExpectedAt: viewModel.regularResetForecast.expectedAt,
+        },
+        existingForecasts: experimentalProbabilityForecasts,
+        trainingState,
+      });
+    }
+
+    // 4. パラメータや各種フラグの抽出
     const environment = signalEvaluation.environment;
     const hasOfficialNotice = hasOfficialNoticeForLog(viewModel);
     const incidentHintCount = environment.official_incident_hints_24h ?? 0;
@@ -98,13 +125,12 @@ async function handleLogRequest(request: NextRequest) {
       p48h: viewModel.probability48h,
     });
 
-    // 4. 重複排除用の logged_hour の計算 (時分秒を 00:00:00 に丸める)
+    // 5. 重複排除用の logged_hour の計算 (時分秒を 00:00:00 に丸める)
     const loggedHour = new Date(calculationNow);
     loggedHour.setMinutes(0, 0, 0);
     loggedHour.setMilliseconds(0);
 
-    // 5. Supabase への保存。logged_hour の最初の予測を保持し、後続実行では再利用する。
-    const supabase = getSupabaseClient();
+    // 6. Supabase への保存。logged_hour の最初の予測を保持し、後続実行では再利用する。
     let savedRecord: PredictionHistorySaveResult;
     try {
       savedRecord = await savePredictionHistoryOnce(supabase, {
@@ -141,7 +167,7 @@ async function handleLogRequest(request: NextRequest) {
             complaint_pressure: signalEvaluation.complaintPressure.level,
             complaint_pressure_sources:
               signalEvaluation.complaintPressure.sources,
-          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.rawShadow ?? publishedProbability.shadow, publishedProbability, experimentalProbabilityForecasts),
+          }, publishedProbability.primary, rawData.checked_at, calculationNow, publishedProbability.rawShadow ?? publishedProbability.shadow, publishedProbability, forecastsForLogging),
       });
     } catch (error) {
       console.error("Supabase prediction history save failed", error);

@@ -50,6 +50,8 @@ export type NextGenerationEnsembleFit = {
 export type NextGenerationAResult = {
   modelVersion: typeof NEXT_GENERATION_A_MODEL_VERSION;
   generatedAt: string;
+  rawProbability24h: number;
+  rawProbability48h: number;
   probability12h: number;
   probability24h: number;
   probability48h: number;
@@ -310,6 +312,8 @@ export function calculateNextGenerationAEnsemble(
   return {
     modelVersion: NEXT_GENERATION_A_MODEL_VERSION,
     generatedAt: options.generatedAt,
+    rawProbability24h: ensemble24h,
+    rawProbability48h: ensemble48h,
     probability12h: derive12hFrom24hProbability(coherent.probability24h),
     probability24h: coherent.probability24h,
     probability48h: coherent.probability48h,

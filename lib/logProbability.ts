@@ -22,6 +22,7 @@ import {
   calculateShadowProbabilityForModel,
   type ShadowProbabilityOptions,
   type ShadowProbabilityResult,
+  type ShadowSignalMultipliers,
 } from "@/lib/radar/shadowProbability";
 import { calculateRegimeElapsedProbability } from "@/lib/radar/regimeElapsedProbability";
 import {
@@ -132,6 +133,42 @@ export type ExperimentalProbabilityForecast = {
   }>;
   freezeAt?: string;
   freezePolicy?: string;
+  nextGenerationRole?: "candidate-a" | "candidate-b";
+  trainingReadStatus?: "ok" | "error";
+  fallbackReason?: string | null;
+  officialNoticeTimingPolicyVersion?: string;
+  signalMultipliers?: ShadowSignalMultipliers;
+  rawEnsembleProbability24h?: number;
+  rawEnsembleProbability48h?: number;
+  componentModelVersions?: readonly string[];
+  componentProbabilities24h?: number[];
+  componentProbabilities48h?: number[];
+  componentLogitEpsilon?: number;
+  weights24h?: number[];
+  weights48h?: number[];
+  alphaPriorStdDev?: number;
+  weightPriorMean?: number;
+  weightPriorStdDev?: number;
+  trainingMode24h?: "equal" | "fitted" | "solver_failed";
+  trainingMode48h?: "equal" | "fitted" | "solver_failed";
+  trainingSampleCount24h?: number;
+  trainingSampleCount48h?: number;
+  positiveTrainingCount24h?: number;
+  positiveTrainingCount48h?: number;
+  fitCutoff24h?: string | null;
+  fitCutoff48h?: string | null;
+  solver24h?: {
+    converged: boolean;
+    iterations: number;
+    objective: number | null;
+    reason: string | null;
+  };
+  solver48h?: {
+    converged: boolean;
+    iterations: number;
+    objective: number | null;
+    reason: string | null;
+  };
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;

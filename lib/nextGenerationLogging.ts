@@ -1,0 +1,237 @@
+import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
+  NEXT_GENERATION_A_COMPONENT_VERSIONS,
+  NEXT_GENERATION_A_MODEL_VERSION,
+  NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_FREEZE_AT,
+  NEXT_GENERATION_FREEZE_POLICY,
+  RECENCY_H30_PROBABILITY_MODEL_VERSION,
+  REGIME_ELAPSED_FULL_MODEL_VERSION,
+  RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
+} from "@/data/shadowProbabilityConfig";
+import type {
+  ExperimentalProbabilityForecast,
+  ExperimentalProbabilityForecasts,
+} from "./logProbability";
+import {
+  calculateNextGenerationAEnsemble,
+  type NextGenerationAResult,
+  type NextGenerationComponentForecast,
+} from "./radar/nextGenerationEnsemble";
+import {
+  calculateNextGenerationBProbability,
+  type NextGenerationBResult,
+} from "./radar/nextGenerationProbability";
+import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining";
+import type { RadarData } from "./radar/types";
+import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
+
+function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilityForecast {
+  const random = result.randomContinuousResult;
+  const randomAudit = result.randomContinuous;
+  const hazard = random.hazard;
+  return {
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability12h: result.predictions.probability12h,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    probability72h: result.predictions.probability72h,
+    halfLifeDays: null,
+    completedEventCount: hazard.completedEventCount,
+    completedIntervalCount: hazard.completedIntervalCount,
+    weightedEventCount: hazard.weightedEventCount,
+    weightedExposureDays: hazard.weightedExposureHours / 24,
+    baseline12h: random.baseline.probability12h,
+    baseline24h: random.baseline.probability24h,
+    baseline48h: random.baseline.probability48h,
+    baseline72h: random.baseline.probability72h,
+    combinedSignalMultiplier24h: random.multipliers.combinedAfterCap.probability24h,
+    combinedSignalMultiplier48h: random.multipliers.combinedAfterCap.probability48h,
+    combinedSignalMultiplier72h: random.multipliers.combinedAfterCap.probability48h,
+    officialNoticeOverride: result.officialNoticeOverride.active,
+    targetDefinition: result.targetDefinition,
+    rawModelVersion: result.rawModelVersion,
+    rawProbability24h: result.rawProbability24h,
+    rawProbability48h: result.rawProbability48h,
+    alpha24h: result.alpha24h,
+    alpha48h: result.alpha48h,
+    calibrationSampleCount24h: result.calibrationSampleCount24h,
+    calibrationSampleCount48h: result.calibrationSampleCount48h,
+    positiveCalibrationCount24h: result.positiveCalibrationCount24h,
+    positiveCalibrationCount48h: result.positiveCalibrationCount48h,
+    priorStdDev: 0.5,
+    minimumSamples: 10,
+    lastResolvedOrigin24h: result.lastResolvedOrigin24h,
+    lastResolvedOrigin48h: result.lastResolvedOrigin48h,
+    horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
+    fallbackUsed: result.fallbackUsed,
+    fallbackReason: result.fallbackReason,
+    trainingReadStatus: result.trainingReadStatus,
+    evaluationMode: "prospective",
+    officialNoticeTimingPolicyVersion: result.officialNoticeTimingPolicyVersion,
+    signalMultipliers: random.multipliers,
+    mode: randomAudit.mode,
+    regimeMultiplier: randomAudit.regimeMultiplier,
+    effectiveRegimeMultiplier: randomAudit.effectiveRegimeMultiplier,
+    recentRatePerDay: randomAudit.recentRatePerDay,
+    longTermRatePerDay: randomAudit.longTermRatePerDay,
+    elapsedHoursSinceRecovery: randomAudit.recoveryElapsedHours,
+    elapsedHoursSinceRandom: randomAudit.randomElapsedHours,
+    randomElapsedHours: randomAudit.randomElapsedHours,
+    recoveryElapsedHours: randomAudit.recoveryElapsedHours,
+    latestRandomResetAt: randomAudit.latestRandomResetAt,
+    latestRecoveryResetAt: randomAudit.latestRecoveryResetAt,
+    randomBoundaryCount: randomAudit.randomBoundaryCount,
+    regularBoundaryCount: randomAudit.regularBoundaryCount,
+    estimator: "gaussian-kernel",
+    kernelBandwidthHours: randomAudit.bandwidthHours,
+    kernelGridHours: randomAudit.gridHours,
+    gridStepHours: randomAudit.gridStepHours,
+    kernelTruncationHours: randomAudit.truncationHours,
+    priorExposureDays: randomAudit.priorExposureDays,
+    localPriorExposureDays: randomAudit.localPriorExposureDays,
+    localPriorWindowHours: randomAudit.localPriorWindowHours,
+    exposureCellCount: randomAudit.exposureCellCount,
+    instantaneousHazardPerHour: randomAudit.instantaneousHazardPerHour,
+    instantaneousDailyProbability: randomAudit.instantaneousDailyProbability,
+    currentKernelWeightedEvents: randomAudit.currentKernelWeightedEvents,
+    currentKernelWeightedExposureHours: randomAudit.currentKernelWeightedExposureHours,
+    kernelType: randomAudit.kernelType,
+    probeDailyProbabilities: randomAudit.probeDailyProbabilities,
+    freezeAt: result.freezeAt,
+    freezePolicy: result.freezePolicy,
+    nextGenerationRole: "candidate-b",
+  };
+}
+
+function toEnsembleForecast(
+  result: NextGenerationAResult,
+  bResult: NextGenerationBResult,
+): ExperimentalProbabilityForecast {
+  const random = bResult.randomContinuousResult;
+  const hazard = random.hazard;
+  return {
+    modelVersion: result.modelVersion,
+    generatedAt: result.generatedAt,
+    probability12h: result.probability12h,
+    probability24h: result.probability24h,
+    probability48h: result.probability48h,
+    probability72h: result.probability72h,
+    halfLifeDays: null,
+    completedEventCount: hazard.completedEventCount,
+    completedIntervalCount: hazard.completedIntervalCount,
+    weightedEventCount: hazard.weightedEventCount,
+    weightedExposureDays: hazard.weightedExposureHours / 24,
+    baseline12h: result.rawProbability24h,
+    baseline24h: result.rawProbability24h,
+    baseline48h: result.rawProbability48h,
+    baseline72h: result.rawProbability48h,
+    combinedSignalMultiplier24h: 1,
+    combinedSignalMultiplier48h: 1,
+    combinedSignalMultiplier72h: 1,
+    officialNoticeOverride: false,
+    targetDefinition: bResult.targetDefinition,
+    rawModelVersion: NEXT_GENERATION_A_MODEL_VERSION,
+    rawProbability24h: result.rawProbability24h,
+    rawProbability48h: result.rawProbability48h,
+    alpha24h: result.alpha24h,
+    alpha48h: result.alpha48h,
+    calibrationSampleCount24h: result.trainingSampleCount24h,
+    calibrationSampleCount48h: result.trainingSampleCount48h,
+    positiveCalibrationCount24h: result.positiveTrainingCount24h,
+    positiveCalibrationCount48h: result.positiveTrainingCount48h,
+    priorStdDev: result.regularization.alphaPriorStdDev,
+    minimumSamples: 10,
+    lastResolvedOrigin24h: result.fitCutoff24h,
+    lastResolvedOrigin48h: result.fitCutoff48h,
+    horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
+    fallbackUsed: false,
+    evaluationMode: "prospective",
+    componentModelVersions: result.componentModelVersions,
+    componentProbabilities24h: result.componentProbabilities24h,
+    componentProbabilities48h: result.componentProbabilities48h,
+    componentLogitEpsilon: result.componentLogitEpsilon,
+    weights24h: result.weights24h,
+    weights48h: result.weights48h,
+    alphaPriorStdDev: result.regularization.alphaPriorStdDev,
+    weightPriorMean: result.regularization.weightPriorMean,
+    weightPriorStdDev: result.regularization.weightPriorStdDev,
+    trainingMode24h: result.trainingMode24h,
+    trainingMode48h: result.trainingMode48h,
+    trainingSampleCount24h: result.trainingSampleCount24h,
+    trainingSampleCount48h: result.trainingSampleCount48h,
+    positiveTrainingCount24h: result.positiveTrainingCount24h,
+    positiveTrainingCount48h: result.positiveTrainingCount48h,
+    fitCutoff24h: result.fitCutoff24h,
+    fitCutoff48h: result.fitCutoff48h,
+    solver24h: result.solver24h,
+    solver48h: result.solver48h,
+    freezeAt: result.freezeAt,
+    freezePolicy: result.freezePolicy,
+    nextGenerationRole: "candidate-a",
+  };
+}
+
+function getComponentForecast(
+  forecasts: ExperimentalProbabilityForecasts,
+  modelVersion: string,
+): NextGenerationComponentForecast | null {
+  const forecast = forecasts[modelVersion];
+  if (!forecast || forecast.modelVersion !== modelVersion) return null;
+  if (!Number.isFinite(forecast.probability24h) || !Number.isFinite(forecast.probability48h)) return null;
+  return {
+    modelVersion,
+    probability24h: forecast.probability24h,
+    probability48h: forecast.probability48h,
+  };
+}
+
+export type NextGenerationShadowBuildOptions = {
+  data: RadarData | null;
+  calculationOptions: ShadowProbabilityOptions;
+  existingForecasts: ExperimentalProbabilityForecasts;
+  trainingState: NextGenerationTrainingState;
+};
+
+export function buildNextGenerationExperimentalProbabilityForecasts(
+  options: NextGenerationShadowBuildOptions,
+): ExperimentalProbabilityForecasts {
+  const generatedAt = options.calculationOptions.now ?? new Date();
+  if (generatedAt.getTime() < new Date(NEXT_GENERATION_FREEZE_AT).getTime()) {
+    return options.existingForecasts;
+  }
+  const bResult = calculateNextGenerationBProbability(options.data, {
+    ...options.calculationOptions,
+    trainingRows: options.trainingState.bRows,
+    trainingReadStatus: options.trainingState.status,
+  });
+  const bForecast = toCommonForecast(bResult);
+  const withB = {
+    ...options.existingForecasts,
+    [NEXT_GENERATION_B_MODEL_VERSION]: bForecast,
+  };
+  const components = Object.fromEntries(
+    NEXT_GENERATION_A_COMPONENT_VERSIONS.map((modelVersion) => {
+      const component = modelVersion === NEXT_GENERATION_B_MODEL_VERSION
+        ? getComponentForecast(withB, NEXT_GENERATION_B_MODEL_VERSION)
+        : getComponentForecast(options.existingForecasts, modelVersion);
+      return [modelVersion, component];
+    }),
+  );
+  if (Object.values(components).some((component) => component === null)) return withB;
+  const aResult = calculateNextGenerationAEnsemble(
+    components as Record<string, NextGenerationComponentForecast>,
+    {
+    generatedAt: bResult.calculatedAt,
+    trainingRows: options.trainingState.aRows,
+    trainingReadStatus: options.trainingState.status,
+    },
+  );
+  return {
+    ...withB,
+    ...(aResult
+      ? { [NEXT_GENERATION_A_MODEL_VERSION]: toEnsembleForecast(aResult, bResult) }
+      : {}),
+  };
+}
