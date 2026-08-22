@@ -1120,7 +1120,7 @@ function buildBankedDistributionEvent(
     details: {
       cycleType: "ランダムリセット",
       reasonType: "ご祝儀リセット",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope: "全有料プラン",
       noticeToExecution: formatNoticeToExecution(noticeMinutes),
       noticeType: "公式予告あり",

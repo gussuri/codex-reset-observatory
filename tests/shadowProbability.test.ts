@@ -99,7 +99,7 @@ test("shadow event collection excludes future, pending, invalid, rejected, and n
         details: {
           cycleType: "ランダムリセット",
           reasonType: "詫びリセット",
-          resetMethod: "任意リセット権1回配布",
+          resetMethod: "任意リセット権配布",
           scope: "全有料プラン",
           noticeToExecution: "0分",
         },
@@ -159,7 +159,7 @@ test("shadow event collection includes broad random distributions but excludes r
     details: {
       cycleType: "ランダムリセット",
       reasonType: "詫びリセット",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope: "全有料プラン",
       noticeToExecution: "0分",
     },
@@ -168,7 +168,7 @@ test("shadow event collection includes broad random distributions but excludes r
     details: {
       cycleType: "定期リセット",
       reasonType: "定期更新",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope: "全有料プラン",
       noticeToExecution: "0分（定期）",
     },
@@ -178,7 +178,7 @@ test("shadow event collection includes broad random distributions but excludes r
     details: {
       cycleType: "ランダムリセット",
       reasonType: "詫びリセット",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope: "不具合対象ユーザー（約50万人）",
       noticeToExecution: "0分",
     },

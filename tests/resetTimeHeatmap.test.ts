@@ -48,7 +48,7 @@ function historyEvent(
     details: {
       cycleType,
       reasonType: cycleType === "定期リセット" ? "定期更新" : "詫びリセット",
-      resetMethod: cycleType === "定期リセット" ? "強制リセット" : "任意リセット権1回配布",
+      resetMethod: cycleType === "定期リセット" ? "強制リセット" : "任意リセット権配布",
       scope,
       noticeToExecution: "0分",
     },

@@ -1140,10 +1140,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage-limit refresh",
     zh: "使用限制更新",
   },
-  "任意リセット権1回配布": {
-    ja: "任意リセット権1回配布",
-    en: "1 Banked Reset",
-    zh: "手动重置 1 次",
+  "任意リセット権配布": {
+    ja: "任意リセット権配布",
+    en: "Banked Reset distribution",
+    zh: "BANKED 重置发放",
   },
   "不明": {
     ja: "不明",

@@ -59,7 +59,7 @@ test("random hard and broad Banked Reset are targets, while regular is boundary-
       details: {
         cycleType: "ランダムリセット",
         reasonType: "ご祝儀リセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "全有料プラン",
         noticeToExecution: "0分",
       },
@@ -100,7 +100,7 @@ test("near-time regular and random records create separate recovery boundaries",
       details: {
         cycleType: "ランダムリセット",
         reasonType: "ご祝儀リセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "全有料プラン",
         noticeToExecution: "0分",
       },

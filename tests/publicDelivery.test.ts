@@ -851,11 +851,11 @@ test("regular history keeps a known Banked Reset delivery method", () => {
   const bankedRegular = snapshot.viewModel.recentHistory.find(
     (item) =>
       item.details?.cycleType === "定期リセット" &&
-      item.details.resetMethod === "任意リセット権1回配布",
+      item.details.resetMethod === "任意リセット権配布",
   );
   assert.ok(bankedRegular);
   assert.equal(bankedRegular.details?.reasonType, "定期更新");
-  assert.equal(bankedRegular.details?.resetMethod, "任意リセット権1回配布");
+  assert.equal(bankedRegular.details?.resetMethod, "任意リセット権配布");
 });
 
 test("regular reset supplement is localized without changing the history summary", () => {

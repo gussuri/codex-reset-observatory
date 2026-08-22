@@ -6,7 +6,7 @@
 
 The application will keep an explicit weekly schedule definition and expose a CRON-protected synchronization endpoint. An existing GitHub Actions schedule will invoke that endpoint every ten minutes. The endpoint inserts due occurrences into Supabase with a deterministic `schedule_key`; the database uniqueness constraint makes retries idempotent.
 
-Persisted events are loaded into the internal radar data model and merged with static history. They use the distinct `regular_completed` record kind, retain `cycleType = 定期リセット`, and retain the configured delivery method such as `強制リセット` or `任意リセット権1回配布`. Regular events are never eligible for the random-reset target because the existing eligibility predicate still requires `cycleType = ランダムリセット`.
+Persisted events are loaded into the internal radar data model and merged with static history. They use the distinct `regular_completed` record kind, retain `cycleType = 定期リセット`, and retain the configured delivery method such as `強制リセット` or `任意リセット権配布`. Regular events are never eligible for the random-reset target because the existing eligibility predicate still requires `cycleType = ランダムリセット`.
 
 The latest completed regular event is used as a regular-cycle anchor and as a UI teaser boundary. It is not used as the random-reset age, random event count, or random probability target. Teaser posts before that boundary remain stored unchanged but are excluded from the current UI teaser aggregate; later teaser posts can become active again.
 

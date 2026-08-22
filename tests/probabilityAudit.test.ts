@@ -170,7 +170,7 @@ test("latest reset and seven-day count use only broad random reset targets", () 
       details: {
         cycleType: "ランダムリセット",
         reasonType: "ご祝儀リセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "全有料プラン",
         noticeToExecution: "0分",
       },
@@ -180,7 +180,7 @@ test("latest reset and seven-day count use only broad random reset targets", () 
       details: {
         cycleType: "定期リセット",
         reasonType: "定期更新",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "全有料プラン",
         noticeToExecution: "0分（定期）",
       },
@@ -191,7 +191,7 @@ test("latest reset and seven-day count use only broad random reset targets", () 
       details: {
         cycleType: "ランダムリセット",
         reasonType: "詫びリセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "不具合対象ユーザー（約50万人）",
         noticeToExecution: "0分",
       },

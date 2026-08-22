@@ -49,7 +49,7 @@ function regularForecastEvent(
   options: {
     recordKind?: HistoryRecordKind;
     cycleType: "定期リセット" | "ランダムリセット";
-    resetMethod: "強制リセット" | "任意リセット権1回配布";
+    resetMethod: "強制リセット" | "任意リセット権配布";
     scope?: string;
     status?: string;
   },
@@ -534,7 +534,7 @@ test("manual static history overrides automatic Tibo values for the same tweet",
     details: {
       cycleType: "ランダムリセット",
       reasonType: "詫びリセット",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope: "全有料プラン",
       noticeToExecution: "1時間",
       noticeType: "公式予告あり",
@@ -627,7 +627,7 @@ test("legacy static entries sharing a tweet URL remain separate when their reset
       details: {
         cycleType: "ランダムリセット",
         reasonType: "詫びリセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
         scope: "全有料プラン",
         noticeToExecution: "0分",
         note: "任意リセット権配布",
@@ -672,11 +672,11 @@ test("regular forecast accepts broad forced or regular records, including refere
       regularForecastEvent("regular-reference-banked", "2026-08-02T00:00:00.000Z", {
         recordKind: "reference",
         cycleType: "定期リセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
       }),
       regularForecastEvent("random-banked", "2026-08-07T00:00:00.000Z", {
         cycleType: "ランダムリセット",
-        resetMethod: "任意リセット権1回配布",
+        resetMethod: "任意リセット権配布",
       }),
       regularForecastEvent("regular-narrow", "2026-08-07T12:00:00.000Z", {
         cycleType: "定期リセット",
@@ -828,7 +828,7 @@ test("history records distinguish confirmed resets, banked distributions, and so
   assert.equal(getHistoryRecordKind({ title: "Unclassified event" }), "reference");
   assert.equal(banked12?.details?.cycleType, "定期リセット");
   assert.equal(banked12?.details?.reasonType, "定期更新");
-  assert.equal(banked12?.details?.resetMethod, "任意リセット権1回配布");
+  assert.equal(banked12?.details?.resetMethod, "任意リセット権配布");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux/status/123" }), "direct_post");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
   assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");

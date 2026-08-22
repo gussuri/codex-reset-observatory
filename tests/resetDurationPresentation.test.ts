@@ -36,7 +36,7 @@ function resetEvent(
     details: {
       cycleType,
       reasonType: cycleType === "定期リセット" ? "定期更新" : "詫びリセット",
-      resetMethod: "任意リセット権1回配布",
+      resetMethod: "任意リセット権配布",
       scope,
       noticeToExecution: "0分",
     },

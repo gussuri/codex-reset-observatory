@@ -130,7 +130,7 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked.length, 1);
   assert.equal(banked[0].title, "ランダムリセット");
   assert.equal(banked[0].details?.cycleType, "ランダムリセット");
-  assert.equal(banked[0].details?.resetMethod, "任意リセット権1回配布");
+  assert.equal(banked[0].details?.resetMethod, "任意リセット権配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
 });

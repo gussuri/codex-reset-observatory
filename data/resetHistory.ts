@@ -239,7 +239,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
       "noticeType": "なし",
@@ -262,7 +262,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "詫びリセット",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "不具合対象ユーザー（約50万人）",
       "noticeToExecution": "0分",
       "noticeType": "なし",
@@ -401,7 +401,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
       "noticeToExecution": "1時間",
       "noticeType": "告知投稿あり",
@@ -471,7 +471,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "詫びリセット",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
       "noticeToExecution": "1時間",
       "noticeType": "告知投稿あり",
@@ -542,7 +542,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "詫びリセット",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
       "noticeType": "なし",
@@ -565,7 +565,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "details": {
       "cycleType": "定期リセット",
       "reasonType": "定期更新",
-      "resetMethod": "任意リセット権1回配布",
+      "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
       "noticeToExecution": "0分",
       "noticeType": "なし",

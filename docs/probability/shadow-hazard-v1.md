@@ -19,7 +19,7 @@ but deliberately models random resets only:
   `combineResetHistory`;
 - opened, pending, invalid, rejected, future, and execution-time-less records
   are excluded;
-- records with `details.resetMethod === "任意リセット権1回配布"` are excluded;
+- records with `details.resetMethod === "任意リセット権配布"` are excluded;
 - completed regular resets are excluded from this model;
 - completed random resets are included;
 - explicitly narrow scopes such as a specific user, individual account, or

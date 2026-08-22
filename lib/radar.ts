@@ -540,7 +540,7 @@ const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
 const REGULAR_RESET_NOTE =
   "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。";
-const BANKED_RESET_METHOD = "任意リセット権1回配布";
+const BANKED_RESET_METHOD = "任意リセット権配布";
 
 function isRegularHistoryItem(item: WindowLike) {
   return item.recordKind === "regular_completed" || item.details?.cycleType === "定期リセット";
@@ -578,7 +578,7 @@ export function getHistoryRecordKind(item: WindowLike): HistoryRecordKind {
 
   const resetMethod = item.details?.resetMethod ?? "";
   if (
-    resetMethod === "任意リセット権1回配布" ||
+    resetMethod === "任意リセット権配布" ||
     item.id?.includes("banked-reset") ||
     item.id?.includes("reset-credit") ||
     item.id?.includes("reset-button")
@@ -648,7 +648,7 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
     text.includes("credit") ||
     text.includes("配布")
   ) {
-    return translateDynamic("任意リセット権1回配布", locale);
+    return translateDynamic("任意リセット権配布", locale);
   }
 
   if (
