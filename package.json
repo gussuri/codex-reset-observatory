@@ -33,6 +33,7 @@
     "evaluate:prospective-random-clock": "tsx scripts/evaluateRandomClockModelProspectively.ts",
     "evaluate:prospective-random-continuous": "tsx scripts/evaluateRandomContinuousModelProspectively.ts",
     "evaluate:prospective-next-generation": "tsx scripts/evaluateNextGenerationProbabilityModels.ts",
+    "evaluate:prospective-contextual-burst": "tsx scripts/evaluateContextualBurstProbabilityModel.ts",
     "check": "pnpm test && pnpm run lint && pnpm run typecheck",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "tsx --test tests/*.test.ts"
