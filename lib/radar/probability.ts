@@ -27,8 +27,10 @@ import {
   type ExpectationKey,
 } from "./helpers";
 import {
+  compareTiboNoticeSpecificity,
   combineResetHistory,
   getNoticeBackedHistoryInputs,
+  type TiboNoticeSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
@@ -956,7 +958,43 @@ export function getActiveOfficialNotice(
       isBankedDistribution: false,
     }));
 
-  return [...dynamicNotices, ...localNotices]
+  const representativeDynamicNotice = dynamicNotices
+    .slice()
+    .sort((left, right) => compareTiboNoticeSpecificity(
+      {
+        tweet_id: left.id,
+        text: left.text ?? left.title ?? "",
+        tweet_url: left.source ?? "",
+        tweet_created_at: left.observedAt,
+        signal_type: "official_notice",
+        confidence: 1,
+        verification_status: "auto_unverified",
+        ai_temporal_precision: left.temporalPrecision ?? null,
+        ai_temporal_timezone: left.temporalTimezone ?? null,
+        expected_start_at: left.expectedAt,
+        expected_end_at: left.expectedEndAt,
+        temporal_resolution_status: left.temporalResolutionStatus ?? null,
+      } satisfies TiboNoticeSignal,
+      {
+        tweet_id: right.id,
+        text: right.text ?? right.title ?? "",
+        tweet_url: right.source ?? "",
+        tweet_created_at: right.observedAt,
+        signal_type: "official_notice",
+        confidence: 1,
+        verification_status: "auto_unverified",
+        ai_temporal_precision: right.temporalPrecision ?? null,
+        ai_temporal_timezone: right.temporalTimezone ?? null,
+        expected_start_at: right.expectedAt,
+        expected_end_at: right.expectedEndAt,
+        temporal_resolution_status: right.temporalResolutionStatus ?? null,
+      } satisfies TiboNoticeSignal,
+    ))[0] ?? null;
+
+  return [
+    ...(representativeDynamicNotice ? [representativeDynamicNotice] : []),
+    ...localNotices,
+  ]
     .sort((left, right) => new Date(right.observedAt).getTime() - new Date(left.observedAt).getTime())
     .at(0) ?? null;
 }

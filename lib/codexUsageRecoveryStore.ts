@@ -18,6 +18,12 @@ import {
 } from "./radar/resetExecution";
 import { BANKED_CREDIT_ESTIMATOR_VERSION } from "./radar/bankedReset";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
+import {
+  findRelatedTiboNotices,
+  selectRepresentativeTiboNotice,
+  type FormalTiboResetSignal,
+  type TiboNoticeSignal,
+} from "./radar/tiboHistory";
 
 export type CodexUsageMonitorStateRow = {
   source_key: string;
@@ -502,13 +508,17 @@ export async function findFormalTiboResetCluster(
   clusterWindowMs = 5 * 60 * 1000,
 ) {
   const time = Date.parse(tiboTweetCreatedAt);
+  const fallback = (error: unknown = null) => ({
+    primaryTweetId: tiboTweetId,
+    representativeTweetId: tiboTweetId,
+    representativeNoticeId: null,
+    representativeNoticeAt: null,
+    sourceTweetIds: [tiboTweetId],
+    announcedAt: tiboTweetCreatedAt,
+    error,
+  });
   if (!Number.isFinite(time)) {
-    return {
-      primaryTweetId: tiboTweetId,
-      sourceTweetIds: [tiboTweetId],
-      announcedAt: tiboTweetCreatedAt,
-      error: null,
-    };
+    return fallback();
   }
 
   const result = await client
@@ -523,12 +533,7 @@ export async function findFormalTiboResetCluster(
     .limit(20);
 
   if (result.error) {
-    return {
-      primaryTweetId: tiboTweetId,
-      sourceTweetIds: [tiboTweetId],
-      announcedAt: tiboTweetCreatedAt,
-      error: result.error,
-    };
+    return fallback(result.error);
   }
 
   const candidates = (result.data ?? [])
@@ -538,17 +543,82 @@ export async function findFormalTiboResetCluster(
       Number(row.confidence) >= 0.95,
     )
     .sort((left, right) => Date.parse(left.tweet_created_at) - Date.parse(right.tweet_created_at));
-  const sourceTweetIds = candidates.map((row) => row.tweet_id);
-  if (!sourceTweetIds.includes(tiboTweetId)) sourceTweetIds.push(tiboTweetId);
   const primary = candidates[0] ?? {
     tweet_id: tiboTweetId,
     tweet_created_at: tiboTweetCreatedAt,
   };
 
+  const noticeResult = await client
+    .from("tibo_signals")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,expected_start_at,expected_end_at,temporal_resolution_status")
+    .eq("signal_type", "official_notice")
+    .eq("is_reply", false)
+    .neq("verification_status", "rejected")
+    .gte("tweet_created_at", new Date(time - 48 * 60 * 60 * 1000).toISOString())
+    .lt("tweet_created_at", new Date(time).toISOString())
+    .order("tweet_created_at", { ascending: true })
+    .limit(100);
+  if (noticeResult.error) return fallback(noticeResult.error);
+
+  const notices = (noticeResult.data ?? [])
+    .filter((row) =>
+      typeof row.tweet_id === "string" &&
+      typeof row.text === "string" &&
+      typeof row.tweet_url === "string" &&
+      typeof row.tweet_created_at === "string",
+    )
+    .map((row): TiboNoticeSignal => ({
+      tweet_id: row.tweet_id,
+      text: row.text,
+      tweet_url: row.tweet_url,
+      tweet_created_at: row.tweet_created_at,
+      signal_type: "official_notice",
+      confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
+      verification_status: row.verification_status === "confirmed" || row.verification_status === "rejected"
+        ? row.verification_status
+        : "auto_unverified",
+      expires_at: row.expires_at ?? null,
+      ai_temporal_expression: row.ai_temporal_expression ?? null,
+      ai_temporal_kind: row.ai_temporal_kind ?? null,
+      ai_temporal_precision: row.ai_temporal_precision ?? null,
+      ai_temporal_timezone: row.ai_temporal_timezone ?? null,
+      expected_start_at: row.expected_start_at ?? null,
+      expected_end_at: row.expected_end_at ?? null,
+      temporal_resolution_status: row.temporal_resolution_status ?? null,
+    }));
+  const resetSignal = {
+    tweet_id: tiboTweetId,
+    text: "",
+    tweet_url: `https://x.com/thsottiaux/status/${tiboTweetId}`,
+    tweet_created_at: tiboTweetCreatedAt,
+    signal_type: "reset_executed" as const,
+    confidence: 1,
+    verification_status: "auto_unverified" as const,
+  } satisfies FormalTiboResetSignal;
+  const relatedNotices = findRelatedTiboNotices(resetSignal, notices);
+  const representativeNotice = selectRepresentativeTiboNotice(relatedNotices);
+  const timestampByTweetId = new Map<string, number>([
+    ...candidates.map((row) => [row.tweet_id, Date.parse(row.tweet_created_at)] as const),
+    ...relatedNotices.map((notice) => [notice.tweet_id, Date.parse(notice.tweet_created_at)] as const),
+    [tiboTweetId, time],
+  ]);
+  const sourceTweetIds = Array.from(new Set([
+    ...relatedNotices.map((notice) => notice.tweet_id),
+    ...candidates.map((row) => row.tweet_id),
+    tiboTweetId,
+  ])).sort((left, right) =>
+    (timestampByTweetId.get(left) ?? Number.MAX_SAFE_INTEGER) -
+    (timestampByTweetId.get(right) ?? Number.MAX_SAFE_INTEGER) ||
+    left.localeCompare(right),
+  );
+
   return {
     primaryTweetId: primary.tweet_id,
-    sourceTweetIds: Array.from(new Set(sourceTweetIds)),
-    announcedAt: primary.tweet_created_at,
+    representativeTweetId: representativeNotice?.tweet_id ?? primary.tweet_id,
+    representativeNoticeId: representativeNotice?.tweet_id ?? null,
+    representativeNoticeAt: representativeNotice?.tweet_created_at ?? null,
+    sourceTweetIds,
+    announcedAt: relatedNotices[0]?.tweet_created_at ?? primary.tweet_created_at,
     error: null,
   };
 }
@@ -584,6 +654,7 @@ export async function upsertResetExecutionEstimate(
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
+      .eq("estimator_version", BANKED_CREDIT_ESTIMATOR_VERSION)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
       .limit(1)
       .maybeSingle();
@@ -596,8 +667,18 @@ export async function upsertResetExecutionEstimate(
   const existingEstimate = toResetExecutionEstimate(
     existingRow,
   );
+  const stableInput = existingEstimate
+    ? {
+        ...input,
+        resetEventKey: existingEstimate.resetEventKey,
+        tiboSourceTweetIds: Array.from(new Set([
+          ...input.tiboSourceTweetIds,
+          ...existingEstimate.tiboSourceTweetIds,
+        ])),
+      }
+    : input;
   const estimate = buildResetExecutionEstimate({
-    ...input,
+    ...stableInput,
     persistedEstimate: input.persistedEstimate ?? existingEstimate,
   });
   if (!estimate) return { estimate: null, error: null };
@@ -658,8 +739,9 @@ export type BankedDistributionEstimateInput = {
 };
 
 /**
- * Persist one first-writer-wins BANKED observation in the existing execution
- * estimate table. The row is deliberately separate from recovery estimates:
+ * Persist one corroborated BANKED observation in the existing execution
+ * estimate table. Notice metadata may be enriched by later duplicate grants;
+ * the observed execution time remains first-writer-wins. The row is deliberately separate from recovery estimates:
  * it has no recovery observation and remains approximate because app-server
  * exposes no grant timestamp.
  */
@@ -667,18 +749,64 @@ export async function upsertBankedDistributionEstimate(
   client: SupabaseClient<any>,
   input: BankedDistributionEstimateInput,
 ) {
-  const existingResult = await client
+  let existingResult = await client
     .from("reset_execution_estimates")
     .select(EXECUTION_ESTIMATE_COLUMNS)
     .eq("reset_event_key", input.resetEventKey)
     .maybeSingle();
   if (existingResult.error) return { estimate: null, error: existingResult.error, inserted: false };
 
+  if (!existingResult.data && input.tiboSourceTweetIds.length > 0) {
+    existingResult = await client
+      .from("reset_execution_estimates")
+      .select(EXECUTION_ESTIMATE_COLUMNS)
+      .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
+      .limit(1)
+      .maybeSingle();
+    if (existingResult.error) return { estimate: null, error: existingResult.error, inserted: false };
+  }
+
   const existingEstimate = toResetExecutionEstimate(
     existingResult.data as ResetExecutionEstimateRow | null,
   );
   if (existingEstimate) {
-    return { estimate: existingEstimate, error: null, inserted: false };
+    const sourceTweetIds = Array.from(new Set([
+      ...input.tiboSourceTweetIds,
+      ...existingEstimate.tiboSourceTweetIds,
+    ]));
+    const existingAnnouncedAt = Date.parse(existingEstimate.tiboAnnouncedAt ?? "");
+    const inputAnnouncedAt = Date.parse(input.tiboAnnouncedAt);
+    const tiboAnnouncedAt = Number.isFinite(existingAnnouncedAt) && Number.isFinite(inputAnnouncedAt)
+      ? new Date(Math.min(existingAnnouncedAt, inputAnnouncedAt)).toISOString()
+      : input.tiboAnnouncedAt;
+    const values = {
+      tibo_announced_at: tiboAnnouncedAt,
+      tibo_primary_tweet_id: input.tiboPrimaryTweetId,
+      tibo_source_tweet_ids: sourceTweetIds,
+      official_notice_tweet_id: input.officialNoticeTweetId,
+      official_notice_at: input.officialNoticeAt,
+      updated_at: new Date().toISOString(),
+    };
+    const updateResult = existingResult.data?.id
+      ? await client
+          .from("reset_execution_estimates")
+          .update(values)
+          .eq("id", existingResult.data.id)
+          .select(EXECUTION_ESTIMATE_COLUMNS)
+          .maybeSingle()
+      : { data: null, error: null };
+    return {
+      estimate: toResetExecutionEstimate(updateResult.data as ResetExecutionEstimateRow | null) ?? {
+        ...existingEstimate,
+        tiboAnnouncedAt,
+        tiboPrimaryTweetId: input.tiboPrimaryTweetId,
+        tiboSourceTweetIds: sourceTweetIds,
+        officialNoticeTweetId: input.officialNoticeTweetId,
+        officialNoticeAt: input.officialNoticeAt,
+      },
+      error: updateResult.error,
+      inserted: false,
+    };
   }
 
   const values = {

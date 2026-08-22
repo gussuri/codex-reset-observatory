@@ -10,7 +10,11 @@ import {
   getUiResetTeaserSignals,
   isTeaserStrength,
 } from "./teaserStrength";
-import { getNoticeBackedRecoveryObservationIds } from "./tiboHistory";
+import {
+  compareTiboNoticeSpecificity,
+  getNoticeBackedRecoveryObservationIds,
+  type TiboNoticeSignal,
+} from "./tiboHistory";
 import { isSupersededBankedNotice } from "./bankedReset";
 import type {
   Locale,
@@ -84,6 +88,28 @@ function getLocalizedTiboPostText(
   }
 
   return translateTiboPostText(signal.text, locale);
+}
+
+function toNoticeSpecificitySignal(
+  signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
+): TiboNoticeSignal {
+  return {
+    tweet_id: signal.tweet_id,
+    text: signal.text ?? "",
+    tweet_url: signal.tweet_url ?? "",
+    tweet_created_at: signal.tweet_created_at,
+    signal_type: signal.signal_type === "official_notice" ? "official_notice" : "teaser",
+    confidence: signal.confidence ?? null,
+    verification_status: signal.verification_status ?? "auto_unverified",
+    expires_at: signal.expires_at ?? null,
+    ai_temporal_expression: signal.ai_temporal_expression ?? null,
+    ai_temporal_kind: signal.ai_temporal_kind ?? null,
+    ai_temporal_precision: signal.ai_temporal_precision ?? null,
+    ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+    expected_start_at: signal.expected_start_at ?? null,
+    expected_end_at: signal.expected_end_at ?? null,
+    temporal_resolution_status: signal.temporal_resolution_status ?? null,
+  };
 }
 
 function isCurrentOfficialNotice(
@@ -188,7 +214,15 @@ export function toPublicTiboActivity(
         Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at),
     );
 
-  const latest = relatedCandidates[0] ?? candidates[0];
+  const relatedOfficialNotices = relatedCandidates
+    .filter((signal) => signal.signal_type === "official_notice")
+    .sort((left, right) =>
+      compareTiboNoticeSpecificity(
+        toNoticeSpecificitySignal(left),
+        toNoticeSpecificitySignal(right),
+      ),
+    );
+  const latest = relatedOfficialNotices[0] ?? relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
 
   return {

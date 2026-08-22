@@ -45,7 +45,10 @@ export type TiboNoticeSignal = {
   confidence: number | null;
   verification_status: TiboVerificationStatus;
   expires_at?: string | null;
+  ai_temporal_expression?: string | null;
+  ai_temporal_kind?: TemporalKind | null;
   ai_temporal_precision?: TemporalPrecision | null;
+  ai_temporal_timezone?: string | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
@@ -114,6 +117,7 @@ export type FormalTiboResetSignal = {
   reply_context_text?: string | null;
   source_timeline?: "profile" | "with_replies" | null;
   related_notice?: TiboNoticeSignal | null;
+  related_notices?: TiboNoticeSignal[];
 };
 
 export type RejectedTiboResetSignal = Pick<
@@ -167,6 +171,168 @@ function formatNoticeToExecution(minutes: number) {
   return `${hours}時間${remainingMinutes}分`;
 }
 
+function getNoticeScheduleWidthMs(notice: TiboNoticeSignal) {
+  const start = getTimestamp(notice.expected_start_at);
+  const end = getTimestamp(notice.expected_end_at);
+  if (start === null || end === null || end < start) return null;
+  return end - start;
+}
+
+function getNoticeSpecificityRank(notice: TiboNoticeSignal) {
+  const text = notice.text ?? "";
+  const clockMentions = text.match(/\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|am|pm)\b/gi) ?? [];
+  const hasRangeLanguage = /\b(?:between|from)\b[\s\S]{0,80}\b(?:and|to)\b/i.test(text);
+  const widthMs = getNoticeScheduleWidthMs(notice);
+  const widthHours = widthMs === null ? null : widthMs / (60 * 60 * 1000);
+  let temporalRank = 0;
+
+  // A narrow explicit range is more useful than a broad deadline window. The
+  // text check keeps a resolver-provided "range" from hiding a concrete clock
+  // expression such as "by 8pm".
+  if (clockMentions.length >= 2 && hasRangeLanguage) {
+    temporalRank = 480 - Math.min(widthHours ?? 24, 24);
+  } else if (clockMentions.length > 0 || notice.ai_temporal_precision === "exact_time") {
+    temporalRank = 450;
+  } else if (notice.ai_temporal_precision === "range") {
+    temporalRank = 400 - Math.min(widthHours ?? 24, 24);
+  } else if (notice.ai_temporal_precision === "daypart") {
+    temporalRank = 300;
+  } else if (notice.ai_temporal_precision === "day") {
+    temporalRank = 200;
+  } else if (widthMs !== null) {
+    temporalRank = 150;
+  }
+
+  return [
+    notice.signal_type === "official_notice" ? 1 : 0,
+    temporalRank,
+    isAllPaidScope(text) ? 1 : 0,
+    getTimestamp(notice.tweet_created_at) ?? 0,
+  ] as const;
+}
+
+export function compareTiboNoticeSpecificity(
+  left: TiboNoticeSignal,
+  right: TiboNoticeSignal,
+) {
+  const leftRank = getNoticeSpecificityRank(left);
+  const rightRank = getNoticeSpecificityRank(right);
+  for (let index = 0; index < leftRank.length; index += 1) {
+    if (leftRank[index] !== rightRank[index]) {
+      return rightRank[index] - leftRank[index];
+    }
+  }
+  return right.tweet_id.localeCompare(left.tweet_id);
+}
+
+export function selectRepresentativeTiboNotice(
+  notices: ReadonlyArray<TiboNoticeSignal>,
+) {
+  return notices.slice().sort(compareTiboNoticeSpecificity)[0] ?? null;
+}
+
+function sortTiboNoticesChronologically(notices: ReadonlyArray<TiboNoticeSignal>) {
+  return notices
+    .slice()
+    .sort((left, right) => {
+      const timeDifference =
+        (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
+      return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
+    });
+}
+
+function sortTweetIdsChronologically(
+  tweetIds: ReadonlyArray<string>,
+  notices: ReadonlyArray<TiboNoticeSignal>,
+) {
+  const timestampByTweetId = new Map(
+    notices.map((notice) => [notice.tweet_id, getTimestamp(notice.tweet_created_at) ?? Number.MAX_SAFE_INTEGER]),
+  );
+  return Array.from(new Set(tweetIds)).sort((left, right) => {
+    const timeDifference =
+      (timestampByTweetId.get(left) ?? Number.MAX_SAFE_INTEGER) -
+      (timestampByTweetId.get(right) ?? Number.MAX_SAFE_INTEGER);
+    return timeDifference || left.localeCompare(right);
+  });
+}
+
+function areTiboNoticeSchedulesCompatible(
+  left: TiboNoticeSignal,
+  right: TiboNoticeSignal,
+) {
+  const leftStart = getTimestamp(left.expected_start_at);
+  const leftEnd = getTimestamp(left.expected_end_at);
+  const rightStart = getTimestamp(right.expected_start_at);
+  const rightEnd = getTimestamp(right.expected_end_at);
+  if (
+    leftStart === null ||
+    leftEnd === null ||
+    rightStart === null ||
+    rightEnd === null
+  ) {
+    return true;
+  }
+
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function getNoticeCluster(
+  candidates: ReadonlyArray<TiboNoticeSignal>,
+  representative: TiboNoticeSignal | null,
+) {
+  if (!representative) return [];
+  return sortTiboNoticesChronologically(
+    candidates.filter((candidate) =>
+      candidate.tweet_id === representative.tweet_id ||
+      areTiboNoticeSchedulesCompatible(candidate, representative),
+    ),
+  );
+}
+
+export function findRelatedTiboNoticeCluster(
+  noticeSignals: ReadonlyArray<TiboNoticeSignal>,
+  representativeTweetId: string,
+  completedAt: string,
+) {
+  const completedTime = getTimestamp(completedAt);
+  const representative = noticeSignals.find((notice) => notice.tweet_id === representativeTweetId) ?? null;
+  if (!representative || completedTime === null) return [];
+
+  const candidates = noticeSignals.filter((notice) => {
+    const time = getTimestamp(notice.tweet_created_at);
+    return Boolean(
+      time !== null &&
+        time < completedTime &&
+        completedTime - time <= NOTICE_LOOKBACK_MS &&
+        notice.signal_type === "official_notice" &&
+        notice.verification_status !== "rejected" &&
+        (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE,
+    );
+  });
+  return getNoticeCluster(candidates, representative);
+}
+
+export function findRelatedBankedDistributionNotices(
+  noticeSignals: ReadonlyArray<TiboNoticeSignal>,
+  representativeTweetId: string,
+  observedAt: string,
+) {
+  const candidates = noticeSignals.filter((notice) =>
+    notice.signal_type === "official_notice" &&
+    notice.verification_status !== "rejected" &&
+    (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE &&
+    isBroadBankedDistributionNotice(notice.text),
+  );
+  return getNoticeCluster(
+    candidates.filter((notice) => {
+      const time = getTimestamp(notice.tweet_created_at);
+      const observedTime = getTimestamp(observedAt);
+      return time !== null && observedTime !== null && time <= observedTime;
+    }),
+    candidates.find((notice) => notice.tweet_id === representativeTweetId) ?? null,
+  );
+}
+
 export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
   if (signal.is_reply === true) return false;
   if (signal.signal_type !== "reset_executed") return false;
@@ -184,13 +350,13 @@ export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
   );
 }
 
-export function findRelatedTiboNotice(
+export function findRelatedTiboNotices(
   resetSignal: FormalTiboResetSignal,
   noticeSignals: Array<TiboNoticeSignal>,
   previousResetAt?: string | null,
 ) {
   const resetTime = getTimestamp(resetSignal.tweet_created_at);
-  if (resetTime === null) return null;
+  if (resetTime === null) return [];
 
   const previousResetTime = getTimestamp(previousResetAt);
   const candidates = noticeSignals.filter((signal) => {
@@ -230,25 +396,40 @@ export function findRelatedTiboNotice(
     );
   });
 
-  return candidates.sort((left, right) => {
-    if (left.signal_type !== right.signal_type) {
-      return left.signal_type === "official_notice" ? -1 : 1;
-    }
-    return (getTimestamp(right.tweet_created_at) ?? 0) - (getTimestamp(left.tweet_created_at) ?? 0);
-  })[0] ?? null;
+  return getNoticeCluster(candidates, selectRepresentativeTiboNotice(candidates));
+}
+
+export function findRelatedTiboNotice(
+  resetSignal: FormalTiboResetSignal,
+  noticeSignals: Array<TiboNoticeSignal>,
+  previousResetAt?: string | null,
+) {
+  return selectRepresentativeTiboNotice(
+    findRelatedTiboNotices(resetSignal, noticeSignals, previousResetAt),
+  );
 }
 
 export function convertTiboResetSignalToHistoryEvent(
   signal: FormalTiboResetSignal,
   relatedNotice: TiboNoticeSignal | null = signal.related_notice ?? null,
   completedAtOverride?: string,
+  relatedNotices: ReadonlyArray<TiboNoticeSignal> = signal.related_notices ?? [],
 ): WindowEventLike {
   const completedAt = new Date(completedAtOverride ?? signal.tweet_created_at).toISOString();
-  const noticeAt = relatedNotice
-    ? new Date(relatedNotice.tweet_created_at).toISOString()
+  const notices = sortTiboNoticesChronologically([
+    ...relatedNotices,
+    ...(signal.related_notices ?? []),
+    ...(relatedNotice ? [relatedNotice] : []),
+  ].filter((notice, index, all) =>
+    all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
+  ));
+  const representative = relatedNotice ?? selectRepresentativeTiboNotice(notices);
+  const firstAnnouncement = notices[0] ?? null;
+  const noticeAt = firstAnnouncement
+    ? new Date(firstAnnouncement.tweet_created_at).toISOString()
     : completedAt;
-  const noticeMinutes = relatedNotice
-    ? Math.max(0, Math.round((getTimestamp(signal.tweet_created_at)! - getTimestamp(relatedNotice.tweet_created_at)!) / 60000))
+  const noticeMinutes = firstAnnouncement
+    ? Math.max(0, Math.round((getTimestamp(completedAt)! - getTimestamp(firstAnnouncement.tweet_created_at)!) / 60000))
     : 0;
   const reasonType = getReasonType(signal);
   const cycleType = inferResetCycleType({ text: signal.text });
@@ -268,22 +449,25 @@ export function convertTiboResetSignalToHistoryEvent(
     window_minutes: noticeMinutes,
     scope,
     summary,
-    source_url: signal.tweet_url,
+    source_url: representative?.tweet_url ?? signal.tweet_url,
     details: {
       cycleType,
       reasonType,
       resetMethod: "強制リセット",
       scope,
       noticeToExecution: formatNoticeToExecution(noticeMinutes),
-      noticeType: relatedNotice
-        ? relatedNotice.signal_type === "official_notice"
+      noticeType: representative
+        ? representative.signal_type === "official_notice"
           ? "公式予告あり"
           : "匂わせ投稿あり"
         : "なし",
       note: summary,
     },
-    ...(relatedNotice ? { officialNoticeTweetId: relatedNotice.tweet_id } : {}),
-    sourceTweetIds: [signal.tweet_id],
+    ...(representative ? { officialNoticeTweetId: representative.tweet_id } : {}),
+    sourceTweetIds: sortTiboNoticesChronologically(notices)
+      .map((notice) => notice.tweet_id)
+      .concat(signal.tweet_id)
+      .filter((tweetId, index, all) => all.indexOf(tweetId) === index),
   };
 }
 
@@ -354,29 +538,36 @@ function clusterFormalTiboResetSignals(signals: Array<FormalTiboResetSignal>) {
   return clusters.map((cluster) => {
     const earliest = cluster[0];
     const representative = cluster.slice().sort(compareRepresentativeSignals)[0];
-    const relatedNotice = representative.related_notice ??
-      cluster.find((signal) => signal.related_notice)?.related_notice ??
-      null;
-    const sourceTweetIds = Array.from(
-      new Set(
-        cluster
-          .slice()
-          .sort((left, right) => {
-            const timeDifference =
-              (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
-            return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
-          })
-          .map((signal) => signal.tweet_id),
+    const relatedNotices = sortTiboNoticesChronologically(
+      cluster.flatMap((signal) => [
+        ...(signal.related_notices ?? []),
+        ...(signal.related_notice ? [signal.related_notice] : []),
+      ]).filter((notice, index, all) =>
+        all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
       ),
     );
+    const relatedNotice = selectRepresentativeTiboNotice(relatedNotices);
+    const event = convertTiboResetSignalToHistoryEvent(
+      representative,
+      relatedNotice,
+      earliest.tweet_created_at,
+      relatedNotices,
+    );
+    const resetIds = cluster
+      .slice()
+      .sort((left, right) => {
+        const timeDifference =
+          (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
+        return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
+      })
+      .map((signal) => signal.tweet_id);
 
     return {
-      ...convertTiboResetSignalToHistoryEvent(
-        representative,
-        relatedNotice,
-        earliest.tweet_created_at,
-      ),
-      sourceTweetIds,
+      ...event,
+      sourceTweetIds: sortTiboNoticesChronologically(relatedNotices)
+        .map((notice) => notice.tweet_id)
+        .concat(resetIds)
+        .filter((tweetId, index, all) => all.indexOf(tweetId) === index),
     };
   });
 }
@@ -590,7 +781,10 @@ export function collectOfficialTiboNoticeSignals(
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
       expires_at: signal.expires_at ?? null,
+      ai_temporal_expression: signal.ai_temporal_expression ?? null,
+      ai_temporal_kind: signal.ai_temporal_kind ?? null,
       ai_temporal_precision: signal.ai_temporal_precision ?? null,
+      ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
       expected_start_at: signal.expected_start_at ?? null,
       expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
@@ -695,10 +889,10 @@ function buildNoticeBackedRecoveryEvent(
     (signal) => signal.signal_type === "official_notice" && signal.tweet_id === officialNoticeTweetId,
   );
   const openedAt =
-    getTimestamp(estimate.officialNoticeAt) !== null
-      ? new Date(estimate.officialNoticeAt!).toISOString()
-      : getTimestamp(estimate.tiboAnnouncedAt) !== null
-        ? new Date(estimate.tiboAnnouncedAt!).toISOString()
+    getTimestamp(estimate.tiboAnnouncedAt) !== null
+      ? new Date(estimate.tiboAnnouncedAt!).toISOString()
+      : getTimestamp(estimate.officialNoticeAt) !== null
+        ? new Date(estimate.officialNoticeAt!).toISOString()
         : new Date(getTimestamp(estimate.executionWindowStartAt)!).toISOString();
   const completedAt = new Date(getTimestamp(estimate.displayExecutionAt)!).toISOString();
   const noticeMinutes = Math.max(
@@ -706,10 +900,13 @@ function buildNoticeBackedRecoveryEvent(
     Math.round((getTimestamp(completedAt)! - getTimestamp(openedAt)!) / 60000),
   );
   const sourceUrl = notice?.tweet_url || `https://x.com/thsottiaux/status/${officialNoticeTweetId}`;
-  const sourceTweetIds = Array.from(new Set([
+  const sourceTweetIds = sortTweetIdsChronologically([
     ...estimate.tiboSourceTweetIds,
     officialNoticeTweetId,
-  ]));
+  ], noticeSignals.filter((signal): signal is TiboNoticeSignal =>
+    signal.signal_type === "official_notice" &&
+    estimate.tiboSourceTweetIds.includes(signal.tweet_id),
+  ));
 
   return {
     id: estimate.resetEventKey,
@@ -762,9 +959,11 @@ export function findNoticeBackedRecoveryEvents(
 function buildBankedDistributionEvent(
   estimate: ResetExecutionEstimate,
   notice: TiboNoticeSignal | FormalTiboResetSignal,
+  relatedNotices: ReadonlyArray<TiboNoticeSignal> = [],
 ): WindowEventLike | null {
   const displayTime = getTimestamp(estimate.displayExecutionAt);
   const noticeTime = getTimestamp(notice.tweet_created_at);
+  const firstAnnouncementTime = getTimestamp(estimate.tiboAnnouncedAt) ?? noticeTime;
   if (
     estimate.estimatorVersion !== BANKED_CREDIT_ESTIMATOR_VERSION ||
     estimate.executionTimeSource !== "usage_observation" ||
@@ -780,14 +979,15 @@ function buildBankedDistributionEvent(
     !isBroadBankedDistributionNotice(notice.text) ||
     displayTime === null ||
     noticeTime === null ||
-    displayTime < noticeTime
+    firstAnnouncementTime === null ||
+    displayTime < firstAnnouncementTime
   ) {
     return null;
   }
 
-  const openedAt = new Date(noticeTime).toISOString();
+  const openedAt = new Date(firstAnnouncementTime).toISOString();
   const completedAt = new Date(displayTime).toISOString();
-  const noticeMinutes = Math.max(0, Math.round((displayTime - noticeTime) / 60000));
+  const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
   const summary = "任意リセット権の配布が確認されました。";
 
   return {
@@ -804,10 +1004,10 @@ function buildBankedDistributionEvent(
     summary,
     source_url: notice.tweet_url,
     sourceKind: "direct_post",
-    sourceTweetIds: Array.from(new Set([
+    sourceTweetIds: sortTweetIdsChronologically([
       ...estimate.tiboSourceTweetIds,
       notice.tweet_id,
-    ])),
+    ], relatedNotices),
     officialNoticeTweetId: notice.tweet_id,
     details: {
       cycleType: "ランダムリセット",
@@ -833,7 +1033,11 @@ export function findBankedDistributionEvents(
       signal.signal_type === "official_notice" &&
       signal.tweet_id === estimate.officialNoticeTweetId,
     );
-    const event = notice ? buildBankedDistributionEvent(estimate, notice) : null;
+    const relatedNotices = noticeSignals.filter((signal): signal is TiboNoticeSignal =>
+      signal.signal_type === "official_notice" &&
+      estimate.tiboSourceTweetIds.includes(signal.tweet_id),
+    );
+    const event = notice ? buildBankedDistributionEvent(estimate, notice, relatedNotices) : null;
     return event ? [event] : [];
   });
 }

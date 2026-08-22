@@ -24,14 +24,24 @@ import {
   upsertResetExecutionEstimate,
   upsertCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
-import { getActiveOfficialNotice } from "@/lib/radar/probability";
+import {
+  getActiveOfficialNotice,
+  type ActiveOfficialNotice,
+} from "@/lib/radar/probability";
+import {
+  collectOfficialTiboNoticeSignals,
+  findRelatedBankedDistributionNotices,
+  findRelatedTiboNoticeCluster,
+  selectRepresentativeTiboNotice,
+  type TiboNoticeSignal,
+} from "@/lib/radar/tiboHistory";
 import {
   isBankedObservationWithinNoticeWindow,
   isBroadBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_precision,expected_start_at,expected_end_at,temporal_resolution_status,ai_temporal_timezone,ai_temporal_confidence";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,expected_start_at,expected_end_at,temporal_resolution_status,ai_temporal_timezone,ai_temporal_confidence";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
 
 function getSupabaseServiceClient() {
@@ -41,10 +51,36 @@ function getSupabaseServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+function toTiboNoticeSignal(notice: ActiveOfficialNotice): TiboNoticeSignal {
+  return {
+    tweet_id: notice.id,
+    text: notice.text ?? notice.title ?? "",
+    tweet_url: notice.source ?? "",
+    tweet_created_at: notice.observedAt,
+    signal_type: "official_notice",
+    confidence: 1,
+    verification_status: "auto_unverified",
+    expected_start_at: notice.expectedAt,
+    expected_end_at: notice.expectedEndAt,
+    ai_temporal_precision: notice.temporalPrecision ?? null,
+    ai_temporal_timezone: notice.temporalTimezone ?? null,
+    temporal_resolution_status: notice.temporalResolutionStatus ?? null,
+  };
+}
+
+type OfficialNoticeLookup = {
+  active: boolean;
+  noticeSignal: ActiveOfficialNotice | null;
+  bankedNoticeSignal: ActiveOfficialNotice | null;
+  noticeSignals: TiboNoticeSignal[];
+  bankedNoticeSignals: TiboNoticeSignal[];
+  error: unknown;
+};
+
 async function hasActiveOfficialNotice(
   client: SupabaseClient<any>,
   observedAt: Date,
-) {
+): Promise<OfficialNoticeLookup> {
   const [tiboResult, regularResult] = await Promise.all([
     client
       .from("tibo_signals")
@@ -60,7 +96,14 @@ async function hasActiveOfficialNotice(
   ]);
 
   if (tiboResult.error || regularResult.error) {
-    return { active: false, error: tiboResult.error ?? regularResult.error };
+    return {
+      active: false,
+      noticeSignal: null,
+      bankedNoticeSignal: null,
+      noticeSignals: [],
+      bankedNoticeSignals: [],
+      error: tiboResult.error ?? regularResult.error,
+    };
   }
 
   const signals = (tiboResult.data ?? []) as unknown as ActiveTiboSignal[];
@@ -86,15 +129,21 @@ async function hasActiveOfficialNotice(
     null,
     observedAt,
   );
+  const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
+  const bankedNoticeSignals = findRelatedBankedDistributionNotices(
+    noticeSignals.filter((signal) => isBroadBankedDistributionNotice(signal.text)),
+    activeBankedNotice?.id ?? "",
+    observedAt.toISOString(),
+  );
   return {
     active: Boolean(activeNotice),
     noticeSignal: activeNotice ?? null,
     bankedNoticeSignal: activeBankedNotice ?? null,
+    noticeSignals,
+    bankedNoticeSignals,
     error: null,
   };
 }
-
-type OfficialNoticeLookup = Awaited<ReturnType<typeof hasActiveOfficialNotice>>;
 
 async function persistCorroboratedBankedDistribution(
   client: SupabaseClient<any>,
@@ -102,6 +151,14 @@ async function persistCorroboratedBankedDistribution(
   lookup: OfficialNoticeLookup | null,
 ) {
   const notice = lookup?.bankedNoticeSignal;
+  const relatedNotices = lookup?.bankedNoticeSignals?.length
+    ? lookup.bankedNoticeSignals
+    : notice
+      ? [toTiboNoticeSignal(notice)]
+      : [];
+  const representativeNotice = selectRepresentativeTiboNotice(relatedNotices) ??
+    (notice ? toTiboNoticeSignal(notice) : null);
+  const firstAnnouncement = relatedNotices[0] ?? representativeNotice;
   if (
     snapshot.bankedCreditChange !== true ||
     !snapshot.bankedCredit ||
@@ -113,13 +170,13 @@ async function persistCorroboratedBankedDistribution(
   }
 
   const result = await upsertBankedDistributionEstimate(client, {
-    resetEventKey: `banked-reset-${notice.id}`,
+    resetEventKey: `banked-reset-${firstAnnouncement?.tweet_id ?? notice.id}`,
     displayExecutionAt: snapshot.observedAt,
-    tiboAnnouncedAt: notice.observedAt,
-    tiboPrimaryTweetId: notice.id,
-    tiboSourceTweetIds: [notice.id],
-    officialNoticeTweetId: notice.id,
-    officialNoticeAt: notice.observedAt,
+    tiboAnnouncedAt: firstAnnouncement?.tweet_created_at ?? notice.observedAt,
+    tiboPrimaryTweetId: representativeNotice?.tweet_id ?? notice.id,
+    tiboSourceTweetIds: relatedNotices.map((item) => item.tweet_id),
+    officialNoticeTweetId: representativeNotice?.tweet_id ?? notice.id,
+    officialNoticeAt: representativeNotice?.tweet_created_at ?? notice.observedAt,
   });
   return { observed: true, error: result.error };
 }
@@ -299,9 +356,11 @@ export async function POST(request: Request) {
           const estimateResult = await upsertResetExecutionEstimate(client, {
             resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
             tiboAnnouncedAt: cluster.announcedAt,
-            tiboPrimaryTweetId: cluster.primaryTweetId,
+            tiboPrimaryTweetId: cluster.representativeTweetId,
             tiboSourceTweetIds: cluster.sourceTweetIds,
             usageObservation: observationResult.observation,
+            officialNoticeTweetId: cluster.representativeNoticeId,
+            officialNoticeAt: cluster.representativeNoticeAt,
           });
           if (estimateResult.error) {
             console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
@@ -312,14 +371,27 @@ export async function POST(request: Request) {
       }
     } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observationResult.observation)) {
       try {
+        const noticeSignals = notice.noticeSignals.length > 0
+          ? notice.noticeSignals
+          : [toTiboNoticeSignal(noticeSignal)];
+        const relatedNoticeSignals = findRelatedTiboNoticeCluster(
+          noticeSignals,
+          noticeSignal.id,
+          snapshot.observedAt,
+        );
+        const normalizedRelatedNoticeSignals = relatedNoticeSignals.length > 0
+          ? relatedNoticeSignals
+          : [toTiboNoticeSignal(noticeSignal)];
+        const representativeNotice = selectRepresentativeTiboNotice(normalizedRelatedNoticeSignals)!;
+        const firstAnnouncement = normalizedRelatedNoticeSignals[0] ?? representativeNotice;
         const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `tibo-reset-${noticeSignal.id}`,
-          tiboAnnouncedAt: noticeSignal.observedAt,
-          tiboPrimaryTweetId: noticeSignal.id,
-          tiboSourceTweetIds: [noticeSignal.id].filter(Boolean),
+          resetEventKey: `tibo-reset-${firstAnnouncement.tweet_id}`,
+          tiboAnnouncedAt: firstAnnouncement.tweet_created_at,
+          tiboPrimaryTweetId: representativeNotice.tweet_id,
+          tiboSourceTweetIds: normalizedRelatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
           usageObservation: observationResult.observation,
-          officialNoticeTweetId: noticeSignal.id,
-          officialNoticeAt: noticeSignal.observedAt,
+          officialNoticeTweetId: representativeNotice.tweet_id,
+          officialNoticeAt: representativeNotice.tweet_created_at,
         });
         if (estimateResult.error) {
           console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });

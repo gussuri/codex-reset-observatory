@@ -292,6 +292,33 @@ test("uses the newest related post while keeping status aggregation independent"
   ]);
   assert.equal(newerNotice.latestTiboActivity?.text, "notice post text");
   assert.equal(newerNotice.latestTiboActivity?.classification, "official_notice");
+
+  const specificNotice = snapshotFor([
+    activitySignal("daypart-notice", "2026-08-03T21:00:00.000Z", null, {
+      signal_type: "official_notice",
+      confidence: 0.99,
+      text: "The BANKED reset will arrive during the day.",
+      ai_temporal_precision: "daypart",
+      temporal_resolution_status: "resolved",
+      expected_start_at: "2026-08-04T00:00:00.000Z",
+      expected_end_at: "2026-08-04T12:00:00.000Z",
+    }),
+    activitySignal("deadline-notice", "2026-08-03T22:00:00.000Z", null, {
+      signal_type: "official_notice",
+      confidence: 0.99,
+      text: "The BANKED reset will be there by 8pm PST.",
+      ai_temporal_precision: "range",
+      temporal_resolution_status: "resolved",
+      expected_start_at: "2026-08-04T03:00:00.000Z",
+      expected_end_at: "2026-08-04T04:00:00.000Z",
+    }),
+    activitySignal("low-information-notice", "2026-08-03T23:00:00.000Z", null, {
+      signal_type: "official_notice",
+      confidence: 0.99,
+      text: "Yep, still coming!",
+    }),
+  ]);
+  assert.equal(specificNotice.latestTiboActivity?.text, "The BANKED reset will be there by 8pm PST.");
 });
 
 test("falls back to the latest normal post when no related post is valid", () => {

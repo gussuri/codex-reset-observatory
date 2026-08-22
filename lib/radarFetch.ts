@@ -27,9 +27,10 @@ import {
   readResetExecutionEstimates,
 } from "@/lib/codexUsageRecoveryStore";
 import {
-  findRelatedTiboNotice,
+  findRelatedTiboNotices,
   getNoticeBackedRecoveryObservationIds,
   isFormalTiboResetSignal,
+  selectRepresentativeTiboNotice,
   type FormalTiboResetSignal,
   type RejectedTiboResetSignal,
   type TiboNoticeSignal,
@@ -394,7 +395,10 @@ function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null 
     signal_type: signal.signal_type,
     confidence: signal.confidence,
     verification_status: signal.verification_status,
+    ai_temporal_expression: signal.ai_temporal_expression ?? null,
+    ai_temporal_kind: signal.ai_temporal_kind ?? null,
     ai_temporal_precision: signal.ai_temporal_precision ?? null,
+    ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
     expected_start_at: signal.expected_start_at ?? null,
     expected_end_at: signal.expected_end_at ?? null,
     temporal_resolution_status: signal.temporal_resolution_status ?? null,
@@ -431,9 +435,11 @@ export function associateTiboNotices(
       new Date(sortedResets[index].tweet_created_at).getTime() === groupTime
     ) {
       const signal = sortedResets[index];
+      const relatedNotices = findRelatedTiboNotices(signal, notices, groupPreviousResetAt);
       associated.push({
         ...signal,
-        related_notice: findRelatedTiboNotice(signal, notices, groupPreviousResetAt),
+        related_notice: selectRepresentativeTiboNotice(relatedNotices),
+        related_notices: relatedNotices,
       });
       index += 1;
     }

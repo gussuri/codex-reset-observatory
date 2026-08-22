@@ -83,6 +83,49 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(events[0].closed_at, sampleRecovery.observedAt);
   });
 
+  it("告知履歴は最初の告知時刻を使い、代表告知は具体的な続報を使う", () => {
+    const firstNotice = {
+      ...sampleNotice,
+      tweet_id: "2087706104814023001",
+      tweet_url: "https://x.com/thsottiaux/status/2087706104814023001",
+      tweet_created_at: "2026-08-13T00:30:00Z",
+      text: "The reset will arrive during the day.",
+      ai_temporal_precision: "daypart" as const,
+      temporal_resolution_status: "resolved" as const,
+      expected_start_at: "2026-08-13T02:00:00Z",
+      expected_end_at: "2026-08-13T14:00:00Z",
+    };
+    const representativeNotice = {
+      ...sampleNotice,
+      tweet_id: "2087706104814023002",
+      tweet_url: "https://x.com/thsottiaux/status/2087706104814023002",
+      tweet_created_at: "2026-08-13T00:45:00Z",
+      text: "The reset will be there by 8pm PST.",
+      ai_temporal_precision: "range" as const,
+      temporal_resolution_status: "resolved" as const,
+      expected_start_at: "2026-08-13T03:00:00Z",
+      expected_end_at: "2026-08-13T04:00:00Z",
+    };
+    const estimate = {
+      ...sampleEstimate,
+      tiboAnnouncedAt: firstNotice.tweet_created_at,
+      tiboPrimaryTweetId: representativeNotice.tweet_id,
+      officialNoticeTweetId: representativeNotice.tweet_id,
+      tiboSourceTweetIds: [firstNotice.tweet_id, representativeNotice.tweet_id],
+    };
+    const events = findNoticeBackedRecoveryEvents(
+      [firstNotice, representativeNotice],
+      [sampleRecovery],
+      [estimate],
+    );
+    assert.equal(events.length, 1);
+    assert.equal(events[0].opened_at, "2026-08-13T00:30:00.000Z");
+    assert.equal(events[0].window_minutes, 185);
+    assert.equal(events[0].source_url, representativeNotice.tweet_url);
+    assert.equal(events[0].officialNoticeTweetId, representativeNotice.tweet_id);
+    assert.deepEqual(events[0].sourceTweetIds, [firstNotice.tweet_id, representativeNotice.tweet_id]);
+  });
+
   it("F. 今回の実データ fixture (notice 2087706104814023111 & recovery 68e38669)", () => {
     const events = findNoticeBackedRecoveryEvents([sampleNotice], [sampleRecovery], [sampleEstimate]);
     assert.equal(events.length, 1);

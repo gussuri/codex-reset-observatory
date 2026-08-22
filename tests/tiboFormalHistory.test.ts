@@ -15,8 +15,10 @@ import {
 import {
   combineResetHistory,
   convertTiboResetSignalToHistoryEvent,
+  findRelatedTiboNotices,
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
+  selectRepresentativeTiboNotice,
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
@@ -184,6 +186,87 @@ test("official notice is preferred over a teaser and only a prior post is linked
   assert.equal(findRelatedTiboNotice(reset, [noticeSignal({ tweet_created_at: "2026-07-29T00:00:00.000Z" })]), null);
 });
 
+test("history separates the first announcement from the most specific representative notice", () => {
+  const reset = resetSignal({
+    tweet_created_at: "2026-08-01T09:00:00.000Z",
+  });
+  const first = noticeSignal({
+    tweet_id: "notice-first",
+    text: "During the day we will reset usage limits for all paid users.",
+    tweet_created_at: "2026-08-01T07:00:00.000Z",
+    ai_temporal_precision: "daypart",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-01T06:00:00.000Z",
+    expected_end_at: "2026-08-02T06:00:00.000Z",
+  });
+  const deadline = noticeSignal({
+    tweet_id: "notice-deadline",
+    text: "The reset will be there by 8pm PST for all paid users.",
+    tweet_created_at: "2026-08-01T08:00:00.000Z",
+    ai_temporal_precision: "exact_time",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-01T08:00:00.000Z",
+    expected_end_at: "2026-08-01T12:00:00.000Z",
+  });
+  const lowInformation = noticeSignal({
+    tweet_id: "notice-low-information",
+    text: "Yep, still coming!",
+    tweet_created_at: "2026-08-01T08:30:00.000Z",
+  });
+
+  const related = findRelatedTiboNotices(reset, [first, deadline, lowInformation]);
+  const representative = selectRepresentativeTiboNotice(related);
+  const event = convertTiboResetSignalToHistoryEvent(
+    reset,
+    representative,
+    undefined,
+    related,
+  );
+
+  assert.deepEqual(related.map((notice) => notice.tweet_id), [
+    "notice-first",
+    "notice-deadline",
+    "notice-low-information",
+  ]);
+  assert.equal(representative?.tweet_id, "notice-deadline");
+  assert.equal(event.opened_at, first.tweet_created_at);
+  assert.equal(event.details?.noticeToExecution, "2時間");
+  assert.equal(event.officialNoticeTweetId, "notice-deadline");
+  assert.equal(event.source_url, deadline.tweet_url);
+  assert.deepEqual(event.sourceTweetIds, [
+    "notice-first",
+    "notice-deadline",
+    "notice-low-information",
+    reset.tweet_id,
+  ]);
+});
+
+test("a narrower explicit range can outrank a broader deadline without changing the first announcement", () => {
+  const deadline = noticeSignal({
+    tweet_id: "notice-deadline",
+    text: "The reset will be there by 8pm PST for all paid users.",
+    tweet_created_at: "2026-08-01T08:00:00.000Z",
+    ai_temporal_precision: "exact_time",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-01T08:00:00.000Z",
+    expected_end_at: "2026-08-01T12:00:00.000Z",
+  });
+  const narrowRange = noticeSignal({
+    tweet_id: "notice-narrow-range",
+    text: "The reset will happen between 6pm and 7pm PST.",
+    tweet_created_at: "2026-08-01T08:30:00.000Z",
+    ai_temporal_precision: "range",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-01T10:00:00.000Z",
+    expected_end_at: "2026-08-01T11:00:00.000Z",
+  });
+
+  assert.equal(
+    selectRepresentativeTiboNotice([deadline, narrowRange])?.tweet_id,
+    "notice-narrow-range",
+  );
+});
+
 test("the 2026-08-11 duplicate completion posts become one canonical event", () => {
   const notice = noticeSignal({
     tweet_id: "2086189414292865249",
@@ -219,8 +302,9 @@ test("the 2026-08-11 duplicate completion posts become one canonical event", () 
 
   assert.equal(combined.length, 1);
   assert.equal(combined[0].completed_at, "2026-08-11T00:27:44.000Z");
-  assert.equal(combined[0].source_url, second.tweet_url);
+  assert.equal(combined[0].source_url, notice.tweet_url);
   assert.deepEqual(combined[0].sourceTweetIds, [
+    "2086189414292865249",
     "2086972802457063486",
     "2086972933566857393",
   ]);

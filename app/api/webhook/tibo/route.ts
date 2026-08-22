@@ -537,9 +537,11 @@ export async function POST(req: NextRequest) {
             const estimateResult = await upsertResetExecutionEstimate(supabase, {
               resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
               tiboAnnouncedAt: cluster.announcedAt,
-              tiboPrimaryTweetId: cluster.primaryTweetId,
+              tiboPrimaryTweetId: cluster.representativeTweetId,
               tiboSourceTweetIds: cluster.sourceTweetIds,
               usageObservation: recoveryMatch.observation,
+              officialNoticeTweetId: cluster.representativeNoticeId,
+              officialNoticeAt: cluster.representativeNoticeAt,
             });
             if (estimateResult.error) {
               console.warn("[Tibo Warning] Reset execution estimate write failed", {

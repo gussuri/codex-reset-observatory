@@ -228,7 +228,7 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
   }
 });
 
-test("a BANKED credit matches the latest broad BANKED notice even when a later unrelated notice exists", async () => {
+test("a BANKED credit keeps the first notice and uses the most specific notice as representative", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -331,7 +331,15 @@ test("a BANKED credit matches the latest broad BANKED notice even when a later u
     const estimateWrite = requests.find((request) =>
       request.url.includes("reset_execution_estimates") && request.method !== "GET",
     );
-    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-banked-new-route-test");
+    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-banked-old-route-test");
+    assert.equal(estimateWrite?.body?.tibo_announced_at, "2026-08-21T12:00:00.000Z");
+    assert.equal(estimateWrite?.body?.tibo_primary_tweet_id, "banked-new-route-test");
+    assert.deepEqual(estimateWrite?.body?.tibo_source_tweet_ids, [
+      "banked-old-route-test",
+      "banked-new-route-test",
+    ]);
+    assert.equal(estimateWrite?.body?.official_notice_tweet_id, "banked-new-route-test");
+    assert.equal(estimateWrite?.body?.official_notice_at, "2026-08-21T23:40:34.000Z");
     assert.equal(requests.filter((request) =>
       request.url.includes("reset_execution_estimates") && request.method !== "GET",
     ).length, 1);
