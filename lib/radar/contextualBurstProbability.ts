@@ -145,13 +145,14 @@ function integrateContextualHazard(
   horizonHours: number,
   variant: Variant,
 ): IntegrationResult {
-  const end = Math.max(0, horizonHours);
-  let cursor = 0;
+  const startAgeHours = Math.max(0, randomElapsedHours);
+  const endAgeHours = startAgeHours + Math.max(0, horizonHours);
+  let cursor = startAgeHours;
   let cumulativeHazard = 0;
   let baseCumulativeHazard = 0;
 
-  const adjustedLambda = (offsetHours: number) => {
-    const ageHours = randomElapsedHours + offsetHours;
+  const adjustedLambda = (ageHours: number) => {
+    const offsetHours = ageHours - startAgeHours;
     const absoluteTime = new Date(now.getTime() + offsetHours * HOUR_MS);
     const baseLambda = getRandomContinuousHazardAtAge(hazard, ageHours);
     if (variant === "baseOnly") return { baseLambda, adjustedLambda: baseLambda };
@@ -165,9 +166,9 @@ function integrateContextualHazard(
     return { baseLambda, adjustedLambda: baseLambda * multiplier };
   };
 
-  let current = adjustedLambda(0);
-  while (cursor < end) {
-    const stepEnd = Math.min(end, cursor + DEFAULT_INTEGRATION_STEP_HOURS);
+  let current = adjustedLambda(cursor);
+  while (cursor < endAgeHours) {
+    const stepEnd = Math.min(endAgeHours, cursor + DEFAULT_INTEGRATION_STEP_HOURS);
     if (!(stepEnd > cursor)) break;
     const next = adjustedLambda(stepEnd);
     const duration = stepEnd - cursor;
