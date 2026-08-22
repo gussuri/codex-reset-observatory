@@ -765,9 +765,19 @@ export function collectOfficialTiboNoticeSignals(
   for (const signal of [...recentSignals, ...activeSignals]) {
     if (
       signal.signal_type !== "official_notice" ||
-      signal.is_reply === true ||
-      seen.has(signal.tweet_id)
+      signal.is_reply === true
     ) {
+      continue;
+    }
+
+    if (seen.has(signal.tweet_id)) {
+      const existingIndex = result.findIndex((candidate) => candidate.tweet_id === signal.tweet_id);
+      if (existingIndex !== -1 && result[existingIndex].confidence === null && signal.confidence != null) {
+        result[existingIndex] = {
+          ...result[existingIndex],
+          confidence: signal.confidence,
+        };
+      }
       continue;
     }
 

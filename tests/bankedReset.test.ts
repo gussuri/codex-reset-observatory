@@ -14,6 +14,8 @@ import { getLastGlobalResetAt } from "../lib/radar/probability";
 import {
   combineResetHistory,
   findRelatedBankedDistributionNotices,
+  findBankedDistributionEvents,
+  getNoticeBackedHistoryInputs,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
 
@@ -125,6 +127,21 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked[0].details?.resetMethod, "任意リセット権1回配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
+});
+
+test("keeps official notice confidence when recent and active signal rows overlap", () => {
+  const recentSignal = { ...notice, confidence: undefined };
+  const activeSignal = { ...notice, confidence: 0.98 };
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: [recentSignal],
+    active_tibo_signals: [activeSignal],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [estimate],
+  });
+
+  assert.equal(inputs.noticeSignals[0]?.confidence, 0.98);
+  assert.equal(findBankedDistributionEvents(inputs.noticeSignals, inputs.estimates).length, 1);
 });
 
 test("accepts a guarded manual BANKED observation without a recovery row", () => {

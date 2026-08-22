@@ -487,6 +487,7 @@ async function getTiboSignalBundle(
     tweet_created_at: signal.tweet_created_at,
     detected_at: signal.detected_at ?? undefined,
     expires_at: signal.expires_at ?? undefined,
+    confidence: signal.confidence ?? undefined,
     verification_status: signal.verification_status,
     translated_text_ja: signal.translated_text_ja ?? null,
     translated_text_zh: signal.translated_text_zh ?? null,
