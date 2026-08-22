@@ -37,6 +37,7 @@ import {
 } from "@/lib/radar/tiboHistory";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
+import type { TiboOperationalSignalLike } from "@/lib/radar/codexOperationalStatus";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
@@ -142,7 +143,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle)|codex_operational_(status|confidence|evidence_quote|reason_ja|expires_at))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -183,7 +184,7 @@ async function fetchRawTiboHistorySignals(
       error: unknown | null;
     };
     let result = (await queryTiboHistory(
-      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,teaser_strength,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,translated_text_ja,translated_text_zh,is_reply,is_quote,reply_to_handles,reply_context_text,source_timeline,quote_context_text,quote_tweet_url,quote_author_handle",
+      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,teaser_strength,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,translated_text_ja,translated_text_zh,is_reply,is_quote,reply_to_handles,reply_context_text,source_timeline,quote_context_text,quote_tweet_url,quote_author_handle,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at",
     )) as TiboHistoryQueryResult;
 
     if (result.error && isMissingTiboOptionalColumnError(result.error)) {
@@ -479,32 +480,44 @@ async function getTiboSignalBundle(
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
   const formalResets = associateTiboNotices(acceptedResets, notices);
-  const recentSignals = recentSignalsSource.map((signal) => ({
-    tweet_id: signal.tweet_id,
-    signal_type: signal.signal_type,
-    text: signal.text,
-    tweet_url: signal.tweet_url,
-    tweet_created_at: signal.tweet_created_at,
-    detected_at: signal.detected_at ?? undefined,
-    expires_at: signal.expires_at ?? undefined,
-    confidence: signal.confidence ?? undefined,
-    verification_status: signal.verification_status,
-    translated_text_ja: signal.translated_text_ja ?? null,
-    translated_text_zh: signal.translated_text_zh ?? null,
-    teaser_strength: getEffectiveTeaserStrength(signal),
-    ai_temporal_expression: signal.ai_temporal_expression ?? null,
-    ai_temporal_kind: signal.ai_temporal_kind ?? null,
-    ai_temporal_precision: signal.ai_temporal_precision ?? null,
-    ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
-    ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
-    expected_start_at: signal.expected_start_at ?? null,
-    expected_end_at: signal.expected_end_at ?? null,
-    temporal_resolution_status: signal.temporal_resolution_status ?? null,
-    temporal_resolution_version: signal.temporal_resolution_version ?? null,
-    is_reply: signal.is_reply ?? undefined,
-    reply_to_handles: signal.reply_to_handles ?? null,
-    reply_context_text: signal.reply_context_text ?? null,
-  }));
+  const recentSignals = recentSignalsSource.map((signal) => {
+    const operational = signal as FormalTiboResetSignal & TiboOperationalSignalLike & {
+      codex_operational_confidence?: number | null;
+      codex_operational_evidence_quote?: string | null;
+      codex_operational_reason_ja?: string | null;
+    };
+    return {
+      tweet_id: signal.tweet_id,
+      signal_type: signal.signal_type,
+      text: signal.text,
+      tweet_url: signal.tweet_url,
+      tweet_created_at: signal.tweet_created_at,
+      detected_at: signal.detected_at ?? undefined,
+      expires_at: signal.expires_at ?? undefined,
+      confidence: signal.confidence ?? undefined,
+      verification_status: signal.verification_status,
+      translated_text_ja: signal.translated_text_ja ?? null,
+      translated_text_zh: signal.translated_text_zh ?? null,
+      teaser_strength: getEffectiveTeaserStrength(signal),
+      ai_temporal_expression: signal.ai_temporal_expression ?? null,
+      ai_temporal_kind: signal.ai_temporal_kind ?? null,
+      ai_temporal_precision: signal.ai_temporal_precision ?? null,
+      ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+      ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
+      expected_start_at: signal.expected_start_at ?? null,
+      expected_end_at: signal.expected_end_at ?? null,
+      temporal_resolution_status: signal.temporal_resolution_status ?? null,
+      temporal_resolution_version: signal.temporal_resolution_version ?? null,
+      is_reply: signal.is_reply ?? undefined,
+      reply_to_handles: signal.reply_to_handles ?? null,
+      reply_context_text: signal.reply_context_text ?? null,
+      codex_operational_status: operational.codex_operational_status ?? null,
+      codex_operational_confidence: operational.codex_operational_confidence ?? null,
+      codex_operational_evidence_quote: operational.codex_operational_evidence_quote ?? null,
+      codex_operational_reason_ja: operational.codex_operational_reason_ja ?? null,
+      codex_operational_expires_at: operational.codex_operational_expires_at ?? null,
+    };
+  });
   const rejectedResets = signals
     .filter(
       (signal) =>

@@ -12,6 +12,10 @@ import {
   TIBO_SOURCE_TIME_ZONE,
   type TiboTemporalSemantics,
 } from "./tiboTemporal";
+import {
+  parseCodexOperationalAssessment,
+  type TiboCodexOperationalStatus,
+} from "./codexOperationalStatus";
 
 export type GeminiClassificationInput = {
   text: string;
@@ -50,6 +54,10 @@ export type GeminiClassificationOutput = {
   teaserStrengthConfidence?: number | null;
   teaserStrengthEvidenceQuote?: string | null;
   teaserStrengthReasonJa?: string | null;
+  codexOperationalStatus?: TiboCodexOperationalStatus | null;
+  codexOperationalConfidence?: number | null;
+  codexOperationalEvidenceQuote?: string | null;
+  codexOperationalReasonJa?: string | null;
   temporalExpression?: string | null;
   temporalKind?: TiboTemporalSemantics["temporalKind"] | null;
   temporalPrecision?: TiboTemporalSemantics["temporalPrecision"] | null;
@@ -146,6 +154,21 @@ Strong contrast: "I was gifted a very fancy new reset button today" remains sign
 teaserStrength = "strong". None contrast: "The reset button is my favorite product feature." remains
 signalType = "irrelevant" and teaserStrength = "none".
 
+Also classify the independent display-only "codexOperationalStatus" signal. This MUST be judged independently
+from signalType and teaserStrength. A reset classification of "irrelevant" can still have a current Codex
+operational status. Use Tibo's own author text as the assertion source; reply-parent and quoted text may provide
+context but MUST NOT create an operational state unless Tibo's own text contains the evidence quote.
+- "investigating": Tibo explicitly says a current Codex problem, performance degradation, cache hit problem,
+  unexpected behavior, or user-impacting issue is being investigated. Example: "We are investigating worse cache hit rates."
+- "active": Tibo explicitly says Codex is currently degraded, unavailable, failing, or otherwise experiencing
+  a current user-impacting outage/problem. Use this for a current problem statement stronger than merely investigating.
+- "recovered": Tibo explicitly says a current/recent Codex operational problem is fixed, resolved, recovered,
+  or back to normal.
+- "none": the post contains no current Codex operational problem assertion. Ordinary product news, rate-limit
+  discussion without a problem, historical incidents, and reset-only discussion are none.
+For the cache hit rate case, a statement that cache hit rate has been worse and "We are investigating" is
+codexOperationalStatus="investigating" even when signalType="irrelevant".
+
 Also extract the semantic meaning of any forward-looking time expression for an official_notice.
 For phrases such as "during the day" or "sometime during the day", use
 temporalKind="daypart", temporalPrecision="daypart", and daypart="day". This means
@@ -172,8 +195,12 @@ Respond ONLY with a JSON object strictly matching this schema:
   "teaserStrength": "strong" | "weak" | "none" | null,
   "teaserStrengthConfidence": number (between 0.0 and 1.0) | null,
   "teaserStrengthEvidenceQuote": string | null (Short exact contiguous substring from the tweet text, or null),
-  "teaserStrengthReasonJa": string | null (Short Japanese reason, or null)
-  ,"temporalExpression": string | null,
+  "teaserStrengthReasonJa": string | null (Short Japanese reason, or null),
+  "codexOperationalStatus": "none" | "investigating" | "active" | "recovered",
+  "codexOperationalConfidence": number (between 0.0 and 1.0),
+  "codexOperationalEvidenceQuote": string | null (Exact contiguous substring from Tibo's AUTHOR TEXT, or null),
+  "codexOperationalReasonJa": string | null (Short Japanese reason, or null),
+  "temporalExpression": string | null,
   "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
   "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
   "weekday": "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | null,
@@ -274,6 +301,10 @@ export async function classifyWithGemini(
     teaserStrengthConfidence: null,
     teaserStrengthEvidenceQuote: null,
     teaserStrengthReasonJa: null,
+    codexOperationalStatus: null,
+    codexOperationalConfidence: null,
+    codexOperationalEvidenceQuote: null,
+    codexOperationalReasonJa: null,
     temporalExpression: null,
     temporalKind: null,
     temporalPrecision: null,
@@ -407,6 +438,7 @@ export async function classifyWithGemini(
     const allowedResetTypes = ["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"];
     const resetTypeJa = allowedResetTypes.includes(parsed.resetTypeJa) ? parsed.resetTypeJa : null;
     const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
+    const operationalAssessment = parseCodexOperationalAssessment(parsed, input.text);
     const temporalSemantics = parseTiboTemporalSemantics(parsed, input.text);
 
     return applyTiboClassificationSafetyGuard(input.text, {
@@ -418,6 +450,10 @@ export async function classifyWithGemini(
       resetTypeJa,
       noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
       ...teaserStrengthAssessment,
+      codexOperationalStatus: operationalAssessment.status,
+      codexOperationalConfidence: operationalAssessment.confidence,
+      codexOperationalEvidenceQuote: operationalAssessment.evidenceQuote,
+      codexOperationalReasonJa: operationalAssessment.reasonJa,
       temporalExpression: temporalSemantics?.temporalExpression ?? null,
       temporalKind: temporalSemantics?.temporalKind ?? null,
       temporalPrecision: temporalSemantics?.temporalPrecision ?? null,

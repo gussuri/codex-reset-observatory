@@ -134,3 +134,52 @@ test("preserved confirmed and rejected states cannot trigger formal adoption aga
     false,
   );
 });
+
+test("Gemini failure does not erase a valid operational assessment on the same tweet", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    codex_operational_status: null,
+    codex_operational_confidence: null,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: null,
+    codex_operational_expires_at: null,
+  }, {
+    detected_at: "2026-08-22T05:26:27.271Z",
+    verification_status: "auto_unverified",
+    codex_operational_status: "investigating",
+    codex_operational_confidence: 0.99,
+    codex_operational_evidence_quote: "We are investigating",
+    codex_operational_reason_ja: "キャッシュヒット率低下を調査中。",
+    codex_operational_expires_at: "2026-08-22T17:24:01.000Z",
+  }, receivedAt);
+
+  assert.equal(result.codex_operational_status, "investigating");
+  assert.equal(result.codex_operational_confidence, 0.99);
+  assert.equal(result.codex_operational_evidence_quote, "We are investigating");
+  assert.equal(result.codex_operational_reason_ja, "キャッシュヒット率低下を調査中。");
+  assert.equal(result.codex_operational_expires_at, "2026-08-22T17:24:01.000Z");
+});
+
+test("a successful explicit operational none clears a prior same-tweet assessment", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    codex_operational_status: "none" as const,
+    codex_operational_confidence: 0.98,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: "現在の障害についての投稿ではありません。",
+    codex_operational_expires_at: null,
+  }, {
+    detected_at: "2026-08-22T05:26:27.271Z",
+    verification_status: "auto_unverified",
+    codex_operational_status: "investigating",
+    codex_operational_confidence: 0.99,
+    codex_operational_evidence_quote: "We are investigating",
+    codex_operational_reason_ja: "キャッシュヒット率低下を調査中。",
+    codex_operational_expires_at: "2026-08-22T17:24:01.000Z",
+  }, receivedAt);
+
+  assert.equal(result.codex_operational_status, "none");
+  assert.equal(result.codex_operational_confidence, 0.98);
+  assert.equal(result.codex_operational_evidence_quote, null);
+  assert.equal(result.codex_operational_expires_at, null);
+});
