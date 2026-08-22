@@ -21,20 +21,63 @@ function hasDistributionTerm(text: string) {
   return /\b(?:credit|grant|give|gift|distribut|provide)\w*\b|配布|付与|配る|プレゼント/i.test(text);
 }
 
+function hasFutureAvailabilityTerm(text: string) {
+  return /\b(?:banked\s+reset|reset\s+credit)\s+will\s+be\s+(?:there|available|ready)\b/i.test(text);
+}
+
 function hasBroadScopeTerm(text: string) {
-  return /\b(?:everyone|global)\b|\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b|\b(?:all|every)\s+(?:users?|accounts?)\b|全(?:ての|て|有料)?(?:ユーザー|利用者|アカウント|プラン)/i.test(text);
+  return /\b(?:everyone|global)\b|\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b|\b(?:all|every)\s+paid\s+users?\s+of\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\b|\b(?:all|every)\s+(?:users?|accounts?)\b|全(?:ての|て|有料)?(?:ユーザー|利用者|アカウント|プラン)/i.test(text);
 }
 
 /** Detects a distribution statement, not generic reset-button language. */
 export function isBankedDistributionNotice(text: string | null | undefined) {
   if (typeof text !== "string") return false;
   const normalized = text.trim();
-  return normalized.length > 0 && hasResetCreditTerm(normalized) && hasDistributionTerm(normalized);
+  return normalized.length > 0 && hasResetCreditTerm(normalized) && (
+    hasDistributionTerm(normalized) || hasFutureAvailabilityTerm(normalized)
+  );
 }
 
 /** Canonical history requires the post to explicitly cover a broad audience. */
 export function isBroadBankedDistributionNotice(text: string | null | undefined) {
   return isBankedDistributionNotice(text) && hasBroadScopeTerm(text ?? "");
+}
+
+export type BankedNoticeSupersessionInput = {
+  text?: string | null;
+  tweet_created_at?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: string | null;
+};
+
+function isConcreteResolvedBankedNotice(notice: BankedNoticeSupersessionInput) {
+  const start = notice.expected_start_at ? Date.parse(notice.expected_start_at) : Number.NaN;
+  const end = notice.expected_end_at ? Date.parse(notice.expected_end_at) : Number.NaN;
+  return (
+    isBroadBankedDistributionNotice(notice.text) &&
+    notice.temporal_resolution_status === "resolved" &&
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    end > start
+  );
+}
+
+/** Older broad BANKED notices are superseded once a newer concrete window exists. */
+export function isSupersededBankedNotice<T extends BankedNoticeSupersessionInput>(
+  notice: T,
+  notices: readonly T[],
+) {
+  if (!isBroadBankedDistributionNotice(notice.text)) return false;
+  const noticeTime = notice.tweet_created_at ? Date.parse(notice.tweet_created_at) : Number.NaN;
+  if (!Number.isFinite(noticeTime)) return false;
+  return notices.some((candidate) => {
+    const candidateTime = candidate.tweet_created_at ? Date.parse(candidate.tweet_created_at) : Number.NaN;
+    return candidate !== notice &&
+      Number.isFinite(candidateTime) &&
+      candidateTime > noticeTime &&
+      isConcreteResolvedBankedNotice(candidate);
+  });
 }
 
 function parseFiniteTime(value: string | null | undefined) {

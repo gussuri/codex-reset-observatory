@@ -2,7 +2,7 @@ import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
 import { getLastRandomRecoveryResetAt } from "./recoveryBoundary";
-import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getPublicRecoveryObservation } from "../codexUsageRecovery";
 import {
   aggregateResetTeaserStatus,
@@ -11,6 +11,7 @@ import {
   isTeaserStrength,
 } from "./teaserStrength";
 import { getNoticeBackedRecoveryObservationIds } from "./tiboHistory";
+import { isSupersededBankedNotice } from "./bankedReset";
 import type {
   Locale,
   PublicDataHealth,
@@ -89,9 +90,11 @@ function isCurrentOfficialNotice(
   signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
   latestResetAt: string | null,
   nowTime: number,
+  sourceSignals: NonNullable<RadarData["recent_tibo_signals"]>,
 ) {
   if (signal.signal_type !== "official_notice" || signal.is_reply === true) return false;
   if (signal.verification_status === "rejected") return false;
+  if (isSupersededBankedNotice(signal, sourceSignals)) return false;
 
   const createdTime = Date.parse(signal.tweet_created_at);
   const expiresTime = Date.parse(signal.expires_at ?? "");
@@ -107,7 +110,12 @@ function isCurrentOfficialNotice(
         signal.temporal_resolution_status === "resolved"
           ? {
               status: signal.temporal_resolution_status,
-              temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+              temporalPrecision: getEffectiveTemporalPrecision({
+                status: signal.temporal_resolution_status,
+                temporalPrecision: signal.ai_temporal_precision,
+                expectedStartAt: signal.expected_start_at,
+                expectedEndAt: signal.expected_end_at,
+              }) ?? "unknown",
               expectedStartAt: signal.expected_start_at ?? null,
               expectedEndAt: signal.expected_end_at ?? null,
             }
@@ -140,6 +148,7 @@ export function toPublicTiboActivity(
         return false;
       }
       if (signal.verification_status === "rejected") return false;
+      if (isSupersededBankedNotice(signal, sourceSignals)) return false;
 
       const createdAt = Date.parse(signal.tweet_created_at);
       if (!Number.isFinite(createdAt) || createdAt > nowTime) return false;
@@ -170,7 +179,7 @@ export function toPublicTiboActivity(
   const relatedCandidates = sourceSignals
     .filter((signal) => {
       const strength = getEffectiveTeaserStrength(signal);
-      return isCurrentOfficialNotice(signal, latestResetAt, nowTime) ||
+      return isCurrentOfficialNotice(signal, latestResetAt, nowTime, sourceSignals) ||
         (eligibleTeaserSet.has(signal) &&
           (strength === "strong" || strength === "weak"));
     })

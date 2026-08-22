@@ -78,9 +78,18 @@ async function hasActiveOfficialNotice(
     regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
   };
   const activeNotice = getActiveOfficialNotice(data, null, observedAt);
+  const activeBankedNotice = getActiveOfficialNotice(
+    {
+      ...data,
+      active_tibo_signals: signals.filter((signal) => isBroadBankedDistributionNotice(signal.text)),
+    },
+    null,
+    observedAt,
+  );
   return {
     active: Boolean(activeNotice),
     noticeSignal: activeNotice ?? null,
+    bankedNoticeSignal: activeBankedNotice ?? null,
     error: null,
   };
 }
@@ -92,7 +101,7 @@ async function persistCorroboratedBankedDistribution(
   snapshot: CodexUsageSnapshot,
   lookup: OfficialNoticeLookup | null,
 ) {
-  const notice = lookup?.noticeSignal;
+  const notice = lookup?.bankedNoticeSignal;
   if (
     snapshot.bankedCreditChange !== true ||
     !snapshot.bankedCredit ||

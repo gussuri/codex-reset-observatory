@@ -228,6 +228,119 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
   }
 });
 
+test("a BANKED credit matches the latest broad BANKED notice even when a later unrelated notice exists", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-21T23:30:00.000Z",
+        received_at: "2026-08-21T23:30:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 20,
+        window_duration_mins: 10080,
+        resets_at: 1_787_200_000,
+        coverage_started_at: "2026-08-21T22:00:00.000Z",
+        updated_at: "2026-08-21T23:30:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([
+        {
+          tweet_id: "banked-old-route-test",
+          text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+          tweet_url: "https://x.com/thsottiaux/status/banked-old-route-test",
+          tweet_created_at: "2026-08-21T12:00:00.000Z",
+          expires_at: "2026-08-22T08:00:00.000Z",
+          signal_type: "official_notice",
+          confidence: 0.99,
+          verification_status: "auto_unverified",
+          is_reply: false,
+          ai_temporal_precision: "daypart",
+          expected_start_at: "2026-08-21T12:00:00.000Z",
+          expected_end_at: "2026-08-22T07:00:00.000Z",
+          temporal_resolution_status: "resolved",
+          ai_temporal_timezone: "America/Los_Angeles",
+          ai_temporal_confidence: 0.98,
+        },
+        {
+          tweet_id: "banked-new-route-test",
+          text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
+          tweet_url: "https://x.com/thsottiaux/status/banked-new-route-test",
+          tweet_created_at: "2026-08-21T23:40:34.000Z",
+          expires_at: "2026-08-22T06:00:00.000Z",
+          signal_type: "official_notice",
+          confidence: 0.99,
+          verification_status: "auto_unverified",
+          is_reply: false,
+          ai_temporal_precision: "exact_time",
+          expected_start_at: "2026-08-21T23:40:34.000Z",
+          expected_end_at: "2026-08-22T04:00:00.000Z",
+          temporal_resolution_status: "resolved",
+          ai_temporal_timezone: "PST",
+          ai_temporal_confidence: 0.95,
+        },
+        {
+          tweet_id: "unrelated-later-route-test",
+          text: "A reset is planned for later.",
+          tweet_url: "https://x.com/thsottiaux/status/unrelated-later-route-test",
+          tweet_created_at: "2026-08-21T23:45:00.000Z",
+          expires_at: "2026-08-22T10:00:00.000Z",
+          signal_type: "official_notice",
+          confidence: 0.99,
+          verification_status: "auto_unverified",
+          is_reply: false,
+        },
+      ]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-08-21T23:50:00.000Z",
+      usedPercent: 20,
+      resetsAt: 1_787_200_000,
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedCreditChange: true,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    const estimateWrite = requests.find((request) =>
+      request.url.includes("reset_execution_estimates") && request.method !== "GET",
+    );
+    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-banked-new-route-test");
+    assert.equal(requests.filter((request) =>
+      request.url.includes("reset_execution_estimates") && request.method !== "GET",
+    ).length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("an unapplied coverage migration falls back without failing the first snapshot", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",

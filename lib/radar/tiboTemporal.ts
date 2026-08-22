@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v1";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v2";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 2 * 60 * 60 * 1000;
 
@@ -82,6 +82,25 @@ export type TiboTemporalResolution = {
   expectedEndAt: string | null;
 };
 
+export type EffectiveTemporalPrecisionInput = {
+  status?: TemporalResolutionStatus | null;
+  temporalPrecision?: TemporalPrecision | null;
+  expectedStartAt?: string | null;
+  expectedEndAt?: string | null;
+};
+
+export function getEffectiveTemporalPrecision(
+  resolution: EffectiveTemporalPrecisionInput | null | undefined,
+): TemporalPrecision | null {
+  if (!resolution) return null;
+  const start = resolution.expectedStartAt ? Date.parse(resolution.expectedStartAt) : Number.NaN;
+  const end = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : Number.NaN;
+  if (resolution.status === "resolved" && Number.isFinite(start) && Number.isFinite(end) && start !== end) {
+    return "range";
+  }
+  return resolution.temporalPrecision ?? null;
+}
+
 type LocalDateTime = {
   year: number;
   month: number;
@@ -124,6 +143,10 @@ function isValidTimeParts(value: unknown): value is TemporalTimeParts {
 
 function hasClockExpression(value: string) {
   return /\b(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b|\b(?:noon|midnight)\b/i.test(value);
+}
+
+function isDeadlineTimeExpression(value: string) {
+  return /\bby\s+(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?|noon|midnight)\b/i.test(value);
 }
 
 function isValidRelativeDuration(
@@ -559,14 +582,45 @@ export function resolveTiboTemporalSchedule(
       date = { ...date, year: date.year + 1 };
     }
     if (semantics.explicitTimeParts) {
-      expectedStart = localDateTimeToInstant({ ...date, ...semantics.explicitTimeParts }, timeZone);
-      expectedEnd = expectedStart;
-      precision = "exact_time";
+      const candidate = localDateTimeToInstant({ ...date, ...semantics.explicitTimeParts }, timeZone);
+      if (isDeadlineTimeExpression(semantics.temporalExpression ?? "")) {
+        if (!candidate || candidate.getTime() <= created.getTime()) {
+          unresolvedInterpretation = true;
+        } else {
+          expectedStart = created;
+          expectedEnd = candidate;
+          precision = "range";
+        }
+      } else {
+        expectedStart = candidate;
+        expectedEnd = expectedStart;
+        precision = "exact_time";
+      }
     } else {
       const window = buildWindow(atLocalTime(date, 0), atLocalTime(addLocalDays(date, 1), 0), timeZone);
       expectedStart = window?.expectedStart ?? null;
       expectedEnd = window?.expectedEnd ?? null;
       precision = "day";
+    }
+  } else if (
+    semantics.temporalKind === "absolute" &&
+    !semantics.explicitDateParts &&
+    semantics.explicitTimeParts
+  ) {
+    const candidate = localDateTimeToInstant(
+      { ...createdLocal, ...semantics.explicitTimeParts },
+      timeZone,
+    );
+    if (!candidate || candidate.getTime() <= created.getTime()) {
+      unresolvedInterpretation = true;
+    } else if (isDeadlineTimeExpression(semantics.temporalExpression ?? "")) {
+      expectedStart = created;
+      expectedEnd = candidate;
+      precision = "range";
+    } else {
+      expectedStart = candidate;
+      expectedEnd = candidate;
+      precision = "exact_time";
     }
   } else if (semantics.temporalKind === "range" && semantics.rangeKind) {
     const weekStart = startOfIsoWeek(createdLocal);

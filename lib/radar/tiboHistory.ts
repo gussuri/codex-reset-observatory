@@ -8,7 +8,7 @@ import {
   type RegularResetEventRow,
 } from "./regularResetSchedule";
 import { isBroadResetScope } from "./resetEligibility";
-import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import {
   inferResetCycleType,
   normalizeResetReasonType,
@@ -205,7 +205,12 @@ export function findRelatedTiboNotice(
       ? isTemporalNoticeConsumedAtReset(
           {
             status: "resolved",
-            temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+            temporalPrecision: getEffectiveTemporalPrecision({
+              status: signal.temporal_resolution_status,
+              temporalPrecision: signal.ai_temporal_precision,
+              expectedStartAt: signal.expected_start_at,
+              expectedEndAt: signal.expected_end_at,
+            }) ?? "unknown",
             expectedStartAt: signal.expected_start_at ?? null,
             expectedEndAt: signal.expected_end_at ?? null,
           },

@@ -49,6 +49,16 @@ test("recognizes a broad BANKED distribution notice without treating generic res
   assert.equal(isBroadBankedDistributionNotice("I gave all my friends a BANKED reset."), false);
 });
 
+test("recognizes a future BANKED availability promise and its explicit broad scope", () => {
+  const text = "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.";
+
+  assert.equal(isBankedDistributionNotice(text), true);
+  assert.equal(isBroadBankedDistributionNotice(text), true);
+  assert.equal(isBankedDistributionNotice("The reset button will be there by 8pm."), false);
+  assert.equal(isBankedDistributionNotice("The banked reset was there yesterday."), false);
+  assert.equal(isBroadBankedDistributionNotice("The banked reset will be available."), false);
+});
+
 test("accepts only a positive local credit transition as a grant observation", () => {
   assert.equal(isBankedCreditGrant({ available: false, unlimited: false, balance: "0" }, { available: true, unlimited: false, balance: "1" }), true);
   assert.equal(isBankedCreditGrant({ available: true, unlimited: false, balance: "1" }, { available: true, unlimited: false, balance: "2" }), true);

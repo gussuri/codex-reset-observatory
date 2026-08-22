@@ -34,9 +34,9 @@ import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
 import { aggregateResetTeaserStatus } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
-import { isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
-import { isBankedDistributionNotice } from "./bankedReset";
+import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -876,7 +876,8 @@ export function getActiveOfficialNotice(
       if (
         signal.signal_type !== "official_notice" ||
         (signal.confidence ?? 0) < 0.95 ||
-        signal.verification_status === "rejected"
+        signal.verification_status === "rejected" ||
+        isSupersededBankedNotice(signal, rawSignals)
       ) {
         return [];
       }
@@ -893,7 +894,12 @@ export function getActiveOfficialNotice(
           signal.temporal_resolution_status === "resolved"
             ? {
                 status: signal.temporal_resolution_status,
-                temporalPrecision: signal.ai_temporal_precision ?? "unknown",
+                temporalPrecision: getEffectiveTemporalPrecision({
+                  status: signal.temporal_resolution_status,
+                  temporalPrecision: signal.ai_temporal_precision,
+                  expectedStartAt: signal.expected_start_at,
+                  expectedEndAt: signal.expected_end_at,
+                }) ?? "unknown",
                 expectedStartAt: signal.expected_start_at ?? null,
                 expectedEndAt: signal.expected_end_at ?? null,
               }
@@ -917,7 +923,12 @@ export function getActiveOfficialNotice(
         sourceLabel: getTiboDisplayLabel(signal.tweet_url),
         text: signal.text ?? null,
         isBankedDistribution: isBankedDistributionNotice(signal.text),
-        temporalPrecision: signal.ai_temporal_precision ?? null,
+        temporalPrecision: getEffectiveTemporalPrecision({
+          status: signal.temporal_resolution_status,
+          temporalPrecision: signal.ai_temporal_precision,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        }),
         temporalConfidence: signal.ai_temporal_confidence ?? null,
         temporalResolutionStatus: signal.temporal_resolution_status ?? null,
         temporalTimezone: signal.ai_temporal_timezone ?? null,

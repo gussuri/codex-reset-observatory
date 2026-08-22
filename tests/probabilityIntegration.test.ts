@@ -122,6 +122,57 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
 });
 
+test("a concrete BANKED deadline is an active range and supersedes its older broad notice", () => {
+  const now = new Date("2026-08-22T07:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [
+      {
+        tweet_id: "banked-old-during-day",
+        signal_type: "official_notice",
+        text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+        tweet_url: "https://x.com/thsottiaux/status/banked-old-during-day",
+        tweet_created_at: "2026-08-21T12:00:00.000Z",
+        expires_at: "2026-08-23T00:00:00.000Z",
+        confidence: 0.99,
+        verification_status: "auto_unverified",
+        expected_start_at: "2026-08-21T12:00:00.000Z",
+        expected_end_at: "2026-08-22T07:00:00.000Z",
+        temporal_resolution_status: "resolved",
+        ai_temporal_precision: "daypart",
+        ai_temporal_timezone: "America/Los_Angeles",
+      },
+      {
+        tweet_id: "banked-new-deadline",
+        signal_type: "official_notice",
+        text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
+        tweet_url: "https://x.com/thsottiaux/status/banked-new-deadline",
+        tweet_created_at: "2026-08-21T23:40:34.000Z",
+        expires_at: "2026-08-22T06:00:00.000Z",
+        confidence: 0.99,
+        verification_status: "auto_unverified",
+        expected_start_at: "2026-08-21T23:40:34.000Z",
+        expected_end_at: "2026-08-22T04:00:00.000Z",
+        temporal_resolution_status: "resolved",
+        ai_temporal_precision: "exact_time",
+        ai_temporal_timezone: "PST",
+      },
+    ],
+  });
+
+  const active = getActiveOfficialNotice(data, null, now);
+  assert.equal(active, null, "the expired concrete notice must prevent the old notice from resurfacing");
+
+  const beforeExpiry = getActiveOfficialNotice(
+    data,
+    null,
+    new Date("2026-08-22T05:00:00.000Z"),
+  );
+  assert.equal(beforeExpiry?.id, "banked-new-deadline");
+  assert.equal(beforeExpiry?.isBankedDistribution, true);
+  assert.equal(beforeExpiry?.temporalPrecision, "range");
+});
+
 test("getLocalResetProbabilityReason formats English summary without un-translated Japanese text for Tibo Teaser", () => {
   const teaserSignal = LOCAL_OBSERVATION_SIGNALS.find(
     (signal) => signal.id === "official-tibo-signs-resets-teaser-2026-07-31",

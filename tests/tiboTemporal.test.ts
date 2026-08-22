@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getEffectiveTemporalPrecision,
   getTemporalNoticeCoverage,
   isTemporalNoticeConsumedAtReset,
   parseTiboTemporalSemantics,
@@ -82,6 +83,68 @@ test("resolves explicit weekday time and relative times deterministically", () =
   );
   assert.equal(inTwoDays.temporalPrecision, "day");
   assert.equal(inTwoDays.expectedStartAt, "2026-08-10T07:00:00.000Z");
+});
+
+test("resolves a same-day absolute deadline from the tweet instant without inferring tomorrow", () => {
+  const deadline = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "by 8pm PST",
+      temporalKind: "absolute",
+      temporalPrecision: "exact_time",
+      weekday: null,
+      explicitTimeParts: { hour: 20, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-08-21T23:40:34.000Z",
+  );
+
+  assert.equal(deadline.status, "resolved");
+  assert.equal(deadline.expectedStartAt, "2026-08-21T23:40:34.000Z");
+  assert.equal(deadline.expectedEndAt, "2026-08-22T04:00:00.000Z");
+  assert.equal(deadline.temporalPrecision, "range");
+  assert.equal(
+    getEffectiveTemporalPrecision({
+      status: deadline.status,
+      temporalPrecision: "exact_time",
+      expectedStartAt: deadline.expectedStartAt,
+      expectedEndAt: deadline.expectedEndAt,
+    }),
+    "range",
+  );
+
+  const pastDeadline = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "by 8pm PST",
+      temporalKind: "absolute",
+      temporalPrecision: "exact_time",
+      weekday: null,
+      explicitTimeParts: { hour: 20, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-08-22T05:00:00.000Z",
+  );
+  assert.equal(pastDeadline.status, "unresolved");
+  assert.equal(pastDeadline.expectedStartAt, null);
+  assert.equal(pastDeadline.expectedEndAt, null);
+});
+
+test("keeps an absolute at-time as a point instant", () => {
+  const result = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "at 8pm PST",
+      temporalKind: "absolute",
+      temporalPrecision: "exact_time",
+      weekday: null,
+      explicitTimeParts: { hour: 20, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-08-21T23:40:34.000Z",
+  );
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.expectedStartAt, "2026-08-22T04:00:00.000Z");
+  assert.equal(result.expectedEndAt, result.expectedStartAt);
+  assert.equal(result.temporalPrecision, "exact_time");
 });
 
 test("resolves today, tomorrow, and next-week calendar windows", () => {
