@@ -29,10 +29,14 @@ import {
   isNewFormalAdoption,
   shouldDeferFormalTiboReset,
 } from "@/lib/radar/formalAdoption";
-import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
+import {
+  preserveTiboWebhookState,
+  type ExistingTiboWebhookState,
+} from "@/lib/radar/tiboWebhookState";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
+import { getTiboOperationalExpiry } from "@/lib/radar/codexOperationalStatus";
 import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
@@ -54,7 +58,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle)|codex_operational_(status|confidence|evidence_quote|reason_ja|expires_at))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -77,6 +81,11 @@ function getSupabaseServiceClient() {
     auth: { persistSession: false },
   });
 }
+
+type ExistingTiboSignal = Partial<FormalTiboResetSignal> & ExistingTiboWebhookState & {
+  translated_text_ja?: unknown;
+  translated_text_zh?: unknown;
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -172,6 +181,10 @@ export async function POST(req: NextRequest) {
           teaserStrengthConfidence: null,
           teaserStrengthEvidenceQuote: null,
           teaserStrengthReasonJa: null,
+          codexOperationalStatus: null,
+          codexOperationalConfidence: null,
+          codexOperationalEvidenceQuote: null,
+          codexOperationalReasonJa: null,
           temporalExpression: null,
           temporalKind: null,
           temporalPrecision: null,
@@ -234,6 +247,12 @@ export async function POST(req: NextRequest) {
     const expiresAt = temporalResolution?.status === "resolved"
       ? new Date(getTemporalNoticeExpiry(temporalResolution, createdDate.toISOString()) ?? createdDate.toISOString())
       : new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
+    const operationalStatus = aiResult?.status === "success"
+      ? aiResult.codexOperationalStatus ?? null
+      : null;
+    const operationalExpiresAt = operationalStatus && operationalStatus !== "none"
+      ? getTiboOperationalExpiry(createdDate.toISOString())
+      : null;
     const receivedAt = new Date().toISOString();
 
     // 6. Build Supabase Payload
@@ -257,6 +276,11 @@ export async function POST(req: NextRequest) {
       quote_context_text: replyMetadata.quoteContextText ?? null,
       quote_tweet_url: replyMetadata.quoteTweetUrl ?? null,
       quote_author_handle: replyMetadata.quoteAuthorHandle ?? null,
+      codex_operational_status: operationalStatus,
+      codex_operational_confidence: aiResult?.codexOperationalConfidence ?? null,
+      codex_operational_evidence_quote: aiResult?.codexOperationalEvidenceQuote ?? null,
+      codex_operational_reason_ja: aiResult?.codexOperationalReasonJa ?? null,
+      codex_operational_expires_at: operationalExpiresAt,
 
       // Audit columns
       rule_signal_type: ruleResult.signalType,
@@ -290,16 +314,16 @@ export async function POST(req: NextRequest) {
     // 7. Detect a first formal adoption before the upsert. State lookup is
     // fail-closed so an unknown existing state can never be overwritten.
     const supabase = getSupabaseServiceClient();
-    let existingSignal: Partial<FormalTiboResetSignal> | null = null;
+    let existingSignal: ExistingTiboSignal | null = null;
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
       if (lookupError) {
-        // The translation migration may be applied after the application is
+        // Optional-column migrations may be applied after the application is
         // deployed. Keep the existing state lookup usable during that window,
         // while all real lookup failures remain fail-closed.
         if (isMissingTiboOptionalColumnError(lookupError)) {
@@ -317,7 +341,7 @@ export async function POST(req: NextRequest) {
               { status: 503 },
             );
           }
-          existingSignal = legacyLookup.data as Partial<FormalTiboResetSignal> | null;
+          existingSignal = legacyLookup.data as ExistingTiboSignal | null;
         } else {
           console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
             reason: "lookup_failed",
@@ -328,7 +352,7 @@ export async function POST(req: NextRequest) {
           );
         }
       } else {
-        existingSignal = data as Partial<FormalTiboResetSignal> | null;
+        existingSignal = data as ExistingTiboSignal | null;
       }
 
     } catch {
@@ -500,6 +524,11 @@ export async function POST(req: NextRequest) {
         quote_context_text: _quoteContextText,
         quote_tweet_url: _quoteTweetUrl,
         quote_author_handle: _quoteAuthorHandle,
+        codex_operational_status: _codexOperationalStatus,
+        codex_operational_confidence: _codexOperationalConfidence,
+        codex_operational_evidence_quote: _codexOperationalEvidenceQuote,
+        codex_operational_reason_ja: _codexOperationalReasonJa,
+        codex_operational_expires_at: _codexOperationalExpiresAt,
         ...legacyPayload
       } = persistedPayload;
       upsertResult = await supabase
