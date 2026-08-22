@@ -1244,7 +1244,7 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     };
   });
 
-  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
 
   return combineResetHistory(
     [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
@@ -1254,5 +1254,6 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     noticeSignals,
     recoveryObservations,
     estimates,
+    bankedSignals,
   );
 }

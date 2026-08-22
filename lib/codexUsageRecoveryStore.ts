@@ -16,7 +16,7 @@ import {
   type ResetExecutionEstimate,
   type ResolveDisplayExecutionTimeInput,
 } from "./radar/resetExecution";
-import { BANKED_CREDIT_ESTIMATOR_VERSION } from "./radar/bankedReset";
+import { BANKED_DISTRIBUTION_ESTIMATOR_VERSION } from "./radar/bankedReset";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
 import {
   findRelatedTiboNotices,
@@ -654,7 +654,7 @@ export async function upsertResetExecutionEstimate(
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
-      .eq("estimator_version", BANKED_CREDIT_ESTIMATOR_VERSION)
+      .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
       .limit(1)
       .maybeSingle();
@@ -785,6 +785,7 @@ export async function upsertBankedDistributionEstimate(
       tibo_source_tweet_ids: sourceTweetIds,
       official_notice_tweet_id: input.officialNoticeTweetId,
       official_notice_at: input.officialNoticeAt,
+      estimator_version: BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
       updated_at: new Date().toISOString(),
     };
     const updateResult = existingResult.data?.id
@@ -825,7 +826,7 @@ export async function upsertBankedDistributionEstimate(
     tibo_source_tweet_ids: Array.from(new Set(input.tiboSourceTweetIds)),
     official_notice_tweet_id: input.officialNoticeTweetId,
     official_notice_at: input.officialNoticeAt,
-    estimator_version: BANKED_CREDIT_ESTIMATOR_VERSION,
+    estimator_version: BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
     manual_override_at: null,
     manual_override_by: null,
     manual_override_reason: null,
@@ -856,7 +857,7 @@ export async function upsertBankedDistributionEstimate(
       tiboSourceTweetIds: Array.from(new Set(input.tiboSourceTweetIds)),
       officialNoticeTweetId: input.officialNoticeTweetId,
       officialNoticeAt: input.officialNoticeAt,
-      estimatorVersion: BANKED_CREDIT_ESTIMATOR_VERSION,
+      estimatorVersion: BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
     },
     error: result.error,
     inserted: !result.error,

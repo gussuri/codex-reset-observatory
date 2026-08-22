@@ -201,7 +201,7 @@ export function collectBoundaryCensoredBoundaries(
     };
   }
 
-  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     staticHistory,
     data?.formal_tibo_resets ?? [],
@@ -210,6 +210,7 @@ export function collectBoundaryCensoredBoundaries(
     noticeSignals,
     recoveryObservations,
     estimates,
+    bankedSignals,
   );
   const seen = new Set<string>();
   const boundaries: BoundaryCensoredBoundary[] = [];

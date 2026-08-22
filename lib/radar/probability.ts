@@ -599,7 +599,7 @@ export function getHistoricalResetPressure(
 }
 
 function getRandomResetIntervals(data: RadarData | null, now: Date) {
-  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const historicalItems = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -608,6 +608,7 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
     noticeSignals,
     recoveryObservations,
     estimates,
+    bankedSignals,
   );
   const resetTimes = historicalItems
     .filter((item) => isEligibleRandomResetEvent(
@@ -1005,7 +1006,7 @@ export function getRecent7DayResetCount(
 ): number {
   const nowTime = now.getTime();
   const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
-  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -1014,6 +1015,7 @@ export function getRecent7DayResetCount(
     noticeSignals,
     recoveryObservations,
     estimates,
+    bankedSignals,
   );
 
   return combinedHistory.filter((item) => {
@@ -1096,7 +1098,7 @@ export function getLastGlobalResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ) {
-  const { noticeSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -1105,6 +1107,7 @@ export function getLastGlobalResetAt(
     noticeSignals,
     recoveryObservations,
     estimates,
+    bankedSignals,
   );
   const candidates = combinedHistory.map((item) => {
     const time = getCompletedResetTimestamp(item);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   BANKED_NOTICE_MATCH_WINDOW_MS,
   isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
@@ -43,8 +44,12 @@ const estimate = {
   tiboSourceTweetIds: [notice.tweet_id],
   officialNoticeTweetId: notice.tweet_id,
   officialNoticeAt: notice.tweet_created_at,
-  estimatorVersion: "banked-credit-observation-v1",
+  estimatorVersion: "banked-distribution-observation-v2",
 };
+
+test("uses the dedicated BANKED distribution estimator version", () => {
+  assert.equal(BANKED_DISTRIBUTION_ESTIMATOR_VERSION, "banked-distribution-observation-v2");
+});
 
 test("recognizes a broad BANKED distribution notice without treating generic reset wording as one", () => {
   const text = "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.";
@@ -294,6 +299,75 @@ test("BANKED notice grouping excludes a separate non-overlapping event", () => {
     ).map((item) => item.tweet_id),
     [first.tweet_id, sameEvent.tweet_id],
   );
+});
+
+test("keeps BANKED completion as provenance without making it representative", () => {
+  const completion = {
+    ...notice,
+    tweet_id: "2090964822422949999",
+    text: "The banked reset has landed, I repeat, the banked reset has landed. Have an amazing weekend.",
+    tweet_url: "https://x.com/thsottiaux/status/2090964822422949999",
+    tweet_created_at: "2026-08-22T00:50:36.000Z",
+    signal_type: "irrelevant" as const,
+    confidence: 1,
+    verification_status: "auto_unverified" as const,
+  };
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: [notice, completion],
+    active_tibo_signals: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [],
+  });
+  const related = findRelatedBankedDistributionNotices(
+    inputs.bankedSignals,
+    notice.tweet_id,
+    "2026-08-22T01:52:00.000Z",
+  );
+
+  assert.deepEqual(related.map((signal) => signal.tweet_id), [notice.tweet_id, completion.tweet_id]);
+
+  const estimateWithSources = {
+    ...estimate,
+    resetEventKey: "banked-reset-2090766694897619318",
+    tiboPrimaryTweetId: notice.tweet_id,
+    tiboSourceTweetIds: [notice.tweet_id, completion.tweet_id],
+    officialNoticeTweetId: notice.tweet_id,
+  };
+  const event = findBankedDistributionEvents(inputs.bankedSignals, [estimateWithSources])[0];
+  assert.ok(event);
+  assert.deepEqual(event.sourceTweetIds, [notice.tweet_id, completion.tweet_id]);
+  assert.equal(event.officialNoticeTweetId, notice.tweet_id);
+  assert.equal(event.opened_at, notice.tweet_created_at);
+});
+
+test("BANKED completion provenance alone cannot create a distribution event", () => {
+  const completion = {
+    ...notice,
+    tweet_id: "2090964822422949999",
+    text: "The banked reset has landed.",
+    tweet_created_at: "2026-08-22T00:50:36.000Z",
+    signal_type: "irrelevant" as const,
+    confidence: 1,
+    verification_status: "auto_unverified" as const,
+  };
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: [completion],
+    active_tibo_signals: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [
+      {
+        ...estimate,
+        resetEventKey: "banked-reset-2090964822422949999",
+        tiboPrimaryTweetId: completion.tweet_id,
+        tiboSourceTweetIds: [completion.tweet_id],
+        officialNoticeTweetId: completion.tweet_id,
+      },
+    ],
+  });
+
+  assert.equal(findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates).length, 0);
 });
 
 test("a confirmed BANKED distribution becomes the latest eligible random boundary", () => {

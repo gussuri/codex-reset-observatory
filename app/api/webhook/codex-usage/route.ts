@@ -29,10 +29,12 @@ import {
   type ActiveOfficialNotice,
 } from "@/lib/radar/probability";
 import {
+  collectBankedDistributionSignals,
   collectOfficialTiboNoticeSignals,
   findRelatedBankedDistributionNotices,
   findRelatedTiboNoticeCluster,
   selectRepresentativeTiboNotice,
+  type BankedDistributionSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import {
@@ -73,7 +75,7 @@ type OfficialNoticeLookup = {
   noticeSignal: ActiveOfficialNotice | null;
   bankedNoticeSignal: ActiveOfficialNotice | null;
   noticeSignals: TiboNoticeSignal[];
-  bankedNoticeSignals: TiboNoticeSignal[];
+  bankedNoticeSignals: BankedDistributionSignal[];
   error: unknown;
 };
 
@@ -85,7 +87,7 @@ async function hasActiveOfficialNotice(
     client
       .from("tibo_signals")
       .select(NOTICE_COLUMNS)
-      .in("signal_type", ["official_notice", "reset_executed"])
+      .in("signal_type", ["official_notice", "reset_executed", "irrelevant"])
       .or("is_reply.is.null,is_reply.eq.false")
       .neq("verification_status", "rejected")
       .limit(1000),
@@ -130,8 +132,9 @@ async function hasActiveOfficialNotice(
     observedAt,
   );
   const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
+  const bankedSignals = collectBankedDistributionSignals(signals, []);
   const bankedNoticeSignals = findRelatedBankedDistributionNotices(
-    noticeSignals.filter((signal) => isBroadBankedDistributionNotice(signal.text)),
+    bankedSignals,
     activeBankedNotice?.id ?? "",
     observedAt.toISOString(),
   );
@@ -156,9 +159,12 @@ async function persistCorroboratedBankedDistribution(
     : notice
       ? [toTiboNoticeSignal(notice)]
       : [];
-  const representativeNotice = selectRepresentativeTiboNotice(relatedNotices) ??
+  const officialNotices = relatedNotices.filter(
+    (signal): signal is TiboNoticeSignal => signal.signal_type === "official_notice",
+  );
+  const representativeNotice = selectRepresentativeTiboNotice(officialNotices) ??
     (notice ? toTiboNoticeSignal(notice) : null);
-  const firstAnnouncement = relatedNotices[0] ?? representativeNotice;
+  const firstAnnouncement = officialNotices[0] ?? representativeNotice;
   if (
     snapshot.bankedResetCountChange !== true ||
     typeof snapshot.bankedResetAvailableCount !== "number" ||

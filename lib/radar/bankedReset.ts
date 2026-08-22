@@ -1,5 +1,5 @@
 export const BANKED_NOTICE_MATCH_WINDOW_MS = 90 * 60 * 1000;
-export const BANKED_CREDIT_ESTIMATOR_VERSION = "banked-credit-observation-v1";
+export const BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "banked-distribution-observation-v2";
 
 export type BankedNoticeTiming = {
   observedAt: string;
