@@ -111,6 +111,36 @@ export const NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG = {
   maximumCombinedOddsMultiplier48h: 6,
 } as const;
 
+// Third next-generation shadow. Keep its identity, fit constants, and freeze
+// boundary independent from A/B so future changes require a new C version.
+export const NEXT_GENERATION_C_MODEL_VERSION = "hazard-contextual-burst-circadian-v1";
+export const NEXT_GENERATION_C_FREEZE_AT = "2026-08-22T06:15:00.000Z";
+export const NEXT_GENERATION_C_FREEZE_POLICY =
+  "A single reset, miss, or new observation must not trigger retuning.";
+export const NEXT_GENERATION_C_CONTEXT_PRIOR_STD_DEV = 0.5;
+export const NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS = 15;
+export const NEXT_GENERATION_C_MINIMUM_EXPOSURE_CELLS = 720;
+export const NEXT_GENERATION_C_MIN_MULTIPLIER = 0.5;
+export const NEXT_GENERATION_C_MAX_MULTIPLIER = 2;
+export const NEXT_GENERATION_C_SOLVER_MAX_ITERATIONS = 250;
+export const NEXT_GENERATION_C_SOLVER_TOLERANCE = 1e-7;
+export const NEXT_GENERATION_C_SOLVER_INITIAL_STEP = 1;
+export const NEXT_GENERATION_C_SOLVER_BACKTRACKING_FACTOR = 0.5;
+export const NEXT_GENERATION_C_SOLVER_MAX_BACKTRACKING_STEPS = 24;
+export const NEXT_GENERATION_C_FROZEN_CONTINUOUS_CONFIG = {
+  bandwidthHours: 24,
+  gridHours: 1,
+  truncationHours: 72,
+  localPriorExposureDays: 2,
+  localPriorWindowHours: 48,
+  integrationStepMinutes: 10,
+  globalPriorEventCount: 1,
+  globalPriorExposureDays: 10,
+  minimumDailyProbability: 0.01,
+  maximumDailyProbability: 0.35,
+} as const;
+export const NEXT_GENERATION_C_FROZEN_SIGNAL_CONFIG = NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG;
+
 export const NEXT_GENERATION_A_COMPONENT_VERSIONS = [
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -157,7 +187,7 @@ export const PUBLISHED_ELAPSED_MODEL_OPTIONS = {
 } as const;
 export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
 export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;
-export const REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES = [3, 5, 7, 10, 14] as const;
+export const REGIME_ELAPSED_REGIME_HALF_LIFE_DAYS = [3, 5, 7, 10, 14] as const;
 export const REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES = [0.25, 0.5, 0.75, 1] as const;
 export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION =
   "status-conservative-v2";
