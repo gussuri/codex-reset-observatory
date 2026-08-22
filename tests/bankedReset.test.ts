@@ -3,12 +3,12 @@ import test from "node:test";
 
 import {
   BANKED_NOTICE_MATCH_WINDOW_MS,
-  isBankedCreditGrant,
   isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
   isBroadBankedDistributionNotice,
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
+import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
 import { getLocalRadarData } from "../lib/radar";
 import { getLastGlobalResetAt } from "../lib/radar/probability";
 import {
@@ -80,11 +80,12 @@ test("recognizes a future BANKED availability promise and its explicit broad sco
   assert.equal(isBroadBankedDistributionNotice("The banked reset will be available."), false);
 });
 
-test("accepts only a positive local credit transition as a grant observation", () => {
-  assert.equal(isBankedCreditGrant({ available: false, unlimited: false, balance: "0" }, { available: true, unlimited: false, balance: "1" }), true);
-  assert.equal(isBankedCreditGrant({ available: true, unlimited: false, balance: "1" }, { available: true, unlimited: false, balance: "2" }), true);
-  assert.equal(isBankedCreditGrant({ available: true, unlimited: false, balance: "1" }, { available: false, unlimited: false, balance: "0" }), false);
-  assert.equal(isBankedCreditGrant({ available: false, unlimited: false, balance: "0" }, { available: false, unlimited: false, balance: "0" }), false);
+test("accepts only a positive explicit BANKED reset count transition", () => {
+  assert.equal(isBankedResetAvailableCountGrant(0, 1), true);
+  assert.equal(isBankedResetAvailableCountGrant(1, 2), true);
+  assert.equal(isBankedResetAvailableCountGrant(1, 0), false);
+  assert.equal(isBankedResetAvailableCountGrant(1, 1), false);
+  assert.equal(isBankedResetAvailableCountGrant(null, 1), false);
 });
 
 test("matches a credit observation to the resolved BANKED notice window", () => {
@@ -124,6 +125,36 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked[0].details?.resetMethod, "任意リセット権1回配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
+});
+
+test("accepts a guarded manual BANKED observation without a recovery row", () => {
+  const manualEstimate = {
+    ...estimate,
+    executionTimeSource: "manual_override" as const,
+    displayExecutionAt: "2026-08-21T13:00:00.000Z",
+    manualOverrideAt: "2026-08-21T13:05:00.000Z",
+    manualOverrideBy: "operator",
+    manualOverrideReason: "A usage UI observation confirmed availability by this time.",
+    manualExecutionAt: "2026-08-21T13:00:00.000Z",
+    manualExecutionPrecision: "approximate" as const,
+  };
+  const history = combineResetHistory([], [], [], [], [notice], [], [manualEstimate]);
+  const banked = history.filter((item) => item.recordKind === "banked_distribution");
+
+  assert.equal(banked.length, 1);
+  assert.equal(banked[0].completed_at, manualEstimate.displayExecutionAt);
+});
+
+test("rejects a manual BANKED observation without its audit evidence", () => {
+  const incompleteEstimate = {
+    ...estimate,
+    executionTimeSource: "manual_override" as const,
+    manualExecutionAt: estimate.displayExecutionAt,
+    manualExecutionPrecision: "approximate" as const,
+  };
+  const history = combineResetHistory([], [], [], [], [notice], [], [incompleteEstimate]);
+
+  assert.equal(history.some((item) => item.recordKind === "banked_distribution"), false);
 });
 
 test("BANKED history keeps the first announcement while displaying the specific representative notice", () => {

@@ -88,7 +88,7 @@ test("selects the weekly window instead of assuming primary or secondary", () =>
   assert.equal(parsed?.resetsAt, 1787012727);
 });
 
-test("retains only the safe credit fields exposed by app-server", () => {
+test("ignores ordinary credits when the reset-credit field is absent", () => {
   const parsed = parseCodexRateLimitsResponse({
     result: {
       rateLimits: {
@@ -98,14 +98,9 @@ test("retains only the safe credit fields exposed by app-server", () => {
     },
   }, NOW);
 
-  assert.deepEqual(parsed?.bankedCredit, {
-    available: true,
-    unlimited: false,
-    balance: "1",
-  });
   assert.equal(parsed?.bankedResetAvailableCount, null);
-  assert.equal(parsed?.bankedResetDisplayCount, 1);
-  assert.equal(parsed?.bankedResetCountSource, "availability_fallback");
+  assert.equal(parsed?.bankedResetDisplayCount, null);
+  assert.equal(parsed?.bankedResetCountSource, "unavailable");
 });
 
 test("parses an explicit BANKED reset available count without inferring it from credits", () => {
@@ -168,11 +163,11 @@ test("keeps the weekly snapshot valid and returns no BANKED count for missing or
   }
 });
 
-test("normalizes credit availability without interpreting balance as a count", () => {
+test("normal credits never affect the BANKED reset count", () => {
   const cases = [
-    { hasCredits: false, unlimited: false, balance: "2", expected: 0 },
-    { hasCredits: true, unlimited: false, balance: "0", expected: 1 },
-    { hasCredits: true, unlimited: true, balance: "2", expected: null },
+    { hasCredits: false, unlimited: false, balance: "2" },
+    { hasCredits: true, unlimited: false, balance: "0" },
+    { hasCredits: true, unlimited: true, balance: "2" },
   ] as const;
 
   for (const credits of cases) {
@@ -185,17 +180,13 @@ test("normalizes credit availability without interpreting balance as a count", (
       },
     }, NOW);
 
-    assert.equal(parsed?.bankedResetDisplayCount, credits.expected);
-    assert.equal(
-      parsed?.bankedResetCountSource,
-      credits.expected === null ? "unavailable" : "availability_fallback",
-    );
+    assert.equal(parsed?.bankedResetDisplayCount, null);
+    assert.equal(parsed?.bankedResetCountSource, "unavailable");
   }
 });
 
 test("keeps the weekly usage snapshot valid when app-server has no credit object", () => {
   const parsed = parseCodexRateLimitsResponse(validRateLimitResponse(), NOW);
-  assert.equal(parsed?.bankedCredit, null);
   assert.equal(parsed?.bankedResetDisplayCount, null);
   assert.equal(parsed?.bankedResetCountSource, "unavailable");
 });
@@ -211,7 +202,7 @@ test("ignores malformed credit metadata without rejecting the weekly usage windo
   }, NOW);
 
   assert.ok(parsed);
-  assert.equal(parsed.bankedCredit, null);
+  assert.equal(parsed.bankedResetDisplayCount, null);
 });
 
 test("selects a weekly secondary window when primary is short", () => {
@@ -296,19 +287,23 @@ test("validates the monitor payload and preserves only safe fields", () => {
   });
 });
 
-test("accepts a bounded banked credit change marker and safe credit state", () => {
+test("accepts an explicit BANKED reset count change marker", () => {
   const parsed = parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    bankedResetAvailableCount: 1,
+    bankedResetCountChange: true,
+  }, NOW);
+
+  assert.equal(parsed?.bankedResetAvailableCount, 1);
+  assert.equal(parsed?.bankedResetCountChange, true);
+});
+
+test("rejects generic credits in the webhook payload", () => {
+  assert.equal(parseCodexUsageWebhookPayload({
     ...snapshot(),
     bankedCredit: { available: true, unlimited: false, balance: "1" },
     bankedCreditChange: true,
-  }, NOW);
-
-  assert.deepEqual(parsed?.bankedCredit, {
-    available: true,
-    unlimited: false,
-    balance: "1",
-  });
-  assert.equal(parsed?.bankedCreditChange, true);
+  }, NOW), null);
 });
 
 test("rejects unknown webhook fields", () => {

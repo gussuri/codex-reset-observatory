@@ -25,11 +25,6 @@ function snapshot(overrides: Partial<{
   usedPercent: number;
   windowDurationMins: 10080;
   resetsAt: number;
-  bankedCredit?: {
-    available: boolean;
-    unlimited: boolean;
-    balance: string;
-  } | null;
   bankedResetAvailableCount?: number | null;
   bankedResetDisplayCount?: number | null;
 }> = {}) {
@@ -136,77 +131,113 @@ test("a meaningful recovery is posted immediately as a recovery candidate", () =
   );
 });
 
-test("a newly observed local BANKED credit is posted as an explicit credit change", () => {
+test("a newly observed explicit BANKED reset count is posted as a count change", () => {
   assert.equal(
     getMonitorSnapshotPostReason(snapshot({
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedResetAvailableCount: 1,
     }), {
       previousLocalSnapshot: snapshot({
-        bankedCredit: { available: false, unlimited: false, balance: "0" },
+        bankedResetAvailableCount: 0,
       }),
       lastSuccessfulPostAt: 0,
     }, 120_000),
-    "banked_credit_change",
+    "banked_reset_count_change",
   );
 });
 
-test("a BANKED credit change remains explicit when it coincides with weekly recovery", () => {
+test("an explicit BANKED reset count increase from one to two is posted", () => {
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 2 }), {
+      previousLocalSnapshot: snapshot({ bankedResetAvailableCount: 1 }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_reset_count_change",
+  );
+  assert.notEqual(
+    getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 1 }), {
+      previousLocalSnapshot: snapshot({ bankedResetAvailableCount: 1 }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_reset_count_change",
+  );
+});
+
+test("a BANKED reset count change remains explicit when it coincides with weekly recovery", () => {
   assert.equal(
     getMonitorSnapshotPostReason(snapshot({
       usedPercent: 19,
       resetsAt: 1_787_016_327,
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedResetAvailableCount: 1,
     }), {
       previousLocalSnapshot: snapshot({
-        bankedCredit: { available: false, unlimited: false, balance: "0" },
+        bankedResetAvailableCount: 0,
       }),
       lastSuccessfulPostAt: 0,
     }, 120_000),
-    "banked_credit_change",
+    "banked_reset_count_change",
   );
 });
 
-test("a consumed local BANKED credit does not look like a distribution", () => {
+test("a consumed BANKED reset count does not look like a distribution", () => {
   assert.notEqual(
     getMonitorSnapshotPostReason(snapshot({
-      bankedCredit: { available: false, unlimited: false, balance: "0" },
+      bankedResetAvailableCount: 0,
     }), {
       previousLocalSnapshot: snapshot({
-        bankedCredit: { available: true, unlimited: false, balance: "1" },
+        bankedResetAvailableCount: 1,
       }),
       lastSuccessfulPostAt: 0,
     }, 120_000),
-    "banked_credit_change",
+    "banked_reset_count_change",
   );
 });
 
-test("a BANKED reset count change remains local-only and does not trigger a webhook post", () => {
+test("an unavailable-to-explicit BANKED count does not create a grant", () => {
+  assert.notEqual(
+    getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 1 }), {
+      previousLocalSnapshot: snapshot({ bankedResetAvailableCount: null }),
+      lastSuccessfulPostAt: 0,
+    }, 120_000),
+    "banked_reset_count_change",
+  );
+});
+
+test("an explicit BANKED reset count change is sent without generic credits", () => {
   assert.equal(
     getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 1 }), {
       previousLocalSnapshot: snapshot({ bankedResetAvailableCount: 0 }),
       lastSuccessfulPostAt: 0,
     }, 120_000),
-    null,
+    "banked_reset_count_change",
   );
 
-  const payload = toSafeMonitorPayload(snapshot({ bankedResetAvailableCount: 1 }), "heartbeat");
-  assert.equal("bankedResetAvailableCount" in payload, false);
+  const payload = toSafeMonitorPayload(snapshot({ bankedResetAvailableCount: 1 }), "banked_reset_count_change");
+  assert.deepEqual(payload, {
+    observedAt: "2026-08-21T00:00:00.000Z",
+    limitId: "codex",
+    planType: "plus",
+    usedPercent: 20,
+    windowDurationMins: 10080,
+    resetsAt: 1_787_012_727,
+    bankedResetAvailableCount: 1,
+    bankedResetCountChange: true,
+  });
 });
 
 test("a failed event post stays pending with its detection snapshot until success", () => {
   const detected = snapshot({
     observedAt: "2026-08-21T00:02:00.000Z",
-    bankedCredit: { available: true, unlimited: false, balance: "1" },
+    bankedResetAvailableCount: 1,
   });
   let state = enqueueMonitorSnapshotPost({
     previousLocalSnapshot: snapshot({
-      bankedCredit: { available: false, unlimited: false, balance: "0" },
+      bankedResetAvailableCount: 0,
     }),
     lastSuccessfulPostAt: 0,
-  }, "banked_credit_change", detected);
+  }, "banked_reset_count_change", detected);
 
   assert.deepEqual(getPendingMonitorPosts(state), [{
-    reason: "banked_credit_change",
+    reason: "banked_reset_count_change",
     snapshot: detected,
   }]);
 
@@ -214,7 +245,7 @@ test("a failed event post stays pending with its detection snapshot until succes
     ...state,
     previousLocalSnapshot: snapshot({
       observedAt: "2026-08-21T00:04:00.000Z",
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedResetAvailableCount: 1,
     }),
   };
   assert.equal(getPendingMonitorPosts(state)[0]?.snapshot.observedAt, detected.observedAt);
@@ -397,7 +428,7 @@ test("monitor payload contains only safe rate-limit fields", () => {
   );
 });
 
-test("monitor payload includes credit state only for an explicit credit change", () => {
+test("monitor payload includes only the explicit BANKED reset count for a count change", () => {
   assert.deepEqual(
     toSafeMonitorPayload({
       observedAt: "2026-08-21T00:02:00.000Z",
@@ -406,8 +437,8 @@ test("monitor payload includes credit state only for an explicit credit change",
       usedPercent: 0,
       windowDurationMins: 10080,
       resetsAt: 1787012727,
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
-    }, "banked_credit_change"),
+      bankedResetAvailableCount: 1,
+    }, "banked_reset_count_change"),
     {
       observedAt: "2026-08-21T00:02:00.000Z",
       limitId: "codex",
@@ -415,8 +446,8 @@ test("monitor payload includes credit state only for an explicit credit change",
       usedPercent: 0,
       windowDurationMins: 10080,
       resetsAt: 1787012727,
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
-      bankedCreditChange: true,
+      bankedResetAvailableCount: 1,
+      bankedResetCountChange: true,
     },
   );
 });

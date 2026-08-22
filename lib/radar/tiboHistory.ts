@@ -964,11 +964,23 @@ function buildBankedDistributionEvent(
   const displayTime = getTimestamp(estimate.displayExecutionAt);
   const noticeTime = getTimestamp(notice.tweet_created_at);
   const firstAnnouncementTime = getTimestamp(estimate.tiboAnnouncedAt) ?? noticeTime;
+  const isUsageObservationEstimate =
+    estimate.executionTimeSource === "usage_observation" &&
+    estimate.executionTimePrecision === "approximate" &&
+    estimate.executionTimeConfidence === "high";
+  const isManualOverrideEstimate =
+    estimate.executionTimeSource === "manual_override" &&
+    (estimate.executionTimePrecision === "approximate" || estimate.executionTimePrecision === "exact") &&
+    estimate.executionTimeConfidence === "high" &&
+    estimate.manualExecutionAt &&
+    getTimestamp(estimate.manualOverrideAt) !== null &&
+    estimate.manualOverrideReason?.trim() &&
+    estimate.manualExecutionPrecision &&
+    (estimate.manualExecutionPrecision === "approximate" || estimate.manualExecutionPrecision === "exact") &&
+    getTimestamp(estimate.manualExecutionAt) === displayTime;
   if (
     estimate.estimatorVersion !== BANKED_CREDIT_ESTIMATOR_VERSION ||
-    estimate.executionTimeSource !== "usage_observation" ||
-    estimate.executionTimeConfidence !== "high" ||
-    estimate.executionTimePrecision !== "approximate" ||
+    (!isUsageObservationEstimate && !isManualOverrideEstimate) ||
     estimate.recoveryObservationId ||
     !estimate.officialNoticeTweetId ||
     estimate.officialNoticeTweetId !== notice.tweet_id ||

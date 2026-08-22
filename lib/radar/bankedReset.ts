@@ -1,12 +1,6 @@
 export const BANKED_NOTICE_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const BANKED_CREDIT_ESTIMATOR_VERSION = "banked-credit-observation-v1";
 
-export type BankedCreditState = {
-  available: boolean;
-  unlimited: boolean;
-  balance: string;
-};
-
 export type BankedNoticeTiming = {
   observedAt: string;
   expectedAt?: string | null;
@@ -100,28 +94,6 @@ function parseFiniteTime(value: string | null | undefined) {
   if (typeof value !== "string") return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseBalance(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-/**
- * A local credit observation is only a grant candidate when availability or
- * the safe numeric balance increases. Consumption and unchanged state never
- * trigger a distribution POST.
- */
-export function isBankedCreditGrant(
-  previous: BankedCreditState | null | undefined,
-  current: BankedCreditState | null | undefined,
-) {
-  if (!previous || !current || current.unlimited) return false;
-  if (!previous.available && current.available) return true;
-
-  const previousBalance = parseBalance(previous.balance);
-  const currentBalance = parseBalance(current.balance);
-  return previousBalance !== null && currentBalance !== null && currentBalance > previousBalance;
 }
 
 /** Match a local observation to the notice window without treating it as proof by itself. */

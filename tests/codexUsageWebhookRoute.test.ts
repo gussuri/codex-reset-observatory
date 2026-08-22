@@ -101,6 +101,28 @@ test("unknown and personal payload fields are rejected before storage", async ()
   }
 });
 
+test("generic credits cannot create a BANKED distribution event", async () => {
+  const restore = withEnvironment({ CODEX_USAGE_MONITOR_SECRET: "monitor-secret" });
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response("unexpected", { status: 500 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      bankedCredit: { available: true, unlimited: false, balance: "1" },
+      bankedCreditChange: true,
+    }));
+    assert.equal(response.status, 400);
+    assert.equal(fetchCount, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("the first valid snapshot is stored as a baseline only", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
@@ -204,8 +226,8 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
   try {
     const response = await POST(buildRequest({
       observedAt: "2026-08-11T00:02:00.000Z",
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
-      bankedCreditChange: true,
+      bankedResetAvailableCount: 1,
+      bankedResetCountChange: true,
     }));
 
     assert.equal(response.status, 200);
@@ -322,8 +344,8 @@ test("a BANKED credit keeps the first notice and uses the most specific notice a
       observedAt: "2026-08-21T23:50:00.000Z",
       usedPercent: 20,
       resetsAt: 1_787_200_000,
-      bankedCredit: { available: true, unlimited: false, balance: "1" },
-      bankedCreditChange: true,
+      bankedResetAvailableCount: 1,
+      bankedResetCountChange: true,
     }));
 
     assert.equal(response.status, 200);

@@ -1,5 +1,4 @@
 import { isBearerAuthorizationValid } from "./security/bearerAuth";
-import type { BankedCreditState } from "./radar/bankedReset";
 
 export const CODEX_WEEKLY_WINDOW_MINUTES = 7 * 24 * 60;
 export const MAX_USAGE_COMPARISON_GAP_MS = 10 * 60 * 1000;
@@ -12,7 +11,6 @@ export const MAX_BANKED_RESET_AVAILABLE_COUNT = 1_000;
 
 export type BankedResetCountSource =
   | "explicit"
-  | "availability_fallback"
   | "unavailable";
 
 export function shouldCreateNoticeBackedEstimate<T extends { id: string }>(
@@ -35,11 +33,10 @@ export type CodexUsageSnapshot = {
   usedPercent: number;
   windowDurationMins: typeof CODEX_WEEKLY_WINDOW_MINUTES;
   resetsAt: number;
-  bankedCredit?: BankedCreditState | null;
-  bankedCreditChange?: boolean;
   bankedResetAvailableCount?: number | null;
   bankedResetDisplayCount?: number | null;
   bankedResetCountSource?: BankedResetCountSource;
+  bankedResetCountChange?: boolean;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";
@@ -140,23 +137,6 @@ function readWindow(value: unknown) {
   return { usedPercent, windowDurationMins, resetsAt };
 }
 
-function readBankedCredit(value: unknown): BankedCreditState | null {
-  if (!isRecord(value)) return null;
-  const available = value.hasCredits;
-  const unlimited = value.unlimited;
-  const balance = value.balance;
-  if (
-    typeof available !== "boolean" ||
-    typeof unlimited !== "boolean" ||
-    typeof balance !== "string" ||
-    balance.length > 64 ||
-    !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(balance)
-  ) {
-    return null;
-  }
-  return { available, unlimited, balance };
-}
-
 function readBankedResetAvailableCount(value: unknown) {
   if (!isRecord(value)) return null;
   const availableCount = value.availableCount;
@@ -166,6 +146,19 @@ function readBankedResetAvailableCount(value: unknown) {
     availableCount <= MAX_BANKED_RESET_AVAILABLE_COUNT
     ? availableCount
     : null;
+}
+
+export function isBankedResetAvailableCountGrant(
+  previous: number | null | undefined,
+  current: number | null | undefined,
+) {
+  return typeof previous === "number" &&
+    Number.isSafeInteger(previous) &&
+    previous >= 0 &&
+    typeof current === "number" &&
+    Number.isSafeInteger(current) &&
+    current >= 0 &&
+    current > previous;
 }
 
 function getRateLimitSnapshots(root: Record<string, unknown>) {
@@ -208,19 +201,11 @@ function getExplicitBankedResetAvailableCount(
 
 function normalizeBankedResetCount(
   explicit: ExplicitBankedResetCount,
-  bankedCredit: BankedCreditState | null,
 ): { displayCount: number | null; source: BankedResetCountSource } {
   if (explicit.present) {
     return {
       displayCount: explicit.count,
       source: explicit.count === null ? "unavailable" : "explicit",
-    };
-  }
-
-  if (bankedCredit?.unlimited === false) {
-    return {
-      displayCount: bankedCredit.available ? 1 : 0,
-      source: "availability_fallback",
     };
   }
 
@@ -250,7 +235,6 @@ export function parseCodexRateLimitsResponse(
     limitId: string | null;
     planType: string;
     window: { usedPercent: number; windowDurationMins: number; resetsAt: number };
-    bankedCredit: BankedCreditState | null;
     bankedResetAvailableCount: number | null;
     bankedResetDisplayCount: number | null;
     bankedResetCountSource: BankedResetCountSource;
@@ -266,13 +250,9 @@ export function parseCodexRateLimitsResponse(
     const planType = typeof planValue === "string" && planValue.length <= MAX_PLAN_TYPE_LENGTH
       ? planValue || "unknown"
       : "unknown";
-    const bankedCredit = snapshot.value.credits === undefined
-      ? null
-      : readBankedCredit(snapshot.value.credits);
     const explicitBankedResetCount = getExplicitBankedResetAvailableCount(result, snapshot.value);
     const normalizedBankedResetCount = normalizeBankedResetCount(
       explicitBankedResetCount,
-      bankedCredit,
     );
 
     for (const windowKey of ["primary", "secondary"] as const) {
@@ -286,7 +266,6 @@ export function parseCodexRateLimitsResponse(
           limitId,
           planType,
           window,
-          bankedCredit,
           bankedResetAvailableCount: explicitBankedResetCount.count,
           bankedResetDisplayCount: normalizedBankedResetCount.displayCount,
           bankedResetCountSource: normalizedBankedResetCount.source,
@@ -312,7 +291,6 @@ export function parseCodexRateLimitsResponse(
     usedPercent: selected.window.usedPercent,
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt: selected.window.resetsAt,
-    bankedCredit: selected.bankedCredit,
     bankedResetAvailableCount: selected.bankedResetAvailableCount,
     bankedResetDisplayCount: selected.bankedResetDisplayCount,
     bankedResetCountSource: selected.bankedResetCountSource,
@@ -339,8 +317,8 @@ export function parseCodexUsageWebhookPayload(
     "usedPercent",
     "windowDurationMins",
     "resetsAt",
-    "bankedCredit",
-    "bankedCreditChange",
+    "bankedResetAvailableCount",
+    "bankedResetCountChange",
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) return null;
 
@@ -355,19 +333,22 @@ export function parseCodexUsageWebhookPayload(
   const resetsAt = getPositiveInteger(value.resetsAt);
   if (resetsAt === null) return null;
 
-  let bankedCredit: BankedCreditState | null | undefined;
-  if (value.bankedCredit !== undefined) {
-    if (value.bankedCredit === null) {
-      bankedCredit = null;
+  let bankedResetAvailableCount: number | null | undefined;
+  if (value.bankedResetAvailableCount !== undefined) {
+    if (value.bankedResetAvailableCount === null) {
+      bankedResetAvailableCount = null;
     } else {
-      bankedCredit = readBankedCredit({
-        ...(isRecord(value.bankedCredit) ? value.bankedCredit : {}),
-        hasCredits: isRecord(value.bankedCredit) ? value.bankedCredit.available : undefined,
+      bankedResetAvailableCount = readBankedResetAvailableCount({
+        availableCount: value.bankedResetAvailableCount,
       });
-      if (!bankedCredit) return null;
+      if (bankedResetAvailableCount === null) return null;
     }
   }
-  if (value.bankedCreditChange !== undefined && typeof value.bankedCreditChange !== "boolean") {
+  if (value.bankedResetCountChange !== undefined && typeof value.bankedResetCountChange !== "boolean") {
+    return null;
+  }
+  if (value.bankedResetCountChange === true &&
+    (typeof bankedResetAvailableCount !== "number" || bankedResetAvailableCount < 1)) {
     return null;
   }
 
@@ -378,8 +359,8 @@ export function parseCodexUsageWebhookPayload(
     usedPercent: value.usedPercent,
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt,
-    ...(value.bankedCredit !== undefined ? { bankedCredit } : {}),
-    ...(value.bankedCreditChange === true ? { bankedCreditChange: true } : {}),
+    ...(value.bankedResetAvailableCount !== undefined ? { bankedResetAvailableCount } : {}),
+    ...(value.bankedResetCountChange === true ? { bankedResetCountChange: true } : {}),
   };
 }
 

@@ -160,8 +160,9 @@ async function persistCorroboratedBankedDistribution(
     (notice ? toTiboNoticeSignal(notice) : null);
   const firstAnnouncement = relatedNotices[0] ?? representativeNotice;
   if (
-    snapshot.bankedCreditChange !== true ||
-    !snapshot.bankedCredit ||
+    snapshot.bankedResetCountChange !== true ||
+    typeof snapshot.bankedResetAvailableCount !== "number" ||
+    snapshot.bankedResetAvailableCount < 1 ||
     !notice?.isBankedDistribution ||
     !isBroadBankedDistributionNotice(notice.text) ||
     !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt)
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
     }
 
-    const bankedNotice = snapshot.bankedCreditChange === true
+    const bankedNotice = snapshot.bankedResetCountChange === true
       ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
       : null;
     if (bankedNotice?.error) {

@@ -1,13 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
   MAX_BANKED_RESET_AVAILABLE_COUNT,
+  isBankedResetAvailableCountGrant,
   parseCodexRateLimitsResponse,
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
-import { isBankedCreditGrant } from "../lib/radar/bankedReset";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
@@ -107,7 +108,7 @@ export function shouldRestartAppServerAfterRpcFailure(consecutiveFailures: numbe
 export type MonitorSnapshotPostReason =
   | "initial"
   | "recovery_candidate"
-  | "banked_credit_change"
+  | "banked_reset_count_change"
   | "structure_change"
   | "heartbeat";
 
@@ -169,8 +170,11 @@ export function getMonitorSnapshotPostReason(
 
   const previous = state.previousLocalSnapshot;
   if (previous) {
-    if (isBankedCreditGrant(previous.bankedCredit, snapshot.bankedCredit)) {
-      return "banked_credit_change";
+    if (isBankedResetAvailableCountGrant(
+      previous.bankedResetAvailableCount,
+      snapshot.bankedResetAvailableCount,
+    )) {
+      return "banked_reset_count_change";
     }
 
     const usageDecrease = previous.usedPercent - snapshot.usedPercent;
@@ -225,10 +229,11 @@ export function toSafeMonitorPayload(
     usedPercent: snapshot.usedPercent,
     windowDurationMins: snapshot.windowDurationMins,
     resetsAt: snapshot.resetsAt,
-    ...(postReason === "banked_credit_change" && snapshot.bankedCredit
+    ...(postReason === "banked_reset_count_change" &&
+      typeof snapshot.bankedResetAvailableCount === "number"
       ? {
-          bankedCredit: snapshot.bankedCredit,
-          bankedCreditChange: true,
+          bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
+          bankedResetCountChange: true,
         }
       : {}),
   };
@@ -248,10 +253,36 @@ export function getSafeMonitorErrorCode(error: unknown) {
 
 function getCodexCliPath(env: NodeJS.ProcessEnv) {
   if (env.CODEX_CLI_PATH?.trim()) return env.CODEX_CLI_PATH;
-  if (env.LOCALAPPDATA) {
-    return path.join(env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe");
+  if (!env.LOCALAPPDATA) return "codex";
+
+  const binDirectory = path.join(env.LOCALAPPDATA, "OpenAI", "Codex", "bin");
+  const bundledPath = path.join(binDirectory, "codex.exe");
+  const candidates = [bundledPath];
+  try {
+    for (const entry of fs.readdirSync(binDirectory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const sideBySidePath = path.join(binDirectory, entry.name, "codex.exe");
+      if (fs.existsSync(sideBySidePath)) candidates.push(sideBySidePath);
+    }
+  } catch {
+    return bundledPath;
   }
-  return "codex";
+
+  const existingCandidates = candidates.flatMap((candidate) => {
+    try {
+      const stats = fs.statSync(candidate);
+      return stats.isFile() ? [{ candidate, modifiedAt: stats.mtimeMs }] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (existingCandidates.length === 0) return bundledPath;
+
+  // Codex desktop keeps side-by-side CLI versions under this directory. Pick
+  // the newest local executable while retaining CODEX_CLI_PATH as the escape hatch.
+  return existingCandidates.reduce((latest, current) =>
+    current.modifiedAt > latest.modifiedAt ? current : latest,
+  ).candidate;
 }
 
 function validateWebhookUrl(rawUrl: string) {
@@ -298,9 +329,9 @@ export function createJsonMonitorLogger(
   return (event, details = {}) => {
     const safeDetails: Record<string, unknown> = {};
     const allowedKeys = event === "snapshot_observed"
-      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount"]
+      ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount", "bankedResetCountSource"]
       : event === "snapshot_sent"
-        ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedCreditChange", "bankedResetDisplayCount"]
+        ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetCountChange", "bankedResetDisplayCount", "bankedResetCountSource"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -470,8 +501,9 @@ async function runAppServerSession(
         resetsAt: snapshot.resetsAt,
         planType: snapshot.planType,
         windowDurationMins: snapshot.windowDurationMins,
-        bankedCreditChange: reason === "banked_credit_change",
+        bankedResetCountChange: reason === "banked_reset_count_change",
         bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
+        bankedResetCountSource: snapshot.bankedResetCountSource,
       });
     };
 
@@ -514,6 +546,7 @@ async function runAppServerSession(
           planType: snapshot.planType,
           windowDurationMins: snapshot.windowDurationMins,
           bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
+          bankedResetCountSource: snapshot.bankedResetCountSource,
         });
 
         const previousLocalSnapshot = monitorSnapshotState.previousLocalSnapshot;
