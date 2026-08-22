@@ -1,5 +1,5 @@
 import type { TeaserStrength } from "./teaserStrength";
-
+import type { TiboCodexOperationalStatus } from "./codexOperationalStatus";
 import type { TiboVerificationStatus } from "./tiboHistory";
 
 export type ExistingTiboWebhookState = {
@@ -14,6 +14,11 @@ export type ExistingTiboWebhookState = {
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: string | null;
+  codex_operational_status?: TiboCodexOperationalStatus | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
 };
 
 type TiboWebhookPayload = {
@@ -28,10 +33,43 @@ type TiboWebhookPayload = {
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: string | null;
+  codex_operational_status?: TiboCodexOperationalStatus | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
 };
 
 function keepExisting<T>(existing: T | undefined, incoming: T) {
   return existing === undefined ? incoming : existing;
+}
+
+function preserveOperationalAssessment(
+  payload: TiboWebhookPayload,
+  existing: ExistingTiboWebhookState | null | undefined,
+) {
+  if (
+    payload.codex_operational_status !== null
+    && payload.codex_operational_status !== undefined
+  ) {
+    return payload;
+  }
+
+  if (
+    existing?.codex_operational_status === null
+    || existing?.codex_operational_status === undefined
+  ) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    codex_operational_status: existing.codex_operational_status,
+    codex_operational_confidence: existing.codex_operational_confidence ?? null,
+    codex_operational_evidence_quote: existing.codex_operational_evidence_quote ?? null,
+    codex_operational_reason_ja: existing.codex_operational_reason_ja ?? null,
+    codex_operational_expires_at: existing.codex_operational_expires_at ?? null,
+  };
 }
 
 export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
@@ -39,11 +77,11 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
   existing: ExistingTiboWebhookState | null | undefined,
   receivedAt: string,
 ): T {
-  const preserved = {
+  const preserved = preserveOperationalAssessment({
     ...payload,
     detected_at: existing?.detected_at ?? receivedAt,
     verification_status: existing?.verification_status ?? "auto_unverified",
-  } as TiboWebhookPayload;
+  }, existing);
 
   if (existing?.classification_source === "manual") {
     return {
