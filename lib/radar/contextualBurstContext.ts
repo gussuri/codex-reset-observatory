@@ -64,6 +64,7 @@ type TrainingCell = {
 
 type NormalizedCell = TrainingCell & {
   features: [number, number, number, number];
+  baseCumulativeHazard: number;
 };
 
 function timestamp(value: Date | string | null | undefined) {
@@ -222,7 +223,7 @@ function buildTrainingCells(
   return cells;
 }
 
-function normalizeCells(cells: TrainingCell[]) {
+function normalizeCells(cells: TrainingCell[], hazard: RandomContinuousHazard) {
   const countValues = cells.map((cell) => Math.log1p(cell.raw.randomResetCount72h));
   const previousValues = cells.map((cell) => Math.log1p(cell.raw.previousRandomIntervalHours ?? 0));
   const count72Mean = mean(countValues);
@@ -243,13 +244,19 @@ function normalizeCells(cells: TrainingCell[]) {
       cell.raw.hourSin,
       cell.raw.hourCos,
     ],
+    // The base offset is fixed for the whole MAP fit. Computing the Gaussian
+    // posterior once per cell avoids repeating the expensive kernel reduction
+    // during every objective/gradient iteration without changing model semantics.
+    baseCumulativeHazard: Math.max(
+      PROBABILITY_EPSILON,
+      getRandomContinuousHazardAtAge(hazard, cell.randomAgeHours) * cell.durationHours,
+    ),
   }));
   return { normalized, stats };
 }
 
 function objective(
   cells: NormalizedCell[],
-  hazard: RandomContinuousHazard,
   beta: number[],
 ) {
   if (beta.some((value) => !Number.isFinite(value))) return Number.POSITIVE_INFINITY;
@@ -258,10 +265,8 @@ function objective(
     0,
   );
   for (const cell of cells) {
-    const baseHazardPerHour = getRandomContinuousHazardAtAge(hazard, cell.randomAgeHours);
-    const cumulative = Math.max(PROBABILITY_EPSILON, baseHazardPerHour * cell.durationHours);
     const linear = cell.features.reduce((sum, value, index) => sum + value * beta[index], 0);
-    const eta = Math.log(cumulative) + linear;
+    const eta = Math.log(cell.baseCumulativeHazard) + linear;
     const mu = Math.exp(Math.min(40, Math.max(-40, eta)));
     if (cell.event) {
       const probability = Math.max(PROBABILITY_EPSILON, 1 - Math.exp(-mu));
@@ -275,15 +280,12 @@ function objective(
 
 function gradient(
   cells: NormalizedCell[],
-  hazard: RandomContinuousHazard,
   beta: number[],
 ) {
   const result = beta.map((value) => value / (NEXT_GENERATION_C_CONTEXT_PRIOR_STD_DEV ** 2));
   for (const cell of cells) {
-    const baseHazardPerHour = getRandomContinuousHazardAtAge(hazard, cell.randomAgeHours);
-    const cumulative = Math.max(PROBABILITY_EPSILON, baseHazardPerHour * cell.durationHours);
     const linear = cell.features.reduce((sum, value, index) => sum + value * beta[index], 0);
-    const eta = Math.log(cumulative) + linear;
+    const eta = Math.log(cell.baseCumulativeHazard) + linear;
     const mu = Math.exp(Math.min(40, Math.max(-40, eta)));
     const derivative = cell.event
       ? -mu * Math.exp(-mu) / Math.max(PROBABILITY_EPSILON, 1 - Math.exp(-mu))
@@ -303,7 +305,7 @@ export function fitContextualBurstContext(
   const cells = buildTrainingCells(randomBoundaries, asOf);
   const trainingEventCount = cells.filter((cell) => cell.event).length;
   const exposureCellCount = cells.length;
-  const { normalized, stats } = normalizeCells(cells);
+  const { normalized, stats } = normalizeCells(cells, hazard);
   if (
     trainingEventCount < NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS
     || exposureCellCount < NEXT_GENERATION_C_MINIMUM_EXPOSURE_CELLS
@@ -314,13 +316,13 @@ export function fitContextualBurstContext(
   let beta = [0, 0, 0, 0];
   if (stats.count72StdDev < STD_EPSILON) beta[0] = 0;
   if (stats.previousIntervalStdDev < STD_EPSILON) beta[1] = 0;
-  let currentObjective = objective(normalized, hazard, beta);
+  let currentObjective = objective(normalized, beta);
   if (!Number.isFinite(currentObjective)) {
     return fallback("context_initial_objective_non_finite", trainingEventCount, exposureCellCount, stats);
   }
 
   for (let iteration = 1; iteration <= NEXT_GENERATION_C_SOLVER_MAX_ITERATIONS; iteration += 1) {
-    const grad = gradient(normalized, hazard, beta);
+    const grad = gradient(normalized, beta);
     if (grad.some((value) => !Number.isFinite(value))) {
       return fallback("context_gradient_non_finite", trainingEventCount, exposureCellCount, stats);
     }
@@ -333,7 +335,7 @@ export function fitContextualBurstContext(
       const candidate = beta.map((value, index) => value - step * grad[index]);
       if (stats.count72StdDev < STD_EPSILON) candidate[0] = 0;
       if (stats.previousIntervalStdDev < STD_EPSILON) candidate[1] = 0;
-      const candidateObjective = objective(normalized, hazard, candidate);
+      const candidateObjective = objective(normalized, candidate);
       if (Number.isFinite(candidateObjective) && candidateObjective <= currentObjective) {
         accepted = { beta: candidate, objective: candidateObjective };
         break;
