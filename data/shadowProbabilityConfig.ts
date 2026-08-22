@@ -187,7 +187,7 @@ export const PUBLISHED_ELAPSED_MODEL_OPTIONS = {
 } as const;
 export const REGIME_ELAPSED_BIN_SCHEME_CANDIDATES = ["A", "B"] as const;
 export const REGIME_ELAPSED_PRIOR_EXPOSURE_DAY_CANDIDATES = [2, 5, 10, 20] as const;
-export const REGIME_ELAPSED_REGIME_HALF_LIFE_DAYS = [3, 5, 7, 10, 14] as const;
+export const REGIME_ELAPSED_REGIME_HALF_LIFE_CANDIDATES = [3, 5, 7, 10, 14] as const;
 export const REGIME_ELAPSED_RATIO_EXPONENT_CANDIDATES = [0.25, 0.5, 0.75, 1] as const;
 export const CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION =
   "status-conservative-v2";
