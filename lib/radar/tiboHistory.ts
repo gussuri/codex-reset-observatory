@@ -1015,7 +1015,7 @@ function buildBankedDistributionEvent(
   return {
     id: estimate.resetEventKey,
     recordKind: "banked_distribution",
-    title: "BANKEDリセット配布",
+    title: "ランダムリセット",
     kind: "reset_completed",
     status: "closed",
     opened_at: openedAt,

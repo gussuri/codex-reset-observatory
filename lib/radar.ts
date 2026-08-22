@@ -912,6 +912,16 @@ function getHistoryDisplayTitle(
 ) {
   const record = getResetDisplayNameRecord(data, item);
 
+  // Manual names are stored in Japanese. Reuse them for other locales only
+  // when the normal dynamic dictionary has a matching localized title.
+  const manualName = record?.manual_name_ja?.trim();
+  if (manualName) {
+    const localizedManualName = translateDynamic(manualName, locale);
+    if (locale === "ja" || localizedManualName !== manualName) {
+      return localizedManualName;
+    }
+  }
+
   if (isNoticeBackedRecoveryEvent(item)) {
     const japaneseTitle = resolveJapaneseResetDisplayName(item, record);
     return japaneseTitle === "全体リセット完了"

@@ -1262,10 +1262,10 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage limits for ChatGPT Work and Codex were reset to celebrate reaching 10 million active users.",
     zh: "为庆祝活跃用户数达到 1000 万，ChatGPT Work 和 Codex 的使用限制已被强制重置。",
   },
-  "BANKEDリセット配布": {
-    ja: "BANKEDリセット配布",
-    en: "BANKED Reset distribution",
-    zh: "BANKED 重置发放",
+  "2000万人アクティブユーザー突破記念リセット": {
+    ja: "2000万人アクティブユーザー突破記念リセット",
+    en: "20 Million Active Users Milestone Reset",
+    zh: "活跃用户突破2000万纪念重置",
   },
   "任意リセット権の配布が確認されました。": {
     ja: "任意リセット権の配布が確認されました。",

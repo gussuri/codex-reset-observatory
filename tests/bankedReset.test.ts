@@ -9,7 +9,7 @@ import {
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
-import { getLocalRadarData } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { getLastGlobalResetAt } from "../lib/radar/probability";
 import {
   combineResetHistory,
@@ -123,10 +123,54 @@ test("creates one eligible banked_distribution from corroborated observation evi
   const banked = history.filter((item) => item.recordKind === "banked_distribution");
 
   assert.equal(banked.length, 1);
+  assert.equal(banked[0].title, "ランダムリセット");
   assert.equal(banked[0].details?.cycleType, "ランダムリセット");
   assert.equal(banked[0].details?.resetMethod, "任意リセット権1回配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
+});
+
+test("uses the accepted event display name for the 20M BANKED event in every locale", () => {
+  const banked = findBankedDistributionEvents([notice], [
+    { ...estimate, resetEventKey: "banked-reset-2090766694897619318" },
+  ])[0];
+  const displayName = "2000万人アクティブユーザー突破記念リセット";
+  const displayNameRecord = {
+    event_key: "banked-reset-2090766694897619318",
+    source_tweet_id: notice.tweet_id,
+    manual_name_ja: displayName,
+    ai_name_ja: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: null,
+    ai_flags: [],
+    ai_generated_at: null,
+    input_hash: null,
+  };
+
+  assert.equal(banked?.title, "ランダムリセット");
+
+  const radarData = getLocalRadarData({
+    calculationNow: new Date("2026-08-22T02:00:00.000Z"),
+    recentTiboSignals: [notice],
+    resetDisplayNames: [displayNameRecord],
+    resetExecutionEstimates: [{ ...estimate, resetEventKey: "banked-reset-2090766694897619318" }],
+  });
+  for (const [locale, expectedTitle] of [
+    ["ja", displayName],
+    ["en", "20 Million Active Users Milestone Reset"],
+    ["zh", "活跃用户突破2000万纪念重置"],
+  ] as const) {
+    const viewModel = getRadarViewModel(radarData, locale, false, undefined, new Date("2026-08-22T02:00:00.000Z"));
+    assert.equal(
+      viewModel.recentHistory.find((item) => item.recordKind === "banked_distribution")?.title,
+      expectedTitle,
+    );
+  }
 });
 
 test("keeps official notice confidence when recent and active signal rows overlap", () => {
