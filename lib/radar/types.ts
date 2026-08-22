@@ -14,6 +14,10 @@ import type {
   ExecutionTimePrecision,
   ResetExecutionEstimate,
 } from "./resetExecution";
+import type {
+  PublicCodexOperationalStatus,
+  TiboCodexOperationalStatus,
+} from "./codexOperationalStatus";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -151,6 +155,11 @@ export type ActiveTiboSignal = {
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
   temporal_resolution_version?: string | null;
+  codex_operational_status?: TiboCodexOperationalStatus | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
   is_reply?: boolean;
   is_quote?: boolean;
   quote_context_text?: string | null;
@@ -436,6 +445,7 @@ export type PublicRadarSnapshot = {
   lastRandomResetAt: string | null;
   dataHealth: PublicDataHealth;
   viewModel: PublicRadarViewModel;
+  codexOperationalStatus?: PublicCodexOperationalStatus;
   resetTeaserStatus?: TeaserStrength | "unknown";
   latestTiboActivity?: PublicTiboActivity | null;
   recoveryObservation?: PublicRecoveryObservation | null;
