@@ -86,7 +86,8 @@ test("C starts only at its own freeze and never changes A v1 components", () => 
     [...NEXT_GENERATION_A_COMPONENT_VERSIONS],
   );
   assert.equal(
-    afterForecasts[NEXT_GENERATION_A_MODEL_VERSION].componentModelVersions?.includes(NEXT_GENERATION_C_MODEL_VERSION),
+    (afterForecasts[NEXT_GENERATION_A_MODEL_VERSION].componentModelVersions as readonly string[] | undefined)
+      ?.includes(NEXT_GENERATION_C_MODEL_VERSION),
     false,
   );
 });
