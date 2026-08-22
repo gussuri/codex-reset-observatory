@@ -110,15 +110,16 @@ regular resetはbase hazardのclockをresetしない。
 C v1は短期クラスタリングを1つのfeature groupとして扱うが、監査のため2つのraw featureを保持する。
 
 1. `randomResetCount72h`
-   - origin直前72時間に完了したeligible random reset数。
-   - origin自身や未来イベントは含めない。
+   - 評価時点の直前72時間に完了したeligible random reset数。
+   - 評価時点自身や未来イベントは含めない。
    - transform前の整数値もauditへ保存する。
 
 2. `previousRandomIntervalHours`
    - latest eligible random resetと、その1つ前のeligible random resetのinterval。
-   - 十分な過去イベントがない場合はmissingとして扱い、0埋めで「短いinterval」と誤解させない。
+   - training exposureではこの値が定義できる時点以降だけをcontext fitへ使う。
+   - forecast originでは十分な過去イベントがない場合missingとし、context fit fallbackへ送る。0埋めで「短いinterval」と誤解させない。
 
-fitではskewを抑えるため `log1p` 系transformを使用し、past-only training exposure上で標準化する。標準化の平均・分散もoriginより後のデータを使わない。
+fitではskewを抑えるため `log1p` transformを使用し、past-only training exposure上で平均0・標準偏差1へ標準化する。標準化の平均・分散もoriginより後のデータを使わない。標準偏差が実質0の場合、そのfeature coefficientは0へ固定する。
 
 この2featureは相関し得るため、独立した手作業倍率を掛けない。1つのregularized context fitの中で同時に推定し、group ablationでは両方まとめて `burst` として落とす。
 
@@ -131,28 +132,52 @@ Pacific Timeの時刻は `America/Los_Angeles` を使い、DSTをIANA time zone�
 - `hourSin = sin(2π * localHour / 24)`
 - `hourCos = cos(2π * localHour / 24)`
 
-`localHour` は分・秒を含む連続値としてよい。
+`localHour` は分・秒を含む連続値とする。sin/cosはそのまま使い、追加標準化しない。
 
 曜日・平日週末はC v1へ入れない。
 
+### Future context path
+
+24h / 48h forecastのintegration中、contextをorigin値のまま固定しない。各integration stepで「それ以前に新しいtarget resetが起きていない」というsurvival pathを仮定してcontextを更新する。
+
+- `randomElapsedHours`: step時間ぶん増える。
+- `hourSin/hourCos`: step時点のPacific Timeへ更新する。
+- `randomResetCount72h`: 既知の過去resetが72h windowから外れるにつれて減少する。未来resetを仮定追加しない。
+- `previousRandomIntervalHours`: target resetが発生するまでは固定する。
+
+これにより、たとえばorigin時点では直近72hに3件あっても、その古いイベントがforecast horizon中に72h windowから抜ければburst effectも自然に弱まる。
+
 ## Point-in-time context fitting
 
-Cのcontext係数は、base hazardをoffsetにした**強く正則化したdiscrete-time hazard fit**として推定する。
+Cのcontext係数は、1時間exposure cellを使った**ridge-regularized complementary-log-log discrete-time hazard model**で推定する。logistic / Poissonの選択肢は残さずC v1で固定する。
 
-推奨実装は1時間exposure cellを使うridge-regularized logisticまたはPoisson approximationとし、どちらを採用するかはimplementation planで既存コードとの整合を見て最終決定する。ただし以下の意味は固定する。
+各training cellについて、B相当のbase continuous hazardをその1時間へ積分したbase cumulative hazardを `H0` とする。context linear predictorを `beta · x` とし、cell内event probabilityを次で定義する。
 
-- response: そのexposure cell内にeligible random resetが発生したか
-- offset/base: そのcellのrandom elapsed ageに対するC base continuous hazard
-- features: `randomResetCount72h`, `previousRandomIntervalHours`, `hourSin`, `hourCos`
-- training data: forecast originより前のexposureとeventsのみ
+`p_cell = 1 - exp(-H0 * exp(beta · x))`
+
+これはcloglog linkで `log(-log(1 - p_cell)) = log(H0) + beta · x` と等価であり、`log(H0)` をoffsetとして扱う。
+
+固定仕様:
+
+- cell width: 1h
+- response: そのcell内にeligible random resetが発生したか
+- base offset: そのcellのrandom elapsed ageへbase continuous hazardを積分した `log(H0)`
+- fitted features: standardized `log1p(randomResetCount72h)`, standardized `log1p(previousRandomIntervalHours)`, `hourSin`, `hourCos`
+- intercept: 追加しない。global levelはbase hazardと後段calibrationへ任せる。
+- training data: forecast originより前のexposure / eventsのみ
+- training start: `previousRandomIntervalHours` が定義可能になった最初のcell以降
 - future information: 使用禁止
-- coefficient prior center: 0
-- strong L2 / Gaussian shrinkageを必須とする
-- context multiplierは極端値を防ぐため最終的に `0.5x–2.0x` へclampする
+- coefficient prior: independent Gaussian, mean `0`, standard deviation `0.5`
+- objective: Bernoulli cloglog log-likelihood + 上記Gaussian priorのMAP
+- minimum historical eligible random events in fit window: `15`
+- minimum exposure cells: `720`
+- context multiplier clamp: `0.5x–2.0x`
 
-実装時にsolverやprior strengthを決めたらC v1のversioned constantsとしてfreezeする。探索データ上の最高scoreになるようgrid searchで選ばない。既存の数値安定性・サンプル数を基準に保守的な既定値を選ぶ。
+solverは同じobjectiveの一意なMAP解へ収束するdeterministic implementationとし、数値不安定・非有限値・未収束を成功扱いしない。solverの内部手法は実装詳細だが、objective、prior、features、offset、fallback条件はC v1の意味として固定する。
 
-fit不能、データ不足、solver failureの場合はcontext係数を0として `M_context = 1` にfallbackし、C forecast自体はbase continuous + semantic signalsで生成できるようにする。fallback reasonをauditへ保存する。
+fit不能、最低サンプル不足、solver failureの場合はcontext係数をすべて0として `M_context = 1` にfallbackし、C forecast自体はbase continuous + semantic signalsで生成する。fallback reasonをauditへ保存する。
+
+各forecast originでcontext fitに使用できるのはoriginより前の履歴だけである。将来共有configや新しいイベントが増えても、過去originを再fitして保存済みC forecastを書き換えない。
 
 ## Ordinary semantic signals
 
@@ -213,10 +238,11 @@ Cは将来「どのfactorが効いたか」をprospectiveに評価できるこ�
 - `latestRandomResetAt`
 - base `instantaneousHazardPerHour`
 - base 24h / 48h probability
-- `randomResetCount72h`
-- `previousRandomIntervalHours`
-- `hourSin`
-- `hourCos`
+- origin時点の `randomResetCount72h`
+- origin時点の `previousRandomIntervalHours`
+- origin時点の `hourSin`
+- origin時点の `hourCos`
+- burst標準化mean / std
 - fitted context coefficients
 - context training event count / exposure cell count
 - context multiplier audit for 24h / 48h integration
