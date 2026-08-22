@@ -4,6 +4,7 @@ import { getLastResetBoundaryAt } from "./probability";
 import { getLastRandomRecoveryResetAt } from "./recoveryBoundary";
 import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getPublicRecoveryObservation } from "../codexUsageRecovery";
+import { deriveCodexOperationalStatus } from "./codexOperationalStatus";
 import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
@@ -382,14 +383,24 @@ export function toPublicRadarSnapshot(
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
   );
+  const dataHealth = toPublicHealth(internal, options, checkedAt);
+  const codexOperationalStatus = deriveCodexOperationalStatus({
+    openAIStatusHistory: internal.openai_status_history ?? [],
+    openAIStatusHealth: dataHealth.sources.openAIStatus,
+    affectedCodexComponents:
+      internal.codex_environment?.openai_status_affected_codex_components ?? 0,
+    tiboSignals: internal.recent_tibo_signals ?? internal.active_tibo_signals ?? [],
+    now: calculationNow,
+  });
 
   return {
     schemaVersion: "public-v1",
     checkedAt,
     updatedAt: internal.updated_at ?? null,
     lastRandomResetAt: latestTeaserConsumingResetAt,
-    dataHealth: toPublicHealth(internal, options, checkedAt),
+    dataHealth,
     viewModel: toPublicViewModel(viewModel),
+    codexOperationalStatus: codexOperationalStatus.status,
     resetTeaserStatus: aggregateResetTeaserStatus(
       internal.recent_tibo_signals ?? internal.active_tibo_signals,
       latestTeaserConsumingResetAt,
