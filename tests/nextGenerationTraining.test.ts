@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_C_FREEZE_AT,
+  NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -41,6 +43,25 @@ function historyRow(generatedAt = "2026-08-22T00:00:00.000Z") {
   };
 }
 
+function contextualOnlyRow(generatedAt: string) {
+  return {
+    logged_hour: generatedAt,
+    debug_info: {
+      calculated_at: generatedAt,
+      experimentalProbabilityForecasts: {
+        [NEXT_GENERATION_C_MODEL_VERSION]: {
+          modelVersion: NEXT_GENERATION_C_MODEL_VERSION,
+          generatedAt,
+          rawProbability24h: 0.31,
+          rawProbability48h: 0.52,
+          probability24h: 0.32,
+          probability48h: 0.53,
+        },
+      },
+    },
+  };
+}
+
 test("training parser excludes pre-freeze rows and labels only random boundaries", () => {
   const rows = parseNextGenerationTrainingRows(
     [
@@ -55,6 +76,7 @@ test("training parser excludes pre-freeze rows and labels only random boundaries
 
   assert.equal(rows.bRows.length, 1);
   assert.equal(rows.aRows.length, 1);
+  assert.equal(rows.cRows.length, 0);
   assert.equal(rows.bRows[0].rawProbability24h, 0.22);
   assert.equal(rows.bRows[0].actual24h, true);
   assert.equal(rows.bRows[0].actual48h, undefined);
@@ -75,6 +97,26 @@ test("training parser rejects incomplete A components without weakening B", () =
   assert.equal(parsed.bRows.length, 1);
   assert.equal(parsed.aRows.length, 0);
   assert.equal(parsed.skipReasons.incomplete_a_components, 1);
+});
+
+test("C rows are parsed independently of B and A availability", () => {
+  const afterFreeze = "2026-08-22T07:00:00.000Z";
+  const beforeFreeze = new Date(Date.parse(NEXT_GENERATION_C_FREEZE_AT) - 1).toISOString();
+  const parsed = parseNextGenerationTrainingRows([
+    contextualOnlyRow(beforeFreeze),
+    contextualOnlyRow(afterFreeze),
+  ], {
+    asOf: new Date("2026-08-23T12:00:00.000Z"),
+    randomEvents: [{ id: "random-c", resetAt: "2026-08-22T18:00:00.000Z" }],
+  });
+
+  assert.equal(parsed.cRows.length, 1);
+  assert.equal(parsed.cRows[0].generatedAt, afterFreeze);
+  assert.equal(parsed.cRows[0].rawProbability24h, 0.31);
+  assert.equal(parsed.cRows[0].actual24h, true);
+  assert.equal(parsed.cRows[0].actual48h, undefined);
+  assert.equal(parsed.bRows.length, 0);
+  assert.equal(parsed.aRows.length, 0);
 });
 
 test("training query distinguishes successful empty reads from query failures", async () => {
@@ -116,6 +158,7 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.equal(empty.status, "ok");
   assert.equal(empty.bRows.length, 0);
   assert.equal(empty.aRows.length, 0);
+  assert.equal(empty.cRows.length, 0);
   assert.equal(empty.backfill, false);
   assert.deepEqual(calls.slice(0, 3), [
     "from:prediction_history",
@@ -134,4 +177,5 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.equal(failed.status, "error");
   assert.equal(failed.bRows.length, 0);
   assert.equal(failed.aRows.length, 0);
+  assert.equal(failed.cRows.length, 0);
 });
