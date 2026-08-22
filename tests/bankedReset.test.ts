@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BANKED_NOTICE_MATCH_WINDOW_MS,
   isBankedCreditGrant,
+  isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
   isBroadBankedDistributionNotice,
   isBankedObservationWithinNoticeWindow,
@@ -51,6 +52,22 @@ test("recognizes a broad BANKED distribution notice without treating generic res
   assert.equal(isBankedDistributionNotice("The reset button is my favorite product feature."), false);
   assert.equal(isBroadBankedDistributionNotice("I received a BANKED reset."), false);
   assert.equal(isBroadBankedDistributionNotice("I gave all my friends a BANKED reset."), false);
+});
+
+test("a BANKED completion post does not create generic or distribution history by itself", () => {
+  const completion = {
+    ...notice,
+    tweet_id: "banked-completion-only",
+    text: "The banked reset has landed, I repeat, the banked reset has landed.",
+    tweet_url: "https://x.com/thsottiaux/status/banked-completion-only",
+    signal_type: "reset_executed" as const,
+    classification_source: "gemini",
+  };
+
+  assert.equal(isBankedDistributionCompletionSignal(completion.text), true);
+  const history = combineResetHistory([], [completion], [], [], [notice], [], []);
+  assert.equal(history.some((item) => item.recordKind === "confirmed_global"), false);
+  assert.equal(history.some((item) => item.recordKind === "banked_distribution"), false);
 });
 
 test("recognizes a future BANKED availability promise and its explicit broad scope", () => {

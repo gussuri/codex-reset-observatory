@@ -1,3 +1,5 @@
+import { isBankedDistributionCompletionSignal } from "./bankedReset";
+
 export type ClassificationSignalType =
   | "official_notice"
   | "reset_executed"
@@ -20,6 +22,7 @@ export type TiboReplyClassificationMetadata = {
 export type TiboClassificationSafetyReason =
   | "non_usage_reset_object"
   | "non_usage_activation"
+  | "banked_distribution_completion"
   | "pure_hypothetical"
   | "explicit_negation"
   | "current_execution"
@@ -136,6 +139,15 @@ export function getTiboClassificationSafetyDecision(
   text: string,
   candidate: ClassificationSignalType,
 ): TiboClassificationSafetyDecision {
+  if (isBankedDistributionCompletionSignal(text) && candidate !== "irrelevant") {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "BANKEDリセット権の配布完了であり、全体の利用上限リセット実施とは別のため、正式resetには採用しません。",
+      reasonCode: "banked_distribution_completion",
+      suppressTeaserStrength: true,
+    };
+  }
+
   if (hasExplicitNonUsageResetObject(text) && candidate !== "irrelevant") {
     return {
       signalType: "irrelevant",

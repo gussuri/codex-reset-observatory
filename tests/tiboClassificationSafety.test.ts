@@ -67,6 +67,37 @@ test("usage-limit reset positive controls remain eligible", () => {
   }
 });
 
+test("BANKED distribution completion is not a generic usage-limit reset", () => {
+  const bankedCompletionTexts = [
+    "The banked reset has landed.",
+    "The banked reset is available.",
+    "The banked reset has arrived.",
+    "The reset credit has been distributed to everyone.",
+  ];
+
+  for (const text of bankedCompletionTexts) {
+    assert.equal(
+      getTiboClassificationSafetyDecision(text, "reset_executed").signalType,
+      "irrelevant",
+      text,
+    );
+
+    const guarded = applyTiboClassificationSafetyGuard(text, geminiResult("reset_executed"));
+    assert.equal(guarded.signalType, "irrelevant", text);
+    assert.equal(guarded.teaserStrength, "none", text);
+  }
+
+  const usageLimitReset = "The usage limits have been reset for all paid users of Codex.";
+  assert.equal(
+    getTiboClassificationSafetyDecision(usageLimitReset, "reset_executed").signalType,
+    "reset_executed",
+  );
+  assert.equal(
+    applyTiboClassificationSafetyGuard(usageLimitReset, geminiResult("reset_executed")).signalType,
+    "reset_executed",
+  );
+});
+
 test("non-reset feature activation and rollout completions are irrelevant", () => {
   const cases = [
     "GPT-X 1M context in Codex. This used to only work for API keys, but we just flipped the switch and it works through ChatGPT accounts now too.",

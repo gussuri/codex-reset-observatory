@@ -25,6 +25,9 @@ function hasFutureAvailabilityTerm(text: string) {
   return /\b(?:banked\s+reset|reset\s+credit)\s+will\s+be\s+(?:there|available|ready)\b/i.test(text);
 }
 
+const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:reset|credit)|reset\s+credit)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|is\s+(?:now\s+)?available)\b/i;
+const BANKED_FUTURE_CUE_PATTERN = /\b(?:will|going\s+to|tomorrow|tonight|later|soon|next\s+(?:day|week|month)|by\s+\d)\b/i;
+
 function hasBroadScopeTerm(text: string) {
   return /\b(?:everyone|global)\b|\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b|\b(?:all|every)\s+paid\s+users?\s+of\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\b|\b(?:all|every)\s+(?:users?|accounts?)\b|全(?:ての|て|有料)?(?:ユーザー|利用者|アカウント|プラン)/i.test(text);
 }
@@ -41,6 +44,19 @@ export function isBankedDistributionNotice(text: string | null | undefined) {
 /** Canonical history requires the post to explicitly cover a broad audience. */
 export function isBroadBankedDistributionNotice(text: string | null | undefined) {
   return isBankedDistributionNotice(text) && hasBroadScopeTerm(text ?? "");
+}
+
+/**
+ * A completed BANKED delivery is not evidence that the global usage limits
+ * were reset. Keep it out of the generic Tibo reset adoption path; a real
+ * BANKED history row still requires the Usage Monitor credit transition.
+ */
+export function isBankedDistributionCompletionSignal(text: string | null | undefined) {
+  if (typeof text !== "string") return false;
+  const normalized = text.trim();
+  return normalized.length > 0 &&
+    BANKED_COMPLETION_PATTERN.test(normalized) &&
+    !BANKED_FUTURE_CUE_PATTERN.test(normalized);
 }
 
 export type BankedNoticeSupersessionInput = {

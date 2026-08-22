@@ -6,6 +6,7 @@ import {
   hasExistingFormalResetCluster,
   isNewFormalAdoption,
 } from "../lib/radar/formalAdoption";
+import { isFormalTiboResetSignal } from "../lib/radar/tiboHistory";
 import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
 
 function candidate(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
@@ -51,6 +52,21 @@ test("formal adoption rejects ineligible or unavailable candidates", () => {
       null,
     ),
     false,
+  );
+});
+
+test("BANKED completion is not eligible for generic formal adoption", () => {
+  const bankedCompletion = candidate({
+    text: "The banked reset has landed, I repeat, the banked reset has landed.",
+  });
+
+  assert.equal(isFormalTiboResetSignal(bankedCompletion), false);
+  assert.equal(isNewFormalAdoption(bankedCompletion, null), false);
+  assert.equal(
+    isFormalTiboResetSignal(candidate({
+      text: "The usage limits have been reset for all paid users of Codex.",
+    })),
+    true,
   );
 });
 
