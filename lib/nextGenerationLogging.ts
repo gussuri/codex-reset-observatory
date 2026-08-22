@@ -3,6 +3,8 @@ import {
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_C_FREEZE_AT,
+  NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -22,6 +24,10 @@ import {
   calculateNextGenerationBProbability,
   type NextGenerationBResult,
 } from "./radar/nextGenerationProbability";
+import {
+  calculateContextualBurstProbability,
+  type ContextualBurstProbabilityResult,
+} from "./radar/contextualBurstProbability";
 import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining";
 import type { RadarData } from "./radar/types";
 import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
@@ -115,6 +121,89 @@ function isValidBResult(result: NextGenerationBResult) {
     result.predictions.probability72h,
   ].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
     && result.predictions.probability48h >= result.predictions.probability24h;
+}
+
+function isValidCResult(result: ContextualBurstProbabilityResult) {
+  return [
+    result.rawProbability24h,
+    result.rawProbability48h,
+    result.probability12h,
+    result.probability24h,
+    result.probability48h,
+    result.probability72h,
+  ].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.probability48h >= result.probability24h;
+}
+
+function toContextualBurstForecast(result: ContextualBurstProbabilityResult) {
+  const fit = result.contextFit;
+  const forecast = {
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability12h: result.probability12h,
+    probability24h: result.probability24h,
+    probability48h: result.probability48h,
+    probability72h: result.probability72h,
+    halfLifeDays: null,
+    // C-specific context-fit counts are intentionally separate from the common
+    // historical hazard fields; these common values are conservative audit placeholders.
+    completedEventCount: fit.trainingEventCount,
+    completedIntervalCount: fit.trainingEventCount,
+    weightedEventCount: fit.trainingEventCount,
+    weightedExposureDays: fit.exposureCellCount / 24,
+    baseline24h: result.baseProbability24h,
+    baseline48h: result.baseProbability48h,
+    combinedSignalMultiplier24h: result.multipliers.combinedAfterCap.probability24h,
+    combinedSignalMultiplier48h: result.multipliers.combinedAfterCap.probability48h,
+    officialNoticeOverride: result.officialNoticeOverride.active,
+    targetDefinition: result.targetDefinition,
+    rawModelVersion: result.modelVersion,
+    rawProbability24h: result.rawProbability24h,
+    rawProbability48h: result.rawProbability48h,
+    alpha24h: result.alpha24h,
+    alpha48h: result.alpha48h,
+    calibrationSampleCount24h: result.calibrationSampleCount24h,
+    calibrationSampleCount48h: result.calibrationSampleCount48h,
+    positiveCalibrationCount24h: result.positiveCalibrationCount24h,
+    positiveCalibrationCount48h: result.positiveCalibrationCount48h,
+    priorStdDev: 0.5,
+    minimumSamples: 10,
+    lastResolvedOrigin24h: result.lastResolvedOrigin24h,
+    lastResolvedOrigin48h: result.lastResolvedOrigin48h,
+    horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
+    fallbackUsed: result.calibrationFallbackUsed || fit.fallbackUsed,
+    fallbackReason: result.calibrationFallbackReason ?? fit.fallbackReason,
+    trainingReadStatus: result.trainingReadStatus,
+    evaluationMode: "prospective" as const,
+    officialNoticeTimingPolicyVersion: result.officialNoticeTimingPolicyVersion,
+    signalMultipliers: result.multipliers,
+    randomElapsedHours: result.randomElapsedHours,
+    elapsedHoursSinceRandom: result.randomElapsedHours,
+    latestRandomResetAt: result.latestRandomResetAt,
+    latestRecoveryResetAt: result.latestRecoveryResetAt,
+    estimator: "gaussian-kernel" as const,
+    instantaneousHazardPerHour: result.baseInstantaneousHazardPerHour,
+    freezeAt: result.freezeAt,
+    freezePolicy: result.freezePolicy,
+    nextGenerationRole: "candidate-c",
+    randomResetCount72h: result.originFeatures.randomResetCount72h,
+    previousRandomIntervalHours: result.originFeatures.previousRandomIntervalHours,
+    hourSin: result.originFeatures.hourSin,
+    hourCos: result.originFeatures.hourCos,
+    contextCoefficients: fit.coefficients,
+    burstStats: fit.burstStats,
+    contextTrainingEventCount: fit.trainingEventCount,
+    contextExposureCellCount: fit.exposureCellCount,
+    contextFallbackUsed: fit.fallbackUsed,
+    contextFallbackReason: fit.fallbackReason,
+    contextSolver: fit.solver,
+    effectiveContextMultiplier24h: result.effectiveContextMultiplier24h,
+    effectiveContextMultiplier48h: result.effectiveContextMultiplier48h,
+    ablations: result.ablations,
+  };
+  // ExperimentalProbabilityForecast predates candidate C. Keep C audit fields
+  // runtime-visible without widening the public/debug type in this integration step.
+  return forecast as unknown as ExperimentalProbabilityForecast;
 }
 
 function toEnsembleForecast(
@@ -213,38 +302,59 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
   if (generatedAt.getTime() < new Date(NEXT_GENERATION_FREEZE_AT).getTime()) {
     return options.existingForecasts;
   }
+
   const bResult = calculateNextGenerationBProbability(options.data, {
     ...options.calculationOptions,
     trainingRows: options.trainingState.bRows,
     trainingReadStatus: options.trainingState.status,
   });
-  if (!isValidBResult(bResult)) return options.existingForecasts;
-  const bForecast = toCommonForecast(bResult);
-  const withB = {
-    ...options.existingForecasts,
-    [NEXT_GENERATION_B_MODEL_VERSION]: bForecast,
-  };
-  const components = Object.fromEntries(
-    NEXT_GENERATION_A_COMPONENT_VERSIONS.map((modelVersion) => {
-      const component = modelVersion === NEXT_GENERATION_B_MODEL_VERSION
-        ? getComponentForecast(withB, NEXT_GENERATION_B_MODEL_VERSION)
-        : getComponentForecast(options.existingForecasts, modelVersion);
-      return [modelVersion, component];
-    }),
-  );
-  if (Object.values(components).some((component) => component === null)) return withB;
-  const aResult = calculateNextGenerationAEnsemble(
-    components as Record<string, NextGenerationComponentForecast>,
-    {
-    generatedAt: bResult.calculatedAt,
-    trainingRows: options.trainingState.aRows,
+  const bValid = isValidBResult(bResult);
+  const withB: ExperimentalProbabilityForecasts = bValid
+    ? {
+        ...options.existingForecasts,
+        [NEXT_GENERATION_B_MODEL_VERSION]: toCommonForecast(bResult),
+      }
+    : options.existingForecasts;
+
+  let withA = withB;
+  if (bValid) {
+    const components = Object.fromEntries(
+      NEXT_GENERATION_A_COMPONENT_VERSIONS.map((modelVersion) => {
+        const component = modelVersion === NEXT_GENERATION_B_MODEL_VERSION
+          ? getComponentForecast(withB, NEXT_GENERATION_B_MODEL_VERSION)
+          : getComponentForecast(options.existingForecasts, modelVersion);
+        return [modelVersion, component];
+      }),
+    );
+    if (!Object.values(components).some((component) => component === null)) {
+      const aResult = calculateNextGenerationAEnsemble(
+        components as Record<string, NextGenerationComponentForecast>,
+        {
+          generatedAt: bResult.calculatedAt,
+          trainingRows: options.trainingState.aRows,
+          trainingReadStatus: options.trainingState.status,
+        },
+      );
+      if (aResult) {
+        withA = {
+          ...withB,
+          [NEXT_GENERATION_A_MODEL_VERSION]: toEnsembleForecast(aResult, bResult),
+        };
+      }
+    }
+  }
+
+  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
+    return withA;
+  }
+  const cResult = calculateContextualBurstProbability(options.data, {
+    ...options.calculationOptions,
+    trainingRows: options.trainingState.cRows,
     trainingReadStatus: options.trainingState.status,
-    },
-  );
+  });
+  if (!isValidCResult(cResult)) return withA;
   return {
-    ...withB,
-    ...(aResult
-      ? { [NEXT_GENERATION_A_MODEL_VERSION]: toEnsembleForecast(aResult, bResult) }
-      : {}),
+    ...withA,
+    [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
   };
 }

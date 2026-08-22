@@ -4,6 +4,8 @@ import {
 import {
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_C_FREEZE_AT,
+  NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
@@ -17,6 +19,7 @@ import type {
   NextGenerationComponentForecast,
   NextGenerationEnsembleTrainingRow,
 } from "./nextGenerationEnsemble";
+import type { ContextualBurstCalibrationRow } from "./contextualBurstProbability";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -41,6 +44,7 @@ export type NextGenerationTrainingSkipReasons = {
 export type NextGenerationTrainingRows = {
   bRows: Array<NextGenerationCalibrationRow>;
   aRows: Array<NextGenerationEnsembleTrainingRow>;
+  cRows: Array<ContextualBurstCalibrationRow>;
   totalRows: number;
   skipReasons: NextGenerationTrainingSkipReasons;
   backfill: false;
@@ -112,6 +116,35 @@ function getActualLabel(
   return getActualWithinHorizon(randomEvents, generatedAt, horizonHours);
 }
 
+function maybePushContextualBurstRow(
+  forecasts: Record<string, unknown> | null,
+  options: NextGenerationTrainingQueryOptions,
+  asOfTime: number,
+  output: Array<ContextualBurstCalibrationRow>,
+) {
+  const cForecast = asRecord(forecasts?.[NEXT_GENERATION_C_MODEL_VERSION]);
+  if (!cForecast || cForecast.modelVersion !== NEXT_GENERATION_C_MODEL_VERSION) return;
+  const generatedAt = typeof cForecast.generatedAt === "string" ? cForecast.generatedAt : null;
+  const generatedTime = timestamp(generatedAt);
+  if (
+    generatedAt === null
+    || generatedTime === null
+    || generatedTime < timestamp(NEXT_GENERATION_C_FREEZE_AT)!
+    || generatedTime >= asOfTime
+    || !isProbability(cForecast.rawProbability24h)
+    || !isProbability(cForecast.rawProbability48h)
+  ) return;
+
+  output.push({
+    generatedAt,
+    modelVersion: NEXT_GENERATION_C_MODEL_VERSION,
+    rawProbability24h: cForecast.rawProbability24h,
+    rawProbability48h: cForecast.rawProbability48h,
+    actual24h: getActualLabel(options.randomEvents, generatedAt, asOfTime, 24),
+    actual48h: getActualLabel(options.randomEvents, generatedAt, asOfTime, 48),
+  });
+}
+
 export function parseNextGenerationTrainingRows(
   rows: Array<NextGenerationTrainingHistoryRow>,
   options: NextGenerationTrainingQueryOptions,
@@ -120,11 +153,18 @@ export function parseNextGenerationTrainingRows(
   const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
   const bRows: Array<NextGenerationCalibrationRow> = [];
   const aRows: Array<NextGenerationEnsembleTrainingRow> = [];
+  const cRows: Array<ContextualBurstCalibrationRow> = [];
   const skipReasons = createSkipReasons();
 
   for (const row of rows) {
     const debugInfo = parseDebugInfo(row.debug_info);
     const forecasts = asRecord(debugInfo?.experimentalProbabilityForecasts);
+
+    // C has its own freeze/version contract and must not depend on B/A presence.
+    if (Number.isFinite(asOfTime)) {
+      maybePushContextualBurstRow(forecasts, options, asOfTime, cRows);
+    }
+
     const bForecast = asRecord(forecasts?.[NEXT_GENERATION_B_MODEL_VERSION]);
     const generatedAt = typeof bForecast?.generatedAt === "string"
       ? bForecast.generatedAt
@@ -197,6 +237,7 @@ export function parseNextGenerationTrainingRows(
   return {
     bRows,
     aRows,
+    cRows,
     totalRows: rows.length,
     skipReasons,
     backfill: false,
@@ -220,6 +261,7 @@ export async function loadNextGenerationTrainingState(
   const empty: NextGenerationTrainingRows = {
     bRows: [],
     aRows: [],
+    cRows: [],
     totalRows: 0,
     skipReasons: createSkipReasons(),
     backfill: false,

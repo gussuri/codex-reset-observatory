@@ -49,6 +49,7 @@ function state(status: "ok" | "error"): NextGenerationTrainingState {
     reason: status === "error" ? "prediction_history query failed" : null,
     bRows: [],
     aRows: [],
+    cRows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,
