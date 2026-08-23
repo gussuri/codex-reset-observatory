@@ -37,6 +37,11 @@ import {
 } from "@/lib/radar/tiboHistory";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
+import { attachNextGenerationBPublicTrainingState } from "@/lib/radar/publishedProbability";
+import {
+  getNextGenerationRandomTargetEvents,
+  loadNextGenerationTrainingState,
+} from "@/lib/radar/nextGenerationTraining";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
@@ -318,7 +323,7 @@ async function fetchRawCodexRecoveryObservations(): Promise<
     }
     return { data: result.rows, health };
   } catch {
-    console.error("Failed to load Codex recovery observations", { detail: "request_failed" });
+    console.error("Failed to load codex recovery observations", { detail: "request_failed" });
     return { data: [], health: { state: "degraded", detail: "request_failed" } };
   }
 }
@@ -547,6 +552,39 @@ export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
   return (await getTiboSignalBundle()).activeSignals;
 }
 
+async function attachPublicBTrainingState(
+  data: RadarData,
+  calculationNow: Date,
+): Promise<RadarData> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return attachNextGenerationBPublicTrainingState(data, {
+      trainingRows: [],
+      trainingReadStatus: "error",
+    });
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const trainingState = await loadNextGenerationTrainingState(supabase, {
+      asOf: calculationNow,
+      randomEvents: getNextGenerationRandomTargetEvents(data, calculationNow),
+    });
+    return attachNextGenerationBPublicTrainingState(data, {
+      trainingRows: trainingState.bRows,
+      trainingReadStatus: trainingState.status,
+    });
+  } catch {
+    return attachNextGenerationBPublicTrainingState(data, {
+      trainingRows: [],
+      trainingReadStatus: "error",
+    });
+  }
+}
+
 export async function fetchCurrentRadarData(
   options: {
     cache?: RequestCache;
@@ -575,7 +613,7 @@ export async function fetchCurrentRadarData(
     ),
   ) ?? null;
 
-  return getLocalRadarData({
+  const radarData = getLocalRadarData({
     checkedAt,
     calculationNow,
     dataHealth: createRadarDataHealth(
@@ -599,6 +637,8 @@ export async function fetchCurrentRadarData(
     codexRecoveryObservation,
     codexRecoveryObservations: codexRecovery.data,
   });
+
+  return attachPublicBTrainingState(radarData, calculationNow);
 }
 
 type SharedRadarCore = {

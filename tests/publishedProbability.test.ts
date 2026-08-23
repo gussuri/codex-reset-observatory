@@ -17,6 +17,7 @@ import {
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
   ELAPSED_ONLY_MODEL_VERSION,
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
+  NEXT_GENERATION_B_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
@@ -39,11 +40,11 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
-test("the calibrated public model has a new v3 boundary with v2 retained as baseline", () => {
+test("the calibrated public model remains the previous baseline after B adoption", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION_V2);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
 });
 
 test("Shadow values stay aligned across DTO, UI, and history fields", () => {
@@ -84,8 +85,8 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
     modelVersion: "hazard-regime-elapsed-v1",
@@ -137,11 +138,11 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(snapshot.viewModel.probability48h, published.probability48h);
   assert.equal(snapshot.viewModel.probability12h, published.probability12h);
   assert.equal(snapshot.viewModel.probability72h, published.probability72h);
-  assert.equal(publishedDebug.version, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(publishedDebug.version, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(publishedDebug.source, "calibrated");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionMode: string }).adoptionMode, "manual");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionGateStatus: string }).adoptionGateStatus, "not_met");
-  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string }).adoptionDate, "2026-08-20");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string }).adoptionDate, "2026-08-23");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionAt: string }).adoptionAt, PUBLISHED_PROBABILITY_ADOPTION_AT);
   assert.equal((debugInfo.publishedProbabilityModel as { previousAdoptionAt: string }).previousAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT);
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);
@@ -498,7 +499,7 @@ test("the published model uses broad random distributions and excludes regular o
   const eventIds = new Set(events.map((event) => event.id));
   const published = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
 
-  assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(unweightedBaseline.modelVersion, SHADOW_PROBABILITY_MODEL_VERSION);
   assert.notEqual(published.adoptedModel, LEGACY_SHADOW_PROBABILITY_MODEL_VERSION);
   assert.equal(events.length, 23);
@@ -516,7 +517,7 @@ test("the calibrated public model keeps the fixed-time forecast deterministic", 
   const published = calculatePublishedProbability(data, { now: fixedNow }, { logFallback: false });
   const unweightedBaseline = calculateShadowProbability(data, { now: fixedNow });
 
-  assert.equal(published.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(published.fallbackReason, null);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
@@ -543,7 +544,7 @@ test("valid calibrated values are adopted as the published model", () => {
   }, null);
 
   assert.equal(selected.source, "calibrated");
-  assert.equal(selected.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(selected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(selected.fallbackReason, null);
   assert.equal(selected.probability24h, 0.18);
   assert.equal(selected.probability48h, 0.31);
