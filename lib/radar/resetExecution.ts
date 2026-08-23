@@ -65,6 +65,8 @@ export type ResolveDisplayExecutionTimeInput = {
   tiboAnnouncedAt: string;
   tiboPrimaryTweetId: string;
   tiboSourceTweetIds: string[];
+  officialNoticeTweetId?: string | null;
+  officialNoticeAt?: string | null;
   usageObservation?: CodexRecoveryObservation | null;
   persistedEstimate?: ResetExecutionEstimate | null;
   manualOverride?: ManualExecutionOverride | null;
@@ -90,15 +92,30 @@ function hasCompleteManualOverride(
 function isMatchedUsageObservation(
   value: CodexRecoveryObservation | null | undefined,
   sourceTweetIds: Set<string>,
+  officialNoticeTweetId?: string | null,
 ) {
-  if (!value || value.status !== "confirmed" || !value.matchedTiboTweetId) return false;
-  if (!sourceTweetIds.has(value.matchedTiboTweetId)) return false;
+  if (!value) return false;
 
   const observedAt = parseTimestamp(value.observedAt);
   const previousObservedAt = parseTimestamp(value.previousObservedAt);
   if (!observedAt || !previousObservedAt) return false;
+  if (Date.parse(previousObservedAt) >= Date.parse(observedAt)) return false;
 
-  return Date.parse(previousObservedAt) < Date.parse(observedAt);
+  if (value.status === "confirmed" && value.matchedTiboTweetId && sourceTweetIds.has(value.matchedTiboTweetId)) {
+    return true;
+  }
+
+  if (
+    officialNoticeTweetId &&
+    sourceTweetIds.has(officialNoticeTweetId) &&
+    value.confidence === "strong" &&
+    value.cycleHint !== "regular" &&
+    value.status !== "rejected"
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function getPersistedManualOverride(
@@ -198,7 +215,7 @@ export function resolveDisplayExecutionTime(
     return getManualDecision(manualOverride);
   }
 
-  if (isMatchedUsageObservation(input.usageObservation, sourceTweetIds)) {
+  if (isMatchedUsageObservation(input.usageObservation, sourceTweetIds, input.officialNoticeTweetId)) {
     return getUsageDecision(input.usageObservation!);
   }
 
