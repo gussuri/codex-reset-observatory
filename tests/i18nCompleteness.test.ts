@@ -6,6 +6,7 @@ import { translateDynamic, UI_TRANSLATIONS } from "../lib/radar/i18n";
 import { getRadarViewModel, getLocalRadarData } from "../lib/radar";
 
 const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+const JAPANESE_KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF]/;
 
 test("i18n Automated Check: All LOCAL_OBSERVATION_SIGNALS have full English & Chinese translations", () => {
   for (const signal of LOCAL_OBSERVATION_SIGNALS) {
@@ -18,16 +19,27 @@ test("i18n Automated Check: All LOCAL_OBSERVATION_SIGNALS have full English & Ch
         false,
         `Signal '${signal.id}' boostReason lacks English translation. Got: "${enBoost}"`
       );
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(zhBoost),
+        false,
+        `Signal '${signal.id}' boostReason contains Japanese kana in Chinese. Got: "${zhBoost}"`
+      );
       assert.ok(enBoost.length > 0, `Signal '${signal.id}' English boostReason is empty`);
       assert.ok(zhBoost.length > 0, `Signal '${signal.id}' Chinese boostReason is empty`);
     }
 
     if (signal.title) {
       const enTitle = translateDynamic(signal.title, "en");
+      const zhTitle = translateDynamic(signal.title, "zh");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enTitle),
         false,
         `Signal '${signal.id}' title lacks English translation. Got: "${enTitle}"`
+      );
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(zhTitle),
+        false,
+        `Signal '${signal.id}' title contains Japanese kana in Chinese. Got: "${zhTitle}"`
       );
     }
   }
@@ -41,61 +53,103 @@ test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & C
 
     if (history.title) {
       const enTitle = translateDynamic(history.title, "en");
+      const zhTitle = translateDynamic(history.title, "zh");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enTitle),
         false,
         `History '${historyLabel}' title lacks English translation. Got: "${enTitle}"`
       );
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(zhTitle),
+        false,
+        `History '${historyLabel}' title contains Japanese kana in Chinese. Got: "${zhTitle}"`
+      );
     }
     if (history.details) {
       if (history.details.noticeType) {
         const enNotice = translateDynamic(history.details.noticeType, "en");
+        const zhNotice = translateDynamic(history.details.noticeType, "zh");
         assert.strictEqual(
           JAPANESE_CHAR_REGEX.test(enNotice),
           false,
           `History '${historyLabel}' noticeType lacks English translation. Got: "${enNotice}"`
         );
+        assert.strictEqual(
+          JAPANESE_KANA_REGEX.test(zhNotice),
+          false,
+          `History '${historyLabel}' noticeType contains Japanese kana in Chinese. Got: "${zhNotice}"`
+        );
       }
       if (history.details.cycleType) {
         const enCycle = translateDynamic(history.details.cycleType, "en");
+        const zhCycle = translateDynamic(history.details.cycleType, "zh");
         assert.strictEqual(
           JAPANESE_CHAR_REGEX.test(enCycle),
           false,
           `History '${historyLabel}' cycleType lacks English translation. Got: "${enCycle}"`
         );
+        assert.strictEqual(
+          JAPANESE_KANA_REGEX.test(zhCycle),
+          false,
+          `History '${historyLabel}' cycleType contains Japanese kana in Chinese. Got: "${zhCycle}"`
+        );
       }
       if (history.details.reasonType) {
         const enReason = translateDynamic(history.details.reasonType, "en");
+        const zhReason = translateDynamic(history.details.reasonType, "zh");
         assert.strictEqual(
           JAPANESE_CHAR_REGEX.test(enReason),
           false,
           `History '${historyLabel}' reasonType lacks English translation. Got: "${enReason}"`
         );
+        assert.strictEqual(
+          JAPANESE_KANA_REGEX.test(zhReason),
+          false,
+          `History '${historyLabel}' reasonType contains Japanese kana in Chinese. Got: "${zhReason}"`
+        );
       }
       if (history.details.resetMethod) {
         const enMethod = translateDynamic(history.details.resetMethod, "en");
+        const zhMethod = translateDynamic(history.details.resetMethod, "zh");
         assert.strictEqual(
           JAPANESE_CHAR_REGEX.test(enMethod),
           false,
           `History '${historyLabel}' resetMethod lacks English translation. Got: "${enMethod}"`
         );
+        assert.strictEqual(
+          JAPANESE_KANA_REGEX.test(zhMethod),
+          false,
+          `History '${historyLabel}' resetMethod contains Japanese kana in Chinese. Got: "${zhMethod}"`
+        );
       }
       if (history.details.scope) {
         const enScope = translateDynamic(history.details.scope, "en");
+        const zhScope = translateDynamic(history.details.scope, "zh");
         assert.strictEqual(
           JAPANESE_CHAR_REGEX.test(enScope),
           false,
           `History '${historyLabel}' scope lacks English translation. Got: "${enScope}"`
+        );
+        assert.strictEqual(
+          JAPANESE_KANA_REGEX.test(zhScope),
+          false,
+          `History '${historyLabel}' scope contains Japanese kana in Chinese. Got: "${zhScope}"`
         );
       }
     }
     const historyNote = history.details?.note;
     if (historyNote) {
       const enNote = translateDynamic(historyNote, "en");
+      const zhNote = translateDynamic(historyNote, "zh");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enNote),
         false,
         `History '${historyLabel}' note lacks English translation. Got: "${enNote}"`
+      );
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(zhNote),
+        false,
+        `History '${historyLabel}' note contains Japanese kana in Chinese. Got: "${zhNote}"`
       );
     }
   }
