@@ -169,7 +169,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     const event = findNoticeBackedRecoveryEvents([notice], [sampleRecovery], [estimate])[0];
 
     assert.ok(event);
-    assert.equal(event.title, "消費量が多くなっていた詫びリセット");
+    assert.equal(event.title, "過剰消費のお詫びリセット");
     assert.equal(event.details?.cycleType, "ランダムリセット");
     assert.equal(event.details?.reasonType, "詫びリセット");
     assert.equal(event.details?.resetMethod, "強制リセット");
@@ -182,9 +182,9 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       reset_execution_estimates: [estimate as any],
     } as any;
     for (const [locale, expectedTitle, expectedReason] of [
-      ["ja", "消費量が多くなっていた詫びリセット", "詫びリセット"],
-      ["en", "Compensation reset due to increased usage", "Compensation reset"],
-      ["zh", "因使用量增加而进行的补偿重置", "故障补偿重置"],
+      ["ja", "過剰消費のお詫びリセット", "詫びリセット"],
+      ["en", "Excessive consumption compensation reset", "Compensation reset"],
+      ["zh", "过度消耗补偿重置", "故障补偿重置"],
     ] as const) {
       const snapshot = toPublicRadarSnapshot(data, locale, {
         calculationNow: new Date("2026-08-23T23:00:00Z"),
