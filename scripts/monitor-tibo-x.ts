@@ -110,13 +110,17 @@ Classify each tweet into EXACTLY ONE of the following 5 categories:
 4. "TEASER_HINT": A hint, teaser, or ambiguous statement strongly suggesting an upcoming reset, global usage refresh, or "fun week/recharge" teaser within 24-48 hours.
 5. "IRRELEVANT": Regular chatter, general small updates without limit resets, surveys without previous teasers, outage investigation without resets, or explicit statements denying a reset.
 
+The reset_type_ja field is a reason candidate only. Use "ご祝儀リセット" or
+"詫びリセット" when supported by the post, and null otherwise. Regular versus
+random cycle classification is determined by the deterministic reset pipeline, not Gemini.
+
 Respond ONLY with valid JSON in this exact structure:
 {
   "category": "RESET_COMPLETED" | "OFFICIAL_NOTICE" | "TEASER_RESOLVED_BY_FEATURE" | "TEASER_HINT" | "IRRELEVANT",
   "confidence": number,
   "reason_ja": "判別理由（日本語で分かりやすく説明）",
   "reset_title_ja": "リセット完了時のタイトル（COMPLETED時のみ必須、それ以外はnull）",
-  "reset_type_ja": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット",
+  "reset_type_ja": "ご祝儀リセット" | "詫びリセット" | null,
   "notice_to_execution": "告知から実施までの時間表現",
   "key_phrase": "判定の決め手となったキーワードまたはフレーズ",
   "resolved_feature_summary_ja": "どのような新機能・アプデ発表であったか（TEASER_RESOLVED_BY_FEATURE時のみ記述、それ以外はnull）"

@@ -16,9 +16,7 @@ export type TiboClassificationResult = {
   reset_title_ja?: string;
   reset_type_ja?:
     | "ご祝儀リセット"
-    | "詫びリセット"
-    | "定期リセット"
-    | "ランダムリセット";
+    | "詫びリセット";
   notice_to_execution?: string;
   key_phrase?: string;
   parsed_notice_time?: string | null;

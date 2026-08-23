@@ -38,13 +38,19 @@ export type GeminiClassificationStatus =
   | "api_error"
   | "model_not_configured";
 
+export type GeminiResetType = "ご祝儀リセット" | "詫びリセット";
+
+export function normalizeGeminiResetType(value: unknown): GeminiResetType | null {
+  return value === "ご祝儀リセット" || value === "詫びリセット" ? value : null;
+}
+
 export type GeminiClassificationOutput = {
   signalType: "official_notice" | "reset_executed" | "teaser" | "irrelevant" | null;
   confidence: number | null;
   temporalDirection: "future" | "completed_now" | "historical" | "unclear" | null;
   evidenceQuote: string | null;
   reasonJa: string | null;
-  resetTypeJa: "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット" | null;
+  resetTypeJa: GeminiResetType | null;
   noticeToExecution: string | null;
   teaserStrength?: TeaserStrength | null;
   teaserStrengthConfidence?: number | null;
@@ -160,6 +166,10 @@ temporalPrecision="exact_time") or "in two hours" (relativeAmount=2, relativeUni
 temporalKind="relative_duration", temporalPrecision="exact_time"), extract as relative_duration.
 temporalConfidence must reflect the semantic extraction confidence and must not be invented from the tweet timestamp.
 
+resetTypeJa is a reason candidate, not a reset cycle classification. Use only
+"ご祝儀リセット" or "詫びリセット" when the post provides evidence for one of them;
+otherwise return null. Do not return "定期リセット" or "ランダムリセット" here.
+
 Respond ONLY with a JSON object strictly matching this schema:
 {
   "signalType": "reset_executed" | "official_notice" | "teaser" | "irrelevant",
@@ -167,7 +177,7 @@ Respond ONLY with a JSON object strictly matching this schema:
   "temporalDirection": "future" | "completed_now" | "historical" | "unclear",
   "evidenceQuote": string | null (Exact substring from the tweet text acting as primary evidence, or null),
   "reasonJa": string (Japanese explanation, max 300 characters),
-  "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | "定期リセット" | "ランダムリセット" | null,
+  "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | null,
   "noticeToExecution": string | null (Extracted timeframe expression, or null),
   "teaserStrength": "strong" | "weak" | "none" | null,
   "teaserStrengthConfidence": number (between 0.0 and 1.0) | null,
@@ -404,8 +414,7 @@ export async function classifyWithGemini(
 
     // Sanitize reason text length
     const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
-    const allowedResetTypes = ["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"];
-    const resetTypeJa = allowedResetTypes.includes(parsed.resetTypeJa) ? parsed.resetTypeJa : null;
+    const resetTypeJa = normalizeGeminiResetType(parsed.resetTypeJa);
     const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
     // Keep Gemini's validated fields as raw audit values. Effective temporal
     // semantics are resolved separately by the webhook route so deterministic

@@ -4,6 +4,8 @@ import {
   buildGeminiPrompt,
   classifyWithGemini,
   GeminiClassificationOutput,
+  normalizeGeminiResetType,
+  TIBO_GEMINI_SYSTEM_PROMPT,
 } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
 import {
@@ -56,6 +58,20 @@ test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
   assert.match(prompt, /Quoted author: @blueemi99/);
   assert.match(prompt, /never treat it as Tibo's own assertion/);
   assert.ok(prompt.indexOf("AUTHOR TEXT:") < prompt.indexOf("QUOTED CONTEXT"));
+});
+
+test("Gemini reset reason candidates exclude cycle labels", () => {
+  assert.equal(normalizeGeminiResetType("ご祝儀リセット"), "ご祝儀リセット");
+  assert.equal(normalizeGeminiResetType("詫びリセット"), "詫びリセット");
+  assert.equal(normalizeGeminiResetType("定期リセット"), null);
+  assert.equal(normalizeGeminiResetType("ランダムリセット"), null);
+  assert.equal(normalizeGeminiResetType("その他"), null);
+  assert.match(
+    TIBO_GEMINI_SYSTEM_PROMPT,
+    /"resetTypeJa": "ご祝儀リセット" \| "詫びリセット" \| null/,
+  );
+  assert.doesNotMatch(TIBO_GEMINI_SYSTEM_PROMPT, /"resetTypeJa"[^\n]*定期リセット/);
+  assert.doesNotMatch(TIBO_GEMINI_SYSTEM_PROMPT, /"resetTypeJa"[^\n]*ランダムリセット/);
 });
 
 test("2. GEMINI_MODEL or GEMINI_API_KEY missing returns model_not_configured without calling API", async () => {
