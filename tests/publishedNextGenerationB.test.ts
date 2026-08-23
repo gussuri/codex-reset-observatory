@@ -20,7 +20,7 @@ test("next-generation B is the manually adopted public probability model", () =>
   });
 
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
-  assert.equal(published.source, "next-generation-b");
+  assert.equal(published.source, "calibrated");
   assert.equal(published.adoptedModel, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.ok(published.nextGenerationB);
