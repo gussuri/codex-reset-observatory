@@ -43,7 +43,7 @@ import {
 } from "@/lib/radar/bankedReset";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,expected_start_at,expected_end_at,temporal_resolution_status,ai_temporal_timezone,ai_temporal_confidence";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
 
 function getSupabaseServiceClient() {
@@ -66,6 +66,8 @@ function toTiboNoticeSignal(notice: ActiveOfficialNotice): TiboNoticeSignal {
     expected_end_at: notice.expectedEndAt,
     ai_temporal_precision: notice.temporalPrecision ?? null,
     ai_temporal_timezone: notice.temporalTimezone ?? null,
+    temporal_precision: notice.temporalPrecision ?? null,
+    temporal_timezone: notice.temporalTimezone ?? null,
     temporal_resolution_status: notice.temporalResolutionStatus ?? null,
   };
 }

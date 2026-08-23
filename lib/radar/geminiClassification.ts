@@ -8,7 +8,7 @@ import {
   type TeaserStrength,
 } from "./teaserStrength";
 import {
-  parseTiboTemporalSemantics,
+  parseGeminiTemporalSemantics,
   TIBO_SOURCE_TIME_ZONE,
   type TiboTemporalSemantics,
 } from "./tiboTemporal";
@@ -407,7 +407,10 @@ export async function classifyWithGemini(
     const allowedResetTypes = ["ご祝儀リセット", "詫びリセット", "定期リセット", "ランダムリセット"];
     const resetTypeJa = allowedResetTypes.includes(parsed.resetTypeJa) ? parsed.resetTypeJa : null;
     const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
-    const temporalSemantics = parseTiboTemporalSemantics(parsed, input.text);
+    // Keep Gemini's validated fields as raw audit values. Effective temporal
+    // semantics are resolved separately by the webhook route so deterministic
+    // fallback data never gets written into ai_* columns.
+    const rawTemporalSemantics = parseGeminiTemporalSemantics(parsed, input.text);
 
     return applyTiboClassificationSafetyGuard(input.text, {
       signalType: parsed.signalType,
@@ -418,19 +421,19 @@ export async function classifyWithGemini(
       resetTypeJa,
       noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
       ...teaserStrengthAssessment,
-      temporalExpression: temporalSemantics?.temporalExpression ?? null,
-      temporalKind: temporalSemantics?.temporalKind ?? null,
-      temporalPrecision: temporalSemantics?.temporalPrecision ?? null,
-      weekday: temporalSemantics?.weekday ?? null,
-      relativeDayOffset: temporalSemantics?.relativeDayOffset ?? null,
-      relativeAmount: temporalSemantics?.relativeAmount ?? null,
-      relativeUnit: temporalSemantics?.relativeUnit ?? null,
-      explicitDateParts: temporalSemantics?.explicitDateParts ?? null,
-      explicitTimeParts: temporalSemantics?.explicitTimeParts ?? null,
-      daypart: temporalSemantics?.daypart ?? null,
-      rangeKind: temporalSemantics?.rangeKind ?? null,
-      explicitTimezone: temporalSemantics?.explicitTimezone ?? null,
-      temporalConfidence: temporalSemantics?.temporalConfidence ?? null,
+      temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
+      temporalKind: rawTemporalSemantics?.temporalKind ?? null,
+      temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
+      weekday: rawTemporalSemantics?.weekday ?? null,
+      relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
+      relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
+      relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
+      explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
+      explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
+      daypart: rawTemporalSemantics?.daypart ?? null,
+      rangeKind: rawTemporalSemantics?.rangeKind ?? null,
+      explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
+      temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
       model,
       status: "success",
       classifiedAt: nowIso,

@@ -34,7 +34,7 @@ async function run() {
   });
   let query = supabase
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_created_at,signal_type,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,expires_at")
+    .select("tweet_id,text,tweet_created_at,signal_type,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,expires_at")
     .eq("signal_type", "official_notice")
     .order("tweet_created_at", { ascending: true });
   if (tweetId) query = query.eq("tweet_id", tweetId);
@@ -80,8 +80,14 @@ async function run() {
       ai_temporal_expression: result.temporalExpression,
       ai_temporal_kind: result.temporalKind,
       ai_temporal_precision: result.temporalPrecision,
-      ai_temporal_timezone: resolution.timezone,
+      ai_temporal_timezone: result.explicitTimezone,
       ai_temporal_confidence: result.temporalConfidence,
+      temporal_expression: resolution.temporalExpression,
+      temporal_kind: resolution.temporalKind,
+      temporal_precision: resolution.temporalPrecision,
+      temporal_timezone: resolution.timezone,
+      temporal_confidence: resolution.confidence,
+      temporal_resolution_source: resolution.resolutionSource,
       expected_start_at: resolution.expectedStartAt,
       expected_end_at: resolution.expectedEndAt,
       temporal_resolution_status: resolution.status,

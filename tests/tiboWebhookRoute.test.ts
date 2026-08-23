@@ -78,6 +78,29 @@ function installGeminiClassificationMock(result: Record<string, unknown>) {
   };
 }
 
+function installGeminiHttpErrorMock(statusCode = 503) {
+  const originalHttpsRequest = https.request;
+  https.request = ((...args: any[]) => {
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const request = new EventEmitter() as EventEmitter & {
+      write: (body: string) => boolean;
+      end: () => void;
+    };
+    request.write = () => true;
+    request.end = () => {
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      response.statusCode = statusCode;
+      callback(response);
+      queueMicrotask(() => response.emit("end"));
+    };
+    return request;
+  }) as typeof https.request;
+
+  return () => {
+    https.request = originalHttpsRequest;
+  };
+}
+
 function installSupabaseWebhookMock(requestBodies: unknown[]) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
@@ -411,13 +434,58 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(response.status, 200);
     const upsertBody = requestBodies[0] as Record<string, unknown>;
     assert.equal(upsertBody.signal_type, "official_notice");
-    assert.equal(upsertBody.ai_temporal_kind, "relative_day");
-    assert.equal(upsertBody.ai_temporal_precision, "exact_time");
-    assert.equal(upsertBody.ai_temporal_timezone, "PST");
+    assert.equal(upsertBody.ai_temporal_kind, null);
+    assert.equal(upsertBody.ai_temporal_precision, null);
+    assert.equal(upsertBody.ai_temporal_timezone, null);
+    assert.equal(upsertBody.temporal_kind, "relative_day");
+    assert.equal(upsertBody.temporal_precision, "exact_time");
+    assert.equal(upsertBody.temporal_timezone, "PST");
+    assert.equal(upsertBody.temporal_resolution_source, "deterministic");
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v3");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v4");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("official notice source fallback is used when Gemini is unavailable", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiHttpErrorMock(503);
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2091412393368945028",
+      text: "Reset scheduled tomorrow at 2pm PST.",
+      tweetUrl: "https://x.com/thsottiaux/status/2091412393368945028",
+      tweetCreatedAt: "2026-08-23T06:29:05.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.ai_classification_status, "api_error");
+    assert.equal(upsertBody.ai_temporal_expression, null);
+    assert.equal(upsertBody.temporal_kind, "relative_day");
+    assert.equal(upsertBody.temporal_precision, "exact_time");
+    assert.equal(upsertBody.temporal_timezone, "PST");
+    assert.equal(upsertBody.temporal_resolution_source, "deterministic");
+    assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
+    assert.equal(upsertBody.temporal_resolution_status, "resolved");
   } finally {
     restoreGemini();
     restoreFetch();

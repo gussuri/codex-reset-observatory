@@ -550,7 +550,7 @@ export async function findFormalTiboResetCluster(
 
   const noticeResult = await client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,expected_start_at,expected_end_at,temporal_resolution_status")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status")
     .eq("signal_type", "official_notice")
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
@@ -582,6 +582,12 @@ export async function findFormalTiboResetCluster(
       ai_temporal_kind: row.ai_temporal_kind ?? null,
       ai_temporal_precision: row.ai_temporal_precision ?? null,
       ai_temporal_timezone: row.ai_temporal_timezone ?? null,
+      temporal_expression: row.temporal_expression ?? null,
+      temporal_kind: row.temporal_kind ?? null,
+      temporal_precision: row.temporal_precision ?? null,
+      temporal_timezone: row.temporal_timezone ?? null,
+      temporal_confidence: row.temporal_confidence ?? null,
+      temporal_resolution_source: row.temporal_resolution_source ?? null,
       expected_start_at: row.expected_start_at ?? null,
       expected_end_at: row.expected_end_at ?? null,
       temporal_resolution_status: row.temporal_resolution_status ?? null,

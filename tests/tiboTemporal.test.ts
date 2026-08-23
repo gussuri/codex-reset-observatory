@@ -8,6 +8,7 @@ import {
   parseTiboTemporalSemantics,
   resolveTiboTemporalSchedule,
   TIBO_SOURCE_TIME_ZONE,
+  TIBO_TEMPORAL_RESOLUTION_VERSION,
 } from "../lib/radar/tiboTemporal";
 import { formatOfficialNoticeScheduleSubject } from "../lib/radar/officialNoticePresentation";
 
@@ -375,6 +376,7 @@ test("recovers an explicit 14pm PST tomorrow schedule from source text when Gemi
   assert.equal(parsed.temporalKind, "relative_day");
   assert.deepEqual(parsed.explicitTimeParts, { hour: 14, minute: 0 });
   assert.equal(parsed.explicitTimezone, "PST");
+  assert.equal(parsed.resolutionSource, "deterministic");
 
   const resolution = resolveTiboTemporalSchedule(
     parsed,
@@ -382,6 +384,8 @@ test("recovers an explicit 14pm PST tomorrow schedule from source text when Gemi
     TIBO_SOURCE_TIME_ZONE,
   );
   assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.version, TIBO_TEMPORAL_RESOLUTION_VERSION);
+  assert.equal(resolution.resolutionSource, "deterministic");
   assert.equal(resolution.temporalPrecision, "exact_time");
   assert.equal(resolution.timezone, "PST");
   assert.equal(resolution.expectedStartAt, "2026-08-23T22:00:00.000Z");
@@ -399,6 +403,163 @@ test("recovers an explicit 14pm PST tomorrow schedule from source text when Gemi
   );
   assert.ok(subject?.includes("14:00"));
   assert.ok(subject?.endsWith("ごろ"));
+});
+
+test("associates a clock with the reset clause instead of the first day token in the post", () => {
+  const withEarlierToday = parseTiboTemporalSemantics(
+    null,
+    "We hit 20M today. Reset will land at 2pm PST tomorrow.",
+  );
+  assert.ok(withEarlierToday);
+  assert.equal(withEarlierToday.relativeDayOffset, 1);
+  assert.deepEqual(withEarlierToday.explicitTimeParts, { hour: 14, minute: 0 });
+  assert.equal(withEarlierToday.explicitTimezone, "PST");
+
+  const resetDayOnly = parseTiboTemporalSemantics(
+    null,
+    "Reset tomorrow — details today at 2pm.",
+  );
+  assert.ok(resetDayOnly);
+  assert.equal(resetDayOnly.relativeDayOffset, 1);
+  assert.equal(resetDayOnly.explicitTimeParts, null);
+  assert.equal(
+    resolveTiboTemporalSchedule(resetDayOnly, "2026-08-23T06:29:00.000Z").expectedStartAt,
+    "2026-08-23T07:00:00.000Z",
+  );
+
+  const monday = parseTiboTemporalSemantics(
+    null,
+    "Reset Monday at 2pm PDT; another update Tuesday.",
+  );
+  assert.ok(monday);
+  assert.equal(monday.weekday, "monday");
+  assert.deepEqual(monday.explicitTimeParts, { hour: 14, minute: 0 });
+
+  const ambiguous = parseTiboTemporalSemantics(
+    null,
+    "Reset Monday at 2pm; another reset Tuesday at 3pm.",
+  );
+  assert.equal(ambiguous, null);
+
+  const groundedGemini = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "Monday at 2pm",
+      temporalKind: "weekday",
+      temporalPrecision: "exact_time",
+      weekday: "monday",
+      relativeDayOffset: null,
+      explicitTimeParts: { hour: 14, minute: 0 },
+      explicitTimezone: null,
+      temporalConfidence: 0.98,
+    },
+    "Reset Monday at 2pm; another reset Tuesday at 3pm.",
+  );
+  assert.ok(groundedGemini);
+  assert.equal(groundedGemini.weekday, "monday");
+  assert.deepEqual(groundedGemini.explicitTimeParts, { hour: 14, minute: 0 });
+  assert.equal(groundedGemini.resolutionSource, "gemini");
+
+  const ungroundedGemini = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "Wednesday at 4pm",
+      temporalKind: "weekday",
+      temporalPrecision: "exact_time",
+      weekday: "wednesday",
+      relativeDayOffset: null,
+      explicitTimeParts: { hour: 16, minute: 0 },
+      explicitTimezone: null,
+      temporalConfidence: 0.98,
+    },
+    "Reset Monday at 2pm; another reset Tuesday at 3pm.",
+  );
+  assert.equal(ungroundedGemini, null);
+});
+
+test("uses a source-grounded exact clock to complete a Gemini day-only result", () => {
+  const parsed = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      relativeDayOffset: 1,
+      explicitTimeParts: null,
+      explicitTimezone: null,
+      temporalConfidence: 0.97,
+    },
+    "Reset will land at 2pm PST tomorrow.",
+  );
+
+  assert.ok(parsed);
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 14, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "PST");
+  assert.equal(parsed.resolutionSource, "merged");
+});
+
+test("keeps the recent official-notice corpus source-grounded without rewriting stored history", () => {
+  const fixtures = [
+    {
+      text: "Reset will land around 14pm PST tomorrow.",
+      createdAt: "2026-08-23T06:29:05.000Z",
+      expectedStartAt: "2026-08-23T22:00:00.000Z",
+      expectedEndAt: "2026-08-23T22:00:00.000Z",
+      gemini: null,
+    },
+    {
+      text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
+      createdAt: "2026-08-21T23:40:34.000Z",
+      expectedStartAt: "2026-08-21T23:40:34.000Z",
+      expectedEndAt: "2026-08-22T04:00:00.000Z",
+      gemini: null,
+    },
+    {
+      text: "Codex users will receive a reset during the day.",
+      createdAt: "2026-08-21T11:43:19.000Z",
+      expectedStartAt: "2026-08-21T11:43:19.000Z",
+      expectedEndAt: "2026-08-22T07:00:00.000Z",
+      gemini: {
+        temporalExpression: "during the day",
+        temporalKind: "daypart",
+        temporalPrecision: "daypart",
+        daypart: "day",
+        temporalConfidence: 0.95,
+      },
+    },
+    {
+      text: "Landing in the next hour or so, for all paid users.",
+      createdAt: "2026-08-13T01:01:37.000Z",
+      expectedStartAt: "2026-08-13T02:01:37.000Z",
+      expectedEndAt: "2026-08-13T02:01:37.000Z",
+      gemini: {
+        temporalExpression: "in the next hour or so",
+        temporalKind: "relative_duration",
+        temporalPrecision: "exact_time",
+        relativeAmount: 1,
+        relativeUnit: "hours",
+        temporalConfidence: 0.95,
+      },
+    },
+    {
+      text: "I'll do another performative reset on Monday",
+      createdAt: "2026-08-08T20:34:50.000Z",
+      expectedStartAt: "2026-08-10T07:00:00.000Z",
+      expectedEndAt: "2026-08-11T07:00:00.000Z",
+      gemini: {
+        temporalExpression: "Monday",
+        temporalKind: "weekday",
+        temporalPrecision: "day",
+        weekday: "monday",
+        temporalConfidence: 0.95,
+      },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const parsed = parseTiboTemporalSemantics(fixture.gemini, fixture.text);
+    const resolution = resolveTiboTemporalSchedule(parsed, fixture.createdAt);
+    assert.equal(resolution.status, "resolved", fixture.text);
+    assert.equal(resolution.expectedStartAt, fixture.expectedStartAt, fixture.text);
+    assert.equal(resolution.expectedEndAt, fixture.expectedEndAt, fixture.text);
+  }
 });
 
 test("recovers supported clock and relative-day spellings without inventing a timestamp", () => {

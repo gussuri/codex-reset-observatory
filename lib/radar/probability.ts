@@ -899,7 +899,7 @@ export function getActiveOfficialNotice(
                 status: signal.temporal_resolution_status,
                 temporalPrecision: getEffectiveTemporalPrecision({
                   status: signal.temporal_resolution_status,
-                  temporalPrecision: signal.ai_temporal_precision,
+                  temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
                   expectedStartAt: signal.expected_start_at,
                   expectedEndAt: signal.expected_end_at,
                 }) ?? "unknown",
@@ -928,13 +928,13 @@ export function getActiveOfficialNotice(
         isBankedDistribution: isBankedDistributionNotice(signal.text),
         temporalPrecision: getEffectiveTemporalPrecision({
           status: signal.temporal_resolution_status,
-          temporalPrecision: signal.ai_temporal_precision,
+          temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
           expectedStartAt: signal.expected_start_at,
           expectedEndAt: signal.expected_end_at,
         }),
-        temporalConfidence: signal.ai_temporal_confidence ?? null,
+        temporalConfidence: signal.temporal_confidence ?? signal.ai_temporal_confidence ?? null,
         temporalResolutionStatus: signal.temporal_resolution_status ?? null,
-        temporalTimezone: signal.ai_temporal_timezone ?? null,
+        temporalTimezone: signal.temporal_timezone ?? signal.ai_temporal_timezone ?? null,
       }];
     });
   const localNotices = localObservationSignals
@@ -970,8 +970,8 @@ export function getActiveOfficialNotice(
         signal_type: "official_notice",
         confidence: 1,
         verification_status: "auto_unverified",
-        ai_temporal_precision: left.temporalPrecision ?? null,
-        ai_temporal_timezone: left.temporalTimezone ?? null,
+        temporal_precision: left.temporalPrecision ?? null,
+        temporal_timezone: left.temporalTimezone ?? null,
         expected_start_at: left.expectedAt,
         expected_end_at: left.expectedEndAt,
         temporal_resolution_status: left.temporalResolutionStatus ?? null,
@@ -984,8 +984,8 @@ export function getActiveOfficialNotice(
         signal_type: "official_notice",
         confidence: 1,
         verification_status: "auto_unverified",
-        ai_temporal_precision: right.temporalPrecision ?? null,
-        ai_temporal_timezone: right.temporalTimezone ?? null,
+        temporal_precision: right.temporalPrecision ?? null,
+        temporal_timezone: right.temporalTimezone ?? null,
         expected_start_at: right.expectedAt,
         expected_end_at: right.expectedEndAt,
         temporal_resolution_status: right.temporalResolutionStatus ?? null,

@@ -54,7 +54,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -216,9 +216,7 @@ export async function POST(req: NextRequest) {
         }
       : baseClassificationResponse;
 
-    const temporalSemantics = effectiveClassification.signalType === "official_notice" &&
-      aiResult?.status === "success" &&
-      aiResult.temporalDirection === "future"
+    const temporalSemantics = effectiveClassification.signalType === "official_notice"
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
     const temporalResolution = effectiveClassification.signalType === "official_notice"
@@ -275,8 +273,14 @@ export async function POST(req: NextRequest) {
       ai_temporal_expression: aiResult?.temporalExpression || null,
       ai_temporal_kind: aiResult?.temporalKind || null,
       ai_temporal_precision: aiResult?.temporalPrecision || null,
-      ai_temporal_timezone: temporalResolution?.timezone ?? aiResult?.explicitTimezone ?? null,
+      ai_temporal_timezone: aiResult?.explicitTimezone ?? null,
       ai_temporal_confidence: aiResult?.temporalConfidence ?? null,
+      temporal_expression: temporalResolution?.temporalExpression ?? null,
+      temporal_kind: temporalResolution?.temporalKind ?? null,
+      temporal_precision: temporalResolution?.temporalPrecision ?? null,
+      temporal_timezone: temporalResolution?.timezone ?? null,
+      temporal_confidence: temporalResolution?.confidence ?? null,
+      temporal_resolution_source: temporalResolution?.resolutionSource ?? null,
       expected_start_at: temporalResolution?.expectedStartAt ?? null,
       expected_end_at: temporalResolution?.expectedEndAt ?? null,
       temporal_resolution_status: temporalResolution?.status ?? null,
@@ -493,6 +497,12 @@ export async function POST(req: NextRequest) {
         ai_temporal_precision: _aiTemporalPrecision,
         ai_temporal_timezone: _aiTemporalTimezone,
         ai_temporal_confidence: _aiTemporalConfidence,
+        temporal_expression: _temporalExpression,
+        temporal_kind: _temporalKind,
+        temporal_precision: _temporalPrecision,
+        temporal_timezone: _temporalTimezone,
+        temporal_confidence: _temporalConfidence,
+        temporal_resolution_source: _temporalResolutionSource,
         expected_start_at: _expectedStartAt,
         expected_end_at: _expectedEndAt,
         temporal_resolution_status: _temporalResolutionStatus,

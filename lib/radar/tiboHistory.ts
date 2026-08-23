@@ -1,6 +1,11 @@
 import type { ActiveTiboSignal, RadarData, WindowEventLike } from "./types";
 import type { TeaserStrength } from "./teaserStrength";
-import type { TemporalKind, TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
+import type {
+  TemporalKind,
+  TemporalPrecision,
+  TemporalResolutionSource,
+  TemporalResolutionStatus,
+} from "./tiboTemporal";
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 import type { ResetExecutionEstimate } from "./resetExecution";
 import {
@@ -50,6 +55,12 @@ export type TiboNoticeSignal = {
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
+  temporal_expression?: string | null;
+  temporal_kind?: TemporalKind | null;
+  temporal_precision?: TemporalPrecision | null;
+  temporal_timezone?: string | null;
+  temporal_confidence?: number | null;
+  temporal_resolution_source?: TemporalResolutionSource | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
@@ -117,6 +128,12 @@ export type FormalTiboResetSignal = {
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   ai_temporal_confidence?: number | null;
+  temporal_expression?: string | null;
+  temporal_kind?: TemporalKind | null;
+  temporal_precision?: TemporalPrecision | null;
+  temporal_timezone?: string | null;
+  temporal_confidence?: number | null;
+  temporal_resolution_source?: TemporalResolutionSource | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
@@ -207,13 +224,13 @@ function getNoticeSpecificityRank(notice: TiboNoticeSignal) {
   // expression such as "by 8pm".
   if (clockMentions.length >= 2 && hasRangeLanguage) {
     temporalRank = 480 - Math.min(widthHours ?? 24, 24);
-  } else if (clockMentions.length > 0 || notice.ai_temporal_precision === "exact_time") {
+  } else if (clockMentions.length > 0 || (notice.temporal_precision ?? notice.ai_temporal_precision) === "exact_time") {
     temporalRank = 450;
-  } else if (notice.ai_temporal_precision === "range") {
+  } else if ((notice.temporal_precision ?? notice.ai_temporal_precision) === "range") {
     temporalRank = 400 - Math.min(widthHours ?? 24, 24);
-  } else if (notice.ai_temporal_precision === "daypart") {
+  } else if ((notice.temporal_precision ?? notice.ai_temporal_precision) === "daypart") {
     temporalRank = 300;
-  } else if (notice.ai_temporal_precision === "day") {
+  } else if ((notice.temporal_precision ?? notice.ai_temporal_precision) === "day") {
     temporalRank = 200;
   } else if (widthMs !== null) {
     temporalRank = 150;
@@ -417,7 +434,7 @@ export function findRelatedTiboNotices(
             status: "resolved",
             temporalPrecision: getEffectiveTemporalPrecision({
               status: signal.temporal_resolution_status,
-              temporalPrecision: signal.ai_temporal_precision,
+              temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
               expectedStartAt: signal.expected_start_at,
               expectedEndAt: signal.expected_end_at,
             }) ?? "unknown",
@@ -839,6 +856,12 @@ export function collectOfficialTiboNoticeSignals(
       ai_temporal_kind: signal.ai_temporal_kind ?? null,
       ai_temporal_precision: signal.ai_temporal_precision ?? null,
       ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+      temporal_expression: signal.temporal_expression ?? null,
+      temporal_kind: signal.temporal_kind ?? null,
+      temporal_precision: signal.temporal_precision ?? null,
+      temporal_timezone: signal.temporal_timezone ?? null,
+      temporal_confidence: signal.temporal_confidence ?? null,
+      temporal_resolution_source: signal.temporal_resolution_source ?? null,
       expected_start_at: signal.expected_start_at ?? null,
       expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,

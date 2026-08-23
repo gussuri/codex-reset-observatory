@@ -4,7 +4,12 @@ import type {
   RejectedTiboResetSignal,
 } from "./tiboHistory";
 import type { TeaserStrength } from "./teaserStrength";
-import type { TemporalKind, TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
+import type {
+  TemporalKind,
+  TemporalPrecision,
+  TemporalResolutionSource,
+  TemporalResolutionStatus,
+} from "./tiboTemporal";
 import type { RegularResetEventRow } from "./regularResetSchedule";
 import type {
   CodexRecoveryObservation,
@@ -147,6 +152,12 @@ export type ActiveTiboSignal = {
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   ai_temporal_confidence?: number | null;
+  temporal_expression?: string | null;
+  temporal_kind?: TemporalKind | null;
+  temporal_precision?: TemporalPrecision | null;
+  temporal_timezone?: string | null;
+  temporal_confidence?: number | null;
+  temporal_resolution_source?: TemporalResolutionSource | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
