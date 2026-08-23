@@ -8,7 +8,9 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 
-const NOW = new Date("2026-08-23T02:04:00.000Z");
+// Public calculations are evaluated on ten-minute buckets; 02:10 is the
+// first rounded bucket at or after the 02:04 adoption timestamp.
+const NOW = new Date("2026-08-23T02:10:00.000Z");
 
 test("next-generation B is the manually adopted public probability model", () => {
   const data = getLocalRadarData({ calculationNow: NOW });

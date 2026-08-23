@@ -19,6 +19,7 @@ import {
 import type { WindowEventLike } from "../lib/radar/types";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  NEXT_GENERATION_B_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
@@ -102,7 +103,7 @@ test("strict history classification uses the adopted calibrated public probabili
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);

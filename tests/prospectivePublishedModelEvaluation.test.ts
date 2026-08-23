@@ -11,8 +11,9 @@ import {
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
-  CALIBRATED_SHADOW_MODEL_VERSION_V2,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
 
@@ -49,9 +50,10 @@ function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
-test("published prospective evaluation uses v3 after its boundary and v2 as the baseline", () => {
-  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION_V2);
+test("published prospective evaluation uses adopted B after its boundary and v3 as the baseline", () => {
+  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
+  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
 });
 
 test("only rows containing both published models are comparable and evaluation starts there", () => {
@@ -162,14 +164,14 @@ test("a comparable forecast after asOf is excluded from the prospective start an
   assert.equal(report.comparison.resolved48h, 0);
 });
 
-test("pre-adoption experimental v2 rows are not counted as public forecasts", () => {
+test("pre-adoption forecast rows are not counted as public forecasts", () => {
   const adoptionAt = Date.parse(PUBLISHED_PROBABILITY_ADOPTION_AT);
   const preAdoption = forecastRow(new Date(adoptionAt - 60_000).toISOString());
   const adopted = forecastRow(new Date(adoptionAt + 60_000).toISOString());
   const report = evaluatePublishedModelProspectively(
     [preAdoption, adopted],
     [],
-    new Date("2026-08-21T00:00:00.000Z"),
+    new Date("2026-08-23T03:00:00.000Z"),
   );
 
   assert.deepEqual(report.forecastCounts, { active: 1, baseline: 1, comparable: 1 });
