@@ -697,6 +697,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Long-session compression over-consumption compensation reset",
     zh: "长会话压缩过度消耗补偿重置",
   },
+  "消費量が多くなっていた詫びリセット": {
+    ja: "消費量が多くなっていた詫びリセット",
+    en: "Compensation reset due to increased usage",
+    zh: "因使用量增加而进行的补偿重置",
+  },
   "Samいいね約束リセット": {
     ja: "Samいいね約束リセット",
     en: "Sam's promised like milestone reset",

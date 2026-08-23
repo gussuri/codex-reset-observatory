@@ -148,6 +148,56 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(events[0].details?.reasonType, "ご祝儀リセット");
   });
 
+  it("rate-limit compensation notice uses its explicit title and reason", () => {
+    const notice = {
+      ...sampleNotice,
+      tweet_id: "2091412393368945027",
+      text: "Reset will land around 14pm PST tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/2091412393368945027",
+      tweet_created_at: "2026-08-23T06:29:05Z",
+      expected_start_at: "2026-08-23T22:00:00Z",
+    };
+    const estimate = {
+      ...sampleEstimate,
+      resetEventKey: "tibo-reset-2091412393368945027",
+      tiboAnnouncedAt: notice.tweet_created_at,
+      tiboPrimaryTweetId: notice.tweet_id,
+      officialNoticeTweetId: notice.tweet_id,
+      tiboSourceTweetIds: [notice.tweet_id],
+    };
+
+    const event = findNoticeBackedRecoveryEvents([notice], [sampleRecovery], [estimate])[0];
+
+    assert.ok(event);
+    assert.equal(event.title, "消費量が多くなっていた詫びリセット");
+    assert.equal(event.details?.cycleType, "ランダムリセット");
+    assert.equal(event.details?.reasonType, "詫びリセット");
+    assert.equal(event.details?.resetMethod, "強制リセット");
+    assert.equal(event.details?.scope, "全有料プラン");
+    assert.equal(event.details?.noticeType, "公式予告あり");
+
+    const data: RadarData = {
+      recent_tibo_signals: [notice as any],
+      codex_recovery_observations: [sampleRecovery as any],
+      reset_execution_estimates: [estimate as any],
+    } as any;
+    for (const [locale, expectedTitle, expectedReason] of [
+      ["ja", "消費量が多くなっていた詫びリセット", "詫びリセット"],
+      ["en", "Compensation reset due to increased usage", "Compensation reset"],
+      ["zh", "因使用量增加而进行的补偿重置", "故障补偿重置"],
+    ] as const) {
+      const snapshot = toPublicRadarSnapshot(data, locale, {
+        calculationNow: new Date("2026-08-23T23:00:00Z"),
+        limitHistory: false,
+      });
+      const history = snapshot.viewModel.recentHistory.find(
+        (item) => item.recordKind === "confirmed_global",
+      );
+      assert.equal(history?.title, expectedTitle);
+      assert.equal(history?.resetType, expectedReason);
+    }
+  });
+
   it("K. active notice/recoveryがなくてもpersisted estimateだけで残る", () => {
     const events = findNoticeBackedRecoveryEvents([], [], [sampleEstimate]);
     assert.equal(events.length, 1);
