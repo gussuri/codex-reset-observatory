@@ -16,13 +16,14 @@ export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
 // A single reset, miss, or new observation must not trigger retuning.
 export const REGIME_ELAPSED_FULL_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const ELAPSED_ONLY_MODEL_VERSION = "hazard-elapsed-v1";
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION_V2;
+export const NEXT_GENERATION_B_MODEL_VERSION = "hazard-regime-random-continuous-calibrated-v1";
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
-export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-20";
-export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-20T11:21:37.105Z";
-export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-20T09:28:17.000Z";
+export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-23";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
+export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-20T11:21:37.105Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.
@@ -60,7 +61,6 @@ export const RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS = [
 // Next-generation shadows are independently preregistered. Keep their
 // identity and freeze boundary separate from the existing model aliases.
 export const NEXT_GENERATION_A_MODEL_VERSION = "hazard-ensemble-logit-stack-v1";
-export const NEXT_GENERATION_B_MODEL_VERSION = "hazard-regime-random-continuous-calibrated-v1";
 export const NEXT_GENERATION_B_RAW_MODEL_VERSION = RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION;
 export const NEXT_GENERATION_FREEZE_AT = "2026-08-21T03:27:00.000Z";
 export const NEXT_GENERATION_FREEZE_POLICY =
