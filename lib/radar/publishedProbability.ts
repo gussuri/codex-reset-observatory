@@ -57,6 +57,30 @@ export function roundPublicProbabilityTime(now: Date) {
   return new Date(Math.floor(time / PUBLIC_CALCULATION_INTERVAL_MS) * PUBLIC_CALCULATION_INTERVAL_MS);
 }
 
+export type NextGenerationBPublicTrainingState = {
+  trainingRows: Array<NextGenerationCalibrationRow>;
+  trainingReadStatus: NextGenerationTrainingReadStatus;
+};
+
+type RadarDataWithNextGenerationBTraining = RadarData & {
+  __nextGenerationBPublicTrainingState?: NextGenerationBPublicTrainingState;
+};
+
+export function attachNextGenerationBPublicTrainingState(
+  data: RadarData,
+  state: NextGenerationBPublicTrainingState,
+): RadarData {
+  return {
+    ...data,
+    __nextGenerationBPublicTrainingState: state,
+  } as RadarDataWithNextGenerationBTraining;
+}
+
+function getAttachedNextGenerationBPublicTrainingState(data: RadarData | null) {
+  return (data as RadarDataWithNextGenerationBTraining | null)
+    ?.__nextGenerationBPublicTrainingState ?? null;
+}
+
 export type PublishedProbabilityCalculation = {
   probability12h: number;
   probability24h: number;
@@ -311,11 +335,15 @@ export function calculatePublishedProbability(
   options: PublishedProbabilityOptions = {},
   runtime: { logFallback?: boolean } = {},
 ): PublishedProbabilityCalculation {
+  const attachedTraining = getAttachedNextGenerationBPublicTrainingState(data);
   const {
-    nextGenerationBTrainingRows = [],
-    nextGenerationBTrainingReadStatus = "ok",
+    nextGenerationBTrainingRows,
+    nextGenerationBTrainingReadStatus,
     ...calculationOptions
   } = options;
+  const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
+  const resolvedTrainingReadStatus =
+    nextGenerationBTrainingReadStatus ?? attachedTraining?.trainingReadStatus ?? "ok";
   const primary = getLocalProbabilityCalculation(data, calculationOptions);
   const publicModelOptions = {
     ...calculationOptions,
@@ -331,8 +359,8 @@ export function calculatePublishedProbability(
   try {
     nextGenerationB = calculateNextGenerationBProbability(data, {
       ...publicModelOptions,
-      trainingRows: nextGenerationBTrainingRows,
-      trainingReadStatus: nextGenerationBTrainingReadStatus,
+      trainingRows: resolvedTrainingRows,
+      trainingReadStatus: resolvedTrainingReadStatus,
     });
     if (!isValidNextGenerationBPrediction(nextGenerationB)) {
       fallbackReason = "next_generation_b_invalid_prediction";
