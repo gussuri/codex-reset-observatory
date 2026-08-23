@@ -31,31 +31,31 @@ test("B. exact_time exactly due has full notice support (1.0)", () => {
   assert.equal(coverage24, 1);
 });
 
-test("C. exact_time 30m overdue has 0.75 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 30 * 60 * 1000);
+test("C. exact_time 45m overdue has 0.75 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 45 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.75);
 });
 
-test("D. exact_time 60m overdue has 0.50 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 60 * 60 * 1000);
+test("D. exact_time 90m overdue has 0.50 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 90 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.5);
 });
 
-test("E. exact_time 90m overdue has 0.25 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 90 * 60 * 1000);
+test("E. exact_time 135m overdue has 0.25 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 135 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.25);
 });
 
-test("F. exact_time at grace expiry (120m) has 0.0 support", () => {
+test("F. exact_time at grace expiry (180m) has 0.0 support", () => {
   const now = new Date(EXPECTED_TIME + TIBO_NOTICE_GRACE_MS);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0);
 });
 
-test("G. exact_time after grace expiry (>120m) has 0.0 support", () => {
+test("G. exact_time after grace expiry (>180m) has 0.0 support", () => {
   const now = new Date(EXPECTED_TIME + TIBO_NOTICE_GRACE_MS + 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0);

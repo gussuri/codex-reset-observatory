@@ -7,7 +7,7 @@
 
 export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v4";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
-export const TIBO_NOTICE_GRACE_MS = 2 * 60 * 60 * 1000;
+export const TIBO_NOTICE_GRACE_MS = 3 * 60 * 60 * 1000;
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
