@@ -1,4 +1,11 @@
-import type { Locale } from "./types";
+import type {
+  HistoryNoticeType,
+  Locale,
+  ResetCycleType,
+  ResetMethodType,
+  ResetReasonType,
+  ResetScopeType,
+} from "./types";
 import { SITE_NAME } from "../siteMetadata";
 
 export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
@@ -656,7 +663,18 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
 };
 
-export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
+/**
+ * Standard history terms that must be present in DYNAMIC_TRANSLATIONS.
+ * If any standard term is missing from DYNAMIC_TRANSLATIONS, tsc will raise a type error.
+ */
+export type StandardHistoryTerm =
+  | ResetCycleType
+  | ResetReasonType
+  | HistoryNoticeType
+  | ResetMethodType
+  | ResetScopeType;
+
+export const DYNAMIC_TRANSLATIONS = {
   "Codex信頼性障害補償リセット": {
     ja: "Codex信頼性障害補償リセット",
     en: "Codex reliability compensation reset",
@@ -920,6 +938,11 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "全プラン",
     en: "All plans",
     zh: "所有计划",
+  },
+  "全ユーザー": {
+    ja: "全ユーザー",
+    en: "All users",
+    zh: "所有用户",
   },
   "所有付费计划": {
     ja: "全有料プラン",
@@ -1823,7 +1846,7 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "None",
     zh: "无预告",
   },
-};
+} satisfies Record<StandardHistoryTerm, Record<Locale, string>> & Record<string, Record<Locale, string>>;
 
 export function translateUI(key: string, locale: Locale): string {
   return UI_TRANSLATIONS[key]?.[locale] ?? key;

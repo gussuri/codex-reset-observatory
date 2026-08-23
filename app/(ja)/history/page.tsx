@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
+export const revalidate = 900;
 
 export default async function HistoryPage() {
   const data = await fetchPublicRadarSnapshot("ja", { limitHistory: false });

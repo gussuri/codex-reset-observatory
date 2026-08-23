@@ -348,27 +348,27 @@ test("renders the random reset time heatmap after history with a timezone-free S
   const headings = {
     ja: "過去のランダムリセット時刻",
     en: "Past random reset times",
-    zh: "过去的随机重置时刻",
+    zh: "历史随机重置时刻分布",
   } as const;
   const descriptions = {
     ja: "過去のランダムリセット時刻を、PCでは1時間ごと、モバイルでは2時間ごとに集計しています。",
     en: "Past random reset times are grouped by hour on desktop and by two-hour blocks on mobile.",
-    zh: "过去的随机重置时间在桌面端按1小时、移动端按2小时进行汇总。",
+    zh: "按时刻汇总历史随机重置记录（桌面端按1小时、移动端按2小时聚合）。",
   } as const;
   const weekdayHeadings = {
     ja: "過去のランダムリセット曜日",
     en: "Past random reset weekdays",
-    zh: "过去的随机重置星期几",
+    zh: "历史随机重置星期分布",
   } as const;
   const intervalHeadings = {
     ja: "過去のランダムリセット間隔",
     en: "Past random reset intervals",
-    zh: "过去的随机重置间隔",
+    zh: "历史随机重置间隔分布",
   } as const;
   const intervalDescriptions = {
     ja: "過去のランダムリセットどうしの間隔を集計しています。前回のランダムリセットから次のランダムリセットまでの経過時間です。",
     en: "Past intervals between consecutive random resets are grouped by elapsed time. Each interval runs from one random reset to the next.",
-    zh: "按经过时间汇总连续两次随机重置之间的间隔。每个间隔从一次随机重置到下一次随机重置。",
+    zh: "汇总连续两次随机重置之间的间隔时长（从一次随机重置到下一次随机重置的经过时间）。",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -390,12 +390,12 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.ok(intervalIndex > weekdayIndex);
     assert.ok(html.includes(descriptions[locale]));
     assert.match(html, new RegExp(locale === "ja" ? "時刻" : locale === "en" ? "Time" : "时间"));
-    assert.match(html, new RegExp(locale === "ja" ? "全期間" : locale === "en" ? "All time" : "全部期间"));
+    assert.match(html, new RegExp(locale === "ja" ? "全期間" : locale === "en" ? "All time" : "全部记录"));
     assert.match(html, new RegExp(locale === "ja" ? "直近1か月" : locale === "en" ? "Last month" : "最近1个月"));
-    assert.match(html, new RegExp(locale === "ja" ? "過去のランダムリセット曜日" : locale === "en" ? "Past random reset weekdays" : "过去的随机重置星期几"));
+    assert.match(html, new RegExp(locale === "ja" ? "過去のランダムリセット曜日" : locale === "en" ? "Past random reset weekdays" : "历史随机重置星期分布"));
     assert.match(html, new RegExp(intervalHeadings[locale]));
     assert.match(html, new RegExp(intervalDescriptions[locale]));
-    assert.match(html, new RegExp(locale === "ja" ? "リセット件数" : locale === "en" ? "Reset records" : "重置记录数"));
+    assert.match(html, new RegExp(locale === "ja" ? "リセット件数" : locale === "en" ? "Reset records" : "重置次数"));
     assert.doesNotMatch(html, /対象件数|Recorded events|记录数量/);
     assert.match(html, new RegExp(locale === "ja" ? "aria-pressed=\"true\"[^>]*>直近1か月" : locale === "en" ? "aria-pressed=\"true\"[^>]*>Last month" : "aria-pressed=\"true\"[^>]*>最近1个月"));
     assert.match(html, new RegExp(`<h2[^>]*>${weekdayHeadings[locale]}`));

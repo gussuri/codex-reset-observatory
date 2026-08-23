@@ -34,6 +34,26 @@ export type ResetReasonType =
   | "詫びリセット"
   | "定期更新";
 
+export type HistoryNoticeType =
+  | "公式予告あり"
+  | "公式告知あり"
+  | "告知投稿あり"
+  | "匂わせ投稿あり"
+  | "予告あり"
+  | "予告なし"
+  | "なし";
+
+export type ResetMethodType =
+  | "強制リセット"
+  | "任意リセット権配布"
+  | "利用上限更新"
+  | "リセット実施";
+
+export type ResetScopeType =
+  | "全有料プラン"
+  | "全ユーザー"
+  | "任意リセット未使用アカウント";
+
 export type HistoryRecordKind =
   | "confirmed_global"
   | "banked_distribution"
@@ -66,21 +86,24 @@ export type ResetDisplayNameRecord = {
 };
 
 export type ResetHistoryDetails = {
-  cycleType: string;
-  reasonType: string;
-  resetMethod: string;
-  scope: string;
+  cycleType: ResetCycleType | string;
+  reasonType: ResetReasonType | string;
+  resetMethod: ResetMethodType | string;
+  scope: ResetScopeType | string;
   noticeToExecution: string;
-  noticeType?: string;
+  noticeType?: HistoryNoticeType | string;
   note?: string | null;
 };
 
 export type CanonicalResetHistoryDetails = Omit<
   ResetHistoryDetails,
-  "cycleType" | "reasonType"
+  "cycleType" | "reasonType" | "resetMethod" | "scope" | "noticeType"
 > & {
   cycleType: ResetCycleType;
   reasonType: ResetReasonType;
+  resetMethod?: ResetMethodType | string;
+  scope?: ResetScopeType | string;
+  noticeType?: HistoryNoticeType | string;
 };
 
 export type WindowLike = {
