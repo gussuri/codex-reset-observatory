@@ -1,5 +1,6 @@
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  NEXT_GENERATION_B_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
@@ -21,16 +22,25 @@ import {
   calculateCalibratedShadowProbability,
   type CalibratedShadowProbabilityResult,
 } from "./calibratedShadowProbability";
+import {
+  calculateNextGenerationBProbability,
+  type NextGenerationBResult,
+  type NextGenerationCalibrationRow,
+  type NextGenerationTrainingReadStatus,
+} from "./nextGenerationProbability";
 import { calculateRegimeElapsedProbability } from "./regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "./recencyWeightedProbability";
 import type { RadarData } from "./types";
 
 export type PublishedProbabilitySource =
+  | "next-generation-b"
   | "calibrated"
   | "stable-shadow-fallback"
   | "legacy-shadow-fallback"
   | "heuristic-fallback";
 export type PublishedProbabilityFallbackReason =
+  | "next_generation_b_exception"
+  | "next_generation_b_invalid_prediction"
   | "calibrated_exception"
   | "calibrated_fallback"
   | "calibrated_invalid_prediction"
@@ -56,11 +66,36 @@ export type PublishedProbabilityCalculation = {
   source: PublishedProbabilitySource;
   fallbackReason: PublishedProbabilityFallbackReason | null;
   primary: ProbabilityCalculationAudit;
+  nextGenerationB: NextGenerationBResult | null;
   calibrated: CalibratedShadowProbabilityResult | null;
   rawShadow: ShadowProbabilityResult | null;
   stableShadow: ShadowProbabilityResult | null;
   shadow: ShadowProbabilityResult | null;
 };
+
+export function isValidNextGenerationBPrediction(
+  result: Pick<NextGenerationBResult, "modelVersion" | "predictions">,
+) {
+  const { predictions } = result;
+  return (
+    result.modelVersion === NEXT_GENERATION_B_MODEL_VERSION &&
+    Number.isFinite(predictions.probability12h) &&
+    Number.isFinite(predictions.probability24h) &&
+    Number.isFinite(predictions.probability48h) &&
+    Number.isFinite(predictions.probability72h) &&
+    predictions.probability12h >= 0 &&
+    predictions.probability12h <= 1 &&
+    predictions.probability24h >= 0 &&
+    predictions.probability24h <= 1 &&
+    predictions.probability48h >= 0 &&
+    predictions.probability48h <= 1 &&
+    predictions.probability72h >= 0 &&
+    predictions.probability72h <= 1 &&
+    predictions.probability12h <= predictions.probability24h &&
+    predictions.probability24h <= predictions.probability48h &&
+    predictions.probability48h <= predictions.probability72h
+  );
+}
 
 export function isValidCalibratedPrediction(
   calibrated: Pick<
@@ -146,7 +181,26 @@ export function selectPublishedProbability(
   fallbackReason: PublishedProbabilityCalculation["fallbackReason"] = null,
   legacyShadow: ShadowProbabilityResult | null = null,
   rawShadow: ShadowProbabilityResult | null = null,
+  nextGenerationB: NextGenerationBResult | null = null,
 ): PublishedProbabilityCalculation {
+  if (nextGenerationB && isValidNextGenerationBPrediction(nextGenerationB)) {
+    return {
+      probability12h: nextGenerationB.predictions.probability12h,
+      probability24h: nextGenerationB.predictions.probability24h,
+      probability48h: nextGenerationB.predictions.probability48h,
+      probability72h: nextGenerationB.predictions.probability72h,
+      adoptedModel: nextGenerationB.modelVersion,
+      source: "next-generation-b",
+      fallbackReason: null,
+      primary,
+      nextGenerationB,
+      calibrated,
+      rawShadow,
+      stableShadow,
+      shadow: null,
+    };
+  }
+
   if (calibrated && isValidCalibratedPrediction(calibrated)) {
     return {
       probability12h: derive12hFrom24hProbability(calibrated.probability24h),
@@ -155,8 +209,9 @@ export function selectPublishedProbability(
       probability72h: derive72hFrom48hProbability(calibrated.probability48h),
       adoptedModel: calibrated.modelVersion,
       source: "calibrated",
-      fallbackReason: null,
+      fallbackReason,
       primary,
+      nextGenerationB,
       calibrated,
       rawShadow,
       stableShadow,
@@ -174,6 +229,7 @@ export function selectPublishedProbability(
       source: "stable-shadow-fallback",
       fallbackReason: fallbackReason ?? "calibrated_invalid_prediction",
       primary,
+      nextGenerationB,
       calibrated,
       rawShadow,
       stableShadow,
@@ -191,6 +247,7 @@ export function selectPublishedProbability(
       source: "legacy-shadow-fallback",
       fallbackReason: fallbackReason ?? "stable_shadow_invalid_prediction",
       primary,
+      nextGenerationB,
       calibrated,
       rawShadow,
       stableShadow,
@@ -209,6 +266,7 @@ export function selectPublishedProbability(
     source: "heuristic-fallback",
     fallbackReason: resolvedFallbackReason,
     primary,
+    nextGenerationB,
     calibrated,
     rawShadow,
     stableShadow,
@@ -219,10 +277,13 @@ export function selectPublishedProbability(
 function logPublishedProbabilityFallback(
   calculation: PublishedProbabilityCalculation,
 ) {
-  if (calculation.source === "calibrated") return;
+  if (calculation.source === "next-generation-b") return;
 
   console.warn("[Published probability fallback]", {
     reason: calculation.fallbackReason,
+    nextGenerationBModelVersion: calculation.nextGenerationB?.modelVersion ?? null,
+    nextGenerationBFallbackUsed: calculation.nextGenerationB?.fallbackUsed ?? null,
+    nextGenerationBFallbackReason: calculation.nextGenerationB?.fallbackReason ?? null,
     calibratedModelVersion: calculation.calibrated?.modelVersion ?? null,
     calibratedFallbackUsed: calculation.calibrated?.fallbackUsed ?? null,
     calibratedAlpha24h: calculation.calibrated?.alpha24h ?? null,
@@ -236,26 +297,49 @@ function logPublishedProbabilityFallback(
   });
 }
 
+export type PublishedProbabilityOptions = {
+  now?: Date;
+  signalEvaluation?: LocalSignalEvaluation;
+  activeOfficialNotice?: ActiveOfficialNotice | null;
+  regularResetExpectedAt?: string | null;
+  nextGenerationBTrainingRows?: Array<NextGenerationCalibrationRow>;
+  nextGenerationBTrainingReadStatus?: NextGenerationTrainingReadStatus;
+};
+
 export function calculatePublishedProbability(
   data: RadarData | null,
-  options: {
-    now?: Date;
-    signalEvaluation?: LocalSignalEvaluation;
-    activeOfficialNotice?: ActiveOfficialNotice | null;
-    regularResetExpectedAt?: string | null;
-  } = {},
+  options: PublishedProbabilityOptions = {},
   runtime: { logFallback?: boolean } = {},
 ): PublishedProbabilityCalculation {
-  const primary = getLocalProbabilityCalculation(data, options);
+  const {
+    nextGenerationBTrainingRows = [],
+    nextGenerationBTrainingReadStatus = "ok",
+    ...calculationOptions
+  } = options;
+  const primary = getLocalProbabilityCalculation(data, calculationOptions);
   const publicModelOptions = {
-    ...options,
-    now: roundPublicProbabilityTime(options.now ?? new Date()),
+    ...calculationOptions,
+    now: roundPublicProbabilityTime(calculationOptions.now ?? new Date()),
   };
 
+  let nextGenerationB: NextGenerationBResult | null = null;
   let rawShadow: ShadowProbabilityResult | null = null;
   let calibrated: CalibratedShadowProbabilityResult | null = null;
   let stableShadow: ShadowProbabilityResult | null = null;
   let fallbackReason: PublishedProbabilityFallbackReason | null = null;
+
+  try {
+    nextGenerationB = calculateNextGenerationBProbability(data, {
+      ...publicModelOptions,
+      trainingRows: nextGenerationBTrainingRows,
+      trainingReadStatus: nextGenerationBTrainingReadStatus,
+    });
+    if (!isValidNextGenerationBPrediction(nextGenerationB)) {
+      fallbackReason = "next_generation_b_invalid_prediction";
+    }
+  } catch {
+    fallbackReason = "next_generation_b_exception";
+  }
 
   try {
     rawShadow = calculateShadowProbability(data, publicModelOptions);
@@ -263,13 +347,13 @@ export function calculatePublishedProbability(
       ...publicModelOptions,
       shadowProbability: rawShadow,
     });
-    if (!isValidCalibratedPrediction(calibrated)) {
+    if (!isValidCalibratedPrediction(calibrated) && !fallbackReason) {
       fallbackReason = calibrated.fallbackUsed
         ? "calibrated_fallback"
         : "calibrated_invalid_prediction";
     }
   } catch {
-    fallbackReason = "calibrated_exception";
+    if (!fallbackReason) fallbackReason = "calibrated_exception";
   }
 
   try {
@@ -286,7 +370,8 @@ export function calculatePublishedProbability(
   }
 
   let legacyShadow: ShadowProbabilityResult | null = null;
-  if (!(calibrated && isValidCalibratedPrediction(calibrated)) ||
+  if (!(nextGenerationB && isValidNextGenerationBPrediction(nextGenerationB)) ||
+      !(calibrated && isValidCalibratedPrediction(calibrated)) ||
       !(stableShadow && isValidShadowPrediction(stableShadow, PUBLISHED_STABLE_FALLBACK_MODEL_VERSION))) {
     try {
       legacyShadow = calculateRecencyWeightedShadowProbability(
@@ -306,6 +391,7 @@ export function calculatePublishedProbability(
     fallbackReason,
     legacyShadow,
     rawShadow,
+    nextGenerationB,
   );
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
   return selected;
