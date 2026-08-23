@@ -33,7 +33,6 @@ import { calculateRecencyWeightedShadowProbability } from "./recencyWeightedProb
 import type { RadarData } from "./types";
 
 export type PublishedProbabilitySource =
-  | "next-generation-b"
   | "calibrated"
   | "stable-shadow-fallback"
   | "legacy-shadow-fallback"
@@ -214,7 +213,7 @@ export function selectPublishedProbability(
       probability48h: nextGenerationB.predictions.probability48h,
       probability72h: nextGenerationB.predictions.probability72h,
       adoptedModel: nextGenerationB.modelVersion,
-      source: "next-generation-b",
+      source: "calibrated",
       fallbackReason: null,
       primary,
       nextGenerationB,
@@ -301,7 +300,7 @@ export function selectPublishedProbability(
 function logPublishedProbabilityFallback(
   calculation: PublishedProbabilityCalculation,
 ) {
-  if (calculation.source === "next-generation-b") return;
+  if (calculation.fallbackReason === null) return;
 
   console.warn("[Published probability fallback]", {
     reason: calculation.fallbackReason,
