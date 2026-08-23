@@ -284,6 +284,16 @@ test("content.js quarantines terminal webhook failures and cools down retryable 
   assert.match(source, /RETRY_COOLDOWN_MS/);
 });
 
+test("content.js supports an explicit single-tweet retry without broad queue clearing", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+
+  assert.match(source, /request\?\.action === "RETRY_TWEET"/);
+  assert.match(source, /processedTweetIds\.delete\(tweetId\)/);
+  assert.match(source, /textExpansionRequestedTweetIds\.delete\(tweetId\)/);
+  assert.match(source, /runExtensionTask\(scanTweets, "explicit tweet retry"\)/);
+  assert.doesNotMatch(source, /processedTweetIds\.clear\(\)/);
+});
+
 test("content.js does not create timers after the extension context is invalidated", () => {
   const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
 

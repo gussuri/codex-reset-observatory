@@ -197,6 +197,28 @@
           return false;
         }
 
+        if (request?.action === "RETRY_TWEET") {
+          const tweetId = request.tweetId;
+          if (typeof tweetId !== "string" || !/^\d{15,25}$/.test(tweetId)) {
+            sendResponse({ success: false, error: "invalid_tweet_id" });
+            return false;
+          }
+
+          processedTweetIds.delete(tweetId);
+          quarantinedTweetIds.delete(tweetId);
+          authBlockedTweetIds.delete(tweetId);
+          retryBlockedUntil.delete(tweetId);
+          textExpansionRequestedTweetIds.delete(tweetId);
+          const expansionTimer = expansionRescanTimers.get(tweetId);
+          if (expansionTimer !== undefined) {
+            clearTimeout(expansionTimer);
+            expansionRescanTimers.delete(tweetId);
+          }
+          runExtensionTask(scanTweets, "explicit tweet retry");
+          sendResponse({ success: true, tweetId });
+          return false;
+        }
+
         if (request?.action !== "CAPTURE_WITH_REPLIES_DOM") return false;
 
         if (!isCurrentRepliesTimeline()) {

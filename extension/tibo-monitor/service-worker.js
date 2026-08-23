@@ -25,6 +25,7 @@ const DEFAULT_OBSERVATORY_DOMAIN = "https://codex.gussuriworks.com";
 const LEGACY_OBSERVATORY_DOMAIN = "https://codex-reset-observatory.vercel.app";
 const TEST_HISTORY_URL = `${DEFAULT_OBSERVATORY_DOMAIN}${HISTORY_PATH}`;
 const TEST_NOTIFICATION_ID = "tibo-monitor-notification-test";
+const TWEET_ID_PATTERN = /^\d{15,25}$/;
 const CONTENT_MONITOR_STORAGE_KEYS = new Set([
   "tibo_leader_tab_id",
   "tibo_leader_timestamp",
@@ -158,6 +159,88 @@ async function broadcastAuthQuarantineCleared() {
           }),
       ),
   );
+}
+
+async function broadcastTweetRetry(tweetId) {
+  if (
+    !chrome.tabs ||
+    typeof chrome.tabs.query !== "function" ||
+    typeof chrome.tabs.sendMessage !== "function"
+  ) {
+    return 0;
+  }
+
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: MONITORED_TAB_PATTERNS });
+  } catch {
+    return 0;
+  }
+
+  const monitoredTabs = (Array.isArray(tabs) ? tabs : []).filter(
+    (tab) => Number.isInteger(tab?.id),
+  );
+  await Promise.all(
+    monitoredTabs.map(
+      (tab) =>
+        new Promise((resolve) => {
+          try {
+            chrome.tabs.sendMessage(
+              tab.id,
+              { action: "RETRY_TWEET", tweetId },
+              () => {
+                void chrome.runtime?.lastError;
+                resolve();
+              },
+            );
+          } catch {
+            resolve();
+          }
+        }),
+    ),
+  );
+  return monitoredTabs.length;
+}
+
+async function retryTweet(tweetId) {
+  if (typeof tweetId !== "string" || !TWEET_ID_PATTERN.test(tweetId)) {
+    return { success: false, error: "invalid_tweet_id" };
+  }
+
+  const data = await chrome.storage.local.get([QUEUE_KEY, QUARANTINE_KEY]);
+  const processedIds = Array.isArray(data[QUEUE_KEY]) ? data[QUEUE_KEY] : null;
+  const quarantine = data[QUARANTINE_KEY];
+  const quarantineEntries =
+    quarantine && typeof quarantine === "object" && !Array.isArray(quarantine)
+      ? { ...quarantine }
+      : null;
+  const clearedProcessed = Boolean(
+    processedIds && processedIds.includes(tweetId),
+  );
+  const clearedQuarantine = Boolean(
+    quarantineEntries && Object.hasOwn(quarantineEntries, tweetId),
+  );
+
+  const update = {};
+  if (clearedProcessed) {
+    update[QUEUE_KEY] = processedIds.filter((id) => id !== tweetId);
+  }
+  if (clearedQuarantine) {
+    delete quarantineEntries[tweetId];
+    update[QUARANTINE_KEY] = quarantineEntries;
+  }
+  if (Object.keys(update).length > 0) {
+    await chrome.storage.local.set(update);
+  }
+
+  const notifiedTabs = await broadcastTweetRetry(tweetId);
+  return {
+    success: true,
+    tweetId,
+    clearedProcessed,
+    clearedQuarantine,
+    notifiedTabs,
+  };
 }
 
 async function clearAuthBlockedQuarantine() {
@@ -539,6 +622,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     clearAuthBlockedQuarantine()
       .then((data) => sendResponse({ success: true, data }))
       .catch(() => sendResponse({ success: false, error: "quarantine_clear_failed" }));
+    return true;
+  }
+
+  if (request.action === "RETRY_TWEET") {
+    retryTweet(request.tweetId)
+      .then((res) => sendResponse(res))
+      .catch(() => sendResponse({ success: false, error: "retry_tweet_failed" }));
     return true;
   }
 

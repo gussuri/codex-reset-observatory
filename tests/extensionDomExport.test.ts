@@ -173,6 +173,8 @@ function loadOptionsPage(
     "testBtn",
     "notificationTestBtn",
     "saveRepliesDomBtn",
+    "retryTweetId",
+    "retryTweetBtn",
     "statusMessage",
     "diagnosticsEnabled",
     "diagnosticsMaskText",

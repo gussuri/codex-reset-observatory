@@ -156,6 +156,17 @@
       line-height: 1.5;
       margin: 6px 0 12px;
     }
+    .retry-tweet-panel {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .retry-tweet-description {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 6px 0 12px;
+    }
     .notification-test-description {
       color: var(--muted);
       font-size: 0.8rem;
@@ -220,6 +231,13 @@
       <label for="saveRepliesDomBtn">DOM investigation</label>
       <p class="dom-investigation-description">現在開いている Tibo の返信ページの生DOMをローカル保存します。調査用のため、投稿本文など画面内の情報を加工せず保存します。</p>
       <button id="saveRepliesDomBtn" class="btn-secondary">返信ページHTMLを保存</button>
+    </div>
+
+    <div class="retry-tweet-panel">
+      <label for="retryTweetId">投稿の再送</label>
+      <p class="retry-tweet-description">処理済みのTweet IDを1件だけ解除し、現在開いているTibo監視タブへ再スキャンを通知します。</p>
+      <input type="text" id="retryTweetId" inputmode="numeric" placeholder="Tweet ID（数字のみ）">
+      <button id="retryTweetBtn" class="btn-secondary">この投稿を再送可能にする</button>
     </div>
 
     <div class="diagnostic-panel">

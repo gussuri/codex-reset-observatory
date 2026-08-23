@@ -62,6 +62,8 @@ test("options page exposes a safe notification test and reports its result", asy
     "testBtn",
     "notificationTestBtn",
     "saveRepliesDomBtn",
+    "retryTweetId",
+    "retryTweetBtn",
     "statusMessage",
     "diagnosticsEnabled",
     "diagnosticsMaskText",
@@ -137,4 +139,16 @@ test("options page exposes a safe notification test and reports its result", asy
     elements.statusMessage.innerText,
     "通知を送信しました。Windowsの通知欄を確認してください。",
   );
+});
+
+test("options page exposes an explicit single-tweet retry action", () => {
+  const extensionRoot = path.join(__dirname, "../extension/tibo-monitor");
+  const html = fs.readFileSync(path.join(extensionRoot, "options.html"), "utf8");
+  const source = fs.readFileSync(path.join(extensionRoot, "options.js"), "utf8");
+
+  assert.match(html, /id="retryTweetId"/);
+  assert.match(html, /id="retryTweetBtn"/);
+  assert.match(html, /処理済みのTweet IDを1件だけ解除/);
+  assert.match(source, /RETRY_TWEET/);
+  assert.match(source, /retryTweetIdInput\.value\.trim\(\)/);
 });

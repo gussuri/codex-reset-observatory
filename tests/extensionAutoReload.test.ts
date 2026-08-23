@@ -615,6 +615,56 @@ test("HTTP 400 is quarantined and does not trigger an immediate second fetch", a
   assert.equal(mockFetchCalls.length, 1);
 });
 
+test("explicit tweet retry removes only the requested ID and notifies monitored tabs", async () => {
+  const targetTweetId = "2091407991736332689";
+  const otherTweetId = "2091407991736332690";
+  const context = setupServiceWorkerContext([
+    { id: 21, url: "https://x.com/thsottiaux/with_replies" },
+    { id: 22, url: `https://x.com/thsottiaux/status/${targetTweetId}` },
+    { id: 99, url: "https://example.com/" },
+  ]);
+  context.localStore.tibo_processed_tweet_ids = [targetTweetId, otherTweetId];
+  context.localStore.tibo_quarantined_tweet_ids = {
+    [targetTweetId]: { reasonCode: "payload_rejected" },
+    [otherTweetId]: { reasonCode: "payload_rejected" },
+  };
+
+  const result = await Promise.race([
+    context.sendMessage({ action: "RETRY_TWEET", tweetId: targetTweetId }),
+    new Promise((resolve) => setTimeout(() => resolve({ error: "unhandled_action" }), 50)),
+  ]);
+
+  assert.equal(result.success, true);
+  assert.equal(result.tweetId, targetTweetId);
+  assert.equal(result.clearedProcessed, true);
+  assert.equal(result.clearedQuarantine, true);
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, [otherTweetId]);
+  assert.deepEqual(context.localStore.tibo_quarantined_tweet_ids, {
+    [otherTweetId]: { reasonCode: "payload_rejected" },
+  });
+  assert.deepEqual(context.contentMessages, [
+    { tabId: 21, message: { action: "RETRY_TWEET", tweetId: targetTweetId } },
+    { tabId: 22, message: { action: "RETRY_TWEET", tweetId: targetTweetId } },
+  ]);
+});
+
+test("explicit tweet retry rejects malformed IDs without touching queue state", async () => {
+  const context = setupServiceWorkerContext([
+    { id: 21, url: "https://x.com/thsottiaux" },
+  ]);
+  context.localStore.tibo_processed_tweet_ids = ["2091407991736332689"];
+
+  const result = await Promise.race([
+    context.sendMessage({ action: "RETRY_TWEET", tweetId: "not-a-tweet-id" }),
+    new Promise((resolve) => setTimeout(() => resolve({ error: "unhandled_action" }), 50)),
+  ]);
+
+  assert.equal(result.success, false);
+  assert.equal(result.error, "invalid_tweet_id");
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, ["2091407991736332689"]);
+  assert.deepEqual(context.contentMessages, []);
+});
+
 test("401 is quarantined without a retry storm and clears after saving auth settings", async () => {
   const context = setupServiceWorkerContext(
     [{ id: 21, url: "https://x.com/thsottiaux" }],

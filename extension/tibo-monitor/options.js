@@ -5,6 +5,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const testBtn = document.getElementById("testBtn");
   const notificationTestBtn = document.getElementById("notificationTestBtn");
   const saveRepliesDomBtn = document.getElementById("saveRepliesDomBtn");
+  const retryTweetIdInput = document.getElementById("retryTweetId");
+  const retryTweetBtn = document.getElementById("retryTweetBtn");
   const statusMsg = document.getElementById("statusMessage");
   const diagnosticsEnabled = document.getElementById("diagnosticsEnabled");
   const diagnosticsMaskText = document.getElementById("diagnosticsMaskText");
@@ -132,6 +134,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     } finally {
       saveRepliesDomBtn.disabled = false;
     }
+  });
+
+  retryTweetBtn.addEventListener("click", () => {
+    const tweetId = retryTweetIdInput.value.trim();
+    if (!/^\d{15,25}$/.test(tweetId)) {
+      showStatus("有効なTweet ID（15〜25桁の数字）を入力してください。", true);
+      return;
+    }
+
+    showStatus("対象投稿の処理済み状態を解除中...");
+    retryTweetBtn.disabled = true;
+    chrome.runtime.sendMessage({ action: "RETRY_TWEET", tweetId }, (response) => {
+      retryTweetBtn.disabled = false;
+      if (chrome.runtime.lastError) {
+        showStatus("再送準備に失敗しました。拡張機能を再読み込みしてください。", true);
+        return;
+      }
+      if (!response?.success) {
+        showStatus(
+          response?.error === "invalid_tweet_id"
+            ? "有効なTweet ID（15〜25桁の数字）を入力してください。"
+            : "対象投稿の再送準備に失敗しました。",
+          true,
+        );
+        return;
+      }
+
+      const notifiedTabs = Number.isInteger(response.notifiedTabs)
+        ? response.notifiedTabs
+        : 0;
+      showStatus(
+        `対象IDだけ再送可能にしました。監視タブ${notifiedTabs}件へ再スキャンを通知しました。`,
+      );
+    });
   });
 
   function safeNotificationError(value) {
