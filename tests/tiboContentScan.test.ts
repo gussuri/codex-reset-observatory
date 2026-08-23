@@ -46,6 +46,7 @@ function getScanUtilities() {
 function makeTweetTextArticle(options: {
   text: string;
   expandLabel?: string | null;
+  expandInsideText?: boolean;
   nestedExpandLabel?: string | null;
 }) {
   let article: Record<string, unknown>;
@@ -57,7 +58,9 @@ function makeTweetTextArticle(options: {
   const expandControl: Record<string, unknown> = {
     innerText: options.expandLabel ?? "",
     getAttribute: (name: string) => name === "role" ? "button" : null,
-    closest: () => article,
+    closest: (selector: string) => selector === '[data-testid="tweetText"]'
+      ? (options.expandInsideText === false ? null : textElement)
+      : article,
   };
   const nestedExpandControl: Record<string, unknown> = {
     innerText: options.nestedExpandLabel ?? "",
@@ -191,6 +194,21 @@ test("ignores a Show more control belonging to a nested article", () => {
   const { article } = makeTweetTextArticle({
     text: "A complete Tibo post",
     nestedExpandLabel: "Show more",
+  });
+
+  const state = scan.getTweetTextState(article);
+
+  assert.equal(state.text, "A complete Tibo post");
+  assert.equal(state.needsExpansion, false);
+  assert.equal(state.expandControl, null);
+});
+
+test("ignores an ambiguous localized More control outside the tweet text", () => {
+  const scan = getScanUtilities();
+  const { article } = makeTweetTextArticle({
+    text: "A complete Tibo post",
+    expandLabel: "もっと見る",
+    expandInsideText: false,
   });
 
   const state = scan.getTweetTextState(article);

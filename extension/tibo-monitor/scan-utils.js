@@ -358,6 +358,10 @@
     const tagName = String(element.tagName || "").toUpperCase();
     if (role !== "button" && tagName !== "BUTTON") return false;
 
+    // Generic localized labels are ambiguous on X. Only treat them as text
+    // expansion controls when they are inside the tweet text itself.
+    if (!element.closest?.('[data-testid="tweetText"]')) return false;
+
     return [
       element.getAttribute?.("aria-label"),
       element.innerText,

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Codex Reset Observatory - Tibo Real-Time Monitor",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Monitors Tibo (@thsottiaux) tweets on X in real-time and forwards signals to Codex Reset Observatory.",
   "icons": {
     "128": "icons/icon-128.png"
