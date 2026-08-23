@@ -211,12 +211,17 @@ export function getRefreshIntervalMs(value: number | undefined) {
 
 export function getRefreshIntervalLabel(value: number | undefined, locale: Locale = "ja") {
   const intervalMs = getRefreshIntervalMs(value);
+  const totalMinutes = Math.round(intervalMs / (60 * 1000));
 
-  if (intervalMs === REFRESH_INTERVAL_MS.veryHigh) {
-    return locale === "en" ? "30 min" : locale === "zh" ? "30分钟" : "30分";
+  if (totalMinutes < 60) {
+    return locale === "en"
+      ? `${totalMinutes} min`
+      : locale === "zh"
+        ? `${totalMinutes}分钟`
+        : `${totalMinutes}分`;
   }
 
-  const hours = Math.round(intervalMs / 60 / 60 / 1000);
+  const hours = Math.round(totalMinutes / 60);
   return locale === "en" ? `${hours} hours` : locale === "zh" ? `${hours}小时` : `${hours}時間`;
 }
 

@@ -38,8 +38,8 @@ function getOfficialNoticeRefreshIntervalMs(
   if (expectedTime === null) return OFFICIAL_NOTICE_NO_TIME_REFRESH_INTERVAL_MS;
 
   const remainingMs = expectedTime - nowMs;
-  if (remainingMs >= 6 * 60 * 60 * 1000) return 60 * 60 * 1000;
-  if (remainingMs >= 2 * 60 * 60 * 1000) return 30 * 60 * 1000;
+  if (remainingMs >= 6 * 60 * 60 * 1000) return 15 * 60 * 1000;
+  if (remainingMs >= 2 * 60 * 60 * 1000) return 10 * 60 * 1000;
   if (remainingMs >= 30 * 60 * 1000) return 10 * 60 * 1000;
   return 5 * 60 * 1000;
 }

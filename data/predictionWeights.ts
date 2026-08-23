@@ -13,11 +13,11 @@ export const RECOMMENDED_ACTION_THRESHOLDS = {
 } as const;
 
 export const REFRESH_INTERVAL_MS = {
-  unknown: 3 * 60 * 60 * 1000,
-  low: 6 * 60 * 60 * 1000,
-  medium: 3 * 60 * 60 * 1000,
-  high: 60 * 60 * 1000,
-  veryHigh: 30 * 60 * 1000,
+  unknown: 15 * 60 * 1000,
+  low: 15 * 60 * 1000,
+  medium: 10 * 60 * 1000,
+  high: 10 * 60 * 1000,
+  veryHigh: 5 * 60 * 1000,
 } as const;
 
 export const AUTOMATED_TIBO_SIGNAL_WEIGHTS = {
