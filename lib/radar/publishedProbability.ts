@@ -2,6 +2,7 @@ import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -49,6 +50,7 @@ export type PublishedProbabilityFallbackReason =
   | "shadow_invalid_prediction";
 
 const PUBLIC_CALCULATION_INTERVAL_MS = 10 * 60 * 1000;
+const PUBLISHED_PROBABILITY_ADOPTION_TIME = new Date(PUBLISHED_PROBABILITY_ADOPTION_AT).getTime();
 
 export function roundPublicProbabilityTime(now: Date) {
   const time = now.getTime();
@@ -348,6 +350,9 @@ export function calculatePublishedProbability(
     ...calculationOptions,
     now: roundPublicProbabilityTime(calculationOptions.now ?? new Date()),
   };
+  const useNextGenerationB =
+    Number.isFinite(PUBLISHED_PROBABILITY_ADOPTION_TIME) &&
+    publicModelOptions.now.getTime() >= PUBLISHED_PROBABILITY_ADOPTION_TIME;
 
   let nextGenerationB: NextGenerationBResult | null = null;
   let rawShadow: ShadowProbabilityResult | null = null;
@@ -355,17 +360,19 @@ export function calculatePublishedProbability(
   let stableShadow: ShadowProbabilityResult | null = null;
   let fallbackReason: PublishedProbabilityFallbackReason | null = null;
 
-  try {
-    nextGenerationB = calculateNextGenerationBProbability(data, {
-      ...publicModelOptions,
-      trainingRows: resolvedTrainingRows,
-      trainingReadStatus: resolvedTrainingReadStatus,
-    });
-    if (!isValidNextGenerationBPrediction(nextGenerationB)) {
-      fallbackReason = "next_generation_b_invalid_prediction";
+  if (useNextGenerationB) {
+    try {
+      nextGenerationB = calculateNextGenerationBProbability(data, {
+        ...publicModelOptions,
+        trainingRows: resolvedTrainingRows,
+        trainingReadStatus: resolvedTrainingReadStatus,
+      });
+      if (!isValidNextGenerationBPrediction(nextGenerationB)) {
+        fallbackReason = "next_generation_b_invalid_prediction";
+      }
+    } catch {
+      fallbackReason = "next_generation_b_exception";
     }
-  } catch {
-    fallbackReason = "next_generation_b_exception";
   }
 
   try {
