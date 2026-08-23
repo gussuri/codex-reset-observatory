@@ -662,6 +662,10 @@ export function RadarDashboard({
                         value={viewModel.activeWindow.expectedAt}
                         locale={locale}
                         weekday="short"
+                        approximate={
+                          viewModel.activeWindow.kind === "official" &&
+                          viewModel.activeWindow.expectedPrecision === "exact_time"
+                        }
                       />
                       {viewModel.activeWindow.expectedPrecision !== "exact_time" && viewModel.activeWindow.expectedEndAt ? (
                         <>
