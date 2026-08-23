@@ -35,7 +35,50 @@ function getScanUtilities() {
       finish: () => void;
       reset: () => void;
     };
+    getTweetTextState: (article: unknown) => {
+      text: string;
+      needsExpansion: boolean;
+      expandControl: unknown;
+    };
   };
+}
+
+function makeTweetTextArticle(options: {
+  text: string;
+  expandLabel?: string | null;
+  nestedExpandLabel?: string | null;
+}) {
+  let article: Record<string, unknown>;
+  const textElement: Record<string, unknown> = {
+    innerText: options.text,
+    closest: () => article,
+  };
+  const nestedArticle: Record<string, unknown> = {};
+  const expandControl: Record<string, unknown> = {
+    innerText: options.expandLabel ?? "",
+    getAttribute: (name: string) => name === "role" ? "button" : null,
+    closest: () => article,
+  };
+  const nestedExpandControl: Record<string, unknown> = {
+    innerText: options.nestedExpandLabel ?? "",
+    getAttribute: (name: string) => name === "role" ? "button" : null,
+    closest: () => nestedArticle,
+  };
+
+  article = {
+    querySelectorAll: (selector: string) => {
+      if (selector === '[data-testid="tweetText"]') return [textElement];
+      if (selector.includes('[role="button"]') || selector === "button") {
+        return [
+          ...(options.expandLabel ? [expandControl] : []),
+          ...(options.nestedExpandLabel ? [nestedExpandControl] : []),
+        ];
+      }
+      return [];
+    },
+  };
+
+  return { article, expandControl };
 }
 
 function newestInOrder(
@@ -129,6 +172,34 @@ test("timeline restore gate suppresses in-flight and rapid duplicate requests", 
   assert.equal(gate.tryStart(), true);
 });
 
+test("detects an owned localized Show more control before sending tweet text", () => {
+  const scan = getScanUtilities();
+  const { article, expandControl } = makeTweetTextArticle({
+    text: "The visible prefix ends before the reset announcement",
+    expandLabel: "Show more",
+  });
+
+  const state = scan.getTweetTextState(article);
+
+  assert.equal(state.text, "The visible prefix ends before the reset announcement");
+  assert.equal(state.needsExpansion, true);
+  assert.equal(state.expandControl, expandControl);
+});
+
+test("ignores a Show more control belonging to a nested article", () => {
+  const scan = getScanUtilities();
+  const { article } = makeTweetTextArticle({
+    text: "A complete Tibo post",
+    nestedExpandLabel: "Show more",
+  });
+
+  const state = scan.getTweetTextState(article);
+
+  assert.equal(state.text, "A complete Tibo post");
+  assert.equal(state.needsExpansion, false);
+  assert.equal(state.expandControl, null);
+});
+
 test("content.js selects after a valid parse and before deduplication", () => {
   const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
   const selectionIndex = source.indexOf("TiboMonitorScan.selectNewestParsedTweet");
@@ -165,6 +236,22 @@ test("content.js reads non-empty tweet text before marking a parse successful", 
   assert.ok(parseSuccessIndex > emptyGuardIndex);
   assert.ok(sendIndex > parseSuccessIndex);
   assert.match(source, /textLength=\$\{text\.length\}/);
+});
+
+test("content.js expands and rescans incomplete tweet text before parse success or webhook send", () => {
+  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const stateIndex = source.indexOf("TiboMonitorScan.getTweetTextState(article)");
+  const expansionGuardIndex = source.indexOf("if (tweetTextState.needsExpansion)");
+  const parseSuccessIndex = source.indexOf("record.isParseSuccess = true");
+  const sendIndex = source.indexOf('sendWebhook(\n          tweetId');
+
+  assert.ok(stateIndex >= 0);
+  assert.ok(expansionGuardIndex > stateIndex);
+  assert.ok(parseSuccessIndex > expansionGuardIndex);
+  assert.ok(sendIndex > parseSuccessIndex);
+  assert.match(source, /textExpansionRequestedTweetIds/);
+  assert.match(source, /expandControl\.click\(\)/);
+  assert.match(source, /expanded tweet rescan/);
 });
 
 test("content.js quarantines terminal webhook failures and cools down retryable failures", () => {

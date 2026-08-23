@@ -338,6 +338,53 @@
     return avatarChildren.length >= 2 && avatarChildren.slice(1).some(isEmptyThreadStructure);
   }
 
+  const READ_MORE_LABEL_PATTERN = /^(?:show more|続きを読む|もっと見る|展开全文|显示更多)$/i;
+
+  function getOwnedElements(article, selector) {
+    if (!article || typeof article.querySelectorAll !== "function") return [];
+    return Array.from(article.querySelectorAll(selector)).filter((element) => {
+      const owner = element.closest?.('article[data-testid="tweet"]');
+      return !owner || owner === article;
+    });
+  }
+
+  function isTweetTextExpandControl(element) {
+    if (!element) return false;
+
+    const testId = String(element.getAttribute?.("data-testid") || "");
+    if (/tweet.*text.*show.*more|show.*more.*tweet.*text/i.test(testId)) return true;
+
+    const role = String(element.getAttribute?.("role") || "").toLowerCase();
+    const tagName = String(element.tagName || "").toUpperCase();
+    if (role !== "button" && tagName !== "BUTTON") return false;
+
+    return [
+      element.getAttribute?.("aria-label"),
+      element.innerText,
+      element.textContent,
+    ].some((value) => READ_MORE_LABEL_PATTERN.test(String(value || "").trim().replace(/\s+/g, " ")));
+  }
+
+  function findTweetTextExpandControl(article) {
+    const controls = getOwnedElements(
+      article,
+      '[data-testid="tweet-text-show-more"], [role="button"], button',
+    );
+    return controls.find(isTweetTextExpandControl) || null;
+  }
+
+  function getTweetTextState(article) {
+    const textElement = getOwnedElements(article, '[data-testid="tweetText"]')[0] || null;
+    const text = String(textElement?.innerText || "");
+    const expandControl = findTweetTextExpandControl(article);
+
+    return {
+      text,
+      needsExpansion: Boolean(expandControl),
+      expandControl,
+    };
+  }
+
   function getOwnTweetText(article) {
     if (!article || typeof article.querySelector !== "function") return null;
     const candidates = typeof article.querySelectorAll === "function"
@@ -479,6 +526,7 @@
     createTimelineRestoreGate,
     getDocumentTypeDeclaration,
     captureRawDomToDownload,
+    getTweetTextState,
     extractReplyMetadata,
     extractQuoteMetadata,
   };

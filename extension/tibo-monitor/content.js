@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.8-thread-replies";
+  const SELECTOR_VERSION = "v1.9-text-expansion";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -15,6 +15,10 @@
   const inFlightTweetIds = new Set();
   // Session-level Set of processed tweet IDs for this tab so scans skip silently
   const processedTweetIds = new Set();
+  // Do not submit a collapsed long post; request expansion once and wait for
+  // X to render the complete tweet before the next scan.
+  const textExpansionRequestedTweetIds = new Set();
+  const expansionRescanTimers = new Map();
   // A terminal payload rejection is kept out of mutation-triggered retries.
   const quarantinedTweetIds = new Set();
   const authBlockedTweetIds = new Set();
@@ -82,6 +86,8 @@
       }
       extensionContextInvalidated = true;
       intervalIds.forEach((intervalId) => clearInterval(intervalId));
+      expansionRescanTimers.forEach((timerId) => clearTimeout(timerId));
+      expansionRescanTimers.clear();
       mutationObserver?.disconnect();
       return;
     }
@@ -119,6 +125,29 @@
 
   function blockRetry(tweetId) {
     retryBlockedUntil.set(tweetId, Date.now() + RETRY_COOLDOWN_MS);
+  }
+
+  function scheduleTextExpansionRescan(tweetId) {
+    if (expansionRescanTimers.has(tweetId) || typeof setTimeout !== "function") return;
+    const timerId = setTimeout(() => {
+      expansionRescanTimers.delete(tweetId);
+      runExtensionTask(scanTweets, "expanded tweet rescan");
+    }, 500);
+    expansionRescanTimers.set(tweetId, timerId);
+  }
+
+  function requestTweetTextExpansion(tweetId, expandControl) {
+    if (!expandControl || typeof expandControl.click !== "function") return;
+    if (textExpansionRequestedTweetIds.has(tweetId)) return;
+
+    textExpansionRequestedTweetIds.add(tweetId);
+    try {
+      expandControl.click();
+      console.log(`[Tibo Extension] Requested full text expansion for ${tweetId}.`);
+      scheduleTextExpansionRescan(tweetId);
+    } catch (error) {
+      console.warn(`[Tibo Extension] Tweet text expansion failed for ${tweetId}.`, error);
+    }
   }
 
   function runExtensionTask(task, operation) {
@@ -389,13 +418,14 @@
       for (const article of tweetArticles) {
         const timeEl = article.querySelector("time");
         const textEl = article.querySelector('div[data-testid="tweetText"]');
+        const tweetTextState = TiboMonitorScan.getTweetTextState(article);
         const translated = isTranslatedTweet(article);
         const linkEl = timeEl?.closest('a[href*="/status/"]');
         const href = linkEl?.getAttribute("href") || "";
         const match = href.match(/\/thsottiaux\/status\/(\d+)/i);
         const datetime = timeEl?.getAttribute("datetime") || "";
         const hasValidDatetime = Boolean(datetime && !Number.isNaN(new Date(datetime).getTime()));
-        const text = typeof textEl?.innerText === "string" ? textEl.innerText : "";
+        const text = tweetTextState.text;
         const hasNonEmptyTweetText = text.trim().length > 0;
 
         const record = {
@@ -424,6 +454,11 @@
         if (translated) {
           lastScanError = "translated_text_detected";
           console.warn(`[Tibo Extension] Translated text detected for ${match[1]}. Skipping.`);
+          continue;
+        }
+
+        if (tweetTextState.needsExpansion) {
+          requestTweetTextExpansion(match[1], tweetTextState.expandControl);
           continue;
         }
 
