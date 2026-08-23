@@ -47,6 +47,48 @@ test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & C
         `History '${historyLabel}' title lacks English translation. Got: "${enTitle}"`
       );
     }
+    if (history.details) {
+      if (history.details.noticeType) {
+        const enNotice = translateDynamic(history.details.noticeType, "en");
+        assert.strictEqual(
+          JAPANESE_CHAR_REGEX.test(enNotice),
+          false,
+          `History '${historyLabel}' noticeType lacks English translation. Got: "${enNotice}"`
+        );
+      }
+      if (history.details.cycleType) {
+        const enCycle = translateDynamic(history.details.cycleType, "en");
+        assert.strictEqual(
+          JAPANESE_CHAR_REGEX.test(enCycle),
+          false,
+          `History '${historyLabel}' cycleType lacks English translation. Got: "${enCycle}"`
+        );
+      }
+      if (history.details.reasonType) {
+        const enReason = translateDynamic(history.details.reasonType, "en");
+        assert.strictEqual(
+          JAPANESE_CHAR_REGEX.test(enReason),
+          false,
+          `History '${historyLabel}' reasonType lacks English translation. Got: "${enReason}"`
+        );
+      }
+      if (history.details.resetMethod) {
+        const enMethod = translateDynamic(history.details.resetMethod, "en");
+        assert.strictEqual(
+          JAPANESE_CHAR_REGEX.test(enMethod),
+          false,
+          `History '${historyLabel}' resetMethod lacks English translation. Got: "${enMethod}"`
+        );
+      }
+      if (history.details.scope) {
+        const enScope = translateDynamic(history.details.scope, "en");
+        assert.strictEqual(
+          JAPANESE_CHAR_REGEX.test(enScope),
+          false,
+          `History '${historyLabel}' scope lacks English translation. Got: "${enScope}"`
+        );
+      }
+    }
     const historyNote = history.details?.note;
     if (historyNote) {
       const enNote = translateDynamic(historyNote, "en");
@@ -56,6 +98,31 @@ test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & C
         `History '${historyLabel}' note lacks English translation. Got: "${enNote}"`
       );
     }
+  }
+});
+
+test("i18n Automated Check: Common history noticeType values have valid English & Chinese translations", () => {
+  const noticeTypes = [
+    "公式予告あり",
+    "公式告知あり",
+    "告知投稿あり",
+    "匂わせ投稿あり",
+    "予告あり",
+    "予告なし",
+    "なし",
+  ];
+
+  for (const notice of noticeTypes) {
+    const enNotice = translateDynamic(notice, "en");
+    const zhNotice = translateDynamic(notice, "zh");
+
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(enNotice),
+      false,
+      `Notice type '${notice}' lacks English translation. Got: "${enNotice}"`
+    );
+    assert.ok(enNotice.length > 0, `Notice type '${notice}' English translation is empty`);
+    assert.ok(zhNotice.length > 0, `Notice type '${notice}' Chinese translation is empty`);
   }
 });
 

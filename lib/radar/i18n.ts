@@ -1788,6 +1788,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset probability has been significantly boosted due to a high-density reset wave (4+ resets in the past 7 days).",
     zh: "由于过去 7 天内已发生 4 次以上重置进入高频重置波（密集期），预测概率已大幅向上调整。",
   },
+  "公式予告あり": {
+    ja: "公式予告あり",
+    en: "Official notice",
+    zh: "有官方预告",
+  },
+  "公式告知あり": {
+    ja: "公式告知あり",
+    en: "Official notice",
+    zh: "有官方预告",
+  },
   "告知投稿あり": {
     ja: "告知投稿あり",
     en: "Official notice",
@@ -1797,6 +1807,16 @@ export const DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "匂わせ投稿あり",
     en: "Teaser hint",
     zh: "有预告提示",
+  },
+  "予告あり": {
+    ja: "予告あり",
+    en: "Notice available",
+    zh: "有预告",
+  },
+  "予告なし": {
+    ja: "予告なし",
+    en: "No notice",
+    zh: "无预告",
   },
   "なし": {
     ja: "なし",
