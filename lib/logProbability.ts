@@ -397,6 +397,8 @@ export function buildProbabilityDebugInfo(
 ) {
   const calculatedAtIso = calculatedAt.toISOString();
   const rawShadow = publishedProbability?.rawShadow ?? publishedProbability?.shadow ?? null;
+  const publishedB = publishedProbability?.nextGenerationB ?? null;
+  const publishedConfidence = publishedB?.randomContinuousResult.confidence ?? rawShadow?.confidence ?? null;
 
   return {
     ...base,
@@ -422,23 +424,25 @@ export function buildProbabilityDebugInfo(
             probability48h: publishedProbability.probability48h,
             probability72h: publishedProbability.probability72h,
             fallbackReason: publishedProbability.fallbackReason,
-            confidence: rawShadow?.confidence.level ?? null,
-            completedIntervalCount: rawShadow?.confidence.completedIntervalCount ?? null,
-            totalExposureDays: rawShadow?.confidence.totalExposureDays ?? null,
+            confidence: publishedConfidence?.level ?? null,
+            completedIntervalCount: publishedConfidence?.completedIntervalCount ?? null,
+            totalExposureDays: publishedConfidence?.totalExposureDays ?? null,
             adoptionMode: PUBLISHED_PROBABILITY_ADOPTION_MODE,
             adoptionDate: PUBLISHED_PROBABILITY_ADOPTION_DATE,
             adoptionAt: PUBLISHED_PROBABILITY_ADOPTION_AT,
             previousModelVersion: PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
             previousAdoptionAt: PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
-            rawModelVersion: rawShadow?.modelVersion ?? null,
-            calibratedFallbackUsed: publishedProbability.calibrated?.fallbackUsed ?? null,
-            calibrationAlpha24h: publishedProbability.calibrated?.alpha24h ?? null,
-            calibrationAlpha48h: publishedProbability.calibrated?.alpha48h ?? null,
-            calibrationSampleCount24h: publishedProbability.calibrated?.calibrationSampleCount24h ?? null,
-            calibrationSampleCount48h: publishedProbability.calibrated?.calibrationSampleCount48h ?? null,
-            positiveCalibrationCount24h: publishedProbability.calibrated?.positiveCalibrationCount24h ?? null,
-            positiveCalibrationCount48h: publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
+            rawModelVersion: publishedB?.rawModelVersion ?? rawShadow?.modelVersion ?? null,
+            calibratedFallbackUsed: publishedB?.fallbackUsed ?? publishedProbability.calibrated?.fallbackUsed ?? null,
+            calibrationAlpha24h: publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
+            calibrationAlpha48h: publishedB?.alpha48h ?? publishedProbability.calibrated?.alpha48h ?? null,
+            calibrationSampleCount24h: publishedB?.calibrationSampleCount24h ?? publishedProbability.calibrated?.calibrationSampleCount24h ?? null,
+            calibrationSampleCount48h: publishedB?.calibrationSampleCount48h ?? publishedProbability.calibrated?.calibrationSampleCount48h ?? null,
+            positiveCalibrationCount24h: publishedB?.positiveCalibrationCount24h ?? publishedProbability.calibrated?.positiveCalibrationCount24h ?? null,
+            positiveCalibrationCount48h: publishedB?.positiveCalibrationCount48h ?? publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
+            trainingReadStatus: publishedB?.trainingReadStatus ?? null,
+            modelFallbackReason: publishedB?.fallbackReason ?? null,
           },
         }
       : {}),
