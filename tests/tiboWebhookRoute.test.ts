@@ -377,6 +377,54 @@ test("ambiguous future surprise is persisted as a teaser without official tempor
   }
 });
 
+test("source clock fallback resolves an official 14pm PST tomorrow notice when Gemini omits temporal fields", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.98,
+    temporalDirection: "future",
+    evidenceQuote: "Reset will land around 14pm PST tomorrow.",
+    reasonJa: "明日の予告です。",
+    noticeToExecution: "tomorrow around 14pm PST",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2091412393368945027",
+      text: "Reset will land around 14pm PST tomorrow.",
+      tweetUrl: "https://x.com/thsottiaux/status/2091412393368945027",
+      tweetCreatedAt: "2026-08-23T06:29:05.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "official_notice");
+    assert.equal(upsertBody.ai_temporal_kind, "relative_day");
+    assert.equal(upsertBody.ai_temporal_precision, "exact_time");
+    assert.equal(upsertBody.ai_temporal_timezone, "PST");
+    assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
+    assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
+    assert.equal(upsertBody.temporal_resolution_status, "resolved");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v3");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("new reply metadata is validated and persisted while old payload fields remain compatible", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

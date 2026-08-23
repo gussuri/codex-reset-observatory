@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v2";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v3";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 2 * 60 * 60 * 1000;
 
@@ -141,6 +141,160 @@ function isValidTimeParts(value: unknown): value is TemporalTimeParts {
   );
 }
 
+const DETERMINISTIC_TEMPORAL_CONFIDENCE = 0.95;
+const SOURCE_CLOCK_PATTERN =
+  /\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b|\b([01]?\d|2[0-3]):([0-5]\d)\b/gi;
+const INVALID_MERIDIEM_CLOCK_PATTERN =
+  /\b(?:0|(?:1[3-9]|2[0-3])|\d{3,})\s*(?::\d{2})?\s*am\b|\b(?:0|\d{3,})\s*(?::\d{2})?\s*pm\b/i;
+const SOURCE_TIMEZONE_PATTERN =
+  /\b(?:UTC|GMT)(?:[+-]\d{2}:\d{2})?\b|\b(?:PST|PDT|EST|EDT|PT|ET)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
+const SOURCE_DAY_PATTERN =
+  /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+
+type DeterministicTemporalExtraction = {
+  semantics: TiboTemporalSemantics | null;
+  rejected: boolean;
+};
+
+type SourceClock = {
+  hour: number;
+  minute: number;
+  index: number;
+  end: number;
+};
+
+function extractSourceClock(sourceText: string): { clock: SourceClock | null; rejected: boolean } {
+  if (INVALID_MERIDIEM_CLOCK_PATTERN.test(sourceText)) {
+    return { clock: null, rejected: true };
+  }
+
+  const matches = Array.from(sourceText.matchAll(SOURCE_CLOCK_PATTERN));
+  if (matches.length !== 1) return { clock: null, rejected: false };
+
+  const match = matches[0];
+  const hour = Number(match[1] ?? match[4]);
+  const minute = Number(match[2] ?? match[5] ?? 0);
+  const meridiem = match[3]?.toLowerCase() ?? null;
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return { clock: null, rejected: true };
+  }
+
+  let normalizedHour = hour;
+  if (meridiem) {
+    if (hour >= 13 && hour <= 23) {
+      if (meridiem !== "pm") return { clock: null, rejected: true };
+    } else if (hour >= 1 && hour <= 12) {
+      normalizedHour = hour % 12 + (meridiem === "pm" ? 12 : 0);
+    } else {
+      return { clock: null, rejected: true };
+    }
+  } else if (hour < 0 || hour > 23) {
+    return { clock: null, rejected: true };
+  }
+
+  return {
+    clock: {
+      hour: normalizedHour,
+      minute,
+      index: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    },
+    rejected: false,
+  };
+}
+
+function getSourceDayMatch(sourceText: string) {
+  const match = SOURCE_DAY_PATTERN.exec(sourceText);
+  if (!match) return null;
+  return {
+    value: match[1].toLowerCase(),
+    index: match.index,
+    end: match.index + match[0].length,
+  };
+}
+
+function getSourceTimezoneMatch(sourceText: string, clock: SourceClock) {
+  const candidates = Array.from(sourceText.matchAll(SOURCE_TIMEZONE_PATTERN))
+    .filter((match) => {
+      const index = match.index ?? 0;
+      return Math.abs(index - clock.end) <= 80;
+    })
+    .map((match) => ({
+      value: match[0],
+      index: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    }));
+
+  return candidates.find((candidate) => getTimeZone(candidate.value) !== null) ?? null;
+}
+
+function getSourceTemporalExpression(
+  sourceText: string,
+  clock: SourceClock,
+  day: ReturnType<typeof getSourceDayMatch>,
+  timezone: ReturnType<typeof getSourceTimezoneMatch>,
+) {
+  let start = Math.min(clock.index, day?.index ?? clock.index, timezone?.index ?? clock.index);
+  const prefix = sourceText.slice(0, start).match(/\b(?:around|at|on|by)\s*$/i);
+  if (prefix?.index !== undefined) start = prefix.index;
+
+  const end = Math.max(clock.end, day?.end ?? clock.end, timezone?.end ?? clock.end);
+  return sourceText.slice(start, end).trim();
+}
+
+function parseDeterministicTemporalSemantics(sourceText: string): DeterministicTemporalExtraction {
+  const { clock, rejected } = extractSourceClock(sourceText);
+  if (rejected) return { semantics: null, rejected: true };
+  if (!clock) return { semantics: null, rejected: false };
+
+  const day = getSourceDayMatch(sourceText);
+  const weekday = day && WEEKDAYS.includes(day.value as TemporalWeekday)
+    ? day.value as TemporalWeekday
+    : null;
+  const relativeDayOffset = day?.value === "today" ? 0 : day?.value === "tomorrow" ? 1 : null;
+  const timezone = getSourceTimezoneMatch(sourceText, clock);
+
+  if (day) {
+    const betweenClockAndDay = day.index > clock.end
+      ? sourceText.slice(clock.end, day.index).trim()
+      : "";
+    if (betweenClockAndDay && !getTimeZone(betweenClockAndDay)) {
+      return { semantics: null, rejected: true };
+    }
+  }
+
+  if (!day && !timezone && !sourceText.slice(Math.max(0, clock.index - 12), clock.index).match(/\b(?:at|by)\s*$/i)) {
+    return { semantics: null, rejected: false };
+  }
+
+  const temporalKind: TemporalKind = relativeDayOffset !== null
+    ? "relative_day"
+    : weekday
+      ? "weekday"
+      : "absolute";
+
+  return {
+    semantics: {
+      temporalExpression: getSourceTemporalExpression(sourceText, clock, day, timezone),
+      temporalKind,
+      temporalPrecision: "exact_time",
+      weekday,
+      relativeDayOffset,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: { hour: clock.hour, minute: clock.minute },
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: timezone?.value ?? null,
+      // This score belongs to the deterministic token parser, not to the
+      // tweet timestamp or an invented Gemini confidence value.
+      temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
+    },
+    rejected: false,
+  };
+}
+
 function hasClockExpression(value: string) {
   return /\b(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b|\b(?:noon|midnight)\b/i.test(value);
 }
@@ -216,7 +370,7 @@ function hasTemporalText(value: string, text: string) {
 }
 
 /** Validate and sanitize only semantic fields returned by Gemini. */
-export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
+function parseGeminiTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Record<string, unknown>;
   const expression = typeof parsed.temporalExpression === "string"
@@ -315,6 +469,38 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
     rangeKind,
     explicitTimezone,
     temporalConfidence: confidence,
+  };
+}
+
+/**
+ * Gemini may omit the structured clock fields even when the source contains a
+ * single explicit schedule. In that case, use only source tokens that can be
+ * resolved deterministically; never invent a day, clock, or timezone.
+ */
+export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
+  const sourceExtraction = parseDeterministicTemporalSemantics(sourceText);
+  if (sourceExtraction.rejected) return null;
+
+  const geminiSemantics = parseGeminiTemporalSemantics(value, sourceText);
+  if (!sourceExtraction.semantics) return geminiSemantics;
+  if (!geminiSemantics) return sourceExtraction.semantics;
+
+  return {
+    ...geminiSemantics,
+    temporalExpression: sourceExtraction.semantics.temporalExpression,
+    temporalKind: sourceExtraction.semantics.temporalKind,
+    temporalPrecision: sourceExtraction.semantics.temporalPrecision,
+    weekday: sourceExtraction.semantics.weekday,
+    relativeDayOffset: sourceExtraction.semantics.relativeDayOffset,
+    explicitDateParts: sourceExtraction.semantics.explicitDateParts,
+    explicitTimeParts: sourceExtraction.semantics.explicitTimeParts,
+    daypart: sourceExtraction.semantics.daypart,
+    rangeKind: sourceExtraction.semantics.rangeKind,
+    explicitTimezone: sourceExtraction.semantics.explicitTimezone,
+    temporalConfidence: Math.min(
+      geminiSemantics.temporalConfidence,
+      sourceExtraction.semantics.temporalConfidence,
+    ),
   };
 }
 

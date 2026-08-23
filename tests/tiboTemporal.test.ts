@@ -9,6 +9,7 @@ import {
   resolveTiboTemporalSchedule,
   TIBO_SOURCE_TIME_ZONE,
 } from "../lib/radar/tiboTemporal";
+import { formatOfficialNoticeScheduleSubject } from "../lib/radar/officialNoticePresentation";
 
 const CREATED_AT = "2026-08-08T20:34:50.000Z";
 
@@ -364,4 +365,88 @@ test("partial window coverage is not the legacy fixed 90/96 override", () => {
   assert.ok(coverage48 !== null && coverage48 > 0 && coverage48 < 1);
   assert.equal(isTemporalNoticeConsumedAtReset(notice, "2026-08-09T12:00:00.000Z"), false);
   assert.equal(isTemporalNoticeConsumedAtReset(notice, "2026-08-10T12:00:00.000Z"), true);
+});
+
+test("recovers an explicit 14pm PST tomorrow schedule from source text when Gemini omits temporal fields", () => {
+  const source = "Reset will land around 14pm PST tomorrow.";
+  const parsed = parseTiboTemporalSemantics(null, source);
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "relative_day");
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 14, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "PST");
+
+  const resolution = resolveTiboTemporalSchedule(
+    parsed,
+    "2026-08-23T06:29:00.000Z",
+    TIBO_SOURCE_TIME_ZONE,
+  );
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.temporalPrecision, "exact_time");
+  assert.equal(resolution.timezone, "PST");
+  assert.equal(resolution.expectedStartAt, "2026-08-23T22:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, resolution.expectedStartAt);
+
+  const subject = formatOfficialNoticeScheduleSubject(
+    {
+      expectedAt: resolution.expectedStartAt,
+      expectedEndAt: resolution.expectedEndAt,
+      temporalPrecision: resolution.temporalPrecision,
+      temporalResolutionStatus: resolution.status,
+      temporalTimezone: resolution.timezone,
+    },
+    "ja",
+  );
+  assert.ok(subject?.includes("14:00"));
+  assert.ok(subject?.endsWith("ごろ"));
+});
+
+test("recovers supported clock and relative-day spellings without inventing a timestamp", () => {
+  const cases = [
+    "Reset will land around 14pm PST tomorrow.",
+    "Reset will land 14pm PST tomorrow.",
+    "Reset will land 14 pm PST tomorrow.",
+    "Reset will land 14:00 PST tomorrow.",
+    "Reset will land 2pm PST tomorrow.",
+    "Reset will land tomorrow around 14pm PST.",
+  ];
+
+  for (const source of cases) {
+    const parsed = parseTiboTemporalSemantics(null, source);
+    const resolution = resolveTiboTemporalSchedule(parsed, "2026-08-23T06:29:00.000Z");
+    assert.equal(resolution.status, "resolved", source);
+    assert.equal(resolution.expectedStartAt, "2026-08-23T22:00:00.000Z", source);
+  }
+
+  const weekday = parseTiboTemporalSemantics(null, "Reset will land Monday at 2pm PDT.");
+  const weekdayResolution = resolveTiboTemporalSchedule(weekday, CREATED_AT);
+  assert.equal(weekdayResolution.status, "resolved");
+  assert.equal(weekdayResolution.expectedStartAt, "2026-08-10T21:00:00.000Z");
+});
+
+test("rejects contradictory or vague source clocks and replaces hallucinated clock fields with source evidence", () => {
+  for (const source of [
+    "Reset will land at 14am tomorrow.",
+    "Reset will land around sometime tomorrow.",
+    "Reset will land soon.",
+  ]) {
+    const parsed = parseTiboTemporalSemantics(null, source);
+    assert.equal(resolveTiboTemporalSchedule(parsed, "2026-08-23T06:29:00.000Z").status, "unresolved", source);
+  }
+
+  const hallucinated = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "tomorrow at 10am",
+      temporalKind: "relative_day",
+      temporalPrecision: "exact_time",
+      relativeDayOffset: 1,
+      explicitTimeParts: { hour: 10, minute: 0 },
+      explicitTimezone: null,
+      temporalConfidence: 0.95,
+    },
+    "Reset will land tomorrow at 9am.",
+  );
+  assert.ok(hallucinated);
+  assert.deepEqual(hallucinated.explicitTimeParts, { hour: 9, minute: 0 });
+  assert.equal(hallucinated.temporalKind, "relative_day");
 });

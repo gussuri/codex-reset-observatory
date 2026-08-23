@@ -5,6 +5,7 @@ import {
   parseTiboTemporalSemantics,
   resolveTiboTemporalSchedule,
   TIBO_SOURCE_TIME_ZONE,
+  TIBO_TEMPORAL_RESOLUTION_VERSION,
 } from "../lib/radar/tiboTemporal";
 
 const DEFAULT_LIMIT = 1000;
@@ -37,7 +38,11 @@ async function run() {
     .eq("signal_type", "official_notice")
     .order("tweet_created_at", { ascending: true });
   if (tweetId) query = query.eq("tweet_id", tweetId);
-  if (!force) query = query.or("temporal_resolution_version.is.null,temporal_resolution_version.neq.tibo-temporal-v2");
+  if (!force) {
+    query = query.or(
+      `temporal_resolution_version.is.null,temporal_resolution_version.neq.${TIBO_TEMPORAL_RESOLUTION_VERSION}`,
+    );
+  }
   if (Number.isFinite(limit) && limit > 0) query = query.limit(limit);
 
   const { data: rows, error } = await query;

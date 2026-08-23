@@ -16,6 +16,16 @@ function getLocaleName(locale: Locale) {
   return locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ja-JP";
 }
 
+function getPresentationTimeZone(timeZone: string) {
+  const fixedOffsetAliases: Record<string, string> = {
+    PST: "Etc/GMT+8",
+    PDT: "Etc/GMT+7",
+    EST: "Etc/GMT+5",
+    EDT: "Etc/GMT+4",
+  };
+  return fixedOffsetAliases[timeZone.toUpperCase()] ?? timeZone;
+}
+
 function getResolvedNoticeDate(notice: OfficialNoticePresentationInput) {
   if (
     !notice.expectedAt ||
@@ -42,7 +52,7 @@ function formatScheduleWeekday(
   locale: Locale,
 ) {
   const value = new Intl.DateTimeFormat(getLocaleName(locale), {
-    timeZone,
+    timeZone: getPresentationTimeZone(timeZone),
     weekday: "long",
   }).format(date);
   return value;
@@ -54,14 +64,15 @@ function formatExactSchedule(
   locale: Locale,
 ) {
   const localeName = getLocaleName(locale);
+  const presentationTimeZone = getPresentationTimeZone(timeZone);
   const datePart = new Intl.DateTimeFormat(localeName, {
-    timeZone,
+    timeZone: presentationTimeZone,
     month: "long",
     day: "numeric",
     weekday: locale === "ja" ? "short" : "long",
   }).format(date);
   const timePart = new Intl.DateTimeFormat(localeName, {
-    timeZone,
+    timeZone: presentationTimeZone,
     hour: "numeric",
     minute: "2-digit",
     hour12: locale === "en",
