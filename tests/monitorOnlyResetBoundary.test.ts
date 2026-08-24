@@ -13,7 +13,11 @@ import {
   getRecoveryResetEvents,
 } from "../lib/radar/recoveryBoundary";
 import type { ActiveTiboSignal, RadarData } from "../lib/radar/types";
-import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
+import {
+  combineResetHistory,
+  getNoticeBackedHistoryInputs,
+  type FormalTiboResetSignal,
+} from "../lib/radar/tiboHistory";
 import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 
@@ -273,4 +277,58 @@ test("late reset_executed confirmation does not consume a post-reset weak teaser
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
 
   assert.equal(snapshot.resetTeaserStatus, "weak");
+});
+
+test("monitor boundary merges a late composite completion while preserving its secondary teaser", () => {
+  const calculationNow = new Date("2026-08-24T10:00:00.000Z");
+  const compositeCompletion: FormalTiboResetSignal = {
+    ...lateCompletion,
+    tweet_id: "late-composite-confirmation",
+    tweet_created_at: "2026-08-24T09:46:00.000Z",
+    text: "Reset is done. Might press the reset button again tomorrow.",
+    secondary_signal: {
+      signalType: "teaser",
+      teaserStrength: "strong",
+      confidence: 0.96,
+      evidenceQuote: "Might press the reset button again tomorrow",
+      reasonJa: "次回resetを強く示唆する別の未来部分です。",
+      expiresAt: "2026-08-25T09:46:00.000Z",
+      temporal: null,
+    },
+  };
+  const data = fixture(
+    [
+      oldNotice,
+      teaser("old-composite", "2026-08-24T08:00:00.000Z", "strong"),
+      compositeCompletion as unknown as ActiveTiboSignal,
+    ],
+    calculationNow,
+    [compositeCompletion],
+  );
+
+  const boundaries = getRecoveryResetEvents(data, calculationNow, []);
+  assert.equal(boundaries.length, 1);
+  assert.equal(boundaries[0]?.resetAt, RESET_AT);
+  assert.equal(boundaries[0]?.isRandom, true);
+
+  const historyInputs = getNoticeBackedHistoryInputs(data);
+  const combinedHistory = combineResetHistory(
+    [],
+    [compositeCompletion],
+    [],
+    [],
+    historyInputs.noticeSignals,
+    historyInputs.recoveryObservations,
+    historyInputs.estimates,
+  );
+  assert.equal(combinedHistory.length, 1);
+  assert.equal(combinedHistory[0]?.completed_at, RESET_AT);
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  const calculation = getLocalProbabilityCalculation(data, { now: calculationNow });
+  assert.equal(snapshot.lastRandomResetAt, RESET_AT);
+  assert.equal(snapshot.resetTeaserStatus, "strong");
+  assert.equal(calculation.inputSnapshot.activeTeaserCount, 1);
+  assert.ok(calculation.breakdown.contributions.teaserOrEvent.probability24h > 0);
+  assert.ok(calculation.breakdown.contributions.teaserOrEvent.probability48h > 0);
 });

@@ -8,6 +8,7 @@ import {
   parseTeaserStrengthAssessment,
   type TeaserStrength,
 } from "./teaserStrength";
+import type { TiboSecondarySignalType } from "./tiboSecondarySignal";
 import {
   parseGeminiTemporalSemantics,
   TIBO_SOURCE_TIME_ZONE,
@@ -45,10 +46,38 @@ const GENERIC_FUTURE_CONTINUATION_PATTERN =
   /\b(?:more\s+to\s+come|more\s+to\s+follow)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day))\b/i;
 const EXPLICIT_FUTURE_RESET_PATTERN =
   /\b(?:more\s+resets?|another\s+(?:reset|one)|(?:press|hit|use)\s+(?:the\s+)?reset\s+button(?:\s+again)?|reset\s+again)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day)|in\s+(?:an?|one|\d+)\s+(?:hour|hours|day|days))\b/i;
+const FUTURE_RESET_QUOTE_PATTERN =
+  /\b(?:reset|resets|resetting|reset\s+button|usage\s+limits?|quota)\b[\s\S]{0,100}\b(?:tomorrow|later|soon|next\s+(?:week|day)|again|in\s+(?:an?|one|\d+)\s+(?:hour|hours|day|days))\b/i;
+const UNRELATED_FUTURE_QUOTE_PATTERN =
+  /\b(?:documentation|docs|reliability|feature|rollout|blog|meeting|work\s+on|bug\s+fix(?:es)?|status\s+update)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day))\b/i;
+const EXPLICIT_FUTURE_NOTICE_QUOTE_PATTERN =
+  /\b(?:will|going\s+to|plan(?:s|ned)?\s+to|scheduled\s+to|coming|more|another|next)\b[\s\S]{0,100}\b(?:reset|resets|resetting|reset\s+button|usage\s+limits?|quota)\b[\s\S]{0,100}\b(?:tomorrow|later|soon|next\s+(?:week|day)|again|in\s+(?:an?|one|\d+)\s+(?:hour|hours|day|days))\b/i;
 
 export function normalizeGeminiResetType(value: unknown): GeminiResetType | null {
   return value === "ご祝儀リセット" || value === "詫びリセット" ? value : null;
 }
+
+export type GeminiFutureSignalOutput = {
+  signalType: TiboSecondarySignalType | null;
+  teaserStrength?: TeaserStrength | null;
+  confidence: number | null;
+  evidenceQuote: string | null;
+  reasonJa: string | null;
+  temporalDirection?: "future" | "completed_now" | "historical" | "unclear" | null;
+  temporalExpression?: string | null;
+  temporalKind?: TiboTemporalSemantics["temporalKind"] | null;
+  temporalPrecision?: TiboTemporalSemantics["temporalPrecision"] | null;
+  weekday?: TiboTemporalSemantics["weekday"];
+  relativeDayOffset?: number | null;
+  relativeAmount?: number | null;
+  relativeUnit?: TiboTemporalSemantics["relativeUnit"];
+  explicitDateParts?: TiboTemporalSemantics["explicitDateParts"];
+  explicitTimeParts?: TiboTemporalSemantics["explicitTimeParts"];
+  daypart?: TiboTemporalSemantics["daypart"];
+  rangeKind?: TiboTemporalSemantics["rangeKind"];
+  explicitTimezone?: string | null;
+  temporalConfidence?: number | null;
+};
 
 export type GeminiClassificationOutput = {
   signalType: "official_notice" | "reset_executed" | "teaser" | "irrelevant" | null;
@@ -62,6 +91,7 @@ export type GeminiClassificationOutput = {
   teaserStrengthConfidence?: number | null;
   teaserStrengthEvidenceQuote?: string | null;
   teaserStrengthReasonJa?: string | null;
+  futureSignal?: GeminiFutureSignalOutput | null;
   temporalExpression?: string | null;
   temporalKind?: TiboTemporalSemantics["temporalKind"] | null;
   temporalPrecision?: TiboTemporalSemantics["temporalPrecision"] | null;
@@ -158,6 +188,35 @@ Strong contrast: "I was gifted a very fancy new reset button today" remains sign
 teaserStrength = "strong". None contrast: "The reset button is my favorite product feature." remains
 signalType = "irrelevant" and teaserStrength = "none".
 
+When the primary signal is a grounded completed reset, independently classify any separate
+forward-looking meaning in the same post as futureSignal. The futureSignal choice is independent
+from the primary signalType and must be made from the whole tweet context.
+
+Use futureSignal.type="official_notice" only when the future reset itself is explicitly announced
+or is a very clear reset-specific coreference. "We will reset everyone again tomorrow" and
+"Another full reset lands tomorrow" are official notices. Generic continuation language such as
+"More to come tomorrow", "More updates tomorrow", or "More improvements tomorrow" is not an
+official notice because it does not commit to another reset.
+
+Use futureSignal.type="teaser" when the whole post context makes a future reset reasonably
+suggestible but does not meet the explicit official-notice standard. The evidenceQuote may be a
+context-only exact substring without the words reset or limit. Choose teaserStrength="strong" or
+"weak" yourself from the full post context; do not leave it null or use none for a teaser.
+Use futureSignal.type="none" only when the future passage cannot reasonably be connected to a
+future reset, such as documentation, changelog, or unrelated improvements.
+
+Contrast these cases: "Reset is done. Might press the reset button again tomorrow." is a
+future teaser whose strength you must assess; "Reset is done. Maybe another surprise tomorrow."
+is also a teaser candidate whose strength you must assess from the whole context; and
+"Reset is done. Documentation update tomorrow." is none. Do not make the actual classification
+of a mixed post depend on a hard-coded example.
+
+The future evidenceQuote must be an exact contiguous substring of the tweet and must refer to a
+distinct future passage from the primary completed-reset evidence. Do not promote the primary
+completed event to a future event. For futureSignal, type="official_notice" requires
+teaserStrength=null, type="teaser" requires teaserStrength="strong" or "weak", and type="none"
+requires teaserStrength=null.
+
 Also extract the semantic meaning of any forward-looking time expression for an official_notice.
 For phrases such as "during the day" or "sometime during the day", use
 temporalKind="daypart", temporalPrecision="daypart", and daypart="day". This means
@@ -188,7 +247,28 @@ Respond ONLY with a JSON object strictly matching this schema:
   "teaserStrength": "strong" | "weak" | "none" | null,
   "teaserStrengthConfidence": number (between 0.0 and 1.0) | null,
   "teaserStrengthEvidenceQuote": string | null (Short exact contiguous substring from the tweet text, or null),
-  "teaserStrengthReasonJa": string | null (Short Japanese reason, or null)
+  "teaserStrengthReasonJa": string | null (Short Japanese reason, or null),
+  "futureSignal": {
+    "signalType": "official_notice" | "teaser" | "none" | null,
+    "teaserStrength": "strong" | "weak" | null,
+    "confidence": number | null,
+    "evidenceQuote": string | null,
+    "reasonJa": string | null,
+    "temporalDirection": "future" | "completed_now" | "historical" | "unclear" | null,
+    "temporalExpression": string | null,
+    "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
+    "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
+    "weekday": "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | null,
+    "relativeDayOffset": number | null,
+    "relativeAmount": number | null,
+    "relativeUnit": "minutes" | "hours" | "days" | null,
+    "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
+    "explicitTimeParts": {"hour": number, "minute": number} | null,
+    "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
+    "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
+    "explicitTimezone": string | null,
+    "temporalConfidence": number | null
+  } | null
   ,"temporalExpression": string | null,
   "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
   "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
@@ -233,9 +313,150 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
   ].join("\n");
 }
 
+function getExactFutureQuote(value: unknown, sourceText: string) {
+  if (typeof value !== "string" || value.length > 300) return null;
+  const quote = value.trim();
+  if (!quote || !sourceText.includes(quote)) return null;
+  return quote;
+}
+
+function overlapsPrimaryEvidence(quote: string, primaryQuote: string | null) {
+  if (!primaryQuote) return false;
+  const source = quote.toLowerCase();
+  const primary = primaryQuote.toLowerCase();
+  return source.includes(primary) || primary.includes(source);
+}
+
+function normalizeFutureSignal(
+  value: unknown,
+  sourceText: string,
+  primaryEvidenceQuote: string | null,
+): GeminiFutureSignalOutput | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Record<string, unknown>;
+  const signalType = parsed.signalType;
+  if (signalType !== "official_notice" && signalType !== "teaser" && signalType !== "none") {
+    return null;
+  }
+
+  const confidence = parsed.confidence;
+  const normalizedConfidence = typeof confidence === "number" &&
+      Number.isFinite(confidence) && confidence >= 0 && confidence <= 1
+    ? confidence
+    : null;
+  const evidenceQuote = getExactFutureQuote(parsed.evidenceQuote, sourceText);
+  const reasonJa = typeof parsed.reasonJa === "string" && parsed.reasonJa.trim()
+    ? parsed.reasonJa.trim().slice(0, 500)
+    : null;
+  const teaserStrength = parsed.teaserStrength === "strong" ||
+      parsed.teaserStrength === "weak" ||
+      parsed.teaserStrength === "none"
+    ? parsed.teaserStrength
+    : null;
+  const temporalDirection = parsed.temporalDirection === "future" ||
+      parsed.temporalDirection === "completed_now" ||
+      parsed.temporalDirection === "historical" ||
+      parsed.temporalDirection === "unclear"
+    ? parsed.temporalDirection
+    : null;
+
+  if (signalType === "none") {
+    return {
+      signalType,
+      teaserStrength: null,
+      confidence: normalizedConfidence,
+      evidenceQuote,
+      reasonJa,
+      temporalDirection,
+    };
+  }
+
+  if (
+    !evidenceQuote ||
+    overlapsPrimaryEvidence(evidenceQuote, primaryEvidenceQuote) ||
+    !reasonJa ||
+    normalizedConfidence === null ||
+    temporalDirection === "completed_now"
+  ) {
+    return null;
+  }
+
+  if (
+    signalType === "teaser" &&
+    teaserStrength !== "strong" &&
+    teaserStrength !== "weak"
+  ) {
+    return null;
+  }
+
+  if (signalType === "official_notice") {
+    // Official notices need explicit future reset language. Teasers are
+    // intentionally less strict because their meaning may come from the
+    // whole post rather than the short evidence quote.
+    if (
+      normalizedConfidence < 0.95 ||
+      !(
+        FUTURE_RESET_QUOTE_PATTERN.test(evidenceQuote) ||
+        (EXPLICIT_FUTURE_NOTICE_QUOTE_PATTERN.test(evidenceQuote) &&
+          /\banother\s+(?:one|reset)\b/i.test(evidenceQuote) &&
+          hasCurrentResetExecution(sourceText))
+      )
+    ) {
+      return null;
+    }
+  } else if (
+    normalizedConfidence < 0.8 ||
+    temporalDirection === "historical" ||
+    UNRELATED_FUTURE_QUOTE_PATTERN.test(evidenceQuote)
+  ) {
+    return null;
+  }
+
+  return {
+    signalType,
+    teaserStrength: signalType === "teaser" ? teaserStrength : null,
+    confidence: normalizedConfidence,
+    evidenceQuote,
+    reasonJa,
+    temporalDirection,
+  };
+}
+
+function hasIndependentFuturePassage(text: string) {
+  return GENERIC_FUTURE_CONTINUATION_PATTERN.test(text) ||
+    EXPLICIT_FUTURE_RESET_PATTERN.test(text);
+}
+
+function parseFutureSignalAssessment(
+  value: unknown,
+  sourceText: string,
+  primaryEvidenceQuote: string | null,
+) {
+  const normalized = normalizeFutureSignal(value, sourceText, primaryEvidenceQuote);
+  if (!normalized) return null;
+  const temporal = parseGeminiTemporalSemantics(value, sourceText);
+  return {
+    ...normalized,
+    temporalExpression: temporal?.temporalExpression ?? null,
+    temporalKind: temporal?.temporalKind ?? null,
+    temporalPrecision: temporal?.temporalPrecision ?? null,
+    weekday: temporal?.weekday ?? null,
+    relativeDayOffset: temporal?.relativeDayOffset ?? null,
+    relativeAmount: temporal?.relativeAmount ?? null,
+    relativeUnit: temporal?.relativeUnit ?? null,
+    explicitDateParts: temporal?.explicitDateParts ?? null,
+    explicitTimeParts: temporal?.explicitTimeParts ?? null,
+    daypart: temporal?.daypart ?? null,
+    rangeKind: temporal?.rangeKind ?? null,
+    explicitTimezone: temporal?.explicitTimezone ?? null,
+    temporalConfidence: temporal?.temporalConfidence ?? null,
+  } satisfies GeminiFutureSignalOutput;
+}
+
 export function applyTiboClassificationSafetyGuard(
   text: string,
   result: GeminiClassificationOutput,
+  options: { futureSignalProvided?: boolean } = {},
 ): GeminiClassificationOutput {
   if (result.status !== "success" || !result.signalType) return result;
 
@@ -250,19 +471,40 @@ export function applyTiboClassificationSafetyGuard(
     text,
     result.signalType as ClassificationSignalType,
   );
-  if (decision.signalType === result.signalType && !decision.suppressTeaserStrength) return result;
-
-  const hasIndependentFutureTeaser = groundedCompletedReset && (
-    GENERIC_FUTURE_CONTINUATION_PATTERN.test(text) ||
-    EXPLICIT_FUTURE_RESET_PATTERN.test(text)
+  const futureSignalProvided = options.futureSignalProvided ?? (
+    result.futureSignal !== undefined && result.futureSignal !== null
   );
-  const preservedTeaserStrength = hasIndependentFutureTeaser &&
-    result.teaserStrength !== null &&
-    result.teaserStrength !== undefined &&
-    result.teaserStrength !== "none"
-    ? GENERIC_FUTURE_CONTINUATION_PATTERN.test(text) && result.teaserStrength === "strong"
-      ? "weak"
-      : result.teaserStrength
+
+  let futureSignal = groundedCompletedReset
+    ? parseFutureSignalAssessment(result.futureSignal, text, result.evidenceQuote)
+    : null;
+
+  // Keep compatibility with the earlier single teaserStrength field while
+  // the new nested futureSignal schema rolls out. The Gemini strength is
+  // preserved as-is; generic continuation text is not deterministically
+  // downgraded anymore.
+  if (
+    !futureSignal &&
+    !futureSignalProvided &&
+    groundedCompletedReset &&
+    hasIndependentFuturePassage(text)
+  ) {
+    futureSignal = parseFutureSignalAssessment(
+      {
+        signalType: "teaser",
+        teaserStrength: result.teaserStrength,
+        confidence: result.teaserStrengthConfidence ?? result.confidence,
+        evidenceQuote: result.teaserStrengthEvidenceQuote,
+        reasonJa: result.teaserStrengthReasonJa ?? result.reasonJa,
+        temporalDirection: "future",
+      },
+      text,
+      result.evidenceQuote,
+    );
+  }
+
+  const preservedTeaserStrength = futureSignal?.signalType === "teaser"
+    ? futureSignal.teaserStrength ?? null
     : null;
   const shouldPreserveIndependentTeaser = preservedTeaserStrength !== null;
 
@@ -270,19 +512,26 @@ export function applyTiboClassificationSafetyGuard(
     ...result,
     signalType: decision.signalType,
     reasonJa: decision.reasonJa ?? result.reasonJa,
-    teaserStrength: decision.suppressTeaserStrength
+    futureSignal,
+    teaserStrength: decision.suppressTeaserStrength || groundedCompletedReset
       ? shouldPreserveIndependentTeaser
         ? preservedTeaserStrength
         : "none"
       : result.teaserStrength,
-    teaserStrengthConfidence: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
-      ? null
+    teaserStrengthConfidence: decision.suppressTeaserStrength || groundedCompletedReset
+      ? shouldPreserveIndependentTeaser
+        ? futureSignal?.confidence ?? result.teaserStrengthConfidence
+        : null
       : result.teaserStrengthConfidence,
-    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
-      ? null
+    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength || groundedCompletedReset
+      ? shouldPreserveIndependentTeaser
+        ? futureSignal?.evidenceQuote ?? result.teaserStrengthEvidenceQuote
+        : null
       : result.teaserStrengthEvidenceQuote,
-    teaserStrengthReasonJa: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
-      ? decision.reasonJa
+    teaserStrengthReasonJa: decision.suppressTeaserStrength || groundedCompletedReset
+      ? shouldPreserveIndependentTeaser
+        ? futureSignal?.reasonJa ?? result.teaserStrengthReasonJa
+        : decision.reasonJa
       : result.teaserStrengthReasonJa,
   };
 }
@@ -321,6 +570,7 @@ export async function classifyWithGemini(
     teaserStrengthConfidence: null,
     teaserStrengthEvidenceQuote: null,
     teaserStrengthReasonJa: null,
+    futureSignal: null,
     temporalExpression: null,
     temporalKind: null,
     temporalPrecision: null,
@@ -457,33 +707,43 @@ export async function classifyWithGemini(
     // semantics are resolved separately by the webhook route so deterministic
     // fallback data never gets written into ai_* columns.
     const rawTemporalSemantics = parseGeminiTemporalSemantics(parsed, input.text);
+    const futureSignal = parseFutureSignalAssessment(
+      parsed.futureSignal,
+      input.text,
+      validQuote,
+    );
 
-    return applyTiboClassificationSafetyGuard(input.text, {
-      signalType: parsed.signalType,
-      confidence: parsed.confidence,
-      temporalDirection: parsed.temporalDirection,
-      evidenceQuote: validQuote,
-      reasonJa,
-      resetTypeJa,
-      noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
-      ...teaserStrengthAssessment,
-      temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
-      temporalKind: rawTemporalSemantics?.temporalKind ?? null,
-      temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
-      weekday: rawTemporalSemantics?.weekday ?? null,
-      relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
-      relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
-      relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
-      explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
-      explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
-      daypart: rawTemporalSemantics?.daypart ?? null,
-      rangeKind: rawTemporalSemantics?.rangeKind ?? null,
-      explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
-      temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
-      model,
-      status: "success",
-      classifiedAt: nowIso,
-    });
+    return applyTiboClassificationSafetyGuard(
+      input.text,
+      {
+        signalType: parsed.signalType,
+        confidence: parsed.confidence,
+        temporalDirection: parsed.temporalDirection,
+        evidenceQuote: validQuote,
+        reasonJa,
+        resetTypeJa,
+        noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
+        ...teaserStrengthAssessment,
+        futureSignal,
+        temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
+        temporalKind: rawTemporalSemantics?.temporalKind ?? null,
+        temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
+        weekday: rawTemporalSemantics?.weekday ?? null,
+        relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
+        relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
+        relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
+        explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
+        explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
+        daypart: rawTemporalSemantics?.daypart ?? null,
+        rangeKind: rawTemporalSemantics?.rangeKind ?? null,
+        explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
+        temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
+        model,
+        status: "success",
+        classifiedAt: nowIso,
+      },
+      { futureSignalProvided: parsed.futureSignal !== undefined && parsed.futureSignal !== null },
+    );
   } catch (err: any) {
     const msg = err?.message || "";
     if (msg === "TIMEOUT") {

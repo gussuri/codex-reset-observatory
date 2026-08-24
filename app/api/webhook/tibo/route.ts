@@ -30,6 +30,7 @@ import {
   shouldDeferFormalTiboReset,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
+import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { translateWithGemini } from "@/lib/radar/geminiTranslation";
@@ -54,7 +55,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(secondary_signal|teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -65,6 +66,62 @@ function normalizeStoredTranslation(value: unknown) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\r\n?/g, "\n").trim();
   return normalized && normalized.length <= 6000 ? normalized : null;
+}
+
+function buildSecondarySignal(
+  aiResult: Awaited<ReturnType<typeof classifyWithGemini>> | null,
+  sourceText: string,
+  createdAt: string,
+  primarySignalType: string | null | undefined,
+): TiboSecondarySignal | null {
+  const futureSignal = aiResult?.futureSignal;
+  if (
+    primarySignalType !== "reset_executed" ||
+    !futureSignal ||
+    (futureSignal.signalType !== "official_notice" &&
+      futureSignal.signalType !== "teaser" &&
+      futureSignal.signalType !== "none")
+  ) {
+    return null;
+  }
+
+  const temporalSemantics = futureSignal.signalType === "official_notice"
+    ? parseTiboTemporalSemantics(futureSignal, sourceText)
+    : null;
+  const temporalResolution = futureSignal.signalType === "official_notice"
+    ? resolveTiboTemporalSchedule(temporalSemantics, createdAt, TIBO_SOURCE_TIME_ZONE)
+    : null;
+  const fallbackExpiresAt = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = temporalResolution?.status === "resolved"
+    ? new Date(
+        getTemporalNoticeExpiry(temporalResolution, createdAt) ?? fallbackExpiresAt,
+      ).toISOString()
+    : fallbackExpiresAt;
+
+  return {
+    signalType: futureSignal.signalType,
+    teaserStrength: futureSignal.signalType === "teaser"
+      ? futureSignal.teaserStrength ?? null
+      : null,
+    confidence: futureSignal.confidence,
+    evidenceQuote: futureSignal.evidenceQuote,
+    reasonJa: futureSignal.reasonJa,
+    expiresAt,
+    temporal: temporalResolution
+      ? {
+          status: temporalResolution.status,
+          version: temporalResolution.version,
+          temporalExpression: temporalResolution.temporalExpression,
+          temporalKind: temporalResolution.temporalKind,
+          temporalPrecision: temporalResolution.temporalPrecision,
+          timezone: temporalResolution.timezone,
+          confidence: temporalResolution.confidence,
+          expectedStartAt: temporalResolution.expectedStartAt,
+          expectedEndAt: temporalResolution.expectedEndAt,
+          resolutionSource: temporalResolution.resolutionSource,
+        }
+      : null,
+  };
 }
 
 function getSupabaseServiceClient() {
@@ -160,7 +217,7 @@ export async function POST(req: NextRequest) {
       } catch {
         // Keep the webhook successful and let primary mode select the rule fallback.
         console.warn("[Webhook Warning] Gemini classification failed; using the rule fallback.");
-        aiResult = {
+          aiResult = {
           signalType: null,
           confidence: null,
           temporalDirection: null,
@@ -172,6 +229,7 @@ export async function POST(req: NextRequest) {
           teaserStrengthConfidence: null,
           teaserStrengthEvidenceQuote: null,
           teaserStrengthReasonJa: null,
+          futureSignal: null,
           temporalExpression: null,
           temporalKind: null,
           temporalPrecision: null,
@@ -235,6 +293,20 @@ export async function POST(req: NextRequest) {
     const receivedAt = new Date().toISOString();
 
     // 6. Build Supabase Payload
+    const secondarySignal = buildSecondarySignal(
+      aiResult,
+      text,
+      createdDate.toISOString(),
+      effectiveClassification.signalType,
+    );
+    const secondaryExpiresTime = secondarySignal?.expiresAt
+      ? new Date(secondarySignal.expiresAt).getTime()
+      : Number.NaN;
+    const payloadExpiresAt = Number.isFinite(secondaryExpiresTime) &&
+        secondaryExpiresTime > expiresAt.getTime()
+      ? new Date(secondaryExpiresTime)
+      : expiresAt;
+
     const payload = {
       tweet_id: tweetId,
       signal_type: effectiveClassification.signalType,
@@ -243,10 +315,11 @@ export async function POST(req: NextRequest) {
       tweet_url: tweetUrl,
       tweet_created_at: createdDate.toISOString(),
       detected_at: receivedAt,
-      expires_at: expiresAt.toISOString(),
+      expires_at: payloadExpiresAt.toISOString(),
       verification_status: "auto_unverified" as const,
       classification_reason: effectiveClassification.reason,
       teaser_strength: contextSafetyDecision?.teaserStrength ?? null,
+      secondary_signal: secondarySignal,
       is_reply: ruleResult.isReply,
       reply_to_handles: replyMetadata.replyToHandles ?? null,
       reply_context_text: replyMetadata.replyContextText ?? null,
@@ -298,7 +371,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -510,6 +583,7 @@ export async function POST(req: NextRequest) {
         quote_context_text: _quoteContextText,
         quote_tweet_url: _quoteTweetUrl,
         quote_author_handle: _quoteAuthorHandle,
+        secondary_signal: _secondarySignal,
         ...legacyPayload
       } = persistedPayload;
       upsertResult = await supabase

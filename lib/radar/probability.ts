@@ -39,6 +39,7 @@ import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal
 import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
 import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
+import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -153,10 +154,10 @@ function getProbabilityComponents(
   now: Date,
 ) {
   const environment = signalEvaluation.environment;
-  const sortedSignals = [
+  const sortedSignals = expandTiboSignalVariants([
     ...(data?.active_tibo_signals ?? []),
     ...(data?.formal_tibo_resets ?? []),
-  ]
+  ])
     .slice()
     .sort(
       (left, right) =>
@@ -177,12 +178,14 @@ function getProbabilityComponents(
         latestAcceptedTiboExecutionTime,
         latestRandomRecoveryTime ? getDateTime(latestRandomRecoveryTime) : 0,
       );
-  const validTeasers = sortedSignals.filter(
-    (signal) =>
-      signal.signal_type === "teaser" &&
+  const validTeasers = sortedSignals.filter((signal) => {
+    const createdTime = new Date(signal.tweet_created_at).getTime();
+    const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
+      new Date(signal.primary_event_at ?? "").getTime() === executionTime;
+    return signal.signal_type === "teaser" &&
       (signal.confidence ?? 0) >= 0.8 &&
-      new Date(signal.tweet_created_at).getTime() > executionTime,
-  );
+      (createdTime > executionTime || secondaryFollowsThisBoundary);
+  });
 
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
     (signal) =>
@@ -892,7 +895,9 @@ export function getActiveOfficialNotice(
         resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
         latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
       );
-  const rawSignals: Array<ActiveTiboSignal> = data?.active_tibo_signals ?? [];
+  const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(
+    data?.active_tibo_signals ?? [],
+  );
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
     .flatMap((signal) => {
       if (
@@ -907,12 +912,30 @@ export function getActiveOfficialNotice(
       const observedTime = new Date(signal.tweet_created_at).getTime();
       const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
       const latestBoundaryTime = cutoff === Number.NEGATIVE_INFINITY ? null : cutoff;
+      const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
+        new Date(signal.primary_event_at ?? "").getTime() === cutoff;
       if (
         Number.isNaN(observedTime) ||
         observedTime > now.getTime() ||
         Number.isNaN(expiresTime) ||
         expiresTime <= now.getTime() ||
-        (observedTime <= cutoff && isTemporalNoticeConsumedAtReset(
+        (observedTime < cutoff && isTemporalNoticeConsumedAtReset(
+          signal.temporal_resolution_status === "resolved"
+            ? {
+                status: signal.temporal_resolution_status,
+                temporalPrecision: getEffectiveTemporalPrecision({
+                  status: signal.temporal_resolution_status,
+                  temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
+                  expectedStartAt: signal.expected_start_at,
+                  expectedEndAt: signal.expected_end_at,
+                }) ?? "unknown",
+                expectedStartAt: signal.expected_start_at ?? null,
+                expectedEndAt: signal.expected_end_at ?? null,
+              }
+            : null,
+          latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
+        )) ||
+        (observedTime === cutoff && !secondaryFollowsThisBoundary && isTemporalNoticeConsumedAtReset(
           signal.temporal_resolution_status === "resolved"
             ? {
                 status: signal.temporal_resolution_status,

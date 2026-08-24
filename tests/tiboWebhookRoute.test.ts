@@ -426,6 +426,14 @@ test("composite completion is saved as reset_executed with independent weak teas
     teaserStrength: "weak",
     teaserStrengthConfidence: 0.9,
     teaserStrengthEvidenceQuote: "More to come tomorrow",
+    futureSignal: {
+      signalType: "teaser",
+      teaserStrength: "weak",
+      confidence: 0.9,
+      evidenceQuote: "More to come tomorrow",
+      reasonJa: "完了後の追加予告ですが、次回resetの具体性は弱いです。",
+      temporalDirection: "future",
+    },
   });
 
   try {
@@ -445,6 +453,10 @@ test("composite completion is saved as reset_executed with independent weak teas
     assert.equal(upsertBody.rule_signal_type, "reset_executed");
     assert.equal(upsertBody.teaser_strength, null);
     assert.equal(upsertBody.ai_teaser_strength, "weak");
+    const secondarySignal = upsertBody.secondary_signal as Record<string, unknown>;
+    assert.equal(secondarySignal.signalType, "teaser");
+    assert.equal(secondarySignal.teaserStrength, "weak");
+    assert.equal(secondarySignal.evidenceQuote, "More to come tomorrow");
     assert.equal(upsertBody.ai_temporal_direction, "completed_now");
     assert.equal(upsertBody.ai_evidence_quote, "Reset has been propagated to accounts");
     assert.equal(upsertBody.expected_start_at, null);
@@ -456,6 +468,188 @@ test("composite completion is saved as reset_executed with independent weak teas
   } finally {
     restoreGemini();
     restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("explicit secondary none is stored as raw AI provenance for later manual review", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2091688655828246890";
+  const text = "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 1,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    reasonJa: "完了済みのresetです。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 1,
+    teaserStrengthEvidenceQuote: null,
+    futureSignal: {
+      signalType: "none",
+      teaserStrength: null,
+      confidence: 1,
+      evidenceQuote: null,
+      reasonJa: "翌日の追加更新であり、次回resetの予告ではありません。",
+      temporalDirection: "future",
+    },
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-08-23T23:37:43.201Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.deepEqual(upsertBody.secondary_signal, {
+      signalType: "none",
+      teaserStrength: null,
+      confidence: 1,
+      evidenceQuote: null,
+      reasonJa: "翌日の追加更新であり、次回resetの予告ではありません。",
+      expiresAt: "2026-08-24T23:37:43.201Z",
+      temporal: null,
+    });
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("webhook reclassification updates secondary AI fields but preserves a manual weak override", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2091688655828246890";
+  const text = "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.";
+  const existingSecondary = {
+    signalType: "none",
+    teaserStrength: null,
+    confidence: 1,
+    evidenceQuote: null,
+    reasonJa: "AIは一般的な追加更新と判定しました。",
+    manualOverride: {
+      source: "manual",
+      signalType: "teaser",
+      teaserStrength: "weak",
+      reasonJa: "手動確認: 完了済みreset後の次回resetを弱く示唆するsecondary teaserとして補正。",
+      reviewedAt: "2026-08-24T10:00:00.000Z",
+    },
+  };
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    reasonJa: "完了済みのresetです。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 1,
+    teaserStrengthEvidenceQuote: null,
+    futureSignal: {
+      signalType: "teaser",
+      teaserStrength: "strong",
+      confidence: 0.95,
+      evidenceQuote: "More to come tomorrow",
+      reasonJa: "次の展開を強く示唆しています。",
+      temporalDirection: "future",
+    },
+  });
+  globalThis.fetch = async (input, init) => {
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const url = input instanceof Request ? input.url : String(input);
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    if (method === "GET" && url.includes("/tibo_signals")) {
+      return new Response(JSON.stringify({
+        tweet_id: tweetId,
+        text,
+        tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+        tweet_created_at: "2026-08-23T23:37:43.201Z",
+        detected_at: "2026-08-24T00:00:00.000Z",
+        expires_at: "2026-08-25T00:00:00.000Z",
+        signal_type: "reset_executed",
+        confidence: 0.98,
+        classification_reason: "完了済みのresetです。",
+        verification_status: "auto_unverified",
+        classification_source: "gemini",
+        teaser_strength: null,
+        secondary_signal: existingSecondary,
+        is_reply: false,
+        reply_to_handles: null,
+        reply_context_text: null,
+        source_timeline: "profile",
+        translated_text_ja: null,
+        translated_text_zh: null,
+        ai_teaser_strength: "none",
+        ai_teaser_strength_confidence: 1,
+        ai_teaser_strength_evidence_quote: null,
+        ai_teaser_strength_reason_ja: "AIは追加更新と判定しました。",
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "POST") {
+      return new Response(JSON.stringify([]), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-08-23T23:37:43.201Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    const secondarySignal = upsertBody.secondary_signal as Record<string, any>;
+    assert.equal(secondarySignal.signalType, "teaser");
+    assert.equal(secondarySignal.teaserStrength, "strong");
+    assert.equal(secondarySignal.manualOverride.teaserStrength, "weak");
+    assert.equal(secondarySignal.manualOverride.source, "manual");
+  } finally {
+    restoreGemini();
+    globalThis.fetch = originalFetch;
     restoreEnvironment(previous);
   }
 });

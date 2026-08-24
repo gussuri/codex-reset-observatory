@@ -64,6 +64,7 @@ export type TiboScenarioMockGeminiOutput = Partial<
     | "teaserStrengthConfidence"
     | "teaserStrengthEvidenceQuote"
     | "teaserStrengthReasonJa"
+    | "futureSignal"
     | "temporalExpression"
     | "temporalKind"
     | "temporalPrecision"
@@ -150,6 +151,7 @@ export function buildFixedGeminiOutput(scenario: TiboScenario): GeminiClassifica
       mock.teaserStrengthEvidenceQuote ?? (expectedTeaser ? defaultEvidence(scenario.tweetText) : null),
     teaserStrengthReasonJa:
       mock.teaserStrengthReasonJa ?? (expectedTeaser ? "Fixture-defined UI-only teaser strength." : null),
+    futureSignal: mock.futureSignal ?? null,
     temporalExpression: mock.temporalExpression ?? null,
     temporalKind: mock.temporalKind ?? (scenario.expected.temporalResolutionStatus ? "vague" : "none"),
     temporalPrecision: mock.temporalPrecision ?? scenario.expected.temporalPrecision ?? "unknown",

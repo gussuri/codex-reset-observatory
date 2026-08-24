@@ -6,6 +6,7 @@ import {
 } from "../lib/radar/classification";
 import {
   applyTiboClassificationSafetyGuard,
+  buildGeminiPrompt,
   TIBO_GEMINI_SYSTEM_PROMPT,
   type GeminiClassificationOutput,
 } from "../lib/radar/geminiClassification";
@@ -15,6 +16,21 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 const url = "https://x.com/thsottiaux/status/910000000000009999";
 const compositeResetText =
   "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.";
+
+test("futureSignal prompt distinguishes explicit reset notices from contextual teasers", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /official_notice[\s\S]*explicitly announced[\s\S]*reset/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /More to come tomorrow[\s\S]*not an[\s\S]*official notice/i);
+  assert.match(
+    TIBO_GEMINI_SYSTEM_PROMPT,
+    /type="teaser" requires teaserStrength="strong" or "weak"/i,
+  );
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /type="none"[\s\S]*teaserStrength=null/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /futureSignal choice is independent[\s\S]*primary signalType/i);
+  assert.match(
+    buildGeminiPrompt({ text: compositeResetText, tweetCreatedAt: "2026-08-24T00:07:43.201Z" }),
+    /AUTHOR TEXT:/,
+  );
+});
 
 function geminiResult(signalType: GeminiClassificationOutput["signalType"]): GeminiClassificationOutput {
   return {
@@ -226,7 +242,7 @@ test("completed-now evidence prevents a contradictory official notice result", (
   assert.equal(guarded.teaserStrength, "weak");
 });
 
-test("generic future continuation is capped at weak teaser strength after completion", () => {
+test("generic future continuation keeps Gemini's independently assessed strength", () => {
   const text = "Reset has been propagated to accounts. More to come tomorrow.";
   const guarded = applyTiboClassificationSafetyGuard(text, {
     ...geminiResult("reset_executed"),
@@ -237,7 +253,137 @@ test("generic future continuation is capped at weak teaser strength after comple
   });
 
   assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.teaserStrength, "strong");
+});
+
+test("secondary future teaser may use a context-only quote without reset keywords", () => {
+  const text = "Reset has been propagated to accounts. More to come tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    futureSignal: {
+      signalType: "teaser",
+      teaserStrength: "weak",
+      confidence: 0.9,
+      evidenceQuote: "More to come tomorrow",
+      reasonJa: "完了後の追加予告ですが、次回resetの具体性は弱いです。",
+      temporalDirection: "future",
+    },
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.futureSignal?.signalType, "teaser");
+  assert.equal(guarded.futureSignal?.teaserStrength, "weak");
   assert.equal(guarded.teaserStrength, "weak");
+  assert.equal(guarded.futureSignal?.evidenceQuote, "More to come tomorrow");
+});
+
+test("secondary official notice requires explicit reset or clear reset coreference", () => {
+  const text = "Reset is done. We will reset everyone again tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset is done",
+    futureSignal: {
+      signalType: "official_notice",
+      teaserStrength: null,
+      confidence: 0.99,
+      evidenceQuote: "We will reset everyone again tomorrow",
+      reasonJa: "次回のresetを明示的に予告しています。",
+      temporalDirection: "future",
+    },
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.futureSignal?.signalType, "official_notice");
+  assert.equal(guarded.teaserStrength, "none");
+});
+
+test("secondary teaser requires Gemini to choose strong or weak", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "Reset is done. More to come tomorrow.",
+    {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: "Reset is done",
+      futureSignal: {
+        signalType: "teaser",
+        teaserStrength: null,
+        confidence: 0.9,
+        evidenceQuote: "More to come tomorrow",
+        reasonJa: "次回を示唆しています。",
+        temporalDirection: "future",
+      },
+    },
+  );
+
+  assert.equal(guarded.futureSignal, null);
+  assert.equal(guarded.teaserStrength, "none");
+});
+
+test("generic future work is none and invalid generic official notice is not converted", () => {
+  const text = "Reset is done. More updates tomorrow.";
+  const none = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset is done",
+    futureSignal: {
+      signalType: "none",
+      teaserStrength: null,
+      confidence: 0.95,
+      evidenceQuote: "More updates tomorrow",
+      reasonJa: "更新の予定であり、次回resetとの関係は不明です。",
+      temporalDirection: "future",
+    },
+  });
+  assert.equal(none.futureSignal?.signalType, "none");
+  assert.equal(none.teaserStrength, "none");
+
+  const invalidOfficial = applyTiboClassificationSafetyGuard(
+    "Reset is done. More to come tomorrow.",
+    {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: "Reset is done",
+      futureSignal: {
+        signalType: "official_notice",
+        teaserStrength: null,
+        confidence: 0.9,
+        evidenceQuote: "More to come tomorrow",
+        reasonJa: "翌日にさらなる展開があることを予告しています。",
+        temporalDirection: "future",
+      },
+      teaserStrength: "strong",
+      teaserStrengthConfidence: 0.9,
+      teaserStrengthEvidenceQuote: "More to come tomorrow",
+      teaserStrengthReasonJa: "翌日の展開を強く示唆しています。",
+    },
+  );
+  assert.equal(invalidOfficial.futureSignal, null);
+  assert.equal(invalidOfficial.teaserStrength, "none");
+});
+
+test("secondary evidence must be the exact source substring", () => {
+  const guarded = applyTiboClassificationSafetyGuard(
+    "Reset is done. More to come tomorrow.",
+    {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: "Reset is done",
+      futureSignal: {
+        signalType: "teaser",
+        teaserStrength: "weak",
+        confidence: 0.9,
+        evidenceQuote: "more to come tomorrow",
+        reasonJa: "次回を弱く示唆しています。",
+        temporalDirection: "future",
+      },
+    },
+  );
+
+  assert.equal(guarded.futureSignal, null);
+  assert.equal(guarded.teaserStrength, "none");
 });
 
 test("explicit future reset language can retain strong independent teaser strength", () => {

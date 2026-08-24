@@ -1,5 +1,7 @@
 import type { ActiveTiboSignal, RadarData, WindowEventLike } from "./types";
 import type { TeaserStrength } from "./teaserStrength";
+import type { TiboSecondarySignal } from "./tiboSecondarySignal";
+import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import type {
   TemporalKind,
   TemporalPrecision,
@@ -127,6 +129,7 @@ export type FormalTiboResetSignal = {
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
   ai_teaser_strength?: TeaserStrength | null;
+  secondary_signal?: TiboSecondarySignal | null;
   teaser_strength?: TeaserStrength | null;
   ai_teaser_strength_confidence?: number | null;
   ai_teaser_strength_evidence_quote?: string | null;
@@ -831,7 +834,7 @@ export function collectOfficialTiboNoticeSignals(
   const seen = new Set<string>();
   const result: TiboNoticeSignal[] = [];
 
-  for (const signal of [...recentSignals, ...activeSignals]) {
+  for (const signal of expandTiboSignalVariants([...recentSignals, ...activeSignals])) {
     if (
       signal.signal_type !== "official_notice" ||
       signal.is_reply === true

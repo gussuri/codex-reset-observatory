@@ -36,6 +36,7 @@ import {
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
+import { expandTiboSignalVariants } from "@/lib/radar/tiboSecondarySignal";
 import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
 import { attachNextGenerationBPublicTrainingState } from "@/lib/radar/publishedProbability";
 import {
@@ -147,7 +148,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(secondary_signal|teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -188,7 +189,7 @@ async function fetchRawTiboHistorySignals(
       error: unknown | null;
     };
     let result = (await queryTiboHistory(
-      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,teaser_strength,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,translated_text_ja,translated_text_zh,is_reply,is_quote,reply_to_handles,reply_context_text,source_timeline,quote_context_text,quote_tweet_url,quote_author_handle",
+      "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,teaser_strength,secondary_signal,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,translated_text_ja,translated_text_zh,is_reply,is_quote,reply_to_handles,reply_context_text,source_timeline,quote_context_text,quote_tweet_url,quote_author_handle,verification_status",
     )) as TiboHistoryQueryResult;
 
     if (result.error && isMissingTiboOptionalColumnError(result.error)) {
@@ -485,7 +486,7 @@ async function getTiboSignalBundle(
   const signals = historyResult.data;
   const recentSignalsSource = recentResult.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
-  const notices = signals
+  const notices = expandTiboSignalVariants(signals)
     .map(toNoticeSignal)
     .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
 
@@ -503,6 +504,7 @@ async function getTiboSignalBundle(
     translated_text_ja: signal.translated_text_ja ?? null,
     translated_text_zh: signal.translated_text_zh ?? null,
     teaser_strength: getEffectiveTeaserStrength(signal),
+    secondary_signal: signal.secondary_signal ?? null,
     ai_temporal_expression: signal.ai_temporal_expression ?? null,
     ai_temporal_kind: signal.ai_temporal_kind ?? null,
     ai_temporal_precision: signal.ai_temporal_precision ?? null,

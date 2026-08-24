@@ -40,6 +40,7 @@ import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getTeaserStrengthSignals } from "./teaserStrength";
+import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTemporalNoticeCoverage } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -534,10 +535,10 @@ export function calculateShadowSignalMultipliers(
 
 function getLatestAcceptedTiboResetTime(data: RadarData | null, now: Date) {
   return Math.max(
-    ...[
+    ...expandTiboSignalVariants([
       ...(data?.active_tibo_signals ?? []),
       ...(data?.formal_tibo_resets ?? []),
-    ]
+    ])
       .filter(
         (signal) =>
           signal.signal_type === "reset_executed" &&
@@ -558,19 +559,25 @@ function getEligibleFormalTeaserSignals(
   const latestTiboResetTime = getLatestAcceptedTiboResetTime(data, now);
   const cutoff = Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
 
-  return [
+  return expandTiboSignalVariants([
     ...(data?.active_tibo_signals ?? []),
     ...(data?.formal_tibo_resets ?? []),
-  ].filter((signal) => {
+  ]).filter((signal) => {
     const createdAt = getTimestamp(signal.tweet_created_at);
+    const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
+      getTimestamp(signal.primary_event_at) === cutoff;
     return Boolean(
       signal.signal_type === "teaser" &&
+        // Composite-post secondary teasers are strength-classified signals,
+        // not the primary formal teaser slot. Keep them on the existing
+        // weak/strong decay path instead of granting the formal boost.
+        signal.is_secondary_future_signal !== true &&
         (signal.confidence ?? 0) >= 0.8 &&
         signal.verification_status !== "rejected" &&
         signal.is_reply !== true &&
         createdAt !== null &&
         createdAt <= now.getTime() &&
-        createdAt > cutoff,
+        (createdAt > cutoff || secondaryFollowsThisBoundary),
     );
   });
 }
@@ -621,18 +628,22 @@ function getTeaserScore(
 
 function getTeaserStrengthSourceSignals(data: RadarData | null) {
   const seen = new Set<string>();
-  return [
+  return expandTiboSignalVariants([
     ...(data?.active_tibo_signals ?? []),
     ...(data?.recent_tibo_signals ?? []),
-  ].flatMap((signal) => {
-    if (seen.has(signal.tweet_id)) return [];
-    seen.add(signal.tweet_id);
+  ]).flatMap((signal) => {
+    const key = signal.tweet_id ?? `${signal.tweet_created_at}:${signal.signal_type}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
     return [{
+      tweet_id: signal.tweet_id,
       tweet_created_at: signal.tweet_created_at,
-      teaser_strength: signal.teaser_strength ?? null,
+      teaser_strength: signal.teaser_strength ?? signal.ai_teaser_strength ?? null,
       signal_type: signal.signal_type,
       verification_status: signal.verification_status,
       is_reply: signal.is_reply,
+      is_secondary_future_signal: signal.is_secondary_future_signal,
+      primary_event_at: signal.primary_event_at,
     }];
   });
 }

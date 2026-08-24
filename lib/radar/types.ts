@@ -4,6 +4,7 @@ import type {
   RejectedTiboResetSignal,
 } from "./tiboHistory";
 import type { TeaserStrength } from "./teaserStrength";
+import type { TiboSecondarySignal } from "./tiboSecondarySignal";
 import type {
   TemporalKind,
   TemporalPrecision,
@@ -168,6 +169,10 @@ export type ActiveTiboSignal = {
   classification_source?: string | null;
   teaser_strength?: TeaserStrength | null;
   ai_teaser_strength?: TeaserStrength | null;
+  secondary_signal?: TiboSecondarySignal | null;
+  is_secondary_future_signal?: boolean;
+  parent_tweet_id?: string;
+  primary_event_at?: string;
   translated_text_ja?: string | null;
   translated_text_zh?: string | null;
   ai_temporal_expression?: string | null;

@@ -1,3 +1,6 @@
+import { expandTiboSignalVariants } from "./tiboSecondarySignal";
+import type { TiboSecondarySignal } from "./tiboSecondarySignal";
+
 export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 
 export type TeaserStrength = (typeof TIBO_TEASER_STRENGTHS)[number];
@@ -6,12 +9,17 @@ export type ResetTeaserStatus = TeaserStrength | "unknown";
 const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 export type ResetTeaserSignal = {
+  tweet_id?: string;
   tweet_created_at: string;
   teaser_strength?: TeaserStrength | null;
+  ai_teaser_strength?: TeaserStrength | null;
   signal_type?: string | null;
   verification_status?: string | null;
   is_reply?: boolean | null;
   expires_at?: string | null;
+  secondary_signal?: TiboSecondarySignal | null;
+  is_secondary_future_signal?: boolean;
+  primary_event_at?: string;
 };
 
 export type TeaserStrengthWindowOptions = {
@@ -58,14 +66,21 @@ export function getTeaserStrengthSignals(
   const latestResetTime = getTimestamp(latestResetAt);
   const cutoffTime = nowTime - RESET_TEASER_LOOKBACK_MS;
   const includeReplies = options.includeReplies ?? true;
+  const expandedSignals = expandTiboSignalVariants(signals ?? []);
 
-  return (signals ?? []).filter((signal) => {
+  return expandedSignals.filter((signal) => {
     const createdTime = getTimestamp(signal.tweet_created_at);
+    const primaryEventTime = signal.is_secondary_future_signal === true
+      ? getTimestamp(signal.primary_event_at)
+      : null;
+    const isSemanticallyAfterBoundary = latestResetTime === null ||
+      (createdTime !== null && createdTime > latestResetTime) ||
+      (primaryEventTime !== null && primaryEventTime === latestResetTime);
     return Boolean(
       createdTime !== null &&
         createdTime <= nowTime &&
         createdTime >= cutoffTime &&
-        (latestResetTime === null || createdTime > latestResetTime) &&
+        isSemanticallyAfterBoundary &&
         signal.verification_status !== "rejected" &&
         signal.signal_type !== "official_notice" &&
         signal.signal_type !== "reset_executed" &&
@@ -104,10 +119,11 @@ export function aggregateResetTeaserStatus(
 
   for (const signal of eligibleSignals) {
     hasEligiblePost = true;
-    if (signal.teaser_strength === "strong") return "strong";
-    if (signal.teaser_strength === "weak") {
+    const strength = getEffectiveTeaserStrength(signal);
+    if (strength === "strong") return "strong";
+    if (strength === "weak") {
       hasWeak = true;
-    } else if (signal.teaser_strength === "none") {
+    } else if (strength === "none") {
       hasNone = true;
     }
   }

@@ -32,6 +32,7 @@ import {
   calculateShadowProbabilityForModel,
   getShadowCompletedResetEvents,
 } from "../lib/radar/shadowProbability";
+import { setTiboSecondaryManualOverride } from "../lib/radar/tiboSecondarySignal";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -246,6 +247,66 @@ test("calibrated public model reflects eligible teaser strength with existing de
   assert.ok(weak.probability48h > baseline.probability48h);
   assert.ok(strong.probability24h > weak.probability24h);
   assert.ok(strong.probability48h > weak.probability48h);
+});
+
+test("manual secondary weak uses the existing teaser-strength probability path", () => {
+  const primary = {
+    tweet_id: "secondary-manual-probability",
+    text: "Reset is done. More to come tomorrow.",
+    tweet_url: "https://x.com/thsottiaux/status/secondary-manual-probability",
+    tweet_created_at: NOW.toISOString(),
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    verification_status: "auto_unverified" as const,
+    classification_source: "gemini" as const,
+    secondary_signal: {
+      signalType: "none" as const,
+      teaserStrength: null,
+      confidence: 1,
+      evidenceQuote: null,
+      reasonJa: "AIは一般的な追加更新と判定しました。",
+    },
+  };
+  const baseline = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: NOW, activeTiboSignals: [primary] }),
+    { now: NOW, activeOfficialNotice: null },
+  );
+  const weakPrimary = {
+    ...primary,
+    secondary_signal: setTiboSecondaryManualOverride(primary.secondary_signal, {
+      signalType: "teaser",
+      teaserStrength: "weak",
+      reasonJa: "手動確認: weak secondary teaserです。",
+      reviewedAt: "2026-08-24T10:00:00.000Z",
+    }),
+  };
+  const strongPrimary = {
+    ...primary,
+    secondary_signal: setTiboSecondaryManualOverride(primary.secondary_signal, {
+      signalType: "teaser",
+      teaserStrength: "strong",
+      reasonJa: "手動確認: strong secondary teaserです。",
+      reviewedAt: "2026-08-24T10:00:00.000Z",
+    }),
+  };
+  const weak = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: NOW, activeTiboSignals: [weakPrimary] }),
+    { now: NOW, activeOfficialNotice: null },
+  );
+  const strong = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: NOW, activeTiboSignals: [strongPrimary] }),
+    { now: NOW, activeOfficialNotice: null },
+  );
+
+  assert.ok(weak.rawShadow);
+  assert.ok(strong.rawShadow);
+  assert.ok(weak.rawShadow.multipliers.teaserStrength.probability24h > 1);
+  assert.ok(weak.rawShadow.multipliers.teaserStrength.probability48h > 1);
+  assert.ok(strong.rawShadow.multipliers.teaserStrength.probability24h > weak.rawShadow.multipliers.teaserStrength.probability24h);
+  assert.ok(strong.rawShadow.multipliers.teaserStrength.probability48h > weak.rawShadow.multipliers.teaserStrength.probability48h);
+  assert.ok(weak.probability24h > baseline.probability24h);
+  assert.ok(weak.probability48h > baseline.probability48h);
+  assert.equal(weak.rawShadow.officialNoticeOverride.active, false);
 });
 
 test("calibrated public model applies teaser-strength windows and eligibility", () => {
