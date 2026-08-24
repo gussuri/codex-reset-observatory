@@ -163,7 +163,20 @@ function getProbabilityComponents(
         new Date(left.tweet_created_at).getTime() -
         new Date(right.tweet_created_at).getTime(),
     );
-  const executionTime = getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
+  const latestAcceptedTiboExecutionTime =
+    getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
+  const dynamicRandomRecoveryTime = getLastRandomRecoveryResetAt(data, now, []);
+  const latestRandomRecoveryTime = getLastRandomRecoveryResetAt(data, now);
+  // A dynamic canonical boundary represents the observed reset itself. A late
+  // Tibo completion post only corroborates it and must not consume teasers
+  // from the next cycle. With no dynamic boundary, retain the legacy fallback
+  // for Tibo-only and static-history cases.
+  const executionTime = dynamicRandomRecoveryTime
+    ? getDateTime(dynamicRandomRecoveryTime)
+    : Math.max(
+        latestAcceptedTiboExecutionTime,
+        latestRandomRecoveryTime ? getDateTime(latestRandomRecoveryTime) : 0,
+      );
   const validTeasers = sortedSignals.filter(
     (signal) =>
       signal.signal_type === "teaser" &&
@@ -869,10 +882,16 @@ export function getActiveOfficialNotice(
     ? latestResetAt
     : recoveryBoundaryAt;
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
-  const cutoff = Math.max(
-    resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-    latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-  );
+  const dynamicRecoveryBoundaryAt = getLastRecoveryResetAt(data, now, []);
+  // Prefer a dynamic canonical boundary over a later completion post. If the
+  // current data has no dynamic boundary, preserve the legacy Tibo-only and
+  // static-history cutoff behavior.
+  const cutoff = dynamicRecoveryBoundaryAt
+    ? getDateTime(dynamicRecoveryBoundaryAt)
+    : Math.max(
+        resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+        latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+      );
   const rawSignals: Array<ActiveTiboSignal> = data?.active_tibo_signals ?? [];
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
     .flatMap((signal) => {
