@@ -5,11 +5,8 @@ import type { Locale } from "@/lib/radar/types";
 import {
   buildRandomResetIntervalDistribution,
   buildRandomResetTimeHeatmap,
-  buildRandomResetWeekdayDistribution,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
-  formatHeatmapWeekdayBarLabel,
-  formatHeatmapWeekdayLabel,
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
   formatRandomResetIntervalCompactLabel,
@@ -18,7 +15,6 @@ import {
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   RANDOM_RESET_INTERVAL_BIN_COUNT,
-  RANDOM_RESET_TIME_HEATMAP_BIN_COUNT,
   RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT,
 } from "@/lib/radar/resetTimeHeatmap";
 import type {
@@ -31,14 +27,12 @@ import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット時刻",
-    description: "過去のランダムリセット時刻を、PCでは1時間ごと、モバイルでは2時間ごとに集計しています。",
+    description: "過去のランダムリセット時刻を、2時間ごとに集計しています。",
     timezone: "タイムゾーン",
     timeAxis: "時刻",
     period: "集計期間",
     allPeriod: "全期間",
     lastMonth: "直近1か月",
-    weekdayHeading: "過去のランダムリセット曜日",
-    weekdayDescription: "過去のランダムリセットが実施された曜日を集計しています。",
     intervalHeading: "過去のランダムリセット間隔",
     intervalDescription: "過去のランダムリセットどうしの間隔を集計しています。前回のランダムリセットから次のランダムリセットまでの経過時間です。",
     median: "中央値",
@@ -48,18 +42,16 @@ const CONTENT = {
     intervalEmpty: "この期間では、ランダムリセット間隔を集計できる記録がありません。",
     count: "リセット件数",
     empty: "対象となる記録はありません。",
-    ariaBusy: "過去のランダムリセット時刻・曜日・間隔を読み込んでいます",
+    ariaBusy: "過去のランダムリセット時刻・間隔を読み込んでいます",
   },
   en: {
     heading: "Past random reset times",
-    description: "Past random reset times are grouped by hour on desktop and by two-hour blocks on mobile.",
+    description: "Past random reset times are grouped into two-hour blocks.",
     timezone: "Time zone",
     timeAxis: "Time",
     period: "Time range",
     allPeriod: "All time",
     lastMonth: "Last month",
-    weekdayHeading: "Past random reset weekdays",
-    weekdayDescription: "Past random reset records are grouped by day of the week.",
     intervalHeading: "Past random reset intervals",
     intervalDescription: "Past intervals between consecutive random resets are grouped by elapsed time. Each interval runs from one random reset to the next.",
     median: "Median",
@@ -69,18 +61,16 @@ const CONTENT = {
     intervalEmpty: "There are not enough matching records to calculate random reset intervals for this range.",
     count: "Reset records",
     empty: "No matching records are available.",
-    ariaBusy: "Loading past random reset times, weekdays, and intervals",
+    ariaBusy: "Loading past random reset times and intervals",
   },
   zh: {
     heading: "历史随机重置时刻分布",
-    description: "按时刻汇总历史随机重置记录（桌面端按1小时、移动端按2小时聚合）。",
+    description: "按2小时时段汇总历史随机重置记录。",
     timezone: "时区",
     timeAxis: "时间",
     period: "统计周期",
     allPeriod: "全部记录",
     lastMonth: "最近1个月",
-    weekdayHeading: "历史随机重置星期分布",
-    weekdayDescription: "按星期汇总历史随机重置记录的分布情况。",
     intervalHeading: "历史随机重置间隔分布",
     intervalDescription: "汇总连续两次随机重置之间的间隔时长（从一次随机重置到下一次随机重置的经过时间）。",
     median: "中位数",
@@ -90,7 +80,7 @@ const CONTENT = {
     intervalEmpty: "所选统计周期内暂无足够的记录用于计算重置间隔。",
     count: "重置次数",
     empty: "暂无符合条件的记录。",
-    ariaBusy: "正在加载历史随机重置时刻、星期和间隔分布",
+    ariaBusy: "正在加载历史随机重置时刻和间隔分布",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -116,34 +106,23 @@ export function RandomResetTimeHeatmap({
       const visibleEventTimes = filterHeatmapEventTimes(eventTimes, range, now);
       return {
         time: buildRandomResetTimeHeatmap(visibleEventTimes, timeZone, now),
-        weekday: buildRandomResetWeekdayDistribution(visibleEventTimes, timeZone, now),
         interval: buildRandomResetIntervalDistribution(eventTimes, range, now),
       };
     },
     [eventTimes, range, timeZone],
   );
   const timeHeatmap = heatmap?.time ?? null;
-  const mobileTimeBins = timeHeatmap ? getCompactHeatmapTimeBins(timeHeatmap.bins) : [];
-  const weekdayDistribution = heatmap?.weekday ?? null;
+  const timeBins = timeHeatmap ? getCompactHeatmapTimeBins(timeHeatmap.bins) : [];
   const intervalDistribution = heatmap?.interval ?? null;
-  const maxRawCount = timeHeatmap
-    ? Math.max(...timeHeatmap.bins.map((item) => item.rawCount))
-    : 0;
-  const weekdayMaxRawCount = weekdayDistribution
-    ? Math.max(...weekdayDistribution.bins.map((item) => item.rawCount))
+  const maxRawCount = timeBins.length > 0
+    ? Math.max(...timeBins.map((item) => item.rawCount))
     : 0;
   const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
-  const mobileTimeMaxRawCount = mobileTimeBins.length > 0
-    ? Math.max(...mobileTimeBins.map((item) => item.rawCount))
-    : 0;
-  const mobileTimeBarScaleMax = mobileTimeMaxRawCount > 0 ? mobileTimeMaxRawCount + 1 : 0;
-  const weekdayBarScaleMax = weekdayMaxRawCount > 0 ? weekdayMaxRawCount + 1 : 0;
   const intervalMaxRawCount = intervalDistribution
     ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
     : 0;
   const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount * 1.2 : 0;
-  const desktopTimeAxisTicks = getHeatmapTimeAxisTicks(1);
-  const mobileTimeAxisTicks = getHeatmapTimeAxisTicks(2);
+  const timeAxisTicks = getHeatmapTimeAxisTicks(2);
 
   return (
     <section
@@ -190,38 +169,13 @@ export function RandomResetTimeHeatmap({
 
       {!heatmap ? (
         <div className="mt-5 space-y-5" role="status" aria-label={content.ariaBusy}>
-          <div className="grid grid-cols-12 gap-1 md:hidden" aria-hidden="true">
+          <div className="grid grid-cols-12 gap-1" aria-hidden="true">
             {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT }, (_, index) => (
               <span
                 className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
                 key={index}
               />
             ))}
-          </div>
-          <div
-            className="hidden gap-1 md:grid md:grid-cols-[repeat(24,minmax(0,1fr))]"
-            aria-hidden="true"
-          >
-            {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT }, (_, index) => (
-              <span
-                className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
-                key={index}
-              />
-            ))}
-          </div>
-          <div className="border-t border-slate-100 pt-5">
-            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
-              {content.weekdayHeading}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
-            <div className="mt-4 grid grid-cols-7 gap-1" aria-hidden="true">
-              {Array.from({ length: 7 }, (_, index) => (
-                <span
-                  className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
-                  key={index}
-                />
-              ))}
-            </div>
           </div>
           <div className="border-t border-slate-100 pt-5">
             <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
@@ -253,53 +207,16 @@ export function RandomResetTimeHeatmap({
       ) : (
         <>
           <div className="mt-5 min-w-0">
-            <div className="hidden md:block">
-              <TimeHeatmapChart
-                ariaLabel={content.heading}
-                barScaleMax={timeBarScaleMax}
-                bins={timeHeatmap?.bins ?? []}
-                gridClassName="grid-cols-[repeat(24,minmax(0,1fr))]"
-                locale={locale}
-                timeAxisTicks={desktopTimeAxisTicks}
-              />
-            </div>
-            <div className="md:hidden">
-              <TimeHeatmapChart
-                ariaLabel={content.heading}
-                barScaleMax={mobileTimeBarScaleMax}
-                bins={mobileTimeBins}
-                gridClassName="grid-cols-12"
-                locale={locale}
-                timeAxisTicks={mobileTimeAxisTicks}
-              />
-            </div>
+            <TimeHeatmapChart
+              ariaLabel={content.heading}
+              barScaleMax={timeBarScaleMax}
+              bins={timeBins}
+              gridClassName="grid-cols-12"
+              locale={locale}
+              timeAxisTicks={timeAxisTicks}
+            />
           </div>
           <p aria-hidden="true" className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
-          <div className="mt-6 border-t border-slate-100 pt-5">
-            <h2 className="text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
-              {content.weekdayHeading}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">{content.weekdayDescription}</p>
-            <div className="mt-4 grid grid-cols-7 gap-1.5" role="list" aria-label={content.weekdayHeading}>
-              {weekdayDistribution?.bins.map((bin) => {
-                const label = formatHeatmapWeekdayBarLabel(bin, locale);
-                const barHeight = getRawBarHeightPercent(bin.rawCount, weekdayBarScaleMax);
-
-                return (
-                  <div className="min-w-0 text-center" key={bin.weekday} role="listitem">
-                    <ResetCountBar
-                      ariaLabel={label}
-                      barHeight={barHeight}
-                      rawCount={bin.rawCount}
-                    />
-                    <div aria-hidden="true" className="mt-1 text-center text-[0.65rem] font-medium tabular-nums text-slate-500">
-                      {formatHeatmapWeekdayLabel(bin.weekday, locale)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
           {intervalDistribution ? (
             <RandomResetIntervalSection
               barScaleMax={intervalBarScaleMax}
