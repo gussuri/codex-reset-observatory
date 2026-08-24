@@ -17,6 +17,7 @@ import {
   formatRandomResetIntervalBinLabel,
   formatRandomResetIntervalCompactLabel,
   formatRandomResetDuration,
+  getRandomResetIntervalMobileAxisLabels,
   getCompactHeatmapTimeBins,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
@@ -414,4 +415,21 @@ test("formats random reset interval durations and localized bar labels", () => {
   assert.equal(formatRandomResetIntervalBarLabel({ ...bin, rawCount: 1 }, "en"), "24–48h, 1 interval");
   assert.equal(formatRandomResetIntervalBarLabel(bin, "en"), "24–48h, 3 intervals");
   assert.equal(formatRandomResetIntervalBarLabel(bin, "zh"), "24–48小时，3个间隔");
+});
+
+test("uses day-based boundary ticks for the mobile interval chart", () => {
+  assert.deepEqual(getRandomResetIntervalMobileAxisLabels(), [
+    "0d",
+    "1d",
+    "2d",
+    "3d",
+    "4d",
+    "5d",
+    "6d",
+    "7d",
+    "8d",
+    "9d",
+    "10d",
+    "10d+",
+  ]);
 });

@@ -364,6 +364,23 @@ export function formatRandomResetIntervalCompactLabel(
   return labels[bin.key];
 }
 
+export function getRandomResetIntervalMobileAxisLabels() {
+  return [
+    "0d",
+    "1d",
+    "2d",
+    "3d",
+    "4d",
+    "5d",
+    "6d",
+    "7d",
+    "8d",
+    "9d",
+    "10d",
+    "10d+",
+  ] as const;
+}
+
 export function formatRandomResetIntervalBarLabel(
   bin: Pick<RandomResetIntervalBin, "key" | "rawCount">,
   locale: "ja" | "en" | "zh",

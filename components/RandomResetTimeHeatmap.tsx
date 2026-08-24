@@ -9,8 +9,8 @@ import {
   formatHeatmapBarLabel,
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
-  formatRandomResetIntervalCompactLabel,
   formatRandomResetDuration,
+  getRandomResetIntervalMobileAxisLabels,
   getCompactHeatmapTimeBins,
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
@@ -315,14 +315,42 @@ function RandomResetIntervalSection({
                 </div>
               ))}
             </div>
+            <div className="relative mt-1 h-7 border-t border-slate-200 md:hidden" aria-hidden="true">
+              {getRandomResetIntervalMobileAxisLabels().map((label, index, labels) => {
+                const isFirst = index === 0;
+                const isLast = index === labels.length - 1;
+                const isPenultimate = index === labels.length - 2;
+                const position = isFirst
+                  ? "left-0 items-start"
+                    : isLast
+                      ? "right-0 items-end"
+                      : isPenultimate
+                        ? "-translate-x-full items-end"
+                        : "-translate-x-1/2 items-center";
+
+                return (
+                  <span
+                    className={`absolute top-0 flex flex-col gap-0.5 text-[0.65rem] font-medium leading-none tabular-nums text-slate-500 ${position}`}
+                    key={label}
+                    style={
+                      isFirst || isLast
+                        ? undefined
+                        : { left: `${(index / (labels.length - 1)) * 100}%` }
+                    }
+                  >
+                    <span aria-hidden="true" className="h-1.5 border-l border-slate-300" />
+                    <span>{label}</span>
+                  </span>
+                );
+              })}
+            </div>
             <div
               aria-hidden="true"
-              className="mt-1 grid grid-cols-[repeat(11,minmax(0,1fr))] gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
+              className="mt-1 hidden grid-cols-[repeat(11,minmax(0,1fr))] gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 md:grid sm:text-xs"
             >
               {distribution.bins.map((bin) => (
                 <span className="min-w-0 break-words" key={bin.key}>
-                  <span className="md:hidden">{formatRandomResetIntervalCompactLabel(bin, locale)}</span>
-                  <span className="hidden md:inline">{formatRandomResetIntervalBinLabel(bin, locale)}</span>
+                  {formatRandomResetIntervalBinLabel(bin, locale)}
                 </span>
               ))}
             </div>
