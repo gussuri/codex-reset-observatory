@@ -222,3 +222,187 @@ test("i18n Automated Check: data-state warnings are complete for every locale", 
     );
   }
 });
+
+test("i18n Automated Check: All NOTICE_BACKED_RECOVERY dictionaries have complete English & Chinese translations", async () => {
+  const {
+    NOTICE_BACKED_RECOVERY_SUMMARIES,
+    NOTICE_BACKED_RECOVERY_TITLES,
+    NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY,
+    NOTICE_BACKED_RECOVERY_REASON_TYPES,
+  } = await import("../lib/radar/tiboHistory");
+
+  // 1. Fallback summary
+  const fallbackEn = translateDynamic(NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY, "en");
+  const fallbackZh = translateDynamic(NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY, "zh");
+  assert.strictEqual(
+    JAPANESE_CHAR_REGEX.test(fallbackEn),
+    false,
+    `Fallback summary lacks English translation. Got: "${fallbackEn}"`
+  );
+  assert.strictEqual(
+    JAPANESE_KANA_REGEX.test(fallbackZh),
+    false,
+    `Fallback summary contains kana in Chinese. Got: "${fallbackZh}"`
+  );
+
+  // 2. All notice-backed recovery summaries
+  for (const [key, summary] of Object.entries(NOTICE_BACKED_RECOVERY_SUMMARIES)) {
+    const en = translateDynamic(summary, "en");
+    const zh = translateDynamic(summary, "zh");
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(en),
+      false,
+      `NOTICE_BACKED_RECOVERY_SUMMARIES['${key}'] lacks English translation. Got: "${en}"`
+    );
+    assert.strictEqual(
+      JAPANESE_KANA_REGEX.test(zh),
+      false,
+      `NOTICE_BACKED_RECOVERY_SUMMARIES['${key}'] contains kana in Chinese. Got: "${zh}"`
+    );
+  }
+
+  // 3. All notice-backed recovery titles
+  for (const [key, title] of Object.entries(NOTICE_BACKED_RECOVERY_TITLES)) {
+    const en = translateDynamic(title, "en");
+    const zh = translateDynamic(title, "zh");
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(en),
+      false,
+      `NOTICE_BACKED_RECOVERY_TITLES['${key}'] lacks English translation. Got: "${en}"`
+    );
+    assert.strictEqual(
+      JAPANESE_KANA_REGEX.test(zh),
+      false,
+      `NOTICE_BACKED_RECOVERY_TITLES['${key}'] contains kana in Chinese. Got: "${zh}"`
+    );
+  }
+
+  // 4. All notice-backed recovery reason types
+  for (const [key, reasonType] of Object.entries(NOTICE_BACKED_RECOVERY_REASON_TYPES)) {
+    const en = translateDynamic(reasonType, "en");
+    const zh = translateDynamic(reasonType, "zh");
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(en),
+      false,
+      `NOTICE_BACKED_RECOVERY_REASON_TYPES['${key}'] lacks English translation. Got: "${en}"`
+    );
+    assert.strictEqual(
+      JAPANESE_KANA_REGEX.test(zh),
+      false,
+      `NOTICE_BACKED_RECOVERY_REASON_TYPES['${key}'] contains kana in Chinese. Got: "${zh}"`
+    );
+  }
+});
+
+test("i18n Automated Check: Full RadarViewModel history and active window contain zero Japanese in English & Chinese", () => {
+  const radarData = getLocalRadarData();
+
+  // Test English ViewModel
+  const enVm = getRadarViewModel(radarData, "en");
+  for (const item of enVm.recentHistory) {
+    if (item.title) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.title),
+        false,
+        `History item '${item.key}' English title contains Japanese text: "${item.title}"`
+      );
+    }
+    if (item.summary) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.summary),
+        false,
+        `History item '${item.key}' English summary contains Japanese text: "${item.summary}"`
+      );
+    }
+    if (item.details?.note) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.details.note),
+        false,
+        `History item '${item.key}' English note contains Japanese text: "${item.details.note}"`
+      );
+    }
+    if (item.details?.cycleType) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.details.cycleType),
+        false,
+        `History item '${item.key}' English cycleType contains Japanese text: "${item.details.cycleType}"`
+      );
+    }
+    if (item.details?.reasonType) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.details.reasonType),
+        false,
+        `History item '${item.key}' English reasonType contains Japanese text: "${item.details.reasonType}"`
+      );
+    }
+    if (item.details?.resetMethod) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.details.resetMethod),
+        false,
+        `History item '${item.key}' English resetMethod contains Japanese text: "${item.details.resetMethod}"`
+      );
+    }
+    if (item.details?.scope) {
+      assert.strictEqual(
+        JAPANESE_CHAR_REGEX.test(item.details.scope),
+        false,
+        `History item '${item.key}' English scope contains Japanese text: "${item.details.scope}"`
+      );
+    }
+  }
+
+  // Test Chinese ViewModel
+  const zhVm = getRadarViewModel(radarData, "zh");
+  for (const item of zhVm.recentHistory) {
+    if (item.title) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.title),
+        false,
+        `History item '${item.key}' Chinese title contains Japanese kana: "${item.title}"`
+      );
+    }
+    if (item.summary) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.summary),
+        false,
+        `History item '${item.key}' Chinese summary contains Japanese kana: "${item.summary}"`
+      );
+    }
+    if (item.details?.note) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.details.note),
+        false,
+        `History item '${item.key}' Chinese note contains Japanese kana: "${item.details.note}"`
+      );
+    }
+    if (item.details?.cycleType) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.details.cycleType),
+        false,
+        `History item '${item.key}' Chinese cycleType contains Japanese kana: "${item.details.cycleType}"`
+      );
+    }
+    if (item.details?.reasonType) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.details.reasonType),
+        false,
+        `History item '${item.key}' Chinese reasonType contains Japanese kana: "${item.details.reasonType}"`
+      );
+    }
+    if (item.details?.resetMethod) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.details.resetMethod),
+        false,
+        `History item '${item.key}' Chinese resetMethod contains Japanese kana: "${item.details.resetMethod}"`
+      );
+    }
+    if (item.details?.scope) {
+      assert.strictEqual(
+        JAPANESE_KANA_REGEX.test(item.details.scope),
+        false,
+        `History item '${item.key}' Chinese scope contains Japanese kana: "${item.details.scope}"`
+      );
+    }
+  }
+});
+

@@ -87,17 +87,17 @@ export const NOTICE_BACKED_RECOVERY_PRESENTATION = "notice_backed_recovery" as c
 export const NOTICE_BACKED_RECOVERY_TITLE_KEY = "noticeBackedRecoveryTitle";
 export const NOTICE_BACKED_RECOVERY_BODY_KEY = "noticeBackedRecoveryBody";
 
-const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの利用枠がリセットされました。";
-const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
+export const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの利用枠がリセットされました。";
+export const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
   "tibo-reset-2087706104814023111":
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
   "tibo-reset-2091412393368945027":
     "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
 };
-const NOTICE_BACKED_RECOVERY_TITLES: Readonly<Record<string, string>> = {
+export const NOTICE_BACKED_RECOVERY_TITLES: Readonly<Record<string, string>> = {
   "tibo-reset-2091412393368945027": "過剰消費のお詫びリセット",
 };
-const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, ResetReasonType>> = {
+export const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, ResetReasonType>> = {
   "tibo-reset-2087706104814023111": "ご祝儀リセット",
   "tibo-reset-2091412393368945027": "詫びリセット",
 };
