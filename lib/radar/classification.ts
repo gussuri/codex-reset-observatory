@@ -45,6 +45,7 @@ const EXPLICIT_USAGE_LIMIT_RESET_PATTERN = /(?:\b(?:usage\s+limits?|rate\s+limit
 const PURE_HYPOTHETICAL_PATTERN = /\b(?:what\s+if|would\s+be\s+nice\s+to|imagine\s+if|i\s+wish|if\s+only)\b|\b(?:could|would)\s+use\s+(?:a\s+)?reset\b|\bworld\s+with\s+unlimited\s+resets?\b/i;
 const INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN = /\b(?:but|however|so)\b[^.!?]{0,100}\b(?:i|we)\s+(?:will|might|may|could)\b/i;
 const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
+const UNRELATED_HISTORICAL_REFERENCE_PATTERN = /\b(?:things?|issues?|problems?|fixes?|topics?)\s+(?:mentioned|discussed|found|raised)\s+(?:yesterday|last\s+(?:week|month|night|year))\b/i;
 const FUTURE_RESET_PATTERN = /\b(?:will|going\s+to|coming|tonight|tomorrow|later|soon|next|scheduled|planned|in\s+(?:an?|one|two|half\s+an?|\d+)\s+(?:minute|minutes|hour|hours|day|days))\b/i;
 const CANCELLATION_PATTERN = /\b(?:no|not|never|cancel(?:led|ed)?|canceled|not\s+anymore|changed\s+my\s+mind|scratch\s+that)\b/i;
 const EXPLICIT_RESET_NEGATION_PATTERN =
@@ -59,6 +60,7 @@ const CURRENT_EXECUTION_PATTERNS = [
   /\b(?:one\s+|a\s+)?reset\s+now\b/i,
   /\b(?:reset|limits?|usage\s+limits?)\s+(?:is|are|was|were)\s+(?:done|complete|completed|landed|reset|refreshed)\b/i,
   /\b(?:reset|usage\s+limits?)\s+(?:has|have|was|were|are)\s+been\s+(?:reset|completed|refreshed)\b/i,
+  /\b(?:reset|usage\s+limits?|rate\s+limits?)\s+(?:has|have)\s+been\s+(?:propagated|applied)\s+to\s+(?:accounts?|users?|everyone)\b/i,
   /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b/i,
   /\b(?:i|we)\s+reset\b[^.!?]{0,80}\bnow\b/i,
   /\b(?:enjoy|go\s+use)\s+(?:a\s+)?reset\b/i,
@@ -109,7 +111,8 @@ export function isPureHypotheticalReset(text: string) {
 
 export function hasCurrentResetExecution(text: string) {
   const normalized = normalizedClassificationText(text);
-  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized);
+  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized) &&
+    !UNRELATED_HISTORICAL_REFERENCE_PATTERN.test(normalized);
   const hasHistoricalTimestampAfterFirstPersonExecution =
     /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b[^.!?]{0,100}\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago)\b/i.test(
       normalized,

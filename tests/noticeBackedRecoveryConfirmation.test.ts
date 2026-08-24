@@ -282,6 +282,65 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(confirmedEvents[0].completed_at, "2026-08-13T03:34:43.341Z");
   });
 
+  it("複合完了投稿は08:37 Usage Monitor recoveryへ90分以内でmergeされ新規resetを二重登録しない", () => {
+    const compositeNotice = {
+      ...sampleNotice,
+      tweet_id: "2092000000000000100",
+      tweet_url: "https://x.com/thsottiaux/status/2092000000000000100",
+      tweet_created_at: "2026-08-23T22:00:00Z",
+      text: "The reset is now effective for accounts.",
+    };
+    const compositeRecovery = {
+      ...sampleRecovery,
+      id: "composite-recovery-0837",
+      observedAt: "2026-08-23T23:37:43.201Z",
+      previousObservedAt: "2026-08-23T23:33:43.156Z",
+    };
+    const compositeEstimate = {
+      ...sampleEstimate,
+      resetEventKey: "tibo-reset-2092000000000000100",
+      displayExecutionAt: compositeRecovery.observedAt,
+      executionWindowStartAt: compositeRecovery.previousObservedAt,
+      executionWindowEndAt: compositeRecovery.observedAt,
+      recoveryObservationId: compositeRecovery.id,
+      tiboAnnouncedAt: compositeNotice.tweet_created_at,
+      tiboPrimaryTweetId: compositeNotice.tweet_id,
+      officialNoticeTweetId: compositeNotice.tweet_id,
+      tiboSourceTweetIds: [compositeNotice.tweet_id],
+    };
+    const compositeReset = {
+      tweet_id: "2092000000000000001",
+      text: "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.",
+      tweet_url: "https://x.com/thsottiaux/status/2092000000000000001",
+      tweet_created_at: "2026-08-24T00:07:43.201Z",
+      signal_type: "reset_executed" as const,
+      confidence: 0.98,
+      verification_status: "auto_unverified" as const,
+      classification_source: "gemini" as const,
+      related_notice: compositeNotice,
+    };
+
+    const combined = combineResetHistory(
+      [],
+      [compositeReset as any],
+      [],
+      [],
+      [compositeNotice],
+      [compositeRecovery],
+      [compositeEstimate],
+    );
+    const confirmedEvents = combined.filter((event) => event.recordKind === "confirmed_global");
+
+    assert.ok(
+      Math.abs(Date.parse(compositeReset.tweet_created_at) - Date.parse(compositeRecovery.observedAt)) <=
+        90 * 60 * 1000,
+    );
+    assert.equal(confirmedEvents.length, 1);
+    assert.equal(confirmedEvents[0].completed_at, compositeRecovery.observedAt);
+    assert.ok(confirmedEvents[0].sourceTweetIds?.includes(compositeNotice.tweet_id));
+    assert.ok(confirmedEvents[0].sourceTweetIds?.includes(compositeReset.tweet_id));
+  });
+
   it("I. 同じ webhook / recovery を再送しても idempotent で重複なし", () => {
     const combined = combineResetHistory(
       [],

@@ -400,6 +400,66 @@ test("ambiguous future surprise is persisted as a teaser without official tempor
   }
 });
 
+test("composite completion is saved as reset_executed with independent weak teaser metadata", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const text = "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.";
+  const tweetId = "2092000000000000001";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    reasonJa: "完了報告と別の将来示唆を含む複合投稿です。",
+    teaserStrength: "weak",
+    teaserStrengthConfidence: 0.9,
+    teaserStrengthEvidenceQuote: "More to come tomorrow",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-08-24T00:07:43.201Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.equal(upsertBody.signal_type, "reset_executed");
+    assert.equal(upsertBody.rule_signal_type, "reset_executed");
+    assert.equal(upsertBody.teaser_strength, null);
+    assert.equal(upsertBody.ai_teaser_strength, "weak");
+    assert.equal(upsertBody.ai_temporal_direction, "completed_now");
+    assert.equal(upsertBody.ai_evidence_quote, "Reset has been propagated to accounts");
+    assert.equal(upsertBody.expected_start_at, null);
+    assert.equal(upsertBody.temporal_resolution_status, null);
+
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "reset_executed");
+    assert.equal(responseBody.teaserStrength, "weak");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("source clock fallback resolves an official 14pm PST tomorrow notice when Gemini omits temporal fields", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

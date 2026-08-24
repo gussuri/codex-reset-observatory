@@ -13,6 +13,8 @@ import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
+const compositeResetText =
+  "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.";
 
 function geminiResult(signalType: GeminiClassificationOutput["signalType"]): GeminiClassificationOutput {
   return {
@@ -186,6 +188,84 @@ test("current execution takes priority over a secondary future event", () => {
   const text = "One reset now and another if needed later.";
   assert.equal(getTiboClassificationSafetyDecision(text, "official_notice").signalType, "reset_executed");
   assert.equal(classifyTiboTweet(text, url).signalType, "reset_executed");
+});
+
+test("composite reset completion keeps the completed primary signal and weak independent teaser", () => {
+  const guarded = applyTiboClassificationSafetyGuard(compositeResetText, {
+    ...geminiResult("reset_executed"),
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    teaserStrength: "weak",
+    teaserStrengthEvidenceQuote: "More to come tomorrow",
+  });
+
+  assert.equal(classifyTiboTweet(compositeResetText, url).signalType, "reset_executed");
+  assert.equal(
+    getTiboClassificationSafetyDecision(compositeResetText, "reset_executed").signalType,
+    "reset_executed",
+  );
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.temporalDirection, "completed_now");
+  assert.match(guarded.evidenceQuote ?? "", /Reset has been propagated to accounts/);
+  assert.equal(guarded.teaserStrength, "weak");
+});
+
+test("completed-now evidence prevents a contradictory official notice result", () => {
+  const guarded = applyTiboClassificationSafetyGuard(compositeResetText, {
+    ...geminiResult("official_notice"),
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    teaserStrength: "weak",
+    teaserStrengthEvidenceQuote: "More to come tomorrow",
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.temporalDirection, "completed_now");
+  assert.equal(guarded.teaserStrength, "weak");
+});
+
+test("generic future continuation is capped at weak teaser strength after completion", () => {
+  const text = "Reset has been propagated to accounts. More to come tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    teaserStrength: "strong",
+    teaserStrengthEvidenceQuote: "More to come tomorrow",
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.teaserStrength, "weak");
+});
+
+test("explicit future reset language can retain strong independent teaser strength", () => {
+  const text = "Reset has been propagated to accounts. More resets tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    teaserStrength: "strong",
+    teaserStrengthEvidenceQuote: "More resets tomorrow",
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.teaserStrength, "strong");
+});
+
+test("unrelated tomorrow work does not become a completed-reset teaser", () => {
+  const text = "Reset has been propagated to accounts. More work on reliability tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    teaserStrength: "strong",
+    teaserStrengthEvidenceQuote: "More work on reliability tomorrow",
+  });
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(guarded.teaserStrength, "none");
 });
 
 test("explicit negation stays irrelevant while a reconsidered positive execution remains executable", () => {

@@ -1169,6 +1169,26 @@
       "tweetUrl": "https://x.com/thsottiaux/status/910000000000001047",
       "expected": { "signalType": "official_notice", "temporalDirection": "future" }
     },
+    {
+      "id": "composite-reset-01",
+      "category": "multiple_events",
+      "description": "Completed reset with a separate generic tomorrow continuation",
+      "tweetText": "Good Sunday. Reset has been propagated to accounts and we landed some fixes to usage for things mentioned yesterday as issues we found. You should feel a positive difference. More to come tomorrow and will keep communicating.",
+      "tweetCreatedAt": "2026-08-24T00:07:43.201Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2092000000000000001",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": true, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": {
+        "signalType": "reset_executed",
+        "confidence": 0.98,
+        "temporalDirection": "completed_now",
+        "evidenceQuote": "Reset has been propagated to accounts",
+        "teaserStrength": "weak",
+        "teaserStrengthConfidence": 0.9,
+        "teaserStrengthEvidenceQuote": "More to come tomorrow"
+      }
+    },
 
     {
       "id": "noise-01",

@@ -1,5 +1,6 @@
 import https from "node:https";
 import {
+  hasCurrentResetExecution,
   getTiboClassificationSafetyDecision,
   type ClassificationSignalType,
 } from "./classification";
@@ -39,6 +40,11 @@ export type GeminiClassificationStatus =
   | "model_not_configured";
 
 export type GeminiResetType = "ご祝儀リセット" | "詫びリセット";
+
+const GENERIC_FUTURE_CONTINUATION_PATTERN =
+  /\b(?:more\s+to\s+come|more\s+to\s+follow)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day))\b/i;
+const EXPLICIT_FUTURE_RESET_PATTERN =
+  /\b(?:more\s+resets?|another\s+(?:reset|one)|(?:press|hit|use)\s+(?:the\s+)?reset\s+button(?:\s+again)?|reset\s+again)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day)|in\s+(?:an?|one|\d+)\s+(?:hour|hours|day|days))\b/i;
 
 export function normalizeGeminiResetType(value: unknown): GeminiResetType | null {
   return value === "ご祝儀リセット" || value === "詫びリセット" ? value : null;
@@ -233,20 +239,51 @@ export function applyTiboClassificationSafetyGuard(
 ): GeminiClassificationOutput {
   if (result.status !== "success" || !result.signalType) return result;
 
+  // A contradictory official_notice/completed_now result is only promoted to
+  // a completed reset when its evidence quote is an exact source substring
+  // that independently matches the deterministic completion grammar.
+  const groundedCompletedReset = result.temporalDirection === "completed_now" &&
+    typeof result.evidenceQuote === "string" &&
+    text.toLowerCase().includes(result.evidenceQuote.trim().toLowerCase()) &&
+    hasCurrentResetExecution(result.evidenceQuote);
   const decision = getTiboClassificationSafetyDecision(
     text,
     result.signalType as ClassificationSignalType,
   );
   if (decision.signalType === result.signalType && !decision.suppressTeaserStrength) return result;
 
+  const hasIndependentFutureTeaser = groundedCompletedReset && (
+    GENERIC_FUTURE_CONTINUATION_PATTERN.test(text) ||
+    EXPLICIT_FUTURE_RESET_PATTERN.test(text)
+  );
+  const preservedTeaserStrength = hasIndependentFutureTeaser &&
+    result.teaserStrength !== null &&
+    result.teaserStrength !== undefined &&
+    result.teaserStrength !== "none"
+    ? GENERIC_FUTURE_CONTINUATION_PATTERN.test(text) && result.teaserStrength === "strong"
+      ? "weak"
+      : result.teaserStrength
+    : null;
+  const shouldPreserveIndependentTeaser = preservedTeaserStrength !== null;
+
   return {
     ...result,
     signalType: decision.signalType,
     reasonJa: decision.reasonJa ?? result.reasonJa,
-    teaserStrength: decision.suppressTeaserStrength ? "none" : result.teaserStrength,
-    teaserStrengthConfidence: decision.suppressTeaserStrength ? null : result.teaserStrengthConfidence,
-    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength ? null : result.teaserStrengthEvidenceQuote,
-    teaserStrengthReasonJa: decision.suppressTeaserStrength ? decision.reasonJa : result.teaserStrengthReasonJa,
+    teaserStrength: decision.suppressTeaserStrength
+      ? shouldPreserveIndependentTeaser
+        ? preservedTeaserStrength
+        : "none"
+      : result.teaserStrength,
+    teaserStrengthConfidence: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
+      ? null
+      : result.teaserStrengthConfidence,
+    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
+      ? null
+      : result.teaserStrengthEvidenceQuote,
+    teaserStrengthReasonJa: decision.suppressTeaserStrength && !shouldPreserveIndependentTeaser
+      ? decision.reasonJa
+      : result.teaserStrengthReasonJa,
   };
 }
 

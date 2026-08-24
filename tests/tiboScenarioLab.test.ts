@@ -128,6 +128,18 @@ test("reset execution reaches formal history only when the safety gate passes", 
   assert.ok(run.publicSnapshot.viewModel.recentHistory.some((item) => item.source?.includes(run.activeSignal.tweet_id)));
 });
 
+test("composite reset fixture keeps completed primary state and independent weak teaser metadata", () => {
+  const run = runTiboScenario(scenarioById.get("composite-reset-01")!);
+
+  assert.equal(run.selected.signalType, "reset_executed");
+  assert.equal(run.geminiResult?.temporalDirection, "completed_now");
+  assert.equal(run.geminiResult?.evidenceQuote, "Reset has been propagated to accounts");
+  assert.equal(run.geminiResult?.teaserStrength, "weak");
+  assert.equal(run.activeSignal.teaser_strength, "weak");
+  assert.equal(run.formalAccepted, true);
+  assert.equal(run.historyEvent?.recordKind, "confirmed_global");
+});
+
 test("irrelevant, historical, and negated posts do not create current reset state", () => {
   for (const id of ["irrelevant-01", "historical-01", "negative-01", "negtime-01"]) {
     const run = runTiboScenario(scenarioById.get(id)!);
