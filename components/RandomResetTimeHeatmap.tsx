@@ -199,7 +199,7 @@ export function RandomResetTimeHeatmap({
               {content.intervalHeading}
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">{content.intervalDescription}</p>
-            <div className="mt-4 grid grid-cols-12 gap-1" aria-hidden="true">
+            <div className="mt-4 grid grid-cols-[repeat(11,minmax(0,1fr))] gap-1" aria-hidden="true">
               {Array.from({ length: RANDOM_RESET_INTERVAL_BIN_COUNT }, (_, index) => (
                 <span
                   className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
@@ -297,11 +297,11 @@ function RandomResetIntervalSection({
       {distribution.totalCount === 0 ? (
         <p className="mt-5 text-sm leading-6 text-slate-600">{content.intervalEmpty}</p>
       ) : (
-        <div className="mt-5 overflow-x-auto pb-1">
-          <div className="min-w-[36rem] md:min-w-0">
+        <div className="mt-5 overflow-hidden pb-1">
+          <div className="min-w-0">
             <div
               aria-label={content.intervalHeading}
-              className="grid h-40 grid-cols-12 gap-1 sm:h-36"
+              className="grid h-40 grid-cols-[repeat(11,minmax(0,1fr))] gap-1 sm:h-36"
               role="list"
             >
               {distribution.bins.map((bin) => (
@@ -317,7 +317,7 @@ function RandomResetIntervalSection({
             </div>
             <div
               aria-hidden="true"
-              className="mt-1 grid grid-cols-12 gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
+              className="mt-1 grid grid-cols-[repeat(11,minmax(0,1fr))] gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 sm:text-xs"
             >
               {distribution.bins.map((bin) => (
                 <span className="min-w-0 break-words" key={bin.key}>

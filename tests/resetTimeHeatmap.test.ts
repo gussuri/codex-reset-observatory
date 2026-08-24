@@ -301,12 +301,11 @@ test("assigns exact duration boundaries to the required interval bins", () => {
   for (const duration of durations) eventTimes.push(addHours(new Date(eventTimes.at(-1)!), duration));
 
   const distribution = buildRandomResetIntervalDistribution(eventTimes, "all", INTERVAL_NOW);
-  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]);
+  assert.deepEqual(distribution.bins.map((bin) => bin.rawCount), [3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]);
   assert.deepEqual(
     distribution.bins.map((bin) => [bin.key, bin.minHours, bin.maxHours]),
     [
-      ["0-12h", 0, 12],
-      ["12-24h", 12, 24],
+      ["0-24h", 0, 24],
       ["24-48h", 24, 48],
       ["48-72h", 48, 72],
       ["3-4d", 72, 96],
@@ -377,8 +376,7 @@ test("formats random reset interval durations and localized bar labels", () => {
 
   const bin = { key: "24-48h" as const, minHours: 24, maxHours: 48, rawCount: 3 };
   const intervalBinKeys = [
-    "0-12h",
-    "12-24h",
+    "0-24h",
     "24-48h",
     "48-72h",
     "3-4d",
@@ -392,19 +390,19 @@ test("formats random reset interval durations and localized bar labels", () => {
   ] as const;
   assert.deepEqual(
     intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "ja")),
-    ["0–12時間", "12–24時間", "24–48時間", "48–72時間", "3–4日", "4–5日", "5–6日", "6–7日", "7–8日", "8–9日", "9–10日", "10日以上"],
+    ["0–24時間", "24–48時間", "48–72時間", "3–4日", "4–5日", "5–6日", "6–7日", "7–8日", "8–9日", "9–10日", "10日以上"],
   );
   assert.deepEqual(
     intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "en")),
-    ["0–12h", "12–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
+    ["0–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
   );
   assert.deepEqual(
     intervalBinKeys.map((key) => formatRandomResetIntervalBinLabel({ key }, "zh")),
-    ["0–12小时", "12–24小时", "24–48小时", "48–72小时", "3–4天", "4–5天", "5–6天", "6–7天", "7–8天", "8–9天", "9–10天", "10天以上"],
+    ["0–24小时", "24–48小时", "48–72小时", "3–4天", "4–5天", "5–6天", "6–7天", "7–8天", "8–9天", "9–10天", "10天以上"],
   );
   assert.deepEqual(
     intervalBinKeys.map((key) => formatRandomResetIntervalCompactLabel({ key }, "ja")),
-    ["0–12h", "12–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
+    ["0–24h", "24–48h", "48–72h", "3–4d", "4–5d", "5–6d", "6–7d", "7–8d", "8–9d", "9–10d", "10d+"],
   );
   assert.equal(formatRandomResetIntervalBinLabel({ key: "3-4d" }, "en"), "3–4d");
   assert.equal(formatRandomResetIntervalCompactLabel({ key: "7-8d" }, "zh"), "7–8d");

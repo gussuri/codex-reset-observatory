@@ -4,7 +4,7 @@ export const RANDOM_RESET_TIME_HEATMAP_BIN_COUNT = 24;
 export const RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT = 12;
 export const RANDOM_RESET_TIME_HEATMAP_LAST_MONTH_DAYS = 30;
 export const RANDOM_RESET_WEEKDAY_BIN_COUNT = 7;
-export const RANDOM_RESET_INTERVAL_BIN_COUNT = 12;
+export const RANDOM_RESET_INTERVAL_BIN_COUNT = 11;
 
 export type RandomResetTimeHeatmapRange = "all" | "lastMonth";
 
@@ -15,8 +15,7 @@ export type RandomResetIntervalRecord = {
 };
 
 export type RandomResetIntervalBinKey =
-  | "0-12h"
-  | "12-24h"
+  | "0-24h"
   | "24-48h"
   | "48-72h"
   | "3-4d"
@@ -301,8 +300,7 @@ export function formatRandomResetIntervalBinLabel(
 ) {
   const labels = {
     ja: {
-      "0-12h": "0–12時間",
-      "12-24h": "12–24時間",
+      "0-24h": "0–24時間",
       "24-48h": "24–48時間",
       "48-72h": "48–72時間",
       "3-4d": "3–4日",
@@ -315,8 +313,7 @@ export function formatRandomResetIntervalBinLabel(
       "10d-plus": "10日以上",
     },
     en: {
-      "0-12h": "0–12h",
-      "12-24h": "12–24h",
+      "0-24h": "0–24h",
       "24-48h": "24–48h",
       "48-72h": "48–72h",
       "3-4d": "3–4d",
@@ -329,8 +326,7 @@ export function formatRandomResetIntervalBinLabel(
       "10d-plus": "10d+",
     },
     zh: {
-      "0-12h": "0–12小时",
-      "12-24h": "12–24小时",
+      "0-24h": "0–24小时",
       "24-48h": "24–48小时",
       "48-72h": "48–72小时",
       "3-4d": "3–4天",
@@ -352,8 +348,7 @@ export function formatRandomResetIntervalCompactLabel(
   locale: "ja" | "en" | "zh",
 ) {
   const labels = {
-    "0-12h": "0–12h",
-    "12-24h": "12–24h",
+    "0-24h": "0–24h",
     "24-48h": "24–48h",
     "48-72h": "48–72h",
     "3-4d": "3–4d",
@@ -397,8 +392,7 @@ export function formatRandomResetDuration(
 
 function buildRandomResetIntervalBins(): RandomResetIntervalBin[] {
   return [
-    { key: "0-12h", minHours: 0, maxHours: 12, rawCount: 0 },
-    { key: "12-24h", minHours: 12, maxHours: 24, rawCount: 0 },
+    { key: "0-24h", minHours: 0, maxHours: 24, rawCount: 0 },
     { key: "24-48h", minHours: 24, maxHours: 48, rawCount: 0 },
     { key: "48-72h", minHours: 48, maxHours: 72, rawCount: 0 },
     { key: "3-4d", minHours: 72, maxHours: 96, rawCount: 0 },
@@ -414,18 +408,17 @@ function buildRandomResetIntervalBins(): RandomResetIntervalBin[] {
 
 function getRandomResetIntervalBinIndex(durationMs: number) {
   const durationHours = durationMs / (60 * 60 * 1000);
-  if (durationHours < 12) return 0;
-  if (durationHours < 24) return 1;
-  if (durationHours < 48) return 2;
-  if (durationHours < 72) return 3;
-  if (durationHours < 96) return 4;
-  if (durationHours < 120) return 5;
-  if (durationHours < 144) return 6;
-  if (durationHours < 168) return 7;
-  if (durationHours < 192) return 8;
-  if (durationHours < 216) return 9;
-  if (durationHours < 240) return 10;
-  return 11;
+  if (durationHours < 24) return 0;
+  if (durationHours < 48) return 1;
+  if (durationHours < 72) return 2;
+  if (durationHours < 96) return 3;
+  if (durationHours < 120) return 4;
+  if (durationHours < 144) return 5;
+  if (durationHours < 168) return 6;
+  if (durationHours < 192) return 7;
+  if (durationHours < 216) return 8;
+  if (durationHours < 240) return 9;
+  return 10;
 }
 
 function toTimestamp(value: Date | number) {
