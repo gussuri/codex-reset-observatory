@@ -95,6 +95,14 @@ test("completed reset plus a secondary official notice remains active at the sam
   assert.equal(notice?.id, "composite-official#secondary");
   assert.equal(getLocalResetProbability(data, "24h", undefined, notice, NOW), 0.9);
   assert.equal(getLocalResetProbability(data, "48h", undefined, notice, NOW), 0.96);
+
+  const activity = toPublicRadarSnapshot(data, "en", { calculationNow: NOW }).latestTiboActivity;
+  assert.equal(activity?.classification, "official_notice");
+  assert.equal(activity?.text, parent.text);
+  assert.equal(activity?.createdAt, parent.tweet_created_at);
+  assert.equal(activity?.sourceUrl, parent.tweet_url);
+  assert.equal("tweet_id" in (activity ?? {}), false);
+  assert.doesNotMatch(JSON.stringify(activity), /#secondary/);
 });
 
 test("completed reset plus a secondary strong teaser remains in the next cycle", () => {
@@ -114,7 +122,17 @@ test("completed reset plus a secondary strong teaser remains in the next cycle",
 
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW });
   assert.equal(snapshot.resetTeaserStatus, "strong");
-  assert.equal(snapshot.latestTiboActivity?.classification, "reset_executed");
+  assert.deepEqual(snapshot.latestTiboActivity, {
+    classification: "teaser",
+    teaserStrength: "strong",
+    text: parent.text,
+    createdAt: parent.tweet_created_at,
+    sourceUrl: parent.tweet_url,
+    isReply: false,
+    replyContextText: null,
+    replyToHandles: [],
+  });
+  assert.doesNotMatch(JSON.stringify(snapshot.latestTiboActivity), /#secondary|tweet_id/);
 });
 
 test("completed reset plus a secondary weak teaser is independently aggregated", () => {
@@ -132,10 +150,53 @@ test("completed reset plus a secondary weak teaser is independently aggregated",
     recentTiboSignals: [parent],
   });
 
-  assert.equal(
-    toPublicRadarSnapshot(data, "ja", { calculationNow: NOW }).resetTeaserStatus,
-    "weak",
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW });
+  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.deepEqual(snapshot.latestTiboActivity, {
+    classification: "teaser",
+    teaserStrength: "weak",
+    text: parent.text,
+    createdAt: parent.tweet_created_at,
+    sourceUrl: parent.tweet_url,
+    isReply: false,
+    replyContextText: null,
+    replyToHandles: [],
+  });
+  assert.doesNotMatch(JSON.stringify(snapshot.latestTiboActivity), /#secondary|tweet_id/);
+});
+
+test("a newer unrelated post does not displace a related secondary teaser", () => {
+  const parent = completedPost(
+    "composite-with-newer-unrelated",
+    "Reset is done. Maybe another surprise tomorrow.",
+    futureSignal("teaser", {
+      teaserStrength: "weak",
+      evidenceQuote: "Maybe another surprise tomorrow",
+    }),
+    "2026-08-24T09:00:00.000Z",
   );
+  const newerUnrelated: ActiveTiboSignal = {
+    tweet_id: "newer-unrelated",
+    text: "A newer post unrelated to resets.",
+    tweet_url: "https://x.com/thsottiaux/status/newer-unrelated",
+    tweet_created_at: "2026-08-24T09:05:00.000Z",
+    signal_type: "irrelevant",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    expires_at: "2026-08-25T09:05:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: NOW,
+    activeTiboSignals: [parent, newerUnrelated],
+    recentTiboSignals: [parent, newerUnrelated],
+  });
+
+  const activity = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW }).latestTiboActivity;
+  assert.equal(activity?.classification, "teaser");
+  assert.equal(activity?.teaserStrength, "weak");
+  assert.equal(activity?.text, parent.text);
+  assert.equal(activity?.sourceUrl, parent.tweet_url);
 });
 
 test("an unrelated future continuation on the real composite post has no reset secondary signal", () => {

@@ -16,6 +16,7 @@ import {
   type TiboNoticeSignal,
 } from "./tiboHistory";
 import { isSupersededBankedNotice } from "./bankedReset";
+import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import type {
   Locale,
   PublicDataHealth,
@@ -131,6 +132,9 @@ function isCurrentOfficialNotice(
   const createdTime = Date.parse(signal.tweet_created_at);
   const expiresTime = Date.parse(signal.expires_at ?? "");
   const latestResetTime = latestResetAt ? Date.parse(latestResetAt) : Number.NaN;
+  const secondaryFollowsLatestReset = signal.is_secondary_future_signal === true &&
+    Number.isFinite(latestResetTime) &&
+    Date.parse(signal.primary_event_at ?? "") === latestResetTime;
   return (
     Number.isFinite(createdTime) &&
     createdTime <= nowTime &&
@@ -138,6 +142,7 @@ function isCurrentOfficialNotice(
     expiresTime > nowTime &&
     (!Number.isFinite(latestResetTime) ||
       createdTime > latestResetTime ||
+      secondaryFollowsLatestReset ||
       !isTemporalNoticeConsumedAtReset(
         signal.temporal_resolution_status === "resolved"
           ? {
@@ -205,14 +210,20 @@ export function toPublicTiboActivity(
     const strength = getEffectiveTeaserStrength(signal);
     return strength === "strong" || strength === "weak";
   });
-  const eligibleTeaserSet = new Set(eligibleTeaserSignals);
+  const eligibleTeaserIds = new Set(
+    eligibleTeaserSignals
+      .map((signal) => signal.tweet_id)
+      .filter((tweetId): tweetId is string => typeof tweetId === "string"),
+  );
+  const expandedSignals = expandTiboSignalVariants(sourceSignals);
   // UI teaser eligibility is the source of truth here; unlike official notices,
   // teaser expiry is intentionally not reapplied to the related card.
-  const relatedCandidates = sourceSignals
+  const relatedCandidates = expandedSignals
     .filter((signal) => {
       const strength = getEffectiveTeaserStrength(signal);
       return isCurrentOfficialNotice(signal, latestResetAt, nowTime, sourceSignals) ||
-        (eligibleTeaserSet.has(signal) &&
+        (typeof signal.tweet_id === "string" &&
+          eligibleTeaserIds.has(signal.tweet_id) &&
           (strength === "strong" || strength === "weak"));
     })
     .sort(
