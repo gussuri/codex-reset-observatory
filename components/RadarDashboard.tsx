@@ -852,6 +852,11 @@ export function RadarDashboard({
                       hideNoteOnMobile
                       showScope
                     />
+                    {item.details?.cycleType === translateDynamic("定期リセット", locale) ? (
+                      <p className="mt-2 text-xs leading-5 text-slate-500 sm:hidden">
+                        {translateUI("regularResetTimingNote", locale)}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="border-t border-slate-200/80 pt-3 text-sm leading-6 text-slate-700 sm:border-t-0 sm:pt-0 md:text-right">
                     <div className="sm:grid sm:grid-cols-[auto_auto] sm:justify-end sm:gap-x-3">

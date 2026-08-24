@@ -809,6 +809,69 @@ test("keeps probability cards compact while showing the full random reset label"
   assert.doesNotMatch(statusLabel, /truncate/);
 });
 
+test("shows a localized regular reset timing note only on mobile history cards", () => {
+  const calculationNow = new Date("2026-08-12T00:00:00.000Z");
+  const expectedNotes = {
+    ja: "定期リセットのタイミングはユーザーによって異なる場合があります。",
+    en: "The timing of regular resets may vary by user.",
+    zh: "定期重置的时间可能因用户而异。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow },
+    );
+    const template = snapshot.viewModel.recentHistory.find((item) => item.resetAt);
+    if (!template) throw new Error("Expected a reset history item");
+    const cycleTypes = {
+      ja: { regular: "定期リセット", random: "ランダムリセット" },
+      en: { regular: "Weekly reset", random: "Random reset" },
+      zh: { regular: "定期重置", random: "随机重置" },
+    } as const;
+    const regularItem = {
+      ...template,
+      key: "regular-timing-note",
+      recordKind: "regular_completed" as const,
+      details: { ...template.details!, cycleType: cycleTypes[locale].regular },
+    };
+    const randomItem = {
+      ...template,
+      key: "random-timing-note",
+      recordKind: "confirmed_global" as const,
+      details: { ...template.details!, cycleType: cycleTypes[locale].random },
+    };
+
+    const regularHtml = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: {
+          ...snapshot,
+          viewModel: { ...snapshot.viewModel, recentHistory: [regularItem] },
+        },
+        locale,
+      }),
+    );
+    const note = expectedNotes[locale];
+    const noteIndex = regularHtml.indexOf(note);
+    assert.ok(noteIndex >= 0, locale);
+    const noteStart = regularHtml.lastIndexOf("<p", noteIndex);
+    const noteEnd = regularHtml.indexOf("</p>", noteIndex) + 4;
+    assert.match(regularHtml.slice(noteStart, noteEnd), /sm:hidden/, locale);
+
+    const randomHtml = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: {
+          ...snapshot,
+          viewModel: { ...snapshot.viewModel, recentHistory: [randomItem] },
+        },
+        locale,
+      }),
+    );
+    assert.ok(!randomHtml.includes(note), locale);
+  }
+});
+
 test("aligns reset history notice and execution timestamps in a desktop grid", () => {
   const calculationNow = new Date("2026-08-12T00:00:00.000Z");
   const baseSnapshot = toPublicRadarSnapshot(getLocalRadarData({ calculationNow }), "ja", { calculationNow });

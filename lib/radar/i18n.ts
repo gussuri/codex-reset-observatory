@@ -526,6 +526,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "The actual reset time may vary by user depending on usage.",
     zh: "实际重置时间可能因用户的使用情况而异。",
   },
+  regularResetTimingNote: {
+    ja: "定期リセットのタイミングはユーザーによって異なる場合があります。",
+    en: "The timing of regular resets may vary by user.",
+    zh: "定期重置的时间可能因用户而异。",
+  },
   scope: {
     ja: "対象プラン",
     en: "Scope",
