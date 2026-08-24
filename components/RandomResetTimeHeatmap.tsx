@@ -7,6 +7,7 @@ import {
   buildRandomResetTimeHeatmap,
   filterHeatmapEventTimes,
   formatHeatmapBarLabel,
+  formatRandomResetIntervalAxisLabel,
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
   formatRandomResetDuration,
@@ -344,6 +345,9 @@ function RandomResetIntervalSection({
                 );
               })}
             </div>
+            <p className="mt-1 text-center text-xs text-slate-500 md:hidden">
+              {formatRandomResetIntervalAxisLabel(locale)}
+            </p>
             <div
               aria-hidden="true"
               className="mt-1 hidden grid-cols-[repeat(11,minmax(0,1fr))] gap-1 text-center text-[0.65rem] font-medium leading-tight tabular-nums text-slate-500 md:grid sm:text-xs"

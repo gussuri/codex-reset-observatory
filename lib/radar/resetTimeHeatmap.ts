@@ -381,6 +381,16 @@ export function getRandomResetIntervalMobileAxisLabels() {
   ] as const;
 }
 
+export function formatRandomResetIntervalAxisLabel(locale: "ja" | "en" | "zh") {
+  const labels = {
+    ja: "間隔（日）",
+    en: "Interval (days)",
+    zh: "间隔（天）",
+  } as const;
+
+  return labels[locale];
+}
+
 export function formatRandomResetIntervalBarLabel(
   bin: Pick<RandomResetIntervalBin, "key" | "rawCount">,
   locale: "ja" | "en" | "zh",

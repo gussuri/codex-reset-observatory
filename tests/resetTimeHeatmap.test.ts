@@ -16,6 +16,7 @@ import {
   formatRandomResetIntervalBarLabel,
   formatRandomResetIntervalBinLabel,
   formatRandomResetIntervalCompactLabel,
+  formatRandomResetIntervalAxisLabel,
   formatRandomResetDuration,
   getRandomResetIntervalMobileAxisLabels,
   getCompactHeatmapTimeBins,
@@ -432,4 +433,11 @@ test("uses day-based boundary ticks for the mobile interval chart", () => {
     "10d",
     "10d+",
   ]);
+});
+
+test("localizes the random reset interval axis label", () => {
+  assert.deepEqual(
+    (["ja", "en", "zh"] as const).map((locale) => formatRandomResetIntervalAxisLabel(locale)),
+    ["間隔（日）", "Interval (days)", "间隔（天）"],
+  );
 });
