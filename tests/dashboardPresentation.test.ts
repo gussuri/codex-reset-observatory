@@ -7,10 +7,13 @@ import { AboutView } from "../components/AboutView";
 import { formatScheduledSourceDay, RadarDashboard } from "../components/RadarDashboard";
 import { FaqView } from "../components/FaqView";
 import { formatProbabilityDisplay, ProbabilityMetrics } from "../components/ProbabilityMetrics";
+import { ResetHistoryDetails } from "../components/ResetHistoryDetails";
 import { TiboActivityCard } from "../components/TiboActivityCard";
+import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
+import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -1190,6 +1193,126 @@ test("adds stable ChatGPT reset FAQ anchors and keeps the whole-service distinct
     assert.ok(html.includes(cases[locale].reset), locale);
     assert.ok(html.includes(cases[locale].distinction), locale);
     assert.match(html, /"@type":"FAQPage"/);
+  }
+});
+
+test("hides generic all-paid-plan scope while retaining concrete scope details", () => {
+  const calculationNow = new Date("2026-08-10T12:00:00.000Z");
+  const template = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  ).viewModel.recentHistory[0];
+
+  const makeItem = (scope: string) => ({
+    ...template,
+    key: `scope-${scope}`,
+    scope,
+    details: {
+      ...(template.details ?? {
+        cycleType: "ランダムリセット",
+        reasonType: "ご祝儀リセット",
+        resetMethod: "強制リセット",
+        scope,
+        noticeToExecution: "",
+      }),
+      scope,
+      noticeToExecution: "",
+      noticeType: "なし",
+      note: null,
+    },
+  });
+
+  const genericHtml = renderToStaticMarkup(
+    React.createElement(ResetHistoryDetails, {
+      item: makeItem("全有料プラン"),
+      locale: "ja",
+    }),
+  );
+  assert.doesNotMatch(genericHtml, /対象プラン/);
+  assert.doesNotMatch(genericHtml, /全有料プラン/);
+
+  for (const [locale, scope, label] of [
+    ["en", "All paid plans", "Scope"],
+    ["zh", "所有付费套餐", "适用套餐"],
+  ] as const) {
+    const localizedGenericHtml = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, {
+        item: makeItem(scope),
+        locale,
+      }),
+    );
+    assert.doesNotMatch(localizedGenericHtml, new RegExp(label));
+    assert.doesNotMatch(localizedGenericHtml, new RegExp(scope));
+  }
+
+  for (const scope of [
+    "不具合対象ユーザー（約50万人）",
+    "任意リセット未使用アカウント",
+    "Go / Plus / Pro",
+  ]) {
+    const concreteHtml = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, {
+        item: makeItem(scope),
+        locale: "ja",
+      }),
+    );
+    assert.match(concreteHtml, /対象プラン/);
+    assert.match(concreteHtml, new RegExp(scope));
+  }
+
+  const hiddenHtml = renderToStaticMarkup(
+    React.createElement(ResetHistoryDetails, {
+      item: makeItem("Go / Plus / Pro"),
+      locale: "ja",
+      showScope: false,
+    }),
+  );
+  assert.doesNotMatch(hiddenHtml, /対象プラン/);
+  assert.doesNotMatch(hiddenHtml, /Go \/ Plus \/ Pro/);
+});
+
+test("keeps all-paid-plan scope in internal history data and random-reset eligibility", () => {
+  const stored = LOCAL_RESET_HISTORY.find(
+    (item) =>
+      item.details?.cycleType === "ランダムリセット" &&
+      item.details.scope === "全有料プラン" &&
+      item.recordKind === "confirmed_global",
+  );
+  assert.ok(stored);
+  assert.equal(stored.details?.scope, "全有料プラン");
+
+  const completedAt = Date.parse(stored.completed_at ?? stored.closed_at ?? "");
+  assert.equal(
+    isEligibleRandomResetEvent(
+      stored,
+      completedAt,
+      Date.parse("2026-08-24T00:00:00.000Z"),
+    ),
+    true,
+  );
+});
+
+test("adds a localized FAQ note about plan and account-specific reset application", () => {
+  const cases = {
+    ja: {
+      question: "リセットはすべての有料プランに適用されますか？",
+      answer: "過去にはBusinessで未適用または遅延となった事例も確認されています。",
+    },
+    en: {
+      question: "Does a reset always apply to every paid plan?",
+      answer: "We have seen past cases where Business was not included or was updated later.",
+    },
+    zh: {
+      question: "重置一定会适用于所有付费方案吗？",
+      answer: "过去也曾出现 Business 未适用或延迟生效的情况。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(React.createElement(FaqView, { locale }));
+    assert.ok(html.includes(cases[locale].question), locale);
+    assert.ok(html.includes(cases[locale].answer), locale);
   }
 });
 

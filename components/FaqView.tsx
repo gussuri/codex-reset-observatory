@@ -42,6 +42,11 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "はい。対象プランでは、CodexとChatGPT Workは同じエージェント利用量・クレジットのプールを共有しています。その共有利用枠に対するリセットであれば、CodexだけでなくChatGPT Workの利用にも関係します。ただし、対象プランやリセットの範囲によって適用状況が異なる場合があります。",
         },
         {
+          id: "reset-scope-coverage",
+          question: "リセットはすべての有料プランに適用されますか？",
+          answer: "必ずしもすべてのプランやアカウントに同じように適用されるとは限りません。公式に広い対象へのリセットとして告知された場合でも、プランやアカウント条件によって適用状況が異なることがあります。過去にはBusinessで未適用または遅延となった事例も確認されています。このサイトの履歴はリセットイベントの発生を中心に記録しており、各プランへの完全な適用を保証するものではありません。",
+        },
+        {
           id: "chatgpt-reset",
           question: "ChatGPTのリセットとCodexのリセットは同じですか？",
           answer: "いいえ、すべてのChatGPT利用制限がCodexと同じわけではありません。対象プランでは、CodexとChatGPT Workなど一部のエージェント機能が共有のエージェント利用量・クレジット枠を使用しています。この共有枠に対するリセットはCodexとChatGPT Workの両方に関係しますが、通常のChatGPT利用制限や他の機能の制限とは別の場合があります。",
@@ -105,6 +110,11 @@ export function FaqView({ locale }: FaqViewProps) {
           id: "chatgpt-work-reset",
           question: "Does a Codex reset also affect ChatGPT Work?",
           answer: "Yes. On eligible plans, Codex and ChatGPT Work share the same agentic usage and credits pool. A reset affecting that shared pool can therefore affect both Codex and ChatGPT Work, although the applicable scope may vary by plan and event.",
+        },
+        {
+          id: "reset-scope-coverage",
+          question: "Does a reset always apply to every paid plan?",
+          answer: "Not always. Even when an official notice describes a reset as applying broadly, the actual application can vary by plan or account conditions. We have seen past cases where Business was not included or was updated later. This site's history records the occurrence of reset events and does not guarantee that every plan received the reset in exactly the same way.",
         },
         {
           id: "chatgpt-reset",
@@ -204,6 +214,11 @@ export function FaqView({ locale }: FaqViewProps) {
           id: "chatgpt-work-reset",
           question: "Codex 的重置也会影响 ChatGPT Work 吗？",
           answer: "会。在符合条件的方案中，Codex 和 ChatGPT Work 共享同一个代理式使用量和额度池，因此影响这一共享额度池的重置也可能影响两者。不过，具体适用范围可能因方案和事件而不同。",
+        },
+        {
+          id: "reset-scope-coverage",
+          question: "重置一定会适用于所有付费方案吗？",
+          answer: "不一定。即使官方公告将重置描述为适用于较广泛的范围，实际适用情况也可能因方案或账号条件而不同。过去也曾出现 Business 未适用或延迟生效的情况。本网站的历史主要记录重置事件是否发生，并不保证每个方案都以完全相同的方式获得重置。",
         },
         {
           id: "chatgpt-reset",

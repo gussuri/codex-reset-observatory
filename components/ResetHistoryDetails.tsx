@@ -20,6 +20,18 @@ function isMeaningfulValue(value: string | null | undefined) {
   return !new Set(["不明", "unknown", "未知", "なし", "none", "null"]).has(value.trim().toLowerCase());
 }
 
+const GENERIC_SCOPE_VALUES = new Set([
+  "全有料プラン",
+  "all paid plans",
+  "所有付费套餐",
+]);
+
+function shouldShowScope(value: string | null | undefined) {
+  const normalizedValue = value?.trim().toLowerCase();
+  if (!normalizedValue) return false;
+  return !GENERIC_SCOPE_VALUES.has(normalizedValue);
+}
+
 function shouldShowNoticeToExecution(
   value: string,
   details: NonNullable<ResetHistoryItem["details"]>,
@@ -90,7 +102,7 @@ export function ResetHistoryDetails({
       label: translateUI("historyResetMethod", locale),
       value: details.resetMethod,
     },
-    ...(showScope
+    ...(showScope && shouldShowScope(details.scope)
       ? [{ id: "scope", label: translateUI("scope", locale), value: details.scope }]
       : []),
     ...(details.noticeType
