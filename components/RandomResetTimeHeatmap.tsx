@@ -15,6 +15,7 @@ import {
   getHeatmapTimeAxisTicks,
   getRawBarHeightPercent,
   RANDOM_RESET_INTERVAL_BIN_COUNT,
+  RANDOM_RESET_TIME_HEATMAP_BIN_COUNT,
   RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT,
 } from "@/lib/radar/resetTimeHeatmap";
 import type {
@@ -27,7 +28,7 @@ import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 const CONTENT = {
   ja: {
     heading: "過去のランダムリセット時刻",
-    description: "過去のランダムリセット時刻を、2時間ごとに集計しています。",
+    description: "過去のランダムリセット時刻を、PCでは1時間ごと、モバイルでは2時間ごとに集計しています。",
     timezone: "タイムゾーン",
     timeAxis: "時刻",
     period: "集計期間",
@@ -46,7 +47,7 @@ const CONTENT = {
   },
   en: {
     heading: "Past random reset times",
-    description: "Past random reset times are grouped into two-hour blocks.",
+    description: "Past random reset times are grouped by hour on desktop and by two-hour blocks on mobile.",
     timezone: "Time zone",
     timeAxis: "Time",
     period: "Time range",
@@ -65,7 +66,7 @@ const CONTENT = {
   },
   zh: {
     heading: "历史随机重置时刻分布",
-    description: "按2小时时段汇总历史随机重置记录。",
+    description: "按时刻汇总历史随机重置记录（桌面端按1小时、移动端按2小时聚合）。",
     timezone: "时区",
     timeAxis: "时间",
     period: "统计周期",
@@ -112,17 +113,22 @@ export function RandomResetTimeHeatmap({
     [eventTimes, range, timeZone],
   );
   const timeHeatmap = heatmap?.time ?? null;
-  const timeBins = timeHeatmap ? getCompactHeatmapTimeBins(timeHeatmap.bins) : [];
+  const mobileTimeBins = timeHeatmap ? getCompactHeatmapTimeBins(timeHeatmap.bins) : [];
   const intervalDistribution = heatmap?.interval ?? null;
-  const maxRawCount = timeBins.length > 0
-    ? Math.max(...timeBins.map((item) => item.rawCount))
+  const maxRawCount = timeHeatmap
+    ? Math.max(...timeHeatmap.bins.map((item) => item.rawCount))
+    : 0;
+  const mobileTimeMaxRawCount = mobileTimeBins.length > 0
+    ? Math.max(...mobileTimeBins.map((item) => item.rawCount))
     : 0;
   const timeBarScaleMax = maxRawCount > 0 ? maxRawCount + 1 : 0;
+  const mobileTimeBarScaleMax = mobileTimeMaxRawCount > 0 ? mobileTimeMaxRawCount + 1 : 0;
   const intervalMaxRawCount = intervalDistribution
     ? Math.max(...intervalDistribution.bins.map((item) => item.rawCount))
     : 0;
   const intervalBarScaleMax = intervalMaxRawCount > 0 ? intervalMaxRawCount * 1.2 : 0;
-  const timeAxisTicks = getHeatmapTimeAxisTicks(2);
+  const desktopTimeAxisTicks = getHeatmapTimeAxisTicks(1);
+  const mobileTimeAxisTicks = getHeatmapTimeAxisTicks(2);
 
   return (
     <section
@@ -169,8 +175,19 @@ export function RandomResetTimeHeatmap({
 
       {!heatmap ? (
         <div className="mt-5 space-y-5" role="status" aria-label={content.ariaBusy}>
-          <div className="grid grid-cols-12 gap-1" aria-hidden="true">
+          <div className="grid grid-cols-12 gap-1 md:hidden" aria-hidden="true">
             {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_MOBILE_BIN_COUNT }, (_, index) => (
+              <span
+                className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
+                key={index}
+              />
+            ))}
+          </div>
+          <div
+            className="hidden gap-1 md:grid md:grid-cols-[repeat(24,minmax(0,1fr))]"
+            aria-hidden="true"
+          >
+            {Array.from({ length: RANDOM_RESET_TIME_HEATMAP_BIN_COUNT }, (_, index) => (
               <span
                 className="block aspect-[1.35] min-w-0 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
                 key={index}
@@ -207,14 +224,26 @@ export function RandomResetTimeHeatmap({
       ) : (
         <>
           <div className="mt-5 min-w-0">
-            <TimeHeatmapChart
-              ariaLabel={content.heading}
-              barScaleMax={timeBarScaleMax}
-              bins={timeBins}
-              gridClassName="grid-cols-12"
-              locale={locale}
-              timeAxisTicks={timeAxisTicks}
-            />
+            <div className="hidden md:block">
+              <TimeHeatmapChart
+                ariaLabel={content.heading}
+                barScaleMax={timeBarScaleMax}
+                bins={timeHeatmap?.bins ?? []}
+                gridClassName="grid-cols-[repeat(24,minmax(0,1fr))]"
+                locale={locale}
+                timeAxisTicks={desktopTimeAxisTicks}
+              />
+            </div>
+            <div className="md:hidden">
+              <TimeHeatmapChart
+                ariaLabel={content.heading}
+                barScaleMax={mobileTimeBarScaleMax}
+                bins={mobileTimeBins}
+                gridClassName="grid-cols-12"
+                locale={locale}
+                timeAxisTicks={mobileTimeAxisTicks}
+              />
+            </div>
           </div>
           <p aria-hidden="true" className="mt-1 text-center text-xs font-medium text-slate-500">{content.timeAxis}</p>
           {intervalDistribution ? (
