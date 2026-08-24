@@ -181,10 +181,25 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       codex_recovery_observations: [sampleRecovery as any],
       reset_execution_estimates: [estimate as any],
     } as any;
-    for (const [locale, expectedTitle, expectedReason] of [
-      ["ja", "過剰消費のお詫びリセット", "詫びリセット"],
-      ["en", "Excessive consumption compensation reset", "Compensation reset"],
-      ["zh", "过度消耗补偿重置", "故障补偿重置"],
+    for (const [locale, expectedTitle, expectedReason, expectedNote] of [
+      [
+        "ja",
+        "過剰消費のお詫びリセット",
+        "詫びリセット",
+        "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
+      ],
+      [
+        "en",
+        "Excessive consumption compensation reset",
+        "Compensation reset",
+        "Codex usage limits were reset as compensation for the weekend's excessive consumption issue.",
+      ],
+      [
+        "zh",
+        "过度消耗补偿重置",
+        "故障补偿重置",
+        "针对周末过度消耗问题，Codex 整体使用额度已作为补偿进行重置。",
+      ],
     ] as const) {
       const snapshot = toPublicRadarSnapshot(data, locale, {
         calculationNow: new Date("2026-08-23T23:00:00Z"),
@@ -195,6 +210,8 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       );
       assert.equal(history?.title, expectedTitle);
       assert.equal(history?.resetType, expectedReason);
+      assert.equal(history?.details?.note, expectedNote);
+      assert.equal(history?.summary, expectedNote);
     }
   });
 

@@ -1310,6 +1310,16 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "To celebrate Codex surpassing 15 million active users, usage limits for ChatGPT Work and Codex were forcibly reset.",
     zh: "为纪念 Codex 活跃用户数突破 1500 万，ChatGPT Work 和 Codex 的使用额度进行了强制重置。",
   },
+  "Codexの利用枠がリセットされました。": {
+    ja: "Codexの利用枠がリセットされました。",
+    en: "Codex usage limits have been reset.",
+    zh: "Codex 使用额度已重置。",
+  },
+  "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。": {
+    ja: "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
+    en: "Codex usage limits were reset as compensation for the weekend's excessive consumption issue.",
+    zh: "针对周末过度消耗问题，Codex 整体使用额度已作为补偿进行重置。",
+  },
   "16分": {
     ja: "16分",
     en: "16 minutes",

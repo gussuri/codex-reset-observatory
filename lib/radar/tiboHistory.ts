@@ -91,6 +91,8 @@ const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの利用枠がリセッ�
 const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
   "tibo-reset-2087706104814023111":
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
+  "tibo-reset-2091412393368945027":
+    "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
 };
 const NOTICE_BACKED_RECOVERY_TITLES: Readonly<Record<string, string>> = {
   "tibo-reset-2091412393368945027": "過剰消費のお詫びリセット",
