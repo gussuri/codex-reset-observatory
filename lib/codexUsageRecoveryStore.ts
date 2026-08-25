@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CODEX_USAGE_SOURCE_KEY,
   getPublicRecoveryObservation,
+  isBankedResetAvailableCountGrant,
   type CodexRecoveryObservation,
   type CodexUsageSnapshot,
 } from "./codexUsageRecovery";
@@ -233,12 +234,9 @@ export function getNextUsageMonitorLastBankedGrantAt(
   const prevCount = previousState?.bankedResetAvailableCount;
   const currCount = snapshot.bankedResetAvailableCount;
 
-  const isCountIncreased =
-    typeof currCount === "number" &&
-    currCount > 0 &&
-    (typeof prevCount !== "number" || currCount > prevCount);
+  const isCountIncreased = isBankedResetAvailableCountGrant(prevCount, currCount);
 
-  if (snapshot.bankedResetCountChange === true || isCountIncreased) {
+  if (isCountIncreased) {
     return snapshot.observedAt;
   }
 
