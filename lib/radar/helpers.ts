@@ -1,4 +1,8 @@
-import { EXPECTATION_THRESHOLDS, REFRESH_INTERVAL_MS } from "@/data/predictionWeights";
+import {
+  EXPECTATION_THRESHOLDS,
+  REFRESH_INTERVAL_MS,
+  REFRESH_INTERVAL_THRESHOLDS,
+} from "@/data/predictionWeights";
 import type { Locale, ProbabilityLevel } from "./types";
 import { translateUI, translateDynamic, translateExpectation } from "./i18n";
 
@@ -194,15 +198,15 @@ export function getRefreshIntervalMs(value: number | undefined) {
 
   const normalized = normalizeProbability(value);
 
-  if (normalized < EXPECTATION_THRESHOLDS.medium.p24h) {
+  if (normalized < REFRESH_INTERVAL_THRESHOLDS.medium) {
     return REFRESH_INTERVAL_MS.low;
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.high.p24h) {
+  if (normalized < REFRESH_INTERVAL_THRESHOLDS.high) {
     return REFRESH_INTERVAL_MS.medium;
   }
 
-  if (normalized < EXPECTATION_THRESHOLDS.veryHigh.p24h) {
+  if (normalized < REFRESH_INTERVAL_THRESHOLDS.veryHigh) {
     return REFRESH_INTERVAL_MS.high;
   }
 

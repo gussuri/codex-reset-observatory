@@ -139,6 +139,7 @@ test("normal refresh intervals remain low 15 minutes, medium 10 minutes, high 10
   const fetchedAt = Date.parse(FRESH_AT);
   const cases = [
     [0.02, 15 * 60 * 1000],
+    [0.2, 10 * 60 * 1000],
     [0.3, 10 * 60 * 1000],
     [0.7, 10 * 60 * 1000],
     [0.9, 5 * 60 * 1000],

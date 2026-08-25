@@ -97,6 +97,12 @@ test("uses either displayed horizon for expectation thresholds", () => {
   assert.equal(getExpectationKey({ p24h: 0.61, p48h: 0.1 }), "high");
 });
 
+test("starts the medium expectation at thirty percent", () => {
+  assert.equal(getExpectationKey({ p24h: 0.2, p48h: 0.2 }), "low");
+  assert.equal(getExpectationKey({ p24h: 0.2999, p48h: 0.2999 }), "low");
+  assert.equal(getExpectationKey({ p24h: 0.3, p48h: 0.3 }), "medium");
+});
+
 test("falls back from resolvedAt to updatedAt and then createdAt", () => {
   const result = evaluate([
     incident({ id: "updated", resolvedAt: null }),

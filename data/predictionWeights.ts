@@ -1,7 +1,13 @@
 export const EXPECTATION_THRESHOLDS = {
-  medium: { p24h: 0.20, p48h: 0.20 },
+  medium: { p24h: 0.30, p48h: 0.30 },
   high: { p24h: 0.61, p48h: 0.61 },
   veryHigh: { p24h: 0.80, p48h: 0.85 },
+} as const;
+
+export const REFRESH_INTERVAL_THRESHOLDS = {
+  medium: 0.20,
+  high: EXPECTATION_THRESHOLDS.high.p24h,
+  veryHigh: EXPECTATION_THRESHOLDS.veryHigh.p24h,
 } as const;
 
 export const PROBABILITY_MODEL_VERSION = "heuristic-v2-time-consistent";
