@@ -156,6 +156,8 @@ test("the first valid snapshot is stored as a baseline only", async () => {
       window_duration_mins: 10080,
       resets_at: 1787012727,
       coverage_started_at: "2026-08-11T00:02:00.000Z",
+      banked_reset_available_count: null,
+      last_banked_grant_at: null,
       updated_at: bodies[0] && typeof bodies[0] === "object" ? (bodies[0] as Record<string, unknown>).updated_at : undefined,
     });
   } finally {
@@ -751,6 +753,110 @@ test("non-regular recovery beyond five minutes does not write regular history", 
     assert.equal(observation?.body?.cycle_hint, "unexpected");
     assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
     assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("personal banked reset consumption records observation and updates state but suppresses public random reset estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-11T00:00:00.000Z",
+        received_at: "2026-08-11T00:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: 1787000000,
+        coverage_started_at: "2026-08-10T00:00:00.000Z",
+        banked_reset_available_count: 1,
+        last_banked_grant_at: "2026-08-01T00:00:00.000Z",
+        updated_at: "2026-08-11T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("codex_recovery_observations")) {
+      return new Response(JSON.stringify({
+        data: {
+          id: "observation-personal-123",
+          source_key: "local-codex-app-server",
+          observed_at: "2026-08-11T00:02:00.000Z",
+          previous_observed_at: "2026-08-11T00:00:00.000Z",
+          previous_used_percent: 80,
+          current_used_percent: 0,
+          previous_resets_at: 1787000000,
+          current_resets_at: 1787604800,
+          cycle_hint: "unexpected",
+          confidence: "strong",
+          status: "observed",
+          matched_tibo_tweet_id: null,
+          confirmed_at: null,
+          created_at: "2026-08-11T00:02:01.000Z",
+          updated_at: "2026-08-11T00:02:01.000Z",
+        },
+        error: null,
+      }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-08-11T00:02:00.000Z",
+      usedPercent: 0,
+      resetsAt: 1787604800,
+      bankedResetAvailableCount: 0,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "personal_reset" });
+
+    // 1. Observation is recorded as an unconfirmed personal observation
+    const observationWrite = requests.find((request) =>
+      request.url.includes("codex_recovery_observations") && request.method !== "GET",
+    );
+    assert.ok(observationWrite, "Observation should be written for audit");
+    assert.equal(observationWrite?.body?.cycle_hint, "unexpected");
+    assert.equal(observationWrite?.body?.confidence, "strong");
+    assert.equal(observationWrite?.body?.status, "observed");
+    assert.equal(observationWrite?.body?.matched_tibo_tweet_id, null);
+
+    // 2. State is updated to reflect banked count 0 and carry forward grant timestamp
+    const stateWrite = requests.find((request) =>
+      request.url.includes("codex_usage_monitor_state") && request.method !== "GET",
+    );
+    assert.ok(stateWrite, "State should be updated");
+    assert.equal(stateWrite?.body?.banked_reset_available_count, 0);
+    assert.equal(stateWrite?.body?.last_banked_grant_at, "2026-08-01T00:00:00.000Z");
+
+    // 3. CRITICAL: NO public reset execution estimate is created!
+    const estimateWrites = requests.filter((request) =>
+      request.url.includes("reset_execution_estimates") && request.method !== "GET",
+    );
+    assert.equal(estimateWrites.length, 0, "No public random reset estimate must be written for personal reset");
   } finally {
     globalThis.fetch = originalFetch;
     restore();

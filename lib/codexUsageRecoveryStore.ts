@@ -35,6 +35,8 @@ export type CodexUsageMonitorStateRow = {
   window_duration_mins: number;
   resets_at: number;
   coverage_started_at: string | null;
+  banked_reset_available_count?: number | null;
+  last_banked_grant_at?: string | null;
   updated_at: string;
 };
 
@@ -83,10 +85,21 @@ export type ResetExecutionEstimateRow = {
   updated_at: string;
 };
 
-const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,coverage_started_at,updated_at";
+const STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,coverage_started_at,banked_reset_available_count,last_banked_grant_at,updated_at";
+const LEGACY_COVERAGE_STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,coverage_started_at,updated_at";
 const LEGACY_STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,updated_at";
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
+
+function isMissingBankedColumnError(
+  error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined,
+) {
+  return Boolean(
+    error &&
+      (error.code === "42703" || error.code === "PGRST204") &&
+      /banked_reset_available_count|last_banked_grant_at/i.test(`${error.message ?? ""} ${error.details ?? ""}`),
+  );
+}
 
 function isMissingCoverageColumnError(
   error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined,
@@ -124,6 +137,12 @@ export function toCodexUsageMonitorState(
     windowDurationMins: row.window_duration_mins,
     resetsAt: row.resets_at,
     coverageStartedAt: row.coverage_started_at ?? null,
+    bankedResetAvailableCount: typeof row.banked_reset_available_count === "number"
+      ? row.banked_reset_available_count
+      : row.banked_reset_available_count === null
+        ? null
+        : undefined,
+    lastBankedGrantAt: row.last_banked_grant_at ?? null,
   };
 }
 
@@ -138,6 +157,12 @@ export function toCodexUsageSnapshot(row: CodexUsageMonitorStateRow | null | und
     usedPercent: row.used_percent,
     windowDurationMins: 10080,
     resetsAt: row.resets_at,
+    bankedResetAvailableCount: typeof row.banked_reset_available_count === "number"
+      ? row.banked_reset_available_count
+      : row.banked_reset_available_count === null
+        ? null
+        : undefined,
+    lastBankedGrantAt: row.last_banked_grant_at ?? null,
   };
 }
 
@@ -201,6 +226,52 @@ export function toResetExecutionEstimate(
   };
 }
 
+export function getNextUsageMonitorLastBankedGrantAt(
+  previousState: UsageMonitorState | null | undefined,
+  snapshot: CodexUsageSnapshot,
+): string | null {
+  const prevCount = previousState?.bankedResetAvailableCount;
+  const currCount = snapshot.bankedResetAvailableCount;
+
+  const isCountIncreased =
+    typeof currCount === "number" &&
+    currCount > 0 &&
+    (typeof prevCount !== "number" || currCount > prevCount);
+
+  if (snapshot.bankedResetCountChange === true || isCountIncreased) {
+    return snapshot.observedAt;
+  }
+
+  if (snapshot.lastBankedGrantAt) {
+    return snapshot.lastBankedGrantAt;
+  }
+
+  return previousState?.lastBankedGrantAt ?? null;
+}
+
+export async function findLatestBankedGrantAt(
+  client: SupabaseClient<any>,
+  observedAt: string,
+): Promise<string | null> {
+  const time = Date.parse(observedAt);
+  if (!Number.isFinite(time)) return null;
+
+  const result = await client
+    .from("reset_execution_estimates")
+    .select("display_execution_at,created_at,tibo_announced_at,official_notice_at")
+    .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
+    .lte("display_execution_at", observedAt)
+    .order("display_execution_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (result.error || !result.data) {
+    return null;
+  }
+
+  return result.data.display_execution_at ?? result.data.created_at ?? null;
+}
+
 export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {
   let result = await client
     .from("codex_usage_monitor_state")
@@ -208,9 +279,14 @@ export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
     .maybeSingle();
 
-  // Keep the rollout safe if Vercel starts before the additive migration has
-  // reached the production schema. Missing continuity is intentionally treated
-  // as unknown; the next post-migration snapshot starts a new interval.
+  if (isMissingBankedColumnError(result.error)) {
+    result = await client
+      .from("codex_usage_monitor_state")
+      .select(LEGACY_COVERAGE_STATE_COLUMNS)
+      .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+      .maybeSingle();
+  }
+
   if (isMissingCoverageColumnError(result.error)) {
     result = await client
       .from("codex_usage_monitor_state")
@@ -233,7 +309,28 @@ export async function upsertCodexUsageMonitorState(
   previousState: UsageMonitorState | null | undefined = null,
 ) {
   const coverageStartedAt = getNextUsageMonitorCoverageStartedAt(previousState, snapshot);
+  const lastBankedGrantAt = getNextUsageMonitorLastBankedGrantAt(previousState, snapshot);
+  const bankedResetAvailableCount = snapshot.bankedResetAvailableCount !== undefined
+    ? snapshot.bankedResetAvailableCount
+    : previousState?.bankedResetAvailableCount !== undefined
+      ? previousState.bankedResetAvailableCount
+      : null;
+
   const payload = {
+    source_key: CODEX_USAGE_SOURCE_KEY,
+    observed_at: snapshot.observedAt,
+    received_at: receivedAt,
+    limit_id: snapshot.limitId,
+    plan_type: snapshot.planType,
+    used_percent: snapshot.usedPercent,
+    window_duration_mins: snapshot.windowDurationMins,
+    resets_at: snapshot.resetsAt,
+    coverage_started_at: coverageStartedAt,
+    banked_reset_available_count: bankedResetAvailableCount,
+    last_banked_grant_at: lastBankedGrantAt,
+    updated_at: receivedAt,
+  };
+  const legacyCoveragePayload = {
     source_key: CODEX_USAGE_SOURCE_KEY,
     observed_at: snapshot.observedAt,
     received_at: receivedAt,
@@ -257,14 +354,16 @@ export async function upsertCodexUsageMonitorState(
     updated_at: receivedAt,
   };
 
-  // Insert first so a concurrent first snapshot cannot leave the table with
-  // whichever request happened to run its fallback insert last. The following
-  // conditional UPDATE is evaluated atomically by Postgres and only advances
-  // observed_at, so an older webhook cannot roll the state back.
-  let writePayload: typeof payload | typeof legacyPayload = payload;
+  let writePayload: typeof payload | typeof legacyCoveragePayload | typeof legacyPayload = payload;
   let insertResult = await client
     .from("codex_usage_monitor_state")
     .upsert(payload, { onConflict: "source_key", ignoreDuplicates: true });
+  if (isMissingBankedColumnError(insertResult.error)) {
+    writePayload = legacyCoveragePayload;
+    insertResult = await client
+      .from("codex_usage_monitor_state")
+      .upsert(legacyCoveragePayload, { onConflict: "source_key", ignoreDuplicates: true });
+  }
   if (isMissingCoverageColumnError(insertResult.error)) {
     writePayload = legacyPayload;
     insertResult = await client
@@ -278,7 +377,15 @@ export async function upsertCodexUsageMonitorState(
     .update(writePayload)
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
     .lt("observed_at", snapshot.observedAt);
-  if (writePayload === payload && isMissingCoverageColumnError(updateResult.error)) {
+  if (writePayload === payload && isMissingBankedColumnError(updateResult.error)) {
+    writePayload = legacyCoveragePayload;
+    updateResult = await client
+      .from("codex_usage_monitor_state")
+      .update(legacyCoveragePayload)
+      .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+      .lt("observed_at", snapshot.observedAt);
+  }
+  if (writePayload === legacyCoveragePayload && isMissingCoverageColumnError(updateResult.error)) {
     writePayload = legacyPayload;
     updateResult = await client
       .from("codex_usage_monitor_state")

@@ -14,6 +14,8 @@ export type UsageMonitorState = {
   resetsAt: number;
   /** Nullable for rows written before event-time continuity was introduced. */
   coverageStartedAt: string | null;
+  bankedResetAvailableCount?: number | null;
+  lastBankedGrantAt?: string | null;
 };
 
 export type UsageMonitorCoverage =

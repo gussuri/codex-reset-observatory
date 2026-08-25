@@ -37,6 +37,7 @@ export type CodexUsageSnapshot = {
   bankedResetDisplayCount?: number | null;
   bankedResetCountSource?: BankedResetCountSource;
   bankedResetCountChange?: boolean;
+  lastBankedGrantAt?: string | null;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";

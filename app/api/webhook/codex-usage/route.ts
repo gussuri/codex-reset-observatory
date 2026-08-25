@@ -15,6 +15,7 @@ import {
 import {
   confirmNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
+  findLatestBankedGrantAt,
   findRecentFormalTiboReset,
   insertObservedRegularResetEvent,
   insertCodexRecoveryObservation,
@@ -281,7 +282,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
     }
 
-    const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot);
+    const lastBankedGrantAt =
+      previousResult.row?.lastBankedGrantAt ??
+      previousResult.state?.lastBankedGrantAt ??
+      (previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
+        ? await findLatestBankedGrantAt(client, snapshot.observedAt)
+        : null);
+
+    const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
+      lastBankedGrantAt,
+    });
     if (initialDecision.kind === "stale") return recoveryResponse("ignored_stale");
 
     if (
@@ -328,6 +338,7 @@ export async function POST(request: Request) {
     const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
       activeOfficialNotice: notice.active,
       activeResetEvidence: notice.active || Boolean(notice.teaserSignal),
+      lastBankedGrantAt,
     });
     if (decision.kind !== "recovery") {
       const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
