@@ -631,7 +631,8 @@ function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Local
 }
 
 function getHistoryReasonType(item: WindowLike & { kind?: string }, locale: Locale) {
-  return translateDynamic(normalizeResetReasonType(getHistoryReasonContext(item)), locale);
+  const reason = normalizeResetReasonType(getHistoryReasonContext(item));
+  return reason ? translateDynamic(reason, locale) : "";
 }
 
 function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Locale) {
@@ -703,12 +704,10 @@ function getHistoryDetails(
   }
 
   if (item.details) {
+    const reason = normalizeResetReasonType(getHistoryReasonContext(item));
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: translateDynamic(
-        normalizeResetReasonType(getHistoryReasonContext(item)),
-        locale,
-      ),
+      reasonType: reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: translateDynamic(item.details.noticeToExecution, locale),
@@ -743,7 +742,8 @@ function getResetTypes(item: WindowLike & { kind?: string }, locale: Locale = "j
       item.recordKind === "regular_completed",
   );
   if (isCompleted) {
-    return [translateDynamic(normalizeResetReasonType(getHistoryReasonContext(item)), locale)];
+    const reason = normalizeResetReasonType(getHistoryReasonContext(item));
+    return reason ? [translateDynamic(reason, locale)] : [];
   }
 
   const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();

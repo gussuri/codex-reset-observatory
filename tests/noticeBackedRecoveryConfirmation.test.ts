@@ -178,7 +178,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       [{ ...sampleEstimate, resetEventKey: "tibo-reset-unknown" }],
     );
     assert.equal(events.length, 1);
-    assert.equal(events[0].details?.reasonType, "ご祝儀リセット");
+    assert.equal(events[0].details?.reasonType, undefined);
   });
 
   it("rate-limit compensation notice uses its explicit title and reason", () => {

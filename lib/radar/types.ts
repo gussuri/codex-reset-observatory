@@ -88,7 +88,7 @@ export type ResetDisplayNameRecord = {
 
 export type ResetHistoryDetails = {
   cycleType: ResetCycleType | string;
-  reasonType: ResetReasonType | string;
+  reasonType?: ResetReasonType | string;
   resetMethod: ResetMethodType | string;
   scope: ResetScopeType | string;
   noticeToExecution: string;

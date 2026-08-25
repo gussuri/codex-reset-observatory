@@ -1,8 +1,9 @@
 # Codex usage monitor runbook
 
 The local monitor observes the weekly usage window exposed by the official
-Codex app-server. It is an independent corroboration signal, not a replacement
-for Tibo's reset confirmation.
+Codex app-server. An unexpected weekly quota recovery is immediately confirmed
+as a formal random reset on the public observatory, while Tibo posts provide
+retrospective context and corroboration.
 
 ## 日常運用
 
@@ -113,30 +114,32 @@ both a decrease of at least one percentage point in `usedPercent` and a
 `resetsAt` advance of at least one hour. The app-server timestamp may jitter by
 a few seconds, so smaller changes are ignored. Raw `resetsAt` values are kept
 unchanged for monitoring and later analysis. The first observation is a
-baseline. An observation after a gap greater than 10 minutes is a rebase and
-does not create an event.
+baseline. An observation after a gap greater than 10 minutes or after a plan/limit
+structure change is a rebase and does not create an event.
 
-The previous scheduled reset is used only as context. An observation within 60
-minutes of that schedule is marked `regular` when there is no active official
-notice, or `unknown` with strong confidence when an official notice is active.
-An off-schedule recovery is `unexpected`; it is strong only when an active
-official notice corroborates it. Medium observations are stored for audit but do
-not change the public display.
+The previous scheduled reset is used only as context. An observation within 5
+minutes of that schedule is marked `regular`. When a measured recovery is near
+the regular schedule, the webhook stores a canonical `regular_completed`
+history row.
 
-When a measured recovery is near the regular schedule, the webhook stores a
-canonical `regular_completed` history row. Its `scheduled_at` comes from the
-previous snapshot's `resetsAt`, while `completed_at` is the recovery snapshot's
-`observedAt`. This advances the site's regular-reset reference for the next
-cycle; it does not assume that every user's reset occurred at exactly the same
-instant and does not promote the recovery to a Tibo or global random reset.
+An unexpected weekly recovery (`cycleHint === 'unexpected'`) observed by the
+monitor is an immediate, confirmed random reset event. It does not wait for Tibo
+posts. When observed:
+1. A confirmed global reset history item is generated immediately.
+2. `lastRandomResetAt` and the probability forecast clock are updated.
+3. The Next.js data cache is revalidated so the public UI and API reflect the event immediately.
 
-Strong, non-regular observations without a prior official notice are public only as a provisional derived state for 90 minutes. The UI says that usage recovery was observed on the monitored Codex account and that Tibo confirmation is pending.
+Subsequent Tibo posts (official notices, teasers, or completion confirmations)
+serve as retrospective corroboration and enrichment (providing reasons, titles,
+scopes, and source links) that merge into the canonical monitor event without
+shifting execution time or creating duplicates.
 
-When a valid prior `official_notice` exists and a strong, unexpected usage recovery is observed during its active/grace window, it is immediately confirmed as a `confirmed global reset`. The canonical execution time uses the local observation window (`observedAt`, `approximate`). A strong recovery classified as `unknown` is not immediately promoted to a global confirmation.
-
-Subsequent Tibo `reset_executed` posts are not a mandatory confirmation requirement, but serve as additional corroboration that merges into the same canonical reset event without creating duplicate history entries or boundary shifts.
-
-公式予告が有効な間は、監視対象のCodexアカウントでBanked Resetや手動リセットを使用しないでください。手動リセットでも`usedPercent`の低下と`resetsAt`の前進が起こり得るため、Usage Monitorから全体リセットと区別できない可能性があります。公式予告中の監視アカウントは観測専用として扱ってください。誤って手動リセットやBanked Resetを使用した場合は、その直後のrecovery observationを全体リセット確定の根拠にしないでください。
+### Personal Banked Reset vs Random Reset
+If a weekly recovery occurs concurrently with an explicit decrease in banked
+reset credits that is clearly within the active grant window (< 20 days since grant),
+it is treated as personal banked reset consumption and suppressed from the public
+random reset history. If indistinguishable from natural 30-day expiration or if
+credit count is unavailable, the recovery fails open and publishes the random reset.
 
 ## Windows configuration and CLI debugging
 

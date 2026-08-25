@@ -79,6 +79,7 @@ export type CodexUsageRecoveryDecision =
       nearRegularSchedule: boolean;
       cycleHint: CodexRecoveryCycleHint;
       confidence: CodexRecoveryConfidence;
+      isPersonalReset?: boolean;
       previous: CodexUsageSnapshot;
       current: CodexUsageSnapshot;
     };
@@ -371,12 +372,56 @@ export function isCodexUsageAuthorizationValid(
   return isBearerAuthorizationValid(authorizationHeader, expectedSecret);
 }
 
+export const BANKED_RESET_SAFE_CONSUMPTION_MAX_DAYS = 20;
+
+export function isExplicitBankedResetConsumption(
+  previous: CodexUsageSnapshot,
+  current: CodexUsageSnapshot,
+  lastBankedGrantAt?: string | null,
+): boolean {
+  if (
+    typeof previous.bankedResetAvailableCount === "number" &&
+    typeof current.bankedResetAvailableCount === "number" &&
+    current.bankedResetAvailableCount < previous.bankedResetAvailableCount
+  ) {
+    if (lastBankedGrantAt) {
+      const grantTime = Date.parse(lastBankedGrantAt);
+      const currentTime = Date.parse(current.observedAt);
+      if (Number.isFinite(grantTime) && Number.isFinite(currentTime)) {
+        const daysSinceGrant = (currentTime - grantTime) / (24 * 60 * 60 * 1000);
+        // If granted within 20 days, it is clearly not natural 30-day expiration -> personal reset
+        if (daysSinceGrant >= 0 && daysSinceGrant <= BANKED_RESET_SAFE_CONSUMPTION_MAX_DAYS) {
+          return true;
+        }
+        // If near ~30 days expiration or older, fail-open (not definitely personal consumption)
+        return false;
+      }
+    }
+    // If no grant date is known and count dropped clearly, check if option specifies
+    return false;
+  }
+  return false;
+}
+
 export function evaluateCodexUsageRecovery(
   previous: CodexUsageSnapshot | null | undefined,
   current: CodexUsageSnapshot,
-  options: { activeOfficialNotice?: boolean; activeResetEvidence?: boolean } = {},
+  options: {
+    activeOfficialNotice?: boolean;
+    activeResetEvidence?: boolean;
+    lastBankedGrantAt?: string | null;
+    isExplicitPersonalReset?: boolean;
+  } = {},
 ): CodexUsageRecoveryDecision {
   if (!previous) return { kind: "baseline" };
+
+  if (
+    previous.limitId !== current.limitId ||
+    previous.planType !== current.planType ||
+    previous.windowDurationMins !== current.windowDurationMins
+  ) {
+    return { kind: "rebase" };
+  }
 
   const previousTime = Date.parse(previous.observedAt);
   const currentTime = Date.parse(current.observedAt);
@@ -395,13 +440,20 @@ export function evaluateCodexUsageRecovery(
   const cycleHint: CodexRecoveryCycleHint = nearRegularSchedule
     ? activeResetEvidence ? "unknown" : "regular"
     : "unexpected";
-  const confidence: CodexRecoveryConfidence = activeResetEvidence ? "strong" : "medium";
+
+  // Monitor quality is strong on its own for unexpected weekly recoveries
+  const confidence: CodexRecoveryConfidence = nearRegularSchedule && !activeResetEvidence ? "medium" : "strong";
+
+  const isPersonalReset =
+    options.isExplicitPersonalReset === true ||
+    isExplicitBankedResetConsumption(previous, current, options.lastBankedGrantAt);
 
   return {
     kind: "recovery",
     nearRegularSchedule,
     cycleHint,
     confidence,
+    isPersonalReset,
     previous,
     current,
   };

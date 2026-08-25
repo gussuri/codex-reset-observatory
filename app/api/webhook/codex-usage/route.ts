@@ -362,6 +362,38 @@ export async function POST(request: Request) {
       }
     }
 
+    if (decision.isPersonalReset === true) {
+      const observationResult = await insertCodexRecoveryObservation(client, {
+        sourceKey: CODEX_USAGE_SOURCE_KEY,
+        observedAt: snapshot.observedAt,
+        previousObservedAt: decision.previous.observedAt,
+        previousUsedPercent: decision.previous.usedPercent,
+        currentUsedPercent: decision.current.usedPercent,
+        previousResetsAt: decision.previous.resetsAt,
+        currentResetsAt: decision.current.resetsAt,
+        cycleHint: decision.cycleHint,
+        confidence: decision.confidence,
+        status: "observed",
+        matchedTiboTweetId: null,
+        confirmedAt: null,
+      });
+      if (observationResult.error) {
+        console.warn("[Codex usage] personal reset observation write failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      }
+
+      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
+      if (stateError) {
+        console.warn("[Codex usage] state update failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
+      }
+
+      console.info("[Codex usage] personal reset observed and suppressed from public history", {
+        source: CODEX_USAGE_SOURCE_KEY,
+      });
+      return recoveryResponse("personal_reset");
+    }
+
     const confirmedAt = matchingTibo.tweetId ? now.toISOString() : null;
     const observationResult = await insertCodexRecoveryObservation(client, {
       sourceKey: CODEX_USAGE_SOURCE_KEY,
@@ -394,13 +426,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // local-codex-app-server observes one account's personal weekly window.
-    // Keep its recovery observation for audit. A near-regular recovery is
-    // recorded as the canonical regular boundary, but it never promotes a
-    // personal recovery into a Tibo/global random reset.
     const noticeSignal = notice.noticeSignal;
     const teaserSignal = notice.teaserSignal;
     let teaserEstimateObserved = false;
+    let estimateObserved = false;
     if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
       try {
         const cluster = await findFormalTiboResetCluster(
@@ -418,6 +447,7 @@ export async function POST(request: Request) {
             officialNoticeTweetId: cluster.representativeNoticeId,
             officialNoticeAt: cluster.representativeNoticeAt,
           });
+          estimateObserved = Boolean(estimateResult.estimate);
           if (estimateResult.error) {
             console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
           }
@@ -449,6 +479,7 @@ export async function POST(request: Request) {
           officialNoticeTweetId: representativeNotice.tweet_id,
           officialNoticeAt: representativeNotice.tweet_created_at,
         });
+        estimateObserved = Boolean(estimateResult.estimate);
         if (estimateResult.error) {
           console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });
         }
@@ -472,11 +503,33 @@ export async function POST(request: Request) {
           corroboratingTiboTweetId: teaser.tweet_id,
         });
         teaserEstimateObserved = Boolean(estimateResult.estimate);
+        estimateObserved = Boolean(estimateResult.estimate);
         if (estimateResult.error) {
           console.warn("[Codex usage] teaser-backed reset execution estimate write failed", { reason: "database_error" });
         }
       } catch {
         console.warn("[Codex usage] teaser-backed reset execution estimate skipped", { reason: "request_failed" });
+      }
+    } else if (
+      decision.confidence === "strong" &&
+      decision.cycleHint === "unexpected" &&
+      observationResult.observation
+    ) {
+      try {
+        const estimateResult = await upsertResetExecutionEstimate(client, {
+          resetEventKey: `usage-reset-${observationResult.observation.id}`,
+          usageObservation: observationResult.observation,
+          isMonitorObserved: true,
+          tiboAnnouncedAt: null,
+          tiboPrimaryTweetId: null,
+          tiboSourceTweetIds: [],
+        });
+        estimateObserved = Boolean(estimateResult.estimate);
+        if (estimateResult.error) {
+          console.warn("[Codex usage] monitor standalone reset execution estimate write failed", { reason: "database_error" });
+        }
+      } catch {
+        console.warn("[Codex usage] monitor standalone reset execution estimate skipped", { reason: "request_failed" });
       }
     }
 
@@ -501,6 +554,7 @@ export async function POST(request: Request) {
       confidence: decision.confidence,
       matchedTibo: Boolean(matchingTibo.tweetId),
       bankedDistributionObserved: bankedResult.observed,
+      estimateObserved,
     });
     try {
       revalidateTag("radar-data");
@@ -514,7 +568,9 @@ export async function POST(request: Request) {
         ? "confirmed"
         : teaserEstimateObserved
           ? "teaser_corroborated"
-          : "observed_unconfirmed",
+          : estimateObserved
+            ? "confirmed"
+            : "observed_unconfirmed",
     );
   } catch {
     console.warn("[Codex usage] request failed", { reason: "request_failed" });

@@ -1335,6 +1335,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "Codex usage limits were reset as compensation accompanying the restoration of the 5-hour limit for Plus plans.",
     zh: "随着 Plus 计划恢复每 5 小时使用限制，Codex 整体使用额度已作为补偿进行重置。",
   },
+  "Codexの週間利用枠がリセットされたことを確認しました。": {
+    ja: "Codexの週間利用枠がリセットされたことを確認しました。",
+    en: "Codex weekly usage limits were confirmed to have been reset.",
+    zh: "已确认 Codex 每周使用额度已重置。",
+  },
   "16分": {
     ja: "16分",
     en: "16 minutes",

@@ -77,7 +77,10 @@ export function inferResetCycleType(input: ResetReasonContext): ResetCycleType {
   return "ランダムリセット";
 }
 
-export function normalizeResetReasonType(input: ResetReasonContext): ResetReasonType {
+const CELEBRATION_PATTERN =
+  /celebrat|launch|milestone|users|anniversary|gift|happy|campaign|thank|monday|記念|祝|周年|感謝|キャンペーン|突破|達成|ご祝儀/i;
+
+export function normalizeResetReasonType(input: ResetReasonContext): ResetReasonType | undefined {
   if (isRegularResetContext(input)) return "定期更新";
 
   const explicitReasonType = input.reasonType ?? input.details?.reasonType;
@@ -90,7 +93,12 @@ export function normalizeResetReasonType(input: ResetReasonContext): ResetReason
   ) {
     return explicitReasonType as ResetReasonType;
   }
+  if (explicitReasonType === "ランダムリセット" || explicitReasonType === "その他") {
+    return "ご祝儀リセット";
+  }
 
   if (hasCompensationEvidence(input)) return "詫びリセット";
-  return "ご祝儀リセット";
+  if (CELEBRATION_PATTERN.test(getContextText(input))) return "ご祝儀リセット";
+
+  return undefined;
 }

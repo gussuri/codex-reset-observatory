@@ -367,7 +367,7 @@ test("a 69 to zero decrease with a forward reset is recovery", () => {
   const result = evaluateCodexUsageRecovery(previous(), snapshot({ usedPercent: 0 }), { activeOfficialNotice: false });
   assert.equal(result.kind, "recovery");
   assert.equal(result.cycleHint, "unexpected");
-  assert.equal(result.confidence, "medium");
+  assert.equal(result.confidence, "strong");
 });
 
 test("a 3 to zero decrease with a forward reset is recovery", () => {
@@ -459,11 +459,11 @@ test("an unexpected recovery with notice is unexpected strong", () => {
   assert.equal(result.confidence, "strong");
 });
 
-test("an unexpected recovery without notice is unexpected medium", () => {
+test("an unexpected recovery without notice is unexpected strong", () => {
   const result = evaluateCodexUsageRecovery(previous({ resetsAt: Math.floor(Date.parse("2026-08-12T00:00:00.000Z") / 1000) }), snapshot({ usedPercent: 0 }), { activeOfficialNotice: false });
   if (result.kind !== "recovery") throw new Error(`expected recovery, got ${result.kind}`);
   assert.equal(result.cycleHint, "unexpected");
-  assert.equal(result.confidence, "medium");
+  assert.equal(result.confidence, "strong");
 });
 
 test("regular proximity uses an inclusive five-minute boundary", () => {

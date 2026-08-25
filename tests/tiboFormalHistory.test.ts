@@ -404,7 +404,7 @@ test("converted event uses a conservative scope and a fixed factual summary", ()
   assert.equal(event.title, "ランダムリセット");
   assert.equal(event.summary, "Tibo氏がCodexの利用上限リセット完了を発表しました。");
   assert.equal(event.details?.cycleType, "ランダムリセット");
-  assert.equal(event.details?.reasonType, "ご祝儀リセット");
+  assert.equal(event.details?.reasonType, undefined);
   assert.equal(event.details?.note, "Tibo氏がCodexの利用上限リセット完了を発表しました。");
   assert.equal(event.details?.resetMethod, "強制リセット");
 });
@@ -412,10 +412,10 @@ test("converted event uses a conservative scope and a fixed factual summary", ()
 test("automatically generated Tibo history is localized without Japanese leakage", () => {
   const japaneseCharacters = /[\u3040-\u30FF]/;
   const cases = [
-    { id: "celebration", reason: "ご祝儀リセット", text: "I reset usage limits for Codex and ChatGPT Work." },
-    { id: "compensation", reason: "詫びリセット", text: "I reset usage limits after a reliability incident." },
-    { id: "regular", reason: "定期更新", text: "I reset usage limits on the usual weekly cycle." },
-    { id: "fallback", reason: "ご祝儀リセット", text: "I reset usage limits." },
+    { id: "celebration", reason: "ご祝儀リセット" as const, text: "Celebrating launch! I reset usage limits for Codex and ChatGPT Work." },
+    { id: "compensation", reason: "詫びリセット" as const, text: "I reset usage limits after a reliability incident." },
+    { id: "regular", reason: "定期更新" as const, text: "I reset usage limits on the usual weekly cycle." },
+    { id: "fallback", reason: undefined, text: "I reset usage limits." },
   ] as const;
 
   for (const testCase of cases) {
@@ -445,13 +445,15 @@ test("automatically generated Tibo history is localized without Japanese leakage
         item.details?.reasonType,
         isRegular
           ? locale === "en" ? "Regular update" : "定期更新"
-          : locale === "en"
-          ? testCase.reason === "詫びリセット"
-            ? "Compensation reset"
-            : "Celebration reset"
-          : testCase.reason === "詫びリセット"
-            ? "故障补偿重置"
-            : "庆祝重置",
+          : !testCase.reason
+            ? ""
+            : locale === "en"
+            ? testCase.reason === "詫びリセット"
+              ? "Compensation reset"
+              : "Celebration reset"
+            : testCase.reason === "詫びリセット"
+              ? "故障补偿重置"
+              : "庆祝重置",
       );
       assert.equal(
         item.summary,

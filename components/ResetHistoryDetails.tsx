@@ -92,11 +92,9 @@ export function ResetHistoryDetails({
       label: translateUI("historyCycleType", locale),
       value: details.cycleType,
     },
-    {
-      id: "reasonType",
-      label: translateUI("historyReasonType", locale),
-      value: details.reasonType,
-    },
+    ...(details.reasonType && isMeaningfulValue(details.reasonType)
+      ? [{ id: "reasonType", label: translateUI("historyReasonType", locale), value: details.reasonType }]
+      : []),
     {
       id: "resetMethod",
       label: translateUI("historyResetMethod", locale),

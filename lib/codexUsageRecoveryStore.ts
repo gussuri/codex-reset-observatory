@@ -128,12 +128,13 @@ export function toCodexUsageMonitorState(
 }
 
 export function toCodexUsageSnapshot(row: CodexUsageMonitorStateRow | null | undefined): CodexUsageSnapshot | null {
-  if (!row || row.source_key !== CODEX_USAGE_SOURCE_KEY || row.limit_id !== "codex") return null;
+  if (!row || row.source_key !== CODEX_USAGE_SOURCE_KEY) return null;
+  if (row.limit_id && row.limit_id !== "codex") return null;
   if (row.window_duration_mins !== 10080 || !Number.isFinite(row.used_percent) || !Number.isInteger(row.resets_at)) return null;
   return {
     observedAt: row.observed_at,
     limitId: "codex",
-    planType: row.plan_type,
+    planType: row.plan_type ?? "plus",
     usedPercent: row.used_percent,
     windowDurationMins: 10080,
     resetsAt: row.resets_at,
@@ -656,12 +657,12 @@ export async function upsertResetExecutionEstimate(
     }
   }
 
-  if (!existingResult.data && input.tiboSourceTweetIds.length > 0) {
+  if (!existingResult.data && (input.tiboSourceTweetIds ?? []).length > 0) {
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
       .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
-      .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
+      .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds!)
       .limit(1)
       .maybeSingle();
     if (existingResult.error) {
@@ -678,7 +679,7 @@ export async function upsertResetExecutionEstimate(
         ...input,
         resetEventKey: existingEstimate.resetEventKey,
         tiboSourceTweetIds: Array.from(new Set([
-          ...input.tiboSourceTweetIds,
+          ...(input.tiboSourceTweetIds ?? []),
           ...existingEstimate.tiboSourceTweetIds,
         ])),
       }

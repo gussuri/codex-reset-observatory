@@ -63,7 +63,10 @@ function getScope(item: WindowEventLike) {
 
 function isNarrowScope(item: WindowEventLike) {
   const scope = getScope(item);
-  return !scope || NARROW_SCOPE_PATTERN.test(scope);
+  if (!scope) {
+    return item.recordKind !== "confirmed_global";
+  }
+  return NARROW_SCOPE_PATTERN.test(scope);
 }
 
 function isRejectedOrVoided(item: WindowEventLike) {

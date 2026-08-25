@@ -5,7 +5,9 @@ const NARROW_SCOPE_PATTERN = /特定|対象ユーザー|不具合対象|個人|�
 
 export function isBroadResetScope(item: WindowEventLike) {
   const scope = item.scope ?? item.details?.scope ?? "";
-  if (!scope.trim()) return false;
+  if (!scope.trim()) {
+    return item.recordKind === "confirmed_global";
+  }
 
   const normalizedScope = scope.trim().toLowerCase();
   return BROAD_SCOPE_PATTERN.test(normalizedScope) && !NARROW_SCOPE_PATTERN.test(normalizedScope);

@@ -2,6 +2,7 @@ import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 
 export const RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-v1";
 export const TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-teaser-v1";
+export const MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-monitor-v1";
 
 export type ExecutionTimeSource =
   | "usage_observation"
@@ -63,12 +64,13 @@ export type DisplayExecutionDecision = {
 
 export type ResolveDisplayExecutionTimeInput = {
   resetEventKey: string;
-  tiboAnnouncedAt: string;
-  tiboPrimaryTweetId: string;
-  tiboSourceTweetIds: string[];
+  tiboAnnouncedAt?: string | null;
+  tiboPrimaryTweetId?: string | null;
+  tiboSourceTweetIds?: string[];
   officialNoticeTweetId?: string | null;
   officialNoticeAt?: string | null;
   corroboratingTiboTweetId?: string | null;
+  isMonitorObserved?: boolean;
   usageObservation?: CodexRecoveryObservation | null;
   persistedEstimate?: ResetExecutionEstimate | null;
   manualOverride?: ManualExecutionOverride | null;
@@ -96,6 +98,7 @@ function isMatchedUsageObservation(
   sourceTweetIds: Set<string>,
   officialNoticeTweetId?: string | null,
   corroboratingTiboTweetId?: string | null,
+  isMonitorObserved = false,
 ) {
   if (!value) return false;
 
@@ -103,6 +106,14 @@ function isMatchedUsageObservation(
   const previousObservedAt = parseTimestamp(value.previousObservedAt);
   if (!observedAt || !previousObservedAt) return false;
   if (Date.parse(previousObservedAt) >= Date.parse(observedAt)) return false;
+
+  if (isMonitorObserved) {
+    return (
+      value.confidence === "strong" &&
+      value.cycleHint === "unexpected" &&
+      value.status !== "rejected"
+    );
+  }
 
   if (value.status === "confirmed" && value.matchedTiboTweetId && sourceTweetIds.has(value.matchedTiboTweetId)) {
     return true;
@@ -189,14 +200,25 @@ function getPersistedUsageDecision(
     estimate.executionTimeSource !== "usage_observation" ||
     estimate.executionTimePrecision !== "approximate" ||
     estimate.executionTimeConfidence !== "high" ||
-    !estimate.recoveryObservationId ||
-    !estimate.tiboPrimaryTweetId ||
-    !sourceTweetIds.has(estimate.tiboPrimaryTweetId) ||
-    (estimate.officialNoticeTweetId !== null &&
-      estimate.officialNoticeTweetId !== undefined &&
-      !sourceTweetIds.has(estimate.officialNoticeTweetId))
+    !estimate.recoveryObservationId
   ) {
     return null;
+  }
+
+  const isMonitorObserved =
+    estimate.estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
+    (!estimate.tiboPrimaryTweetId && !estimate.officialNoticeTweetId);
+
+  if (!isMonitorObserved) {
+    if (
+      !estimate.tiboPrimaryTweetId ||
+      !sourceTweetIds.has(estimate.tiboPrimaryTweetId) ||
+      (estimate.officialNoticeTweetId !== null &&
+        estimate.officialNoticeTweetId !== undefined &&
+        !sourceTweetIds.has(estimate.officialNoticeTweetId))
+    ) {
+      return null;
+    }
   }
 
   const displayExecutionAt = parseTimestamp(estimate.displayExecutionAt);
@@ -222,32 +244,41 @@ export function resolveDisplayExecutionTime(
   input: ResolveDisplayExecutionTimeInput,
 ): DisplayExecutionDecision {
   const sourceTweetIds = new Set(
-    [input.tiboPrimaryTweetId, ...input.tiboSourceTweetIds].filter(Boolean),
+    [input.tiboPrimaryTweetId, ...(input.tiboSourceTweetIds ?? [])].filter((id): id is string => Boolean(id)),
   );
   const manualOverride = input.manualOverride ?? getPersistedManualOverride(input.persistedEstimate);
   if (hasCompleteManualOverride(manualOverride)) {
     return getManualDecision(manualOverride);
   }
 
+  const isMonitorObserved =
+    input.isMonitorObserved === true ||
+    (!input.officialNoticeTweetId && !input.corroboratingTiboTweetId && !input.tiboPrimaryTweetId);
+
   if (isMatchedUsageObservation(
     input.usageObservation,
     sourceTweetIds,
     input.officialNoticeTweetId,
     input.corroboratingTiboTweetId,
+    isMonitorObserved,
   )) {
     return getUsageDecision(
       input.usageObservation!,
-      input.corroboratingTiboTweetId
-        ? TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION
-        : RESET_EXECUTION_ESTIMATOR_VERSION,
+      isMonitorObserved
+        ? MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION
+        : input.corroboratingTiboTweetId
+          ? TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION
+          : RESET_EXECUTION_ESTIMATOR_VERSION,
     );
   }
 
   const persistedUsage = getPersistedUsageDecision(input.persistedEstimate, sourceTweetIds);
   if (persistedUsage) return persistedUsage;
 
+  const fallbackTime = parseTimestamp(input.tiboAnnouncedAt) ?? parseTimestamp(input.usageObservation?.observedAt);
+
   return {
-    displayExecutionAt: parseTimestamp(input.tiboAnnouncedAt),
+    displayExecutionAt: fallbackTime,
     executionTimeSource: "tibo_announcement_fallback",
     executionTimeConfidence: "medium",
     executionTimePrecision: "announcement_fallback",
@@ -277,8 +308,10 @@ export function buildResetExecutionEstimate(
     recoveryPreviousObservedAt: decision.executionWindowStartAt,
     recoveryObservedAt: decision.executionWindowEndAt,
     tiboAnnouncedAt: parseTimestamp(input.tiboAnnouncedAt),
-    tiboPrimaryTweetId: input.tiboPrimaryTweetId,
-    tiboSourceTweetIds: Array.from(new Set(input.tiboSourceTweetIds)),
+    tiboPrimaryTweetId: input.tiboPrimaryTweetId ?? null,
+    tiboSourceTweetIds: Array.from(new Set(input.tiboSourceTweetIds ?? [])),
+    officialNoticeTweetId: input.officialNoticeTweetId ?? input.persistedEstimate?.officialNoticeTweetId ?? null,
+    officialNoticeAt: parseTimestamp(input.officialNoticeAt ?? input.persistedEstimate?.officialNoticeAt),
     estimatorVersion: decision.estimatorVersion,
     manualOverrideAt: manualOverride?.manualOverrideAt ?? null,
     manualOverrideBy: manualOverride?.manualOverrideBy ?? null,

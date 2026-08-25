@@ -10,6 +10,8 @@ import type {
 } from "./tiboTemporal";
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 import {
+  MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
+  RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
   type ResetExecutionEstimate,
 } from "./resetExecution";
@@ -91,7 +93,7 @@ export const NOTICE_BACKED_RECOVERY_PRESENTATION = "notice_backed_recovery" as c
 export const NOTICE_BACKED_RECOVERY_TITLE_KEY = "noticeBackedRecoveryTitle";
 export const NOTICE_BACKED_RECOVERY_BODY_KEY = "noticeBackedRecoveryBody";
 
-export const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの利用枠がリセットされました。";
+export const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの週間利用枠がリセットされたことを確認しました。";
 export const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
   "tibo-reset-2087706104814023111":
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
@@ -114,12 +116,12 @@ export function getNoticeBackedRecoveryHistorySummary(resetEventKey: string) {
   return NOTICE_BACKED_RECOVERY_SUMMARIES[resetEventKey] ?? NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY;
 }
 
-function getNoticeBackedRecoveryReasonType(resetEventKey: string) {
-  return NOTICE_BACKED_RECOVERY_REASON_TYPES[resetEventKey] ?? "ご祝儀リセット";
+function getNoticeBackedRecoveryReasonType(resetEventKey: string): ResetReasonType | undefined {
+  return NOTICE_BACKED_RECOVERY_REASON_TYPES[resetEventKey];
 }
 
 function getNoticeBackedRecoveryTitle(resetEventKey: string) {
-  return NOTICE_BACKED_RECOVERY_TITLES[resetEventKey] ?? "全体リセット完了";
+  return NOTICE_BACKED_RECOVERY_TITLES[resetEventKey] ?? "ランダムリセット";
 }
 
 export type FormalTiboResetSignal = {
@@ -996,25 +998,32 @@ function isValidNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
   const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
   const teaserTweetId = estimate.tiboPrimaryTweetId?.trim();
   const recoveryObservationId = estimate.recoveryObservationId?.trim();
+
+  const isNoticeBacked = Boolean(officialNoticeTweetId);
   const isTeaserCorroborated =
-    estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
     !officialNoticeTweetId &&
+    estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
     Boolean(teaserTweetId);
+  const isMonitorObserved =
+    !officialNoticeTweetId &&
+    !isTeaserCorroborated &&
+    (estimate.estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
+      (!teaserTweetId && Boolean(recoveryObservationId)));
 
   return Boolean(
     estimate.executionTimeSource === "usage_observation" &&
       estimate.executionTimeConfidence === "high" &&
       estimate.executionTimePrecision === "approximate" &&
       recoveryObservationId &&
-      (officialNoticeTweetId || isTeaserCorroborated) &&
+      (isNoticeBacked || isTeaserCorroborated || isMonitorObserved) &&
       displayExecutionAt !== null &&
       windowStartAt !== null &&
       windowEndAt !== null &&
       windowStartAt < windowEndAt &&
       displayExecutionAt === windowEndAt &&
-    (officialNoticeTweetId
+    (isMonitorObserved || (officialNoticeTweetId
       ? estimate.tiboSourceTweetIds.includes(officialNoticeTweetId)
-      : isTeaserCorroborated && estimate.tiboSourceTweetIds.includes(teaserTweetId!)),
+      : isTeaserCorroborated && estimate.tiboSourceTweetIds.includes(teaserTweetId!))),
   );
 }
 
@@ -1063,18 +1072,29 @@ function buildNoticeBackedRecoveryEvent(
   const recoveryObservation = recoveryObservations.find(
     (observation) => observation.id === recoveryObservationId,
   );
-  const isTeaserCorroborated =
-    !estimate.officialNoticeTweetId &&
-    estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION;
-  if (!isValidSupportingRecoveryObservation(recoveryObservation, isTeaserCorroborated)) return null;
-
   const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim() || null;
+  const isTeaserCorroborated =
+    !officialNoticeTweetId &&
+    estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
+    Boolean(estimate.tiboPrimaryTweetId);
+  const isMonitorObserved =
+    !officialNoticeTweetId &&
+    !isTeaserCorroborated &&
+    (estimate.estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
+      (!estimate.tiboPrimaryTweetId && Boolean(recoveryObservationId)));
+  if (!isValidSupportingRecoveryObservation(recoveryObservation, isTeaserCorroborated || isMonitorObserved)) {
+    return null;
+  }
+
   const evidenceTweetId = officialNoticeTweetId ?? estimate.tiboPrimaryTweetId?.trim() ?? null;
-  if (!evidenceTweetId) return null;
-  const notice = noticeSignals.find(
-    (signal) => signal.tweet_id === evidenceTweetId &&
-      (isTeaserCorroborated ? signal.signal_type === "teaser" : signal.signal_type === "official_notice"),
-  );
+
+  const notice = evidenceTweetId
+    ? noticeSignals.find(
+        (signal) => signal.tweet_id === evidenceTweetId &&
+          (isTeaserCorroborated ? signal.signal_type === "teaser" : signal.signal_type === "official_notice"),
+      )
+    : null;
+
   const openedAt =
     getTimestamp(estimate.tiboAnnouncedAt) !== null
       ? new Date(estimate.tiboAnnouncedAt!).toISOString()
@@ -1082,17 +1102,25 @@ function buildNoticeBackedRecoveryEvent(
         ? new Date(estimate.officialNoticeAt!).toISOString()
         : new Date(getTimestamp(estimate.executionWindowStartAt)!).toISOString();
   const completedAt = new Date(getTimestamp(estimate.displayExecutionAt)!).toISOString();
-  const noticeMinutes = Math.max(
-    0,
-    Math.round((getTimestamp(completedAt)! - getTimestamp(openedAt)!) / 60000),
-  );
-  const sourceUrl = notice?.tweet_url || `https://x.com/thsottiaux/status/${evidenceTweetId}`;
+  const hasOfficialNotice = Boolean(officialNoticeTweetId && notice?.signal_type === "official_notice");
+  const noticeMinutes = hasOfficialNotice
+    ? Math.max(0, Math.round((getTimestamp(completedAt)! - getTimestamp(openedAt)!) / 60000))
+    : 0;
+
+  const sourceUrl = evidenceTweetId
+    ? (notice?.tweet_url || `https://x.com/thsottiaux/status/${evidenceTweetId}`)
+    : undefined;
+
   const sourceTweetIds = sortTweetIdsChronologically([
     ...estimate.tiboSourceTweetIds,
     ...(officialNoticeTweetId ? [officialNoticeTweetId] : []),
   ], noticeSignals.filter((signal): signal is TiboNoticeSignal =>
     estimate.tiboSourceTweetIds.includes(signal.tweet_id),
   ));
+
+  const explicitReason = getNoticeBackedRecoveryReasonType(estimate.resetEventKey);
+  const inferredReason = notice?.text ? normalizeResetReasonType({ text: notice.text }) : undefined;
+  const reasonType = explicitReason ?? inferredReason;
 
   return {
     id: estimate.resetEventKey,
@@ -1105,7 +1133,7 @@ function buildNoticeBackedRecoveryEvent(
     closed_at: completedAt,
     completed_at: completedAt,
     window_minutes: noticeMinutes,
-    scope: "全有料プラン",
+    scope: isMonitorObserved ? "" : "全有料プラン",
     summary: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     source_url: sourceUrl,
     sourceKind: "direct_post",
@@ -1114,11 +1142,11 @@ function buildNoticeBackedRecoveryEvent(
     recoveryObservationId,
     details: {
       cycleType: "ランダムリセット",
-      reasonType: getNoticeBackedRecoveryReasonType(estimate.resetEventKey),
+      reasonType,
       resetMethod: "強制リセット",
-      scope: "全有料プラン",
-      noticeToExecution: formatNoticeToExecution(noticeMinutes),
-      noticeType: isTeaserCorroborated ? "匂わせ投稿あり" : "公式予告あり",
+      scope: isMonitorObserved ? "" : "全有料プラン",
+      noticeToExecution: hasOfficialNotice ? formatNoticeToExecution(noticeMinutes) : "",
+      noticeType: isTeaserCorroborated ? "匂わせ投稿あり" : hasOfficialNotice ? "公式予告あり" : "なし",
       note: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     },
   };

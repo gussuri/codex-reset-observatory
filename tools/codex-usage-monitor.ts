@@ -229,11 +229,10 @@ export function toSafeMonitorPayload(
     usedPercent: snapshot.usedPercent,
     windowDurationMins: snapshot.windowDurationMins,
     resetsAt: snapshot.resetsAt,
-    ...(postReason === "banked_reset_count_change" &&
-      typeof snapshot.bankedResetAvailableCount === "number"
+    ...(typeof snapshot.bankedResetAvailableCount === "number"
       ? {
           bankedResetAvailableCount: snapshot.bankedResetAvailableCount,
-          bankedResetCountChange: true,
+          ...(postReason === "banked_reset_count_change" ? { bankedResetCountChange: true } : {}),
         }
       : {}),
   };
