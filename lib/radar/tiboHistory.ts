@@ -97,13 +97,17 @@ export const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> 
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
   "tibo-reset-2091412393368945027":
     "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
+  "tibo-reset-2092058556707344708":
+    "Plusプランにおける5時間ごとの利用制限復活に伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
 };
 export const NOTICE_BACKED_RECOVERY_TITLES: Readonly<Record<string, string>> = {
   "tibo-reset-2091412393368945027": "過剰消費のお詫びリセット",
+  "tibo-reset-2092058556707344708": "5時間制限復活に伴うリセット",
 };
 export const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, ResetReasonType>> = {
   "tibo-reset-2087706104814023111": "ご祝儀リセット",
   "tibo-reset-2091412393368945027": "詫びリセット",
+  "tibo-reset-2092058556707344708": "詫びリセット",
 };
 
 export function getNoticeBackedRecoveryHistorySummary(resetEventKey: string) {

@@ -725,6 +725,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "Excessive consumption compensation reset",
     zh: "过度消耗补偿重置",
   },
+  "5時間制限復活に伴うリセット": {
+    ja: "5時間制限復活に伴うリセット",
+    en: "5-hour limit restoration reset",
+    zh: "恢复5小时限制附带重置",
+  },
   "Samいいね約束リセット": {
     ja: "Samいいね約束リセット",
     en: "Sam's promised like milestone reset",
@@ -1324,6 +1329,11 @@ export const DYNAMIC_TRANSLATIONS = {
     ja: "週末の過剰消費トラブルに伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
     en: "Codex usage limits were reset as compensation for the weekend's excessive consumption issue.",
     zh: "针对周末过度消耗问题，Codex 整体使用额度已作为补偿进行重置。",
+  },
+  "Plusプランにおける5時間ごとの利用制限復活に伴い、Codex全体の利用枠がお詫びとしてリセットされました。": {
+    ja: "Plusプランにおける5時間ごとの利用制限復活に伴い、Codex全体の利用枠がお詫びとしてリセットされました。",
+    en: "Codex usage limits were reset as compensation accompanying the restoration of the 5-hour limit for Plus plans.",
+    zh: "随着 Plus 计划恢复每 5 小时使用限制，Codex 整体使用额度已作为补偿进行重置。",
   },
   "16分": {
     ja: "16分",
