@@ -1,6 +1,7 @@
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 
 export const RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-v1";
+export const TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-teaser-v1";
 
 export type ExecutionTimeSource =
   | "usage_observation"
@@ -67,6 +68,7 @@ export type ResolveDisplayExecutionTimeInput = {
   tiboSourceTweetIds: string[];
   officialNoticeTweetId?: string | null;
   officialNoticeAt?: string | null;
+  corroboratingTiboTweetId?: string | null;
   usageObservation?: CodexRecoveryObservation | null;
   persistedEstimate?: ResetExecutionEstimate | null;
   manualOverride?: ManualExecutionOverride | null;
@@ -93,6 +95,7 @@ function isMatchedUsageObservation(
   value: CodexRecoveryObservation | null | undefined,
   sourceTweetIds: Set<string>,
   officialNoticeTweetId?: string | null,
+  corroboratingTiboTweetId?: string | null,
 ) {
   if (!value) return false;
 
@@ -110,6 +113,16 @@ function isMatchedUsageObservation(
     sourceTweetIds.has(officialNoticeTweetId) &&
     value.confidence === "strong" &&
     value.cycleHint !== "regular" &&
+    value.status !== "rejected"
+  ) {
+    return true;
+  }
+
+  if (
+    corroboratingTiboTweetId &&
+    sourceTweetIds.has(corroboratingTiboTweetId) &&
+    (value.confidence === "strong" || value.confidence === "medium") &&
+    value.cycleHint === "unexpected" &&
     value.status !== "rejected"
   ) {
     return true;
@@ -151,6 +164,7 @@ function getManualDecision(
 
 function getUsageDecision(
   observation: CodexRecoveryObservation,
+  estimatorVersion = RESET_EXECUTION_ESTIMATOR_VERSION,
 ): DisplayExecutionDecision {
   const observedAt = parseTimestamp(observation.observedAt);
   const previousObservedAt = parseTimestamp(observation.previousObservedAt);
@@ -162,7 +176,7 @@ function getUsageDecision(
     executionWindowStartAt: previousObservedAt,
     executionWindowEndAt: observedAt,
     recoveryObservationId: observation.id ?? null,
-    estimatorVersion: RESET_EXECUTION_ESTIMATOR_VERSION,
+    estimatorVersion,
   };
 }
 
@@ -215,8 +229,18 @@ export function resolveDisplayExecutionTime(
     return getManualDecision(manualOverride);
   }
 
-  if (isMatchedUsageObservation(input.usageObservation, sourceTweetIds, input.officialNoticeTweetId)) {
-    return getUsageDecision(input.usageObservation!);
+  if (isMatchedUsageObservation(
+    input.usageObservation,
+    sourceTweetIds,
+    input.officialNoticeTweetId,
+    input.corroboratingTiboTweetId,
+  )) {
+    return getUsageDecision(
+      input.usageObservation!,
+      input.corroboratingTiboTweetId
+        ? TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION
+        : RESET_EXECUTION_ESTIMATOR_VERSION,
+    );
   }
 
   const persistedUsage = getPersistedUsageDecision(input.persistedEstimate, sourceTweetIds);

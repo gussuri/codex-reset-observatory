@@ -177,6 +177,7 @@ export type ActiveTiboSignal = {
   translated_text_zh?: string | null;
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
+  ai_temporal_direction?: string | null;
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   ai_temporal_confidence?: number | null;

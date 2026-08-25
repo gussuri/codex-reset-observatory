@@ -43,8 +43,9 @@ import {
 } from "@/lib/radar/bankedReset";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
+const TEASER_FUTURE_DAY_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function getSupabaseServiceClient() {
   const url = process.env.SUPABASE_URL;
@@ -72,11 +73,51 @@ function toTiboNoticeSignal(notice: ActiveOfficialNotice): TiboNoticeSignal {
   };
 }
 
+function toTiboSignal(signal: ActiveTiboSignal): TiboNoticeSignal {
+  return {
+    tweet_id: signal.tweet_id,
+    text: signal.text ?? "",
+    tweet_url: signal.tweet_url ?? "",
+    tweet_created_at: signal.tweet_created_at,
+    signal_type: signal.signal_type === "teaser" ? "teaser" : "official_notice",
+    confidence: signal.confidence ?? null,
+    verification_status: signal.verification_status ?? "auto_unverified",
+    expires_at: signal.expires_at ?? null,
+    is_reply: signal.is_reply ?? null,
+  };
+}
+
+function findRecentTiboTeaser(signals: ActiveTiboSignal[], observedAt: Date) {
+  const observedTime = observedAt.getTime();
+  return signals
+    .filter((signal) => {
+      if (signal.signal_type !== "teaser" || signal.is_reply === true || signal.verification_status === "rejected") {
+        return false;
+      }
+      if ((signal.confidence ?? 0) < 0.8) return false;
+      const createdTime = Date.parse(signal.tweet_created_at);
+      const isFutureDayTeaser = signal.ai_temporal_direction === "future" && signal.ai_temporal_kind === "relative_day";
+      const matchWindowMs = isFutureDayTeaser
+        ? TEASER_FUTURE_DAY_MATCH_WINDOW_MS
+        : USAGE_TIBO_MATCH_WINDOW_MS;
+      if (!Number.isFinite(createdTime) || observedTime < createdTime || observedTime - createdTime > matchWindowMs) {
+        return false;
+      }
+      return !signal.expires_at || Date.parse(signal.expires_at) > observedTime;
+    })
+    .sort((left, right) => {
+      const leftDistance = Math.abs(observedTime - Date.parse(left.tweet_created_at));
+      const rightDistance = Math.abs(observedTime - Date.parse(right.tweet_created_at));
+      return leftDistance - rightDistance;
+    })[0] ?? null;
+}
+
 type OfficialNoticeLookup = {
   active: boolean;
   noticeSignal: ActiveOfficialNotice | null;
   bankedNoticeSignal: ActiveOfficialNotice | null;
   noticeSignals: TiboNoticeSignal[];
+  teaserSignal: ActiveTiboSignal | null;
   bankedNoticeSignals: BankedDistributionSignal[];
   error: unknown;
 };
@@ -89,7 +130,7 @@ async function hasActiveOfficialNotice(
     client
       .from("tibo_signals")
       .select(NOTICE_COLUMNS)
-      .in("signal_type", ["official_notice", "reset_executed", "irrelevant"])
+      .in("signal_type", ["official_notice", "reset_executed", "teaser", "irrelevant"])
       .or("is_reply.is.null,is_reply.eq.false")
       .neq("verification_status", "rejected")
       .limit(1000),
@@ -105,6 +146,7 @@ async function hasActiveOfficialNotice(
       noticeSignal: null,
       bankedNoticeSignal: null,
       noticeSignals: [],
+      teaserSignal: null,
       bankedNoticeSignals: [],
       error: tiboResult.error ?? regularResult.error,
     };
@@ -134,6 +176,7 @@ async function hasActiveOfficialNotice(
     observedAt,
   );
   const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
+  const teaserSignal = findRecentTiboTeaser(signals, observedAt);
   const bankedSignals = collectBankedDistributionSignals(signals, []);
   const bankedNoticeSignals = findRelatedBankedDistributionNotices(
     bankedSignals,
@@ -145,6 +188,7 @@ async function hasActiveOfficialNotice(
     noticeSignal: activeNotice ?? null,
     bankedNoticeSignal: activeBankedNotice ?? null,
     noticeSignals,
+    teaserSignal,
     bankedNoticeSignals,
     error: null,
   };
@@ -283,6 +327,7 @@ export async function POST(request: Request) {
 
     const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
       activeOfficialNotice: notice.active,
+      activeResetEvidence: notice.active || Boolean(notice.teaserSignal),
     });
     if (decision.kind !== "recovery") {
       const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
@@ -354,6 +399,8 @@ export async function POST(request: Request) {
     // recorded as the canonical regular boundary, but it never promotes a
     // personal recovery into a Tibo/global random reset.
     const noticeSignal = notice.noticeSignal;
+    const teaserSignal = notice.teaserSignal;
+    let teaserEstimateObserved = false;
     if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
       try {
         const cluster = await findFormalTiboResetCluster(
@@ -408,6 +455,29 @@ export async function POST(request: Request) {
       } catch {
         console.warn("[Codex usage] notice-backed reset execution estimate skipped", { reason: "request_failed" });
       }
+    } else if (
+      teaserSignal &&
+      decision.confidence === "strong" &&
+      decision.cycleHint === "unexpected" &&
+      observationResult.observation
+    ) {
+      try {
+        const teaser = toTiboSignal(teaserSignal);
+        const estimateResult = await upsertResetExecutionEstimate(client, {
+          resetEventKey: `tibo-reset-${teaser.tweet_id}`,
+          tiboAnnouncedAt: teaser.tweet_created_at,
+          tiboPrimaryTweetId: teaser.tweet_id,
+          tiboSourceTweetIds: [teaser.tweet_id],
+          usageObservation: observationResult.observation,
+          corroboratingTiboTweetId: teaser.tweet_id,
+        });
+        teaserEstimateObserved = Boolean(estimateResult.estimate);
+        if (estimateResult.error) {
+          console.warn("[Codex usage] teaser-backed reset execution estimate write failed", { reason: "database_error" });
+        }
+      } catch {
+        console.warn("[Codex usage] teaser-backed reset execution estimate skipped", { reason: "request_failed" });
+      }
     }
 
     const bankedResult = await persistCorroboratedBankedDistribution(
@@ -440,8 +510,10 @@ export async function POST(request: Request) {
     return recoveryResponse(
       bankedResult.observed
         ? "banked_distribution_observed"
-        : matchingTibo.tweetId
-          ? "confirmed"
+      : matchingTibo.tweetId
+        ? "confirmed"
+        : teaserEstimateObserved
+          ? "teaser_corroborated"
           : "observed_unconfirmed",
     );
   } catch {

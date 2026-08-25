@@ -374,7 +374,7 @@ export function isCodexUsageAuthorizationValid(
 export function evaluateCodexUsageRecovery(
   previous: CodexUsageSnapshot | null | undefined,
   current: CodexUsageSnapshot,
-  options: { activeOfficialNotice?: boolean } = {},
+  options: { activeOfficialNotice?: boolean; activeResetEvidence?: boolean } = {},
 ): CodexUsageRecoveryDecision {
   if (!previous) return { kind: "baseline" };
 
@@ -391,11 +391,11 @@ export function evaluateCodexUsageRecovery(
   }
 
   const nearRegularSchedule = Math.abs(currentTime - previous.resetsAt * 1000) <= REGULAR_RESET_PROXIMITY_MS;
-  const activeOfficialNotice = options.activeOfficialNotice === true;
+  const activeResetEvidence = options.activeResetEvidence === true || options.activeOfficialNotice === true;
   const cycleHint: CodexRecoveryCycleHint = nearRegularSchedule
-    ? activeOfficialNotice ? "unknown" : "regular"
+    ? activeResetEvidence ? "unknown" : "regular"
     : "unexpected";
-  const confidence: CodexRecoveryConfidence = activeOfficialNotice ? "strong" : "medium";
+  const confidence: CodexRecoveryConfidence = activeResetEvidence ? "strong" : "medium";
 
   return {
     kind: "recovery",

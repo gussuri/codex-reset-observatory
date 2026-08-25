@@ -6,7 +6,10 @@ import {
   type CodexRecoveryObservationInput,
 } from "@/lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
-import { resolveDisplayExecutionTime } from "@/lib/radar/resetExecution";
+import {
+  resolveDisplayExecutionTime,
+  TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
+} from "@/lib/radar/resetExecution";
 import { getRandomResetHeatmapEventTimes } from "@/lib/radar";
 import { getRecoveryResetEvents } from "@/lib/radar/recoveryBoundary";
 import { getLastGlobalResetAt } from "@/lib/radar/probability";
@@ -81,6 +84,36 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(events.length, 1);
     assert.equal(events[0].recordKind, "confirmed_global");
     assert.equal(events[0].closed_at, sampleRecovery.observedAt);
+  });
+
+  it("匂わせ + strong unexpected recovery は完了投稿なしでも1件の正式履歴になる", () => {
+    const teaser = {
+      ...sampleNotice,
+      tweet_id: "2099999999999999999",
+      tweet_url: "https://x.com/thsottiaux/status/2099999999999999999",
+      tweet_created_at: "2026-08-26T00:00:00Z",
+      signal_type: "teaser" as const,
+      confidence: 0.85,
+      text: "5 hour limits are back tomorrow.",
+    };
+    const estimate = {
+      ...sampleEstimate,
+      resetEventKey: `tibo-reset-${teaser.tweet_id}`,
+      tiboAnnouncedAt: teaser.tweet_created_at,
+      tiboPrimaryTweetId: teaser.tweet_id,
+      tiboSourceTweetIds: [teaser.tweet_id],
+      officialNoticeTweetId: null,
+      officialNoticeAt: null,
+      estimatorVersion: TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
+    };
+
+    const events = findNoticeBackedRecoveryEvents([teaser], [sampleRecovery], [estimate]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].recordKind, "confirmed_global");
+    assert.equal(events[0].closed_at, sampleRecovery.observedAt);
+    assert.equal(events[0].officialNoticeTweetId, undefined);
+    assert.equal(events[0].details?.noticeType, "匂わせ投稿あり");
+    assert.ok(events[0].sourceTweetIds?.includes(teaser.tweet_id));
   });
 
   it("告知履歴は最初の告知時刻を使い、代表告知は具体的な続報を使う", () => {
