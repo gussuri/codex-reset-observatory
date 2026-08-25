@@ -1073,10 +1073,11 @@ function buildNoticeBackedRecoveryEvent(
     (observation) => observation.id === recoveryObservationId,
   );
   const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim() || null;
+  const teaserTweetId = (!officialNoticeTweetId && estimate.tiboPrimaryTweetId?.trim()) || null;
   const isTeaserCorroborated =
     !officialNoticeTweetId &&
     estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
-    Boolean(estimate.tiboPrimaryTweetId);
+    Boolean(teaserTweetId);
   const isMonitorObserved =
     !officialNoticeTweetId &&
     !isTeaserCorroborated &&
@@ -1086,12 +1087,12 @@ function buildNoticeBackedRecoveryEvent(
     return null;
   }
 
-  const evidenceTweetId = officialNoticeTweetId ?? estimate.tiboPrimaryTweetId?.trim() ?? null;
+  const evidenceTweetId = officialNoticeTweetId ?? teaserTweetId ?? null;
 
   const notice = evidenceTweetId
     ? noticeSignals.find(
         (signal) => signal.tweet_id === evidenceTweetId &&
-          (isTeaserCorroborated ? signal.signal_type === "teaser" : signal.signal_type === "official_notice"),
+          (officialNoticeTweetId ? signal.signal_type === "official_notice" : signal.signal_type === "teaser"),
       )
     : null;
 
@@ -1102,9 +1103,20 @@ function buildNoticeBackedRecoveryEvent(
         ? new Date(estimate.officialNoticeAt!).toISOString()
         : new Date(getTimestamp(estimate.executionWindowStartAt)!).toISOString();
   const completedAt = new Date(getTimestamp(estimate.displayExecutionAt)!).toISOString();
+  const openedTime = getTimestamp(openedAt);
+  const completedTime = getTimestamp(completedAt);
+
   const hasOfficialNotice = Boolean(officialNoticeTweetId && notice?.signal_type === "official_notice");
-  const noticeMinutes = hasOfficialNotice
-    ? Math.max(0, Math.round((getTimestamp(completedAt)! - getTimestamp(openedAt)!) / 60000))
+  const hasTeaserNotice = Boolean(
+    !hasOfficialNotice &&
+    notice?.signal_type === "teaser" &&
+    openedTime !== null &&
+    completedTime !== null &&
+    openedTime <= completedTime,
+  );
+  const hasNoticeLead = hasOfficialNotice || hasTeaserNotice;
+  const noticeMinutes = hasNoticeLead && openedTime !== null && completedTime !== null && completedTime >= openedTime
+    ? Math.max(0, Math.round((completedTime - openedTime) / 60000))
     : 0;
 
   const sourceUrl = evidenceTweetId
@@ -1133,7 +1145,7 @@ function buildNoticeBackedRecoveryEvent(
     closed_at: completedAt,
     completed_at: completedAt,
     window_minutes: noticeMinutes,
-    scope: isMonitorObserved ? "" : "全有料プラン",
+    scope: isMonitorObserved && !hasOfficialNotice && !hasTeaserNotice ? "" : "全有料プラン",
     summary: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     source_url: sourceUrl,
     sourceKind: "direct_post",
@@ -1144,9 +1156,13 @@ function buildNoticeBackedRecoveryEvent(
       cycleType: "ランダムリセット",
       reasonType,
       resetMethod: "強制リセット",
-      scope: isMonitorObserved ? "" : "全有料プラン",
-      noticeToExecution: hasOfficialNotice ? formatNoticeToExecution(noticeMinutes) : "",
-      noticeType: isTeaserCorroborated ? "匂わせ投稿あり" : hasOfficialNotice ? "公式予告あり" : "なし",
+      scope: isMonitorObserved && !hasOfficialNotice && !hasTeaserNotice ? "" : "全有料プラン",
+      noticeToExecution: hasNoticeLead ? formatNoticeToExecution(noticeMinutes) : "",
+      noticeType: hasOfficialNotice
+        ? "公式予告あり"
+        : hasTeaserNotice || (isTeaserCorroborated && notice?.signal_type === "teaser")
+          ? "匂わせ投稿あり"
+          : "なし",
       note: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     },
   };

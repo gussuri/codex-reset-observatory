@@ -339,7 +339,9 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     const events = findNoticeBackedRecoveryEvents([teaserTweet as any], [recoveryObservation], [estimate!]);
     assert.equal(events.length, 1);
     assert.equal(events[0].details?.noticeType, "匂わせ投稿あり");
-    assert.equal(events[0].details?.noticeToExecution, ""); // No noticeToExecution for teaser!
+    // 2026-08-25T10:00:00.000Z to 2026-08-26T01:15:00.000Z is 15 hours 15 minutes (915 mins)
+    assert.equal(events[0].details?.noticeToExecution, "15時間15分");
+    assert.equal(events[0].window_minutes, 915);
   });
 
   it("12. completion post追加 -> executionAt不変", () => {
@@ -417,5 +419,134 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     const serialized = JSON.stringify(vm);
     assert.equal(serialized.includes("Usage Monitor"), false);
     assert.equal(serialized.includes("Usage observation"), false);
+  });
+
+  it("15. 5時間制限復活に伴うリセット -> 匂わせ投稿あり + 告知から実施まで 12時間57分 + 詫びリセット", () => {
+    const recoveryObservation: CodexRecoveryObservation = {
+      id: "rec-tibo-5h",
+      sourceKey: "local-codex-app-server",
+      observedAt: "2026-08-25T14:13:31.428Z",
+      previousObservedAt: "2026-08-25T14:11:00.000Z",
+      previousUsedPercent: 31,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "confirmed",
+      matchedTiboTweetId: null,
+    };
+
+    const teaserTweet: ActiveTiboSignal = {
+      tweet_id: "2092058556707344708",
+      text: "Tomorrow we will bring back the 5h limit for Plus accounts. To apologize for the inconvenience we just reset all weekly quotas.",
+      tweet_url: "https://x.com/thsottiaux/status/2092058556707344708",
+      signal_type: "teaser",
+      confidence: 0.95,
+      verification_status: "confirmed",
+      tweet_created_at: "2026-08-25T01:16:11.000Z",
+    };
+
+    const estimate = buildResetExecutionEstimate({
+      resetEventKey: `tibo-reset-${teaserTweet.tweet_id}`,
+      tiboAnnouncedAt: teaserTweet.tweet_created_at,
+      tiboPrimaryTweetId: teaserTweet.tweet_id,
+      tiboSourceTweetIds: [teaserTweet.tweet_id],
+      corroboratingTiboTweetId: teaserTweet.tweet_id,
+      usageObservation: recoveryObservation,
+    });
+
+    const events = findNoticeBackedRecoveryEvents([teaserTweet as any], [recoveryObservation], [estimate!]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].title, "5時間制限復活に伴うリセット");
+    assert.equal(events[0].details?.reasonType, "詫びリセット");
+    assert.equal(events[0].details?.noticeType, "匂わせ投稿あり");
+    // 2026-08-25T01:16:11.000Z to 2026-08-25T14:13:31.428Z = 777 mins = 12h 57m
+    assert.equal(events[0].details?.noticeToExecution, "12時間57分");
+    assert.equal(events[0].window_minutes, 777);
+    assert.equal(events[0].completed_at, "2026-08-25T14:13:31.428Z");
+  });
+
+  it("16. official_notice -> 公式予告あり + 告知から実施まで 表示", () => {
+    const recoveryObservation: CodexRecoveryObservation = {
+      id: "rec-official-notice",
+      sourceKey: "local-codex-app-server",
+      observedAt: "2026-08-25T14:00:00.000Z",
+      previousObservedAt: "2026-08-25T13:58:00.000Z",
+      previousUsedPercent: 80,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "confirmed",
+      matchedTiboTweetId: null,
+    };
+
+    const officialNoticeTweet: ActiveTiboSignal = {
+      tweet_id: "official-notice-1",
+      text: "We will reset all usage limits in 2 hours.",
+      tweet_url: "https://x.com/thsottiaux/status/official-notice-1",
+      signal_type: "official_notice",
+      confidence: 0.98,
+      verification_status: "confirmed",
+      tweet_created_at: "2026-08-25T12:00:00.000Z",
+    };
+
+    const estimate = buildResetExecutionEstimate({
+      resetEventKey: `tibo-reset-${officialNoticeTweet.tweet_id}`,
+      officialNoticeTweetId: officialNoticeTweet.tweet_id,
+      officialNoticeAt: officialNoticeTweet.tweet_created_at,
+      tiboSourceTweetIds: [officialNoticeTweet.tweet_id],
+      usageObservation: recoveryObservation,
+    });
+
+    const events = findNoticeBackedRecoveryEvents([officialNoticeTweet as any], [recoveryObservation], [estimate!]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].details?.noticeType, "公式予告あり");
+    assert.equal(events[0].details?.noticeToExecution, "2時間");
+    assert.equal(events[0].window_minutes, 120);
+  });
+
+  it("17. completion postだけ -> 告知から実施までの起点にしない & executionAt不変", () => {
+    const recoveryObservation: CodexRecoveryObservation = {
+      id: "rec-comp-only",
+      sourceKey: "local-codex-app-server",
+      observedAt: OBSERVATION_TIME,
+      previousObservedAt: PREVIOUS_TIME,
+      previousUsedPercent: 80,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "confirmed",
+      matchedTiboTweetId: null,
+    };
+
+    const completionTweet: ActiveTiboSignal = {
+      tweet_id: "comp-only-1",
+      text: "We just reset all Codex weekly usage quotas.",
+      tweet_url: "https://x.com/thsottiaux/status/comp-only-1",
+      signal_type: "reset_executed",
+      confidence: 0.98,
+      verification_status: "confirmed",
+      tweet_created_at: "2026-08-26T01:45:00.000Z",
+    };
+
+    const estimate = buildResetExecutionEstimate({
+      resetEventKey: `usage-reset-${recoveryObservation.id}`,
+      tiboAnnouncedAt: completionTweet.tweet_created_at,
+      tiboPrimaryTweetId: completionTweet.tweet_id,
+      tiboSourceTweetIds: [completionTweet.tweet_id],
+      usageObservation: recoveryObservation,
+      isMonitorObserved: true,
+    });
+
+    const events = findNoticeBackedRecoveryEvents([completionTweet as any], [recoveryObservation], [estimate!]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].details?.noticeType, "なし");
+    assert.equal(events[0].details?.noticeToExecution, "");
+    assert.equal(events[0].completed_at, OBSERVATION_TIME);
   });
 });
