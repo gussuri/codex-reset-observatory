@@ -119,6 +119,27 @@ export type PendingMonitorPost = {
   snapshot: CodexUsageSnapshot;
 };
 
+export type MonitorWebhookResponse = {
+  accepted: boolean;
+  recovery?: string;
+};
+
+export function isMonitorResetExecutionConfirmed(
+  response: unknown,
+  postReason: MonitorSnapshotPostReason,
+) {
+  if (postReason !== "recovery_candidate" || !response || typeof response !== "object") {
+    return false;
+  }
+  const candidate = response as { accepted?: unknown; recovery?: unknown };
+  return candidate.accepted === true &&
+    (candidate.recovery === "confirmed" || candidate.recovery === "teaser_corroborated");
+}
+
+export function getMonitorResetEventKey(snapshot: Pick<CodexUsageSnapshot, "resetsAt">) {
+  return `usage-reset:${snapshot.resetsAt}`;
+}
+
 export type MonitorSnapshotState = {
   previousLocalSnapshot: CodexUsageSnapshot | null;
   lastSuccessfulPostAt: number | null;
@@ -331,6 +352,8 @@ export function createJsonMonitorLogger(
       ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount", "bankedResetCountSource"]
       : event === "snapshot_sent"
         ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetCountChange", "bankedResetDisplayCount", "bankedResetCountSource"]
+        : event === "reset_confirmed"
+          ? ["resetEventKey", "observedAt", "resetsAt"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -385,7 +408,7 @@ async function postUsageSnapshot(
   config: CodexUsageMonitorConfig,
   snapshot: CodexUsageSnapshot,
   postReason?: MonitorSnapshotPostReason,
-) {
+): Promise<MonitorWebhookResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MONITOR_WEBHOOK_TIMEOUT_MS);
   try {
@@ -399,6 +422,19 @@ async function postUsageSnapshot(
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`webhook_http_${response.status}`);
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      // A successful webhook without a JSON status remains a successful post,
+      // but it cannot confirm a reset notification.
+    }
+    if (!body || typeof body !== "object") return { accepted: false };
+    const candidate = body as { accepted?: unknown; recovery?: unknown };
+    return {
+      accepted: candidate.accepted === true,
+      ...(typeof candidate.recovery === "string" ? { recovery: candidate.recovery } : {}),
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -435,6 +471,7 @@ async function runAppServerSession(
     let nextRequestId = 1;
     let refreshInFlight = false;
     let consecutiveRpcFailures = 0;
+    const emittedResetConfirmationKeys = new Set<string>();
     let monitorSnapshotState: MonitorSnapshotState = {
       previousLocalSnapshot: null,
       lastSuccessfulPostAt: null,
@@ -509,14 +546,29 @@ async function runAppServerSession(
     const postSnapshotSafely = async (
       snapshot: CodexUsageSnapshot,
       reason: MonitorSnapshotPostReason,
-    ) => {
+    ): Promise<MonitorWebhookResponse | null> => {
       try {
-        await postUsageSnapshot(config, snapshot, reason);
-        return true;
+        return await postUsageSnapshot(config, snapshot, reason);
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
-        return false;
+        return null;
       }
+    };
+
+    const emitResetConfirmationIfNeeded = (
+      snapshot: CodexUsageSnapshot,
+      reason: MonitorSnapshotPostReason,
+      response: MonitorWebhookResponse | null,
+    ) => {
+      if (!response || !isMonitorResetExecutionConfirmed(response, reason)) return;
+      const resetEventKey = getMonitorResetEventKey(snapshot);
+      if (emittedResetConfirmationKeys.has(resetEventKey)) return;
+      emittedResetConfirmationKeys.add(resetEventKey);
+      logger("reset_confirmed", {
+        resetEventKey,
+        observedAt: snapshot.observedAt,
+        resetsAt: snapshot.resetsAt,
+      });
     };
 
     const refresh = async (retryPending = true) => {
@@ -553,9 +605,11 @@ async function runAppServerSession(
         let pendingRetryFailed = false;
         const pendingToRetry = retryPending ? pendingBefore[0] : undefined;
         if (pendingToRetry) {
-          if (await postSnapshotSafely(pendingToRetry.snapshot, pendingToRetry.reason)) {
+          const webhookResponse = await postSnapshotSafely(pendingToRetry.snapshot, pendingToRetry.reason);
+          if (webhookResponse) {
             monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
             logSnapshotSent(pendingToRetry.reason, pendingToRetry.snapshot);
+            emitResetConfirmationIfNeeded(pendingToRetry.snapshot, pendingToRetry.reason, webhookResponse);
           } else {
             pendingRetryFailed = true;
           }
@@ -585,9 +639,11 @@ async function runAppServerSession(
 
         if (postReason === "heartbeat") {
           if (getPendingMonitorPosts(monitorSnapshotState).length > 0) return;
-          if (await postSnapshotSafely(snapshot, postReason)) {
+          const webhookResponse = await postSnapshotSafely(snapshot, postReason);
+          if (webhookResponse) {
             monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
             logSnapshotSent(postReason, snapshot);
+            emitResetConfirmationIfNeeded(snapshot, postReason, webhookResponse);
           }
           return;
         }
@@ -601,9 +657,11 @@ async function runAppServerSession(
         if (pendingPosts.length !== 1 || !pendingPosts[0]) return;
 
         const pendingPost = pendingPosts[0];
-        if (await postSnapshotSafely(pendingPost.snapshot, pendingPost.reason)) {
+        const webhookResponse = await postSnapshotSafely(pendingPost.snapshot, pendingPost.reason);
+        if (webhookResponse) {
           monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
           logSnapshotSent(pendingPost.reason, pendingPost.snapshot);
+          emitResetConfirmationIfNeeded(pendingPost.snapshot, pendingPost.reason, webhookResponse);
         }
       } catch (error) {
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });

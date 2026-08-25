@@ -9,8 +9,10 @@ import {
   getPendingMonitorPosts,
   getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
+  getMonitorResetEventKey,
   getMonitorSnapshotPostReason,
   getRestartBackoffMs,
+  isMonitorResetExecutionConfirmed,
   markMonitorSnapshotPostSucceeded,
   MONITOR_HEARTBEAT_INTERVAL_MS,
   shouldRestartAppServerAfterRpcFailure,
@@ -523,6 +525,92 @@ test("local GUI snapshot events omit an unavailable BANKED reset count", () => {
 
   const event = JSON.parse(lines[0]) as Record<string, unknown>;
   assert.equal("bankedResetDisplayCount" in event, false);
+});
+
+test("only a successful recovery-candidate response confirms a reset for notification", () => {
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "confirmed" },
+      "recovery_candidate",
+    ),
+    true,
+  );
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "teaser_corroborated" },
+      "recovery_candidate",
+    ),
+    true,
+  );
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "teaser_corroborated" },
+      "heartbeat",
+    ),
+    false,
+  );
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "observed_unconfirmed" },
+      "recovery_candidate",
+    ),
+    false,
+  );
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "banked_distribution_observed" },
+      "banked_reset_count_change",
+    ),
+    false,
+  );
+  assert.equal(
+    isMonitorResetExecutionConfirmed(
+      { accepted: true, recovery: "confirmed" },
+      "initial",
+    ),
+    false,
+  );
+});
+
+test("reset confirmation event keys remain stable for retries and change for another reset", () => {
+  const first = snapshot({
+    observedAt: "2026-08-21T00:02:00.000Z",
+    resetsAt: 1_787_016_327,
+  });
+  const retry = { ...first, observedAt: "2026-08-21T00:02:05.000Z" };
+  const next = { ...first, resetsAt: 1_787_023_527 };
+
+  assert.equal(getMonitorResetEventKey(first), getMonitorResetEventKey(retry));
+  assert.notEqual(getMonitorResetEventKey(first), getMonitorResetEventKey(next));
+});
+
+test("reset confirmation GUI events expose only safe stable fields", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  logger("reset_confirmed", {
+    resetEventKey: "usage-reset:1787016327",
+    observedAt: "2026-08-21T00:02:00.000Z",
+    resetsAt: 1_787_016_327,
+    secret: "must-not-leak",
+  });
+
+  const event = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.deepEqual(
+    {
+      event: event.event,
+      resetEventKey: event.resetEventKey,
+      observedAt: event.observedAt,
+      resetsAt: event.resetsAt,
+    },
+    {
+      event: "reset_confirmed",
+      resetEventKey: "usage-reset:1787016327",
+      observedAt: "2026-08-21T00:02:00.000Z",
+      resetsAt: 1_787_016_327,
+    },
+  );
+  assert.equal(lines[0].includes("must-not-leak"), false);
 });
 
 test("GUI-safe error codes preserve only known machine-readable reasons", () => {

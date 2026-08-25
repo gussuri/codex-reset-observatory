@@ -6,6 +6,10 @@ namespace CodexUsageMonitor;
 
 internal sealed class MainForm : Form
 {
+    private const int MaxNotifiedResetEvents = 256;
+    private const string NotificationTitle = "Codexリセットを確認";
+    private const string NotificationBody = "MonitorがCodex利用上限のリセットを確認しました。";
+    private const string ObservatoryHistoryUrl = "https://codex.gussuriworks.com/history";
     private readonly Label _statusValue = CreateValueLabel();
     private readonly Label _usedValue = CreateValueLabel();
     private readonly Label _remainingValue = CreateValueLabel();
@@ -14,6 +18,10 @@ internal sealed class MainForm : Form
     private readonly Label _lastSuccessValue = CreateValueLabel();
     private readonly Label _webhookValue = CreateValueLabel();
     private readonly Button _toggleButton = new();
+    private readonly NotifyIcon _notificationIcon;
+    private readonly object _notificationStateLock = new();
+    private readonly string _notificationStatePath = GetNotificationStatePath();
+    private readonly List<string> _notifiedResetEventKeys;
     private Process? _monitorProcess;
     private string? _repositoryRoot;
     private bool _stopping;
@@ -21,6 +29,15 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
+        _notifiedResetEventKeys = LoadNotifiedResetEventKeys(_notificationStatePath);
+        _notificationIcon = new NotifyIcon
+        {
+            Icon = SystemIcons.Information,
+            Text = "Codex Usage Monitor",
+            Visible = true,
+        };
+        _notificationIcon.BalloonTipClicked += (_, _) => OpenObservatoryHistory();
+
         Text = "Codex Usage Monitor";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -78,7 +95,18 @@ internal sealed class MainForm : Form
         _webhookValue.Text = "未送信";
 
         Shown += (_, _) => StartMonitor();
-        FormClosing += (_, _) => StopMonitor();
+        FormClosing += (_, _) =>
+        {
+            try
+            {
+                StopMonitor();
+            }
+            finally
+            {
+                _notificationIcon.Visible = false;
+                _notificationIcon.Dispose();
+            }
+        };
     }
 
     private static Label CreateValueLabel()
@@ -248,6 +276,9 @@ internal sealed class MainForm : Form
                 _lastSuccessValue.Text = FormatLocalClock(ReadString(root, "observedAt") ?? at);
                 UpdateSnapshotValues(root);
                 break;
+            case "reset_confirmed":
+                NotifyResetConfirmed(root);
+                break;
             case "snapshot_failed":
                 SetStatus("△ 一時取得不能");
                 _webhookValue.Text = "再試行中";
@@ -271,6 +302,112 @@ internal sealed class MainForm : Form
                 SetStatus("○ 停止中");
                 _toggleButton.Text = "監視開始";
                 break;
+        }
+    }
+
+    private void NotifyResetConfirmed(JsonElement root)
+    {
+        var eventKey = ReadString(root, "resetEventKey");
+        if (!IsSafeResetEventKey(eventKey) || !TryRecordResetNotification(eventKey!)) return;
+
+        try
+        {
+            _notificationIcon.ShowBalloonTip(
+                5_000,
+                NotificationTitle,
+                NotificationBody,
+                ToolTipIcon.Info);
+        }
+        catch
+        {
+            // Notification failures must not stop the monitor or GUI.
+        }
+    }
+
+    private bool TryRecordResetNotification(string eventKey)
+    {
+        lock (_notificationStateLock)
+        {
+            if (_notifiedResetEventKeys.Contains(eventKey, StringComparer.Ordinal)) return false;
+
+            var next = new List<string>(_notifiedResetEventKeys) { eventKey };
+            if (next.Count > MaxNotifiedResetEvents)
+            {
+                next.RemoveRange(0, next.Count - MaxNotifiedResetEvents);
+            }
+
+            if (!TryPersistNotifiedResetEventKeys(next)) return false;
+            _notifiedResetEventKeys.Clear();
+            _notifiedResetEventKeys.AddRange(next);
+            return true;
+        }
+    }
+
+    private bool TryPersistNotifiedResetEventKeys(IReadOnlyList<string> eventKeys)
+    {
+        var directory = Path.GetDirectoryName(_notificationStatePath);
+        if (string.IsNullOrWhiteSpace(directory)) return false;
+
+        var temporaryPath = $"{_notificationStatePath}.{Environment.ProcessId}.tmp";
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(eventKeys));
+            File.Move(temporaryPath, _notificationStatePath, true);
+            return true;
+        }
+        catch
+        {
+            try { File.Delete(temporaryPath); } catch { }
+            return false;
+        }
+    }
+
+    private static List<string> LoadNotifiedResetEventKeys(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return [];
+            var stored = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(path)) ?? [];
+            return stored
+                .Where(IsSafeResetEventKey)
+                .Distinct(StringComparer.Ordinal)
+                .TakeLast(MaxNotifiedResetEvents)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static string GetNotificationStatePath()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData)) localAppData = AppContext.BaseDirectory;
+        return Path.Combine(localAppData, "CodexUsageMonitor", "notified-reset-events.json");
+    }
+
+    private static bool IsSafeResetEventKey(string? eventKey)
+    {
+        return !string.IsNullOrWhiteSpace(eventKey) &&
+            eventKey.Length <= 200 &&
+            eventKey.All(character => char.IsLetterOrDigit(character) || character is ':' or '-' or '.' or '_');
+    }
+
+    private static void OpenObservatoryHistory()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ObservatoryHistoryUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch
+        {
+            // A browser launch failure must not affect monitoring.
         }
     }
 
