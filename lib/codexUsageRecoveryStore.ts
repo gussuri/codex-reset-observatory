@@ -834,9 +834,13 @@ export async function upsertResetExecutionEstimate(
         .select(EXECUTION_ESTIMATE_COLUMNS)
         .maybeSingle();
 
+  if (result.error) {
+    return { estimate: null, error: result.error };
+  }
+
   return {
     estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null) ?? estimate,
-    error: result.error,
+    error: null,
   };
 }
 

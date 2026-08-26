@@ -862,3 +862,263 @@ test("personal banked reset consumption records observation and updates state bu
     restore();
   }
 });
+
+async function assertEstimateWriteFailureDoesNotAdvanceState(mode: "standalone" | "teaser") {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  let stateWriteCount = 0;
+  let estimateWriteCount = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-25T00:00:00.000Z",
+        received_at: "2026-08-25T00:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: Math.floor(Date.parse("2026-08-27T00:00:00.000Z") / 1000),
+        coverage_started_at: "2026-08-25T00:00:00.000Z",
+        updated_at: "2026-08-25T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify(mode === "teaser"
+        ? [{
+            tweet_id: "teaser-estimate-write-error",
+            text: "The five hour limits are back.",
+            tweet_url: "https://x.com/thsottiaux/status/teaser-estimate-write-error",
+            tweet_created_at: "2026-08-25T00:00:00.000Z",
+            expires_at: "2026-08-26T00:00:00.000Z",
+            signal_type: "teaser",
+            confidence: 0.9,
+            verification_status: "auto_unverified",
+            is_reply: false,
+          }]
+        : []), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("codex_recovery_observations")) {
+      return new Response(JSON.stringify({
+        id: "recovery-estimate-write-error",
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-25T00:04:00.000Z",
+        previous_observed_at: "2026-08-25T00:00:00.000Z",
+        previous_used_percent: 100,
+        current_used_percent: 0,
+        previous_resets_at: Math.floor(Date.parse("2026-08-27T00:00:00.000Z") / 1000),
+        current_resets_at: Math.floor(Date.parse("2026-08-28T00:00:00.000Z") / 1000),
+        cycle_hint: "unexpected",
+        confidence: "strong",
+        status: "observed",
+        matched_tibo_tweet_id: null,
+        confirmed_at: null,
+        created_at: "2026-08-25T00:04:00.000Z",
+        updated_at: "2026-08-25T00:04:00.000Z",
+      }), { status: 201 });
+    }
+    if (method !== "GET" && url.includes("reset_execution_estimates")) {
+      estimateWriteCount += 1;
+      return new Response(JSON.stringify({ message: "estimate write failed" }), { status: 500 });
+    }
+    if (method !== "GET" && url.includes("codex_usage_monitor_state")) {
+      stateWriteCount += 1;
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-08-25T00:04:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-08-28T00:00:00.000Z") / 1000),
+    }));
+
+    assert.equal(response.status, 503);
+    assert.equal(estimateWriteCount, 1);
+    assert.equal(stateWriteCount, 0);
+    const body = await response.json() as Record<string, unknown>;
+    assert.notEqual(body.recovery, "confirmed");
+    assert.notEqual(body.recovery, "teaser_corroborated");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+}
+
+test("a standalone unexpected recovery does not advance state when its estimate write fails", async () => {
+  await assertEstimateWriteFailureDoesNotAdvanceState("standalone");
+});
+
+test("a teaser-correlated recovery does not advance state when its estimate write fails", async () => {
+  await assertEstimateWriteFailureDoesNotAdvanceState("teaser");
+});
+
+test("server-side BANKED count increases restore distribution without a client change marker", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  let serverCount = 0;
+  let estimateWriteCount = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-11T00:00:00.000Z",
+        received_at: "2026-08-11T00:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 20,
+        window_duration_mins: 10080,
+        resets_at: Math.floor(Date.parse("2026-08-18T00:00:00.000Z") / 1000),
+        coverage_started_at: "2026-08-10T23:00:00.000Z",
+        banked_reset_available_count: serverCount,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-11T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: "server-banked-increase-notice",
+        text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+        tweet_url: "https://x.com/thsottiaux/status/server-banked-increase-notice",
+        tweet_created_at: "2026-08-10T23:00:00.000Z",
+        expires_at: "2026-08-12T00:00:00.000Z",
+        signal_type: "official_notice",
+        confidence: 0.99,
+        verification_status: "auto_unverified",
+        is_reply: false,
+        expected_start_at: "2026-08-11T00:00:00.000Z",
+        expected_end_at: "2026-08-11T23:59:59.000Z",
+        temporal_resolution_status: "resolved",
+      }]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("reset_execution_estimates")) {
+      estimateWriteCount += 1;
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    if (method !== "GET" && url.includes("codex_usage_monitor_state")) {
+      if (typeof body?.banked_reset_available_count === "number") {
+        serverCount = body.banked_reset_available_count;
+      }
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    for (const [observedAt, currentCount] of [
+      ["2026-08-11T00:02:00.000Z", 1],
+      ["2026-08-11T00:04:00.000Z", 2],
+    ] as const) {
+      const response = await POST(buildRequest({
+        observedAt,
+        bankedResetAvailableCount: currentCount,
+        usedPercent: 20,
+        resetsAt: Math.floor(Date.parse("2026-08-18T00:00:00.000Z") / 1000),
+      }));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    }
+
+    assert.equal(serverCount, 2);
+    assert.equal(estimateWriteCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("an unknown server BANKED count does not create a distribution from a positive snapshot", async () => {
+  for (const previousCount of [null, undefined]) {
+    const restore = withEnvironment({
+      CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+    });
+    const originalFetch = globalThis.fetch;
+    let estimateWriteCount = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+        return new Response(JSON.stringify({
+          source_key: "local-codex-app-server",
+          observed_at: "2026-08-11T00:00:00.000Z",
+          received_at: "2026-08-11T00:00:01.000Z",
+          limit_id: "codex",
+          plan_type: "plus",
+          used_percent: 20,
+          window_duration_mins: 10080,
+          resets_at: Math.floor(Date.parse("2026-08-18T00:00:00.000Z") / 1000),
+          coverage_started_at: "2026-08-10T23:00:00.000Z",
+          ...(previousCount === undefined ? {} : { banked_reset_available_count: previousCount }),
+          updated_at: "2026-08-11T00:00:01.000Z",
+        }), { status: 200 });
+      }
+      if (method === "GET" && url.includes("tibo_signals")) {
+        return new Response(JSON.stringify([{
+          tweet_id: "unknown-banked-count-notice",
+          text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+          tweet_url: "https://x.com/thsottiaux/status/unknown-banked-count-notice",
+          tweet_created_at: "2026-08-10T23:00:00.000Z",
+          expires_at: "2026-08-12T00:00:00.000Z",
+          signal_type: "official_notice",
+          confidence: 0.99,
+          verification_status: "auto_unverified",
+          is_reply: false,
+        }]), { status: 200 });
+      }
+      if (method === "GET" && url.includes("regular_reset_events")) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (method === "GET" && url.includes("reset_execution_estimates")) {
+        return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+      }
+      if (method !== "GET" && url.includes("reset_execution_estimates")) {
+        estimateWriteCount += 1;
+      }
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    };
+
+    try {
+      const response = await POST(buildRequest({
+        observedAt: "2026-08-11T00:02:00.000Z",
+        bankedResetAvailableCount: 1,
+      }));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { accepted: true, recovery: "no_recovery" });
+      assert.equal(estimateWriteCount, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      restore();
+    }
+  }
+});

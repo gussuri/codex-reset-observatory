@@ -8,6 +8,7 @@ import {
   canCorroborateTiboReset,
   evaluateCodexUsageRecovery,
   isCodexUsageAuthorizationValid,
+  isBankedResetAvailableCountGrant,
   parseCodexUsageWebhookPayload,
   shouldCreateNoticeBackedEstimate,
   type CodexUsageSnapshot,
@@ -199,6 +200,7 @@ async function persistCorroboratedBankedDistribution(
   client: SupabaseClient<any>,
   snapshot: CodexUsageSnapshot,
   lookup: OfficialNoticeLookup | null,
+  effectiveBankedResetCountChange: boolean,
 ) {
   const notice = lookup?.bankedNoticeSignal;
   const relatedNotices = lookup?.bankedNoticeSignals?.length
@@ -213,7 +215,7 @@ async function persistCorroboratedBankedDistribution(
     (notice ? toTiboNoticeSignal(notice) : null);
   const firstAnnouncement = officialNotices[0] ?? representativeNotice;
   if (
-    snapshot.bankedResetCountChange !== true ||
+    effectiveBankedResetCountChange !== true ||
     typeof snapshot.bankedResetAvailableCount !== "number" ||
     snapshot.bankedResetAvailableCount < 1 ||
     !notice?.isBankedDistribution ||
@@ -274,7 +276,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
     }
 
-    const bankedNotice = snapshot.bankedResetCountChange === true
+    const previousBankedResetAvailableCount =
+      previousResult.row?.bankedResetAvailableCount ??
+      previousResult.state?.bankedResetAvailableCount;
+    const serverObservedBankedIncrease = isBankedResetAvailableCountGrant(
+      previousBankedResetAvailableCount,
+      snapshot.bankedResetAvailableCount,
+    );
+    const effectiveBankedResetCountChange =
+      snapshot.bankedResetCountChange === true || serverObservedBankedIncrease;
+    const bankedNotice = effectiveBankedResetCountChange
       ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
       : null;
     if (bankedNotice?.error) {
@@ -304,6 +315,7 @@ export async function POST(request: Request) {
         client,
         snapshot,
         bankedNotice,
+        effectiveBankedResetCountChange,
       );
       if (bankedResult.error) {
         console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });
@@ -448,23 +460,27 @@ export async function POST(request: Request) {
           matchingTibo.tweetId,
           matchingTibo.tweetCreatedAt,
         );
-        if (!cluster.error) {
-          const estimateResult = await upsertResetExecutionEstimate(client, {
-            resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
-            tiboAnnouncedAt: cluster.announcedAt,
-            tiboPrimaryTweetId: cluster.representativeTweetId,
-            tiboSourceTweetIds: cluster.sourceTweetIds,
-            usageObservation: observationResult.observation,
-            officialNoticeTweetId: cluster.representativeNoticeId,
-            officialNoticeAt: cluster.representativeNoticeAt,
-          });
-          estimateObserved = Boolean(estimateResult.estimate);
-          if (estimateResult.error) {
-            console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
-          }
+        if (cluster.error) {
+          console.warn("[Codex usage] reset execution estimate lookup failed", { reason: "database_error" });
+          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
         }
+        const estimateResult = await upsertResetExecutionEstimate(client, {
+          resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
+          tiboAnnouncedAt: cluster.announcedAt,
+          tiboPrimaryTweetId: cluster.representativeTweetId,
+          tiboSourceTweetIds: cluster.sourceTweetIds,
+          usageObservation: observationResult.observation,
+          officialNoticeTweetId: cluster.representativeNoticeId,
+          officialNoticeAt: cluster.representativeNoticeAt,
+        });
+        if (estimateResult.error || !estimateResult.estimate) {
+          console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
+          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+        }
+        estimateObserved = true;
       } catch {
-        console.warn("[Codex usage] reset execution estimate skipped", { reason: "request_failed" });
+        console.warn("[Codex usage] reset execution estimate failed", { reason: "request_failed" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
       }
     } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observationResult.observation)) {
       try {
@@ -490,12 +506,14 @@ export async function POST(request: Request) {
           officialNoticeTweetId: representativeNotice.tweet_id,
           officialNoticeAt: representativeNotice.tweet_created_at,
         });
-        estimateObserved = Boolean(estimateResult.estimate);
-        if (estimateResult.error) {
+        if (estimateResult.error || !estimateResult.estimate) {
           console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });
+          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
         }
+        estimateObserved = true;
       } catch {
-        console.warn("[Codex usage] notice-backed reset execution estimate skipped", { reason: "request_failed" });
+        console.warn("[Codex usage] notice-backed reset execution estimate failed", { reason: "request_failed" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
       }
     } else if (
       teaserSignal &&
@@ -513,13 +531,15 @@ export async function POST(request: Request) {
           usageObservation: observationResult.observation,
           corroboratingTiboTweetId: teaser.tweet_id,
         });
-        teaserEstimateObserved = Boolean(estimateResult.estimate);
-        estimateObserved = Boolean(estimateResult.estimate);
-        if (estimateResult.error) {
+        if (estimateResult.error || !estimateResult.estimate) {
           console.warn("[Codex usage] teaser-backed reset execution estimate write failed", { reason: "database_error" });
+          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
         }
+        teaserEstimateObserved = true;
+        estimateObserved = true;
       } catch {
-        console.warn("[Codex usage] teaser-backed reset execution estimate skipped", { reason: "request_failed" });
+        console.warn("[Codex usage] teaser-backed reset execution estimate failed", { reason: "request_failed" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
       }
     } else if (
       decision.confidence === "strong" &&
@@ -535,12 +555,14 @@ export async function POST(request: Request) {
           tiboPrimaryTweetId: null,
           tiboSourceTweetIds: [],
         });
-        estimateObserved = Boolean(estimateResult.estimate);
-        if (estimateResult.error) {
+        if (estimateResult.error || !estimateResult.estimate) {
           console.warn("[Codex usage] monitor standalone reset execution estimate write failed", { reason: "database_error" });
+          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
         }
+        estimateObserved = true;
       } catch {
-        console.warn("[Codex usage] monitor standalone reset execution estimate skipped", { reason: "request_failed" });
+        console.warn("[Codex usage] monitor standalone reset execution estimate failed", { reason: "request_failed" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
       }
     }
 
@@ -548,6 +570,7 @@ export async function POST(request: Request) {
       client,
       snapshot,
       notice,
+      effectiveBankedResetCountChange,
     );
     if (bankedResult.error) {
       console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });

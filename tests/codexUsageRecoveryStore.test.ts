@@ -5,7 +5,10 @@ import {
   evaluateCodexUsageRecovery,
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
-import { getNextUsageMonitorLastBankedGrantAt } from "../lib/codexUsageRecoveryStore";
+import {
+  getNextUsageMonitorLastBankedGrantAt,
+  upsertResetExecutionEstimate,
+} from "../lib/codexUsageRecoveryStore";
 import type { UsageMonitorState } from "../lib/codexUsageMonitorCoverage";
 
 const OBSERVED_AT = "2026-08-26T01:15:00.000Z";
@@ -109,4 +112,57 @@ test("a clear 1 to 0 decrease within the trusted window keeps personal-reset sup
 
   assert.equal(decision.kind, "recovery");
   assert.equal(decision.isPersonalReset, true);
+});
+
+test("an execution estimate write error does not return an unsaved estimate", async () => {
+  const databaseError = { code: "XX000", message: "estimate write failed" };
+  let isWrite = false;
+  const client = {
+    from() {
+      const builder: Record<string, unknown> = {};
+      builder.select = () => builder;
+      builder.eq = () => builder;
+      builder.overlaps = () => builder;
+      builder.limit = () => builder;
+      builder.upsert = () => {
+        isWrite = true;
+        return builder;
+      };
+      builder.update = () => {
+        isWrite = true;
+        return builder;
+      };
+      builder.maybeSingle = async () => ({
+        data: null,
+        error: isWrite ? databaseError : null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await upsertResetExecutionEstimate(client as never, {
+    resetEventKey: "usage-reset-estimate-write-error",
+    isMonitorObserved: true,
+    usageObservation: {
+      id: "recovery-estimate-write-error",
+      sourceKey: "local-codex-app-server",
+      observedAt: "2026-08-26T01:15:00.000Z",
+      previousObservedAt: "2026-08-26T01:10:00.000Z",
+      previousUsedPercent: 100,
+      currentUsedPercent: 0,
+      previousResetsAt: 1_788_000_000,
+      currentResetsAt: 1_788_604_800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+      matchedTiboTweetId: null,
+      confirmedAt: null,
+      createdAt: "2026-08-26T01:15:00.000Z",
+      updatedAt: "2026-08-26T01:15:00.000Z",
+    },
+    tiboSourceTweetIds: [],
+  });
+
+  assert.equal(result.estimate, null);
+  assert.deepEqual(result.error, databaseError);
 });
