@@ -209,9 +209,9 @@ export type PublicTiboActivity = {
   isReply: boolean;
   replyContextText: string | null;
   replyToHandles: string[];
-  temporalResolutionStatus: TemporalResolutionStatus | null;
-  expectedStartAt: string | null;
-  expectedEndAt: string | null;
+  temporalResolutionStatus?: TemporalResolutionStatus | null;
+  expectedStartAt?: string | null;
+  expectedEndAt?: string | null;
 };
 
 export type DataSourceState = "ok" | "degraded" | "misconfigured";
