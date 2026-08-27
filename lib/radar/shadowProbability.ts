@@ -41,7 +41,10 @@ import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getTeaserStrengthSignals } from "./teaserStrength";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
-import { getTemporalTeaserCoverage } from "./tiboTemporal";
+import {
+  getTemporalNoticeCoverage,
+  getTemporalTeaserCoverage,
+} from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
 export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v2";
