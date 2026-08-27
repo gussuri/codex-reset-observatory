@@ -63,6 +63,8 @@ type BackfillRow = {
   sourcePostText: string | null;
   inputHash: string | null;
   name: string | null;
+  nameEn: string | null;
+  nameZh: string | null;
   confidence: number | null;
   evidence: string | null;
   reason: string | null;
@@ -212,6 +214,8 @@ function resultRow(
     sourcePostText: candidate.sourceText,
     inputHash: candidate.inputHash,
     name: result?.name ?? existingName,
+    nameEn: result?.nameEn ?? candidate.existing?.ai_name_en ?? null,
+    nameZh: result?.nameZh ?? candidate.existing?.ai_name_zh ?? null,
     confidence: result?.confidence ?? candidate.existing?.ai_confidence ?? null,
     evidence: result?.evidence ?? candidate.existing?.ai_evidence ?? null,
     reason: result?.reason ?? candidate.existing?.ai_reason ?? null,
@@ -240,12 +244,12 @@ function buildMarkdown(
     `- Candidate count: ${meta.candidateCount}`,
     "- This script never changes reset event titles or classification fields. Only explicitly accepted names are eligible for `--apply`.",
     "",
-    "| Event key | Completed | Current title | Input | Name | Confidence | Status | Flags | Would display | Applied |",
-    "|---|---|---|---|---|---:|---|---|---|---|",
+    "| Event key | Completed | Current title | Input | Name (JA) | Name (EN) | Name (ZH) | Confidence | Status | Flags | Would display | Applied |",
+    "|---|---|---|---|---|---|---|---:|---|---|---|---|",
   ];
   for (const row of rows) {
     lines.push(
-      `| ${markdownCell(row.eventKey)} | ${markdownCell(row.completedAt)} | ${markdownCell(row.currentTitle)} | ${markdownCell(row.inputMode)} | ${markdownCell(row.name)} | ${row.confidence === null ? "-" : row.confidence.toFixed(3)} | ${markdownCell(row.status)} | ${markdownCell(row.flags.join(", "))} | ${markdownCell(row.wouldDisplay)} | ${row.applied ? "yes" : "no"} |`,
+      `| ${markdownCell(row.eventKey)} | ${markdownCell(row.completedAt)} | ${markdownCell(row.currentTitle)} | ${markdownCell(row.inputMode)} | ${markdownCell(row.name)} | ${markdownCell(row.nameEn)} | ${markdownCell(row.nameZh)} | ${row.confidence === null ? "-" : row.confidence.toFixed(3)} | ${markdownCell(row.status)} | ${markdownCell(row.flags.join(", "))} | ${markdownCell(row.wouldDisplay)} | ${row.applied ? "yes" : "no"} |`,
     );
   }
   return `${lines.join("\n")}\n`;

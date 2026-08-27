@@ -5,6 +5,7 @@ import {
   generateRandomResetName,
   RANDOM_RESET_NAME_MODEL,
   RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
   toRandomResetNameInput,
   type RandomResetNameEvaluationInput,
@@ -20,6 +21,27 @@ import {
 import type { ResetDisplayNameRecord, WindowEventLike } from "./types";
 
 export const RESET_DISPLAY_NAME_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_reason",
+  "ai_model",
+  "ai_prompt_version",
+  "ai_input_mode",
+  "ai_status",
+  "ai_flags",
+  "ai_generated_at",
+  "input_hash",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const RESET_DISPLAY_NAME_LEGACY_COLUMNS = [
   "event_key",
   "source_tweet_id",
   "manual_name_ja",
@@ -62,7 +84,36 @@ function isMissingTableError(error: unknown) {
   const message = [value.message, value.details]
     .filter((item): item is string => typeof item === "string")
     .join(" ");
-  return code === "PGRST205" || /reset_display_names|relation .* does not exist/i.test(message);
+  return code === "PGRST205" || /relation .* does not exist/i.test(message);
+}
+
+function isMissingLocalizedColumnsError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown; details?: unknown };
+  const code = typeof value.code === "string" ? value.code : "";
+  const message = [value.message, value.details]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ");
+  return code === "PGRST204" || /ai_name_(?:en|zh)|column .* does not exist/i.test(message);
+}
+
+async function selectResetDisplayNames(
+  supabase: SupabaseClient,
+  eventKey?: string,
+) {
+  const query = supabase
+    .from("reset_display_names")
+    .select(RESET_DISPLAY_NAME_COLUMNS);
+  const scopedQuery = eventKey ? query.eq("event_key", eventKey).maybeSingle() : query.limit(2000);
+  const result = await scopedQuery;
+  if (!isMissingLocalizedColumnsError(result.error)) return result;
+
+  const legacyQuery = supabase
+    .from("reset_display_names")
+    .select(RESET_DISPLAY_NAME_LEGACY_COLUMNS);
+  return eventKey
+    ? legacyQuery.eq("event_key", eventKey).maybeSingle()
+    : legacyQuery.limit(2000);
 }
 
 export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]> {
@@ -70,10 +121,7 @@ export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]
   if (!supabase) return [];
 
   try {
-    const { data, error } = await supabase
-      .from("reset_display_names")
-      .select(RESET_DISPLAY_NAME_COLUMNS)
-      .limit(2000);
+    const { data, error } = await selectResetDisplayNames(supabase);
     if (error) {
       console.warn("[Reset display names] read skipped", {
         detail: isMissingTableError(error) ? "table_unavailable" : "database_error",
@@ -91,11 +139,7 @@ async function fetchResetDisplayNameByKey(
   supabase: SupabaseClient,
   eventKey: string,
 ) {
-  const { data, error } = await supabase
-    .from("reset_display_names")
-    .select(RESET_DISPLAY_NAME_COLUMNS)
-    .eq("event_key", eventKey)
-    .maybeSingle();
+  const { data, error } = await selectResetDisplayNames(supabase, eventKey);
   if (error) {
     if (isMissingTableError(error)) return null;
     throw new Error("Reset display name lookup failed");
@@ -133,7 +177,11 @@ export function shouldPreserveExistingAcceptedResetDisplayName(
     record?.ai_status === "accepted" &&
       typeof record.ai_name_ja === "string" &&
       record.ai_name_ja.trim() &&
-      (record.ai_prompt_version === RANDOM_RESET_NAME_V1_PROMPT_VERSION || record.ai_prompt_version === null),
+      (
+        record.ai_prompt_version === RANDOM_RESET_NAME_V1_PROMPT_VERSION ||
+        record.ai_prompt_version === RANDOM_RESET_NAME_V2_PROMPT_VERSION ||
+        record.ai_prompt_version === null
+      ),
   );
 }
 
@@ -158,6 +206,8 @@ function buildUpsertPayload(
     source_tweet_id: sourceTweetId ?? existing?.source_tweet_id ?? null,
     manual_name_ja: existing?.manual_name_ja ?? null,
     ai_name_ja: acceptance.status === "accepted" ? result.name : null,
+    ai_name_en: acceptance.status === "accepted" ? result.nameEn ?? null : null,
+    ai_name_zh: acceptance.status === "accepted" ? result.nameZh ?? null : null,
     ai_confidence: result.confidence,
     ai_evidence: result.evidence,
     ai_reason: result.reason,
@@ -199,7 +249,15 @@ async function upsertResetDisplayName(
   const { error } = await supabase
     .from("reset_display_names")
     .upsert(payload, { onConflict: "event_key" });
-  if (error) throw new Error("Reset display name write failed");
+  if (!error) return;
+  if (isMissingLocalizedColumnsError(error)) {
+    const { ai_name_en: _aiNameEn, ai_name_zh: _aiNameZh, ...legacyPayload } = payload;
+    const { error: legacyError } = await supabase
+      .from("reset_display_names")
+      .upsert(legacyPayload, { onConflict: "event_key" });
+    if (!legacyError) return;
+  }
+  throw new Error("Reset display name write failed");
 }
 
 export async function ensureResetDisplayNameForEvent(
@@ -332,6 +390,8 @@ export async function applyAcceptedResetDisplayName(
 function recordToResult(record: ReturnType<typeof getResetDisplayNameWritePayload>): RandomResetNameGenerationResult {
   return {
     name: record.ai_name_ja,
+    nameEn: record.ai_name_en ?? null,
+    nameZh: record.ai_name_zh ?? null,
     confidence: record.ai_confidence,
     evidence: record.ai_evidence,
     reason: record.ai_reason,

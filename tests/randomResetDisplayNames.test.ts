@@ -7,10 +7,13 @@ import {
   assessRandomResetNameResult,
   buildRandomResetNamePrompt,
   parseRandomResetNameResponse,
+  parseRandomResetNameV3Response,
   parseRandomResetNameV2Response,
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
   RANDOM_RESET_NAME_TEMPERATURE,
+  RANDOM_RESET_NAME_V2_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V3_SYSTEM_PROMPT,
   RANDOM_RESET_NAME_V2_SYSTEM_PROMPT,
   generateRandomResetName,
   toRandomResetNameInput,
@@ -128,21 +131,24 @@ test("display-name safety accepts only grounded, sufficiently confident names", 
   assert.equal(assessRandomResetNameResult(hallucinated).status, "review_required");
 });
 
-test("production v2 naming uses the descriptive prompt and accepts a grounded source-based name", () => {
+test("production v3 naming uses the descriptive prompt and accepts grounded localized names", () => {
   const item = resetItem();
   const input = toRandomResetNameInput(item, Date.parse(completedAt));
   input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
 
-  assert.equal(RANDOM_RESET_NAME_PROMPT_VERSION, "random-reset-name-v2");
+  assert.equal(RANDOM_RESET_NAME_PROMPT_VERSION, "random-reset-name-v3");
   assert.equal(RANDOM_RESET_NAME_TEMPERATURE, 0.2);
-  assert.match(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /distinctive product names, model names, concrete numbers/);
-  assert.match(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /simple and descriptive/);
-  assert.doesNotMatch(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /humorous or strange tone/);
-  assert.doesNotMatch(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT, /joke|excuse/i);
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /distinctive product names, model names, concrete numbers/);
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /grounded metaphor, joke, phrase, mood, or motif/i);
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /nameJa/);
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /nameEn/);
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /nameZh/);
 
-  const result = parseRandomResetNameV2Response(
+  const result = parseRandomResetNameV3Response(
     {
-      name: "Luna 10万スレッド週末解放記念リセット",
+      nameJa: "Luna 10万スレッド週末解放記念リセット",
+      nameEn: "Luna 100k Thread Weekend Reset",
+      nameZh: "Luna 10万线程周末重置",
       reason: "原文にあるLunaスレッド数と週末の解放内容を要約した。",
     },
     input,
@@ -155,27 +161,42 @@ test("production v2 naming uses the descriptive prompt and accepts a grounded so
   assert.equal(assessRandomResetNameResult(result).status, "accepted");
 });
 
-test("production v2 naming rejects unsupported or generic generated names without v1 gates", () => {
+test("production v3 naming rejects unsupported or generic generated names", () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "Good feedback today, and I reset the limits.";
 
-  const unsupported = parseRandomResetNameV2Response(
-    { name: "GPT-5.6公開記念リセット", reason: "モデル名を要約した。" },
+  const unsupported = parseRandomResetNameV3Response(
+    {
+      nameJa: "GPT-5.6公開記念リセット",
+      nameEn: "GPT-5.6 Launch Reset",
+      nameZh: "GPT-5.6发布重置",
+      reason: "モデル名を要約した。",
+    },
     input,
     "gemini-3.5-flash-lite",
   );
   assert.equal(unsupported.status, "success");
   assert.equal(assessRandomResetNameResult(unsupported).status, "review_required");
 
-  const generic = parseRandomResetNameV2Response(
-    { name: "ランダムリセット", reason: "具体的な特徴がない。" },
+  const generic = parseRandomResetNameV3Response(
+    {
+      nameJa: "ランダムリセット",
+      nameEn: "Random reset",
+      nameZh: "随机重置",
+      reason: "具体的な特徴がない。",
+    },
     input,
     "gemini-3.5-flash-lite",
   );
   assert.equal(assessRandomResetNameResult(generic).status, "review_required");
 
-  const malformed = parseRandomResetNameV2Response(
-    { name: "週末イベント", reason: "語尾が要件を満たさない。" },
+  const malformed = parseRandomResetNameV3Response(
+    {
+      nameJa: "週末イベント",
+      nameEn: "Weekend event",
+      nameZh: "周末活动",
+      reason: "語尾が要件を満たさない。",
+    },
     input,
     "gemini-3.5-flash-lite",
   );
@@ -183,7 +204,7 @@ test("production v2 naming rejects unsupported or generic generated names withou
   assert.equal(RANDOM_RESET_NAME_MAX_LENGTH, 40);
 });
 
-test("production Gemini requests use the v2 prompt, temperature, and parser", async () => {
+test("production Gemini requests use the v3 prompt, temperature, and parser", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
   const originalFetch = globalThis.fetch;
@@ -196,7 +217,9 @@ test("production Gemini requests use the v2 prompt, temperature, and parser", as
     requestJson = String(init?.body);
     return new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ text: JSON.stringify({
-        name: "Luna 10万スレッド週末解放記念リセット",
+        nameJa: "Luna 10万スレッド週末解放記念リセット",
+        nameEn: "Luna 100k Thread Weekend Reset",
+        nameZh: "Luna 10万线程周末重置",
         reason: "原文の具体的なスレッド数と週末の解放を要約した。",
       }) }] } }],
     }), { status: 200, headers: { "content-type": "application/json" } });
@@ -211,7 +234,7 @@ test("production Gemini requests use the v2 prompt, temperature, and parser", as
     assert.equal(assessRandomResetNameResult(result).status, "accepted");
     const capturedRequest = JSON.parse(requestJson ?? "{}") as GeminiRequest;
     assert.equal(capturedRequest.generationConfig?.temperature, RANDOM_RESET_NAME_TEMPERATURE);
-    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V2_SYSTEM_PROMPT);
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V3_SYSTEM_PROMPT);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -275,7 +298,7 @@ test("Japanese display priority preserves human titles and accepts only safe AI 
   assert.equal(resolveResetDisplayTitle(item, record, "zh"), "ランダムリセット");
 
   const v2Record = acceptedRecord({
-    ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
+    ai_prompt_version: RANDOM_RESET_NAME_V2_PROMPT_VERSION,
     ai_confidence: null,
     ai_evidence: null,
   });
@@ -375,7 +398,7 @@ test("accepted write payload keeps manual and audit fields separate", () => {
   assert.equal("title" in payload, false);
 });
 
-test("AI display names affect Japanese titles only and never public audit fields or probabilities", () => {
+test("AI display names affect titles without changing public audit fields or probabilities", () => {
   const now = new Date("2026-08-09T00:00:00.000Z");
   const withName = getLocalRadarData({
     calculationNow: now,
@@ -410,4 +433,187 @@ test("AI display names affect Japanese titles only and never public audit fields
   assert.equal(serialized.includes("ai_reason"), false);
   assert.equal(serialized.includes("reset_display_names"), false);
   assert.equal(serialized.includes("random-reset-name-v1"), false);
+});
+
+test("legacy v2 names remain accepted and preserved during the v3 rollout", () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "A weekend reset is live.";
+  const result = parseRandomResetNameV2Response(
+    { name: "週末の利用上限リセット", reason: "原文の週末という特徴を使った。" },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_V2_PROMPT_VERSION);
+  assert.equal(assessRandomResetNameResult(result).status, "accepted");
+  assert.equal(RANDOM_RESET_NAME_V2_SYSTEM_PROMPT.includes("Always end with 「リセット」"), true);
+  assert.equal(
+    shouldPreserveExistingAcceptedResetDisplayName(
+      acceptedRecord({ ai_prompt_version: RANDOM_RESET_NAME_V2_PROMPT_VERSION }),
+    ),
+    true,
+  );
+  assert.equal(
+    isSafeStoredAiResetName(
+      acceptedRecord({ ai_prompt_version: RANDOM_RESET_NAME_V2_PROMPT_VERSION }),
+    ),
+    true,
+  );
+});
+
+test("production v3 naming accepts one grounded name per locale", () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "Never slept better and feeling reseted. Brand new me and brand new usage for all ChatGPT Work and Codex users. Regaining my youth one button press at a time.";
+
+  const result = parseRandomResetNameV3Response(
+    {
+      nameJa: "快眠若返り記念リセット",
+      nameEn: "Better Sleep, New Me Reset",
+      nameZh: "睡得更好、焕然一新重置",
+      reason: "原文の快眠と若返りの表現を、3言語で同じ出来事として要約した。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+
+  assert.equal(result.status, "success");
+  assert.equal(result.name, "快眠若返り記念リセット");
+  assert.equal(result.nameEn, "Better Sleep, New Me Reset");
+  assert.equal(result.nameZh, "睡得更好、焕然一新重置");
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+  assert.equal(assessRandomResetNameResult(result).status, "accepted");
+  const payload = getResetDisplayNameWritePayload({
+    eventKey: "tibo-reset-2086188036493344823",
+    sourceTweetId: "2086188036493344823",
+    inputMode: "metadata+source",
+    inputHash: "localized-hash",
+    result,
+    existing: null,
+    generatedAt: "2026-08-28T00:00:00.000Z",
+  });
+  assert.equal(payload.ai_name_en, "Better Sleep, New Me Reset");
+  assert.equal(payload.ai_name_zh, "睡得更好、焕然一新重置");
+  assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /grounded metaphor, joke, phrase, mood, or motif/i);
+});
+
+test("production v3 naming rejects partial or generic localized output", () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "A weekend reset is live.";
+
+  const partial = parseRandomResetNameV3Response(
+    {
+      nameJa: "週末のリセット",
+      nameEn: null,
+      nameZh: "周末重置",
+      reason: "英語名がありません。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(partial.status, "invalid_schema");
+
+  const generic = parseRandomResetNameV3Response(
+    {
+      nameJa: "ランダムリセット",
+      nameEn: "Random reset",
+      nameZh: "随机重置",
+      reason: "具体的な特徴がない。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(generic.status, "success");
+  assert.equal(assessRandomResetNameResult(generic).status, "review_required");
+});
+
+test("production v3 Gemini request returns all locales with one API call", async () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = "Never slept better and feeling reseted. Brand new me and brand new usage for all ChatGPT Work and Codex users. Regaining my youth one button press at a time.";
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  let requestJson: string | null = null;
+  globalThis.fetch = async (_input, init) => {
+    requestCount += 1;
+    requestJson = String(init?.body);
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({
+        nameJa: "快眠若返り記念リセット",
+        nameEn: "Better Sleep, New Me Reset",
+        nameZh: "睡得更好、焕然一新重置",
+        reason: "原文の印象的な表現を要約した。",
+      }) }] } }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const result = await generateRandomResetName(input, {
+      apiKey: "test-key",
+      timeoutMs: 1_000,
+    });
+    assert.equal(requestCount, 1);
+    assert.equal(result.nameEn, "Better Sleep, New Me Reset");
+    assert.equal(result.nameZh, "睡得更好、焕然一新重置");
+    assert.equal(assessRandomResetNameResult(result).status, "accepted");
+    const capturedRequest = JSON.parse(requestJson ?? "{}") as {
+      contents?: Array<{ parts?: Array<{ text?: string }> }>;
+    };
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V3_SYSTEM_PROMPT);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("localized AI display names are selected without changing the public DTO", () => {
+  const item = resetItem();
+  const record = acceptedRecord({
+    ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
+    ai_name_ja: "快眠若返り記念リセット",
+    ai_name_en: "Better Sleep, New Me Reset",
+    ai_name_zh: "睡得更好、焕然一新重置",
+    ai_confidence: null,
+    ai_evidence: null,
+  });
+
+  assert.equal(resolveResetDisplayTitle(item, record, "ja"), "快眠若返り記念リセット");
+  assert.equal(resolveResetDisplayTitle(item, record, "en"), "Better Sleep, New Me Reset");
+  assert.equal(resolveResetDisplayTitle(item, record, "zh"), "睡得更好、焕然一新重置");
+  assert.equal(
+    resolveResetDisplayTitle({ ...item, title: "人手確認済みのリセット" }, record, "en"),
+    "人手確認済みのリセット",
+  );
+
+  const formalSignal = {
+    tweet_id: "2086188036493344823",
+    text: "Never slept better and feeling reseted.",
+    tweet_url: sourceUrl,
+    tweet_created_at: completedAt,
+    detected_at: completedAt,
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    verification_status: "confirmed" as const,
+    classification_source: "gemini",
+  };
+  const localizedData = getLocalRadarData({
+    formalTiboResets: [formalSignal],
+    resetDisplayNames: [record],
+  });
+  assert.equal(
+    getRadarViewModel(localizedData, "en", true, undefined, new Date("2026-08-09T00:00:00.000Z"))
+      .recentHistory[0]?.title,
+    "Better Sleep, New Me Reset",
+  );
+  assert.equal(
+    getRadarViewModel(localizedData, "zh", true, undefined, new Date("2026-08-09T00:00:00.000Z"))
+      .recentHistory[0]?.title,
+    "睡得更好、焕然一新重置",
+  );
+
+  const snapshot = toPublicRadarSnapshot(
+    localizedData,
+    "ja",
+    { calculationNow: new Date("2026-08-09T00:00:00.000Z") },
+  );
+  const serialized = JSON.stringify(snapshot);
+  assert.equal(serialized.includes("ai_name_en"), false);
+  assert.equal(serialized.includes("ai_name_zh"), false);
 });

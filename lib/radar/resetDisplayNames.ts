@@ -2,6 +2,7 @@ import type { Locale, ResetDisplayNameRecord, WindowEventLike } from "./types";
 import {
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_MAX_LENGTH,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
 } from "./randomResetNameConfig";
@@ -49,6 +50,25 @@ export function isSafeStoredAiResetName(record: ResetDisplayNameRecord | null | 
   }
 
   if (record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION) {
+    const hasLocalizedColumns = record.ai_name_en !== undefined || record.ai_name_zh !== undefined;
+    return (
+      record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      record.ai_name_ja.trim().endsWith("リセット") &&
+      (!hasLocalizedColumns || (
+        typeof record.ai_name_en === "string" &&
+        record.ai_name_en.trim().length > 0 &&
+        record.ai_name_en.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+        /reset$/i.test(record.ai_name_en.trim()) &&
+        typeof record.ai_name_zh === "string" &&
+        record.ai_name_zh.trim().length > 0 &&
+        record.ai_name_zh.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+        record.ai_name_zh.trim().endsWith("重置")
+      )) &&
+      (!record.ai_flags || record.ai_flags.length === 0)
+    );
+  }
+
+  if (record.ai_prompt_version === RANDOM_RESET_NAME_V2_PROMPT_VERSION) {
     return (
       record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
       record.ai_name_ja.trim().endsWith("リセット") &&
@@ -79,7 +99,7 @@ export function resolveJapaneseResetDisplayName(
     return currentTitle;
   }
 
-  if (isSafeStoredAiResetName(record)) {
+  if (isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
     return record!.ai_name_ja!.trim();
   }
 
@@ -91,9 +111,12 @@ export function resolveResetDisplayTitle(
   record: ResetDisplayNameRecord | null | undefined,
   locale: Locale,
 ) {
-  return locale === "ja"
-    ? resolveJapaneseResetDisplayName(item, record)
-    : item.title?.trim() || "ランダムリセット";
+  if (locale === "ja") return resolveJapaneseResetDisplayName(item, record);
+  if (isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
+    const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;
+    if (localizedName?.trim()) return localizedName.trim();
+  }
+  return item.title?.trim() || "ランダムリセット";
 }
 
 export function getResetDisplayNameSourceTweetId(item: WindowEventLike) {

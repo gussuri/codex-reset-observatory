@@ -39,6 +39,8 @@ import {
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
   getResetDisplayNameEventKey,
+  isGenericResetDisplayTitle,
+  isSafeStoredAiResetName,
   resolveJapaneseResetDisplayName,
   resolveResetDisplayTitle,
 } from "./radar/resetDisplayNames";
@@ -920,6 +922,11 @@ function getHistoryDisplayTitle(
     if (locale === "ja" || localizedManualName !== manualName) {
       return localizedManualName;
     }
+  }
+
+  if (locale !== "ja" && isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
+    const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;
+    if (localizedName?.trim()) return localizedName.trim();
   }
 
   if (isNoticeBackedRecoveryEvent(item)) {

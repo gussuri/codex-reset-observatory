@@ -6,6 +6,7 @@ import {
   RANDOM_RESET_NAME_MODEL,
   RANDOM_RESET_NAME_PROMPT_VERSION,
   RANDOM_RESET_NAME_TEMPERATURE,
+  RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_MAX_LENGTH,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
 } from "./randomResetNameConfig";
@@ -16,6 +17,7 @@ export {
   RANDOM_RESET_NAME_MODEL,
   RANDOM_RESET_NAME_PROMPT_VERSION,
   RANDOM_RESET_NAME_TEMPERATURE,
+  RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_MAX_LENGTH,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
 } from "./randomResetNameConfig";
@@ -87,6 +89,45 @@ Return JSON:
   "reason": "短い日本語の説明"
 }`;
 
+export const RANDOM_RESET_NAME_V3_SYSTEM_PROMPT = `You are an editor naming Codex usage-limit resets announced by Tibo.
+
+Read Tibo's original reset post and create one concise, natural display name in each
+of Japanese, English, and Simplified Chinese. All three names must describe the
+same grounded event-specific fact from the source post.
+
+Guidelines:
+
+- Prefer the most distinctive reason, milestone, product, circumstance, phrase,
+  or event in the source post.
+- If the source contains a clearly grounded metaphor, joke, phrase, mood, or motif
+  that helps identify this particular reset, it may be reflected naturally in the
+  names. Do not invent humor, embellish the event, or add unsupported facts.
+- Do not flatten a distinctive source expression into a generic audience or usage
+  limit description when the expression itself is the useful identifier.
+- Preserve source-supported distinctive product names, model names, concrete numbers,
+  and events when they are important for identification.
+- Do not invent an official name, cause, purpose, model, milestone, outage, or user count.
+- Do not mechanically include the reset classification, method, or target plan
+  unless it is needed to distinguish the event.
+- Do not begin a name with an author attribution such as "Tibo氏による".
+- Use natural phrasing for each language, not a word-for-word translation.
+- Keep each name concise and at most 40 characters.
+- The Japanese name must end with 「リセット」.
+- The English name must end with "Reset".
+- The Chinese name must end with 「重置」.
+- If the source is not distinctive enough, return null for all three names.
+
+Return only this JSON object:
+{
+  "nameJa": string | null,
+  "nameEn": string | null,
+  "nameZh": string | null,
+  "reason": "短い日本語の説明"
+}
+
+Use null for all three names together when no safe event-specific name is possible.
+Do not return a name in only one or two languages.`;
+
 export type RandomResetNameEvaluationInput = {
   completedAt: string;
   currentClassification: string;
@@ -112,6 +153,8 @@ export type RandomResetNameEvaluationStatus =
 
 export type RandomResetNameEvaluationResult = {
   name: string | null;
+  nameEn?: string | null;
+  nameZh?: string | null;
   confidence: number | null;
   evidence: string | null;
   reason: string | null;
@@ -269,6 +312,8 @@ function emptyResult(
 ): RandomResetNameGenerationResult {
   return {
     name: null,
+    nameEn: null,
+    nameZh: null,
     confidence: null,
     evidence: null,
     reason: null,
@@ -327,6 +372,8 @@ export function parseRandomResetNameResponse(
     : evidenceCorpus(input).includes(evidence);
   return {
     name,
+    nameEn: null,
+    nameZh: null,
     confidence: value.confidence,
     evidence,
     reason: value.reason.trim(),
@@ -384,11 +431,125 @@ export function parseRandomResetNameV2Response(
 
   return {
     name,
+    nameEn: null,
+    nameZh: null,
     confidence: null,
     evidence: null,
     reason,
     evidenceGrounded: null,
     flags: addV2SafetyFlags(input, name),
+    status: "success",
+    model,
+    promptVersion: RANDOM_RESET_NAME_V2_PROMPT_VERSION,
+    latencyMs,
+    httpStatus: 200,
+    retryAfterSeconds: null,
+  };
+}
+
+const GENERIC_LOCALIZED_NAMES = new Set([
+  "ランダムリセット",
+  "強制リセット",
+  "全体リセット",
+  "リセット",
+  "random reset",
+  "forced reset",
+  "reset",
+  "随机重置",
+  "强制重置",
+  "重置",
+]);
+
+function addV3SafetyFlags(
+  input: RandomResetNameEvaluationInput,
+  names: Array<string | null>,
+) {
+  const flags: string[] = [];
+  const source = input.sourcePostText?.trim() ?? "";
+  const normalizedSource = source.toLocaleLowerCase();
+
+  for (const name of names) {
+    if (!name) continue;
+    if (GENERIC_LOCALIZED_NAMES.has(name.toLocaleLowerCase())) {
+      flags.push("generic_only_name");
+    }
+
+    const namedTokens = name.match(/\b(?:tibo|gpt(?:[- ]?[0-9]+(?:\.[0-9]+)?)?|chatgpt|codex|luna|openai|gemini|claude|sora)\b/gi) ?? [];
+    if (namedTokens.some((token) => !normalizedSource.includes(token.toLocaleLowerCase()))) {
+      flags.push("unprovided_named_token");
+    }
+
+    const nameHasNumber = /\d|[万億千百]/.test(name);
+    const sourceHasNumber = /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|million)\b/i.test(source);
+    if (nameHasNumber && !sourceHasNumber) flags.push("unprovided_number");
+  }
+
+  return Array.from(new Set(flags));
+}
+
+export function parseRandomResetNameV3Response(
+  raw: unknown,
+  input: RandomResetNameEvaluationInput,
+  model: string,
+  latencyMs = 0,
+): RandomResetNameGenerationResult {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return emptyResult("invalid_schema", model, latencyMs);
+  }
+
+  const value = raw as Record<string, unknown>;
+  const hasNameField = (key: string) => Object.prototype.hasOwnProperty.call(value, key);
+  if (!hasNameField("nameJa") || !hasNameField("nameEn") || !hasNameField("nameZh")) {
+    return emptyResult("invalid_schema", model, latencyMs, 200);
+  }
+
+  const parseName = (key: string) => {
+    const candidate = value[key];
+    if (candidate === null) return null;
+    return typeof candidate === "string" && candidate.trim().length > 0
+      ? candidate.trim()
+      : undefined;
+  };
+  const nameJa = parseName("nameJa");
+  const nameEn = parseName("nameEn");
+  const nameZh = parseName("nameZh");
+  const reason = typeof value.reason === "string" ? value.reason.trim() : "";
+
+  if (
+    nameJa === undefined ||
+    nameEn === undefined ||
+    nameZh === undefined ||
+    !reason ||
+    reason.length > 300
+  ) {
+    return emptyResult("invalid_schema", model, latencyMs, 200);
+  }
+
+  const names = [nameJa, nameEn, nameZh];
+  const allNull = names.every((name) => name === null);
+  const allPresent = names.every((name) => typeof name === "string");
+  if (!allNull && !allPresent) {
+    return emptyResult("invalid_schema", model, latencyMs, 200);
+  }
+
+  if (
+    names.some((name) => typeof name === "string" && name.length > RANDOM_RESET_NAME_MAX_LENGTH) ||
+    (nameJa !== null && !nameJa.endsWith("リセット")) ||
+    (nameEn !== null && !/reset$/i.test(nameEn)) ||
+    (nameZh !== null && !nameZh.endsWith("重置"))
+  ) {
+    return emptyResult("invalid_schema", model, latencyMs, 200);
+  }
+
+  return {
+    name: nameJa,
+    nameEn,
+    nameZh,
+    confidence: null,
+    evidence: null,
+    reason,
+    evidenceGrounded: null,
+    flags: allNull ? [] : addV3SafetyFlags(input, [nameJa, nameEn, nameZh]),
     status: "success",
     model,
     promptVersion: RANDOM_RESET_NAME_PROMPT_VERSION,
@@ -411,9 +572,30 @@ export function assessRandomResetNameResult(
   if (result.status !== "success") {
     return { status: "invalid_response", displayName: null };
   }
-  if (result.name === null) return { status: "null", displayName: null };
 
   if (result.promptVersion === RANDOM_RESET_NAME_PROMPT_VERSION) {
+    const safe =
+      typeof result.name === "string" &&
+      typeof result.nameEn === "string" &&
+      typeof result.nameZh === "string" &&
+      result.name.length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      result.nameEn.length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      result.nameZh.length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      result.name.endsWith("リセット") &&
+      /reset$/i.test(result.nameEn) &&
+      result.nameZh.endsWith("重置") &&
+      result.flags.length === 0;
+    if (result.name === null && result.nameEn === null && result.nameZh === null) {
+      return { status: "null", displayName: null };
+    }
+    return safe
+      ? { status: "accepted", displayName: result.name }
+      : { status: "review_required", displayName: null };
+  }
+
+  if (result.name === null) return { status: "null", displayName: null };
+
+  if (result.promptVersion === RANDOM_RESET_NAME_V2_PROMPT_VERSION) {
     const safe =
       result.name.length <= RANDOM_RESET_NAME_MAX_LENGTH &&
       result.name.endsWith("リセット") &&
@@ -491,7 +673,7 @@ export async function generateRandomResetName(
     contents: [{
       role: "user",
       parts: [
-        { text: RANDOM_RESET_NAME_V2_SYSTEM_PROMPT },
+        { text: RANDOM_RESET_NAME_V3_SYSTEM_PROMPT },
         { text: buildRandomResetNamePrompt(input) },
       ],
     }],
@@ -532,7 +714,7 @@ export async function generateRandomResetName(
     } catch {
       return emptyResult("invalid_json", model, latencyMs, 200);
     }
-    return parseRandomResetNameV2Response(parsed, input, model, latencyMs);
+    return parseRandomResetNameV3Response(parsed, input, model, latencyMs);
   } catch (error) {
     const latencyMs = Math.round(performance.now() - startedAt);
     return emptyResult(

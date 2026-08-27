@@ -72,6 +72,8 @@ export type ResetDisplayNameRecord = {
   source_tweet_id: string | null;
   manual_name_ja: string | null;
   ai_name_ja: string | null;
+  ai_name_en?: string | null;
+  ai_name_zh?: string | null;
   ai_confidence: number | null;
   ai_evidence: string | null;
   ai_reason: string | null;
