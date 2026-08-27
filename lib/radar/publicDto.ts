@@ -257,9 +257,15 @@ export function toPublicTiboActivity(
     replyToHandles: latest.is_reply === true
       ? normalizePublicReplyHandles(latest.reply_to_handles)
       : [],
-    temporalResolutionStatus: latest.temporal_resolution_status ?? null,
-    expectedStartAt: latest.expected_start_at ?? null,
-    expectedEndAt: latest.expected_end_at ?? null,
+    ...(latest.temporal_resolution_status
+      ? { temporalResolutionStatus: latest.temporal_resolution_status }
+      : {}),
+    ...(latest.expected_start_at
+      ? { expectedStartAt: latest.expected_start_at }
+      : {}),
+    ...(latest.expected_end_at
+      ? { expectedEndAt: latest.expected_end_at }
+      : {}),
   };
 }
 
