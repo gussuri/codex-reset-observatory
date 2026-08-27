@@ -399,7 +399,10 @@ test("renders the random reset time heatmap after history with a timezone-free S
     assert.match(html, new RegExp(`aria-busy="true"[^>]*aria-label="${headings[locale]}"`));
     assert.doesNotMatch(html, /Raw count|Weighted share|加权构成比/);
     assert.doesNotMatch(html, /実際のシステム実行時刻|Some records may reflect|部分记录反映/);
-    assert.doesNotMatch(html, /Asia\/Tokyo|JST|00:00–02:00/);
+    const heatmapSectionStart = html.lastIndexOf("<section", heatmapIndex);
+    const heatmapSectionEnd = html.indexOf("</section>", intervalIndex);
+    const heatmapSection = html.slice(heatmapSectionStart, heatmapSectionEnd + "</section>".length);
+    assert.doesNotMatch(heatmapSection, /Asia\/Tokyo|JST|00:00–02:00/);
   }
 });
 

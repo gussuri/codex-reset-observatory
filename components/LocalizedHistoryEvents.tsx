@@ -170,17 +170,18 @@ export function LocalizedHistoryEvents({
   items: HistoryItem[];
   locale: Locale;
 }) {
-  const [timeZone, setTimeZone] = useState<string | null>(null);
+  // Keep month headings crawlable during SSR using the same deterministic
+  // JST fallback as LocalizedDateTime, then regroup in the viewer's zone.
+  const [timeZone, setTimeZone] = useState<string>(DISPLAY_TIME_ZONE);
 
   useEffect(() => {
     setTimeZone(getBrowserTimeZone());
   }, []);
 
-  const groups = timeZone ? groupHistoryByMonth(items, locale, timeZone) : null;
+  const groups = groupHistoryByMonth(items, locale, timeZone);
 
   return (
     <section
-      aria-busy={!timeZone}
       className="rounded-lg border border-slate-200 bg-white/90 p-5 shadow-sm"
     >
       <header className="border-b border-slate-100 pb-4">
@@ -189,7 +190,7 @@ export function LocalizedHistoryEvents({
       <div className="mt-5 space-y-7">
         {items.length === 0 ? (
           <p className="text-sm leading-6 text-slate-600">{empty}</p>
-        ) : groups ? (
+        ) : (
           groups.map((group) => (
             <div key={group.label}>
               <h3 className="text-sm font-semibold text-teal-800">{group.label}</h3>
@@ -200,15 +201,6 @@ export function LocalizedHistoryEvents({
               </div>
             </div>
           ))
-        ) : (
-          <div>
-            <div aria-hidden="true" className="h-4 w-32 rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none" />
-            <div className="mt-2 divide-y divide-slate-100">
-              {items.map((item) => (
-                <HistoryItemRow item={item} key={item.key} locale={locale} />
-              ))}
-            </div>
-          </div>
         )}
       </div>
     </section>

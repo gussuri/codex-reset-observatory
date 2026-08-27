@@ -920,11 +920,12 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
 
     assert.ok(currentStatusStart >= 0);
     assert.ok(historyStart > currentStatusStart);
-    assert.doesNotMatch(html, new RegExp(escapeRegExp(translateUI("latestReset", locale))));
-    assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyLabels[locale])));
-    assert.doesNotMatch(html, new RegExp(escapeRegExp(weeklyNotes[locale])));
-    assert.doesNotMatch(html, new RegExp(escapeRegExp(forecast.date)));
-    assert.doesNotMatch(html, new RegExp(escapeRegExp(forecast.remaining)));
+    const currentStatusHtml = html.slice(currentStatusStart, historyStart);
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(translateUI("latestReset", locale))));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(weeklyLabels[locale])));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(weeklyNotes[locale])));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(forecast.date)));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(forecast.remaining)));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within48h", locale))));
     assert.doesNotMatch(html, new RegExp(escapeRegExp(translateUI("within12h", locale))));
