@@ -277,10 +277,13 @@ export async function POST(req: NextRequest) {
         }
       : baseClassificationResponse;
 
-    const temporalSemantics = effectiveClassification.signalType === "official_notice"
+    const hasForwardTimingSignal =
+      effectiveClassification.signalType === "official_notice" ||
+      effectiveClassification.signalType === "teaser";
+    const temporalSemantics = hasForwardTimingSignal
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
-    const temporalResolution = effectiveClassification.signalType === "official_notice"
+    const temporalResolution = hasForwardTimingSignal
       ? resolveTiboTemporalSchedule(
           temporalSemantics,
           createdDate.toISOString(),

@@ -611,3 +611,35 @@ test("rejects contradictory or vague source clocks and replaces hallucinated clo
   assert.deepEqual(hallucinated.explicitTimeParts, { hour: 9, minute: 0 });
   assert.equal(hallucinated.temporalKind, "relative_day");
 });
+
+
+test("recovers a cross-sentence tomorrow window when a historical reset button is reused", () => {
+  const source = "A good thing about having aged is that I feel that it’s been 20 years since I’ve pressed the reset button. Intrigued to see if I can find it tomorrow and dust it up";
+  const parsed = parseTiboTemporalSemantics(
+    {
+      temporalExpression: null,
+      temporalKind: "none",
+      temporalPrecision: "unknown",
+      relativeDayOffset: null,
+      explicitTimeParts: null,
+      explicitTimezone: null,
+      temporalConfidence: 1,
+    },
+    source,
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.temporalExpression, "tomorrow");
+  assert.equal(parsed.temporalKind, "relative_day");
+  assert.equal(parsed.temporalPrecision, "day");
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.equal(parsed.resolutionSource, "deterministic");
+  const resolved = resolveTiboTemporalSchedule(parsed, "2026-08-27T06:31:31.000Z", TIBO_SOURCE_TIME_ZONE);
+  assert.equal(resolved.status, "resolved");
+  assert.equal(resolved.expectedStartAt, "2026-08-27T07:00:00.000Z");
+  assert.equal(resolved.expectedEndAt, "2026-08-28T07:00:00.000Z");
+});
+
+test("does not infer teaser timing from an unrelated tomorrow sentence or non-usage reset button", () => {
+  assert.equal(parseTiboTemporalSemantics(null, "It has been 20 years since I pressed the reset button. Tomorrow I am going hiking."), null);
+  assert.equal(parseTiboTemporalSemantics(null, "My laptop reset button is ancient. I might find it tomorrow and dust it up."), null);
+});

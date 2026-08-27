@@ -156,6 +156,12 @@ const SOURCE_DAY_PATTERN =
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
 const RESET_CUE_PATTERN =
   /\b(?:reset|resets|resetting|quota|usage limits?|rate limits?|land(?:s|ed|ing)?|refresh(?:ed|es|ing)?|performative)\b/i;
+const RESET_BUTTON_REUSE_ACTION_PATTERN =
+  /\b(?:find|press|hit|use|reuse)\s+(?:it|the\s+reset\s+button)\b|\b(?:dust\s+it\s+up|bring\s+it\s+back|take\s+it\s+out)\b/i;
+const RESET_BUTTON_REUSE_NEGATION_PATTERN =
+  /\b(?:can(?:not|'t)|won't|will\s+not|not\s+going\s+to)\b[^.!?]{0,100}\b(?:find|press|hit|use|reuse|dust|bring|take)\b/i;
+const NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN =
+  /\b(?:keyboard|laptop|phone|router|server|device|controller|console|game|car|factory\s+reset)\b/i;
 const VAGUE_DAY_PATTERN = /\b(?:sometime|some time|soon|later|in a while)\b/i;
 
 type DeterministicTemporalExtraction = {
@@ -401,6 +407,47 @@ function buildSourceDayCandidate(
   };
 }
 
+function buildResetButtonReuseDayCandidate(sourceText: string): SourceTemporalCandidate | null {
+  const resetButton = /\breset\s+button\b/i.exec(sourceText);
+  if (!resetButton || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(sourceText)) return null;
+
+  const tailStart = (resetButton.index ?? 0) + resetButton[0].length;
+  const tail = sourceText.slice(tailStart, tailStart + 320);
+  if (!RESET_BUTTON_REUSE_ACTION_PATTERN.test(tail) || RESET_BUTTON_REUSE_NEGATION_PATTERN.test(tail)) return null;
+
+  const dayMatches = Array.from(tail.matchAll(SOURCE_DAY_PATTERN));
+  if (dayMatches.length !== 1) return null;
+  const dayMatch = dayMatches[0];
+  const value = dayMatch[1].toLowerCase();
+  const weekday = WEEKDAYS.includes(value as TemporalWeekday) ? value as TemporalWeekday : null;
+  const relativeDayOffset = value === "today" ? 0 : value === "tomorrow" ? 1 : null;
+  if (relativeDayOffset === null && !weekday) return null;
+
+  const index = tailStart + (dayMatch.index ?? 0);
+  const day: SourceDay = { value, index, end: index + dayMatch[0].length };
+  return {
+    clock: null,
+    day,
+    timezone: null,
+    semantics: {
+      temporalExpression: sourceText.slice(day.index, day.end),
+      temporalKind: relativeDayOffset !== null ? "relative_day" : "weekday",
+      temporalPrecision: "day",
+      weekday,
+      relativeDayOffset,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
+      resolutionSource: "deterministic",
+    },
+  };
+}
+
 function parseDeterministicTemporalSemantics(sourceText: string): DeterministicTemporalExtraction {
   const candidates: SourceTemporalCandidate[] = [];
   let rejected = false;
@@ -421,6 +468,11 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
         if (candidate) candidates.push(candidate);
       }
     }
+  }
+
+  if (candidates.length === 0 && !rejected) {
+    const resetButtonReuse = buildResetButtonReuseDayCandidate(sourceText);
+    if (resetButtonReuse) candidates.push(resetButtonReuse);
   }
 
   return {
@@ -633,6 +685,12 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
       : sourceExtraction.semantics;
   }
   if (candidates.length === 0) return geminiSemantics;
+  if (
+    candidates.length === 1 &&
+    (geminiSemantics.temporalKind === "none" || geminiSemantics.temporalKind === "vague")
+  ) {
+    return candidates[0].semantics;
+  }
 
   const matchesGeminiDay = (candidate: SourceTemporalCandidate) => {
     if (
