@@ -1017,3 +1017,36 @@ test("current API keeps its shared cache and excludes responses from search inde
   assert.match(routeSource, /"Cache-Control": API_CACHE_CONTROL/);
   assert.match(routeSource, /"X-Robots-Tag": "noindex, nofollow"/);
 });
+
+
+test("public Tibo activity exposes only resolved teaser window timestamps needed for localized outlook rendering", () => {
+  const calculationNow = new Date("2026-08-27T08:30:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [{
+        tweet_id: "public-timed-teaser",
+        signal_type: "teaser",
+        text: "Reset button tomorrow.",
+        tweet_url: "https://x.com/thsottiaux/status/public-timed-teaser",
+        tweet_created_at: "2026-08-27T06:31:31.000Z",
+        expires_at: "2026-08-28T10:00:00.000Z",
+        confidence: 0.9,
+        verification_status: "confirmed",
+        teaser_strength: "strong",
+        is_reply: false,
+        temporal_resolution_status: "resolved",
+        temporal_precision: "day",
+        temporal_confidence: 0.95,
+        expected_start_at: "2026-08-27T07:00:00.000Z",
+        expected_end_at: "2026-08-28T07:00:00.000Z",
+      }],
+    }),
+    "en",
+    { calculationNow },
+  );
+
+  assert.equal(snapshot.latestTiboActivity?.temporalResolutionStatus, "resolved");
+  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, "2026-08-27T07:00:00.000Z");
+  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-08-28T07:00:00.000Z");
+});

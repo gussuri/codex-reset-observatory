@@ -208,6 +208,71 @@ function getCompactOutlookReason(
   return reason?.trim() || translateUI("outlookUnavailable", locale);
 }
 
+function getTimedTeaserOutlookTemplate(
+  activity: PublicRadarSnapshot["latestTiboActivity"] | null | undefined,
+  resetTeaserStatus: ResetTeaserStatus,
+  fetchedAt: string | null | undefined,
+  locale: Locale,
+) {
+  if (
+    !activity ||
+    activity.classification !== "teaser" ||
+    activity.temporalResolutionStatus !== "resolved" ||
+    !activity.expectedStartAt ||
+    !activity.expectedEndAt ||
+    (resetTeaserStatus !== "strong" && resetTeaserStatus !== "weak")
+  ) {
+    return null;
+  }
+
+  const start = Date.parse(activity.expectedStartAt);
+  const end = Date.parse(activity.expectedEndAt);
+  const observedAt = fetchedAt ? Date.parse(fetchedAt) : Number.NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return null;
+  }
+
+  const isGracePeriod = Number.isFinite(observedAt) && observedAt > end;
+  const key = isGracePeriod
+    ? resetTeaserStatus === "strong"
+      ? "outlookStrongTimedTeaserGrace"
+      : "outlookWeakTimedTeaserGrace"
+    : resetTeaserStatus === "strong"
+      ? "outlookStrongTimedTeaser"
+      : "outlookWeakTimedTeaser";
+
+  return {
+    template: translateUI(key, locale),
+    startAt: activity.expectedStartAt,
+    endAt: activity.expectedEndAt,
+  };
+}
+
+function TimedTeaserOutlook({
+  template,
+  startAt,
+  endAt,
+  locale,
+}: {
+  template: string;
+  startAt: string;
+  endAt: string;
+  locale: Locale;
+}) {
+  const [beforeStart, afterStart = ""] = template.split("{start}", 2);
+  const [between, afterEnd = ""] = afterStart.split("{end}", 2);
+
+  return (
+    <>
+      {beforeStart}
+      <LocalizedDateTime value={startAt} locale={locale} timeClassName="font-normal text-slate-700" />
+      {between}
+      <LocalizedDateTime value={endAt} locale={locale} timeClassName="font-normal text-slate-700" />
+      {afterEnd}
+    </>
+  );
+}
+
 function ObservationStatusItem({
   icon: Icon,
   label,
@@ -534,6 +599,12 @@ export function RadarDashboard({
         : viewModel.displayReasoningSummary,
     locale,
   );
+  const timedTeaserOutlook = getTimedTeaserOutlookTemplate(
+    selectedTiboActivity,
+    resetTeaserStatus,
+    state.fetchedAt,
+    locale,
+  );
   const visibleHistory = viewModel.recentHistory.filter(
     (item) => item.recordKind === "confirmed_global" ||
       item.recordKind === "banked_distribution" ||
@@ -769,7 +840,19 @@ export function RadarDashboard({
 
             <dl className="mt-4 space-y-3">
               {compactOutlookReason ? (
-                <RecommendationRow reason={compactOutlookReason} locale={locale} />
+                <RecommendationRow
+                  reason={
+                    timedTeaserOutlook ? (
+                      <TimedTeaserOutlook
+                        template={timedTeaserOutlook.template}
+                        startAt={timedTeaserOutlook.startAt}
+                        endAt={timedTeaserOutlook.endAt}
+                        locale={locale}
+                      />
+                    ) : compactOutlookReason
+                  }
+                  locale={locale}
+                />
               ) : null}
             </dl>
 
@@ -987,7 +1070,7 @@ function RecommendationRow({
   reason,
   locale = "ja",
 }: {
-  reason: string;
+  reason: React.ReactNode;
   locale?: Locale;
 }) {
   return (

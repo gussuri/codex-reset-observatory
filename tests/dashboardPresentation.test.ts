@@ -1461,3 +1461,57 @@ test("joins display outlook sentences without locale-specific spacing errors", (
     }
   }
 });
+
+
+test("timed teaser outlook renders crawlable JST on SSR before browser-local hydration", () => {
+  const calculationNow = new Date("2026-08-27T08:30:00.000Z");
+  const internal = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [{
+      tweet_id: "localized-timed-teaser-outlook",
+      signal_type: "teaser",
+      text: "Reset button tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/localized-timed-teaser-outlook",
+      tweet_created_at: "2026-08-27T06:31:31.000Z",
+      expires_at: "2026-08-28T10:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      teaser_strength: "strong",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      temporal_confidence: 0.95,
+      expected_start_at: "2026-08-27T07:00:00.000Z",
+      expected_end_at: "2026-08-28T07:00:00.000Z",
+    }],
+    recentTiboSignals: [{
+      tweet_id: "localized-timed-teaser-outlook",
+      signal_type: "teaser",
+      text: "Reset button tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/localized-timed-teaser-outlook",
+      tweet_created_at: "2026-08-27T06:31:31.000Z",
+      expires_at: "2026-08-28T10:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      teaser_strength: "strong",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      temporal_confidence: 0.95,
+      expected_start_at: "2026-08-27T07:00:00.000Z",
+      expected_end_at: "2026-08-28T07:00:00.000Z",
+    }],
+  });
+  const snapshot = toPublicRadarSnapshot(internal, "ja", { calculationNow });
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: snapshot,
+      initialFetchedAt: calculationNow.toISOString(),
+      locale: "ja",
+    }),
+  );
+
+  assert.match(html, /Tiboがリセットを強く示唆しています/);
+  assert.match(html, /<time[^>]*dateTime="2026-08-27T07:00:00\.000Z"[^>]*>2026年8月27日 16:00 JST<\/time>/);
+  assert.match(html, /<time[^>]*dateTime="2026-08-28T07:00:00\.000Z"[^>]*>2026年8月28日 16:00 JST<\/time>/);
+});
