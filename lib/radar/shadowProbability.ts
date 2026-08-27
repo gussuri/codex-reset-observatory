@@ -44,6 +44,7 @@ import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTemporalNoticeCoverage } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
+export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v1";
 
 export type ShadowResetEvent = {
   id: string;
@@ -110,6 +111,8 @@ export type ShadowSignalInputs = {
   recentResetCount7d: number;
   regularResetProximity: number;
   teaserScore: number;
+  teaserScore24h?: number;
+  teaserScore48h?: number;
   teaserStrengthMultiplier?: ShadowProbabilityPair;
   normalizedStatusScore: number;
   officialIncidentHintCount: number;
@@ -464,6 +467,8 @@ export function calculateShadowSignalMultipliers(
   const recentResetMultiplier = 1;
   const regularResetMultiplier = 1;
   const teaserScore = clamp01(input.teaserScore);
+  const teaserScore24h = clamp01(input.teaserScore24h ?? teaserScore);
+  const teaserScore48h = clamp01(input.teaserScore48h ?? teaserScore);
   const statusScore = clamp01(input.normalizedStatusScore);
   const communityScore = clamp01(input.communityScore);
   const anomalyScore = clamp01(input.usageLimitAnomalyScore);
@@ -477,8 +482,8 @@ export function calculateShadowSignalMultipliers(
     recentResetMomentum: pair(recentResetMultiplier, recentResetMultiplier),
     regularResetProximity: pair(regularResetMultiplier, regularResetMultiplier),
     teaser: pair(
-      1 + teaserScore * config.teaser.probability24h,
-      1 + teaserScore * config.teaser.probability48h,
+      1 + teaserScore24h * config.teaser.probability24h,
+      1 + teaserScore48h * config.teaser.probability48h,
     ),
     teaserStrength: input.teaserStrengthMultiplier ?? pair(1, 1),
     statusSignal: pair(
@@ -582,6 +587,68 @@ function getEligibleFormalTeaserSignals(
   });
 }
 
+function getTeaserTimingCoverage(
+  signal: {
+    temporal_resolution_status?: string | null;
+    temporal_precision?: string | null;
+    temporal_confidence?: number | null;
+    expected_start_at?: string | null;
+    expected_end_at?: string | null;
+  },
+  now: Date,
+  horizonHours: 24 | 48,
+) {
+  const coverage = getTemporalNoticeCoverage({
+    status: signal.temporal_resolution_status === "resolved" ? "resolved" : "unresolved",
+    temporalPrecision:
+      signal.temporal_precision === "exact_time" ||
+      signal.temporal_precision === "day" ||
+      signal.temporal_precision === "daypart" ||
+      signal.temporal_precision === "range"
+        ? signal.temporal_precision
+        : "unknown",
+    confidence: signal.temporal_confidence ?? null,
+    expectedStartAt: signal.expected_start_at ?? null,
+    expectedEndAt: signal.expected_end_at ?? null,
+  }, now, horizonHours);
+  return coverage ?? 1;
+}
+
+function getTimedFormalTeaserScores(
+  data: RadarData | null,
+  now: Date,
+  latestResetTime: number | null,
+  localObservationSignals: Array<LocalObservationSignal>,
+) {
+  const hasActiveLocalBoost = localObservationSignals.some((signal) => {
+    const observedAt = getTimestamp(signal.observedAt);
+    return Boolean(
+      observedAt !== null &&
+      observedAt <= now.getTime() &&
+      getEffectiveSignalStatus(signal, now) === "active" &&
+      (signal.type === "probability_boost" ||
+        typeof signal.boostValue24h === "number" ||
+        typeof signal.boostValue48h === "number" ||
+        typeof signal.boostValue === "number"),
+    );
+  });
+  if (hasActiveLocalBoost) return null;
+
+  const dynamicTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
+  if (dynamicTeasers.length === 0) return null;
+
+  return pair(
+    Math.max(...dynamicTeasers.map((signal) =>
+      getTeaserDecayFactor(signal.tweet_created_at, now) *
+      getTeaserTimingCoverage(signal, now, 24),
+    )),
+    Math.max(...dynamicTeasers.map((signal) =>
+      getTeaserDecayFactor(signal.tweet_created_at, now) *
+      getTeaserTimingCoverage(signal, now, 48),
+    )),
+  );
+}
+
 function getTeaserScore(
   data: RadarData | null,
   now: Date,
@@ -644,6 +711,11 @@ function getTeaserStrengthSourceSignals(data: RadarData | null) {
       is_reply: signal.is_reply,
       is_secondary_future_signal: signal.is_secondary_future_signal,
       primary_event_at: signal.primary_event_at,
+      temporal_precision: signal.temporal_precision ?? null,
+      temporal_confidence: signal.temporal_confidence ?? null,
+      expected_start_at: signal.expected_start_at ?? null,
+      expected_end_at: signal.expected_end_at ?? null,
+      temporal_resolution_status: signal.temporal_resolution_status ?? null,
     }];
   });
 }
@@ -683,7 +755,8 @@ function getTeaserStrengthMultiplier(
           now,
           config.teaserStrength.lookbackHours,
         );
-        return 1 + (initial.multiplier24h - 1) * progress;
+        return 1 + (initial.multiplier24h - 1) * progress *
+          getTeaserTimingCoverage(signal, now, 24);
       }),
     ),
     Math.max(
@@ -696,7 +769,8 @@ function getTeaserStrengthMultiplier(
           now,
           config.teaserStrength.lookbackHours,
         );
-        return 1 + (initial.multiplier48h - 1) * progress;
+        return 1 + (initial.multiplier48h - 1) * progress *
+          getTeaserTimingCoverage(signal, now, 48);
       }),
     ),
   );
@@ -729,10 +803,14 @@ export function getShadowSignalInputs(
   signalMultiplierConfig: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
+  const teaserScore = getTeaserScore(data, now, latestResetTime, localObservationSignals);
+  const timedTeaserScores = getTimedFormalTeaserScores(data, now, latestResetTime, localObservationSignals);
   return {
     recentResetCount7d: getRecent7DayResetCount(data, now),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
-    teaserScore: getTeaserScore(data, now, latestResetTime, localObservationSignals),
+    teaserScore,
+    teaserScore24h: timedTeaserScores?.probability24h ?? teaserScore,
+    teaserScore48h: timedTeaserScores?.probability48h ?? teaserScore,
     teaserStrengthMultiplier: includeTeaserStrengthBoost
       ? getTeaserStrengthMultiplier(data, now, latestResetTime, signalMultiplierConfig)
       : pair(1, 1),

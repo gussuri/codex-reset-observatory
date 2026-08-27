@@ -17,6 +17,11 @@ export type ResetTeaserSignal = {
   verification_status?: string | null;
   is_reply?: boolean | null;
   expires_at?: string | null;
+  temporal_precision?: "exact_time" | "day" | "daypart" | "range" | "unknown" | null;
+  temporal_confidence?: number | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: "resolved" | "unresolved" | "rejected" | null;
   secondary_signal?: TiboSecondarySignal | null;
   is_secondary_future_signal?: boolean;
   primary_event_at?: string;

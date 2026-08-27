@@ -12,6 +12,7 @@ import {
   applyOddsMultiplier,
   derive12hFrom24hProbability,
   derive72hFrom48hProbability,
+  TEASER_TIMING_POLICY_VERSION,
   type ShadowProbabilityHorizons,
   type ShadowProbabilityOptions,
 } from "./shadowProbability";
@@ -75,6 +76,7 @@ export type NextGenerationBResult = {
     probability72h: number | null;
   };
   officialNoticeTimingPolicyVersion: string;
+  teaserTimingPolicyVersion: typeof TEASER_TIMING_POLICY_VERSION;
   randomContinuous: RandomContinuousProbabilityResult["randomContinuous"];
   randomContinuousResult: RandomContinuousProbabilityResult;
   freezeAt: typeof NEXT_GENERATION_FREEZE_AT;
@@ -289,6 +291,7 @@ export function calculateNextGenerationBProbability(
       probability72h: noticeHorizons?.probability72h ?? null,
     },
     officialNoticeTimingPolicyVersion: "official-notice-window-v3",
+    teaserTimingPolicyVersion: TEASER_TIMING_POLICY_VERSION,
     randomContinuous: randomContinuousResult.randomContinuous,
     randomContinuousResult,
     freezeAt: NEXT_GENERATION_FREEZE_AT,
