@@ -142,14 +142,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "已确认有暗示重置的帖子，重置的可能性高于平时。",
   },
   outlookStrongTimedTeaser: {
-    ja: "強いリセット匂わせ投稿が確認されています。示唆された時期（{start}〜{end}）と匂わせの強さを24時間・48時間予測に反映しています。",
-    en: "A strong reset hint has been confirmed. Both the hinted window ({start}–{end}) and the hint strength are reflected in the 24h and 48h forecasts.",
-    zh: "已确认有较强的重置暗示。预测已将暗示的时间窗口（{start}至{end}）和暗示强度纳入24小时和48小时预测。",
+    ja: "Tiboがリセットを強く示唆しています。示唆された時間帯は{start}〜{end}で、通常よりリセットの可能性が高まっています。",
+    en: "Tibo is strongly hinting at a reset. The hinted window is {start}–{end}, so the chance of a reset is higher than usual.",
+    zh: "Tibo 正在强烈暗示可能会重置。暗示的时间窗口为{start}至{end}，因此重置的可能性高于平时。",
   },
   outlookStrongTimedTeaserGrace: {
-    ja: "リセットを示唆した時期（{start}〜{end}）を過ぎていますが、直後のため匂わせの影響を段階的に減らしながら予測に反映しています。",
-    en: "The hinted reset window ({start}–{end}) has passed, but because it ended recently, its effect is being phased out gradually in the forecast.",
-    zh: "暗示的重置时间窗口（{start}至{end}）已经结束，但由于刚刚结束，其影响正在预测中逐步减弱。",
+    ja: "Tiboが示唆した時間帯（{start}〜{end}）は過ぎましたが、直後のためリセットの可能性はまだ通常より高めです。",
+    en: "The window Tibo hinted at ({start}–{end}) has passed, but it ended recently, so the chance of a reset is still higher than usual.",
+    zh: "Tibo 暗示的时间窗口（{start}至{end}）已经结束，但由于刚刚结束，重置的可能性目前仍高于平时。",
   },
   outlookActiveIncident: {
     ja: "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。",
@@ -162,14 +162,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "目前有一条较弱的重置暗示。",
   },
   outlookWeakTimedTeaser: {
-    ja: "弱いリセット匂わせ投稿があります。示唆された時期（{start}〜{end}）を24時間・48時間予測に反映しています。",
-    en: "A weak reset hint is present. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
-    zh: "目前有一条较弱的重置暗示。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
+    ja: "Tiboがリセットの可能性をほのめかしています。示唆された時間帯は{start}〜{end}で、リセットの見込みがやや高まっています。",
+    en: "Tibo may be hinting at a reset. The hinted window is {start}–{end}, so the chance of a reset is slightly higher than usual.",
+    zh: "Tibo 可能在暗示会有重置。暗示的时间窗口为{start}至{end}，因此重置的可能性略高于平时。",
   },
   outlookWeakTimedTeaserGrace: {
-    ja: "弱いリセット匂わせで示唆された時期（{start}〜{end}）を過ぎていますが、直後のため影響を段階的に減らしながら予測に反映しています。",
-    en: "The weak hinted reset window ({start}–{end}) has passed, but because it ended recently, its effect is being phased out gradually in the forecast.",
-    zh: "较弱暗示中的重置时间窗口（{start}至{end}）已经结束，但由于刚刚结束，其影响正在预测中逐步减弱。",
+    ja: "Tiboがほのめかした時間帯（{start}〜{end}）は過ぎましたが、直後のためリセットの見込みはまだ少し高めです。",
+    en: "The window Tibo hinted at ({start}–{end}) has passed, but it ended recently, so the chance of a reset is still slightly higher than usual.",
+    zh: "Tibo 暗示的时间窗口（{start}至{end}）已经结束，但由于刚刚结束，重置的可能性目前仍略高于平时。",
   },
   outlookUsageAnomaly: {
     ja: "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。",

@@ -479,10 +479,13 @@ test("current outlook includes a localized resolved teaser window in all support
   const en = getDisplayProbabilityReason(data, 0.54, 0.79, "en", evaluation, null, now);
   const zh = getDisplayProbabilityReason(data, 0.54, 0.79, "zh", evaluation, null, now);
 
-  assert.match(ja ?? "", /示唆された時期/);
+  assert.match(ja ?? "", /Tiboがリセットを強く示唆/);
+  assert.match(ja ?? "", /示唆された時間帯/);
   assert.match(ja ?? "", /2026\/08\/27/);
+  assert.match(en ?? "", /Tibo is strongly hinting at a reset/);
   assert.match(en ?? "", /hinted window/);
   assert.match(en ?? "", /08\/27\/2026/);
+  assert.match(zh ?? "", /Tibo 正在强烈暗示/);
   assert.match(zh ?? "", /时间窗口/);
   assert.match(zh ?? "", /2026\/08\/27/);
 });
@@ -517,9 +520,9 @@ test("current outlook explains the gradual fade during a timed teaser grace peri
   const en = getDisplayProbabilityReason(data, 0.50, 0.75, "en", evaluation, null, now);
   const zh = getDisplayProbabilityReason(data, 0.50, 0.75, "zh", evaluation, null, now);
 
-  assert.match(ja ?? "", /段階的に減らしながら/);
-  assert.match(en ?? "", /phased out gradually/);
-  assert.match(zh ?? "", /逐步减弱/);
+  assert.match(ja ?? "", /まだ通常より高め/);
+  assert.match(en ?? "", /still higher than usual/);
+  assert.match(zh ?? "", /仍高于平时/);
 });
 
 
@@ -551,10 +554,10 @@ test("strong timed teaser outlook says strength is included in all supported loc
   const en = getDisplayProbabilityReason(data, 0.65, 0.85, "en", evaluation, null, now);
   const zh = getDisplayProbabilityReason(data, 0.65, 0.85, "zh", evaluation, null, now);
 
-  assert.match(ja ?? "", /強いリセット匂わせ/);
-  assert.match(ja ?? "", /匂わせの強さ/);
-  assert.match(en ?? "", /strong reset hint/);
-  assert.match(en ?? "", /hint strength/);
-  assert.match(zh ?? "", /较强的重置暗示/);
-  assert.match(zh ?? "", /暗示强度/);
+  assert.match(ja ?? "", /Tiboがリセットを強く示唆/);
+  assert.match(ja ?? "", /通常よりリセットの可能性が高まっています/);
+  assert.match(en ?? "", /Tibo is strongly hinting at a reset/);
+  assert.match(en ?? "", /chance of a reset is higher than usual/);
+  assert.match(zh ?? "", /Tibo 正在强烈暗示/);
+  assert.match(zh ?? "", /重置的可能性高于平时/);
 });
