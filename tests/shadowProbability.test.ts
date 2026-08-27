@@ -26,7 +26,10 @@ import {
   probabilityToOdds,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
-import { getLocalProbabilityCalculation } from "../lib/radar/probability";
+import {
+  getLocalProbabilityCalculation,
+  getLocalSignalEvaluation,
+} from "../lib/radar/probability";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
