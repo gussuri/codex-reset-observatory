@@ -643,3 +643,68 @@ test("untimed formal teasers keep the existing horizon boost behavior", () => {
   assert.equal(multipliers.teaser.probability24h, 1.8);
   assert.equal(multipliers.teaser.probability48h, 2.2);
 });
+
+
+test("resolved timed teasers do not decay just because the post gets older inside the hinted window", () => {
+  const signal = {
+    tweet_id: "timed-no-age-decay",
+    signal_type: "teaser" as const,
+    text: "Reset button tomorrow.",
+    tweet_url: "https://x.com/thsottiaux/status/timed-no-age-decay",
+    tweet_created_at: "2026-08-04T00:00:00.000Z",
+    expires_at: "2026-08-06T03:00:00.000Z",
+    confidence: 0.9,
+    verification_status: "confirmed" as const,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_confidence: 1,
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  };
+
+  for (const now of [
+    new Date("2026-08-05T01:00:00.000Z"),
+    new Date("2026-08-05T12:00:00.000Z"),
+    new Date("2026-08-05T23:00:00.000Z"),
+  ]) {
+    const data = getLocalRadarData({ calculationNow: now, activeTiboSignals: [signal] });
+    const evaluation = getLocalSignalEvaluation(data, now);
+    const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+    const multipliers = calculateShadowSignalMultipliers(inputs);
+    assert.equal(inputs.teaserScore24h, 1);
+    assert.equal(inputs.teaserScore48h, 1);
+    assert.equal(multipliers.teaser.probability24h, 1.8);
+    assert.equal(multipliers.teaser.probability48h, 2.2);
+  }
+});
+
+test("resolved timed teaser weight fades through the three-hour grace instead of falling off a cliff", () => {
+  const now = new Date("2026-08-06T01:30:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "timed-grace",
+      signal_type: "teaser",
+      text: "Reset button tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/timed-grace",
+      tweet_created_at: "2026-08-04T00:00:00.000Z",
+      expires_at: "2026-08-06T03:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      temporal_confidence: 1,
+      expected_start_at: "2026-08-05T00:00:00.000Z",
+      expected_end_at: "2026-08-06T00:00:00.000Z",
+    }],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+  assert.equal(inputs.teaserScore24h, 0.5);
+  assert.equal(inputs.teaserScore48h, 0.5);
+  assert.equal(multipliers.teaser.probability24h, 1.4);
+  assert.equal(multipliers.teaser.probability48h, 1.6);
+});

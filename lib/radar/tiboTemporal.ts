@@ -1201,6 +1201,37 @@ export function getTemporalNoticeCoverage(
   return Math.min(1, Math.max(0, (intersection / remainingDuration) * confidence));
 }
 
+/**
+ * Timing weight for teaser signals. A resolved teaser follows the hinted
+ * window instead of aging out from the post timestamp. After the window ends,
+ * the effect fades through the existing three-hour grace period.
+ */
+export function getTemporalTeaserCoverage(
+  resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "confidence" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
+  now: Date,
+  horizonHours: number,
+) {
+  const coverage = getTemporalNoticeCoverage(resolution, now, horizonHours);
+  if (coverage === null || !resolution?.expectedStartAt) return null;
+
+  const nowTime = now.getTime();
+  const start = Date.parse(resolution.expectedStartAt);
+  const end = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : start;
+  if (!Number.isFinite(nowTime) || !Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return null;
+  }
+
+  if (nowTime <= end) return coverage;
+
+  const overdueMs = nowTime - end;
+  if (overdueMs >= TIBO_NOTICE_GRACE_MS) return 0;
+
+  const confidence = typeof resolution.confidence === "number" && Number.isFinite(resolution.confidence)
+    ? Math.min(1, Math.max(0, resolution.confidence))
+    : 0;
+  return confidence * Math.max(0, 1 - overdueMs / TIBO_NOTICE_GRACE_MS);
+}
+
 export function isOverdueNoticePending(
   resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
   latestResetAt: string | Date | null | undefined,

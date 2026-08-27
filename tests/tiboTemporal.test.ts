@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getEffectiveTemporalPrecision,
   getTemporalNoticeCoverage,
+  getTemporalTeaserCoverage,
   isTemporalNoticeConsumedAtReset,
   parseTiboTemporalSemantics,
   resolveTiboTemporalSchedule,
@@ -642,4 +643,29 @@ test("recovers a cross-sentence tomorrow window when a historical reset button i
 test("does not infer teaser timing from an unrelated tomorrow sentence or non-usage reset button", () => {
   assert.equal(parseTiboTemporalSemantics(null, "It has been 20 years since I pressed the reset button. Tomorrow I am going hiking."), null);
   assert.equal(parseTiboTemporalSemantics(null, "My laptop reset button is ancient. I might find it tomorrow and dust it up."), null);
+});
+
+
+test("teaser timing follows the hinted window and fades smoothly after it ends", () => {
+  const exact = {
+    status: "resolved" as const,
+    temporalPrecision: "exact_time" as const,
+    confidence: 1,
+    expectedStartAt: "2026-08-10T18:00:00.000Z",
+    expectedEndAt: "2026-08-10T18:00:00.000Z",
+  };
+  const before = new Date("2026-08-09T12:00:00.000Z");
+  assert.equal(getTemporalTeaserCoverage(exact, before, 24), 0);
+  assert.equal(getTemporalTeaserCoverage(exact, before, 48), 1);
+
+  const dayWindow = {
+    status: "resolved" as const,
+    temporalPrecision: "day" as const,
+    confidence: 0.8,
+    expectedStartAt: "2026-08-10T07:00:00.000Z",
+    expectedEndAt: "2026-08-11T07:00:00.000Z",
+  };
+  assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-10T12:00:00.000Z"), 24), 0.8);
+  assert.ok(Math.abs((getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T08:30:00.000Z"), 24) ?? 0) - 0.4) < 1e-12);
+  assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T10:00:00.000Z"), 24), 0);
 });

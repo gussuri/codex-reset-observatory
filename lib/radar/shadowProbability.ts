@@ -41,10 +41,10 @@ import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getTeaserStrengthSignals } from "./teaserStrength";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
-import { getTemporalNoticeCoverage } from "./tiboTemporal";
+import { getTemporalTeaserCoverage } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
-export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v1";
+export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v2";
 
 export type ShadowResetEvent = {
   id: string;
@@ -598,7 +598,7 @@ function getTeaserTimingCoverage(
   now: Date,
   horizonHours: 24 | 48,
 ) {
-  const coverage = getTemporalNoticeCoverage({
+  return getTemporalTeaserCoverage({
     status: signal.temporal_resolution_status === "resolved" ? "resolved" : "unresolved",
     temporalPrecision:
       signal.temporal_precision === "exact_time" ||
@@ -611,7 +611,6 @@ function getTeaserTimingCoverage(
     expectedStartAt: signal.expected_start_at ?? null,
     expectedEndAt: signal.expected_end_at ?? null,
   }, now, horizonHours);
-  return coverage ?? 1;
 }
 
 function getTimedFormalTeaserScores(
@@ -638,14 +637,18 @@ function getTimedFormalTeaserScores(
   if (dynamicTeasers.length === 0) return null;
 
   return pair(
-    Math.max(...dynamicTeasers.map((signal) =>
-      getTeaserDecayFactor(signal.tweet_created_at, now) *
-      getTeaserTimingCoverage(signal, now, 24),
-    )),
-    Math.max(...dynamicTeasers.map((signal) =>
-      getTeaserDecayFactor(signal.tweet_created_at, now) *
-      getTeaserTimingCoverage(signal, now, 48),
-    )),
+    Math.max(...dynamicTeasers.map((signal) => {
+      const timingCoverage = getTeaserTimingCoverage(signal, now, 24);
+      return timingCoverage === null
+        ? getTeaserDecayFactor(signal.tweet_created_at, now)
+        : timingCoverage;
+    })),
+    Math.max(...dynamicTeasers.map((signal) => {
+      const timingCoverage = getTeaserTimingCoverage(signal, now, 48);
+      return timingCoverage === null
+        ? getTeaserDecayFactor(signal.tweet_created_at, now)
+        : timingCoverage;
+    })),
   );
 }
 
@@ -750,13 +753,11 @@ function getTeaserStrengthMultiplier(
         const strength = signal.teaser_strength;
         if (strength !== "strong" && strength !== "weak") return 1;
         const initial = config.teaserStrength[strength];
-        const progress = getTeaserDecayFactor(
-          signal.tweet_created_at,
-          now,
-          config.teaserStrength.lookbackHours,
-        );
-        return 1 + (initial.multiplier24h - 1) * progress *
-          getTeaserTimingCoverage(signal, now, 24);
+        const timingCoverage = getTeaserTimingCoverage(signal, now, 24);
+        const progress = timingCoverage === null
+          ? getTeaserDecayFactor(signal.tweet_created_at, now, config.teaserStrength.lookbackHours)
+          : timingCoverage;
+        return 1 + (initial.multiplier24h - 1) * progress;
       }),
     ),
     Math.max(
@@ -764,13 +765,11 @@ function getTeaserStrengthMultiplier(
         const strength = signal.teaser_strength;
         if (strength !== "strong" && strength !== "weak") return 1;
         const initial = config.teaserStrength[strength];
-        const progress = getTeaserDecayFactor(
-          signal.tweet_created_at,
-          now,
-          config.teaserStrength.lookbackHours,
-        );
-        return 1 + (initial.multiplier48h - 1) * progress *
-          getTeaserTimingCoverage(signal, now, 48);
+        const timingCoverage = getTeaserTimingCoverage(signal, now, 48);
+        const progress = timingCoverage === null
+          ? getTeaserDecayFactor(signal.tweet_created_at, now, config.teaserStrength.lookbackHours)
+          : timingCoverage;
+        return 1 + (initial.multiplier48h - 1) * progress;
       }),
     ),
   );
