@@ -391,29 +391,31 @@ test("14. Backfill script can resume from unclassified rows after interruption",
   assert.strictEqual(remainingToProcess[0].tweet_id, "103");
 });
 
-test("15. Gemini API prompt & schema evaluation on today's real Tibo tweet fixture", () => {
+test("15. Gemini API prompt & schema evaluation keeps an ambiguous productivity fixture irrelevant", () => {
   const todayText = "The day we develop really good models. There will be signs.\n\nReliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.\n\nThese kinds of things.";
 
-  // Simulated Gemini API output matching system prompt & schema rules for today's tweet
+  // Simulated Gemini API output matching the semantic domain/time/speech-act order.
   const simulatedAiOutput: GeminiClassificationOutput = {
-    signalType: "teaser",
+    signalType: "irrelevant",
     confidence: 0.90,
     temporalDirection: "future",
-    evidenceQuote: "Resets",
-    reasonJa: "新モデル開発と効率化に伴う将来のリセット（Resets）の発生を予告・示唆しているため。",
+    evidenceQuote: null,
+    reasonJa: "効率化や将来の開発を示していますが、利用上限リセットの意図は明示されていません。",
     resetTypeJa: null,
-    noticeToExecution: "near future",
+    noticeToExecution: null,
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.90,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: "一般的な進展やresetという語だけでは、意図的なリセット匂わせとは判断しません。",
     model: "gemini-3.5-flash-lite",
     status: "success",
     classifiedAt: new Date().toISOString(),
   };
 
   // Validate signalType
-  assert.strictEqual(simulatedAiOutput.signalType, "teaser");
+  assert.strictEqual(simulatedAiOutput.signalType, "irrelevant");
   assert.strictEqual(simulatedAiOutput.temporalDirection, "future");
-
-  // Validate evidenceQuote is actually present in original text
-  const normQuote = simulatedAiOutput.evidenceQuote!.toLowerCase();
-  const normText = todayText.toLowerCase();
-  assert.strictEqual(normText.includes(normQuote), true, "evidenceQuote 'Resets' MUST exist in original text");
+  assert.strictEqual(simulatedAiOutput.teaserStrength, "none");
+  assert.strictEqual(simulatedAiOutput.evidenceQuote, null);
+  assert.ok(todayText.includes("Things getting faster"));
 });

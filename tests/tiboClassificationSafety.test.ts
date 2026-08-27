@@ -152,25 +152,32 @@ test("pure hypothetical and wish speech acts do not become teaser", () => {
 });
 
 test("Gemini prompt distinguishes recent reset-button acquisition from historical or UI mentions", () => {
-  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /gifted.*new reset button|received.*new reset button/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /recent first-person acquisition of the reset mechanism/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /past tense describes/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /receiving the button/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /years ago|UI\/product|product feature/i);
 });
 
 test("Gemini weak teaser guidance is intentionally high-recall without becoming keyword-only", () => {
-  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /weak.*intentionally high-recall/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /weak.*high-recall/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /indirect[\s\S]*playful[\s\S]*jok(?:e|es|ing)[\s\S]*metaphor[\s\S]*cryptic/i);
-  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /does not require[\s\S]*explicit future tense/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /does not require[\s\S]*explicit\s+future\s+tense/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /visible[\s\S]*reply context/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /keyword occurrence[\s\S]*historical memories[\s\S]*UI\/product[\s\S]*unrelated technical resets/i);
+});
+
+test("Gemini prompt requires semantic domain and temporal reasoning", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /first identify the domain[\s\S]*then identify the time meaning/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /historical language is not an automatic veto/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /same reset mechanism/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /generic words such as[\s\S]*not evidence by themselves/i);
 });
 
 test("Gemini teaser strength is independent from signal type and covers ambiguous reset replies", () => {
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /teaserStrength MUST be judged independently from signalType/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /irrelevant[\s\S]*does NOT imply[\s\S]*teaserStrength["'=]*none/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /signalType[\s\S]*irrelevant[\s\S]*teaserStrength[\s\S]*weak/i);
-  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /Parent context:[\s\S]*are we going to get a reset when codex crosses 20M users\?[\s\S]*Tibo reply:[\s\S]*Maybe[\s\S]*weak/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /a short reply such as ["']Maybe["'][\s\S]*reset-related parent context[\s\S]*weak/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /reply status alone[\s\S]*not enough/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /signalType = ["']teaser["'][\s\S]*teaserStrength = ["']strong["']/i);
 });

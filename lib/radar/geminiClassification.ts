@@ -125,12 +125,12 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    Example: "Should we press the reset button tonight?"
 
 A narrow exception applies to a recent first-person acquisition of the reset mechanism:
-when Tibo says that he was gifted, got, or received a new reset button recently (for example,
-"I was gifted a very fancy new reset button today" or "I just got a new reset button"),
-classify it as a strong teaser. The reset button was acquired, not used: the past tense describes
-receiving the button, not a completed reset, so this is neither "reset_executed" nor an official
-scheduled notice. Do not apply this exception to "years ago" or other historical memories,
-UI/product-feature mentions, device or third-party buttons, or unrelated technical resets.
+when Tibo clearly says that he has recently been gifted, received, or obtained a new reset
+mechanism, classify that acquisition as a strong teaser only when the usage-reset meaning is clear.
+The mechanism was acquired, not used: the past tense describes receiving the button, not a
+completed reset, so this is neither "reset_executed" nor an official scheduled notice. Do not
+apply this exception to "years ago" or other historical memories, UI/product-feature mentions,
+device or third-party buttons, or unrelated technical resets.
 
 4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), feature releases, or ambiguous chatter.
    Examples: "I reset everyone yesterday" (historical -> irrelevant), "One day we created the reset button and the rest is history" (historical memory -> irrelevant), "No reset tonight" (negative -> irrelevant).
@@ -140,6 +140,15 @@ Codex/ChatGPT Work usage limits, quotas, allowances, or an unmistakable Tibo usa
 reset context. A reset of a cache, server, benchmark, model, conversation, sleep schedule,
 laptop, database, UI, app, or test environment is unrelated unless the same post explicitly
 connects it to usage limits or quota recovery. The word "reset" by itself is never enough.
+
+Use this decision order for every post: first identify the domain (Codex usage/quota reset or
+another object), then identify the time meaning (historical, completed now, or future), then
+identify the speech act (confirmation, explicit commitment, indirect hint, or unrelated text).
+Read the whole AUTHOR TEXT before using reply or quoted context. Parent and quoted text can
+clarify a Tibo statement, but they are not Tibo's own assertion and must not supply a reset
+claim that is absent from the author text. Generic words such as "cooking something",
+"capacity boost", "resets", or "getting faster" are not evidence by themselves; judge their
+meaning from the usage domain, temporal relation, and Tibo's apparent intent.
 
 Do not classify a pure hypothetical, wish, counterfactual, or thought experiment as "teaser".
 Examples that remain "irrelevant": "What if I reset everyone?", "Would be nice to reset everyone",
@@ -154,13 +163,19 @@ An explicit first-person conditional such as "Only if the launch goes badly woul
 resetting limits" is also a valid teaser because it states Tibo's actual discretion; do not
 confuse it with an abstract wish or an imagined world.
 
+Historical language is not an automatic veto. A past-tense phrase can describe only an earlier
+event while a later phrase refers to the same reset mechanism in the future. Treat the post as
+historical-only only when no later passage reasonably reactivates that same Codex usage-reset
+mechanism. If a later passage is unrelated to reset or usage limits, keep the post irrelevant.
+
 When one post mentions multiple reset events, select the primary event by time meaning:
 - An explicit current/completed event ("now", "done", "landed", "enjoy", "just reset", "already reset")
   takes priority over a secondary future event in the same post, so "One reset now, another later"
   is "reset_executed".
 - A historical-only event does not become a new execution. If it is followed by an actionable future
-  notice, classify the current signal as "official_notice"; if there is no actionable future event,
-  classify it as "irrelevant".
+  notice, classify the current signal as "official_notice"; if it is followed only by an indirect
+  or context-dependent future implication, classify it as "teaser" with the strength chosen from
+  the whole post; if there is no related future event, classify it as "irrelevant".
 
 Reply status alone is never evidence for teaser or official_notice. A short reply without visible context, such as "done", "yes", or "maybe :) ", should usually be irrelevant with low confidence. Use visible parent context only to clarify what the reply means.
 
@@ -170,23 +185,30 @@ A post may be too ambiguous to qualify as a formal teaser signal while still car
 When signalType is uncertain or irrelevant but the visible text or visible conversational context contains a genuine,
 intentional-looking reset implication, teaserStrength may be "weak". Do not force teaserStrength to "none" merely because
 signalType is "irrelevant".
-- "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset.
-  The recent first-person acquisition exception above is also strong.
-- "weak": This label is intentionally high-recall. Use it when the post gives even a slight suggestion that Tibo might perform a usage-limit reset, but the indication is too indirect, playful, joking, metaphorical, vague, cryptic, or context-dependent to qualify as strong. A weak teaser does not require explicit future tense, a concrete schedule, a direct statement of intent, or a clear conditional commitment. Very indirect jokes, wordplay, suggestive one-liners, and short replies may be weak when their visible reply context makes a possible usage-limit reset a reasonable interpretation. When choosing between weak and none, prefer weak if there is a genuine reset-related implication that a human reader could reasonably regard as intentional teasing.
+- "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset,
+  or clearly indicates that he has just obtained a reset mechanism that he may use. The recent
+  first-person acquisition exception above is strong only when that meaning is clear.
+- "weak": This label is high-recall but semantic, not keyword-only. Use it when the whole post
+  gives a slight, indirect, playful, joking, metaphorical, vague, cryptic, or context-dependent
+  suggestion that Tibo might perform a usage-limit reset. A weak teaser does not require explicit
+  future tense, a concrete schedule, a direct statement of intent, or a clear conditional
+  commitment, but it does require a genuine reset-related implication that a human reader could
+  reasonably regard as intentional. Very indirect jokes, wordplay, and short replies may be weak
+  when visible reply context makes a possible usage-limit reset reasonable. Historical wording alone remains none; historical wording
+  followed by a future action that plausibly reuses the same reset mechanism may be weak.
 - Do not use weak for mere keyword occurrence, historical memories, ordinary UI/product features, unrelated technical resets, third-party discussion with no implication that Tibo may reset usage limits, or explicit denial/cancellation.
 - "none": no current personal willingness or near-future indication, including completed, historical, negative, UI, general, or unrelated posts.
 If the auxiliary signal cannot be determined, use null rather than guessing "none".
 
 Contrast example for the independent strength label:
-Parent context: "are we going to get a reset when codex crosses 20M users?"
-Tibo reply: "Maybe"
-The reply alone is too ambiguous for a formal teaser and signalType may remain "irrelevant", but this visible
-reset-related parent context makes the reply an intentional-looking weak reset hint. For this exact pattern,
-teaserStrength = "weak". Reply status alone is not enough; the explicit reset-related parent context is required.
+A short reply such as "Maybe" to a reset-related parent question is too ambiguous for a formal teaser
+on its own and signalType may remain "irrelevant", but visible reset-related parent context can make it
+an intentional-looking weak reset hint. Reply status alone is not enough; the explicit reset-related
+parent context is required.
 
-Strong contrast: "I was gifted a very fancy new reset button today" remains signalType = "teaser" and
-teaserStrength = "strong". None contrast: "The reset button is my favorite product feature." remains
-signalType = "irrelevant" and teaserStrength = "none".
+Strong contrast: a recent first-person acquisition of a reset mechanism can be signalType = "teaser"
+and teaserStrength = "strong" when the usage-reset meaning is clear. None contrast: an ordinary
+UI/product feature mention remains signalType = "irrelevant" and teaserStrength = "none".
 
 When the primary signal is a grounded completed reset, independently classify any separate
 forward-looking meaning in the same post as futureSignal. The futureSignal choice is independent
@@ -304,12 +326,14 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
     `Source timeline: ${timeline}`,
     `Tweet created at: ${createdAt}`,
     `Source timezone for temporal interpretation: ${sourceTimeZone}`,
+    "Decision order: identify the domain, then the temporal meaning, then the speech act.",
     `AUTHOR TEXT: ${input.text}`,
     `Quoted author: ${quoteAuthor}`,
     `Quoted post URL: ${quoteUrl}`,
     `QUOTED CONTEXT (not Tibo's own text): ${quoteContext}`,
     "Use quoted context only to interpret what Tibo may be responding to; never treat it as Tibo's own assertion.",
     "Reply status alone must not raise teaser or official_notice; classify a contextless short reply conservatively.",
+    "Historical wording is not an automatic veto when a later passage plausibly refers to the same reset mechanism; unrelated future work remains irrelevant.",
   ].join("\n");
 }
 

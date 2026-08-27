@@ -370,15 +370,14 @@ export function classifyTiboTweet(
     });
   }
 
-  // 4. 将来の可能性の示唆 (teaser) - 未来志向表現の同居を必須化
+  // 4. 将来の可能性の示唆 (teaser) - 明示的なreset機構と未来志向表現の同居を必須化
+  // Generic productivity, capacity, and progress language belongs to Gemini's
+  // semantic pass rather than the deterministic fallback.
   const teaserBaseKeywords = [
     "reset button",
-    "capacity boost",
     "working on reset",
     "thinking about a reset",
-    "cooking something",
     "sol model caps",
-    "resets",
   ];
 
   const futureIndicators = [
@@ -388,12 +387,10 @@ export function classifyTiboTweet(
     "time to press",
     "tonight",
     "tomorrow",
-    "cooking something",
     "working on",
     "next",
     "later",
     "there will be",
-    "getting faster",
   ];
 
   const matchedBase = teaserBaseKeywords.find((kw) => normalized.includes(kw));

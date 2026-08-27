@@ -25,6 +25,11 @@ export type TiboContextSafetyDecision =
     }
   | {
       signalType: "teaser";
+      teaserStrength: "weak";
+      reasonJa: string;
+    }
+  | {
+      signalType: "teaser";
       teaserStrength: "strong";
       reasonJa: string;
     };
@@ -108,8 +113,8 @@ export function getTiboContextSafetyDecision(
   ) {
     return {
       signalType: "teaser",
-      teaserStrength: "strong",
-      reasonJa: "Context safety guard: 過去のreset buttonへの言及に加えて、その同じbuttonを近い将来に再び使う意図があるため、強い匂わせとして扱います。",
+      teaserStrength: "weak",
+      reasonJa: "Context safety guard: 過去のreset buttonへの言及に加えて、その同じbuttonを近い将来に再び使う意図があるため、弱い匂わせとして扱います。",
     };
   }
 

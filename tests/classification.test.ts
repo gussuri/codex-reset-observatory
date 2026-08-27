@@ -63,8 +63,23 @@ test("classifyTiboTweet correctly classifies teaser tweets with future indicator
     "The day we develop really good models. There will be signs.\n\nReliability increasing despite load going up and up. Sudden efficiency gains. Things getting faster. Resets.\n\nThese kinds of things.",
     "https://x.com/thsottiaux/status/206987654321"
   );
-  assert.strictEqual(todayRealTweet.signalType, "teaser");
-  assert.ok(todayRealTweet.confidence >= 0.80);
+  assert.strictEqual(todayRealTweet.signalType, "irrelevant");
+});
+
+test("ambiguous productivity language does not trigger deterministic teaser fallback", () => {
+  const cases = [
+    "We are cooking something for the weekend.",
+    "A capacity boost is incoming for our game servers.",
+    "The service resets nightly and is getting faster.",
+  ];
+
+  for (const text of cases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2090000000000000000").signalType,
+      "irrelevant",
+      text,
+    );
+  }
 });
 
 test("classify recent first-person reset button acquisition as a teaser without broadening reset button matches", () => {
