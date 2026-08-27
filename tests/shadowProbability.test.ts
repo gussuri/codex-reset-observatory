@@ -20,6 +20,7 @@ import {
   calculateShadowSignalMultipliers,
   getShadowBaselineAgeHours,
   getShadowCompletedResetEvents,
+  getShadowSignalInputs,
   integrateHazardProbability,
   oddsToProbability,
   probabilityToOdds,
@@ -580,4 +581,62 @@ test("shadow result has no post content or secret-like fields", () => {
 
   const serialized = JSON.stringify(result);
   assert.doesNotMatch(serialized, /private tweet text|api[_-]?key|secret|authorization/i);
+});
+
+
+test("resolved teaser timing moves teaser weight into overlapping forecast horizons", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "timed-teaser-48-only",
+      signal_type: "teaser",
+      text: "Might use the reset button tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/123456789",
+      tweet_created_at: new Date(now.getTime() - HOUR_MS).toISOString(),
+      expires_at: new Date(now.getTime() + 60 * HOUR_MS).toISOString(),
+      confidence: 0.9,
+      verification_status: "confirmed",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "exact_time",
+      temporal_confidence: 1,
+      expected_start_at: new Date(now.getTime() + 30 * HOUR_MS).toISOString(),
+      expected_end_at: new Date(now.getTime() + 30 * HOUR_MS).toISOString(),
+    }],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+
+  assert.equal(inputs.teaserScore24h, 0);
+  assert.ok((inputs.teaserScore48h ?? 0) > 0);
+  assert.equal(multipliers.teaser.probability24h, 1);
+  assert.ok(multipliers.teaser.probability48h > 1);
+});
+
+test("untimed formal teasers keep the existing horizon boost behavior", () => {
+  const now = new Date("2026-08-04T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "untimed-teaser",
+      signal_type: "teaser",
+      text: "Might use the reset button soon.",
+      tweet_url: "https://x.com/thsottiaux/status/987654321",
+      tweet_created_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 24 * HOUR_MS).toISOString(),
+      confidence: 0.9,
+      verification_status: "confirmed",
+      is_reply: false,
+    }],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+
+  assert.equal(inputs.teaserScore24h, 1);
+  assert.equal(inputs.teaserScore48h, 1);
+  assert.equal(multipliers.teaser.probability24h, 1.8);
+  assert.equal(multipliers.teaser.probability48h, 2.2);
 });
