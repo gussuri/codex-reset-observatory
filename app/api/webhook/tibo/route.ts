@@ -257,6 +257,9 @@ export async function POST(req: NextRequest) {
       quoteContextText: replyMetadata.quoteContextText,
       selectedSignalType: selectedClassification.signalType,
       aiTeaserStrength: aiResult?.teaserStrength,
+      ruleSignalType: ruleResult.signalType,
+      ruleConfidence: ruleResult.confidence,
+      isReply: ruleResult.isReply,
     });
     const effectiveClassification = contextSafetyDecision
       ? {

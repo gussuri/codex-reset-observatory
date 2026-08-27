@@ -193,3 +193,65 @@ test("isolated showcase phrases do not trigger the physical-item guard", () => {
     );
   }
 });
+
+
+test("future reuse of a historically framed reset button rescues an AI false negative", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "A good thing about having aged is that I feel that it’s been 20 years since I’ve pressed the reset button. Intrigued to see if I can find it tomorrow and dust it up",
+    selectedSignalType: "irrelevant",
+    aiTeaserStrength: "none",
+    ruleSignalType: "teaser",
+    ruleConfidence: 0.85,
+    isReply: false,
+  });
+
+  assert.deepEqual(decision, {
+    signalType: "teaser",
+    teaserStrength: "strong",
+    reasonJa: "Context safety guard: 過去のreset buttonへの言及に加えて、その同じbuttonを近い将来に再び使う意図があるため、強い匂わせとして扱います。",
+  });
+});
+
+test("historical reset-button text plus an unrelated tomorrow does not get rescued", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "It has been 20 years since I pressed the reset button. Tomorrow I am going hiking.",
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: "none",
+      ruleSignalType: "teaser",
+      ruleConfidence: 0.85,
+      isReply: false,
+    }),
+    null,
+  );
+});
+
+test("reply and obvious non-usage reset-button contexts do not get rescued", () => {
+  for (const input of [
+    {
+      authorText: "It has been years since I pressed the reset button. I might find it tomorrow and dust it up.",
+      isReply: true,
+    },
+    {
+      authorText: "My laptop reset button is ancient. I might find it tomorrow and dust it up.",
+      isReply: false,
+    },
+    {
+      authorText: "It has been years since I pressed the reset button. I cannot find it tomorrow.",
+      isReply: false,
+    },
+  ]) {
+    assert.equal(
+      getTiboContextSafetyDecision({
+        authorText: input.authorText,
+        selectedSignalType: "irrelevant",
+        aiTeaserStrength: "none",
+        ruleSignalType: "teaser",
+        ruleConfidence: 0.85,
+        isReply: input.isReply,
+      }),
+      null,
+      input.authorText,
+    );
+  }
+});
