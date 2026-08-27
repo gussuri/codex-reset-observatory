@@ -743,7 +743,7 @@ test("timed formal teaser strength compounds with the formal teaser slot", () =>
   assert.equal(multipliers.teaser.probability48h, 2.2);
   assert.equal(multipliers.teaserStrength.probability24h, 1.6);
   assert.equal(multipliers.teaserStrength.probability48h, 1.6);
-  assert.equal(multipliers.combinedBeforeCap.probability24h, 2.88);
+  assert.ok(Math.abs(multipliers.combinedBeforeCap.probability24h - 2.88) < 1e-12);
   assert.ok(Math.abs(multipliers.combinedBeforeCap.probability48h - 3.52) < 1e-12);
 });
 
