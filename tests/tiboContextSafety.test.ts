@@ -143,6 +143,49 @@ test("explicit future reset notices remain official", () => {
   }
 });
 
+test("an upcoming Codex update is retained as a weak auxiliary teaser", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+    selectedSignalType: "irrelevant",
+    aiTeaserStrength: "none",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "weak");
+});
+
+test("an update-only post is not promoted to an official notice", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+    selectedSignalType: "official_notice",
+    aiTeaserStrength: "strong",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "weak");
+});
+
+test("an update-only post is bounded to weak even if the candidate is strong", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Codex will ship an update tomorrow.",
+    selectedSignalType: "teaser",
+    aiTeaserStrength: "strong",
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "weak");
+});
+
+test("a generic documentation update remains outside the teaser signal", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Documentation update tomorrow.",
+    selectedSignalType: "irrelevant",
+    aiTeaserStrength: "none",
+  });
+
+  assert.equal(decision, null);
+});
+
 test("a person-targeted reset is irrelevant even when AI strength is weak", () => {
   const decision = getTiboContextSafetyDecision({
     authorText: "I feel Theo is in need of a reset",

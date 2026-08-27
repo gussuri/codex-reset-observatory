@@ -19,6 +19,11 @@ export type TiboContextSafetyDecision =
       reasonJa: string;
     }
   | {
+      signalType: "irrelevant";
+      teaserStrength: "weak";
+      reasonJa: string;
+    }
+  | {
       signalType: "teaser";
       teaserStrength: "strong";
       reasonJa: string;
@@ -42,6 +47,8 @@ const NEGATED_RESET_BUTTON_REUSE_PATTERN =
   /\b(?:can(?:not|'t)|won't|will\s+not|not\s+going\s+to)\b[^.!?]{0,80}\b(?:find|press|hit|use|reuse|dust|bring|take)\b/i;
 const NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN =
   /\b(?:keyboard|laptop|phone|router|server|device|controller|console|game|car|factory\s+reset)\b/i;
+const CODEX_UPDATE_CONTEXT_PATTERN = /\b(?:codex|chatgpt\s+work)\b/i;
+const UPDATE_ACTION_PATTERN = /\b(?:update(?:s|d|ing)?|change(?:s|d|ing)?|bring\s+back|come\s+back|return(?:s|ed|ing)?|restore(?:s|d|ing)?|reintroduc(?:e|es|ed|ing)|roll\s+out|ship(?:s|ped|ping)?|launch(?:es|ed|ing)?|(?:be|is|are)\s+back)\b/i;
 const EXPLICIT_FUTURE_RESET_INTENT_PATTERNS = [
   /\b(?:will|going\s+to|plan(?:s|ned)?\s+to|i['’]ll|we['’]ll)\b[^.!?]{0,100}\b(?:reset|resetting|usage[-\s]+limits?|quotas?|allowances?)\b/i,
   /\b(?:reset|resetting)\b[^.!?]{0,60}\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in\s+(?:the\s+)?(?:next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i,
@@ -71,9 +78,15 @@ function hasNearFutureResetButtonReuseIntent(text: string) {
   );
 }
 
+function hasUpcomingCodexUpdate(text: string) {
+  return CODEX_UPDATE_CONTEXT_PATTERN.test(text) &&
+    FUTURE_CUE_PATTERN.test(text) &&
+    UPDATE_ACTION_PATTERN.test(text);
+}
+
 /**
- * Suppress the narrow physical-item false positive after classifier selection.
- * The AI fields remain available for audit; only the effective state is changed.
+ * Apply narrow post-classification context guards without rewriting the AI audit fields.
+ * An upcoming Codex update is only a weak auxiliary signal; it never proves a reset.
  */
 export function getTiboContextSafetyDecision(
   input: TiboContextSafetyInput,
@@ -103,8 +116,9 @@ export function getTiboContextSafetyDecision(
   const hasResetSignal = input.selectedSignalType !== "irrelevant" ||
     input.aiTeaserStrength === "strong" ||
     input.aiTeaserStrength === "weak";
+  const hasUpcomingUpdate = hasUpcomingCodexUpdate(context);
 
-  if (!hasResetSignal) return null;
+  if (!hasResetSignal && !hasUpcomingUpdate) return null;
 
   if (
     input.selectedSignalType === "official_notice" &&
@@ -154,12 +168,27 @@ export function getTiboContextSafetyDecision(
     };
   }
 
-  if (!ITEM_RECEIPT_PATTERN.test(authorText)) return null;
-  if (EXPLICIT_RESET_CONTEXT_PATTERN.test(context)) return null;
+  if (ITEM_RECEIPT_PATTERN.test(authorText)) {
+    if (EXPLICIT_RESET_CONTEXT_PATTERN.test(context)) return null;
 
-  return {
-    signalType: "irrelevant",
-    teaserStrength: "none",
-    reasonJa: "Context safety guard: 物品の受領を示す投稿ですが、本文・返信元・引用文脈に利用枠リセットの明示的な根拠がないため、無関係として扱います。",
-  };
+    return {
+      signalType: "irrelevant",
+      teaserStrength: "none",
+      reasonJa: "Context safety guard: 物品の受領を示す投稿ですが、本文・返信元・引用文脈に利用枠リセットの明示的な根拠がないため、無関係として扱います。",
+    };
+  }
+
+  if (
+    hasUpcomingUpdate &&
+    !hasExplicitFutureResetIntent(context) &&
+    input.selectedSignalType !== "reset_executed"
+  ) {
+    return {
+      signalType: "irrelevant",
+      teaserStrength: "weak",
+      reasonJa: "Context safety guard: Codexの将来の更新を示す投稿ですが、リセット自体は明示していないため、弱い匂わせとして記録します。",
+    };
+  }
+
+  return null;
 }
