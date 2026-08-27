@@ -786,8 +786,9 @@ test("history month grouping follows the viewer timezone", () => {
   );
 
   const html = renderToStaticMarkup(React.createElement(HistoryView, { data, locale: "en" }));
-  assert.match(html, /aria-busy="true"/);
-  assert.doesNotMatch(html, /August 2026/);
+  assert.doesNotMatch(html, /aria-busy="true"/);
+  assert.match(html, /August 2026/);
+  assert.match(html, /JST/);
 });
 
 test("normalizes regular reset presentation and hides notice/source rows", () => {
