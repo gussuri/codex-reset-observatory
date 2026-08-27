@@ -39,7 +39,10 @@ import {
 import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
-import { getTeaserStrengthSignals } from "./teaserStrength";
+import {
+  getEffectiveTeaserStrength,
+  getTeaserStrengthSignals,
+} from "./teaserStrength";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import {
   getTemporalNoticeCoverage,
@@ -47,7 +50,11 @@ import {
 } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
-export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v2";
+export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v3";
+export const TIMED_FORMAL_TEASER_STRENGTH_MULTIPLIERS = {
+  weak: { multiplier24h: 1.15, multiplier48h: 1.2 },
+  strong: { multiplier24h: 1.6, multiplier48h: 1.6 },
+} as const;
 
 export type ShadowResetEvent = {
   id: string;
@@ -732,10 +739,43 @@ function getTeaserStrengthMultiplier(
   latestResetTime: number | null,
   config: ShadowSignalMultiplierConfig,
 ) {
-  // A formal teaser already owns this signal slot. Do not multiply its
-  // established 1.8x/2.2x effect by the weaker strength signal.
-  if (getEligibleFormalTeaserSignals(data, now, latestResetTime).length > 0) {
-    return pair(1, 1);
+  const formalTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
+  if (formalTeasers.length > 0) {
+    const timedFormalTeasers = formalTeasers
+      .map((signal) => ({
+        signal,
+        strength: getEffectiveTeaserStrength(signal),
+      }))
+      .filter(({ signal, strength }) =>
+        (strength === "strong" || strength === "weak") &&
+        signal.temporal_resolution_status === "resolved" &&
+        Boolean(signal.expected_start_at) &&
+        Boolean(signal.expected_end_at)
+      );
+
+    if (timedFormalTeasers.length === 0) {
+      // Untimed formal teasers keep the established formal-teaser slot only.
+      return pair(1, 1);
+    }
+
+    const strengthMultiplierForHorizon = (horizonHours: 24 | 48) =>
+      Math.max(
+        ...timedFormalTeasers.map(({ signal, strength }) => {
+          if (strength !== "strong" && strength !== "weak") return 1;
+          const timingCoverage = getTeaserTimingCoverage(signal, now, horizonHours);
+          if (timingCoverage === null) return 1;
+          const configured = TIMED_FORMAL_TEASER_STRENGTH_MULTIPLIERS[strength];
+          const fullMultiplier = horizonHours === 24
+            ? configured.multiplier24h
+            : configured.multiplier48h;
+          return 1 + (fullMultiplier - 1) * timingCoverage;
+        }),
+      );
+
+    return pair(
+      strengthMultiplierForHorizon(24),
+      strengthMultiplierForHorizon(48),
+    );
   }
 
   const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);

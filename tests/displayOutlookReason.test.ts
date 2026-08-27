@@ -521,3 +521,40 @@ test("current outlook explains the gradual fade during a timed teaser grace peri
   assert.match(en ?? "", /phased out gradually/);
   assert.match(zh ?? "", /逐步减弱/);
 });
+
+
+test("strong timed teaser outlook says strength is included in all supported locales", () => {
+  const now = new Date("2026-08-27T08:30:00.000Z");
+  const timedSignal = {
+    tweet_id: "strong-timed-outlook",
+    signal_type: "teaser" as const,
+    text: "Reset button tomorrow.",
+    tweet_created_at: "2026-08-27T06:31:31.000Z",
+    teaser_strength: "strong" as const,
+    confidence: 0.85,
+    verification_status: "confirmed" as const,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_confidence: 0.95,
+    expected_start_at: "2026-08-27T07:00:00.000Z",
+    expected_end_at: "2026-08-28T07:00:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [timedSignal],
+    recentTiboSignals: [timedSignal],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+
+  const ja = getDisplayProbabilityReason(data, 0.65, 0.85, "ja", evaluation, null, now);
+  const en = getDisplayProbabilityReason(data, 0.65, 0.85, "en", evaluation, null, now);
+  const zh = getDisplayProbabilityReason(data, 0.65, 0.85, "zh", evaluation, null, now);
+
+  assert.match(ja ?? "", /強いリセット匂わせ/);
+  assert.match(ja ?? "", /匂わせの強さ/);
+  assert.match(en ?? "", /strong reset hint/);
+  assert.match(en ?? "", /hint strength/);
+  assert.match(zh ?? "", /较强的重置暗示/);
+  assert.match(zh ?? "", /暗示强度/);
+});

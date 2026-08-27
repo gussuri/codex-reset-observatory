@@ -142,9 +142,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "已确认有暗示重置的帖子，重置的可能性高于平时。",
   },
   outlookStrongTimedTeaser: {
-    ja: "リセットを示唆する投稿が確認されています。示唆された時期（{start}〜{end}）を24時間・48時間予測に反映しています。",
-    en: "A post suggesting a reset has been confirmed. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
-    zh: "已确认有暗示重置的帖子。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
+    ja: "強いリセット匂わせ投稿が確認されています。示唆された時期（{start}〜{end}）と匂わせの強さを24時間・48時間予測に反映しています。",
+    en: "A strong reset hint has been confirmed. Both the hinted window ({start}–{end}) and the hint strength are reflected in the 24h and 48h forecasts.",
+    zh: "已确认有较强的重置暗示。预测已将暗示的时间窗口（{start}至{end}）和暗示强度纳入24小时和48小时预测。",
   },
   outlookStrongTimedTeaserGrace: {
     ja: "リセットを示唆した時期（{start}〜{end}）を過ぎていますが、直後のため匂わせの影響を段階的に減らしながら予測に反映しています。",

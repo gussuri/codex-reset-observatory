@@ -708,3 +708,98 @@ test("resolved timed teaser weight fades through the three-hour grace instead of
   assert.equal(multipliers.teaser.probability24h, 1.4);
   assert.equal(multipliers.teaser.probability48h, 1.6);
 });
+
+
+test("timed formal teaser strength compounds with the formal teaser slot", () => {
+  const now = new Date("2026-08-05T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "timed-formal-strong",
+      signal_type: "teaser",
+      text: "Reset button tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/timed-formal-strong",
+      tweet_created_at: "2026-08-04T00:00:00.000Z",
+      expires_at: "2026-08-06T03:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      teaser_strength: "strong",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      temporal_confidence: 1,
+      expected_start_at: "2026-08-05T00:00:00.000Z",
+      expected_end_at: "2026-08-06T00:00:00.000Z",
+    }],
+  });
+
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+
+  assert.equal(inputs.teaserScore24h, 1);
+  assert.equal(inputs.teaserScore48h, 1);
+  assert.equal(multipliers.teaser.probability24h, 1.8);
+  assert.equal(multipliers.teaser.probability48h, 2.2);
+  assert.equal(multipliers.teaserStrength.probability24h, 1.6);
+  assert.equal(multipliers.teaserStrength.probability48h, 1.6);
+  assert.equal(multipliers.combinedBeforeCap.probability24h, 2.88);
+  assert.ok(Math.abs(multipliers.combinedBeforeCap.probability48h - 3.52) < 1e-12);
+});
+
+test("timed formal weak teaser gets only the bounded weak strength increment", () => {
+  const now = new Date("2026-08-05T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "timed-formal-weak",
+      signal_type: "teaser",
+      text: "Maybe reset tomorrow.",
+      tweet_url: "https://x.com/thsottiaux/status/timed-formal-weak",
+      tweet_created_at: "2026-08-04T00:00:00.000Z",
+      expires_at: "2026-08-06T03:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      teaser_strength: "weak",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      temporal_confidence: 1,
+      expected_start_at: "2026-08-05T00:00:00.000Z",
+      expected_end_at: "2026-08-06T00:00:00.000Z",
+    }],
+  });
+
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+
+  assert.equal(multipliers.teaserStrength.probability24h, 1.15);
+  assert.equal(multipliers.teaserStrength.probability48h, 1.2);
+});
+
+test("untimed formal strong teaser does not receive the timed strength increment", () => {
+  const now = new Date("2026-08-05T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "untimed-formal-strong",
+      signal_type: "teaser",
+      text: "Reset button soon.",
+      tweet_url: "https://x.com/thsottiaux/status/untimed-formal-strong",
+      tweet_created_at: now.toISOString(),
+      expires_at: "2026-08-06T12:00:00.000Z",
+      confidence: 0.9,
+      verification_status: "confirmed",
+      teaser_strength: "strong",
+      is_reply: false,
+    }],
+  });
+
+  const evaluation = getLocalSignalEvaluation(data, now);
+  const inputs = getShadowSignalInputs(data, now, evaluation, null, null, true, []);
+  const multipliers = calculateShadowSignalMultipliers(inputs);
+
+  assert.equal(multipliers.teaserStrength.probability24h, 1);
+  assert.equal(multipliers.teaserStrength.probability48h, 1);
+});
