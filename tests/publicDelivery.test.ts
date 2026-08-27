@@ -444,7 +444,7 @@ test("public Tibo activity uses stored translations and keeps the full post text
   assert.equal(en.latestTiboActivity?.text?.includes("\n\n"), true);
 });
 
-test("SSR datetime waits with a JST-free skeleton until the browser timezone is known", () => {
+test("SSR datetime renders deterministic JST text before browser timezone hydration", () => {
   const props = {
     value: "2026-08-04T00:00:00.000Z",
     locale: "ja" as const,
@@ -459,10 +459,8 @@ test("SSR datetime waits with a JST-free skeleton until the browser timezone is 
   );
 
   assert.match(html, /<time[^>]*dateTime="2026-08-04T00:00:00\.000Z"/);
-  assert.match(html, /aria-busy="true"/);
-  assert.match(html, /aria-hidden="true"/);
-  assert.match(html, /min-w-\[12rem\]/);
-  assert.doesNotMatch(html, /2026年8月4日|JST|GMT\+9/);
+  assert.match(html, /2026年8月4日 09:00 JST/);
+  assert.doesNotMatch(html, /aria-busy="true"|aria-hidden="true"|min-w-\[12rem\]/);
   assert.doesNotMatch(html, /Detecting time zone|タイムゾーンを検出中/);
   assert.doesNotMatch(html, /undefined|null|false/);
   assert.equal(firstClientRender, html);
@@ -683,7 +681,9 @@ test("history page combines confirmed, banked, and regular reference records chr
     assert.match(html, new RegExp(escapeRegExp(escapeHtml(translateDynamic(item.title, "en")))));
   }
   assert.ok(html.indexOf(escapeHtml(firstTitle)) < html.indexOf(escapeHtml(secondTitle)));
-  assert.match(html, /aria-busy="true"/);
+  assert.doesNotMatch(html, /aria-busy="true"/);
+  assert.match(html, /<time[^>]*dateTime=/);
+  assert.match(html, /JST/);
   assert.match(html, /Original post/);
   assert.match(html, /Source profile/);
   assert.match(html, /Weekly reset/);

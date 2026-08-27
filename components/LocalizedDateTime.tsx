@@ -21,9 +21,10 @@ export function LocalizedDateTime({
   weekday,
   approximate = false,
 }: LocalizedDateTimeProps) {
-  // Wait for the browser timezone so overseas visitors never see a JST date
-  // during SSR or the first hydration render.
-  const [timeZone, setTimeZone] = useState<string | null>(null);
+  // Render deterministic JST text during SSR so crawlers and no-JS clients
+  // receive the actual timestamp. After hydration, switch to the viewer's
+  // browser timezone without changing the initial server/client markup.
+  const [timeZone, setTimeZone] = useState<string>(DISPLAY_TIME_ZONE);
   const date = useMemo(() => parseDate(value), [value]);
 
   useEffect(() => {
@@ -51,23 +52,6 @@ export function LocalizedDateTime({
   ]
     .filter((item): item is string => Boolean(item))
     .join(" ");
-
-  if (!timeZone) {
-    return (
-      <span className={classes}>
-        <time
-          dateTime={date.toISOString()}
-          aria-busy="true"
-          className={`min-h-[1.25em] min-w-[12rem] ${timeClasses}`}
-        >
-          <span
-            aria-hidden="true"
-            className="block h-4 w-full rounded bg-slate-200 motion-safe:animate-pulse motion-reduce:animate-none"
-          />
-        </time>
-      </span>
-    );
-  }
 
   const local = formatDateTimeInZone(date, timeZone, formatLocale, { weekday, approximate });
 

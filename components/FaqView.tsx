@@ -33,6 +33,11 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "今後リセットが行われる可能性の目安です。過去のリセット間隔から基礎確率を算出し、公式予告、Statusの障害情報、コミュニティの動きなど現在の観測シグナルで補正しています。公式な確率ではありません。",
         },
         {
+          id: "teaser-forecast-method",
+          question: "リセット匂わせ投稿は予測にどう反映されますか？",
+          answer: "匂わせ投稿は公式予告とは分けて扱います。tomorrow、tonight、曜日、時刻などから示唆された時期を安全に解決できる場合は、その時間窓が今後24時間・48時間の予測範囲にどれだけ重なるかを反映し、時間が分かる匂わせでは「強い・弱い」という匂わせの強さも追加補正に使います。時刻を解決できない場合は、投稿の新しさなどに応じて影響を減衰させます。匂わせは確定した公式予定ではありません。",
+        },
+        {
           question: "Codexのリセットタイミングはいつ分かりますか？",
           answer: "公式予告がある場合は、その内容を優先して確認します。予告がない場合は、直近の履歴やStatusの動きから現在の見立てを表示しています。",
         },
@@ -147,6 +152,11 @@ export function FaqView({ locale }: FaqViewProps) {
           answer: "It is a statistical reference forecast. A baseline derived from past reset intervals is adjusted using official notices, Status incident logs, community reports, and other current signals. It is not an official probability.",
         },
         {
+          id: "teaser-forecast-method",
+          question: "How are reset teaser posts reflected in the forecast?",
+          answer: "Teaser posts are treated separately from official notices. When wording such as tomorrow, tonight, a weekday, or a clock time can be resolved safely, the forecast reflects how much that hinted window overlaps the next 24 and 48 hours; for timed teasers, weak or strong hint strength is also used as an additional adjustment. If the timing cannot be resolved, the effect decays with the age of the post. A teaser is not a confirmed official schedule.",
+        },
+        {
           question: "When can I know the Codex reset timing?",
           answer: "If there is an official notice, that takes priority. If there is no notice, this site shows the current estimate based on recent history and OpenAI Status activity.",
         },
@@ -205,6 +215,11 @@ export function FaqView({ locale }: FaqViewProps) {
           id: "forecast-method",
           question: "重置可能性是什么意思？",
           answer: "重置可能性表示未来发生重置的参考概率。本站先根据过去的重置间隔计算基础概率，再根据官方预告、OpenAI Status 故障信息、社区讨论等当前观测信号进行调整。这并不是 OpenAI 官方公布的概率。",
+        },
+        {
+          id: "teaser-forecast-method",
+          question: "重置暗示帖如何影响预测？",
+          answer: "暗示帖会与官方预告分开处理。当 tomorrow、tonight、星期几或具体时刻等时间表达能够被安全解析时，预测会根据该暗示时间窗口与未来24小时、48小时预测区间的重叠程度进行调整；对于可解析时间的暗示，还会将“较强/较弱”的暗示强度作为额外修正。若无法可靠解析时间，则会按照帖子的新旧程度逐步减弱其影响。暗示帖并不等同于已确认的官方安排。",
         },
         {
           question: "什么时候可以知道 Codex 重置的具体时间？",

@@ -1190,6 +1190,39 @@ test("adds the forecast-method anchor to each localized FAQ", () => {
   }
 });
 
+test("explains teaser timing and strength weighting in every localized FAQ", () => {
+  const cases = {
+    ja: {
+      question: "リセット匂わせ投稿は予測にどう反映されますか？",
+      timing: "今後24時間・48時間の予測範囲にどれだけ重なるか",
+      strength: "匂わせの強さも追加補正",
+      caveat: "匂わせは確定した公式予定ではありません。",
+    },
+    en: {
+      question: "How are reset teaser posts reflected in the forecast?",
+      timing: "overlaps the next 24 and 48 hours",
+      strength: "hint strength is also used as an additional adjustment",
+      caveat: "A teaser is not a confirmed official schedule.",
+    },
+    zh: {
+      question: "重置暗示帖如何影响预测？",
+      timing: "未来24小时、48小时预测区间的重叠程度",
+      strength: "暗示强度作为额外修正",
+      caveat: "暗示帖并不等同于已确认的官方安排。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(React.createElement(FaqView, { locale }));
+    assert.match(html, /id="teaser-forecast-method"/);
+    assert.ok(html.includes(cases[locale].question), locale);
+    assert.ok(html.includes(cases[locale].timing), locale);
+    assert.ok(html.includes(cases[locale].strength), locale);
+    assert.ok(html.includes(cases[locale].caveat), locale);
+    assert.match(html, /"@type":"FAQPage"/);
+  }
+});
+
 test("explains the shared Codex and Work usage pool in localized About and FAQ content", () => {
   const cases = {
     ja: {
