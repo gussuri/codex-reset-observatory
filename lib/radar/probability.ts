@@ -41,7 +41,11 @@ import {
   getTeaserStrengthSignals,
 } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
-import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import {
+  getEffectiveTemporalPrecision,
+  isTemporalNoticeConsumedAtReset,
+  TIBO_NOTICE_GRACE_MS,
+} from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
 import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
@@ -1602,7 +1606,7 @@ function getTimedTeaserForOutlook(
         signal.temporal_resolution_status === "resolved" &&
         Number.isFinite(start) &&
         Number.isFinite(end) &&
-        end >= now.getTime();
+        end + TIBO_NOTICE_GRACE_MS >= now.getTime();
     })
     .sort((left, right) =>
       new Date(right.tweet_created_at).getTime() - new Date(left.tweet_created_at).getTime()
@@ -1614,11 +1618,20 @@ function getTimedTeaserOutlookText(
   locale: Locale,
   signal: ReturnType<typeof getTimedTeaserForOutlook>,
   strength: "strong" | "weak",
+  now: Date,
 ) {
   if (!signal?.expected_start_at || !signal.expected_end_at) return null;
+  const endTime = Date.parse(signal.expected_end_at);
+  const isGracePeriod = Number.isFinite(endTime) && endTime < now.getTime();
   return replaceTeaserWindowPlaceholders(
     translateUI(
-      strength === "strong" ? "outlookStrongTimedTeaser" : "outlookWeakTimedTeaser",
+      isGracePeriod
+        ? strength === "strong"
+          ? "outlookStrongTimedTeaserGrace"
+          : "outlookWeakTimedTeaserGrace"
+        : strength === "strong"
+          ? "outlookStrongTimedTeaser"
+          : "outlookWeakTimedTeaser",
       locale,
     ),
     formatDateTime(signal.expected_start_at, locale),
@@ -1675,7 +1688,7 @@ export function getDisplayProbabilityReason(
 
   if (teaserStatus === "strong") {
     const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "strong");
-    return getTimedTeaserOutlookText(locale, timedTeaser, "strong")
+    return getTimedTeaserOutlookText(locale, timedTeaser, "strong", now)
       ?? translateUI("outlookStrongTeaser", locale);
   }
 
@@ -1685,7 +1698,7 @@ export function getDisplayProbabilityReason(
 
   if (teaserStatus === "weak") {
     const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "weak");
-    return getTimedTeaserOutlookText(locale, timedTeaser, "weak")
+    return getTimedTeaserOutlookText(locale, timedTeaser, "weak", now)
       ?? translateUI("outlookWeakTeaser", locale);
   }
 

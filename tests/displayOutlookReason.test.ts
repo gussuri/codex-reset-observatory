@@ -486,3 +486,38 @@ test("current outlook includes a localized resolved teaser window in all support
   assert.match(zh ?? "", /时间窗口/);
   assert.match(zh ?? "", /2026\/08\/27/);
 });
+
+
+test("current outlook explains the gradual fade during a timed teaser grace period in all locales", () => {
+  const now = new Date("2026-08-28T08:30:00.000Z");
+  const timedSignal = {
+    tweet_id: "timed-grace-outlook",
+    signal_type: "teaser" as const,
+    text: "Reset button tomorrow.",
+    tweet_created_at: "2026-08-27T06:31:31.000Z",
+    teaser_strength: "strong" as const,
+    confidence: 0.85,
+    verification_status: "confirmed" as const,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_confidence: 0.95,
+    expected_start_at: "2026-08-27T07:00:00.000Z",
+    expected_end_at: "2026-08-28T07:00:00.000Z",
+    expires_at: "2026-08-28T10:00:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [timedSignal],
+    recentTiboSignals: [timedSignal],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+
+  const ja = getDisplayProbabilityReason(data, 0.50, 0.75, "ja", evaluation, null, now);
+  const en = getDisplayProbabilityReason(data, 0.50, 0.75, "en", evaluation, null, now);
+  const zh = getDisplayProbabilityReason(data, 0.50, 0.75, "zh", evaluation, null, now);
+
+  assert.match(ja ?? "", /段階的に減らしながら/);
+  assert.match(en ?? "", /phased out gradually/);
+  assert.match(zh ?? "", /逐步减弱/);
+});

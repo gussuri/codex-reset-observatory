@@ -146,6 +146,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A post suggesting a reset has been confirmed. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
     zh: "已确认有暗示重置的帖子。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
   },
+  outlookStrongTimedTeaserGrace: {
+    ja: "リセットを示唆した時期（{start}〜{end}）を過ぎていますが、直後のため匂わせの影響を段階的に減らしながら予測に反映しています。",
+    en: "The hinted reset window ({start}–{end}) has passed, but because it ended recently, its effect is being phased out gradually in the forecast.",
+    zh: "暗示的重置时间窗口（{start}至{end}）已经结束，但由于刚刚结束，其影响正在预测中逐步减弱。",
+  },
   outlookActiveIncident: {
     ja: "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。",
     en: "A Codex-related incident has been confirmed. We are watching for a possible reset connected with recovery work.",
@@ -160,6 +165,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "弱いリセット匂わせ投稿があります。示唆された時期（{start}〜{end}）を24時間・48時間予測に反映しています。",
     en: "A weak reset hint is present. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
     zh: "目前有一条较弱的重置暗示。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
+  },
+  outlookWeakTimedTeaserGrace: {
+    ja: "弱いリセット匂わせで示唆された時期（{start}〜{end}）を過ぎていますが、直後のため影響を段階的に減らしながら予測に反映しています。",
+    en: "The weak hinted reset window ({start}–{end}) has passed, but because it ended recently, its effect is being phased out gradually in the forecast.",
+    zh: "较弱暗示中的重置时间窗口（{start}至{end}）已经结束，但由于刚刚结束，其影响正在预测中逐步减弱。",
   },
   outlookUsageAnomaly: {
     ja: "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。",
