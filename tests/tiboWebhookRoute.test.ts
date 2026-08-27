@@ -341,7 +341,7 @@ test("physical-item showcase is persisted as irrelevant while raw Gemini teaser 
   }
 });
 
-test("ambiguous future surprise is persisted as a teaser without official temporal schedule", async () => {
+test("ambiguous future surprise keeps teaser classification and persists its hinted day window", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -387,9 +387,13 @@ test("ambiguous future surprise is persisted as a teaser without official tempor
     assert.equal(upsertBody.ai_signal_type, "official_notice");
     assert.equal(upsertBody.ai_teaser_strength, "strong");
     assert.equal(upsertBody.ai_temporal_expression, "tomorrow");
-    assert.equal(upsertBody.expected_start_at, null);
-    assert.equal(upsertBody.expected_end_at, null);
-    assert.equal(upsertBody.temporal_resolution_status, null);
+    assert.equal(upsertBody.temporal_expression, "tomorrow");
+    assert.equal(upsertBody.temporal_kind, "relative_day");
+    assert.equal(upsertBody.temporal_precision, "day");
+    assert.equal(upsertBody.temporal_timezone, "America/Los_Angeles");
+    assert.equal(upsertBody.expected_start_at, "2026-08-19T07:00:00.000Z");
+    assert.equal(upsertBody.expected_end_at, "2026-08-20T07:00:00.000Z");
+    assert.equal(upsertBody.temporal_resolution_status, "resolved");
     const responseBody = await response.json();
     assert.equal(responseBody.signalType, "teaser");
     assert.equal(responseBody.teaserStrength, "strong");
