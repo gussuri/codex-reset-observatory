@@ -141,6 +141,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A post suggesting a reset has been confirmed. The outlook is higher than usual.",
     zh: "已确认有暗示重置的帖子，重置的可能性高于平时。",
   },
+  outlookStrongTimedTeaser: {
+    ja: "リセットを示唆する投稿が確認されています。示唆された時期（{start}〜{end}）を24時間・48時間予測に反映しています。",
+    en: "A post suggesting a reset has been confirmed. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
+    zh: "已确认有暗示重置的帖子。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
+  },
   outlookActiveIncident: {
     ja: "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。",
     en: "A Codex-related incident has been confirmed. We are watching for a possible reset connected with recovery work.",
@@ -150,6 +155,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "弱いリセット匂わせ投稿があります。",
     en: "A weak reset hint is present.",
     zh: "目前有一条较弱的重置暗示。",
+  },
+  outlookWeakTimedTeaser: {
+    ja: "弱いリセット匂わせ投稿があります。示唆された時期（{start}〜{end}）を24時間・48時間予測に反映しています。",
+    en: "A weak reset hint is present. The hinted window ({start}–{end}) is reflected in the 24h and 48h forecasts.",
+    zh: "目前有一条较弱的重置暗示。预测已将暗示的时间窗口（{start}至{end}）纳入24小时和48小时预测。",
   },
   outlookUsageAnomaly: {
     ja: "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。",

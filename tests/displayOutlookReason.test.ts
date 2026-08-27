@@ -449,3 +449,40 @@ test("display reasoning does not change public probabilities", () => {
     },
   );
 });
+
+
+test("current outlook includes a localized resolved teaser window in all supported locales", () => {
+  const now = new Date("2026-08-27T07:21:00.000Z");
+  const timedSignal = {
+    tweet_id: "timed-outlook-teaser",
+    signal_type: "teaser" as const,
+    text: "Intrigued to see if I can find the reset button tomorrow.",
+    tweet_created_at: "2026-08-27T06:31:31.000Z",
+    teaser_strength: "strong" as const,
+    confidence: 0.85,
+    verification_status: "confirmed" as const,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_confidence: 0.95,
+    expected_start_at: "2026-08-27T07:00:00.000Z",
+    expected_end_at: "2026-08-28T07:00:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [timedSignal],
+    recentTiboSignals: [timedSignal],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+
+  const ja = getDisplayProbabilityReason(data, 0.54, 0.79, "ja", evaluation, null, now);
+  const en = getDisplayProbabilityReason(data, 0.54, 0.79, "en", evaluation, null, now);
+  const zh = getDisplayProbabilityReason(data, 0.54, 0.79, "zh", evaluation, null, now);
+
+  assert.match(ja ?? "", /示唆された時期/);
+  assert.match(ja ?? "", /2026\/08\/27/);
+  assert.match(en ?? "", /hinted window/);
+  assert.match(en ?? "", /08\/27\/2026/);
+  assert.match(zh ?? "", /时间窗口/);
+  assert.match(zh ?? "", /2026\/08\/27/);
+});

@@ -24,6 +24,7 @@ import {
   getExpectationKey,
   formatElapsedResetDuration,
   formatElapsedResetDurationPrecise,
+  formatDateTime,
   type ExpectationKey,
 } from "./helpers";
 import {
@@ -34,7 +35,11 @@ import {
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
-import { aggregateResetTeaserStatus } from "./teaserStrength";
+import {
+  aggregateResetTeaserStatus,
+  getEffectiveTeaserStrength,
+  getTeaserStrengthSignals,
+} from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
@@ -1577,6 +1582,50 @@ function replaceElapsedPlaceholder(text: string, elapsed: string) {
   return text.replace("{elapsed}", elapsed);
 }
 
+function replaceTeaserWindowPlaceholders(text: string, start: string, end: string) {
+  return text.replace("{start}", start).replace("{end}", end);
+}
+
+function getTimedTeaserForOutlook(
+  data: RadarData,
+  latestResetAt: string | null,
+  now: Date,
+  strength: "strong" | "weak",
+) {
+  const sourceSignals = data.recent_tibo_signals ?? data.active_tibo_signals ?? [];
+  return getTeaserStrengthSignals(sourceSignals, latestResetAt, now, { includeReplies: true })
+    .filter((signal) => {
+      const effectiveStrength = getEffectiveTeaserStrength(signal);
+      const start = signal.expected_start_at ? Date.parse(signal.expected_start_at) : Number.NaN;
+      const end = signal.expected_end_at ? Date.parse(signal.expected_end_at) : Number.NaN;
+      return effectiveStrength === strength &&
+        signal.temporal_resolution_status === "resolved" &&
+        Number.isFinite(start) &&
+        Number.isFinite(end) &&
+        end >= now.getTime();
+    })
+    .sort((left, right) =>
+      new Date(right.tweet_created_at).getTime() - new Date(left.tweet_created_at).getTime()
+    )
+    .at(0) ?? null;
+}
+
+function getTimedTeaserOutlookText(
+  locale: Locale,
+  signal: ReturnType<typeof getTimedTeaserForOutlook>,
+  strength: "strong" | "weak",
+) {
+  if (!signal?.expected_start_at || !signal.expected_end_at) return null;
+  return replaceTeaserWindowPlaceholders(
+    translateUI(
+      strength === "strong" ? "outlookStrongTimedTeaser" : "outlookWeakTimedTeaser",
+      locale,
+    ),
+    formatDateTime(signal.expected_start_at, locale),
+    formatDateTime(signal.expected_end_at, locale),
+  );
+}
+
 function getGenericOutlookKey(
   expectationKey: Exclude<ExpectationKey, "unknown">,
   hasElapsed: boolean,
@@ -1625,7 +1674,9 @@ export function getDisplayProbabilityReason(
   );
 
   if (teaserStatus === "strong") {
-    return translateUI("outlookStrongTeaser", locale);
+    const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "strong");
+    return getTimedTeaserOutlookText(locale, timedTeaser, "strong")
+      ?? translateUI("outlookStrongTeaser", locale);
   }
 
   if (activeIncidentCount > 0) {
@@ -1633,7 +1684,9 @@ export function getDisplayProbabilityReason(
   }
 
   if (teaserStatus === "weak") {
-    return translateUI("outlookWeakTeaser", locale);
+    const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "weak");
+    return getTimedTeaserOutlookText(locale, timedTeaser, "weak")
+      ?? translateUI("outlookWeakTeaser", locale);
   }
 
   if (issueAnomalyCount > 0) {
