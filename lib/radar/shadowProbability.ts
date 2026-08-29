@@ -44,9 +44,12 @@ import {
   getTeaserStrengthSignals,
 } from "./teaserStrength";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
+import { getLastRandomRecoveryResetWindow } from "./recoveryBoundary";
 import {
+  getTemporalExecutionWindowRelation,
   getTemporalNoticeCoverage,
   getTemporalTeaserCoverage,
+  type ResetExecutionWindow,
 } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -582,9 +585,12 @@ function getEligibleFormalTeaserSignals(
   data: RadarData | null,
   now: Date,
   latestResetTime: number | null,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
   const latestTiboResetTime = getLatestAcceptedTiboResetTime(data, now);
-  const cutoff = Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
+  const cutoff = resetExecutionWindow && latestResetTime !== null
+    ? latestResetTime
+    : Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
 
   return expandTiboSignalVariants([
     ...(data?.active_tibo_signals ?? []),
@@ -593,6 +599,16 @@ function getEligibleFormalTeaserSignals(
     const createdAt = getTimestamp(signal.tweet_created_at);
     const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
       getTimestamp(signal.primary_event_at) === cutoff;
+    const temporalRelation = getTemporalExecutionWindowRelation(
+      signal.temporal_resolution_status === "resolved"
+        ? {
+            status: signal.temporal_resolution_status,
+            expectedStartAt: signal.expected_start_at ?? null,
+            expectedEndAt: signal.expected_end_at ?? null,
+          }
+        : null,
+      resetExecutionWindow,
+    );
     return Boolean(
       signal.signal_type === "teaser" &&
         // Composite-post secondary teasers are strength-classified signals,
@@ -604,7 +620,11 @@ function getEligibleFormalTeaserSignals(
         signal.is_reply !== true &&
         createdAt !== null &&
         createdAt <= now.getTime() &&
-        (createdAt > cutoff || secondaryFollowsThisBoundary),
+        (
+          createdAt > cutoff ||
+          secondaryFollowsThisBoundary ||
+          (createdAt <= cutoff && temporalRelation === "before")
+        ),
     );
   });
 }
@@ -640,6 +660,7 @@ function getTimedFormalTeaserScores(
   now: Date,
   latestResetTime: number | null,
   localObservationSignals: Array<LocalObservationSignal>,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
   const hasActiveLocalBoost = localObservationSignals.some((signal) => {
     const observedAt = getTimestamp(signal.observedAt);
@@ -655,7 +676,12 @@ function getTimedFormalTeaserScores(
   });
   if (hasActiveLocalBoost) return null;
 
-  const dynamicTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
+  const dynamicTeasers = getEligibleFormalTeaserSignals(
+    data,
+    now,
+    latestResetTime,
+    resetExecutionWindow,
+  );
   if (dynamicTeasers.length === 0) return null;
 
   return pair(
@@ -679,6 +705,7 @@ function getTeaserScore(
   now: Date,
   latestResetTime: number | null,
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
   const activeLocalBoosts = localObservationSignals.filter((signal) => {
     const observedAt = getTimestamp(signal.observedAt);
@@ -708,7 +735,12 @@ function getTeaserScore(
     ));
   }
 
-  const dynamicTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
+  const dynamicTeasers = getEligibleFormalTeaserSignals(
+    data,
+    now,
+    latestResetTime,
+    resetExecutionWindow,
+  );
 
   if (dynamicTeasers.length === 0) return 0;
   return clamp01(Math.max(
@@ -790,13 +822,20 @@ export function getStrongTimedTeaserProbabilityFloor(
   data: RadarData | null,
   now: Date,
   latestResetTime: number | null,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ): ShadowProbabilityPair | null {
   const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);
+  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(data, now);
+  const effectiveExecutionWindow = resetExecutionWindow ?? (
+    derivedExecutionWindow && getTimestamp(derivedExecutionWindow.executionWindowEndAt) === latestResetTime
+      ? derivedExecutionWindow
+      : null
+  );
   const eligibleSignals = getTeaserStrengthSignals(
     getTeaserStrengthSourceSignals(data, true),
     latestResetAt,
     now,
-    { includeReplies: false },
+    { includeReplies: false, resetExecutionWindow: effectiveExecutionWindow },
   ).filter((signal) =>
     signal.signal_type === "teaser" &&
     signal.teaser_strength === "strong",
@@ -858,8 +897,14 @@ function getTeaserStrengthMultiplier(
   now: Date,
   latestResetTime: number | null,
   config: ShadowSignalMultiplierConfig,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
-  const formalTeasers = getEligibleFormalTeaserSignals(data, now, latestResetTime);
+  const formalTeasers = getEligibleFormalTeaserSignals(
+    data,
+    now,
+    latestResetTime,
+    resetExecutionWindow,
+  );
   if (formalTeasers.length > 0) {
     const timedFormalTeasers = formalTeasers
       .map((signal) => ({
@@ -903,7 +948,7 @@ function getTeaserStrengthMultiplier(
     getTeaserStrengthSourceSignals(data),
     latestResetAt,
     now,
-    { includeReplies: false },
+    { includeReplies: false, resetExecutionWindow },
   ).filter(
     (signal) => signal.teaser_strength === "strong" || signal.teaser_strength === "weak",
   );
@@ -963,10 +1008,29 @@ export function getShadowSignalInputs(
   includeTeaserStrengthBoost: boolean,
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
   signalMultiplierConfig: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
+  resetExecutionWindow?: ResetExecutionWindow | null,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
-  const teaserScore = getTeaserScore(data, now, latestResetTime, localObservationSignals);
-  const timedTeaserScores = getTimedFormalTeaserScores(data, now, latestResetTime, localObservationSignals);
+  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(data, now);
+  const effectiveExecutionWindow = resetExecutionWindow === undefined
+    ? derivedExecutionWindow && getTimestamp(derivedExecutionWindow.executionWindowEndAt) === latestResetTime
+      ? derivedExecutionWindow
+      : null
+    : resetExecutionWindow;
+  const teaserScore = getTeaserScore(
+    data,
+    now,
+    latestResetTime,
+    localObservationSignals,
+    effectiveExecutionWindow,
+  );
+  const timedTeaserScores = getTimedFormalTeaserScores(
+    data,
+    now,
+    latestResetTime,
+    localObservationSignals,
+    effectiveExecutionWindow,
+  );
   return {
     recentResetCount7d: getRecent7DayResetCount(data, now),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
@@ -974,7 +1038,13 @@ export function getShadowSignalInputs(
     teaserScore24h: timedTeaserScores?.probability24h ?? teaserScore,
     teaserScore48h: timedTeaserScores?.probability48h ?? teaserScore,
     teaserStrengthMultiplier: includeTeaserStrengthBoost
-      ? getTeaserStrengthMultiplier(data, now, latestResetTime, signalMultiplierConfig)
+      ? getTeaserStrengthMultiplier(
+          data,
+          now,
+          latestResetTime,
+          signalMultiplierConfig,
+          effectiveExecutionWindow,
+        )
       : pair(1, 1),
     normalizedStatusScore: clamp01(
       signalEvaluation.statusIncidents.weightedStatusScore /
@@ -1084,6 +1154,15 @@ export function calculateShadowProbabilityForModel(
   const latestResetTime = events.length > 0
     ? getTimestamp(events[events.length - 1].resetAt)
     : null;
+  const randomExecutionWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    options.staticHistory ?? LOCAL_RESET_HISTORY,
+  );
+  const resetExecutionWindow = randomExecutionWindow &&
+      getTimestamp(randomExecutionWindow.executionWindowEndAt) === latestResetTime
+    ? randomExecutionWindow
+    : null;
   const resolvedOfficialNotice = options.activeOfficialNotice === undefined
     ? getActiveOfficialNotice(
         data,
@@ -1110,6 +1189,7 @@ export function calculateShadowProbabilityForModel(
     modelOptions.includeTeaserStrengthBoost === true,
     localObservationSignals,
     modelOptions.signalMultiplierConfig,
+    resetExecutionWindow,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const adjusted: ShadowProbabilityHorizons = {

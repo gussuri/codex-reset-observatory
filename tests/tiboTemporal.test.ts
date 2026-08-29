@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   getEffectiveTemporalPrecision,
+  getTemporalExecutionWindowRelation,
   getTemporalNoticeCoverage,
   getTemporalTeaserCoverage,
   isTemporalNoticeConsumedAtReset,
@@ -668,4 +669,38 @@ test("teaser timing follows the hinted window and fades smoothly after it ends",
   assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-10T12:00:00.000Z"), 24), 0.8);
   assert.ok(Math.abs((getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T08:30:00.000Z"), 24) ?? 0) - 0.4) < 1e-12);
   assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T10:00:00.000Z"), 24), 0);
+});
+
+test("classifies reset and forecast windows by semantic relation", () => {
+  const resolution = {
+    status: "resolved" as const,
+    expectedStartAt: "2026-08-24T12:00:00.000Z",
+    expectedEndAt: "2026-08-25T12:00:00.000Z",
+  };
+
+  assert.equal(
+    getTemporalExecutionWindowRelation(resolution, {
+      executionWindowStartAt: "2026-08-24T08:00:00.000Z",
+      executionWindowEndAt: "2026-08-24T09:00:00.000Z",
+    }),
+    "before",
+  );
+  assert.equal(
+    getTemporalExecutionWindowRelation(resolution, {
+      executionWindowStartAt: "2026-08-24T11:30:00.000Z",
+      executionWindowEndAt: "2026-08-24T12:30:00.000Z",
+    }),
+    "overlap",
+  );
+  assert.equal(
+    getTemporalExecutionWindowRelation(resolution, {
+      executionWindowStartAt: "2026-08-25T13:00:00.000Z",
+      executionWindowEndAt: "2026-08-25T14:00:00.000Z",
+    }),
+    "after",
+  );
+  assert.equal(
+    getTemporalExecutionWindowRelation(resolution, null),
+    "unknown",
+  );
 });

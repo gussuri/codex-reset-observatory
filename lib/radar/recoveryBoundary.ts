@@ -2,6 +2,7 @@ import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { RadarData, WindowEventLike } from "./types";
 import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
+import type { ResetExecutionWindow } from "./tiboTemporal";
 
 const RECOVERY_BOUNDARY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 
@@ -229,4 +230,34 @@ export function getLastRandomRecoveryResetAt(
   return getRecoveryResetEvents(data, now, staticHistory)
     .filter((boundary) => boundary.isRandom)
     .at(-1)?.resetAt ?? null;
+}
+
+export function getLastRandomRecoveryResetWindow(
+  data: RadarData | null,
+  now: Date = new Date(),
+  staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+): ResetExecutionWindow | null {
+  const boundary = getRecoveryResetEvents(data, now, staticHistory)
+    .filter((candidate) => candidate.isRandom)
+    .at(-1);
+  if (!boundary) return null;
+
+  const boundaryTime = getTimestamp(boundary.resetAt);
+  if (boundaryTime === null) return null;
+
+  const estimate = (data?.reset_execution_estimates ?? []).find((candidate) => {
+    const displayTime = getTimestamp(candidate.displayExecutionAt);
+    const windowStartTime = getTimestamp(candidate.executionWindowStartAt ?? null);
+    const windowEndTime = getTimestamp(candidate.executionWindowEndAt ?? null);
+    return displayTime === boundaryTime &&
+      windowStartTime !== null &&
+      windowEndTime !== null &&
+      windowStartTime < windowEndTime &&
+      windowEndTime === displayTime;
+  });
+
+  return {
+    executionWindowStartAt: estimate?.executionWindowStartAt ?? null,
+    executionWindowEndAt: boundary.resetAt,
+  };
 }

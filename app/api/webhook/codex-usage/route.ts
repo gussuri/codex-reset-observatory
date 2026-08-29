@@ -31,6 +31,10 @@ import {
   type ActiveOfficialNotice,
 } from "@/lib/radar/probability";
 import {
+  getTemporalExecutionWindowRelation,
+  type ResetExecutionWindow,
+} from "@/lib/radar/tiboTemporal";
+import {
   collectBankedDistributionSignals,
   collectOfficialTiboNoticeSignals,
   findRelatedBankedDistributionNotices,
@@ -47,7 +51,6 @@ import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
 const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
-const TEASER_FUTURE_DAY_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function getSupabaseServiceClient() {
   const url = process.env.SUPABASE_URL;
@@ -89,7 +92,11 @@ function toTiboSignal(signal: ActiveTiboSignal): TiboNoticeSignal {
   };
 }
 
-function findRecentTiboTeaser(signals: ActiveTiboSignal[], observedAt: Date) {
+function findRecentTiboTeaser(
+  signals: ActiveTiboSignal[],
+  observedAt: Date,
+  executionWindow: ResetExecutionWindow | null = null,
+) {
   const observedTime = observedAt.getTime();
   return signals
     .filter((signal) => {
@@ -98,11 +105,21 @@ function findRecentTiboTeaser(signals: ActiveTiboSignal[], observedAt: Date) {
       }
       if ((signal.confidence ?? 0) < 0.8) return false;
       const createdTime = Date.parse(signal.tweet_created_at);
-      const isFutureDayTeaser = signal.ai_temporal_direction === "future" && signal.ai_temporal_kind === "relative_day";
-      const matchWindowMs = isFutureDayTeaser
-        ? TEASER_FUTURE_DAY_MATCH_WINDOW_MS
-        : USAGE_TIBO_MATCH_WINDOW_MS;
-      if (!Number.isFinite(createdTime) || observedTime < createdTime || observedTime - createdTime > matchWindowMs) {
+      if (!Number.isFinite(createdTime) || observedTime < createdTime) {
+        return false;
+      }
+      const temporalRelation = getTemporalExecutionWindowRelation(
+        signal.temporal_resolution_status === "resolved"
+          ? {
+              status: signal.temporal_resolution_status,
+              expectedStartAt: signal.expected_start_at ?? null,
+              expectedEndAt: signal.expected_end_at ?? null,
+            }
+          : null,
+        executionWindow,
+      );
+      if (temporalRelation === "before" || temporalRelation === "after") return false;
+      if (temporalRelation === "unknown" && observedTime - createdTime > USAGE_TIBO_MATCH_WINDOW_MS) {
         return false;
       }
       return !signal.expires_at || Date.parse(signal.expires_at) > observedTime;
@@ -127,6 +144,7 @@ type OfficialNoticeLookup = {
 async function hasActiveOfficialNotice(
   client: SupabaseClient<any>,
   observedAt: Date,
+  executionWindow: ResetExecutionWindow | null = null,
 ): Promise<OfficialNoticeLookup> {
   const [tiboResult, regularResult] = await Promise.all([
     client
@@ -168,7 +186,14 @@ async function hasActiveOfficialNotice(
       })),
     regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
   };
-  const activeNotice = getActiveOfficialNotice(data, null, observedAt);
+  const activeNotice = getActiveOfficialNotice(
+    data,
+    null,
+    observedAt,
+    undefined,
+    executionWindow,
+    true,
+  );
   const activeBankedNotice = getActiveOfficialNotice(
     {
       ...data,
@@ -176,9 +201,12 @@ async function hasActiveOfficialNotice(
     },
     null,
     observedAt,
+    undefined,
+    executionWindow,
+    true,
   );
   const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
-  const teaserSignal = findRecentTiboTeaser(signals, observedAt);
+  const teaserSignal = findRecentTiboTeaser(signals, observedAt, executionWindow);
   const bankedSignals = collectBankedDistributionSignals(signals, []);
   const bankedNoticeSignals = findRelatedBankedDistributionNotices(
     bankedSignals,
@@ -341,7 +369,15 @@ export async function POST(request: Request) {
       return recoveryResponse(bankedResult.observed ? "banked_distribution_observed" : initialDecision.kind);
     }
 
-    const notice = bankedNotice ?? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt));
+    const recoveryExecutionWindow: ResetExecutionWindow = {
+      executionWindowStartAt: initialDecision.previous.observedAt,
+      executionWindowEndAt: snapshot.observedAt,
+    };
+    const notice = bankedNotice ?? await hasActiveOfficialNotice(
+      client,
+      new Date(snapshot.observedAt),
+      recoveryExecutionWindow,
+    );
     if (notice.error) {
       console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
       return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });

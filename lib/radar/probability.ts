@@ -34,7 +34,11 @@ import {
   type TiboNoticeSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
-import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "./recoveryBoundary";
+import {
+  getLastRandomRecoveryResetAt,
+  getLastRandomRecoveryResetWindow,
+  getLastRecoveryResetAt,
+} from "./recoveryBoundary";
 import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
@@ -43,8 +47,10 @@ import {
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import {
   getEffectiveTemporalPrecision,
+  getTemporalExecutionWindowRelation,
   isTemporalNoticeConsumedAtReset,
   TIBO_NOTICE_GRACE_MS,
+  type ResetExecutionWindow,
 } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
 import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
@@ -151,6 +157,20 @@ function zeroProbabilityPair(): ProbabilityPair {
   return { probability24h: 0, probability48h: 0 };
 }
 
+function getSignalTemporalWindow(signal: {
+  temporal_resolution_status?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+}) {
+  return signal.temporal_resolution_status === "resolved"
+    ? {
+        status: "resolved" as const,
+        expectedStartAt: signal.expected_start_at ?? null,
+        expectedEndAt: signal.expected_end_at ?? null,
+      }
+    : null;
+}
+
 function getOfficialNoticeTimingReason(
   locale: Locale,
 ) {
@@ -175,8 +195,10 @@ function getProbabilityComponents(
     );
   const latestAcceptedTiboExecutionTime =
     getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
-  const dynamicRandomRecoveryTime = getLastRandomRecoveryResetAt(data, now, []);
-  const latestRandomRecoveryTime = getLastRandomRecoveryResetAt(data, now);
+  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, []);
+  const latestRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now);
+  const dynamicRandomRecoveryTime = dynamicRandomRecoveryWindow?.executionWindowEndAt ?? null;
+  const latestRandomRecoveryTime = latestRandomRecoveryWindow?.executionWindowEndAt ?? null;
   // A dynamic canonical boundary represents the observed reset itself. A late
   // Tibo completion post only corroborates it and must not consume teasers
   // from the next cycle. With no dynamic boundary, retain the legacy fallback
@@ -187,13 +209,32 @@ function getProbabilityComponents(
         latestAcceptedTiboExecutionTime,
         latestRandomRecoveryTime ? getDateTime(latestRandomRecoveryTime) : 0,
       );
+  const executionWindow: ResetExecutionWindow | null = dynamicRandomRecoveryWindow ??
+    (latestRandomRecoveryWindow &&
+      getDateTime(latestRandomRecoveryWindow.executionWindowEndAt ?? "") === executionTime
+      ? latestRandomRecoveryWindow
+      : executionTime > 0
+        ? {
+            executionWindowStartAt: null,
+            executionWindowEndAt: new Date(executionTime).toISOString(),
+          }
+        : null);
   const validTeasers = sortedSignals.filter((signal) => {
     const createdTime = new Date(signal.tweet_created_at).getTime();
     const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
       new Date(signal.primary_event_at ?? "").getTime() === executionTime;
+    const temporalRelation = getTemporalExecutionWindowRelation(
+      getSignalTemporalWindow(signal),
+      executionWindow,
+    );
+    const isFutureWindowAfterReset = temporalRelation === "before";
     return signal.signal_type === "teaser" &&
       (signal.confidence ?? 0) >= 0.8 &&
-      (createdTime > executionTime || secondaryFollowsThisBoundary);
+      (
+        createdTime > executionTime ||
+        secondaryFollowsThisBoundary ||
+        (createdTime <= executionTime && isFutureWindowAfterReset)
+      );
   });
 
   const activeBoostSignals = LOCAL_OBSERVATION_SIGNALS.filter(
@@ -886,6 +927,8 @@ export function getActiveOfficialNotice(
   latestResetAt?: Date | null,
   now: Date = new Date(),
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
+  requireExecutionWindowMatch = false,
 ): ActiveOfficialNotice | null {
   const recoveryBoundaryAt = getLastResetBoundaryAt(data, now);
   const suppliedResetTime = latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
@@ -895,6 +938,11 @@ export function getActiveOfficialNotice(
     : recoveryBoundaryAt;
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
   const dynamicRecoveryBoundaryAt = getLastRecoveryResetAt(data, now, []);
+  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, []);
+  const activeResetExecutionWindow = dynamicRecoveryBoundaryAt &&
+      dynamicRandomRecoveryWindow?.executionWindowEndAt === dynamicRecoveryBoundaryAt
+    ? dynamicRandomRecoveryWindow
+    : resetExecutionWindow;
   // Prefer a dynamic canonical boundary over a later completion post. If the
   // current data has no dynamic boundary, preserve the legacy Tibo-only and
   // static-history cutoff behavior.
@@ -923,43 +971,52 @@ export function getActiveOfficialNotice(
       const latestBoundaryTime = cutoff === Number.NEGATIVE_INFINITY ? null : cutoff;
       const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
         new Date(signal.primary_event_at ?? "").getTime() === cutoff;
+      const temporalResolution = getSignalTemporalWindow(signal);
+      const temporalRelation = getTemporalExecutionWindowRelation(
+        temporalResolution,
+        activeResetExecutionWindow,
+      );
+      if (
+        requireExecutionWindowMatch &&
+        activeResetExecutionWindow &&
+        temporalRelation !== "overlap" &&
+        temporalRelation !== "unknown"
+      ) {
+        return [];
+      }
+      const executionWindowMatched = requireExecutionWindowMatch &&
+        activeResetExecutionWindow !== null &&
+        temporalRelation === "overlap";
+      const consumedByExecutionWindow = temporalRelation === "before"
+        ? false
+        : temporalRelation === "overlap"
+          ? true
+          : temporalRelation === "after"
+            ? false
+            : isTemporalNoticeConsumedAtReset(
+                temporalResolution
+                  ? {
+                      status: temporalResolution.status,
+                      temporalPrecision: getEffectiveTemporalPrecision({
+                        status: temporalResolution.status,
+                        temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
+                        expectedStartAt: signal.expected_start_at,
+                        expectedEndAt: signal.expected_end_at,
+                      }) ?? "unknown",
+                      expectedStartAt: signal.expected_start_at ?? null,
+                      expectedEndAt: signal.expected_end_at ?? null,
+                    }
+                  : null,
+                latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
+              );
       if (
         Number.isNaN(observedTime) ||
         observedTime > now.getTime() ||
         Number.isNaN(expiresTime) ||
         expiresTime <= now.getTime() ||
-        (observedTime < cutoff && isTemporalNoticeConsumedAtReset(
-          signal.temporal_resolution_status === "resolved"
-            ? {
-                status: signal.temporal_resolution_status,
-                temporalPrecision: getEffectiveTemporalPrecision({
-                  status: signal.temporal_resolution_status,
-                  temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
-                  expectedStartAt: signal.expected_start_at,
-                  expectedEndAt: signal.expected_end_at,
-                }) ?? "unknown",
-                expectedStartAt: signal.expected_start_at ?? null,
-                expectedEndAt: signal.expected_end_at ?? null,
-              }
-            : null,
-          latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
-        )) ||
-        (observedTime === cutoff && !secondaryFollowsThisBoundary && isTemporalNoticeConsumedAtReset(
-          signal.temporal_resolution_status === "resolved"
-            ? {
-                status: signal.temporal_resolution_status,
-                temporalPrecision: getEffectiveTemporalPrecision({
-                  status: signal.temporal_resolution_status,
-                  temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
-                  expectedStartAt: signal.expected_start_at,
-                  expectedEndAt: signal.expected_end_at,
-                }) ?? "unknown",
-                expectedStartAt: signal.expected_start_at ?? null,
-                expectedEndAt: signal.expected_end_at ?? null,
-              }
-            : null,
-          latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
-        ))
+        (!executionWindowMatched && temporalRelation === "after" && !secondaryFollowsThisBoundary) ||
+        (!executionWindowMatched && observedTime < cutoff && consumedByExecutionWindow) ||
+        (!executionWindowMatched && observedTime === cutoff && !secondaryFollowsThisBoundary && consumedByExecutionWindow)
       ) {
         return [];
       }

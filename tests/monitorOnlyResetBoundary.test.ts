@@ -99,6 +99,46 @@ function teaser(
   };
 }
 
+function resolvedFutureTeaser(
+  id: string,
+  createdAt: string,
+  teaserStrength: "strong" | "weak",
+  expectedStartAt: string,
+  expectedEndAt: string,
+): ActiveTiboSignal {
+  return {
+    ...teaser(id, createdAt, teaserStrength),
+    confidence: 0.95,
+    expires_at: expectedEndAt,
+    ai_temporal_direction: "future",
+    ai_temporal_kind: "relative_day",
+    temporal_precision: "range",
+    expected_start_at: expectedStartAt,
+    expected_end_at: expectedEndAt,
+    temporal_resolution_status: "resolved",
+  };
+}
+
+function resolvedFutureNotice(
+  id: string,
+  createdAt: string,
+  expectedStartAt: string,
+  expectedEndAt: string,
+): ActiveTiboSignal {
+  return {
+    ...oldNotice,
+    tweet_id: id,
+    tweet_created_at: createdAt,
+    text: "The next reset will happen tomorrow.",
+    tweet_url: `https://x.com/thsottiaux/status/${id}`,
+    expires_at: expectedEndAt,
+    temporal_precision: "range",
+    expected_start_at: expectedStartAt,
+    expected_end_at: expectedEndAt,
+    temporal_resolution_status: "resolved",
+  };
+}
+
 function fixture(
   signals: ActiveTiboSignal[],
   calculationNow: Date = NOW,
@@ -202,6 +242,120 @@ test("weak teaser strength uses the same monitor-only reset boundary", () => {
     toPublicRadarSnapshot(withNew, "ja", { calculationNow: NOW }).resetTeaserStatus,
     "weak",
   );
+});
+
+test("a future teaser remains active when its forecast window starts after a long monitor window", () => {
+  const longObservation: CodexRecoveryObservation = {
+    ...recoveryObservation,
+    previousObservedAt: "2026-08-24T07:00:00.000Z",
+  };
+  const longEstimate: ResetExecutionEstimate = {
+    ...monitorOnlyEstimate,
+    executionWindowStartAt: longObservation.previousObservedAt,
+    recoveryPreviousObservedAt: longObservation.previousObservedAt,
+  };
+  const future = resolvedFutureTeaser(
+    "future-after-reset",
+    "2026-08-24T08:00:00.000Z",
+    "strong",
+    "2026-08-25T08:00:00.000Z",
+    "2026-08-26T08:00:00.000Z",
+  );
+  const data = getLocalRadarData({
+    calculationNow: NOW,
+    activeTiboSignals: [future],
+    recentTiboSignals: [future],
+    codexRecoveryObservations: [longObservation],
+    resetExecutionEstimates: [longEstimate],
+  });
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW });
+  const calculation = getLocalProbabilityCalculation(data, { now: NOW });
+
+  assert.equal(snapshot.resetTeaserStatus, "strong");
+  assert.equal(calculation.inputSnapshot.activeTeaserCount, 1);
+  assert.ok(calculation.breakdown.contributions.teaserOrEvent.probability24h > 0);
+  assert.ok(calculation.breakdown.contributions.teaserOrEvent.probability48h > 0);
+});
+
+test("a future teaser whose forecast window overlaps the monitor reset remains consumed", () => {
+  const overlapping = resolvedFutureTeaser(
+    "overlapping-reset-window",
+    "2026-08-24T08:00:00.000Z",
+    "strong",
+    "2026-08-24T08:35:00.000Z",
+    "2026-08-24T10:00:00.000Z",
+  );
+  const data = fixture([overlapping]);
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW });
+  const calculation = getLocalProbabilityCalculation(data, { now: NOW });
+
+  assert.equal(snapshot.resetTeaserStatus, "none");
+  assert.equal(calculation.inputSnapshot.activeTeaserCount, 0);
+});
+
+test("future official notices use the forecast window instead of post distance", () => {
+  const future = resolvedFutureNotice(
+    "future-official-after-reset",
+    "2026-08-24T08:00:00.000Z",
+    "2026-08-25T08:00:00.000Z",
+    "2026-08-26T08:00:00.000Z",
+  );
+  const data = fixture([future]);
+
+  assert.equal(getActiveOfficialNotice(data, null, NOW)?.id, future.tweet_id);
+  const executionWindow = {
+    executionWindowStartAt: "2026-08-24T08:33:00.000Z",
+    executionWindowEndAt: RESET_AT,
+  };
+  assert.equal(
+    getActiveOfficialNotice(data, null, NOW, undefined, executionWindow, true),
+    null,
+  );
+
+  const overlapping = resolvedFutureNotice(
+    "overlapping-official-window",
+    "2026-08-24T08:00:00.000Z",
+    "2026-08-24T08:35:00.000Z",
+    "2026-08-24T10:00:00.000Z",
+  );
+  assert.equal(getActiveOfficialNotice(fixture([overlapping]), null, NOW), null);
+  assert.equal(
+    getActiveOfficialNotice(
+      fixture([overlapping]),
+      null,
+      NOW,
+      undefined,
+      executionWindow,
+      true,
+    )?.id,
+    overlapping.tweet_id,
+  );
+});
+
+test("insertion order does not change the future teaser boundary result", () => {
+  const future = resolvedFutureTeaser(
+    "future-order-independent",
+    "2026-08-24T08:00:00.000Z",
+    "weak",
+    "2026-08-25T08:00:00.000Z",
+    "2026-08-26T08:00:00.000Z",
+  );
+  const old = teaser("old-order-independent", "2026-08-24T08:10:00.000Z", "strong");
+  const first = toPublicRadarSnapshot(
+    fixture([future, old]),
+    "ja",
+    { calculationNow: NOW },
+  );
+  const second = toPublicRadarSnapshot(
+    fixture([old, future]),
+    "ja",
+    { calculationNow: NOW },
+  );
+
+  assert.equal(first.resetTeaserStatus, "weak");
+  assert.equal(second.resetTeaserStatus, "weak");
 });
 
 test("an old official notice is consumed, while a post-reset notice starts the next cycle", () => {

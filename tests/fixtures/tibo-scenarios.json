@@ -1194,6 +1194,27 @@
         }
       }
     },
+    {
+      "id": "moved-celebration-reset-teaser-01",
+      "category": "multiple_events",
+      "description": "A postponed celebration keeps a future reset teaser separate from today's button press",
+      "tweetText": "This celebration is moved to tomorrow as the button was already pressed today.",
+      "tweetCreatedAt": "2026-08-30T00:23:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000001",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": {
+        "signalType": "teaser",
+        "confidence": 0.98,
+        "temporalDirection": "future",
+        "evidenceQuote": "This celebration is moved to tomorrow",
+        "teaserStrength": "strong",
+        "teaserStrengthConfidence": 0.94,
+        "teaserStrengthEvidenceQuote": "This celebration is moved to tomorrow",
+        "teaserStrengthReasonJa": "今日のボタン操作とは別に、明日のcelebrationを強く示唆しています。"
+      }
+    },
 
     {
       "id": "noise-01",

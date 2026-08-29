@@ -704,6 +704,105 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
   }
 });
 
+test("a future-dated teaser is not used to corroborate an earlier monitor recovery", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-25T00:00:00.000Z",
+        received_at: "2026-08-25T00:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: Math.floor(Date.parse("2026-08-27T00:00:00.000Z") / 1000),
+        coverage_started_at: "2026-08-25T00:00:00.000Z",
+        updated_at: "2026-08-25T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: "future-teaser-route-test",
+        text: "A reset may land tomorrow.",
+        tweet_url: "https://x.com/thsottiaux/status/future-teaser-route-test",
+        tweet_created_at: "2026-08-25T00:00:00.000Z",
+        expires_at: "2026-08-27T00:00:00.000Z",
+        signal_type: "teaser",
+        confidence: 0.9,
+        verification_status: "auto_unverified",
+        is_reply: false,
+        ai_temporal_direction: "future",
+        ai_temporal_kind: "relative_day",
+        temporal_precision: "day",
+        expected_start_at: "2026-08-26T07:00:00.000Z",
+        expected_end_at: "2026-08-27T07:00:00.000Z",
+        temporal_resolution_status: "resolved",
+      }]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("codex_recovery_observations")) {
+      return new Response(JSON.stringify({
+        id: "recovery-future-teaser-route-test",
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-25T00:04:00.000Z",
+        previous_observed_at: "2026-08-25T00:00:00.000Z",
+        previous_used_percent: 100,
+        current_used_percent: 0,
+        previous_resets_at: Math.floor(Date.parse("2026-08-27T00:00:00.000Z") / 1000),
+        current_resets_at: Math.floor(Date.parse("2026-08-28T00:00:00.000Z") / 1000),
+        cycle_hint: "unexpected",
+        confidence: "strong",
+        status: "observed",
+        matched_tibo_tweet_id: null,
+        confirmed_at: null,
+        created_at: "2026-08-25T00:04:00.000Z",
+        updated_at: "2026-08-25T00:04:00.000Z",
+      }), { status: 201 });
+    }
+    if (method === "POST" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-08-25T00:04:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-08-28T00:00:00.000Z") / 1000),
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const estimate = requests.find((request) =>
+      request.url.includes("reset_execution_estimates") && request.method !== "GET",
+    );
+    assert.equal(estimate?.body?.reset_event_key, "usage-reset-recovery-future-teaser-route-test");
+    assert.equal(estimate?.body?.tibo_primary_tweet_id, null);
+    assert.deepEqual(estimate?.body?.tibo_source_tweet_ids, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("non-regular recovery beyond five minutes does not write regular history", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",

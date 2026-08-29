@@ -85,6 +85,57 @@ export type TiboTemporalResolution = {
   resolutionSource: TemporalResolutionSource;
 };
 
+export type ResetExecutionWindow = {
+  executionWindowStartAt?: string | null;
+  executionWindowEndAt?: string | null;
+};
+
+export type TemporalExecutionWindowRelation = "before" | "overlap" | "after" | "unknown";
+
+/**
+ * Compares a resolved signal forecast window with the observed reset window.
+ * Unknown or incomplete temporal data deliberately stays on the legacy path.
+ */
+export function getTemporalExecutionWindowRelation(
+  resolution: Pick<
+    TiboTemporalResolution,
+    "status" | "expectedStartAt" | "expectedEndAt"
+  > | null | undefined,
+  executionWindow: ResetExecutionWindow | null | undefined,
+): TemporalExecutionWindowRelation {
+  if (!resolution || resolution.status !== "resolved" || !executionWindow) {
+    return "unknown";
+  }
+
+  const expectedStart = resolution.expectedStartAt
+    ? Date.parse(resolution.expectedStartAt)
+    : Number.NaN;
+  const expectedEnd = resolution.expectedEndAt
+    ? Date.parse(resolution.expectedEndAt)
+    : expectedStart;
+  const executionEnd = executionWindow.executionWindowEndAt
+    ? Date.parse(executionWindow.executionWindowEndAt)
+    : Number.NaN;
+  const executionStart = executionWindow.executionWindowStartAt
+    ? Date.parse(executionWindow.executionWindowStartAt)
+    : executionEnd;
+
+  if (
+    !Number.isFinite(expectedStart) ||
+    !Number.isFinite(expectedEnd) ||
+    expectedEnd < expectedStart ||
+    !Number.isFinite(executionStart) ||
+    !Number.isFinite(executionEnd) ||
+    executionEnd < executionStart
+  ) {
+    return "unknown";
+  }
+
+  if (executionEnd < expectedStart) return "before";
+  if (executionStart > expectedEnd) return "after";
+  return "overlap";
+}
+
 export type EffectiveTemporalPrecisionInput = {
   status?: TemporalResolutionStatus | null;
   temporalPrecision?: TemporalPrecision | null;

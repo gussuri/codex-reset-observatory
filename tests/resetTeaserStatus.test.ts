@@ -147,7 +147,7 @@ test("clears pre-reset strengths and keeps post-reset strengths", () => {
   assert.equal(toPublicRadarSnapshot(afterReset, "ja", { calculationNow: NOW }).resetTeaserStatus, "strong");
 });
 
-test("keeps a resolved future teaser posted inside an approximate reset observation window", () => {
+test("keeps a resolved future teaser when its forecast window follows the reset", () => {
   const resetAt = "2026-08-04T00:00:00.000Z";
   const futureWindow = {
     temporal_resolution_status: "resolved" as const,
@@ -165,7 +165,7 @@ test("keeps a resolved future teaser posted inside an approximate reset observat
     aggregateResetTeaserStatus([
       signal("old-before-observation", "2026-08-03T23:54:59.000Z", "strong", futureWindow),
     ], resetAt, NOW),
-    "none",
+    "strong",
   );
 });
 

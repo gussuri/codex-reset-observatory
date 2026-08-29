@@ -1,8 +1,16 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
-import { getLastRandomRecoveryResetAt } from "./recoveryBoundary";
-import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import {
+  getLastRandomRecoveryResetAt,
+  getLastRandomRecoveryResetWindow,
+} from "./recoveryBoundary";
+import {
+  getEffectiveTemporalPrecision,
+  getTemporalExecutionWindowRelation,
+  isTemporalNoticeConsumedAtReset,
+  type ResetExecutionWindow,
+} from "./tiboTemporal";
 import { getPublicRecoveryObservation } from "../codexUsageRecovery";
 import {
   aggregateResetTeaserStatus,
@@ -124,6 +132,7 @@ function isCurrentOfficialNotice(
   latestResetAt: string | null,
   nowTime: number,
   sourceSignals: NonNullable<RadarData["recent_tibo_signals"]>,
+  resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
   if (signal.signal_type !== "official_notice" || signal.is_reply === true) return false;
   if (signal.verification_status === "rejected") return false;
@@ -135,6 +144,18 @@ function isCurrentOfficialNotice(
   const secondaryFollowsLatestReset = signal.is_secondary_future_signal === true &&
     Number.isFinite(latestResetTime) &&
     Date.parse(signal.primary_event_at ?? "") === latestResetTime;
+  const temporalResolution = signal.temporal_resolution_status === "resolved"
+    ? {
+        status: signal.temporal_resolution_status,
+        expectedStartAt: signal.expected_start_at ?? null,
+        expectedEndAt: signal.expected_end_at ?? null,
+      }
+    : null;
+  const temporalRelation = getTemporalExecutionWindowRelation(
+    temporalResolution,
+    resetExecutionWindow,
+  );
+  const isFutureWindowAfterBoundary = temporalRelation === "before";
   return (
     Number.isFinite(createdTime) &&
     createdTime <= nowTime &&
@@ -143,12 +164,13 @@ function isCurrentOfficialNotice(
     (!Number.isFinite(latestResetTime) ||
       createdTime > latestResetTime ||
       secondaryFollowsLatestReset ||
-      !isTemporalNoticeConsumedAtReset(
-        signal.temporal_resolution_status === "resolved"
+      isFutureWindowAfterBoundary ||
+      (temporalRelation === "unknown" && !isTemporalNoticeConsumedAtReset(
+        temporalResolution
           ? {
-              status: signal.temporal_resolution_status,
+              status: temporalResolution.status,
               temporalPrecision: getEffectiveTemporalPrecision({
-                status: signal.temporal_resolution_status,
+                status: temporalResolution.status,
                 temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
                 expectedStartAt: signal.expected_start_at,
                 expectedEndAt: signal.expected_end_at,
@@ -158,7 +180,7 @@ function isCurrentOfficialNotice(
             }
           : null,
         latestResetAt,
-      ))
+      )))
   );
 }
 
@@ -172,12 +194,18 @@ export function toPublicTiboActivity(
   locale: Locale = "ja",
   latestResetAt: string | null = getLastResetBoundaryAt(internal, now)?.toISOString() ?? null,
   latestTeaserConsumingResetAt: string | null = getLastRandomRecoveryResetAt(internal, now),
+  latestTeaserExecutionWindow: ResetExecutionWindow | null = getLastRandomRecoveryResetWindow(internal, now),
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
   const recentSignals = internal.recent_tibo_signals;
   const sourceSignals = recentSignals ?? internal.active_tibo_signals ?? [];
+  const resetExecutionWindow = latestTeaserExecutionWindow &&
+      latestResetAt &&
+      Date.parse(latestTeaserExecutionWindow.executionWindowEndAt ?? "") === Date.parse(latestResetAt)
+    ? latestTeaserExecutionWindow
+    : null;
   const candidates = sourceSignals
     .filter((signal) => {
       if (signal.is_reply === true) return false;
@@ -206,6 +234,7 @@ export function toPublicTiboActivity(
     sourceSignals,
     latestTeaserConsumingResetAt,
     now,
+    latestTeaserExecutionWindow,
   ).filter((signal) => {
     const strength = getEffectiveTeaserStrength(signal);
     return strength === "strong" || strength === "weak";
@@ -221,7 +250,13 @@ export function toPublicTiboActivity(
   const relatedCandidates = expandedSignals
     .filter((signal) => {
       const strength = getEffectiveTeaserStrength(signal);
-      return isCurrentOfficialNotice(signal, latestResetAt, nowTime, sourceSignals) ||
+      return isCurrentOfficialNotice(
+        signal,
+        latestResetAt,
+        nowTime,
+        sourceSignals,
+        resetExecutionWindow,
+      ) ||
         (typeof signal.tweet_id === "string" &&
           eligibleTeaserIds.has(signal.tweet_id) &&
           (strength === "strong" || strength === "weak"));
@@ -405,6 +440,7 @@ export function toPublicRadarSnapshot(
   );
   const latestResetAt = getLastResetBoundaryAt(internal, calculationNow)?.toISOString() ?? null;
   const latestTeaserConsumingResetAt = getLastRandomRecoveryResetAt(internal, calculationNow);
+  const latestTeaserExecutionWindow = getLastRandomRecoveryResetWindow(internal, calculationNow);
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
   );
@@ -420,6 +456,7 @@ export function toPublicRadarSnapshot(
       internal.recent_tibo_signals ?? internal.active_tibo_signals,
       latestTeaserConsumingResetAt,
       calculationNow,
+      latestTeaserExecutionWindow,
     ),
     latestTiboActivity: toPublicTiboActivity(
       internal,
@@ -427,6 +464,7 @@ export function toPublicRadarSnapshot(
       locale,
       latestResetAt,
       latestTeaserConsumingResetAt,
+      latestTeaserExecutionWindow,
     ),
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,

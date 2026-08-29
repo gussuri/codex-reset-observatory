@@ -37,6 +37,7 @@ import {
 } from "./shadowProbability";
 import {
   getRecoveryBoundaryAudit,
+  getLastRandomRecoveryResetWindow,
   getRecoveryResetEvents,
   type RecoveryBoundaryAudit,
   type RecoveryResetBoundary,
@@ -497,6 +498,15 @@ export function calculateRegimeElapsedProbability(
   const mode = modelOptions.mode ?? "full";
   const latestRecoveryResetAt = boundaries.at(-1)?.resetAt ?? null;
   const latestRandomResetAt = boundaries.filter((boundary) => boundary.isRandom).at(-1)?.resetAt ?? null;
+  const randomExecutionWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    options.staticHistory ?? LOCAL_RESET_HISTORY,
+  );
+  const resetExecutionWindow = randomExecutionWindow &&
+      getTimestamp(randomExecutionWindow.executionWindowEndAt) === getTimestamp(latestRecoveryResetAt)
+    ? randomExecutionWindow
+    : null;
   const elapsedHours = getElapsedAgeHours(boundaries, now.getTime());
   const resolvedOfficialNotice = options.activeOfficialNotice === undefined
     ? getActiveOfficialNotice(
@@ -515,6 +525,7 @@ export function calculateRegimeElapsedProbability(
     true,
     localObservationSignals,
     modelOptions.signalMultiplierConfig,
+    resetExecutionWindow,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const regimeMultiplier = mode === "elapsed-only" ? 1 : regime.regimeMultiplier;
