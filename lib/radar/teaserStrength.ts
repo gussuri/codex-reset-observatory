@@ -7,6 +7,7 @@ export type TeaserStrength = (typeof TIBO_TEASER_STRENGTHS)[number];
 export type ResetTeaserStatus = TeaserStrength | "unknown";
 
 const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+const RESET_OBSERVATION_BOUNDARY_GRACE_MS = 5 * 60 * 1000;
 
 export type ResetTeaserSignal = {
   tweet_id?: string;
@@ -78,9 +79,21 @@ export function getTeaserStrengthSignals(
     const primaryEventTime = signal.is_secondary_future_signal === true
       ? getTimestamp(signal.primary_event_at)
       : null;
+    const expectedStartTime = getTimestamp(signal.expected_start_at);
+    // Usage Monitor execution times are approximate. A resolved future teaser
+    // posted within the observation window belongs to the next cycle even if
+    // its post timestamp is a few minutes before the observed boundary.
+    const isFutureSignalWithinObservationWindow = latestResetTime !== null &&
+      createdTime !== null &&
+      createdTime <= latestResetTime &&
+      latestResetTime - createdTime <= RESET_OBSERVATION_BOUNDARY_GRACE_MS &&
+      signal.temporal_resolution_status === "resolved" &&
+      expectedStartTime !== null &&
+      expectedStartTime > latestResetTime;
     const isSemanticallyAfterBoundary = latestResetTime === null ||
       (createdTime !== null && createdTime > latestResetTime) ||
-      (primaryEventTime !== null && primaryEventTime === latestResetTime);
+      (primaryEventTime !== null && primaryEventTime === latestResetTime) ||
+      isFutureSignalWithinObservationWindow;
     return Boolean(
       createdTime !== null &&
         createdTime <= nowTime &&

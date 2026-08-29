@@ -147,6 +147,28 @@ test("clears pre-reset strengths and keeps post-reset strengths", () => {
   assert.equal(toPublicRadarSnapshot(afterReset, "ja", { calculationNow: NOW }).resetTeaserStatus, "strong");
 });
 
+test("keeps a resolved future teaser posted inside an approximate reset observation window", () => {
+  const resetAt = "2026-08-04T00:00:00.000Z";
+  const futureWindow = {
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-04T12:00:00.000Z",
+    expected_end_at: "2026-08-05T12:00:00.000Z",
+  };
+
+  assert.equal(
+    aggregateResetTeaserStatus([
+      signal("future-after-observation", "2026-08-03T23:58:00.000Z", "strong", futureWindow),
+    ], resetAt, NOW),
+    "strong",
+  );
+  assert.equal(
+    aggregateResetTeaserStatus([
+      signal("old-before-observation", "2026-08-03T23:54:59.000Z", "strong", futureWindow),
+    ], resetAt, NOW),
+    "none",
+  );
+});
+
 test("a later random reset consumes a teaser even after a regular boundary", () => {
   const regular = createObservedRegularResetEventRow(
     "2026-08-03T12:00:00.000Z",
