@@ -435,6 +435,39 @@ test("AI display names affect titles without changing public audit fields or pro
   assert.equal(serialized.includes("random-reset-name-v1"), false);
 });
 
+test("manual Japanese display names use localized fallbacks on history pages", () => {
+  const now = new Date("2026-08-30T00:00:00.000Z");
+  const manualName = "Codex利用制限改善対応リセット";
+  const data = getLocalRadarData({
+    calculationNow: now,
+    formalTiboResets: [{
+      tweet_id: "2086188036493344823",
+      text: "A weekend reset is live.",
+      tweet_url: sourceUrl,
+      tweet_created_at: completedAt,
+      detected_at: completedAt,
+      signal_type: "reset_executed",
+      confidence: 0.98,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+    }],
+    resetDisplayNames: [{
+      ...acceptedRecord(),
+      manual_name_ja: manualName,
+    }],
+  });
+
+  assert.equal(getRadarViewModel(data, "ja", true, undefined, now).recentHistory[0]?.title, manualName);
+  assert.equal(
+    getRadarViewModel(data, "en", true, undefined, now).recentHistory[0]?.title,
+    "Codex Usage Limit Improvement Reset",
+  );
+  assert.equal(
+    getRadarViewModel(data, "zh", true, undefined, now).recentHistory[0]?.title,
+    "Codex 使用限制改进重置",
+  );
+});
+
 test("legacy v2 names remain accepted and preserved during the v3 rollout", () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "A weekend reset is live.";

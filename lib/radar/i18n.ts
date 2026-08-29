@@ -1325,6 +1325,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "20 Million Active Users Milestone Reset",
     zh: "活跃用户突破2000万纪念重置",
   },
+  "Codex利用制限改善対応リセット": {
+    ja: "Codex利用制限改善対応リセット",
+    en: "Codex Usage Limit Improvement Reset",
+    zh: "Codex 使用限制改进重置",
+  },
   "任意リセット権の配布が確認されました。": {
     ja: "任意リセット権の配布が確認されました。",
     en: "A BANKED Reset distribution was observed.",
