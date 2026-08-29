@@ -45,7 +45,7 @@ import {
 } from "@/lib/radar/nextGenerationTraining";
 
 export const API_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
+  "public, max-age=0, s-maxage=180, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
 
 export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
