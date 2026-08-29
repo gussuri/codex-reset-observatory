@@ -50,11 +50,14 @@ import {
 } from "./tiboTemporal";
 
 const HOUR_MS = 60 * 60 * 1000;
-export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v3";
+export const TEASER_TIMING_POLICY_VERSION = "teaser-window-overlap-v4";
 export const TIMED_FORMAL_TEASER_STRENGTH_MULTIPLIERS = {
   weak: { multiplier24h: 1.15, multiplier48h: 1.2 },
   strong: { multiplier24h: 1.6, multiplier48h: 1.6 },
 } as const;
+
+const STRONG_TIMED_TEASER_FLOOR_START_HOURS = 24;
+const STRONG_TIMED_TEASER_FLOOR_FULL_HOURS = 2;
 
 export type ShadowResetEvent = {
   id: string;
@@ -100,6 +103,15 @@ export type ShadowProbabilityHorizons = {
   probability24h: number;
   probability48h: number;
   probability72h: number;
+};
+
+const STRONG_TIMED_TEASER_FLOOR_AT_START: ShadowProbabilityPair = {
+  probability24h: 0.7,
+  probability48h: 0.85,
+};
+const STRONG_TIMED_TEASER_FLOOR_NEAR_START: ShadowProbabilityPair = {
+  probability24h: 0.85,
+  probability48h: 0.9,
 };
 
 export type ShadowSignalMultipliers = {
@@ -706,11 +718,15 @@ function getTeaserScore(
   ));
 }
 
-function getTeaserStrengthSourceSignals(data: RadarData | null) {
+function getTeaserStrengthSourceSignals(
+  data: RadarData | null,
+  includeFormalTiboResets = false,
+) {
   const seen = new Set<string>();
   return expandTiboSignalVariants([
     ...(data?.active_tibo_signals ?? []),
     ...(data?.recent_tibo_signals ?? []),
+    ...(includeFormalTiboResets ? data?.formal_tibo_resets ?? [] : []),
   ]).flatMap((signal) => {
     const key = signal.tweet_id ?? `${signal.tweet_created_at}:${signal.signal_type}`;
     if (seen.has(key)) return [];
@@ -731,6 +747,110 @@ function getTeaserStrengthSourceSignals(data: RadarData | null) {
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
     }];
   });
+}
+
+function getStrongTimedTeaserProgress(
+  signal: {
+    temporal_resolution_status?: string | null;
+    expected_start_at?: string | null;
+    expected_end_at?: string | null;
+  },
+  now: Date,
+) {
+  const nowTime = now.getTime();
+  const startTime = getTimestamp(signal.expected_start_at);
+  const endTime = getTimestamp(signal.expected_end_at);
+  if (
+    !Number.isFinite(nowTime) ||
+    signal.temporal_resolution_status !== "resolved" ||
+    startTime === null ||
+    endTime === null ||
+    endTime < startTime ||
+    nowTime > endTime
+  ) {
+    return null;
+  }
+
+  const hoursUntilStart = (startTime - nowTime) / HOUR_MS;
+  if (hoursUntilStart > STRONG_TIMED_TEASER_FLOOR_START_HOURS) return null;
+  if (hoursUntilStart <= STRONG_TIMED_TEASER_FLOOR_FULL_HOURS) return 1;
+
+  return clamp01(
+    (STRONG_TIMED_TEASER_FLOOR_START_HOURS - hoursUntilStart) /
+      (STRONG_TIMED_TEASER_FLOOR_START_HOURS - STRONG_TIMED_TEASER_FLOOR_FULL_HOURS),
+  );
+}
+
+/**
+ * Returns the post-calibration floor for a strong, resolved timed teaser.
+ * Keeping this policy outside raw inputs preserves prospective calibration
+ * rows and the frozen next-generation model coefficients.
+ */
+export function getStrongTimedTeaserProbabilityFloor(
+  data: RadarData | null,
+  now: Date,
+  latestResetTime: number | null,
+): ShadowProbabilityPair | null {
+  const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);
+  const eligibleSignals = getTeaserStrengthSignals(
+    getTeaserStrengthSourceSignals(data, true),
+    latestResetAt,
+    now,
+    { includeReplies: false },
+  ).filter((signal) =>
+    signal.signal_type === "teaser" &&
+    signal.teaser_strength === "strong",
+  );
+  const progress = Math.max(
+    ...eligibleSignals
+      .map((signal) => getStrongTimedTeaserProgress(signal, now))
+      .filter((value): value is number => value !== null),
+    Number.NEGATIVE_INFINITY,
+  );
+  if (!Number.isFinite(progress)) return null;
+
+  return pair(
+    STRONG_TIMED_TEASER_FLOOR_AT_START.probability24h +
+      progress * (
+        STRONG_TIMED_TEASER_FLOOR_NEAR_START.probability24h -
+        STRONG_TIMED_TEASER_FLOOR_AT_START.probability24h
+      ),
+    STRONG_TIMED_TEASER_FLOOR_AT_START.probability48h +
+      progress * (
+        STRONG_TIMED_TEASER_FLOOR_NEAR_START.probability48h -
+        STRONG_TIMED_TEASER_FLOOR_AT_START.probability48h
+      ),
+  );
+}
+
+export function applyStrongTimedTeaserProbabilityFloor(
+  horizons: ShadowProbabilityHorizons,
+  floor: ShadowProbabilityPair | null,
+): ShadowProbabilityHorizons {
+  if (!floor) return horizons;
+
+  const probability24h = Math.max(
+    clamp01(horizons.probability24h),
+    clamp01(floor.probability24h),
+  );
+  const probability48h = Math.max(
+    probability24h,
+    clamp01(horizons.probability48h),
+    clamp01(floor.probability48h),
+  );
+  if (
+    probability24h === horizons.probability24h &&
+    probability48h === horizons.probability48h
+  ) {
+    return horizons;
+  }
+
+  return {
+    probability12h: derive12hFrom24hProbability(probability24h),
+    probability24h,
+    probability48h,
+    probability72h: derive72hFrom48hProbability(probability48h),
+  };
 }
 
 function getTeaserStrengthMultiplier(

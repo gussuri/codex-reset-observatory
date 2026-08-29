@@ -10,8 +10,10 @@ import {
 import type { RadarData } from "./types";
 import {
   applyOddsMultiplier,
+  applyStrongTimedTeaserProbabilityFloor,
   derive12hFrom24hProbability,
   derive72hFrom48hProbability,
+  getStrongTimedTeaserProbabilityFloor,
   TEASER_TIMING_POLICY_VERSION,
   type ShadowProbabilityHorizons,
   type ShadowProbabilityOptions,
@@ -248,19 +250,29 @@ export function calculateNextGenerationBProbability(
     probability72h: derive72hFrom48hProbability(calibrated.probability48h),
   };
   const noticeHorizons = applyOfficialNoticeTimingPolicy(calibratedHorizons, notice, now);
+  const strongTimedTeaserFloor = noticeHorizons
+    ? null
+    : getStrongTimedTeaserProbabilityFloor(
+      data,
+      now,
+      timestamp(latestRecoveryResetAt),
+    );
+  const policyHorizons = applyStrongTimedTeaserProbabilityFloor(
+    noticeHorizons ?? calibratedHorizons,
+    strongTimedTeaserFloor,
+  );
   const finalPair = enforceNextGenerationHorizonCoherence(
-    noticeHorizons?.probability24h ?? calibratedHorizons.probability24h,
-    noticeHorizons?.probability48h ?? calibratedHorizons.probability48h,
+    policyHorizons.probability24h,
+    policyHorizons.probability48h,
   );
   const finalHorizons: ShadowProbabilityHorizons = {
-    probability12h: noticeHorizons
-      ? derive12hFrom24hProbability(finalPair.probability24h)
-      : calibratedHorizons.probability12h,
+    probability12h: policyHorizons.probability12h,
     probability24h: finalPair.probability24h,
     probability48h: finalPair.probability48h,
-    probability72h: noticeHorizons
-      ? Math.max(finalPair.probability48h, derive72hFrom48hProbability(finalPair.probability48h))
-      : calibratedHorizons.probability72h,
+    probability72h: Math.max(
+      finalPair.probability48h,
+      policyHorizons.probability72h,
+    ),
   };
   const fallbackUsed = trainingReadStatus === "error";
   return {
