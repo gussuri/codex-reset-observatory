@@ -85,7 +85,6 @@ export function ResetHistoryDetails({
     note: item.summary,
   };
 
-  const isMonitorObservation = item.signalLabel === translateUI("observationTime", locale);
   const recordKind = item.recordKind ?? "confirmed_global";
   const candidateRows: Array<{ id: string; label: string; value: string }> = [
     {
@@ -109,10 +108,7 @@ export function ResetHistoryDetails({
       : []),
     {
       id: "noticeToExecution",
-      label: translateUI(
-        isMonitorObservation ? "historyDetectionWindow" : "historyNoticeToExecution",
-        locale,
-      ),
+      label: translateUI("historyNoticeToExecution", locale),
       value: details.noticeToExecution,
     },
   ];

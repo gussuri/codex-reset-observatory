@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord } from "./radar/types";
+import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord, ResetReasonType } from "./radar/types";
 import {
   resolveDisplayExecutionTime,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -538,8 +538,6 @@ function getHistoryReasonContext(item: WindowLike & { kind?: string }): ResetRea
   };
 }
 
-const MONITOR_ONLY_APOLOGY_DISPLAY_NAME = "Codex利用制限改善対応リセット";
-
 function getMonitorOnlyExecutionEstimate(
   data: RadarData | null | undefined,
   item: WindowLike,
@@ -559,37 +557,21 @@ function getMonitorOnlyExecutionEstimate(
   return estimate;
 }
 
-function getMonitorOnlyDetectionWindowMinutes(
-  data: RadarData | null | undefined,
-  item: WindowLike,
-) {
-  const estimate = getMonitorOnlyExecutionEstimate(data, item);
-  if (!estimate) return null;
+const CANONICAL_HISTORY_REASON_BY_EVENT_KEY: Partial<Record<string, ResetReasonType>> = {
+  "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925": "詫びリセット",
+};
 
-  const startTime = Date.parse(estimate.executionWindowStartAt ?? "");
-  const executionTime = Date.parse(estimate.displayExecutionAt);
-  if (!Number.isFinite(startTime) || !Number.isFinite(executionTime) || executionTime < startTime) {
-    return null;
-  }
-
-  return Math.max(0, Math.round((executionTime - startTime) / 60000));
+function getCanonicalHistoryReasonType(item: WindowLike & { kind?: string }) {
+  const eventKey = getResetDisplayNameEventKey(item);
+  return eventKey ? CANONICAL_HISTORY_REASON_BY_EVENT_KEY[eventKey] : undefined;
 }
 
-function getHistoryReasonTypeValue(
-  data: RadarData | null | undefined,
-  item: WindowLike & { kind?: string },
-) {
+function getHistoryReasonTypeValue(item: WindowLike & { kind?: string }) {
+  const canonicalReason = getCanonicalHistoryReasonType(item);
+  if (canonicalReason) return canonicalReason;
+
   const inferredReason = normalizeResetReasonType(getHistoryReasonContext(item));
   if (inferredReason) return inferredReason;
-
-  const manualName = getResetDisplayNameRecord(data, item)?.manual_name_ja?.trim();
-  if (
-    getMonitorOnlyExecutionEstimate(data, item) &&
-    manualName === MONITOR_ONLY_APOLOGY_DISPLAY_NAME
-  ) {
-    return "詫びリセット" as const;
-  }
-
   return undefined;
 }
 
@@ -689,11 +671,10 @@ function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Local
 }
 
 function getHistoryReasonType(
-  data: RadarData | null | undefined,
   item: WindowLike & { kind?: string },
   locale: Locale,
 ) {
-  const reason = getHistoryReasonTypeValue(data, item);
+  const reason = getHistoryReasonTypeValue(item);
   return reason ? translateDynamic(reason, locale) : "";
 }
 
@@ -740,11 +721,10 @@ function getHistoryNoticeToExecution(item: WindowLike & { kind?: string }, local
     return formatWindowLength(item.window_minutes, locale);
   }
 
-  return translateDynamic("不明", locale);
+  return translateDynamic("告知なし", locale);
 }
 
 function getHistoryDetails(
-  data: RadarData | null | undefined,
   item: WindowLike & { kind?: string },
   locale: Locale,
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
@@ -767,16 +747,15 @@ function getHistoryDetails(
   }
 
   if (item.details) {
-    const monitorOnlyWindowMinutes = getMonitorOnlyDetectionWindowMinutes(data, item);
-    const reason = getHistoryReasonTypeValue(data, item);
+    const reason = getHistoryReasonTypeValue(item);
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
       reasonType: reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
-      noticeToExecution: monitorOnlyWindowMinutes === null
+      noticeToExecution: item.details.noticeToExecution?.trim()
         ? translateDynamic(item.details.noticeToExecution, locale)
-        : formatWindowLength(monitorOnlyWindowMinutes, locale),
+        : translateDynamic("告知なし", locale),
       noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
       note: item.details.note
         ? translateDynamic(item.details.note, locale)
@@ -785,23 +764,19 @@ function getHistoryDetails(
   }
 
   const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
-  const monitorOnlyWindowMinutes = getMonitorOnlyDetectionWindowMinutes(data, item);
 
   return {
     cycleType: getHistoryCycleType(item, locale),
-    reasonType: getHistoryReasonType(data, item, locale),
+    reasonType: getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
     scope,
-    noticeToExecution: monitorOnlyWindowMinutes === null
-      ? getHistoryNoticeToExecution(item, locale)
-      : formatWindowLength(monitorOnlyWindowMinutes, locale),
+    noticeToExecution: getHistoryNoticeToExecution(item, locale),
     noticeType: translateDynamic("なし", locale),
     note: item.summary ? translateDynamic(item.summary, locale) : null,
   };
 }
 
 function getResetTypes(
-  data: RadarData | null | undefined,
   item: WindowLike & { kind?: string },
   locale: Locale = "ja",
 ) {
@@ -815,7 +790,7 @@ function getResetTypes(
       item.recordKind === "regular_completed",
   );
   if (isCompleted) {
-    const reason = getHistoryReasonTypeValue(data, item);
+    const reason = getHistoryReasonTypeValue(item);
     return reason ? [translateDynamic(reason, locale)] : [];
   }
 
@@ -1082,8 +1057,8 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
       const monitorOnly = getMonitorOnlyExecutionEstimate(data, item) !== null;
       const resetTypes = isRegular
         ? [translateDynamic("定期更新", locale)]
-        : getResetTypes(data, item, locale);
-      const details = getHistoryDetails(data, item, locale);
+        : getResetTypes(item, locale);
+      const details = getHistoryDetails(item, locale);
 
       return {
         key,
@@ -1098,12 +1073,12 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
           : translateEventStatus(item.kind ?? item.status, locale),
         details,
         date: item.date ?? resetAt ?? item.opened_at,
-        signalAt: isRegular ? null : item.opened_at ?? null,
+        signalAt: isRegular || monitorOnly ? null : item.opened_at ?? null,
         resetAt,
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
-        signalLabel: isRegular
+        signalLabel: isRegular || monitorOnly
           ? ""
-          : translateUI(monitorOnly ? "observationTime" : "detectionTime", locale),
+          : translateUI("detectionTime", locale),
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
         scope: isRegular
           ? details.scope

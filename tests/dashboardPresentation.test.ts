@@ -10,7 +10,7 @@ import { formatProbabilityDisplay, ProbabilityMetrics } from "../components/Prob
 import { ResetHistoryDetails } from "../components/ResetHistoryDetails";
 import { TiboActivityCard } from "../components/TiboActivityCard";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
+import { getLocalRadarData, getRadarViewModel, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
@@ -18,6 +18,7 @@ import {
   buildResetExecutionEstimate,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
 } from "../lib/radar/resetExecution";
+import type { FormalTiboResetSignal, TiboNoticeSignal } from "../lib/radar/tiboHistory";
 import type { ActiveTiboSignal, ResetDisplayNameRecord } from "../lib/radar/types";
 import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
 
@@ -1390,7 +1391,7 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
   );
 });
 
-test("presents a monitor-only recovery as an observation window, not a notice", () => {
+test("normalizes a monitor-only recovery to the shared history schema", () => {
   const calculationNow = new Date("2026-08-30T00:00:00.000Z");
   const resetEventKey = "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925";
   const recoveryObservation: CodexRecoveryObservation = {
@@ -1438,9 +1439,9 @@ test("presents a monitor-only recovery as an observation window, not a notice", 
     resetDisplayNames: [displayName],
   });
   const expected = {
-    ja: { reason: "詫びリセット", window: "4分", signal: "観測", noNotice: "告知から実施まで" },
-    en: { reason: "Compensation reset", window: "4 minutes", signal: "Observed", noNotice: "Time from notice to reset" },
-    zh: { reason: "故障补偿重置", window: "4分钟", signal: "观测", noNotice: "从预告到执行" },
+    ja: { reason: "詫びリセット", noNotice: "告知なし", oldWindowLabel: "検知幅", oldSignal: "観測", oldNoticeSignal: "予告" },
+    en: { reason: "Compensation reset", noNotice: "No notice", oldWindowLabel: "Detection window", oldSignal: "Observed", oldNoticeSignal: "Notice" },
+    zh: { reason: "故障补偿重置", noNotice: "无预告", oldWindowLabel: "检测时间窗口", oldSignal: "观测", oldNoticeSignal: "预告" },
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -1448,18 +1449,19 @@ test("presents a monitor-only recovery as an observation window, not a notice", 
     const item = snapshot.viewModel.recentHistory.find((historyItem) => historyItem.key === resetEventKey);
     assert.ok(item, `${locale} monitor-only history item should be present`);
     assert.equal(item.details?.reasonType, expected[locale].reason);
-    assert.equal(item.details?.noticeToExecution, expected[locale].window);
-    assert.equal(item.signalLabel, expected[locale].signal);
-    assert.equal(item.signalAt, recoveryObservation.previousObservedAt);
+    assert.equal(item.details?.noticeToExecution, expected[locale].noNotice);
+    assert.equal(item.signalLabel, "");
+    assert.equal(item.signalAt, null);
     assert.equal(item.resetAt, recoveryObservation.observedAt);
     assert.equal(item.details?.noticeType, locale === "ja" ? "なし" : locale === "en" ? "None" : "无预告");
 
     const detailsHtml = renderToStaticMarkup(
       React.createElement(ResetHistoryDetails, { item, locale }),
     );
-    assert.match(detailsHtml, new RegExp(expected[locale].window));
-    assert.match(detailsHtml, new RegExp(locale === "ja" ? "検知幅" : locale === "en" ? "Detection window" : "检测时间窗口"));
-    assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].noNotice));
+    assert.match(detailsHtml, new RegExp(expected[locale].noNotice));
+    assert.match(detailsHtml, new RegExp(locale === "ja" ? "告知から実施まで" : locale === "en" ? "Time from notice to reset" : "从预告到执行"));
+    assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].oldWindowLabel));
+    assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].oldSignal));
 
     const dashboardHtml = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
@@ -1473,11 +1475,62 @@ test("presents a monitor-only recovery as an observation window, not a notice", 
     const historyIndex = dashboardHtml.indexOf(item.title);
     assert.ok(historyIndex >= 0, `${locale} monitor-only title should be rendered`);
     const historyHtml = dashboardHtml.slice(historyIndex);
-    assert.match(
-      historyHtml,
-      new RegExp(`>${expected[locale].signal}${locale === "en" ? ": " : "："}</span>`),
-    );
-    assert.doesNotMatch(historyHtml, new RegExp(`>${locale === "en" ? "Notice" : locale === "zh" ? "预告" : "予告"}${locale === "en" ? ": " : "："}</span>`));
+    assert.doesNotMatch(historyHtml, new RegExp(`>${expected[locale].oldSignal}${locale === "en" ? ": " : "："}</span>`));
+    assert.doesNotMatch(historyHtml, new RegExp(`>${expected[locale].oldNoticeSignal}${locale === "en" ? ": " : "："}</span>`));
+    assert.match(historyHtml, new RegExp(`>${locale === "en" ? "Reset" : locale === "zh" ? "执行" : "実施"}${locale === "en" ? ": " : "："}</span>`));
+  }
+});
+
+test("keeps notice-backed history on the shared notice-to-execution schema", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const makeReset = (
+    tweetId: string,
+    noticeType: TiboNoticeSignal["signal_type"],
+    noticeAt: string,
+    resetAt: string,
+  ): FormalTiboResetSignal => ({
+    tweet_id: tweetId,
+    text: "I reset usage limits for Codex and ChatGPT Work.",
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: resetAt,
+    signal_type: "reset_executed",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    related_notice: {
+      tweet_id: `${tweetId}-notice`,
+      text: noticeType === "official_notice" ? "The reset is scheduled." : "A reset may be coming.",
+      tweet_url: `https://x.com/thsottiaux/status/${tweetId}-notice`,
+      tweet_created_at: noticeAt,
+      signal_type: noticeType,
+      confidence: noticeType === "official_notice" ? 0.96 : 0.9,
+      verification_status: "auto_unverified",
+    },
+  });
+  const data = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [
+      makeReset("shared-official-reset", "official_notice", "2026-08-01T07:00:00.000Z", "2026-08-01T09:00:00.000Z"),
+      makeReset("shared-teaser-reset", "teaser", "2026-08-02T07:00:00.000Z", "2026-08-02T09:00:00.000Z"),
+    ],
+  });
+
+  const expected = {
+    ja: { duration: "2時間", signal: "予告" },
+    en: { duration: "2 hours", signal: "Notice" },
+    zh: { duration: "2 小时", signal: "预告" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const viewModel = getRadarViewModel(data, locale, false, undefined, calculationNow);
+    for (const key of ["shared-official-reset", "shared-teaser-reset"]) {
+      const item = viewModel.recentHistory.find((historyItem) => historyItem.key === `tibo-reset-${key}`);
+      assert.ok(item, `${locale} ${key} history item should be present`);
+      assert.equal(item.details?.noticeToExecution, expected[locale].duration);
+      assert.equal(item.signalLabel, expected[locale].signal);
+      assert.ok(item.signalAt);
+      assert.ok(item.resetAt);
+    }
   }
 });
 

@@ -561,11 +561,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Notice",
     zh: "预告",
   },
-  observationTime: {
-    ja: "観測",
-    en: "Observed",
-    zh: "观测",
-  },
   resetTime: {
     ja: "リセット実施時刻",
     en: "Reset time",
@@ -595,11 +590,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "告知から実施まで",
     en: "Time from notice to reset",
     zh: "从预告到执行",
-  },
-  historyDetectionWindow: {
-    ja: "検知幅",
-    en: "Detection window",
-    zh: "检测时间窗口",
   },
   historyNoticeType: {
     ja: "リセット告知",
@@ -1903,6 +1893,11 @@ export const DYNAMIC_TRANSLATIONS = {
   },
   "予告なし": {
     ja: "予告なし",
+    en: "No notice",
+    zh: "无预告",
+  },
+  "告知なし": {
+    ja: "告知なし",
     en: "No notice",
     zh: "无预告",
   },
