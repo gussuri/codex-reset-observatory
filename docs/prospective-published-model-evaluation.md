@@ -1,8 +1,8 @@
 # 公開モデルのprospective評価
 
-2026-08-20までは`hazard-elapsed-v1`が公開モデルでした。現在の公開モデルは、`hazard-odds-v4-logit-calibrated-prequential-v3`を2026-08-20T11:21:37.105Z（最初のProduction deploymentがREADYになった時刻）に手動採用する境界として記録したものです。採用時点ではprospective gateは未達で、自動公開や過去rowの書き換えは行いません。
+2026-08-20までは`hazard-elapsed-v1`、その後2026-08-23T02:04:00.000Zまでは`hazard-odds-v4-logit-calibrated-prequential-v3`が公開モデルでした。現在の公開モデルは、`hazard-regime-random-continuous-calibrated-v1`（Model B）を2026-08-23T02:04:00.000Zに手動採用したものです。adoption modeは`manual`で、採用時点のprospective gateは`not_met`でした。gate未達でも、手動採用を自動で無効化したり、過去rowを書き換えたりしません。
 
-v3は、v2と同じ校正・prequential仕様を使い、teaserStrengthを反映したraw forecastとhorizon-awareな公式予告処理を持ちます。v2の旧手動採用時刻`2026-08-20T09:28:17Z`は履歴metadataとして保持します。v3の採用境界以後は、`prediction_history.debug_info.experimentalProbabilityForecasts`へv3と旧v2のforecastを同一originで保存し、v3を公開モデル、v2を比較用baselineとして評価できます。境界前のv2 forecastは保持し、v3の公開実績へ再分類しません。`hazard-elapsed-v1`は安定フォールバックおよび過去比較用に保持し、`hazard-regime-elapsed-v1`は同じ固定設定のfull regime shadowとして並行保存・評価します。
+Bは、`prediction_history.debug_info.experimentalProbabilityForecasts`に保存されるv3との同一origin比較を使ってprospectiveに評価します。Bのadoption後はBを公開モデル、`hazard-odds-v4-logit-calibrated-prequential-v3`を比較用previous baselineとして扱います。境界前のforecastは保持し、Bの公開実績へ再分類しません。`hazard-elapsed-v1`は安定fallback、`hazard-regime-elapsed-v1`は固定設定のfull regime shadowとして保持します。Model AとCはshadow/evaluation用で、Bの公開採用には含めません。
 
 採用境界以後の評価期間の開始日時は、両方のモデル予測が同じ保存rowに初めて存在した時刻から自動的に決まります。公開前の履歴をbackfillしたり、過去の予測を新モデルとして書き換えたりしません。
 

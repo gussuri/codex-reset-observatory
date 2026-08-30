@@ -1,5 +1,7 @@
 # Shadow Hazard Probability v2 (random-only)
 
+> Historical note (2026-08-30): This page describes the earlier `hazard-odds-v2-random-only` candidate and its promotion criteria. It is not the current public model. The current published-model status is recorded in [`published-model-governance.md`](published-model-governance.md).
+
 ## Purpose
 
 `hazard-odds-v2-random-only` is the candidate public probability model. The

@@ -1,5 +1,7 @@
 # Preregistration: random continuous hazard shadow v1
 
+> Historical preregistration note (2026-08-30): “Public model: unchanged” records the state at this model's 2026-08-18 freeze. The current public model and adoption decision are documented in [`published-model-governance.md`](published-model-governance.md).
+
 - Model version: `hazard-regime-random-continuous-v1`
 - Preregistration/freeze timestamp: `2026-08-18T16:14:21.000Z` (UTC)
 - Evaluation mode: prospective only

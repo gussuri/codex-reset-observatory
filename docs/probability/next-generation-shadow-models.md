@@ -1,29 +1,31 @@
-# 次世代確率モデルのshadow運用
+# 次世代確率モデルの運用と公開状態
 
-現在の公開モデルは `hazard-odds-v4-logit-calibrated-prequential-v3` のまま維持し、次のモデルは公開選択へ接続しないshadowとして観測する。
+現在の公開モデルは `hazard-regime-random-continuous-calibrated-v1`（Model B）です。Bは2026-08-23T02:04:00.000Zに`manual`で採用され、`hazard-odds-v4-logit-calibrated-prequential-v3`は比較用のprevious baselineとして維持します。prospective gateは`not_met`ですが、manual adoptionでは診断状態であり、Bを自動rollbackするruntime switchではありません。Model A/Cはshadowとして観測します。
 
-- B: `hazard-regime-random-continuous-calibrated-v1`
-- A: `hazard-ensemble-logit-stack-v1`
-- C: `hazard-contextual-burst-circadian-v1`
+- B: `hazard-regime-random-continuous-calibrated-v1`（現在の公開モデル）
+- A: `hazard-ensemble-logit-stack-v1`（shadow）
+- C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
 - C freeze: `2026-08-22T06:15:00.000Z`
 - mode: prospective only
 - backfill: false
-- auto publish: false（manual review only）
+- adoption mode: manual
+- gate status: not_met
+- auto publish: false（gateはmanual review only）
 
 ## 保存経路
 
-A/B/Cは `/api/log-probability` のlogging cycleだけで計算し、既存の `prediction_history.debug_info.experimentalProbabilityForecasts` へ保存する。`/api/current`、公開DTO、UIではA/B/Cの学習読み出しやsolverを実行しない。DB schemaも追加しない。
+Bの公開forecastは公開確率pathで計算され、logging cycleでは`prediction_history.debug_info.experimentalProbabilityForecasts`へ評価用の同一origin forecastも保存します。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
 
 prediction historyはlogging cycleで1回だけreadし、Bのraw forecast calibration、Aのensemble training、Cのfuture-only calibrationで共有する。Cのcontext係数自体はprediction historyから学習するのではなく、各origin時点までに利用可能なeligible random-reset履歴からpoint-in-timeで推定する。
 
-DB queryが失敗した場合はBとCをalpha=0のuncalibrated shadowとして監査情報付きで保存し、Aは保存しない。既存のfirst-writer-winsを維持し、保存済みrowを更新しない。
+DB queryが失敗した場合はBとCをalpha=0のuncalibrated状態として監査情報付きで保存し、Aは保存しない。既存のfirst-writer-winsを維持し、保存済みrowを更新しない。
 
 ## targetと評価
 
 targetはcompleted broad-scope eligible random resetだけ。regular resetはrandom clockを戻さず、A/B/Cのlabelをcensorしない。origin後の24h/48h終了時刻が評価のas-of以前になった場合だけ、そのhorizonをresolvedとして使う。
 
-A/Bの正式比較は同一originにpublic・A・Bが実際に保存されたrowのうち、Asia/Tokyo各日の最初のrowを使う。Brier、log loss、calibration、availability、non-overlap、skip reasonをレポートし、Gateを満たしても自動採用しない。
+BとAの正式比較は同一originに公開モデル・A・Bが実際に保存されたrowのうち、Asia/Tokyo各日の最初のrowを使う。Brier、log loss、calibration、availability、non-overlap、skip reasonをレポートし、Gateを満たしても自動採用や自動rollbackはしません。
 
 ```text
 corepack pnpm run evaluate:prospective-next-generation
@@ -33,7 +35,7 @@ corepack pnpm run evaluate:prospective-next-generation
 
 ## B: Explainable Random Continuous
 
-Bはrandom-reset-only Gaussian continuous hazardを主軸とする説明可能なbaseline候補。
+Bはrandom-reset-only Gaussian continuous hazardを主軸とする、現在の公開モデルです。
 
 - Gaussian bandwidth: 24h
 - exposure grid: 1h
@@ -85,7 +87,7 @@ corepack pnpm run evaluate:prospective-contextual-burst
 
 ## A v1との関係
 
-A v1のcomponent setはfreeze済みで、Cを追加しない。
+A v1のcomponent setはfreeze済みで、Cを追加しない。component 1のv3はBのprevious baselineとして固定された明示的な比較対象であり、現在の公開モデル名を表すaliasではありません。
 
 1. `hazard-odds-v4-logit-calibrated-prequential-v3`
 2. `hazard-regime-random-continuous-calibrated-v1`

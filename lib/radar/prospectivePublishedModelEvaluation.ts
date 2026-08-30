@@ -1,5 +1,4 @@
 import {
-  CALIBRATED_SHADOW_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
@@ -433,10 +432,10 @@ export function evaluatePublishedModelProspectively(
       "Rows before the first comparable forecast are not backfilled and are not relabeled.",
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
-      `Only forecasts generated at or after the manual adoption boundary ${PUBLISHED_PROBABILITY_ADOPTION_AT} are evaluated as public v3; earlier v2 rows remain historical baseline data and are not relabeled.`,
+      `Only forecasts generated at or after the manual adoption boundary ${PUBLISHED_PROBABILITY_ADOPTION_AT} are evaluated as the adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}; earlier rows remain historical data and are not relabeled.`,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
-      `The calibrated ${CALIBRATED_SHADOW_MODEL_VERSION} public model was manually adopted on ${PUBLISHED_PROBABILITY_ADOPTION_DATE}; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`,
+      `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model was manually adopted on ${PUBLISHED_PROBABILITY_ADOPTION_DATE}; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`,
     ],
   };
 }

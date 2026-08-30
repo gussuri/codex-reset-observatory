@@ -58,8 +58,9 @@ export const RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS = [
   216,
 ] as const;
 
-// Next-generation shadows are independently preregistered. Keep their
-// identity and freeze boundary separate from the existing model aliases.
+// Next-generation model identities are independently preregistered. Keep their
+// identity and freeze boundary separate from the existing model aliases;
+// B is public after its manual adoption boundary while A/C remain shadows.
 export const NEXT_GENERATION_A_MODEL_VERSION = "hazard-ensemble-logit-stack-v1";
 export const NEXT_GENERATION_B_RAW_MODEL_VERSION = RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION;
 export const NEXT_GENERATION_FREEZE_AT = "2026-08-21T03:27:00.000Z";
