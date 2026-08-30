@@ -14,7 +14,12 @@ import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
-import type { ActiveTiboSignal } from "../lib/radar/types";
+import {
+  buildResetExecutionEstimate,
+  MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
+} from "../lib/radar/resetExecution";
+import type { ActiveTiboSignal, ResetDisplayNameRecord } from "../lib/radar/types";
+import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -1383,6 +1388,97 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
     ),
     true,
   );
+});
+
+test("presents a monitor-only recovery as an observation window, not a notice", () => {
+  const calculationNow = new Date("2026-08-30T00:00:00.000Z");
+  const resetEventKey = "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925";
+  const recoveryObservation: CodexRecoveryObservation = {
+    id: "41c8ec4e-f752-4e5b-b685-4af67a1e6925",
+    sourceKey: "local-codex-app-server",
+    observedAt: "2026-08-29T21:25:40.549Z",
+    previousObservedAt: "2026-08-29T21:21:40.487Z",
+    previousUsedPercent: 80,
+    currentUsedPercent: 0,
+    previousResetsAt: 1788000000,
+    currentResetsAt: 1788604800,
+    cycleHint: "unexpected",
+    confidence: "strong",
+    status: "confirmed",
+    matchedTiboTweetId: null,
+  };
+  const estimate = buildResetExecutionEstimate({
+    resetEventKey,
+    usageObservation: recoveryObservation,
+    isMonitorObserved: true,
+  });
+  assert.ok(estimate);
+  assert.equal(estimate.estimatorVersion, MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION);
+
+  const displayName: ResetDisplayNameRecord = {
+    event_key: resetEventKey,
+    source_tweet_id: null,
+    manual_name_ja: "Codex利用制限改善対応リセット",
+    ai_name_ja: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: null,
+    ai_flags: null,
+    ai_generated_at: null,
+    input_hash: null,
+  };
+  const data = getLocalRadarData({
+    calculationNow,
+    codexRecoveryObservations: [recoveryObservation],
+    resetExecutionEstimates: [estimate],
+    resetDisplayNames: [displayName],
+  });
+  const expected = {
+    ja: { reason: "詫びリセット", window: "4分", signal: "観測", noNotice: "告知から実施まで" },
+    en: { reason: "Compensation reset", window: "4 minutes", signal: "Observed", noNotice: "Time from notice to reset" },
+    zh: { reason: "故障补偿重置", window: "4分钟", signal: "观测", noNotice: "从预告到执行" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+    const item = snapshot.viewModel.recentHistory.find((historyItem) => historyItem.key === resetEventKey);
+    assert.ok(item, `${locale} monitor-only history item should be present`);
+    assert.equal(item.details?.reasonType, expected[locale].reason);
+    assert.equal(item.details?.noticeToExecution, expected[locale].window);
+    assert.equal(item.signalLabel, expected[locale].signal);
+    assert.equal(item.signalAt, recoveryObservation.previousObservedAt);
+    assert.equal(item.resetAt, recoveryObservation.observedAt);
+    assert.equal(item.details?.noticeType, locale === "ja" ? "なし" : locale === "en" ? "None" : "无预告");
+
+    const detailsHtml = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, { item, locale }),
+    );
+    assert.match(detailsHtml, new RegExp(expected[locale].window));
+    assert.match(detailsHtml, new RegExp(locale === "ja" ? "検知幅" : locale === "en" ? "Detection window" : "检测时间窗口"));
+    assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].noNotice));
+
+    const dashboardHtml = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: {
+          ...snapshot,
+          viewModel: { ...snapshot.viewModel, recentHistory: [item] },
+        },
+        locale,
+      }),
+    );
+    const historyIndex = dashboardHtml.indexOf(item.title);
+    assert.ok(historyIndex >= 0, `${locale} monitor-only title should be rendered`);
+    const historyHtml = dashboardHtml.slice(historyIndex);
+    assert.match(
+      historyHtml,
+      new RegExp(`>${expected[locale].signal}${locale === "en" ? ": " : "："}</span>`),
+    );
+    assert.doesNotMatch(historyHtml, new RegExp(`>${locale === "en" ? "Notice" : locale === "zh" ? "预告" : "予告"}${locale === "en" ? ": " : "："}</span>`));
+  }
 });
 
 test("adds a localized FAQ note about plan and account-specific reset application", () => {
