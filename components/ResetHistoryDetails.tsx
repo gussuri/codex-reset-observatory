@@ -32,39 +32,6 @@ function shouldShowScope(value: string | null | undefined) {
   return !GENERIC_SCOPE_VALUES.has(normalizedValue);
 }
 
-function shouldShowNoticeToExecution(
-  value: string,
-  details: NonNullable<ResetHistoryItem["details"]>,
-  recordKind: ResetHistoryItem["recordKind"],
-) {
-  if (!isMeaningfulValue(value)) return false;
-
-  const normalizedValue = value.trim();
-  const normalizedCycle = details.cycleType.trim();
-  const normalizedMethod = details.resetMethod.trim();
-  const noNotice = !details.noticeType || details.noticeType.trim() === "なし";
-
-  if (recordKind === "banked_distribution" && normalizedValue === "0分") {
-    return false;
-  }
-
-  if (
-    normalizedValue === "0分（定期）" ||
-    (normalizedValue === "0分" && noNotice && normalizedCycle.includes("定期"))
-  ) {
-    return false;
-  }
-
-  if (
-    recordKind === "banked_distribution" &&
-    (normalizedValue === "リセット実施" || normalizedValue === "強制リセット")
-  ) {
-    return false;
-  }
-
-  return normalizedMethod !== "リセット実施" || normalizedValue !== "0分" || !noNotice;
-}
-
 export function ResetHistoryDetails({
   item,
   locale,
@@ -81,7 +48,7 @@ export function ResetHistoryDetails({
     reasonType: item.resetTypes?.find((type) => type !== item.resetType) ?? item.resetType,
     resetMethod: item.windowLength,
     scope: item.scope,
-    noticeToExecution: item.windowLength,
+    noticeToExecution: "",
     note: item.summary,
   };
 
@@ -116,9 +83,6 @@ export function ResetHistoryDetails({
   const rows = candidateRows.filter((row) => {
     if (!isMeaningfulValue(row.value)) return false;
     if (row.id === "noticeType" && hideNoticeType) return false;
-    if (row.id === "noticeToExecution") {
-      return shouldShowNoticeToExecution(row.value, details, recordKind);
-    }
     if (
       recordKind === "banked_distribution" &&
       row.id === "resetMethod" &&

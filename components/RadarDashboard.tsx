@@ -1020,7 +1020,7 @@ export function RadarDashboard({
                       {item.signalLabel && hasPriorSignal(item.signalAt, item.resetAt) ? (
                         <div className="hidden sm:contents">
                           <span className="text-slate-600">
-                            {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}
+                            {item.signalLabel}{locale === "en" ? ": " : "："}
                           </span>
                           <span className="tabular-nums">
                             <LocalizedDateTime value={item.signalAt} locale={locale} />

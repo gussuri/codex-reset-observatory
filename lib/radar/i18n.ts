@@ -596,6 +596,21 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset Notice",
     zh: "重置预告",
   },
+  historyNoticeAnnouncementValue: {
+    ja: "告知あり",
+    en: "Announcement",
+    zh: "有告知",
+  },
+  historyNoticeTeaserValue: {
+    ja: "匂わせあり",
+    en: "Teaser hint",
+    zh: "有预告提示",
+  },
+  historyAnnouncementTime: {
+    ja: "告知",
+    en: "Announcement",
+    zh: "告知",
+  },
   historyNote: {
     ja: "補足",
     en: "Note",

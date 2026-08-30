@@ -712,16 +712,27 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
   return translateDynamic("不明", locale);
 }
 
-function getHistoryNoticeToExecution(item: WindowLike & { kind?: string }, locale: Locale) {
-  if (item.window_human) {
-    return translateDynamic(item.window_human, locale);
-  }
+export type HistoryNoticePresentation = "announcement" | "teaser" | "none";
 
-  if (typeof item.window_minutes === "number") {
-    return formatWindowLength(item.window_minutes, locale);
-  }
+const ANNOUNCEMENT_HISTORY_NOTICE_TYPES = new Set([
+  "公式予告あり",
+  "公式告知あり",
+  "告知投稿あり",
+  "予告あり",
+]);
 
-  return translateDynamic("0分", locale);
+export function getHistoryNoticePresentation(
+  noticeType: string | null | undefined,
+): HistoryNoticePresentation {
+  const normalizedNoticeType = noticeType?.trim();
+  if (!normalizedNoticeType) return "none";
+  if (ANNOUNCEMENT_HISTORY_NOTICE_TYPES.has(normalizedNoticeType)) {
+    return "announcement";
+  }
+  if (normalizedNoticeType === "匂わせ投稿あり") {
+    return "teaser";
+  }
+  return "none";
 }
 
 function getHistoryDetails(
@@ -748,15 +759,21 @@ function getHistoryDetails(
 
   if (item.details) {
     const reason = getHistoryReasonTypeValue(item);
+    const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
+    const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
       reasonType: reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
-      noticeToExecution: item.details.noticeToExecution?.trim()
-        ? translateDynamic(item.details.noticeToExecution, locale)
-        : translateDynamic("0分", locale),
-      noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
+      noticeToExecution: noticePresentation === "none" || !storedNoticeToExecution
+        ? ""
+        : translateDynamic(storedNoticeToExecution, locale),
+      noticeType: noticePresentation === "announcement"
+        ? translateUI("historyNoticeAnnouncementValue", locale)
+        : noticePresentation === "teaser"
+          ? translateUI("historyNoticeTeaserValue", locale)
+          : undefined,
       note: item.details.note
         ? translateDynamic(item.details.note, locale)
         : null,
@@ -770,8 +787,8 @@ function getHistoryDetails(
     reasonType: getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
     scope,
-    noticeToExecution: getHistoryNoticeToExecution(item, locale),
-    noticeType: translateDynamic("なし", locale),
+    noticeToExecution: "",
+    noticeType: undefined,
     note: item.summary ? translateDynamic(item.summary, locale) : null,
   };
 }
@@ -1070,6 +1087,15 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         ? [translateDynamic("定期更新", locale)]
         : getResetTypes(item, locale);
       const details = getHistoryDetails(item, locale);
+      const noticePresentation = getHistoryNoticePresentation(item.details?.noticeType);
+      const signalTime = item.opened_at ? new Date(item.opened_at).getTime() : Number.NaN;
+      const resetTime = resetAt ? new Date(resetAt).getTime() : Number.NaN;
+      const hasPriorNotice = !isRegular &&
+        !monitorOnly &&
+        noticePresentation !== "none" &&
+        Number.isFinite(signalTime) &&
+        Number.isFinite(resetTime) &&
+        signalTime < resetTime;
 
       return {
         key,
@@ -1084,12 +1110,10 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
           : translateEventStatus(item.kind ?? item.status, locale),
         details,
         date: item.date ?? resetAt ?? item.opened_at,
-        signalAt: isRegular || monitorOnly ? null : item.opened_at ?? null,
+        signalAt: hasPriorNotice ? item.opened_at ?? null : null,
         resetAt,
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
-        signalLabel: isRegular || monitorOnly
-          ? ""
-          : translateUI("detectionTime", locale),
+        signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
         scope: isRegular
           ? details.scope

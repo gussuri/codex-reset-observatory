@@ -518,19 +518,19 @@ test("the Monitor-backed current announcement is localized from the canonical ev
     ja: {
       title: "Codex利用制限改善対応リセット",
       reason: "詫びリセット",
-      noticeType: "公式告知あり",
+      noticeType: "告知あり",
       noticeToExecution: "42分",
     },
     en: {
       title: "Codex Usage Limit Improvement Reset",
       reason: "Compensation reset",
-      noticeType: "Official notice",
+      noticeType: "Announcement",
       noticeToExecution: "42 minutes",
     },
     zh: {
       title: "Codex 使用限制改进重置",
       reason: "故障补偿重置",
-      noticeType: "有官方预告",
+      noticeType: "有告知",
       noticeToExecution: "42 分钟",
     },
   } as const;

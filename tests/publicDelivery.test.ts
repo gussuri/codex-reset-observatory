@@ -967,11 +967,11 @@ test("shows the next regular reset reference only within 72 hours", () => {
   }
 });
 
-test("history uses a short notice label only for a signal before execution", () => {
+test("history uses the common announcement label only for a signal before execution", () => {
   const expectedLabels = {
-    ja: "予告：",
-    en: "Notice:",
-    zh: "预告：",
+    ja: "告知：",
+    en: "Announcement:",
+    zh: "告知：",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
