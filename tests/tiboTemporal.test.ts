@@ -587,6 +587,21 @@ test("recovers supported clock and relative-day spellings without inventing a ti
   assert.equal(weekdayResolution.expectedStartAt, "2026-08-10T21:00:00.000Z");
 });
 
+test("resolves the target day of a postponed reset instead of the earlier planned day", () => {
+  const source = "The reset planned for today is postponed until tomorrow.";
+  const parsed = parseTiboTemporalSemantics(null, source);
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "relative_day");
+  assert.equal(parsed.temporalPrecision, "day");
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.match(parsed.temporalExpression ?? "", /postponed until tomorrow/i);
+
+  const resolution = resolveTiboTemporalSchedule(parsed, "2026-08-30T07:00:00.000Z");
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.expectedStartAt, "2026-08-31T07:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-09-01T07:00:00.000Z");
+});
+
 test("rejects contradictory or vague source clocks and replaces hallucinated clock fields with source evidence", () => {
   for (const source of [
     "Reset will land at 14am tomorrow.",

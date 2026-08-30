@@ -12,6 +12,7 @@ import {
 } from "../lib/radar/geminiClassification";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { parseTiboTemporalSemantics } from "../lib/radar/tiboTemporal";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
 const compositeResetText =
@@ -171,6 +172,12 @@ test("Gemini prompt requires semantic domain and temporal reasoning", () => {
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /historical language is not an automatic veto/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /same reset mechanism/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /generic words such as[\s\S]*not evidence by themselves/i);
+});
+
+test("Gemini prompt separates completed events from postponed future events", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /moved|postponed|delayed|rescheduled/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /completed event[\s\S]*future event/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /cancel(?:led|ed)[\s\S]*active future/i);
 });
 
 test("Gemini teaser strength is independent from signal type and covers ambiguous reset replies", () => {
@@ -391,6 +398,134 @@ test("secondary evidence must be the exact source substring", () => {
 
   assert.equal(guarded.futureSignal, null);
   assert.equal(guarded.teaserStrength, "none");
+});
+
+test("mixed-timeline normalization rescues the real postponed celebration from a historical-only Gemini result", () => {
+  const text = "This celebration is moved to tomorrow as the button was already pressed today.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("irrelevant"),
+    confidence: 0.97,
+    temporalDirection: "historical",
+    evidenceQuote: "the button was already pressed today",
+    reasonJa: "過去のbutton操作を示しています。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.97,
+    teaserStrengthEvidenceQuote: "the button was already pressed today",
+    teaserStrengthReasonJa: "過去の操作です。",
+    futureSignal: null,
+  });
+
+  assert.equal(guarded.signalType, "teaser");
+  assert.equal(guarded.temporalDirection, "future");
+  assert.equal(guarded.teaserStrength, "strong");
+  assert.equal(guarded.evidenceQuote, "This celebration is moved to tomorrow");
+  assert.equal(guarded.futureSignal?.signalType, "teaser");
+  assert.equal(guarded.futureSignal?.teaserStrength, "strong");
+  assert.equal(guarded.futureSignal?.evidenceQuote, "This celebration is moved to tomorrow");
+  assert.equal(guarded.futureSignal?.temporalDirection, "future");
+  assert.equal(guarded.temporalKind, "relative_day");
+  assert.equal(guarded.relativeDayOffset, 1);
+});
+
+test("mixed-timeline contrast cases keep completion, postponement, cancellation, history, and negation separate", () => {
+  const completedOnly = applyTiboClassificationSafetyGuard(
+    "The reset was already done today. Documentation update tomorrow.",
+    {
+      ...geminiResult("irrelevant"),
+      temporalDirection: "historical",
+      evidenceQuote: "The reset was already done today",
+      futureSignal: null,
+    },
+  );
+  assert.equal(completedOnly.signalType, "reset_executed");
+  assert.equal(completedOnly.futureSignal, null);
+
+  const completedWithFuture = applyTiboClassificationSafetyGuard(
+    "We already reset everyone today, but another one may come tomorrow.",
+    {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: "We already reset everyone today",
+      futureSignal: {
+        signalType: "teaser",
+        teaserStrength: "weak",
+        confidence: 0.9,
+        evidenceQuote: "another one may come tomorrow",
+        reasonJa: "別の将来resetを弱く示唆しています。",
+        temporalDirection: "future",
+      },
+    },
+  );
+  assert.equal(completedWithFuture.signalType, "reset_executed");
+  assert.equal(completedWithFuture.futureSignal?.signalType, "teaser");
+
+  const postponed = "The reset planned for today is postponed until tomorrow.";
+  assert.notEqual(getTiboClassificationSafetyDecision(postponed, "reset_executed").signalType, "reset_executed");
+  assert.equal(parseTiboTemporalSemantics(null, postponed)?.relativeDayOffset, 1);
+  const guardedPostponed = applyTiboClassificationSafetyGuard(postponed, {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "The reset planned for today is postponed until tomorrow",
+    futureSignal: null,
+  });
+  assert.equal(guardedPostponed.signalType, "official_notice");
+  assert.equal(guardedPostponed.temporalDirection, "future");
+  assert.equal(guardedPostponed.relativeDayOffset, 1);
+
+  const unrelatedPostponement = applyTiboClassificationSafetyGuard(
+    "The reset was already done today, and documentation is postponed until tomorrow.",
+    {
+      ...geminiResult("irrelevant"),
+      temporalDirection: "historical",
+      evidenceQuote: "The reset was already done today",
+      futureSignal: null,
+    },
+  );
+  assert.equal(unrelatedPostponement.signalType, "reset_executed");
+  assert.equal(unrelatedPostponement.futureSignal, null);
+
+  const unrelatedButtonPostponement = applyTiboClassificationSafetyGuard(
+    "The button was already pressed today, and the interface update is postponed until tomorrow.",
+    {
+      ...geminiResult("irrelevant"),
+      temporalDirection: "historical",
+      evidenceQuote: "The button was already pressed today",
+      futureSignal: null,
+    },
+  );
+  assert.equal(unrelatedButtonPostponement.signalType, "irrelevant");
+  assert.equal(unrelatedButtonPostponement.futureSignal, null);
+
+  const cancelledReschedule = applyTiboClassificationSafetyGuard(
+    "The button was already pressed today, but the celebration was cancelled and moved to tomorrow.",
+    {
+      ...geminiResult("irrelevant"),
+      temporalDirection: "historical",
+      evidenceQuote: "The button was already pressed today",
+      futureSignal: null,
+    },
+  );
+  assert.equal(cancelledReschedule.signalType, "irrelevant");
+  assert.equal(cancelledReschedule.futureSignal, null);
+
+  assert.equal(
+    getTiboClassificationSafetyDecision(
+      "We were going to reset tomorrow, but that's cancelled.",
+      "official_notice",
+    ).signalType,
+    "irrelevant",
+  );
+  assert.equal(
+    getTiboClassificationSafetyDecision("I pressed the reset button yesterday.", "reset_executed").signalType,
+    "irrelevant",
+  );
+  assert.equal(
+    getTiboClassificationSafetyDecision(
+      "The button was already pressed today, so no celebration tomorrow.",
+      "teaser",
+    ).signalType,
+    "irrelevant",
+  );
 });
 
 test("explicit future reset language can retain strong independent teaser strength", () => {

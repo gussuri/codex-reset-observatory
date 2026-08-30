@@ -28,6 +28,7 @@ export type TiboClassificationSafetyReason =
   | "current_execution"
   | "historical_reset"
   | "historical_then_future"
+  | "future_reschedule"
   | null;
 
 export type TiboClassificationSafetyDecision = {
@@ -48,6 +49,12 @@ const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year
 const UNRELATED_HISTORICAL_REFERENCE_PATTERN = /\b(?:things?|issues?|problems?|fixes?|topics?)\s+(?:mentioned|discussed|found|raised)\s+(?:yesterday|last\s+(?:week|month|night|year))\b/i;
 const FUTURE_RESET_PATTERN = /\b(?:will|going\s+to|coming|tonight|tomorrow|later|soon|next|scheduled|planned|in\s+(?:an?|one|two|half\s+an?|\d+)\s+(?:minute|minutes|hour|hours|day|days))\b/i;
 const CANCELLATION_PATTERN = /\b(?:no|not|never|cancel(?:led|ed)?|canceled|not\s+anymore|changed\s+my\s+mind|scratch\s+that)\b/i;
+const EXPLICIT_FUTURE_RESET_RESCHEDULE_PATTERN =
+  /(?:\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,140}\b(?:moved|postponed|delayed|rescheduled|pushed\s+back|put\s+off)\b[^.!?]{0,100}\b(?:tomorrow|later|next\s+(?:day|week|month|year)|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b|\b(?:moved|postponed|delayed|rescheduled|pushed\s+back|put\s+off)\b[^.!?]{0,100}\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,100}\b(?:tomorrow|later|next\s+(?:day|week|month|year)|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b)/i;
+const CANCELLED_FUTURE_RESET_PATTERN =
+  /(?:\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?|celebration)\b[^.!?]{0,140}\b(?:cancel(?:led|ed)?|canceled|no\s+longer|not\s+happening|scrapped)\b|\b(?:cancel(?:led|ed)?|canceled|no\s+longer|not\s+happening|scrapped)\b[^.!?]{0,140}\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?|celebration)\b)/i;
+const NEGATED_FUTURE_RESET_PATTERN =
+  /\b(?:no|not|never)\s+(?:[^.!?]{0,40}\b)?(?:reset|celebration)\b[^.!?]{0,80}\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year))\b/i;
 const EXPLICIT_RESET_NEGATION_PATTERN =
   /\b(?:no\s+reset|(?:will|would|going\s+to|can|could|should|do|does|did|am|is|are)\s+not\s+(?:going\s+to\s+|planning\s+to\s+)?(?:reset|restart|reboot)|(?:will|would|going\s+to)\s+not\s+(?:happen|occur)|not\s+(?:reset|happen|occur)\b)/i;
 const RECENT_RESET_BUTTON_ACQUISITION_PATTERN =
@@ -58,7 +65,7 @@ const HISTORICAL_RESET_BUTTON_ACQUISITION_PATTERN =
 
 const CURRENT_EXECUTION_PATTERNS = [
   /\b(?:one\s+|a\s+)?reset\s+now\b/i,
-  /\b(?:reset|limits?|usage\s+limits?)\s+(?:is|are|was|were)\s+(?:done|complete|completed|landed|reset|refreshed)\b/i,
+  /\b(?:reset|limits?|usage\s+limits?)\s+(?:is|are|was|were)\s+(?:already\s+)?(?:done|complete|completed|landed|reset|refreshed)\b/i,
   /\b(?:reset|usage\s+limits?)\s+(?:has|have|was|were|are)\s+been\s+(?:reset|completed|refreshed)\b/i,
   /\b(?:reset|usage\s+limits?|rate\s+limits?)\s+(?:has|have)\s+been\s+(?:propagated|applied)\s+to\s+(?:accounts?|users?|everyone)\b/i,
   /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b/i,
@@ -191,6 +198,20 @@ export function getTiboClassificationSafetyDecision(
     };
   }
 
+  const normalizedText = normalizedClassificationText(text);
+  if (
+    (CANCELLED_FUTURE_RESET_PATTERN.test(normalizedText) || NEGATED_FUTURE_RESET_PATTERN.test(normalizedText)) &&
+    !hasCurrentResetExecution(text) &&
+    candidate !== "irrelevant"
+  ) {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "resetの延期・予定ではなく、取り消しまたは否定を示しているため、現在のresetシグナルにはしません。",
+      reasonCode: "explicit_negation",
+      suppressTeaserStrength: true,
+    };
+  }
+
   if (hasCurrentResetExecution(text)) {
     if (candidate !== "reset_executed") {
       return {
@@ -210,7 +231,19 @@ export function getTiboClassificationSafetyDecision(
     };
   }
 
-  const normalized = normalizedClassificationText(text);
+  if (
+    EXPLICIT_FUTURE_RESET_RESCHEDULE_PATTERN.test(normalizedText) &&
+    candidate === "reset_executed"
+  ) {
+    return {
+      signalType: "official_notice",
+      reasonJa: "resetの実施予定が延期・変更されており、完了ではなく未来の予告として扱います。",
+      reasonCode: "future_reschedule",
+      suppressTeaserStrength: false,
+    };
+  }
+
+  const normalized = normalizedText;
   const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized);
   if (hasHistoricalReset && candidate !== "irrelevant") {
     const hasFutureEvent = FUTURE_RESET_PATTERN.test(normalized);

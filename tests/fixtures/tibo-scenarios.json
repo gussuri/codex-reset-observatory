@@ -1205,15 +1205,94 @@
       "pipeline": true,
       "regressionGroup": "composite-reset",
       "mockGeminiOutput": {
-        "signalType": "teaser",
-        "confidence": 0.98,
-        "temporalDirection": "future",
-        "evidenceQuote": "This celebration is moved to tomorrow",
-        "teaserStrength": "strong",
-        "teaserStrengthConfidence": 0.94,
-        "teaserStrengthEvidenceQuote": "This celebration is moved to tomorrow",
-        "teaserStrengthReasonJa": "今日のボタン操作とは別に、明日のcelebrationを強く示唆しています。"
+        "signalType": "irrelevant",
+        "confidence": 0.97,
+        "temporalDirection": "historical",
+        "evidenceQuote": "the button was already pressed today",
+        "teaserStrength": "none",
+        "teaserStrengthConfidence": 0.97,
+        "teaserStrengthEvidenceQuote": "the button was already pressed today",
+        "teaserStrengthReasonJa": "過去のbutton操作です。"
       }
+    },
+    {
+      "id": "mixed-completed-docs-01",
+      "category": "multiple_events",
+      "description": "Completed reset followed by unrelated documentation work",
+      "tweetText": "The reset was already done today. Documentation update tomorrow.",
+      "tweetCreatedAt": "2026-08-30T01:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000002",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": true },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "completed_now", "evidenceQuote": "The reset was already done today", "teaserStrength": "none" }
+    },
+    {
+      "id": "mixed-completed-future-reset-01",
+      "category": "multiple_events",
+      "description": "Completed reset with an independent possible future reset",
+      "tweetText": "We already reset everyone today, but another one may come tomorrow.",
+      "tweetCreatedAt": "2026-08-30T02:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000003",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateActiveNotice": false, "shouldCreateResetHistoryEvent": true },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": {
+        "signalType": "reset_executed",
+        "confidence": 0.98,
+        "temporalDirection": "completed_now",
+        "evidenceQuote": "already reset everyone today",
+        "teaserStrength": "none",
+        "futureSignal": { "signalType": "teaser", "teaserStrength": "weak", "confidence": 0.9, "evidenceQuote": "another one may come tomorrow", "reasonJa": "別の将来resetを弱く示唆しています。", "temporalDirection": "future" }
+      }
+    },
+    {
+      "id": "postponed-reset-01",
+      "category": "multiple_events",
+      "description": "A reset planned for today is moved to tomorrow",
+      "tweetText": "The reset planned for today is postponed until tomorrow.",
+      "tweetCreatedAt": "2026-08-30T03:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000004",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "day", "shouldCreateActiveNotice": true, "shouldCreateResetHistoryEvent": false },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": { "signalType": "official_notice", "confidence": 0.98, "temporalDirection": "future", "evidenceQuote": "The reset planned for today is postponed until tomorrow", "temporalExpression": "postponed until tomorrow", "temporalKind": "relative_day", "temporalPrecision": "day", "relativeDayOffset": 1, "temporalConfidence": 0.95 }
+    },
+    {
+      "id": "cancelled-future-reset-01",
+      "category": "multiple_events",
+      "description": "A future reset plan is cancelled",
+      "tweetText": "We were going to reset tomorrow, but that's cancelled.",
+      "tweetCreatedAt": "2026-08-30T04:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000005",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": { "signalType": "official_notice", "confidence": 0.98, "temporalDirection": "future", "evidenceQuote": "reset tomorrow", "teaserStrength": "strong" }
+    },
+    {
+      "id": "historical-button-01",
+      "category": "historical",
+      "description": "A reset button memory remains historical only",
+      "tweetText": "I pressed the reset button yesterday.",
+      "tweetCreatedAt": "2026-08-30T05:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000006",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 0.98, "temporalDirection": "historical", "evidenceQuote": "pressed the reset button yesterday", "teaserStrength": "strong" }
+    },
+    {
+      "id": "negated-celebration-01",
+      "category": "negation",
+      "description": "A denied celebration tomorrow is not a future teaser",
+      "tweetText": "The button was already pressed today, so no celebration tomorrow.",
+      "tweetCreatedAt": "2026-08-30T06:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093000000000000007",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false },
+      "pipeline": true,
+      "regressionGroup": "composite-reset",
+      "mockGeminiOutput": { "signalType": "teaser", "confidence": 0.98, "temporalDirection": "future", "evidenceQuote": "no celebration tomorrow", "teaserStrength": "strong" }
     },
 
     {

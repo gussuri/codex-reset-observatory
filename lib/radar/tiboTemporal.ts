@@ -214,6 +214,12 @@ const RESET_BUTTON_REUSE_NEGATION_PATTERN =
 const NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN =
   /\b(?:keyboard|laptop|phone|router|server|device|controller|console|game|car|factory\s+reset)\b/i;
 const VAGUE_DAY_PATTERN = /\b(?:sometime|some time|soon|later|in a while)\b/i;
+const RESCHEDULE_VERB_PATTERN =
+  /\b(?:moved|postponed|delayed|rescheduled|pushed\s+back|put\s+off)\b/i;
+const RESCHEDULE_TARGET_DAY_PATTERN =
+  /\b(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+const RESCHEDULE_RESET_CONTEXT_PATTERN =
+  /\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?|celebration|(?:reset\s+)?button)\b/i;
 
 type DeterministicTemporalExtraction = {
   semantics: TiboTemporalSemantics | null;
@@ -458,6 +464,60 @@ function buildSourceDayCandidate(
   };
 }
 
+/**
+ * A reschedule sentence can contain both the original day and the new day.
+ * Prefer the destination day instead of treating both tokens as ambiguous.
+ * This stays limited to reset/celebration context so ordinary postponed work
+ * does not acquire a reset schedule.
+ */
+function buildRescheduledDayCandidate(
+  sourceText: string,
+  segment: SourceSegment,
+): SourceTemporalCandidate | null {
+  if (!RESCHEDULE_RESET_CONTEXT_PATTERN.test(segment.text)) return null;
+  const movement = RESCHEDULE_VERB_PATTERN.exec(segment.text);
+  if (!movement || movement.index === undefined) return null;
+
+  const tail = segment.text.slice(movement.index + movement[0].length);
+  const targetMatch = Array.from(tail.matchAll(RESCHEDULE_TARGET_DAY_PATTERN))[0];
+  if (!targetMatch || targetMatch.index === undefined) return null;
+
+  const targetValue = targetMatch[0].toLowerCase();
+  const targetIndex = segment.start + movement.index + movement[0].length + targetMatch.index;
+  const targetDay: SourceDay = {
+    value: targetValue,
+    index: targetIndex,
+    end: targetIndex + targetMatch[0].length,
+  };
+  const weekday = WEEKDAYS.includes(targetValue as TemporalWeekday)
+    ? targetValue as TemporalWeekday
+    : null;
+  const relativeDayOffset = targetValue === "tomorrow" ? 1 : null;
+  if (relativeDayOffset === null && !weekday) return null;
+
+  return {
+    clock: null,
+    day: targetDay,
+    timezone: null,
+    semantics: {
+      temporalExpression: sourceText.slice(segment.start, targetDay.end).trim(),
+      temporalKind: relativeDayOffset !== null ? "relative_day" : "weekday",
+      temporalPrecision: "day",
+      weekday,
+      relativeDayOffset,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
+      resolutionSource: "deterministic",
+    },
+  };
+}
+
 function buildResetButtonReuseDayCandidate(sourceText: string): SourceTemporalCandidate | null {
   const resetButton = /\breset\s+button\b/i.exec(sourceText);
   if (!resetButton || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(sourceText)) return null;
@@ -503,6 +563,12 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
   const candidates: SourceTemporalCandidate[] = [];
   let rejected = false;
   for (const segment of getSourceSegments(sourceText)) {
+    const rescheduled = buildRescheduledDayCandidate(sourceText, segment);
+    if (rescheduled) {
+      candidates.push(rescheduled);
+      continue;
+    }
+
     const clockResult = getSourceClockMatches(segment);
     if (clockResult.rejected) {
       rejected = true;

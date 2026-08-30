@@ -1,6 +1,7 @@
 import https from "node:https";
 import {
   hasCurrentResetExecution,
+  hasExplicitNonUsageResetObject,
   getTiboClassificationSafetyDecision,
   type ClassificationSignalType,
 } from "./classification";
@@ -11,6 +12,7 @@ import {
 import type { TiboSecondarySignalType } from "./tiboSecondarySignal";
 import {
   parseGeminiTemporalSemantics,
+  parseTiboTemporalSemantics,
   TIBO_SOURCE_TIME_ZONE,
   type TiboTemporalSemantics,
 } from "./tiboTemporal";
@@ -52,6 +54,18 @@ const UNRELATED_FUTURE_QUOTE_PATTERN =
   /\b(?:documentation|docs|reliability|feature|rollout|blog|meeting|work\s+on|bug\s+fix(?:es)?|status\s+update)\b[\s\S]{0,80}\b(?:tomorrow|later|soon|next\s+(?:week|day))\b/i;
 const EXPLICIT_FUTURE_NOTICE_QUOTE_PATTERN =
   /\b(?:will|going\s+to|plan(?:s|ned)?\s+to|scheduled\s+to|coming|more|another|next)\b[\s\S]{0,100}\b(?:reset|resets|resetting|reset\s+button|usage\s+limits?|quota)\b[\s\S]{0,100}\b(?:tomorrow|later|soon|next\s+(?:week|day)|again|in\s+(?:an?|one|\d+)\s+(?:hour|hours|day|days))\b/i;
+const MIXED_TIMELINE_BUTTON_COMPLETION_PATTERN =
+  /\b(?:the\s+)?(?:reset\s+)?button\s+(?:was|has\s+been)\s+(?:already\s+)?pressed\s+(?:today|just\s+now)\b/i;
+const MIXED_TIMELINE_RESCHEDULE_PATTERN =
+  /\b(?:moved|postponed|delayed|rescheduled|pushed\s+back|put\s+off)\b/i;
+const MIXED_TIMELINE_TARGET_DAY_PATTERN =
+  /\b(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+const MIXED_TIMELINE_CANCELLATION_PATTERN =
+  /\b(?:cancel(?:led|ed)?|canceled|no\s+longer|not\s+happening|scrapped)\b/i;
+const MIXED_TIMELINE_NEGATED_RESCHEDULE_PATTERN =
+  /\b(?:not|never)\s+(?:be\s+)?(?:moved|postponed|delayed|rescheduled|pushed\s+back|put\s+off)\b/i;
+const MIXED_TIMELINE_FUTURE_RESET_CONTEXT_PATTERN =
+  /\b(?:reset|usage\s+limits?|rate\s+limits?|quotas?|allowances?|celebration)\b/i;
 
 export function normalizeGeminiResetType(value: unknown): GeminiResetType | null {
   return value === "ご祝儀リセット" || value === "詫びリセット" ? value : null;
@@ -226,6 +240,19 @@ context-only exact substring without the words reset or limit. Choose teaserStre
 "weak" yourself from the full post context; do not leave it null or use none for a teaser.
 Use futureSignal.type="none" only when the future passage cannot reasonably be connected to a
 future reset, such as documentation, changelog, or unrelated improvements.
+
+Treat rescheduling language as a mixed timeline, not as a historical-only veto. A sentence may
+describe a completed or already-pressed reset mechanism and separately move a celebration or reset
+to tomorrow, later, or another named day. Evaluate those passages independently: the completed
+passage remains primary when it is an actual usage-limit reset, while the moved/postponed future
+passage is a separate futureSignal. A moved celebration is at least a teaser when the surrounding
+post makes its reset meaning clear; it is not an official_notice unless the future reset itself is
+explicitly committed. A postponed reset is future, not completed today. Cancellation, denial,
+documentation, and unrelated future work must remain outside an active future reset signal.
+A cancelled future reset is not an active future signal, even when the post also mentions a prior reset.
+
+Treat a completed event and a future event in the same post as separate timeline passages. Do not
+let a historical or completed passage erase a distinct future reschedule.
 
 Contrast these cases: "Reset is done. Might press the reset button again tomorrow." is a
 future teaser whose strength you must assess; "Reset is done. Maybe another surprise tomorrow."
@@ -477,6 +504,128 @@ function parseFutureSignalAssessment(
   } satisfies GeminiFutureSignalOutput;
 }
 
+type MixedTimelineRecovery = {
+  completedEvidenceQuote: string;
+  futureEvidenceQuote: string;
+  temporal: TiboTemporalSemantics | null;
+  primarySignalType: "reset_executed" | "teaser";
+};
+
+function findMixedTimelineRecovery(
+  text: string,
+  result: GeminiClassificationOutput,
+): MixedTimelineRecovery | null {
+  const canRecover = result.signalType === "irrelevant" ||
+    result.temporalDirection === "historical" ||
+    (result.signalType === "reset_executed" && result.temporalDirection === "completed_now");
+  if (!canRecover || hasExplicitNonUsageResetObject(text)) return null;
+
+  const evidenceQuote = getExactFutureQuote(result.evidenceQuote, text);
+  if (!evidenceQuote) return null;
+
+  const directCompletion = hasCurrentResetExecution(evidenceQuote);
+  const buttonCompletion = MIXED_TIMELINE_BUTTON_COMPLETION_PATTERN.exec(text);
+  if (!directCompletion && !buttonCompletion) return null;
+  if (
+    !directCompletion &&
+    (!buttonCompletion ||
+      !/\b(?:button|pressed)\b/i.test(evidenceQuote) ||
+      (!buttonCompletion[0].toLowerCase().includes(evidenceQuote.toLowerCase()) &&
+        !evidenceQuote.toLowerCase().includes(buttonCompletion[0].toLowerCase())))
+  ) {
+    return null;
+  }
+
+  const movement = MIXED_TIMELINE_RESCHEDULE_PATTERN.exec(text);
+  if (!movement || movement.index === undefined) return null;
+
+  const sentenceTail = text.slice(movement.index);
+  const sentenceBreak = /[.!?;\n]/.exec(sentenceTail);
+  const sentenceEnd = movement.index + (sentenceBreak?.index ?? sentenceTail.length);
+  const targetTail = text.slice(movement.index + movement[0].length, sentenceEnd);
+  const targetMatch = Array.from(targetTail.matchAll(MIXED_TIMELINE_TARGET_DAY_PATTERN))[0];
+  if (!targetMatch || targetMatch.index === undefined) return null;
+
+  const targetEnd = movement.index + movement[0].length + targetMatch.index + targetMatch[0].length;
+  const sentenceStart = Math.max(
+    text.lastIndexOf(".", movement.index - 1),
+    text.lastIndexOf("!", movement.index - 1),
+    text.lastIndexOf("?", movement.index - 1),
+    text.lastIndexOf(";", movement.index - 1),
+    text.lastIndexOf("\n", movement.index - 1),
+  ) + 1;
+  const futureSentence = text.slice(sentenceStart, sentenceEnd);
+  if (
+    MIXED_TIMELINE_CANCELLATION_PATTERN.test(futureSentence) ||
+    MIXED_TIMELINE_NEGATED_RESCHEDULE_PATTERN.test(futureSentence)
+  ) {
+    return null;
+  }
+  const prefix = text.slice(sentenceStart, movement.index);
+  const connectors = Array.from(prefix.matchAll(/\b(?:but|and|as|while)\s+/gi));
+  const lastConnector = connectors.at(-1);
+  const futureStart = lastConnector?.index === undefined
+    ? sentenceStart
+    : sentenceStart + lastConnector.index + lastConnector[0].length;
+  const futureEvidenceQuote = text.slice(futureStart, targetEnd).trim();
+  if (!futureEvidenceQuote) return null;
+  if (!MIXED_TIMELINE_FUTURE_RESET_CONTEXT_PATTERN.test(futureEvidenceQuote)) {
+    return null;
+  }
+
+  const completedEvidenceQuote = directCompletion
+    ? evidenceQuote
+    : buttonCompletion?.[0] ?? evidenceQuote;
+  const futureLower = futureEvidenceQuote.toLowerCase();
+  const completedLower = completedEvidenceQuote.toLowerCase();
+  if (futureLower.includes(completedLower) || completedLower.includes(futureLower)) return null;
+
+  const temporal = parseTiboTemporalSemantics(null, text);
+  if (!temporal || (temporal.relativeDayOffset !== 1 && !temporal.weekday)) return null;
+
+  return {
+    completedEvidenceQuote,
+    futureEvidenceQuote,
+    temporal,
+    primarySignalType: directCompletion ? "reset_executed" : "teaser",
+  };
+}
+
+function buildRecoveredFutureSignal(
+  recovery: MixedTimelineRecovery,
+  text: string,
+  result: GeminiClassificationOutput,
+) {
+  const temporal = recovery.temporal;
+  return parseFutureSignalAssessment(
+    {
+      signalType: "teaser",
+      teaserStrength: "strong",
+      confidence: typeof result.confidence === "number" && Number.isFinite(result.confidence)
+        ? result.confidence
+        : temporal?.temporalConfidence ?? 0.85,
+      evidenceQuote: recovery.futureEvidenceQuote,
+      reasonJa: "本文内の完了済みreset機構と、延期された別の未来イベントを分けて解釈しました。",
+      temporalDirection: "future",
+      temporalExpression: temporal?.temporalExpression ?? null,
+      temporalKind: temporal?.temporalKind ?? null,
+      temporalPrecision: temporal?.temporalPrecision ?? null,
+      weekday: temporal?.weekday ?? null,
+      relativeDayOffset: temporal?.relativeDayOffset ?? null,
+      relativeAmount: temporal?.relativeAmount ?? null,
+      relativeUnit: temporal?.relativeUnit ?? null,
+      explicitDateParts: temporal?.explicitDateParts ?? null,
+      explicitTimeParts: temporal?.explicitTimeParts ?? null,
+      daypart: temporal?.daypart ?? null,
+      rangeKind: temporal?.rangeKind ?? null,
+      explicitTimezone: temporal?.explicitTimezone ?? null,
+      temporalConfidence: temporal?.temporalConfidence ?? null,
+    },
+    text,
+    recovery.completedEvidenceQuote,
+  );
+}
+
 export function applyTiboClassificationSafetyGuard(
   text: string,
   result: GeminiClassificationOutput,
@@ -501,6 +650,9 @@ export function applyTiboClassificationSafetyGuard(
 
   let futureSignal = groundedCompletedReset
     ? parseFutureSignalAssessment(result.futureSignal, text, result.evidenceQuote)
+    : null;
+  const mixedTimelineRecovery = !futureSignalProvided
+    ? findMixedTimelineRecovery(text, result)
     : null;
 
   // Keep compatibility with the earlier single teaserStrength field while
@@ -527,6 +679,20 @@ export function applyTiboClassificationSafetyGuard(
     );
   }
 
+  if (!futureSignal && mixedTimelineRecovery) {
+    futureSignal = buildRecoveredFutureSignal(mixedTimelineRecovery, text, result);
+  }
+
+  const recoveredPrimaryTeaser = mixedTimelineRecovery?.primarySignalType === "teaser" &&
+    futureSignal?.signalType === "teaser";
+  const effectiveSignalType = recoveredPrimaryTeaser ? "teaser" : decision.signalType;
+  const rescheduledTemporal = decision.reasonCode === "future_reschedule"
+    ? parseTiboTemporalSemantics(result, text)
+    : null;
+  const effectiveTemporal = recoveredPrimaryTeaser
+    ? mixedTimelineRecovery?.temporal
+    : rescheduledTemporal;
+
   const preservedTeaserStrength = futureSignal?.signalType === "teaser"
     ? futureSignal.teaserStrength ?? null
     : null;
@@ -534,25 +700,54 @@ export function applyTiboClassificationSafetyGuard(
 
   return {
     ...result,
-    signalType: decision.signalType,
-    reasonJa: decision.reasonJa ?? result.reasonJa,
+    signalType: effectiveSignalType,
+    reasonJa: recoveredPrimaryTeaser
+      ? "完了済みのbutton操作とは別に、延期された未来のcelebrationをresetの匂わせとして扱います。"
+      : decision.reasonJa ?? result.reasonJa,
+    evidenceQuote: recoveredPrimaryTeaser
+      ? mixedTimelineRecovery?.futureEvidenceQuote ?? result.evidenceQuote
+      : result.evidenceQuote,
+    temporalDirection: recoveredPrimaryTeaser || decision.reasonCode === "future_reschedule"
+      ? "future"
+      : result.temporalDirection,
+    temporalExpression: effectiveTemporal?.temporalExpression ?? result.temporalExpression,
+    temporalKind: effectiveTemporal?.temporalKind ?? result.temporalKind,
+    temporalPrecision: effectiveTemporal?.temporalPrecision ?? result.temporalPrecision,
+    weekday: effectiveTemporal?.weekday ?? result.weekday,
+    relativeDayOffset: effectiveTemporal?.relativeDayOffset ?? result.relativeDayOffset,
+    relativeAmount: effectiveTemporal?.relativeAmount ?? result.relativeAmount,
+    relativeUnit: effectiveTemporal?.relativeUnit ?? result.relativeUnit,
+    explicitDateParts: effectiveTemporal?.explicitDateParts ?? result.explicitDateParts,
+    explicitTimeParts: effectiveTemporal?.explicitTimeParts ?? result.explicitTimeParts,
+    daypart: effectiveTemporal?.daypart ?? result.daypart,
+    rangeKind: effectiveTemporal?.rangeKind ?? result.rangeKind,
+    explicitTimezone: effectiveTemporal?.explicitTimezone ?? result.explicitTimezone,
+    temporalConfidence: effectiveTemporal?.temporalConfidence ?? result.temporalConfidence,
     futureSignal,
-    teaserStrength: decision.suppressTeaserStrength || groundedCompletedReset
+    teaserStrength: recoveredPrimaryTeaser
+      ? preservedTeaserStrength ?? "strong"
+      : decision.suppressTeaserStrength || groundedCompletedReset
       ? shouldPreserveIndependentTeaser
         ? preservedTeaserStrength
         : "none"
       : result.teaserStrength,
-    teaserStrengthConfidence: decision.suppressTeaserStrength || groundedCompletedReset
+    teaserStrengthConfidence: recoveredPrimaryTeaser
+      ? futureSignal?.confidence ?? result.teaserStrengthConfidence
+      : decision.suppressTeaserStrength || groundedCompletedReset
       ? shouldPreserveIndependentTeaser
         ? futureSignal?.confidence ?? result.teaserStrengthConfidence
         : null
       : result.teaserStrengthConfidence,
-    teaserStrengthEvidenceQuote: decision.suppressTeaserStrength || groundedCompletedReset
+    teaserStrengthEvidenceQuote: recoveredPrimaryTeaser
+      ? futureSignal?.evidenceQuote ?? result.teaserStrengthEvidenceQuote
+      : decision.suppressTeaserStrength || groundedCompletedReset
       ? shouldPreserveIndependentTeaser
         ? futureSignal?.evidenceQuote ?? result.teaserStrengthEvidenceQuote
         : null
       : result.teaserStrengthEvidenceQuote,
-    teaserStrengthReasonJa: decision.suppressTeaserStrength || groundedCompletedReset
+    teaserStrengthReasonJa: recoveredPrimaryTeaser
+      ? futureSignal?.reasonJa ?? result.teaserStrengthReasonJa
+      : decision.suppressTeaserStrength || groundedCompletedReset
       ? shouldPreserveIndependentTeaser
         ? futureSignal?.reasonJa ?? result.teaserStrengthReasonJa
         : decision.reasonJa
