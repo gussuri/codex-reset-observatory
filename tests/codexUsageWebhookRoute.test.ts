@@ -13,6 +13,43 @@ const ENV_KEYS = [
   "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
 
+const ATOMIC_RPC_PATH = "/rpc/apply_codex_usage_webhook_write";
+
+type MockRequest = {
+  url: string;
+  method: string;
+  body: Record<string, unknown> | null;
+};
+
+function getAtomicPlan(body: Record<string, unknown> | null) {
+  const plan = body?.p_plan;
+  return plan && typeof plan === "object" ? plan as Record<string, unknown> : null;
+}
+
+function respondToAtomicRpc(body: Record<string, unknown> | null, observationId = "route-observation-id") {
+  const plan = getAtomicPlan(body);
+  return new Response(JSON.stringify({
+    status: "applied",
+    retry_required: false,
+    observation_id: plan?.observation ? observationId : null,
+  }), { status: 200 });
+}
+
+function getAtomicPlanFromRequests(requests: ReadonlyArray<MockRequest>) {
+  const rpcRequest = requests.find((request) =>
+    request.method === "POST" && request.url.includes(ATOMIC_RPC_PATH),
+  );
+  assert.ok(rpcRequest, "The webhook should use the atomic write RPC");
+  const plan = getAtomicPlan(rpcRequest!.body);
+  assert.ok(plan, "The atomic RPC should receive a write plan");
+  return plan!;
+}
+
+function getAtomicPlanPart(requests: ReadonlyArray<MockRequest>, key: string) {
+  const value = getAtomicPlanFromRequests(requests)[key];
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
 function withEnvironment(values: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
   const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   for (const key of ENV_KEYS) {
@@ -167,8 +204,13 @@ test("the first valid snapshot is stored as a baseline only", async () => {
   const methods: string[] = [];
   const bodies: unknown[] = [];
   globalThis.fetch = async (input, init) => {
-    methods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    methods.push(method);
     if (init?.body) bodies.push(JSON.parse(String(init.body)));
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(bodies.at(-1) as Record<string, unknown> | null);
+    }
     if (methods.length === 1) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
     }
@@ -179,11 +221,13 @@ test("the first valid snapshot is stored as a baseline only", async () => {
     const response = await POST(buildRequest());
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "baseline" });
-    assert.deepEqual(methods, ["GET", "POST", "PATCH"]);
-    assert.deepEqual(bodies[0], {
+    assert.deepEqual(methods, ["GET", "POST"]);
+    const plan = getAtomicPlan(bodies[0] as Record<string, unknown>);
+    assert.ok(plan);
+    assert.deepEqual(plan?.state, {
       source_key: "local-codex-app-server",
       observed_at: "2026-08-11T00:02:00.000Z",
-      received_at: bodies[0] && typeof bodies[0] === "object" ? (bodies[0] as Record<string, unknown>).received_at : undefined,
+      received_at: plan?.state && typeof plan.state === "object" ? (plan.state as Record<string, unknown>).received_at : undefined,
       limit_id: "codex",
       plan_type: "plus",
       used_percent: 0,
@@ -192,7 +236,7 @@ test("the first valid snapshot is stored as a baseline only", async () => {
       coverage_started_at: "2026-08-11T00:02:00.000Z",
       banked_reset_available_count: null,
       last_banked_grant_at: null,
-      updated_at: bodies[0] && typeof bodies[0] === "object" ? (bodies[0] as Record<string, unknown>).updated_at : undefined,
+      updated_at: plan?.state && typeof plan.state === "object" ? (plan.state as Record<string, unknown>).updated_at : undefined,
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -213,6 +257,10 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -268,18 +316,12 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
-    const estimateWrite = requests.find((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-banked-notice-route-test");
-    assert.equal(estimateWrite?.body?.display_execution_at, "2026-08-11T00:02:00.000Z");
-    assert.equal(estimateWrite?.body?.recovery_observation_id, null);
-    assert.equal(requests.filter((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    ).length, 1);
-    assert.equal(requests.some((request) =>
-      request.url.includes("regular_reset_events") && request.method !== "GET",
-    ), false);
+    const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(estimateWrite?.reset_event_key, "banked-reset-banked-notice-route-test");
+    assert.equal(estimateWrite?.display_execution_at, "2026-08-11T00:02:00.000Z");
+    const atomicPlan = getAtomicPlanFromRequests(requests);
+    assert.equal(atomicPlan.observation, undefined);
+    assert.equal(atomicPlan.regular_reset_event, undefined);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -330,6 +372,10 @@ test("bounded notice lookup keeps the latest signal available beyond 1000 old ro
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
 
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
         source_key: "local-codex-app-server",
@@ -378,10 +424,8 @@ test("bounded notice lookup keeps the latest signal available beyond 1000 old ro
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
     assertUsageWebhookQueryBounds(requests, observedAt);
-    const estimateWrite = requests.find((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-latest-banked-notice-after-old-rows");
+    const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(estimateWrite?.reset_event_key, "banked-reset-latest-banked-notice-after-old-rows");
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -401,6 +445,10 @@ test("a BANKED credit keeps the first notice and uses the most specific notice a
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -488,21 +536,16 @@ test("a BANKED credit keeps the first notice and uses the most specific notice a
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
-    const estimateWrite = requests.find((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-banked-old-route-test");
-    assert.equal(estimateWrite?.body?.tibo_announced_at, "2026-08-21T12:00:00.000Z");
-    assert.equal(estimateWrite?.body?.tibo_primary_tweet_id, "banked-new-route-test");
-    assert.deepEqual(estimateWrite?.body?.tibo_source_tweet_ids, [
+    const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(estimateWrite?.reset_event_key, "banked-reset-banked-old-route-test");
+    assert.equal(estimateWrite?.tibo_announced_at, "2026-08-21T12:00:00.000Z");
+    assert.equal(estimateWrite?.tibo_primary_tweet_id, "banked-new-route-test");
+    assert.deepEqual(estimateWrite?.tibo_source_tweet_ids, [
       "banked-old-route-test",
       "banked-new-route-test",
     ]);
-    assert.equal(estimateWrite?.body?.official_notice_tweet_id, "banked-new-route-test");
-    assert.equal(estimateWrite?.body?.official_notice_at, "2026-08-21T23:40:34.000Z");
-    assert.equal(requests.filter((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    ).length, 1);
+    assert.equal(estimateWrite?.official_notice_tweet_id, "banked-new-route-test");
+    assert.equal(estimateWrite?.official_notice_at, "2026-08-21T23:40:34.000Z");
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -522,6 +565,10 @@ test("an unapplied coverage migration falls back without failing the first snaps
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       if (url.includes("coverage_started_at")) {
@@ -554,7 +601,7 @@ test("an unapplied coverage migration falls back without failing the first snaps
     assert.deepEqual(await response.json(), { accepted: true, recovery: "baseline" });
     assert.deepEqual(
       requests.map((request) => request.method),
-      ["GET", "GET", "POST", "POST", "PATCH"],
+      ["GET", "GET", "POST"],
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -618,6 +665,10 @@ test("regular recovery records the observation and canonical event without match
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
 
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
         source_key: "local-codex-app-server",
@@ -666,19 +717,17 @@ test("regular recovery records the observation and canonical event without match
     assert.equal(response.status, 200);
     assert.equal(regularRowsReturned, "latest");
     assert.equal(requests.filter((request) => request.url.includes("tibo_signals") && request.method === "GET").length, 1, JSON.stringify(requests));
-    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
-    const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
-    assert.equal(observation?.body?.matched_tibo_tweet_id, null);
-    assert.equal(observation?.body?.status, "observed");
-    assert.equal(observation?.body?.cycle_hint, "regular");
-    assert.equal(observation?.body?.confidence, "medium");
-    const regularCompletion = requests.find((request) => request.url.includes("regular_reset_events") && request.method !== "GET");
-    assert.equal(regularCompletion?.body?.scheduled_at, "2026-08-11T00:00:00.000Z");
-    assert.equal(regularCompletion?.body?.completed_at, "2026-08-11T00:02:00.000Z");
-    assert.notEqual(regularCompletion?.body?.scheduled_at, regularCompletion?.body?.completed_at);
-    assert.equal(requests.filter((request) => request.url.includes("regular_reset_events") && request.method !== "GET").length, 1);
-    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
-    assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
+    assert.equal(getAtomicPlanFromRequests(requests).promotion, undefined);
+    const observation = getAtomicPlanPart(requests, "observation");
+    assert.equal(observation?.matched_tibo_tweet_id, null);
+    assert.equal(observation?.status, "observed");
+    assert.equal(observation?.cycle_hint, "regular");
+    assert.equal(observation?.confidence, "medium");
+    const regularCompletion = getAtomicPlanPart(requests, "regular_reset_event");
+    assert.equal(regularCompletion?.scheduled_at, "2026-08-11T00:00:00.000Z");
+    assert.equal(regularCompletion?.completed_at, "2026-08-11T00:02:00.000Z");
+    assert.notEqual(regularCompletion?.scheduled_at, regularCompletion?.completed_at);
+    assert.equal(getAtomicPlanFromRequests(requests).promotion, undefined);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -698,6 +747,10 @@ test("regular recovery with an official notice records regular history without p
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -751,17 +804,14 @@ test("regular recovery with an official notice records regular history without p
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     assertUsageWebhookQueryBounds(requests, "2026-08-11T00:02:00.000Z");
-    const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
-    assert.equal(observation?.body?.cycle_hint, "unknown");
-    assert.equal(observation?.body?.confidence, "strong");
-    assert.equal(observation?.body?.status, "observed");
-    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
-    const regularCompletion = requests.find((request) => request.url.includes("regular_reset_events") && request.method !== "GET");
-    assert.equal(regularCompletion?.body?.scheduled_at, "2026-08-11T00:00:00.000Z");
-    assert.equal(regularCompletion?.body?.completed_at, "2026-08-11T00:02:00.000Z");
-    assert.notEqual(regularCompletion?.body?.scheduled_at, regularCompletion?.body?.completed_at);
-    assert.equal(requests.filter((request) => request.url.includes("regular_reset_events") && request.method !== "GET").length, 1);
-    assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
+    const observation = getAtomicPlanPart(requests, "observation");
+    assert.equal(observation?.cycle_hint, "unknown");
+    assert.equal(observation?.confidence, "strong");
+    assert.equal(observation?.status, "observed");
+    const regularCompletion = getAtomicPlanPart(requests, "regular_reset_event");
+    assert.equal(regularCompletion?.scheduled_at, "2026-08-11T00:00:00.000Z");
+    assert.equal(regularCompletion?.completed_at, "2026-08-11T00:02:00.000Z");
+    assert.notEqual(regularCompletion?.scheduled_at, regularCompletion?.completed_at);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -803,6 +853,10 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "recovery-teaser-route-test");
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -873,19 +927,18 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "teaser_corroborated" });
     assertUsageWebhookQueryBounds(requests, observedAt);
-    const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
-    assert.equal(observation?.body?.status, "observed");
-    assert.equal(observation?.body?.matched_tibo_tweet_id, null);
-    assert.equal(observation?.body?.confidence, "strong");
-    const estimate = requests.find((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimate?.body?.reset_event_key, "tibo-reset-teaser-route-test");
-    assert.equal(estimate?.body?.tibo_primary_tweet_id, "teaser-route-test");
-    assert.equal(estimate?.body?.official_notice_tweet_id, null);
-    assert.equal(estimate?.body?.display_execution_at, "2026-08-25T00:04:00.000Z");
-    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
-    assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
+    const observation = getAtomicPlanPart(requests, "observation");
+    assert.equal(observation?.status, "observed");
+    assert.equal(observation?.matched_tibo_tweet_id, null);
+    assert.equal(observation?.confidence, "strong");
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "tibo-reset-teaser-route-test");
+    assert.equal(estimate?.tibo_primary_tweet_id, "teaser-route-test");
+    assert.equal(estimate?.official_notice_tweet_id, null);
+    assert.equal(estimate?.display_execution_at, "2026-08-25T00:04:00.000Z");
+    const atomicPlan = getAtomicPlanFromRequests(requests);
+    assert.equal(atomicPlan.regular_reset_event, undefined);
+    assert.equal(atomicPlan.promotion, undefined);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -905,6 +958,10 @@ test("a future-dated teaser is not used to corroborate an earlier monitor recove
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "recovery-future-teaser-route-test");
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -980,12 +1037,11 @@ test("a future-dated teaser is not used to corroborate an earlier monitor recove
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
     assertUsageWebhookQueryBounds(requests, "2026-08-25T00:04:00.000Z");
-    const estimate = requests.find((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimate?.body?.reset_event_key, "usage-reset-recovery-future-teaser-route-test");
-    assert.equal(estimate?.body?.tibo_primary_tweet_id, null);
-    assert.deepEqual(estimate?.body?.tibo_source_tweet_ids, []);
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(estimate?.is_monitor_observed, true);
+    assert.equal(estimate?.tibo_primary_tweet_id, null);
+    assert.deepEqual(estimate?.tibo_source_tweet_ids, []);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -1005,6 +1061,10 @@ test("non-regular recovery beyond five minutes does not write regular history", 
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "recovery-non-regular-route-test");
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -1037,10 +1097,10 @@ test("non-regular recovery beyond five minutes does not write regular history", 
     }));
 
     assert.equal(response.status, 200);
-    const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
-    assert.equal(observation?.body?.cycle_hint, "unexpected");
-    assert.equal(requests.some((request) => request.url.includes("regular_reset_events") && request.method !== "GET"), false);
-    assert.equal(requests.some((request) => request.url.includes("codex_usage_monitor_state") && request.method !== "GET"), true);
+    const observation = getAtomicPlanPart(requests, "observation");
+    assert.equal(observation?.cycle_hint, "unexpected");
+    const atomicPlan = getAtomicPlanFromRequests(requests);
+    assert.equal(atomicPlan.regular_reset_event, undefined);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -1060,6 +1120,10 @@ test("personal banked reset consumption records observation and updates state bu
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "observation-personal-123");
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -1123,28 +1187,22 @@ test("personal banked reset consumption records observation and updates state bu
     assert.deepEqual(await response.json(), { accepted: true, recovery: "personal_reset" });
 
     // 1. Observation is recorded as an unconfirmed personal observation
-    const observationWrite = requests.find((request) =>
-      request.url.includes("codex_recovery_observations") && request.method !== "GET",
-    );
+    const observationWrite = getAtomicPlanPart(requests, "observation");
     assert.ok(observationWrite, "Observation should be written for audit");
-    assert.equal(observationWrite?.body?.cycle_hint, "unexpected");
-    assert.equal(observationWrite?.body?.confidence, "strong");
-    assert.equal(observationWrite?.body?.status, "observed");
-    assert.equal(observationWrite?.body?.matched_tibo_tweet_id, null);
+    assert.equal(observationWrite?.cycle_hint, "unexpected");
+    assert.equal(observationWrite?.confidence, "strong");
+    assert.equal(observationWrite?.status, "observed");
+    assert.equal(observationWrite?.matched_tibo_tweet_id, null);
 
     // 2. State is updated to reflect banked count 0 and carry forward grant timestamp
-    const stateWrite = requests.find((request) =>
-      request.url.includes("codex_usage_monitor_state") && request.method !== "GET",
-    );
+    const stateWrite = getAtomicPlanPart(requests, "state");
     assert.ok(stateWrite, "State should be updated");
-    assert.equal(stateWrite?.body?.banked_reset_available_count, 0);
-    assert.equal(stateWrite?.body?.last_banked_grant_at, "2026-08-01T00:00:00.000Z");
+    assert.equal(stateWrite?.banked_reset_available_count, 0);
+    assert.equal(stateWrite?.last_banked_grant_at, "2026-08-01T00:00:00.000Z");
 
     // 3. CRITICAL: NO public reset execution estimate is created!
-    const estimateWrites = requests.filter((request) =>
-      request.url.includes("reset_execution_estimates") && request.method !== "GET",
-    );
-    assert.equal(estimateWrites.length, 0, "No public random reset estimate must be written for personal reset");
+    assert.equal(getAtomicPlanFromRequests(requests).execution_estimate, undefined,
+      "No public random reset estimate must be written for personal reset");
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -1163,6 +1221,16 @@ async function assertEstimateWriteFailureDoesNotAdvanceState(mode: "standalone" 
   globalThis.fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      const plan = getAtomicPlan(body);
+      if (plan?.execution_estimate) {
+        estimateWriteCount += 1;
+        return new Response(JSON.stringify({ message: "estimate write failed" }), { status: 500 });
+      }
+      return respondToAtomicRpc(body, "recovery-estimate-write-error");
+    }
 
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
@@ -1270,6 +1338,16 @@ test("server-side BANKED count increases restore distribution without a client c
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
 
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      const plan = getAtomicPlan(body);
+      const state = plan?.state;
+      if (state && typeof state === "object" && typeof (state as Record<string, unknown>).banked_reset_available_count === "number") {
+        serverCount = (state as Record<string, unknown>).banked_reset_available_count as number;
+      }
+      if (plan?.banked_distribution_estimate) estimateWriteCount += 1;
+      return respondToAtomicRpc(body);
+    }
+
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
         source_key: "local-codex-app-server",
@@ -1356,6 +1434,13 @@ test("an unknown server BANKED count does not create a distribution from a posit
     globalThis.fetch = async (input, init) => {
       const url = String(input);
       const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+
+      if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+        assert.equal(getAtomicPlan(body)?.banked_distribution_estimate, undefined);
+        return respondToAtomicRpc(body);
+      }
+
       if (method === "GET" && url.includes("codex_usage_monitor_state")) {
         return new Response(JSON.stringify({
           source_key: "local-codex-app-server",

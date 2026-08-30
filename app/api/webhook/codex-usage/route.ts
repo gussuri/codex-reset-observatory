@@ -14,18 +14,16 @@ import {
   type CodexUsageSnapshot,
 } from "@/lib/codexUsageRecovery";
 import {
-  confirmNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
   findLatestBankedGrantAt,
   findRecentFormalTiboReset,
-  insertObservedRegularResetEvent,
-  insertCodexRecoveryObservation,
-  promoteDeferredTiboReset,
   readCodexUsageMonitorState,
-  upsertBankedDistributionEstimate,
-  upsertResetExecutionEstimate,
-  upsertCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
+import {
+  applyCodexUsageAtomicWrite,
+  buildCodexUsageAtomicWritePlan,
+  buildResetExecutionEstimateWrite,
+} from "@/lib/codexUsageAtomic";
 import {
   getActiveOfficialNotice,
   type ActiveOfficialNotice,
@@ -34,6 +32,7 @@ import {
   getTemporalExecutionWindowRelation,
   type ResetExecutionWindow,
 } from "@/lib/radar/tiboTemporal";
+import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import {
   collectBankedDistributionSignals,
   collectOfficialTiboNoticeSignals,
@@ -238,8 +237,7 @@ async function hasActiveOfficialNotice(
   };
 }
 
-async function persistCorroboratedBankedDistribution(
-  client: SupabaseClient<any>,
+function getCorroboratedBankedDistribution(
   snapshot: CodexUsageSnapshot,
   lookup: OfficialNoticeLookup | null,
   effectiveBankedResetCountChange: boolean,
@@ -264,23 +262,386 @@ async function persistCorroboratedBankedDistribution(
     !isBroadBankedDistributionNotice(notice.text) ||
     !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt)
   ) {
-    return { observed: false, error: null };
+    return { observed: false, input: null };
   }
 
-  const result = await upsertBankedDistributionEstimate(client, {
-    resetEventKey: `banked-reset-${firstAnnouncement?.tweet_id ?? notice.id}`,
-    displayExecutionAt: snapshot.observedAt,
-    tiboAnnouncedAt: firstAnnouncement?.tweet_created_at ?? notice.observedAt,
-    tiboPrimaryTweetId: representativeNotice?.tweet_id ?? notice.id,
-    tiboSourceTweetIds: relatedNotices.map((item) => item.tweet_id),
-    officialNoticeTweetId: representativeNotice?.tweet_id ?? notice.id,
-    officialNoticeAt: representativeNotice?.tweet_created_at ?? notice.observedAt,
-  });
-  return { observed: true, error: result.error };
+  return {
+    observed: true,
+    input: {
+      resetEventKey: `banked-reset-${firstAnnouncement?.tweet_id ?? notice.id}`,
+      displayExecutionAt: snapshot.observedAt,
+      tiboAnnouncedAt: firstAnnouncement?.tweet_created_at ?? notice.observedAt,
+      tiboPrimaryTweetId: representativeNotice?.tweet_id ?? notice.id,
+      tiboSourceTweetIds: relatedNotices.map((item) => item.tweet_id),
+      officialNoticeTweetId: representativeNotice?.tweet_id ?? notice.id,
+      officialNoticeAt: representativeNotice?.tweet_created_at ?? notice.observedAt,
+    },
+  };
 }
 
 function recoveryResponse(status: string) {
   return NextResponse.json({ accepted: true, recovery: status });
+}
+
+type MatchingTiboResult = {
+  tweetId: string | null;
+  tweetCreatedAt: string | null;
+  needsPromotion: boolean;
+  confidence: number | null;
+  error: unknown;
+};
+
+function createRecoveryObservation(
+  decision: Extract<ReturnType<typeof evaluateCodexUsageRecovery>, { kind: "recovery" }>,
+  matchingTibo: MatchingTiboResult,
+  now: Date,
+) {
+  const confirmedAt = matchingTibo.tweetId ? now.toISOString() : null;
+  return {
+    sourceKey: CODEX_USAGE_SOURCE_KEY,
+    observedAt: decision.current.observedAt,
+    previousObservedAt: decision.previous.observedAt,
+    previousUsedPercent: decision.previous.usedPercent,
+    currentUsedPercent: decision.current.usedPercent,
+    previousResetsAt: decision.previous.resetsAt,
+    currentResetsAt: decision.current.resetsAt,
+    cycleHint: decision.cycleHint,
+    confidence: decision.confidence,
+    status: matchingTibo.tweetId ? "confirmed" as const : "observed" as const,
+    matchedTiboTweetId: matchingTibo.tweetId,
+    confirmedAt,
+  };
+}
+
+async function applyAtomicPlanOrRetry(
+  client: SupabaseClient<any>,
+  plan: ReturnType<typeof buildCodexUsageAtomicWritePlan>,
+  snapshot: CodexUsageSnapshot,
+  now: Date,
+  retryCount: number,
+): Promise<NextResponse | null> {
+  const result = await applyCodexUsageAtomicWrite(client, plan);
+  if (result.error) {
+    console.warn("[Codex usage] atomic write failed", { reason: "database_error" });
+    return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+  }
+  if (result.result?.status === "stale") {
+    if (result.result.retryRequired && retryCount === 0) {
+      return processCodexUsageSnapshot(client, snapshot, now, retryCount + 1);
+    }
+    return recoveryResponse("ignored_stale");
+  }
+  return null;
+}
+
+async function processCodexUsageSnapshot(
+  client: SupabaseClient<any>,
+  snapshot: CodexUsageSnapshot,
+  now: Date,
+  retryCount = 0,
+): Promise<NextResponse> {
+  const previousResult = await readCodexUsageMonitorState(client);
+  if (previousResult.error) {
+    console.warn("[Codex usage] state lookup failed", { reason: "database_error" });
+    return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
+  }
+
+  const previousBankedResetAvailableCount =
+    previousResult.row?.bankedResetAvailableCount ??
+    previousResult.state?.bankedResetAvailableCount;
+  const serverObservedBankedIncrease = isBankedResetAvailableCountGrant(
+    previousBankedResetAvailableCount,
+    snapshot.bankedResetAvailableCount,
+  );
+  const effectiveBankedResetCountChange =
+    snapshot.bankedResetCountChange === true || serverObservedBankedIncrease;
+  const bankedNotice = effectiveBankedResetCountChange
+    ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
+    : null;
+  if (bankedNotice?.error) {
+    console.warn("[Codex usage] BANKED notice lookup failed", { reason: "database_error" });
+    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+  }
+
+  const lastBankedGrantAt =
+    previousResult.row?.lastBankedGrantAt ??
+    previousResult.state?.lastBankedGrantAt ??
+    (previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
+      ? await findLatestBankedGrantAt(client, snapshot.observedAt)
+      : null);
+
+  const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
+    lastBankedGrantAt,
+  });
+  if (initialDecision.kind === "stale") return recoveryResponse("ignored_stale");
+
+  if (
+    initialDecision.kind === "baseline" ||
+    initialDecision.kind === "rebase" ||
+    initialDecision.kind === "invalid" ||
+    initialDecision.kind === "no_recovery"
+  ) {
+    const bankedResult = getCorroboratedBankedDistribution(
+      snapshot,
+      bankedNotice,
+      effectiveBankedResetCountChange,
+    );
+    const plan = buildCodexUsageAtomicWritePlan({
+      expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+      snapshot,
+      receivedAt: now.toISOString(),
+      previousState: previousResult.state,
+      bankedDistribution: bankedResult.input,
+    });
+    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    if (atomicResponse) return atomicResponse;
+    console.info("[Codex usage] snapshot accepted", {
+      source: CODEX_USAGE_SOURCE_KEY,
+      recovery: initialDecision.kind,
+      bankedDistributionObserved: bankedResult.observed,
+    });
+    if (bankedResult.observed) {
+      try {
+        revalidateTag("radar-data");
+      } catch {
+        console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+      }
+    }
+    return recoveryResponse(bankedResult.observed ? "banked_distribution_observed" : initialDecision.kind);
+  }
+
+  const recoveryExecutionWindow: ResetExecutionWindow = {
+    executionWindowStartAt: initialDecision.previous.observedAt,
+    executionWindowEndAt: snapshot.observedAt,
+  };
+  const notice = bankedNotice ?? await hasActiveOfficialNotice(
+    client,
+    new Date(snapshot.observedAt),
+    recoveryExecutionWindow,
+  );
+  if (notice.error) {
+    console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
+    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+  }
+
+  const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
+    activeOfficialNotice: notice.active,
+    activeResetEvidence: notice.active || Boolean(notice.teaserSignal),
+    lastBankedGrantAt,
+  });
+  if (decision.kind !== "recovery") {
+    const plan = buildCodexUsageAtomicWritePlan({
+      expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+      snapshot,
+      receivedAt: now.toISOString(),
+      previousState: previousResult.state,
+    });
+    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    if (atomicResponse) return atomicResponse;
+    return recoveryResponse(decision.kind);
+  }
+
+  // A recovery near the regular schedule is not Tibo evidence. This also
+  // covers the `unknown` near-regular case where an official notice exists:
+  // a notice must not turn a regular quota recovery into a Tibo confirmation.
+  const matchingTibo: MatchingTiboResult = !canCorroborateTiboReset(decision)
+    ? { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null }
+    : await findRecentFormalTiboReset(
+        client,
+        snapshot.observedAt,
+        USAGE_TIBO_MATCH_WINDOW_MS,
+      );
+  if (matchingTibo.error) {
+    console.warn("[Codex usage] Tibo match lookup failed", { reason: "database_error" });
+    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+  }
+
+  const observation = createRecoveryObservation(decision, matchingTibo, now);
+  if (decision.isPersonalReset === true) {
+    const plan = buildCodexUsageAtomicWritePlan({
+      expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+      snapshot,
+      receivedAt: now.toISOString(),
+      previousState: previousResult.state,
+      observation,
+    });
+    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    if (atomicResponse) return atomicResponse;
+    console.info("[Codex usage] personal reset observed and suppressed from public history", {
+      source: CODEX_USAGE_SOURCE_KEY,
+    });
+    return recoveryResponse("personal_reset");
+  }
+
+  const noticeSignal = notice.noticeSignal;
+  const teaserSignal = notice.teaserSignal;
+  let teaserEstimateObserved = false;
+  let estimateObserved = false;
+  let executionEstimate = null;
+
+  if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt) {
+    try {
+      const cluster = await findFormalTiboResetCluster(
+        client,
+        matchingTibo.tweetId,
+        matchingTibo.tweetCreatedAt,
+        undefined,
+        matchingTibo.needsPromotion
+          ? {
+              tweet_id: matchingTibo.tweetId,
+              tweet_created_at: matchingTibo.tweetCreatedAt,
+              confidence: matchingTibo.confidence ?? 0.95,
+            }
+          : undefined,
+      );
+      if (cluster.error) {
+        console.warn("[Codex usage] reset execution estimate lookup failed", { reason: "database_error" });
+        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      }
+      const estimate = buildResetExecutionEstimate({
+        resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
+        tiboAnnouncedAt: cluster.announcedAt,
+        tiboPrimaryTweetId: cluster.representativeTweetId,
+        tiboSourceTweetIds: cluster.sourceTweetIds,
+        usageObservation: observation,
+        officialNoticeTweetId: cluster.representativeNoticeId,
+        officialNoticeAt: cluster.representativeNoticeAt,
+      });
+      if (!estimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      executionEstimate = buildResetExecutionEstimateWrite(estimate);
+      estimateObserved = true;
+    } catch {
+      console.warn("[Codex usage] reset execution estimate failed", { reason: "request_failed" });
+      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+  } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observation)) {
+    try {
+      const noticeSignals = notice.noticeSignals.length > 0
+        ? notice.noticeSignals
+        : [toTiboNoticeSignal(noticeSignal)];
+      const relatedNoticeSignals = findRelatedTiboNoticeCluster(
+        noticeSignals,
+        noticeSignal.id,
+        snapshot.observedAt,
+      );
+      const normalizedRelatedNoticeSignals = relatedNoticeSignals.length > 0
+        ? relatedNoticeSignals
+        : [toTiboNoticeSignal(noticeSignal)];
+      const representativeNotice = selectRepresentativeTiboNotice(normalizedRelatedNoticeSignals)!;
+      const firstAnnouncement = normalizedRelatedNoticeSignals[0] ?? representativeNotice;
+      const estimate = buildResetExecutionEstimate({
+        resetEventKey: `tibo-reset-${firstAnnouncement.tweet_id}`,
+        tiboAnnouncedAt: firstAnnouncement.tweet_created_at,
+        tiboPrimaryTweetId: representativeNotice.tweet_id,
+        tiboSourceTweetIds: normalizedRelatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
+        usageObservation: observation,
+        officialNoticeTweetId: representativeNotice.tweet_id,
+        officialNoticeAt: representativeNotice.tweet_created_at,
+      });
+      if (!estimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      executionEstimate = buildResetExecutionEstimateWrite(estimate);
+      estimateObserved = true;
+    } catch {
+      console.warn("[Codex usage] notice-backed reset execution estimate failed", { reason: "request_failed" });
+      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+  } else if (
+    teaserSignal &&
+    decision.confidence === "strong" &&
+    decision.cycleHint === "unexpected"
+  ) {
+    try {
+      const teaser = toTiboSignal(teaserSignal);
+      const estimate = buildResetExecutionEstimate({
+        resetEventKey: `tibo-reset-${teaser.tweet_id}`,
+        tiboAnnouncedAt: teaser.tweet_created_at,
+        tiboPrimaryTweetId: teaser.tweet_id,
+        tiboSourceTweetIds: [teaser.tweet_id],
+        usageObservation: observation,
+        corroboratingTiboTweetId: teaser.tweet_id,
+      });
+      if (!estimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      executionEstimate = buildResetExecutionEstimateWrite(estimate);
+      teaserEstimateObserved = true;
+      estimateObserved = true;
+    } catch {
+      console.warn("[Codex usage] teaser-backed reset execution estimate failed", { reason: "request_failed" });
+      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+  } else if (
+    decision.confidence === "strong" &&
+    decision.cycleHint === "unexpected"
+  ) {
+    try {
+      const estimate = buildResetExecutionEstimate({
+        resetEventKey: "usage-reset-pending",
+        usageObservation: observation,
+        isMonitorObserved: true,
+        tiboAnnouncedAt: null,
+        tiboPrimaryTweetId: null,
+        tiboSourceTweetIds: [],
+      });
+      if (!estimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+      executionEstimate = buildResetExecutionEstimateWrite(estimate, { monitorObserved: true });
+      estimateObserved = true;
+    } catch {
+      console.warn("[Codex usage] monitor standalone reset execution estimate failed", { reason: "request_failed" });
+      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    }
+  }
+
+  const bankedResult = getCorroboratedBankedDistribution(
+    snapshot,
+    notice,
+    effectiveBankedResetCountChange,
+  );
+  const plan = buildCodexUsageAtomicWritePlan({
+    expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+    snapshot,
+    receivedAt: now.toISOString(),
+    previousState: previousResult.state,
+    observation,
+    regularReset: decision.nearRegularSchedule
+      ? {
+          scheduledAt: new Date(decision.previous.resetsAt * 1000).toISOString(),
+          completedAt: snapshot.observedAt,
+        }
+      : undefined,
+    executionEstimate,
+    bankedDistribution: bankedResult.input,
+    promotion: matchingTibo.tweetId && matchingTibo.needsPromotion
+      ? {
+          tweetId: matchingTibo.tweetId,
+          confidence: matchingTibo.confidence ?? 0.95,
+        }
+      : undefined,
+  });
+  const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+  if (atomicResponse) return atomicResponse;
+
+  console.info("[Codex usage] recovery observation accepted", {
+    cycleHint: decision.cycleHint,
+    confidence: decision.confidence,
+    matchedTibo: Boolean(matchingTibo.tweetId),
+    bankedDistributionObserved: bankedResult.observed,
+    estimateObserved,
+  });
+  try {
+    revalidateTag("radar-data");
+  } catch {
+    console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+  }
+  return recoveryResponse(
+    bankedResult.observed
+      ? "banked_distribution_observed"
+    : matchingTibo.tweetId
+      ? "confirmed"
+      : teaserEstimateObserved
+        ? "teaser_corroborated"
+        : estimateObserved
+          ? "confirmed"
+          : "observed_unconfirmed",
+  );
 }
 
 export async function POST(request: Request) {
@@ -312,350 +673,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const previousResult = await readCodexUsageMonitorState(client);
-    if (previousResult.error) {
-      console.warn("[Codex usage] state lookup failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
-    }
-
-    const previousBankedResetAvailableCount =
-      previousResult.row?.bankedResetAvailableCount ??
-      previousResult.state?.bankedResetAvailableCount;
-    const serverObservedBankedIncrease = isBankedResetAvailableCountGrant(
-      previousBankedResetAvailableCount,
-      snapshot.bankedResetAvailableCount,
-    );
-    const effectiveBankedResetCountChange =
-      snapshot.bankedResetCountChange === true || serverObservedBankedIncrease;
-    const bankedNotice = effectiveBankedResetCountChange
-      ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
-      : null;
-    if (bankedNotice?.error) {
-      console.warn("[Codex usage] BANKED notice lookup failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
-    }
-
-    const lastBankedGrantAt =
-      previousResult.row?.lastBankedGrantAt ??
-      previousResult.state?.lastBankedGrantAt ??
-      (previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
-        ? await findLatestBankedGrantAt(client, snapshot.observedAt)
-        : null);
-
-    const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
-      lastBankedGrantAt,
-    });
-    if (initialDecision.kind === "stale") return recoveryResponse("ignored_stale");
-
-    if (
-      initialDecision.kind === "baseline" ||
-      initialDecision.kind === "rebase" ||
-      initialDecision.kind === "invalid" ||
-      initialDecision.kind === "no_recovery"
-    ) {
-      const bankedResult = await persistCorroboratedBankedDistribution(
-        client,
-        snapshot,
-        bankedNotice,
-        effectiveBankedResetCountChange,
-      );
-      if (bankedResult.error) {
-        console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
-      if (stateError) {
-        console.warn("[Codex usage] state update failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
-      }
-      console.info("[Codex usage] snapshot accepted", {
-        source: CODEX_USAGE_SOURCE_KEY,
-        recovery: initialDecision.kind,
-        bankedDistributionObserved: bankedResult.observed,
-      });
-      if (bankedResult.observed) {
-        try {
-          revalidateTag("radar-data");
-        } catch {
-          console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
-        }
-      }
-      return recoveryResponse(bankedResult.observed ? "banked_distribution_observed" : initialDecision.kind);
-    }
-
-    const recoveryExecutionWindow: ResetExecutionWindow = {
-      executionWindowStartAt: initialDecision.previous.observedAt,
-      executionWindowEndAt: snapshot.observedAt,
-    };
-    const notice = bankedNotice ?? await hasActiveOfficialNotice(
-      client,
-      new Date(snapshot.observedAt),
-      recoveryExecutionWindow,
-    );
-    if (notice.error) {
-      console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
-    }
-
-    const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
-      activeOfficialNotice: notice.active,
-      activeResetEvidence: notice.active || Boolean(notice.teaserSignal),
-      lastBankedGrantAt,
-    });
-    if (decision.kind !== "recovery") {
-      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
-      if (stateError) return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
-      return recoveryResponse(decision.kind);
-    }
-
-    // A recovery near the regular schedule is not Tibo evidence. This also
-    // covers the `unknown` near-regular case where an official notice exists:
-    // a notice must not turn a regular quota recovery into a Tibo confirmation.
-    const matchingTibo = !canCorroborateTiboReset(decision)
-      ? { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null }
-      : await findRecentFormalTiboReset(
-          client,
-          snapshot.observedAt,
-          USAGE_TIBO_MATCH_WINDOW_MS,
-        );
-    if (matchingTibo.error) {
-      console.warn("[Codex usage] Tibo match lookup failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
-    }
-
-    if (matchingTibo.tweetId && matchingTibo.needsPromotion) {
-      const promotion = await promoteDeferredTiboReset(
-        client,
-        matchingTibo.tweetId,
-        matchingTibo.confidence ?? 0.95,
-      );
-      if (promotion.error) {
-        console.warn("[Codex usage] deferred Tibo reset promotion failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
-      }
-    }
-
-    if (decision.isPersonalReset === true) {
-      const observationResult = await insertCodexRecoveryObservation(client, {
-        sourceKey: CODEX_USAGE_SOURCE_KEY,
-        observedAt: snapshot.observedAt,
-        previousObservedAt: decision.previous.observedAt,
-        previousUsedPercent: decision.previous.usedPercent,
-        currentUsedPercent: decision.current.usedPercent,
-        previousResetsAt: decision.previous.resetsAt,
-        currentResetsAt: decision.current.resetsAt,
-        cycleHint: decision.cycleHint,
-        confidence: decision.confidence,
-        status: "observed",
-        matchedTiboTweetId: null,
-        confirmedAt: null,
-      });
-      if (observationResult.error) {
-        console.warn("[Codex usage] personal reset observation write failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-
-      const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
-      if (stateError) {
-        console.warn("[Codex usage] state update failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
-      }
-
-      console.info("[Codex usage] personal reset observed and suppressed from public history", {
-        source: CODEX_USAGE_SOURCE_KEY,
-      });
-      return recoveryResponse("personal_reset");
-    }
-
-    const confirmedAt = matchingTibo.tweetId ? now.toISOString() : null;
-    const observationResult = await insertCodexRecoveryObservation(client, {
-      sourceKey: CODEX_USAGE_SOURCE_KEY,
-      observedAt: snapshot.observedAt,
-      previousObservedAt: decision.previous.observedAt,
-      previousUsedPercent: decision.previous.usedPercent,
-      currentUsedPercent: decision.current.usedPercent,
-      previousResetsAt: decision.previous.resetsAt,
-      currentResetsAt: decision.current.resetsAt,
-      cycleHint: decision.cycleHint,
-      confidence: decision.confidence,
-      status: matchingTibo.tweetId ? "confirmed" : "observed",
-      matchedTiboTweetId: matchingTibo.tweetId,
-      confirmedAt,
-    });
-    if (observationResult.error) {
-      console.warn("[Codex usage] recovery observation write failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-    }
-
-    if (decision.nearRegularSchedule) {
-      const regularError = await insertObservedRegularResetEvent(
-        client,
-        new Date(decision.previous.resetsAt * 1000).toISOString(),
-        snapshot.observedAt,
-      );
-      if (regularError) {
-        console.warn("[Codex usage] regular reset completion write failed", { reason: "database_error" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    }
-
-    const noticeSignal = notice.noticeSignal;
-    const teaserSignal = notice.teaserSignal;
-    let teaserEstimateObserved = false;
-    let estimateObserved = false;
-    if (matchingTibo.tweetId && matchingTibo.tweetCreatedAt && observationResult.observation) {
-      try {
-        const cluster = await findFormalTiboResetCluster(
-          client,
-          matchingTibo.tweetId,
-          matchingTibo.tweetCreatedAt,
-        );
-        if (cluster.error) {
-          console.warn("[Codex usage] reset execution estimate lookup failed", { reason: "database_error" });
-          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-        }
-        const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
-          tiboAnnouncedAt: cluster.announcedAt,
-          tiboPrimaryTweetId: cluster.representativeTweetId,
-          tiboSourceTweetIds: cluster.sourceTweetIds,
-          usageObservation: observationResult.observation,
-          officialNoticeTweetId: cluster.representativeNoticeId,
-          officialNoticeAt: cluster.representativeNoticeAt,
-        });
-        if (estimateResult.error || !estimateResult.estimate) {
-          console.warn("[Codex usage] reset execution estimate write failed", { reason: "database_error" });
-          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-        }
-        estimateObserved = true;
-      } catch {
-        console.warn("[Codex usage] reset execution estimate failed", { reason: "request_failed" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observationResult.observation)) {
-      try {
-        const noticeSignals = notice.noticeSignals.length > 0
-          ? notice.noticeSignals
-          : [toTiboNoticeSignal(noticeSignal)];
-        const relatedNoticeSignals = findRelatedTiboNoticeCluster(
-          noticeSignals,
-          noticeSignal.id,
-          snapshot.observedAt,
-        );
-        const normalizedRelatedNoticeSignals = relatedNoticeSignals.length > 0
-          ? relatedNoticeSignals
-          : [toTiboNoticeSignal(noticeSignal)];
-        const representativeNotice = selectRepresentativeTiboNotice(normalizedRelatedNoticeSignals)!;
-        const firstAnnouncement = normalizedRelatedNoticeSignals[0] ?? representativeNotice;
-        const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `tibo-reset-${firstAnnouncement.tweet_id}`,
-          tiboAnnouncedAt: firstAnnouncement.tweet_created_at,
-          tiboPrimaryTweetId: representativeNotice.tweet_id,
-          tiboSourceTweetIds: normalizedRelatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
-          usageObservation: observationResult.observation,
-          officialNoticeTweetId: representativeNotice.tweet_id,
-          officialNoticeAt: representativeNotice.tweet_created_at,
-        });
-        if (estimateResult.error || !estimateResult.estimate) {
-          console.warn("[Codex usage] notice-backed reset execution estimate write failed", { reason: "database_error" });
-          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-        }
-        estimateObserved = true;
-      } catch {
-        console.warn("[Codex usage] notice-backed reset execution estimate failed", { reason: "request_failed" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    } else if (
-      teaserSignal &&
-      decision.confidence === "strong" &&
-      decision.cycleHint === "unexpected" &&
-      observationResult.observation
-    ) {
-      try {
-        const teaser = toTiboSignal(teaserSignal);
-        const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `tibo-reset-${teaser.tweet_id}`,
-          tiboAnnouncedAt: teaser.tweet_created_at,
-          tiboPrimaryTweetId: teaser.tweet_id,
-          tiboSourceTweetIds: [teaser.tweet_id],
-          usageObservation: observationResult.observation,
-          corroboratingTiboTweetId: teaser.tweet_id,
-        });
-        if (estimateResult.error || !estimateResult.estimate) {
-          console.warn("[Codex usage] teaser-backed reset execution estimate write failed", { reason: "database_error" });
-          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-        }
-        teaserEstimateObserved = true;
-        estimateObserved = true;
-      } catch {
-        console.warn("[Codex usage] teaser-backed reset execution estimate failed", { reason: "request_failed" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    } else if (
-      decision.confidence === "strong" &&
-      decision.cycleHint === "unexpected" &&
-      observationResult.observation
-    ) {
-      try {
-        const estimateResult = await upsertResetExecutionEstimate(client, {
-          resetEventKey: `usage-reset-${observationResult.observation.id}`,
-          usageObservation: observationResult.observation,
-          isMonitorObserved: true,
-          tiboAnnouncedAt: null,
-          tiboPrimaryTweetId: null,
-          tiboSourceTweetIds: [],
-        });
-        if (estimateResult.error || !estimateResult.estimate) {
-          console.warn("[Codex usage] monitor standalone reset execution estimate write failed", { reason: "database_error" });
-          return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-        }
-        estimateObserved = true;
-      } catch {
-        console.warn("[Codex usage] monitor standalone reset execution estimate failed", { reason: "request_failed" });
-        return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-      }
-    }
-
-    const bankedResult = await persistCorroboratedBankedDistribution(
-      client,
-      snapshot,
-      notice,
-      effectiveBankedResetCountChange,
-    );
-    if (bankedResult.error) {
-      console.warn("[Codex usage] BANKED distribution estimate write failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
-    }
-
-    const stateError = await upsertCodexUsageMonitorState(client, snapshot, now.toISOString(), previousResult.state);
-    if (stateError) {
-      console.warn("[Codex usage] state update failed", { reason: "database_error" });
-      return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
-    }
-
-    console.info("[Codex usage] recovery observation accepted", {
-      cycleHint: decision.cycleHint,
-      confidence: decision.confidence,
-      matchedTibo: Boolean(matchingTibo.tweetId),
-      bankedDistributionObserved: bankedResult.observed,
-      estimateObserved,
-    });
-    try {
-      revalidateTag("radar-data");
-    } catch {
-      console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
-    }
-    return recoveryResponse(
-      bankedResult.observed
-        ? "banked_distribution_observed"
-      : matchingTibo.tweetId
-        ? "confirmed"
-        : teaserEstimateObserved
-          ? "teaser_corroborated"
-          : estimateObserved
-            ? "confirmed"
-            : "observed_unconfirmed",
-    );
+    return await processCodexUsageSnapshot(client, snapshot, now);
   } catch {
     console.warn("[Codex usage] request failed", { reason: "request_failed" });
     return NextResponse.json({ error: "Usage monitor unavailable" }, { status: 503 });

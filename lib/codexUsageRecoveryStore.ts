@@ -612,6 +612,11 @@ export async function findFormalTiboResetCluster(
   tiboTweetId: string,
   tiboTweetCreatedAt: string,
   clusterWindowMs = 5 * 60 * 1000,
+  promotionCandidate?: {
+    tweet_id: string;
+    tweet_created_at: string;
+    confidence: number;
+  },
 ) {
   const time = Date.parse(tiboTweetCreatedAt);
   const fallback = (error: unknown = null) => ({
@@ -642,7 +647,16 @@ export async function findFormalTiboResetCluster(
     return fallback(result.error);
   }
 
-  const candidates = (result.data ?? [])
+  const candidates = [
+    ...(result.data ?? []),
+    ...(promotionCandidate
+      ? [{
+          tweet_id: promotionCandidate.tweet_id,
+          tweet_created_at: promotionCandidate.tweet_created_at,
+          confidence: promotionCandidate.confidence,
+        }]
+      : []),
+  ]
     .filter((row) =>
       typeof row.tweet_id === "string" &&
       typeof row.tweet_created_at === "string" &&
