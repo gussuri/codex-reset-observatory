@@ -90,7 +90,7 @@ test("workflow notifier only opens one issue and closes it after recovery", () =
   assert.match(workflow, /^  workflow_run:\s*$/m);
   assert.match(
     workflow,
-    /workflows: \["CI", "Tibo monitor health", "Log Reset Probability", "Verify Supabase Migrations"\]/,
+    /workflows: \["CI", "Tibo monitor health", "Log Reset Probability", "Verify Supabase Migrations", "Verify Browser E2E"\]/,
   );
   assert.match(workflow, /branches: \[main\]/);
   assert.match(

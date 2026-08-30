@@ -74,6 +74,7 @@ test("all external workflow actions are pinned to full commit SHAs", () => {
     ".github/workflows/log-probability.yml",
     ".github/workflows/notify-workflow-failures.yml",
     ".github/workflows/tibo-monitor-health.yml",
+    ".github/workflows/verify-browser-e2e.yml",
   ];
   const externalUses = workflowFiles.flatMap((file) =>
     readFileSync(resolve(file), "utf8")
@@ -89,6 +90,22 @@ test("all external workflow actions are pinned to full commit SHAs", () => {
       `External action is not pinned: ${line}`,
     );
   }
+});
+
+test("browser E2E workflow builds the local app and runs Chromium only", () => {
+  const workflowPath = resolve(".github/workflows/verify-browser-e2e.yml");
+  const workflow = readFileSync(workflowPath, "utf8").replace(/\r\n/g, "\n");
+
+  assert.match(workflow, /^name: Verify Browser E2E$/m);
+  assert.match(workflow, /^  push:\n    branches: \[main\]$/m);
+  assert.match(workflow, /^  workflow_dispatch:\s*$/m);
+  assert.match(workflow, /node-version: 22\.13\.0/);
+  assert.match(workflow, /corepack pnpm install --frozen-lockfile/);
+  assert.match(workflow, /corepack pnpm build/);
+  assert.match(workflow, /corepack pnpm exec playwright install --with-deps chromium/);
+  assert.match(workflow, /corepack pnpm exec playwright test/);
+  assert.doesNotMatch(workflow, /secrets\./);
+  assert.doesNotMatch(workflow, /playwright install --with-deps\s*$/m);
 });
 
 test("probability logging keeps a six-hour research cadence", () => {
