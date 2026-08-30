@@ -1,5 +1,4 @@
 import React from "react";
-import { probabilityToPercent } from "@/lib/radar";
 import { normalizeProbability } from "@/lib/radar/helpers";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";

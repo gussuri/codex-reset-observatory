@@ -11,13 +11,10 @@ import {
   Radio,
   type LucideIcon,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CachedRadarData,
-  getRadarViewModel,
-  isSafeHttpUrl,
-} from "@/lib/radar";
+import type { CachedRadarData } from "@/lib/radar/types";
 import {
   applyRefreshFailure,
   applyRefreshSuccess,
@@ -39,10 +36,66 @@ import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
-import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { TiboActivityCard } from "@/components/TiboActivityCard";
-import { formatElapsedResetDuration } from "@/lib/radar/helpers";
+import { formatElapsedResetDuration, isSafeHttpUrl } from "@/lib/radar/helpers";
+
+const DeferredRandomResetTimeHeatmap = dynamic(
+  () => import("@/components/RandomResetTimeHeatmap").then((module) => module.RandomResetTimeHeatmap),
+);
+
+function createUnavailableRadarViewModel(locale: Locale): PublicRadarSnapshot["viewModel"] {
+  const unknown = translateUI("unknownProbability", locale);
+  const noNotice = translateUI("noNoticeLabel", locale);
+
+  return {
+    status: noNotice,
+    expectation: unknown,
+    lastUpdated: null,
+    regularResetForecast: {
+      date: unknown,
+      time: null,
+      remaining: unknown,
+      sourceResetAt: null,
+      expectedAt: null,
+      lastCompletedAt: null,
+      remainingDays: null,
+      isNoticeWindow: false,
+    },
+    activeWindow: {
+      active: false,
+      kind: "none",
+      label: noNotice,
+      summary: locale === "en"
+        ? "At this moment, there are no official reset notices detected."
+        : locale === "zh"
+          ? "目前未检测到官方重置预告。"
+          : "現時点で、このサイトで確認した公式リセット予告はありません。",
+      openedAt: null,
+      expectedAt: null,
+      expectedEndAt: null,
+      expectedPrecision: null,
+      expectedTimeZone: null,
+      source: null,
+      sourceLabel: null,
+      isOverduePending: false,
+      overdueText: null,
+    },
+    displayReasoningSummary: null,
+    latestWindow: {
+      kind: "observed",
+      title: unknown,
+      summary: unknown,
+      scope: unknown,
+      openedAt: null,
+      closedAt: null,
+      windowLength: unknown,
+      source: null,
+      sourceKind: "none",
+    },
+    recentHistory: [],
+  };
+}
 
 function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | null | undefined) {
   if (!signalAt || !resetAt) return false;
@@ -320,6 +373,11 @@ export function RadarDashboard({
   const latestDataRef = useRef<PublicRadarSnapshot | null>(initialData ?? null);
   const latestFetchedAtRef = useRef<string | null>(resolvedInitialFetchedAt);
   const cacheKey = `codex-reset-observatory:last-success:${locale}`;
+  const unavailableViewModel = useMemo(
+    () => createUnavailableRadarViewModel(locale),
+    [locale],
+  );
+  const [loadedFallbackViewModel, setLoadedFallbackViewModel] = useState<PublicRadarSnapshot["viewModel"] | null>(null);
 
   const loadCachedData = useCallback((): CachedRadarData | null => {
     try {
@@ -530,10 +588,29 @@ export function RadarDashboard({
     };
   }, [fetchRadar, initialData, locale, resolvedInitialFetchedAt]);
 
-  const viewModel = useMemo(
-    () => state.data?.viewModel ?? getRadarViewModel(null, locale),
-    [state.data, locale],
-  );
+  useEffect(() => {
+    if (state.data) {
+      setLoadedFallbackViewModel(null);
+      return;
+    }
+
+    let cancelled = false;
+    void import("@/lib/radar")
+      .then(({ getRadarViewModel }) => {
+        if (!cancelled) {
+          setLoadedFallbackViewModel(getRadarViewModel(null, locale));
+        }
+      })
+      .catch(() => {
+        // The compact unavailable view remains usable if the fallback module cannot load.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, state.data]);
+
+  const viewModel = state.data?.viewModel ?? loadedFallbackViewModel ?? unavailableViewModel;
   const dashboardDataState = getDashboardDataState(state);
   const isDataUnavailable = dashboardDataState === "unavailable";
   const shouldShowDataWarning =
@@ -1004,7 +1081,7 @@ export function RadarDashboard({
           ) : null}
         </section>
 
-        <RandomResetTimeHeatmap
+        <DeferredRandomResetTimeHeatmap
           eventTimes={randomResetHeatmapEventTimes}
           locale={locale}
         />
