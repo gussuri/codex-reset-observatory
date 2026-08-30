@@ -35,7 +35,6 @@ import {
   isBankedDistributionCompletionSignal,
   isBroadBankedDistributionNotice,
 } from "./bankedReset";
-import { getCanonicalHistoryDetails } from "./historyNormalization";
 
 export type TiboSignalType =
   | "official_notice"
@@ -99,8 +98,6 @@ export const NOTICE_BACKED_RECOVERY_BODY_KEY = "noticeBackedRecoveryBody";
 
 export const NOTICE_BACKED_RECOVERY_FALLBACK_SUMMARY = "Codexの週間利用枠がリセットされたことを確認しました。";
 export const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> = {
-  "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925":
-    "複数の利用量過剰消費につながる問題を修正したうえで、Codex / ChatGPT Workの全有料ユーザーの利用上限がリセットされました。",
   "tibo-reset-2087706104814023111":
     "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
   "tibo-reset-2091412393368945027":
@@ -527,7 +524,7 @@ export function convertTiboResetSignalToHistoryEvent(
   const summary = "Tibo氏がCodexの利用上限リセット完了を発表しました。";
   const title = "ランダムリセット";
 
-  const event: WindowEventLike = {
+  return {
     id: `tibo-reset-${signal.tweet_id}`,
     recordKind: "confirmed_global",
     title,
@@ -558,11 +555,6 @@ export function convertTiboResetSignalToHistoryEvent(
       .map((notice) => notice.tweet_id)
       .concat(signal.tweet_id)
       .filter((tweetId, index, all) => all.indexOf(tweetId) === index),
-  };
-
-  return {
-    ...event,
-    canonicalDetails: getCanonicalHistoryDetails(event),
   };
 }
 
@@ -730,11 +722,6 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
     ...(dynamicItem.sourceTweetIds ?? []),
     ...(staticItem.sourceTweetIds ?? []),
   ]));
-  const canonicalDetails = dynamicItem.canonicalDetails?.noticeType === "present"
-    ? dynamicItem.canonicalDetails
-    : staticItem.canonicalDetails?.noticeType === "present"
-      ? staticItem.canonicalDetails
-      : dynamicItem.canonicalDetails ?? staticItem.canonicalDetails;
 
   return {
     ...dynamicItem,
@@ -744,7 +731,6 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
     summary: staticItem.summary ?? dynamicItem.summary,
     scope,
     source_url: staticItem.source_url ?? dynamicItem.source_url,
-    canonicalDetails,
     ...(sourceTweetIds.length > 0 ? { sourceTweetIds } : {}),
     details: {
       cycleType: staticDetails?.cycleType ?? dynamicDetails?.cycleType ?? "",
@@ -1159,21 +1145,15 @@ function buildNoticeBackedRecoveryEvent(
   const openedTime = getTimestamp(openedAt);
   const completedTime = getTimestamp(completedAt);
 
-  const hasOfficialNotice = Boolean(
-    officialNoticeTweetId &&
-      notice?.signal_type === "official_notice" &&
-      openedTime !== null &&
-      completedTime !== null &&
-      openedTime <= completedTime,
-  );
+  const hasOfficialNotice = Boolean(officialNoticeTweetId && notice?.signal_type === "official_notice");
   const hasTeaserNotice = Boolean(
     !hasOfficialNotice &&
     notice?.signal_type === "teaser" &&
     openedTime !== null &&
     completedTime !== null &&
-    openedTime < completedTime,
+    openedTime <= completedTime,
   );
-  const hasNoticeLead = hasOfficialNotice;
+  const hasNoticeLead = hasOfficialNotice || hasTeaserNotice;
   const noticeMinutes = hasNoticeLead && openedTime !== null && completedTime !== null && completedTime >= openedTime
     ? Math.max(0, Math.round((completedTime - openedTime) / 60000))
     : 0;
@@ -1193,7 +1173,7 @@ function buildNoticeBackedRecoveryEvent(
   const inferredReason = notice?.text ? normalizeResetReasonType({ text: notice.text }) : undefined;
   const reasonType = explicitReason ?? inferredReason;
 
-  const event: WindowEventLike = {
+  return {
     id: estimate.resetEventKey,
     recordKind: "confirmed_global",
     presentation: NOTICE_BACKED_RECOVERY_PRESENTATION,
@@ -1226,11 +1206,6 @@ function buildNoticeBackedRecoveryEvent(
           : "なし",
       note: getNoticeBackedRecoveryHistorySummary(estimate.resetEventKey),
     },
-  };
-
-  return {
-    ...event,
-    canonicalDetails: getCanonicalHistoryDetails(event),
   };
 }
 
@@ -1298,7 +1273,7 @@ function buildBankedDistributionEvent(
   const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
   const summary = "任意リセット権の配布が確認されました。";
 
-  const event: WindowEventLike = {
+  return {
     id: estimate.resetEventKey,
     recordKind: "banked_distribution",
     title: "ランダムリセット",
@@ -1326,11 +1301,6 @@ function buildBankedDistributionEvent(
       noticeType: "公式予告あり",
       note: summary,
     },
-  };
-
-  return {
-    ...event,
-    canonicalDetails: getCanonicalHistoryDetails(event),
   };
 }
 

@@ -187,8 +187,8 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       tweet_id: "2091412393368945027",
       text: "Reset will land around 14pm PST tomorrow.",
       tweet_url: "https://x.com/thsottiaux/status/2091412393368945027",
-      tweet_created_at: "2026-08-13T02:29:05Z",
-      expected_start_at: "2026-08-13T04:00:00Z",
+      tweet_created_at: "2026-08-23T06:29:05Z",
+      expected_start_at: "2026-08-23T22:00:00Z",
     };
     const estimate = {
       ...sampleEstimate,
@@ -208,7 +208,6 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(event.details?.resetMethod, "強制リセット");
     assert.equal(event.details?.scope, "全有料プラン");
     assert.equal(event.details?.noticeType, "公式予告あり");
-    assert.equal(event.canonicalDetails?.noticeType, "present");
 
     const data: RadarData = {
       recent_tibo_signals: [notice as any],

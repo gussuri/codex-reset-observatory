@@ -91,7 +91,7 @@ function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Local
 }
 
 function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) {
-  if (item.canonicalDetails?.cycleType === "regular") {
+  if (item.details?.cycleType === translateDynamic("定期リセット", locale)) {
     return null;
   }
 
@@ -117,7 +117,7 @@ function getHistoryDisplayTitle(item: HistoryItem, locale: Locale) {
   const title = translateDynamic(item.title, locale);
   if (
     item.recordKind !== "reference" ||
-    item.canonicalDetails?.cycleType === "regular"
+    item.details?.cycleType === translateDynamic("定期リセット", locale)
   ) {
     return title;
   }

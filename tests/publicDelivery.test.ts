@@ -726,7 +726,7 @@ test("history page combines confirmed, banked, and regular reference records chr
 
     const description = {
       ja: "Codexの全体リセットと任意リセット配布を、新しい順にまとめています。",
-      en: "Global resets and Banked Reset distributions are listed together, newest first.",
+      en: "Global resets and Banked Reset distributions are listed together in chronological order.",
       zh: "按时间倒序汇总 Codex 全局重置和手动重置发放记录。",
     }[locale];
     assert.equal((localizedHtml.match(new RegExp(escapeRegExp(description), "g")) ?? []).length, 1);
@@ -969,9 +969,9 @@ test("shows the next regular reset reference only within 72 hours", () => {
 
 test("history uses a short notice label only for a signal before execution", () => {
   const expectedLabels = {
-    ja: "匂わせ：",
-    en: "Teaser:",
-    zh: "暗示：",
+    ja: "予告：",
+    en: "Notice:",
+    zh: "预告：",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {

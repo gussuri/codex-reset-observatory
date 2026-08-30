@@ -32,7 +32,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
       category: "Codex usage limits reset history",
       pageTitle: "Recent Codex Reset Events",
       sectionTitle: "Reset history",
-      description: "Global resets and Banked Reset distributions are listed together, newest first.",
+      description: "Global resets and Banked Reset distributions are listed together in chronological order.",
       empty: "No reset history is available yet.",
       nav: {
         top: "Back to English top",

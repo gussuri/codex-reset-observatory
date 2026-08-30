@@ -1,9 +1,4 @@
 import type {
-  CanonicalHistoryCycleType,
-  CanonicalHistoryNoticeType,
-  CanonicalHistoryReasonType,
-  CanonicalHistoryResetMethod,
-  CanonicalHistorySignalKind,
   HistoryNoticeType,
   Locale,
   ResetCycleType,
@@ -562,14 +557,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "适用套餐",
   },
   detectionTime: {
-    ja: "告知",
-    en: "Announcement",
-    zh: "告知",
-  },
-  teaserTime: {
-    ja: "匂わせ",
-    en: "Teaser",
-    zh: "暗示",
+    ja: "予告",
+    en: "Notice",
+    zh: "预告",
   },
   resetTime: {
     ja: "リセット実施時刻",
@@ -603,8 +593,8 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   },
   historyNoticeType: {
     ja: "リセット告知",
-    en: "Reset announcement",
-    zh: "重置告知",
+    en: "Reset Notice",
+    zh: "重置预告",
   },
   historyNote: {
     ja: "補足",
@@ -710,26 +700,6 @@ export type StandardHistoryTerm =
   | ResetScopeType;
 
 export const DYNAMIC_TRANSLATIONS = {
-  "複数の利用量過剰消費につながる問題を修正したうえで、Codex / ChatGPT Workの全有料ユーザーの利用上限がリセットされました。": {
-    ja: "複数の利用量過剰消費につながる問題を修正したうえで、Codex / ChatGPT Workの全有料ユーザーの利用上限がリセットされました。",
-    en: "After fixing multiple issues that caused excessive usage, usage limits for all Codex and ChatGPT Work paid users were reset.",
-    zh: "修复多个导致使用量过度消耗的问题后，Codex 和 ChatGPT Work 的所有付费用户使用限制已重置。",
-  },
-  "Tiboの快眠若返り記念リセット": {
-    ja: "Tiboの快眠若返り記念リセット",
-    en: "Tibo's sleep-and-youth celebration reset",
-    zh: "Tibo 睡眠与重获青春庆祝重置",
-  },
-  "Tiboのパフォーマンス的なリセット": {
-    ja: "Tiboのパフォーマンス的なリセット",
-    en: "Tibo performance reset",
-    zh: "Tibo 性能重置",
-  },
-  "Claude CodeでもGPT-5.6 Solが使える記念リセット": {
-    ja: "Claude CodeでもGPT-5.6 Solが使える記念リセット",
-    en: "GPT-5.6 Sol on Claude Code celebration reset",
-    zh: "Claude Code 支持 GPT-5.6 Sol 庆祝重置",
-  },
   "Codex信頼性障害補償リセット": {
     ja: "Codex信頼性障害補償リセット",
     en: "Codex reliability compensation reset",
@@ -1935,104 +1905,6 @@ export const DYNAMIC_TRANSLATIONS = {
 
 export function translateUI(key: string, locale: Locale): string {
   return UI_TRANSLATIONS[key]?.[locale] ?? key;
-}
-
-const CANONICAL_HISTORY_CYCLE_TRANSLATIONS: Record<
-  CanonicalHistoryCycleType,
-  Record<Locale, string>
-> = {
-  random: { ja: "ランダムリセット", en: "Random reset", zh: "随机重置" },
-  regular: { ja: "定期リセット", en: "Weekly reset", zh: "定期重置" },
-  account_specific: { ja: "個人別リセット", en: "Account-specific reset", zh: "个人专属重置" },
-};
-
-const CANONICAL_HISTORY_REASON_TRANSLATIONS: Record<
-  CanonicalHistoryReasonType,
-  Record<Locale, string>
-> = {
-  celebration: { ja: "ご祝儀リセット", en: "Celebration reset", zh: "庆祝重置" },
-  compensation: { ja: "詫びリセット", en: "Compensation reset", zh: "故障补偿重置" },
-  regular_update: { ja: "定期更新", en: "Regular update", zh: "定期更新" },
-};
-
-const CANONICAL_HISTORY_METHOD_TRANSLATIONS: Record<
-  CanonicalHistoryResetMethod,
-  Record<Locale, string>
-> = {
-  hard_reset: { ja: "強制リセット", en: "Hard reset", zh: "强制重置" },
-  banked_reset_distribution: {
-    ja: "任意リセット権配布",
-    en: "BANKED Reset distribution",
-    zh: "BANKED 重置发放",
-  },
-};
-
-const CANONICAL_HISTORY_NOTICE_TRANSLATIONS: Record<
-  CanonicalHistoryNoticeType,
-  Record<Locale, string>
-> = {
-  present: { ja: "あり", en: "Yes", zh: "有" },
-  none: { ja: "なし", en: "None", zh: "无" },
-};
-
-const CANONICAL_HISTORY_SIGNAL_TRANSLATIONS: Record<
-  CanonicalHistorySignalKind,
-  Record<Locale, string>
-> = {
-  announcement: { ja: "告知", en: "Announcement", zh: "告知" },
-  teaser: { ja: "匂わせ", en: "Teaser", zh: "暗示" },
-  none: { ja: "", en: "", zh: "" },
-};
-
-export function translateHistoryCycle(value: CanonicalHistoryCycleType, locale: Locale) {
-  return CANONICAL_HISTORY_CYCLE_TRANSLATIONS[value][locale];
-}
-
-export function translateHistoryReason(value: CanonicalHistoryReasonType, locale: Locale) {
-  return CANONICAL_HISTORY_REASON_TRANSLATIONS[value][locale];
-}
-
-export function translateHistoryResetMethod(value: CanonicalHistoryResetMethod, locale: Locale) {
-  return CANONICAL_HISTORY_METHOD_TRANSLATIONS[value][locale];
-}
-
-export function translateHistoryNotice(value: CanonicalHistoryNoticeType, locale: Locale) {
-  return CANONICAL_HISTORY_NOTICE_TRANSLATIONS[value][locale];
-}
-
-export function translateHistorySignal(value: CanonicalHistorySignalKind, locale: Locale) {
-  return CANONICAL_HISTORY_SIGNAL_TRANSLATIONS[value][locale];
-}
-
-export function formatHistoryNoticeToExecution(minutes: number, locale: Locale) {
-  const normalizedMinutes = Math.max(0, Math.round(minutes));
-  if (locale === "en") {
-    if (normalizedMinutes === 0) return "0 minutes";
-    const hours = Math.floor(normalizedMinutes / 60);
-    const remainingMinutes = normalizedMinutes % 60;
-    const parts: string[] = [];
-    if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-    if (remainingMinutes > 0) {
-      parts.push(`${remainingMinutes} ${remainingMinutes === 1 ? "minute" : "minutes"}`);
-    }
-    return parts.join(" ");
-  }
-  if (locale === "zh") {
-    if (normalizedMinutes === 0) return "0 分钟";
-    const hours = Math.floor(normalizedMinutes / 60);
-    const remainingMinutes = normalizedMinutes % 60;
-    const parts: string[] = [];
-    if (hours > 0) parts.push(`${hours} 小时`);
-    if (remainingMinutes > 0) parts.push(`${remainingMinutes} 分钟`);
-    return parts.join(" ");
-  }
-
-  if (normalizedMinutes === 0) return "0分";
-  const hours = Math.floor(normalizedMinutes / 60);
-  const remainingMinutes = normalizedMinutes % 60;
-  if (hours === 0) return `${remainingMinutes}分`;
-  if (remainingMinutes === 0) return `${hours}時間`;
-  return `${hours}時間${remainingMinutes}分`;
 }
 
 export function translateDynamic(value: string | undefined, locale: Locale): string {

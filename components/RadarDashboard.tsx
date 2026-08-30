@@ -154,7 +154,7 @@ function getHistoryDisplayTitle(
   const title = translateDynamic(item.title, locale);
   if (
     item.recordKind !== "reference" ||
-    item.canonicalDetails?.cycleType === "regular"
+    item.details?.cycleType === translateDynamic("定期リセット", locale)
   ) {
     return title;
   }
@@ -1002,14 +1002,14 @@ export function RadarDashboard({
                       item={item}
                       locale={locale}
                       compact
-                      hideScopeOnMobile={item.canonicalDetails?.scope === "全有料プラン"}
+                      hideScopeOnMobile={item.scope === "全有料プラン"}
                       hideReasonOnMobile
                       hideNoticeType
                       hideNoticeToExecutionOnMobile
                       hideNoteOnMobile
                       showScope
                     />
-                    {item.canonicalDetails?.cycleType === "regular" ? (
+                    {item.details?.cycleType === translateDynamic("定期リセット", locale) ? (
                       <p className="mt-2 text-xs leading-5 text-slate-500 sm:hidden">
                         {translateUI("regularResetTimingNote", locale)}
                       </p>
@@ -1020,7 +1020,7 @@ export function RadarDashboard({
                       {item.signalLabel && hasPriorSignal(item.signalAt, item.resetAt) ? (
                         <div className="hidden sm:contents">
                           <span className="text-slate-600">
-                            {item.signalLabel}{locale === "en" ? ": " : "："}
+                            {translateDynamic(item.signalLabel, locale)}{locale === "en" ? ": " : "："}
                           </span>
                           <span className="tabular-nums">
                             <LocalizedDateTime value={item.signalAt} locale={locale} />
@@ -1030,7 +1030,7 @@ export function RadarDashboard({
                       {item.resetAt || item.resetLabel ? (
                         <div className="sm:contents">
                           <span className="text-slate-600">
-                            {item.resetLabel}{locale === "en" ? ": " : "："}
+                            {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}
                           </span>
                           <span className="tabular-nums font-bold text-slate-900 sm:font-normal sm:text-slate-700">
                             <LocalizedDateTime
@@ -1043,7 +1043,7 @@ export function RadarDashboard({
                         </div>
                       ) : null}
                     </div>
-                    {item.canonicalDetails?.cycleType !== "regular" && isSafeHttpUrl(item.source) ? (
+                    {item.details?.cycleType !== translateDynamic("定期リセット", locale) && isSafeHttpUrl(item.source) ? (
                       <div className="sm:text-right">
                         <a
                           className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"

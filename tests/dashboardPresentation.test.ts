@@ -843,14 +843,12 @@ test("shows a localized regular reset timing note only on mobile history cards",
       ...template,
       key: "regular-timing-note",
       recordKind: "regular_completed" as const,
-      canonicalDetails: { ...template.canonicalDetails!, cycleType: "regular" as const },
       details: { ...template.details!, cycleType: cycleTypes[locale].regular },
     };
     const randomItem = {
       ...template,
       key: "random-timing-note",
       recordKind: "confirmed_global" as const,
-      canonicalDetails: { ...template.canonicalDetails!, cycleType: "random" as const },
       details: { ...template.details!, cycleType: cycleTypes[locale].random },
     };
 
@@ -894,7 +892,7 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
     key: "timestamp-alignment-test",
     recordKind: "confirmed_global" as const,
     title: "テストリセット",
-    signalLabel: "告知",
+    signalLabel: "予告",
     signalAt: "2026-08-10T20:34:00.000Z",
     resetLabel: "実施",
     resetAt: "2026-08-11T00:00:00.000Z",
@@ -910,20 +908,6 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
       }),
       cycleType: "ランダムリセット",
     },
-    canonicalDetails: {
-      ...(template.canonicalDetails ?? {
-        cycleType: "random" as const,
-        reasonType: "celebration" as const,
-        resetMethod: "hard_reset" as const,
-        scope: "全体",
-        noticeType: "present" as const,
-        noticeToExecutionMinutes: 255,
-      }),
-      cycleType: "random" as const,
-      noticeType: "present" as const,
-      noticeToExecutionMinutes: 255,
-      signalKind: "announcement" as const,
-    },
   };
   const alignedSnapshot = {
     ...baseSnapshot,
@@ -937,7 +921,7 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
   );
 
   const historyIndex = html.indexOf("テストリセット");
-  const noticeLabelIndex = html.indexOf(">告知：</span>", historyIndex);
+  const noticeLabelIndex = html.indexOf(">予告：</span>", historyIndex);
   const executionLabelIndex = html.indexOf(">実施：</span>", historyIndex);
   const sourceIndex = html.indexOf("ソース", executionLabelIndex);
   assert.ok(historyIndex >= 0);
@@ -945,36 +929,13 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
   assert.ok(executionLabelIndex > noticeLabelIndex);
   assert.ok(sourceIndex > executionLabelIndex);
   const labels = {
-    ja: [">告知：</span>", ">実施：</span>"],
-    en: [">Announcement: </span>", ">Reset: </span>"],
-    zh: [">告知：</span>", ">执行：</span>"],
-  } as const;
-  const signalLabels = {
-    ja: "告知",
-    en: "Announcement",
-    zh: "告知",
-  } as const;
-  const resetLabels = {
-    ja: "実施",
-    en: "Reset",
-    zh: "执行",
+    ja: [">予告：</span>", ">実施：</span>"],
+    en: [">Notice: </span>", ">Reset: </span>"],
+    zh: [">预告：</span>", ">执行：</span>"],
   } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
-    const localizedSnapshot = locale === "ja"
-      ? alignedSnapshot
-      : {
-          ...alignedSnapshot,
-          viewModel: {
-            ...alignedSnapshot.viewModel,
-            recentHistory: [{
-              ...historyItem,
-              signalLabel: signalLabels[locale],
-              resetLabel: resetLabels[locale],
-            }],
-          },
-        };
     const localizedHtml = renderToStaticMarkup(
-      React.createElement(RadarDashboard, { initialData: localizedSnapshot, locale }),
+      React.createElement(RadarDashboard, { initialData: alignedSnapshot, locale }),
     );
     for (const label of labels[locale]) assert.match(localizedHtml, new RegExp(label));
   }
@@ -989,7 +950,7 @@ test("aligns reset history notice and execution timestamps in a desktop grid", (
   const withoutNoticeHtml = renderToStaticMarkup(
     React.createElement(RadarDashboard, { initialData: withoutNoticeSnapshot, locale: "ja" }),
   );
-  assert.doesNotMatch(withoutNoticeHtml, />告知：<\/span>/);
+  assert.doesNotMatch(withoutNoticeHtml, />予告：<\/span>/);
   assert.match(withoutNoticeHtml, />実施：<\/span>/);
 });
 
@@ -1344,9 +1305,6 @@ test("hides generic all-paid-plan scope while retaining concrete scope details",
   const makeItem = (scope: string) => ({
     ...template,
     key: `scope-${scope}`,
-    canonicalDetails: template.canonicalDetails
-      ? { ...template.canonicalDetails, scope }
-      : undefined,
     scope,
     details: {
       ...(template.details ?? {
@@ -1481,9 +1439,9 @@ test("normalizes a monitor-only recovery to the shared history schema", () => {
     resetDisplayNames: [displayName],
   });
   const expected = {
-    ja: { reason: "詫びリセット", noNotice: "なし", oldWindowLabel: "検知幅", oldSignal: "観測", oldNoticeSignal: "予告" },
-    en: { reason: "Compensation reset", noNotice: "None", oldWindowLabel: "Detection window", oldSignal: "Observed", oldNoticeSignal: "Notice" },
-    zh: { reason: "故障补偿重置", noNotice: "无", oldWindowLabel: "检测时间窗口", oldSignal: "观测", oldNoticeSignal: "预告" },
+    ja: { reason: "詫びリセット", noNotice: "0分", oldWindowLabel: "検知幅", oldSignal: "観測", oldNoticeSignal: "予告" },
+    en: { reason: "Compensation reset", noNotice: "0 min", oldWindowLabel: "Detection window", oldSignal: "Observed", oldNoticeSignal: "Notice" },
+    zh: { reason: "故障补偿重置", noNotice: "0 分", oldWindowLabel: "检测时间窗口", oldSignal: "观测", oldNoticeSignal: "预告" },
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -1491,18 +1449,17 @@ test("normalizes a monitor-only recovery to the shared history schema", () => {
     const item = snapshot.viewModel.recentHistory.find((historyItem) => historyItem.key === resetEventKey);
     assert.ok(item, `${locale} monitor-only history item should be present`);
     assert.equal(item.details?.reasonType, expected[locale].reason);
-    assert.equal(item.details?.noticeToExecution, "");
+    assert.equal(item.details?.noticeToExecution, expected[locale].noNotice);
     assert.equal(item.signalLabel, "");
     assert.equal(item.signalAt, null);
     assert.equal(item.resetAt, recoveryObservation.observedAt);
-    assert.equal(item.details?.noticeType, locale === "ja" ? "なし" : locale === "en" ? "None" : "无");
+    assert.equal(item.details?.noticeType, locale === "ja" ? "なし" : locale === "en" ? "None" : "无预告");
 
     const detailsHtml = renderToStaticMarkup(
       React.createElement(ResetHistoryDetails, { item, locale }),
     );
-    assert.match(detailsHtml, new RegExp(locale === "ja" ? "リセット告知" : locale === "en" ? "Reset announcement" : "重置告知"));
     assert.match(detailsHtml, new RegExp(expected[locale].noNotice));
-    assert.doesNotMatch(detailsHtml, new RegExp(locale === "ja" ? "告知から実施まで" : locale === "en" ? "Time from notice to reset" : "从预告到执行"));
+    assert.match(detailsHtml, new RegExp(locale === "ja" ? "告知から実施まで" : locale === "en" ? "Time from notice to reset" : "从预告到执行"));
     assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].oldWindowLabel));
     assert.doesNotMatch(detailsHtml, new RegExp(expected[locale].oldSignal));
 
@@ -1559,18 +1516,9 @@ test("keeps notice-backed history on the shared notice-to-execution schema", () 
   });
 
   const expected = {
-    ja: {
-      official: { duration: "2時間", notice: "あり", signal: "告知" },
-      teaser: { duration: "", notice: "なし", signal: "匂わせ" },
-    },
-    en: {
-      official: { duration: "2 hours", notice: "Yes", signal: "Announcement" },
-      teaser: { duration: "", notice: "None", signal: "Teaser" },
-    },
-    zh: {
-      official: { duration: "2 小时", notice: "有", signal: "告知" },
-      teaser: { duration: "", notice: "无", signal: "暗示" },
-    },
+    ja: { duration: "2時間", signal: "予告" },
+    en: { duration: "2 hours", signal: "Notice" },
+    zh: { duration: "2 小时", signal: "预告" },
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -1578,10 +1526,8 @@ test("keeps notice-backed history on the shared notice-to-execution schema", () 
     for (const key of ["shared-official-reset", "shared-teaser-reset"]) {
       const item = viewModel.recentHistory.find((historyItem) => historyItem.key === `tibo-reset-${key}`);
       assert.ok(item, `${locale} ${key} history item should be present`);
-      const kind = key === "shared-official-reset" ? "official" : "teaser";
-      assert.equal(item.details?.noticeToExecution, expected[locale][kind].duration);
-      assert.equal(item.details?.noticeType, expected[locale][kind].notice);
-      assert.equal(item.signalLabel, expected[locale][kind].signal);
+      assert.equal(item.details?.noticeToExecution, expected[locale].duration);
+      assert.equal(item.signalLabel, expected[locale].signal);
       assert.ok(item.signalAt);
       assert.ok(item.resetAt);
     }

@@ -45,23 +45,19 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "title": "Luna 10万スレッド到達・効率改善記念リセット",
     "kind": "reset_completed",
     "status": "closed",
-    "opened_at": "2026-07-31T04:53:19.000Z",
+    "opened_at": "2026-07-31T13:50:00.000Z",
     "closed_at": "2026-08-01T12:32:00+09:00",
     "completed_at": "2026-08-01T12:32:00+09:00",
-    "window_minutes": 1359,
+    "window_minutes": 1362,
     "scope": "全有料プラン",
     "summary": "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
-    "source_url": "https://x.com/thsottiaux/status/2083053369351090254",
-    "sourceTweetIds": [
-      "2083053369351090254",
-      "2083395449814229287"
-    ],
+    "source_url": "https://x.com/thsottiaux/status/2083395449814229287",
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
       "scope": "全有料プラン",
-      "noticeToExecution": "22時間39分",
+      "noticeToExecution": "22時間42分",
       "noticeType": "匂わせ投稿あり",
       "note": "Tibo氏より今週の利用効率改善を記念し、週末に10万件のLunaスレッドを実行できるようCodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。"
     }
@@ -407,8 +403,8 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "ご祝儀リセット",
       "resetMethod": "任意リセット権配布",
       "scope": "全有料プラン",
-      "noticeToExecution": "0分",
-      "noticeType": "なし",
+      "noticeToExecution": "1時間",
+      "noticeType": "告知投稿あり",
       "note": "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。"
     }
   },
