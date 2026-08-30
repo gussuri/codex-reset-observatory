@@ -1323,7 +1323,7 @@ test("adds stable ChatGPT reset FAQ anchors and keeps the whole-service distinct
   }
 });
 
-test("hides generic all-paid-plan scope while retaining concrete scope details", () => {
+test("hides all scope values from public history details while retaining internal scope data", () => {
   const calculationNow = new Date("2026-08-10T12:00:00.000Z");
   const template = toPublicRadarSnapshot(
     getLocalRadarData({ calculationNow }),
@@ -1350,53 +1350,31 @@ test("hides generic all-paid-plan scope while retaining concrete scope details",
     },
   });
 
-  const genericHtml = renderToStaticMarkup(
-    React.createElement(ResetHistoryDetails, {
-      item: makeItem("全有料プラン"),
-      locale: "ja",
-    }),
-  );
-  assert.doesNotMatch(genericHtml, /対象プラン/);
-  assert.doesNotMatch(genericHtml, /全有料プラン/);
-
-  for (const [locale, scope, label] of [
-    ["en", "All paid plans", "Scope"],
-    ["zh", "所有付费套餐", "适用套餐"],
-  ] as const) {
-    const localizedGenericHtml = renderToStaticMarkup(
-      React.createElement(ResetHistoryDetails, {
-        item: makeItem(scope),
-        locale,
-      }),
-    );
-    assert.doesNotMatch(localizedGenericHtml, new RegExp(label));
-    assert.doesNotMatch(localizedGenericHtml, new RegExp(scope));
-  }
-
-  for (const scope of [
+  const scopeValues = [
+    "Codex / ChatGPT Work",
+    "全有料プラン",
     "不具合対象ユーザー（約50万人）",
     "任意リセット未使用アカウント",
     "Go / Plus / Pro",
-  ]) {
-    const concreteHtml = renderToStaticMarkup(
-      React.createElement(ResetHistoryDetails, {
-        item: makeItem(scope),
-        locale: "ja",
-      }),
-    );
-    assert.match(concreteHtml, /対象プラン/);
-    assert.match(concreteHtml, new RegExp(scope));
-  }
+  ] as const;
+  const scopeLabels = {
+    ja: "対象プラン",
+    en: "Scope",
+    zh: "适用套餐",
+  } as const;
 
-  const hiddenHtml = renderToStaticMarkup(
-    React.createElement(ResetHistoryDetails, {
-      item: makeItem("Go / Plus / Pro"),
-      locale: "ja",
-      showScope: false,
-    }),
-  );
-  assert.doesNotMatch(hiddenHtml, /対象プラン/);
-  assert.doesNotMatch(hiddenHtml, /Go \/ Plus \/ Pro/);
+  for (const locale of ["ja", "en", "zh"] as const) {
+    for (const scope of scopeValues) {
+      const html = renderToStaticMarkup(
+        React.createElement(ResetHistoryDetails, {
+          item: makeItem(scope),
+          locale,
+        }),
+      );
+      assert.doesNotMatch(html, new RegExp(scopeLabels[locale]));
+      assert.doesNotMatch(html, new RegExp(scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+  }
 });
 
 test("keeps all-paid-plan scope in internal history data and random-reset eligibility", () => {
@@ -1408,6 +1386,19 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
   );
   assert.ok(stored);
   assert.equal(stored.details?.scope, "全有料プラン");
+
+  const calculationNow = new Date("2026-08-31T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  );
+  const projected = snapshot.viewModel.recentHistory.find(
+    (item) => item.key === stored.id || item.title === stored.title,
+  );
+  assert.ok(projected);
+  assert.equal(projected.scope, "全有料プラン");
+  assert.equal(projected.details?.scope, "全有料プラン");
 
   const completedAt = Date.parse(stored.completed_at ?? stored.closed_at ?? "");
   assert.equal(

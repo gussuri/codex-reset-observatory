@@ -7,8 +7,6 @@ type ResetHistoryDetailsProps = {
   item: ResetHistoryItem;
   locale: Locale;
   compact?: boolean;
-  showScope?: boolean;
-  hideScopeOnMobile?: boolean;
   hideReasonOnMobile?: boolean;
   hideNoticeType?: boolean;
   hideNoticeToExecutionOnMobile?: boolean;
@@ -20,24 +18,10 @@ function isMeaningfulValue(value: string | null | undefined) {
   return !new Set(["不明", "unknown", "未知", "なし", "none", "null"]).has(value.trim().toLowerCase());
 }
 
-const GENERIC_SCOPE_VALUES = new Set([
-  "全有料プラン",
-  "all paid plans",
-  "所有付费套餐",
-]);
-
-function shouldShowScope(value: string | null | undefined) {
-  const normalizedValue = value?.trim().toLowerCase();
-  if (!normalizedValue) return false;
-  return !GENERIC_SCOPE_VALUES.has(normalizedValue);
-}
-
 export function ResetHistoryDetails({
   item,
   locale,
   compact = false,
-  showScope = true,
-  hideScopeOnMobile = false,
   hideReasonOnMobile = false,
   hideNoticeType = false,
   hideNoticeToExecutionOnMobile = false,
@@ -67,9 +51,6 @@ export function ResetHistoryDetails({
       label: translateUI("historyResetMethod", locale),
       value: details.resetMethod,
     },
-    ...(showScope && shouldShowScope(details.scope)
-      ? [{ id: "scope", label: translateUI("scope", locale), value: details.scope }]
-      : []),
     ...(details.noticeType
       ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType }]
       : []),
@@ -99,7 +80,6 @@ export function ResetHistoryDetails({
         {rows.map(({ id, label, value }) => (
           <div
             className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
-              (hideScopeOnMobile && id === "scope") ||
               (hideReasonOnMobile && id === "reasonType") ||
               (hideNoticeToExecutionOnMobile && id === "noticeToExecution")
                 ? "hidden sm:grid"

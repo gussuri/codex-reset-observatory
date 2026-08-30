@@ -1002,12 +1002,10 @@ export function RadarDashboard({
                       item={item}
                       locale={locale}
                       compact
-                      hideScopeOnMobile={item.scope === "全有料プラン"}
                       hideReasonOnMobile
                       hideNoticeType
                       hideNoticeToExecutionOnMobile
                       hideNoteOnMobile
-                      showScope
                     />
                     {item.details?.cycleType === translateDynamic("定期リセット", locale) ? (
                       <p className="mt-2 text-xs leading-5 text-slate-500 sm:hidden">
