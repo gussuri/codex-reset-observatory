@@ -1439,9 +1439,9 @@ test("normalizes a monitor-only recovery to the shared history schema", () => {
     resetDisplayNames: [displayName],
   });
   const expected = {
-    ja: { reason: "詫びリセット", noNotice: "告知なし", oldWindowLabel: "検知幅", oldSignal: "観測", oldNoticeSignal: "予告" },
-    en: { reason: "Compensation reset", noNotice: "No notice", oldWindowLabel: "Detection window", oldSignal: "Observed", oldNoticeSignal: "Notice" },
-    zh: { reason: "故障补偿重置", noNotice: "无预告", oldWindowLabel: "检测时间窗口", oldSignal: "观测", oldNoticeSignal: "预告" },
+    ja: { reason: "詫びリセット", noNotice: "0分", oldWindowLabel: "検知幅", oldSignal: "観測", oldNoticeSignal: "予告" },
+    en: { reason: "Compensation reset", noNotice: "0 min", oldWindowLabel: "Detection window", oldSignal: "Observed", oldNoticeSignal: "Notice" },
+    zh: { reason: "故障补偿重置", noNotice: "0 分", oldWindowLabel: "检测时间窗口", oldSignal: "观测", oldNoticeSignal: "预告" },
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {

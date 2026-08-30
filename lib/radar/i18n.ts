@@ -1896,11 +1896,6 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "No notice",
     zh: "无预告",
   },
-  "告知なし": {
-    ja: "告知なし",
-    en: "No notice",
-    zh: "无预告",
-  },
   "なし": {
     ja: "なし",
     en: "None",

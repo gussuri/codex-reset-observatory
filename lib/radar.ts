@@ -721,7 +721,7 @@ function getHistoryNoticeToExecution(item: WindowLike & { kind?: string }, local
     return formatWindowLength(item.window_minutes, locale);
   }
 
-  return translateDynamic("告知なし", locale);
+  return translateDynamic("0分", locale);
 }
 
 function getHistoryDetails(
@@ -755,7 +755,7 @@ function getHistoryDetails(
       scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: item.details.noticeToExecution?.trim()
         ? translateDynamic(item.details.noticeToExecution, locale)
-        : translateDynamic("告知なし", locale),
+        : translateDynamic("0分", locale),
       noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
       note: item.details.note
         ? translateDynamic(item.details.note, locale)
