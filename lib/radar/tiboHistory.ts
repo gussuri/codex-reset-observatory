@@ -184,7 +184,7 @@ export type RejectedTiboResetSignal = Pick<
 const FORMAL_RESET_CONFIDENCE = 0.95;
 const OFFICIAL_NOTICE_CONFIDENCE = 0.95;
 const TEASER_CONFIDENCE = 0.8;
-const NOTICE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+export const NOTICE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const DUPLICATE_RESET_WINDOW_MS = 5 * 60 * 1000;
 const RULE_BACKED_CLASSIFICATION_SOURCES = new Set<TiboClassificationSource>([
   "rule",

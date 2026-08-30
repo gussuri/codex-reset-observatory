@@ -40,6 +40,7 @@ import {
   findRelatedBankedDistributionNotices,
   findRelatedTiboNoticeCluster,
   selectRepresentativeTiboNotice,
+  NOTICE_LOOKBACK_MS,
   type BankedDistributionSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
@@ -146,6 +147,10 @@ async function hasActiveOfficialNotice(
   observedAt: Date,
   executionWindow: ResetExecutionWindow | null = null,
 ): Promise<OfficialNoticeLookup> {
+  const observedAtIso = observedAt.toISOString();
+  const noticeLookbackStartIso = new Date(
+    observedAt.getTime() - NOTICE_LOOKBACK_MS,
+  ).toISOString();
   const [tiboResult, regularResult] = await Promise.all([
     client
       .from("tibo_signals")
@@ -153,11 +158,20 @@ async function hasActiveOfficialNotice(
       .in("signal_type", ["official_notice", "reset_executed", "teaser", "irrelevant"])
       .or("is_reply.is.null,is_reply.eq.false")
       .neq("verification_status", "rejected")
+      .lte("tweet_created_at", observedAtIso)
+      .or(`tweet_created_at.gte.${noticeLookbackStartIso},expires_at.gt.${observedAtIso}`)
+      .order("tweet_created_at", { ascending: false })
+      .order("tweet_id", { ascending: false })
       .limit(1000),
     client
       .from("regular_reset_events")
       .select(REGULAR_COLUMNS)
-      .limit(1000),
+      .eq("cycle_type", "定期リセット")
+      .eq("record_kind", "regular_completed")
+      .in("status", ["completed", "corrected"])
+      .lte("completed_at", observedAtIso)
+      .order("completed_at", { ascending: false })
+      .limit(1),
   ]);
 
   if (tiboResult.error || regularResult.error) {

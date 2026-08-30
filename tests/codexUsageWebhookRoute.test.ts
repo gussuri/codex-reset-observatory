@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/codex-usage/route";
 import { shouldCreateNoticeBackedEstimate } from "../lib/codexUsageRecovery";
+import { NOTICE_LOOKBACK_MS } from "../lib/radar/tiboHistory";
 
 const ENV_KEYS = [
   "CODEX_USAGE_MONITOR_SECRET",
@@ -45,6 +46,39 @@ function buildRequest(overrides: Record<string, unknown> = {}, authorization = "
       ...overrides,
     }),
   });
+}
+
+function assertUsageWebhookQueryBounds(
+  requests: ReadonlyArray<{ url: string; method: string }>,
+  observedAt: string,
+) {
+  const tiboRequest = requests.find((request) =>
+    request.method === "GET" && request.url.includes("tibo_signals"),
+  );
+  assert.ok(tiboRequest, "The webhook should query Tibo signals");
+  const tiboUrl = new URL(tiboRequest!.url);
+  const observedIso = new Date(observedAt).toISOString();
+  const lookbackIso = new Date(Date.parse(observedAt) - NOTICE_LOOKBACK_MS).toISOString();
+  const orFilters = tiboUrl.searchParams.getAll("or");
+  assert.equal(tiboUrl.searchParams.get("tweet_created_at"), `lte.${observedIso}`);
+  assert.equal(tiboUrl.searchParams.get("order"), "tweet_created_at.desc,tweet_id.desc");
+  assert.equal(tiboUrl.searchParams.get("limit"), "1000");
+  assert.ok(orFilters.some((value) =>
+    value.includes(`tweet_created_at.gte.${lookbackIso}`) &&
+    value.includes(`expires_at.gt.${observedIso}`),
+  ), `Expected a bounded Tibo lookback/active-window filter: ${orFilters.join(" | ")}`);
+
+  const regularRequest = requests.find((request) =>
+    request.method === "GET" && request.url.includes("regular_reset_events"),
+  );
+  assert.ok(regularRequest, "The webhook should query regular reset events");
+  const regularUrl = new URL(regularRequest!.url);
+  assert.equal(regularUrl.searchParams.get("cycle_type"), "eq.定期リセット");
+  assert.equal(regularUrl.searchParams.get("record_kind"), "eq.regular_completed");
+  assert.equal(regularUrl.searchParams.get("status"), "in.(completed,corrected)");
+  assert.equal(regularUrl.searchParams.get("completed_at"), `lte.${observedIso}`);
+  assert.equal(regularUrl.searchParams.get("order"), "completed_at.desc");
+  assert.equal(regularUrl.searchParams.get("limit"), "1");
 }
 
 test("missing monitor secret returns 503 without contacting storage", async () => {
@@ -246,6 +280,108 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
     assert.equal(requests.some((request) =>
       request.url.includes("regular_reset_events") && request.method !== "GET",
     ), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("bounded notice lookup keeps the latest signal available beyond 1000 old rows", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const observedAt = "2026-08-11T00:02:00.000Z";
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const latestNotice = {
+    tweet_id: "latest-banked-notice-after-old-rows",
+    text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+    tweet_url: "https://x.com/thsottiaux/status/latest-banked-notice-after-old-rows",
+    tweet_created_at: "2026-08-10T23:00:00.000Z",
+    expires_at: "2026-08-12T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    ai_temporal_precision: "daypart",
+    expected_start_at: "2026-08-11T00:00:00.000Z",
+    expected_end_at: "2026-08-11T23:59:59.000Z",
+    temporal_resolution_status: "resolved",
+    ai_temporal_timezone: "America/Los_Angeles",
+    ai_temporal_confidence: 0.98,
+  };
+  const oldSignals = Array.from({ length: 1001 }, (_, index) => ({
+    tweet_id: `old-tibo-signal-${index}`,
+    text: "An unrelated historical post.",
+    tweet_url: `https://x.com/thsottiaux/status/old-tibo-signal-${index}`,
+    tweet_created_at: "2020-01-01T00:00:00.000Z",
+    expires_at: "2020-01-02T00:00:00.000Z",
+    signal_type: "irrelevant",
+    confidence: 0.1,
+    verification_status: "auto_unverified",
+    is_reply: false,
+  }));
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-10T23:00:00.000Z",
+        received_at: "2026-08-10T23:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 20,
+        window_duration_mins: 10080,
+        resets_at: 1_787_012_727,
+        coverage_started_at: "2026-08-10T22:00:00.000Z",
+        banked_reset_available_count: 0,
+        updated_at: "2026-08-10T23:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const observedIso = new Date(observedAt).toISOString();
+      const lookbackIso = new Date(Date.parse(observedAt) - NOTICE_LOOKBACK_MS).toISOString();
+      const orFilters = query.searchParams.getAll("or");
+      const bounded =
+        query.searchParams.get("tweet_created_at") === `lte.${observedIso}` &&
+        query.searchParams.get("order") === "tweet_created_at.desc,tweet_id.desc" &&
+        query.searchParams.get("limit") === "1000" &&
+        orFilters.some((value) =>
+          value.includes(`tweet_created_at.gte.${lookbackIso}`) &&
+          value.includes(`expires_at.gt.${observedIso}`),
+        );
+      return new Response(JSON.stringify(bounded ? [latestNotice, ...oldSignals] : oldSignals), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      bankedResetAvailableCount: 1,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    assertUsageWebhookQueryBounds(requests, observedAt);
+    const estimateWrite = requests.find((request) =>
+      request.url.includes("reset_execution_estimates") && request.method !== "GET",
+    );
+    assert.equal(estimateWrite?.body?.reset_event_key, "banked-reset-latest-banked-notice-after-old-rows");
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -455,6 +591,26 @@ test("regular recovery records the observation and canonical event without match
     SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
   });
   const originalFetch = globalThis.fetch;
+  const observedAt = "2026-08-11T00:02:00.000Z";
+  const latestRegularEvent = {
+    schedule_key: "weekly-regular-reset:2026-08-10T12:00:00.000Z",
+    window_start_at: "2026-08-10T11:58:00.000Z",
+    window_end_at: "2026-08-10T12:13:00.000Z",
+    representative_at: "2026-08-10T12:00:00.000Z",
+    scheduled_at: "2026-08-10T12:00:00.000Z",
+    completed_at: "2026-08-10T12:02:00.000Z",
+    cycle_type: "定期リセット",
+    reset_method: "強制リセット",
+    scope: "任意リセット未使用アカウント",
+    record_kind: "regular_completed",
+    status: "completed",
+  };
+  const oldRegularEvents = Array.from({ length: 1001 }, (_, index) => ({
+    ...latestRegularEvent,
+    schedule_key: `old-regular-reset-${index}`,
+    completed_at: "2020-01-01T00:00:00.000Z",
+  }));
+  let regularRowsReturned: "latest" | "old" | null = null;
   const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
   globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -480,7 +636,13 @@ test("regular recovery records the observation and canonical event without match
       return new Response(JSON.stringify([]), { status: 200 });
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
-      return new Response(JSON.stringify([]), { status: 200 });
+      const query = new URL(url);
+      const bounded =
+        query.searchParams.get("completed_at") === `lte.${new Date(observedAt).toISOString()}` &&
+        query.searchParams.get("order") === "completed_at.desc" &&
+        query.searchParams.get("limit") === "1";
+      regularRowsReturned = bounded ? "latest" : "old";
+      return new Response(JSON.stringify(bounded ? [latestRegularEvent] : oldRegularEvents), { status: 200 });
     }
     if (method === "POST" && url.includes("codex_recovery_observations")) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
@@ -496,12 +658,13 @@ test("regular recovery records the observation and canonical event without match
 
   try {
     const response = await POST(buildRequest({
-      observedAt: "2026-08-11T00:02:00.000Z",
+      observedAt,
       usedPercent: 0,
       resetsAt: Math.floor(Date.parse("2026-08-18T00:00:00.000Z") / 1000),
     }));
 
     assert.equal(response.status, 200);
+    assert.equal(regularRowsReturned, "latest");
     assert.equal(requests.filter((request) => request.url.includes("tibo_signals") && request.method === "GET").length, 1, JSON.stringify(requests));
     assert.equal(requests.some((request) => request.url.includes("tibo_signals") && request.method !== "GET"), false);
     const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
@@ -587,6 +750,7 @@ test("regular recovery with an official notice records regular history without p
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
+    assertUsageWebhookQueryBounds(requests, "2026-08-11T00:02:00.000Z");
     const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
     assert.equal(observation?.body?.cycle_hint, "unknown");
     assert.equal(observation?.body?.confidence, "strong");
@@ -611,6 +775,28 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
     SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
   });
   const originalFetch = globalThis.fetch;
+  const observedAt = "2026-08-25T00:04:00.000Z";
+  const latestTeaser = {
+    tweet_id: "teaser-route-test",
+    text: "The five hour limits are back.",
+    tweet_url: "https://x.com/thsottiaux/status/teaser-route-test",
+    tweet_created_at: "2026-08-25T00:00:00.000Z",
+    expires_at: "2026-08-25T03:00:00.000Z",
+    signal_type: "teaser",
+    confidence: 0.9,
+    verification_status: "auto_unverified",
+    is_reply: false,
+  };
+  const oldSignals = Array.from({ length: 1001 }, (_, index) => ({
+    ...latestTeaser,
+    tweet_id: `old-teaser-signal-${index}`,
+    text: "An unrelated historical post.",
+    tweet_url: `https://x.com/thsottiaux/status/old-teaser-signal-${index}`,
+    tweet_created_at: "2020-01-01T00:00:00.000Z",
+    expires_at: "2020-01-02T00:00:00.000Z",
+    signal_type: "irrelevant",
+    confidence: 0.1,
+  }));
   const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
   globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -633,17 +819,18 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
       }), { status: 200 });
     }
     if (method === "GET" && url.includes("tibo_signals")) {
-      return new Response(JSON.stringify([{
-        tweet_id: "teaser-route-test",
-        text: "The five hour limits are back.",
-        tweet_url: "https://x.com/thsottiaux/status/teaser-route-test",
-        tweet_created_at: "2026-08-25T00:00:00.000Z",
-        expires_at: "2026-08-25T03:00:00.000Z",
-        signal_type: "teaser",
-        confidence: 0.9,
-        verification_status: "auto_unverified",
-        is_reply: false,
-      }]), { status: 200 });
+      const query = new URL(url);
+      const observedIso = new Date(observedAt).toISOString();
+      const lookbackIso = new Date(Date.parse(observedAt) - NOTICE_LOOKBACK_MS).toISOString();
+      const bounded =
+        query.searchParams.get("tweet_created_at") === `lte.${observedIso}` &&
+        query.searchParams.get("order") === "tweet_created_at.desc,tweet_id.desc" &&
+        query.searchParams.get("limit") === "1000" &&
+        query.searchParams.getAll("or").some((value) =>
+          value.includes(`tweet_created_at.gte.${lookbackIso}`) &&
+          value.includes(`expires_at.gt.${observedIso}`),
+        );
+      return new Response(JSON.stringify(bounded ? [latestTeaser, ...oldSignals] : oldSignals), { status: 200 });
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
       return new Response(JSON.stringify([]), { status: 200 });
@@ -678,13 +865,14 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
 
   try {
     const response = await POST(buildRequest({
-      observedAt: "2026-08-25T00:04:00.000Z",
+      observedAt,
       usedPercent: 0,
       resetsAt: Math.floor(Date.parse("2026-08-28T00:00:00.000Z") / 1000),
     }));
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "teaser_corroborated" });
+    assertUsageWebhookQueryBounds(requests, observedAt);
     const observation = requests.find((request) => request.url.includes("codex_recovery_observations"));
     assert.equal(observation?.body?.status, "observed");
     assert.equal(observation?.body?.matched_tibo_tweet_id, null);
@@ -791,6 +979,7 @@ test("a future-dated teaser is not used to corroborate an earlier monitor recove
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assertUsageWebhookQueryBounds(requests, "2026-08-25T00:04:00.000Z");
     const estimate = requests.find((request) =>
       request.url.includes("reset_execution_estimates") && request.method !== "GET",
     );
