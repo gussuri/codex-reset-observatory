@@ -339,9 +339,9 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     const events = findNoticeBackedRecoveryEvents([teaserTweet as any], [recoveryObservation], [estimate!]);
     assert.equal(events.length, 1);
     assert.equal(events[0].details?.noticeType, "匂わせ投稿あり");
-    // 2026-08-25T10:00:00.000Z to 2026-08-26T01:15:00.000Z is 15 hours 15 minutes (915 mins)
-    assert.equal(events[0].details?.noticeToExecution, "15時間15分");
-    assert.equal(events[0].window_minutes, 915);
+    assert.equal(events[0].details?.noticeToExecution, "");
+    assert.equal(events[0].canonicalDetails?.noticeType, "none");
+    assert.equal(events[0].canonicalDetails?.noticeToExecutionMinutes, null);
   });
 
   it("12. completion post追加 -> executionAt不変", () => {
@@ -461,9 +461,9 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     assert.equal(events[0].title, "5時間制限復活に伴うリセット");
     assert.equal(events[0].details?.reasonType, "詫びリセット");
     assert.equal(events[0].details?.noticeType, "匂わせ投稿あり");
-    // 2026-08-25T01:16:11.000Z to 2026-08-25T14:13:31.428Z = 777 mins = 12h 57m
-    assert.equal(events[0].details?.noticeToExecution, "12時間57分");
-    assert.equal(events[0].window_minutes, 777);
+    assert.equal(events[0].details?.noticeToExecution, "");
+    assert.equal(events[0].canonicalDetails?.noticeType, "none");
+    assert.equal(events[0].canonicalDetails?.noticeToExecutionMinutes, null);
     assert.equal(events[0].completed_at, "2026-08-25T14:13:31.428Z");
   });
 
@@ -504,6 +504,7 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     const events = findNoticeBackedRecoveryEvents([officialNoticeTweet as any], [recoveryObservation], [estimate!]);
     assert.equal(events.length, 1);
     assert.equal(events[0].details?.noticeType, "公式予告あり");
+    assert.equal(events[0].canonicalDetails?.noticeType, "present");
     assert.equal(events[0].details?.noticeToExecution, "2時間");
     assert.equal(events[0].window_minutes, 120);
   });

@@ -49,7 +49,17 @@ import {
   translateUI,
   translateDynamic,
   translateExpectation,
+  formatHistoryNoticeToExecution,
+  translateHistoryCycle,
+  translateHistoryNotice,
+  translateHistoryReason,
+  translateHistoryResetMethod,
+  translateHistorySignal,
 } from "./radar/i18n";
+import {
+  getCanonicalHistoryDetails,
+  getCanonicalHistorySignalKind,
+} from "./radar/historyNormalization";
 import { isOverdueNoticePending } from "./radar/tiboTemporal";
 import {
   probabilityToPercent,
@@ -96,7 +106,6 @@ import {
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
 import {
-  inferResetCycleType,
   normalizeResetReasonType,
   type ResetReasonContext,
 } from "./radar/resetReason";
@@ -521,10 +530,6 @@ function getHistoryExecutionPresentation(
   } as const;
 }
 
-function getHistoryText(item: WindowLike & { kind?: string }) {
-  return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
-}
-
 function getHistoryReasonContext(item: WindowLike & { kind?: string }): ResetReasonContext {
   return {
     recordKind: item.recordKind,
@@ -557,19 +562,7 @@ function getMonitorOnlyExecutionEstimate(
   return estimate;
 }
 
-const CANONICAL_HISTORY_REASON_BY_EVENT_KEY: Partial<Record<string, ResetReasonType>> = {
-  "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925": "詫びリセット",
-};
-
-function getCanonicalHistoryReasonType(item: WindowLike & { kind?: string }) {
-  const eventKey = getResetDisplayNameEventKey(item);
-  return eventKey ? CANONICAL_HISTORY_REASON_BY_EVENT_KEY[eventKey] : undefined;
-}
-
 function getHistoryReasonTypeValue(item: WindowLike & { kind?: string }) {
-  const canonicalReason = getCanonicalHistoryReasonType(item);
-  if (canonicalReason) return canonicalReason;
-
   const inferredReason = normalizeResetReasonType(getHistoryReasonContext(item));
   if (inferredReason) return inferredReason;
   return undefined;
@@ -666,69 +659,14 @@ export function getHistorySourceKind(item: WindowLike): HistorySourceKind {
   return "none";
 }
 
-function getHistoryCycleType(item: WindowLike & { kind?: string }, locale: Locale) {
-  return translateDynamic(inferResetCycleType(getHistoryReasonContext(item)), locale);
-}
-
-function getHistoryReasonType(
-  item: WindowLike & { kind?: string },
-  locale: Locale,
-) {
-  const reason = getHistoryReasonTypeValue(item);
-  return reason ? translateDynamic(reason, locale) : "";
-}
-
-function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Locale) {
-  const text = getHistoryText(item);
-
-  if (text.includes("定期") || text.includes("weekly") || text.includes("1週間サイクル")) {
-    return translateDynamic("利用上限更新", locale);
-  }
-
-  if (
-    text.includes("任意") ||
-    text.includes("manual reset") ||
-    text.includes("banked reset") ||
-    text.includes("credit") ||
-    text.includes("配布")
-  ) {
-    return translateDynamic("任意リセット権配布", locale);
-  }
-
-  if (
-    item.kind === "reset_completed" ||
-    item.kind === "window_closed" ||
-    item.closed_at ||
-    item.completed_at ||
-    text.includes("強制") ||
-    text.includes("forced") ||
-    text.includes("hard reset") ||
-    text.includes("フルリセット") ||
-    text.includes("reset")
-  ) {
-    return translateDynamic("強制リセット", locale);
-  }
-
-  return translateDynamic("不明", locale);
-}
-
-function getHistoryNoticeToExecution(item: WindowLike & { kind?: string }, locale: Locale) {
-  if (item.window_human) {
-    return translateDynamic(item.window_human, locale);
-  }
-
-  if (typeof item.window_minutes === "number") {
-    return formatWindowLength(item.window_minutes, locale);
-  }
-
-  return translateDynamic("0分", locale);
-}
-
 function getHistoryDetails(
   item: WindowLike & { kind?: string },
   locale: Locale,
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
-  if (isRegularHistoryItem(item)) {
+  const canonical = getCanonicalHistoryDetails(item);
+  const isRegular = canonical.cycleType === "regular";
+
+  if (isRegular) {
     const resetMethod = getRegularResetMethod(item);
     const scope = getRegularResetScope(item, resetMethod);
     const note = resetMethod === BANKED_RESET_METHOD
@@ -736,9 +674,9 @@ function getHistoryDetails(
       : REGULAR_RESET_NOTE;
 
     return {
-      cycleType: translateDynamic("定期リセット", locale),
-      reasonType: translateDynamic("定期更新", locale),
-      resetMethod: translateDynamic(resetMethod, locale),
+      cycleType: translateHistoryCycle(canonical.cycleType, locale),
+      reasonType: translateHistoryReason(canonical.reasonType, locale),
+      resetMethod: translateHistoryResetMethod(canonical.resetMethod, locale),
       scope: translateDynamic(scope, locale),
       noticeToExecution: "",
       noticeType: undefined,
@@ -746,33 +684,20 @@ function getHistoryDetails(
     };
   }
 
-  if (item.details) {
-    const reason = getHistoryReasonTypeValue(item);
-    return {
-      cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: reason ? translateDynamic(reason, locale) : "",
-      resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: translateDynamic(item.details.scope, locale),
-      noticeToExecution: item.details.noticeToExecution?.trim()
-        ? translateDynamic(item.details.noticeToExecution, locale)
-        : translateDynamic("0分", locale),
-      noticeType: item.details.noticeType ? translateDynamic(item.details.noticeType, locale) : translateDynamic("なし", locale),
-      note: item.details.note
-        ? translateDynamic(item.details.note, locale)
-        : null,
-    };
-  }
-
-  const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
-
   return {
-    cycleType: getHistoryCycleType(item, locale),
-    reasonType: getHistoryReasonType(item, locale),
-    resetMethod: getHistoryResetMethod(item, locale),
-    scope,
-    noticeToExecution: getHistoryNoticeToExecution(item, locale),
-    noticeType: translateDynamic("なし", locale),
-    note: item.summary ? translateDynamic(item.summary, locale) : null,
+    cycleType: translateHistoryCycle(canonical.cycleType, locale),
+    reasonType: translateHistoryReason(canonical.reasonType, locale),
+    resetMethod: translateHistoryResetMethod(canonical.resetMethod, locale),
+    scope: canonical.scope ? translateDynamic(canonical.scope, locale) : translateDynamic("不明", locale),
+    noticeToExecution: canonical.noticeType === "present" && canonical.noticeToExecutionMinutes !== null
+      ? formatHistoryNoticeToExecution(canonical.noticeToExecutionMinutes, locale)
+      : "",
+    noticeType: translateHistoryNotice(canonical.noticeType, locale),
+    note: item.details?.note
+      ? translateDynamic(item.details.note, locale)
+      : item.summary
+        ? translateDynamic(item.summary, locale)
+        : null,
   };
 }
 
@@ -1066,10 +991,22 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         ? getRegularResetSummary(item, resetMethod ?? "強制リセット")
         : null;
       const monitorOnly = getMonitorOnlyExecutionEstimate(data, item) !== null;
+      const canonicalDetails = getCanonicalHistoryDetails(item);
+      const canonicalSignalKind = getCanonicalHistorySignalKind(item);
       const resetTypes = isRegular
         ? [translateDynamic("定期更新", locale)]
         : getResetTypes(item, locale);
       const details = getHistoryDetails(item, locale);
+      const hasPriorSignal = Boolean(
+        item.opened_at &&
+          resetAt &&
+          Date.parse(item.opened_at) < Date.parse(resetAt),
+      );
+      const shouldShowSignal =
+        !isRegular &&
+        !monitorOnly &&
+        hasPriorSignal &&
+        (canonicalDetails.noticeType === "present" || canonicalSignalKind === "teaser");
 
       return {
         key,
@@ -1083,17 +1020,16 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
           ? translateDynamic("リセット実施", locale)
           : translateEventStatus(item.kind ?? item.status, locale),
         details,
+        canonicalDetails,
         date: item.date ?? resetAt ?? item.opened_at,
-        signalAt: isRegular || monitorOnly ? null : item.opened_at ?? null,
+        signalAt: shouldShowSignal ? item.opened_at ?? null : null,
         resetAt,
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
-        signalLabel: isRegular || monitorOnly
-          ? ""
-          : translateUI("detectionTime", locale),
+        signalLabel: shouldShowSignal
+          ? translateHistorySignal(canonicalSignalKind, locale)
+          : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: isRegular
-          ? details.scope
-          : translateDynamic(item.scope, locale),
+        scope: details.scope,
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
         windowLength: item.window_human
           ? translateDynamic(item.window_human, locale)

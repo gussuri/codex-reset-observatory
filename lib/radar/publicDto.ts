@@ -375,6 +375,17 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       resetType: item.resetType,
       resetTypes: item.resetTypes ? [...item.resetTypes] : undefined,
       status: item.status,
+      canonicalDetails: item.canonicalDetails
+        ? {
+            cycleType: item.canonicalDetails.cycleType,
+            reasonType: item.canonicalDetails.reasonType,
+            resetMethod: item.canonicalDetails.resetMethod,
+            scope: item.canonicalDetails.scope,
+            noticeType: item.canonicalDetails.noticeType,
+            noticeToExecutionMinutes: item.canonicalDetails.noticeToExecutionMinutes,
+            signalKind: item.canonicalDetails.signalKind,
+          }
+        : undefined,
       details: item.details
         ? {
             cycleType: item.details.cycleType,

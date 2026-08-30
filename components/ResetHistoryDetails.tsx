@@ -1,5 +1,5 @@
 import type { Locale, RadarViewModel } from "@/lib/radar/types";
-import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import { translateUI } from "@/lib/radar/i18n";
 
 type ResetHistoryItem = RadarViewModel["recentHistory"][number];
 
@@ -16,8 +16,7 @@ type ResetHistoryDetailsProps = {
 };
 
 function isMeaningfulValue(value: string | null | undefined) {
-  if (!value || !value.trim()) return false;
-  return !new Set(["不明", "unknown", "未知", "なし", "none", "null"]).has(value.trim().toLowerCase());
+  return Boolean(value?.trim());
 }
 
 const GENERIC_SCOPE_VALUES = new Set([
@@ -30,39 +29,6 @@ function shouldShowScope(value: string | null | undefined) {
   const normalizedValue = value?.trim().toLowerCase();
   if (!normalizedValue) return false;
   return !GENERIC_SCOPE_VALUES.has(normalizedValue);
-}
-
-function shouldShowNoticeToExecution(
-  value: string,
-  details: NonNullable<ResetHistoryItem["details"]>,
-  recordKind: ResetHistoryItem["recordKind"],
-) {
-  if (!isMeaningfulValue(value)) return false;
-
-  const normalizedValue = value.trim();
-  const normalizedCycle = details.cycleType.trim();
-  const normalizedMethod = details.resetMethod.trim();
-  const noNotice = !details.noticeType || details.noticeType.trim() === "なし";
-
-  if (recordKind === "banked_distribution" && normalizedValue === "0分") {
-    return false;
-  }
-
-  if (
-    normalizedValue === "0分（定期）" ||
-    (normalizedValue === "0分" && noNotice && normalizedCycle.includes("定期"))
-  ) {
-    return false;
-  }
-
-  if (
-    recordKind === "banked_distribution" &&
-    (normalizedValue === "リセット実施" || normalizedValue === "強制リセット")
-  ) {
-    return false;
-  }
-
-  return normalizedMethod !== "リセット実施" || normalizedValue !== "0分" || !noNotice;
 }
 
 export function ResetHistoryDetails({
@@ -86,6 +52,9 @@ export function ResetHistoryDetails({
   };
 
   const recordKind = item.recordKind ?? "confirmed_global";
+  const canonicalDetails = item.canonicalDetails;
+  const isBankedDistribution = canonicalDetails?.resetMethod === "banked_reset_distribution" ||
+    recordKind === "banked_distribution";
   const candidateRows: Array<{ id: string; label: string; value: string }> = [
     {
       id: "cycleType",
@@ -103,26 +72,26 @@ export function ResetHistoryDetails({
     ...(showScope && shouldShowScope(details.scope)
       ? [{ id: "scope", label: translateUI("scope", locale), value: details.scope }]
       : []),
-    ...(details.noticeType
-      ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType }]
+    ...(canonicalDetails && canonicalDetails.noticeType
+      ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType ?? "" }]
       : []),
-    {
-      id: "noticeToExecution",
-      label: translateUI("historyNoticeToExecution", locale),
-      value: details.noticeToExecution,
-    },
+    ...(canonicalDetails?.noticeType === "present" &&
+    canonicalDetails.noticeToExecutionMinutes !== null
+      ? [{
+          id: "noticeToExecution",
+          label: translateUI("historyNoticeToExecution", locale),
+          value: details.noticeToExecution,
+        }]
+      : []),
   ];
 
   const rows = candidateRows.filter((row) => {
     if (!isMeaningfulValue(row.value)) return false;
     if (row.id === "noticeType" && hideNoticeType) return false;
-    if (row.id === "noticeToExecution") {
-      return shouldShowNoticeToExecution(row.value, details, recordKind);
-    }
     if (
-      recordKind === "banked_distribution" &&
+      isBankedDistribution &&
       row.id === "resetMethod" &&
-      (row.value === "強制リセット" || row.value === "リセット実施")
+      !canonicalDetails
     ) {
       return false;
     }
@@ -135,7 +104,7 @@ export function ResetHistoryDetails({
         {rows.map(({ id, label, value }) => (
           <div
             className={`grid grid-cols-[7.5rem_1fr] gap-2 ${
-              (hideScopeOnMobile && id === "scope") ||
+            (hideScopeOnMobile && id === "scope") ||
               (hideReasonOnMobile && id === "reasonType") ||
               (hideNoticeToExecutionOnMobile && id === "noticeToExecution")
                 ? "hidden sm:grid"
@@ -144,7 +113,7 @@ export function ResetHistoryDetails({
             key={id}
           >
             <dt className="text-slate-500">{label}</dt>
-            <dd className="font-medium text-slate-800">{translateDynamic(value, locale)}</dd>
+            <dd className="font-medium text-slate-800">{value}</dd>
           </div>
         ))}
       </dl>
@@ -157,7 +126,7 @@ export function ResetHistoryDetails({
           <p className="font-medium text-slate-500">
             {translateUI("historyNote", locale)}
           </p>
-          <p className="mt-1">{translateDynamic(details.note ?? "", locale)}</p>
+          <p className="mt-1">{details.note}</p>
         </div>
       ) : null}
     </div>

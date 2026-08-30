@@ -39,9 +39,10 @@ export function shouldDeferFormalTiboReset(
 }
 
 function hasStaticHistoryTweet(tweetId: string) {
-  return LOCAL_RESET_HISTORY.some((item) =>
-    item.source_url?.match(/\/status\/(\d+)/i)?.[1] === tweetId,
-  );
+  return LOCAL_RESET_HISTORY.some((item) => {
+    const sourceTweetId = item.source_url?.match(/\/status\/(\d+)/i)?.[1];
+    return sourceTweetId === tweetId || item.sourceTweetIds?.includes(tweetId) === true;
+  });
 }
 function wasAlreadyFormal(
   existing: Partial<FormalTiboResetSignal> | null | undefined,

@@ -518,19 +518,19 @@ test("the Monitor-backed current announcement is localized from the canonical ev
     ja: {
       title: "Codex利用制限改善対応リセット",
       reason: "詫びリセット",
-      noticeType: "公式告知あり",
+      noticeType: "あり",
       noticeToExecution: "42分",
     },
     en: {
       title: "Codex Usage Limit Improvement Reset",
       reason: "Compensation reset",
-      noticeType: "Official notice",
+      noticeType: "Yes",
       noticeToExecution: "42 minutes",
     },
     zh: {
       title: "Codex 使用限制改进重置",
       reason: "故障补偿重置",
-      noticeType: "有官方预告",
+      noticeType: "有",
       noticeToExecution: "42 分钟",
     },
   } as const;
@@ -602,7 +602,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
         isRegular
           ? locale === "en" ? "Regular update" : "定期更新"
           : !testCase.reason
-            ? ""
+            ? locale === "en" ? "Celebration reset" : "庆祝重置"
             : locale === "en"
             ? testCase.reason === "詫びリセット"
               ? "Compensation reset"
@@ -932,9 +932,13 @@ test("rejected dynamic reset allows the latest reset to fall back to static hist
   assert.notEqual(rejectedLatest, new Date(resetSignal().tweet_created_at).getTime());
 });
 
-test("the corrected static 2026-08-01 record points to the executed tweet", () => {
+test("the corrected static 2026-08-01 record points to the observed teaser", () => {
   const record = LOCAL_RESET_HISTORY.find((item) => item.id === "local-luna-100k-threads-efficiency-reset-2026-08-01");
-  assert.equal(record?.source_url, "https://x.com/thsottiaux/status/2083395449814229287");
+  assert.equal(record?.source_url, "https://x.com/thsottiaux/status/2083053369351090254");
+  assert.equal(record?.opened_at, "2026-07-31T04:53:19.000Z");
+  assert.equal(record?.window_minutes, 1359);
+  assert.equal(record?.details?.noticeToExecution, "22時間39分");
+  assert.equal(record?.details?.noticeType, "匂わせ投稿あり");
 });
 
 test("weekly reference dates remain visible in history without becoming latest random resets", () => {

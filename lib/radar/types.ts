@@ -50,6 +50,24 @@ export type ResetMethodType =
   | "利用上限更新"
   | "リセット実施";
 
+export type CanonicalHistoryCycleType =
+  | "random"
+  | "regular"
+  | "account_specific";
+
+export type CanonicalHistoryReasonType =
+  | "celebration"
+  | "compensation"
+  | "regular_update";
+
+export type CanonicalHistoryResetMethod =
+  | "hard_reset"
+  | "banked_reset_distribution";
+
+export type CanonicalHistoryNoticeType = "present" | "none";
+
+export type CanonicalHistorySignalKind = "announcement" | "teaser" | "none";
+
 export type ResetScopeType =
   | "全有料プラン"
   | "全ユーザー"
@@ -98,15 +116,14 @@ export type ResetHistoryDetails = {
   note?: string | null;
 };
 
-export type CanonicalResetHistoryDetails = Omit<
-  ResetHistoryDetails,
-  "cycleType" | "reasonType" | "resetMethod" | "scope" | "noticeType"
-> & {
-  cycleType: ResetCycleType;
-  reasonType: ResetReasonType;
-  resetMethod?: ResetMethodType | string;
-  scope?: ResetScopeType | string;
-  noticeType?: HistoryNoticeType | string;
+export type CanonicalResetHistoryDetails = {
+  cycleType: CanonicalHistoryCycleType;
+  reasonType: CanonicalHistoryReasonType;
+  resetMethod: CanonicalHistoryResetMethod;
+  scope: string;
+  noticeType: CanonicalHistoryNoticeType;
+  noticeToExecutionMinutes: number | null;
+  signalKind?: CanonicalHistorySignalKind;
 };
 
 export type WindowLike = {
@@ -138,6 +155,7 @@ export type WindowLike = {
   }>;
   windowLabel?: string;
   details?: ResetHistoryDetails;
+  canonicalDetails?: CanonicalResetHistoryDetails;
 };
 
 export type WindowEventLike = WindowLike & {
@@ -429,6 +447,7 @@ export type RadarViewModel = {
     resetTypes?: Array<string>;
     status: string;
     details?: ResetHistoryDetails;
+    canonicalDetails?: CanonicalResetHistoryDetails;
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;
