@@ -447,12 +447,108 @@ test("current usage-limit announcement can provide official history provenance f
 
   assert.ok(event);
   assert.equal(events.filter((candidate) => candidate.recordKind === "confirmed_global").length, 1);
+  assert.equal(event.id, estimate.resetEventKey);
   assert.equal(event.completed_at, recovery.observedAt);
   assert.equal(event.source_url, TARGET_TIBO_TWEET_URL);
   assert.deepEqual(event.sourceTweetIds, [TARGET_TIBO_TWEET_ID]);
-  assert.equal(event.details?.noticeType, "公式予告あり");
+  assert.equal(event.details?.noticeType, "公式告知あり");
   assert.equal(event.details?.noticeToExecution, "42分");
   assert.equal(event.details?.reasonType, "詫びリセット");
+});
+
+test("the Monitor-backed current announcement is localized from the canonical event key", () => {
+  const calculationNow = new Date("2026-08-30T12:00:00.000Z");
+  const recovery = {
+    id: "41c8ec4e-f752-4e5b-b685-4af67a1e6925",
+    observedAt: "2026-08-29T21:25:40.549Z",
+    previousObservedAt: "2026-08-29T21:21:40.487Z",
+    confidence: "strong" as const,
+    cycleHint: "unexpected" as const,
+    status: "observed" as const,
+  };
+  const signal = resetSignal({
+    tweet_id: TARGET_TIBO_TWEET_ID,
+    text: TARGET_TIBO_TWEET_TEXT,
+    tweet_url: TARGET_TIBO_TWEET_URL,
+    tweet_created_at: TARGET_TIBO_TWEET_CREATED_AT,
+    classification_source: "rule",
+  });
+  const estimate = {
+    resetEventKey: "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925",
+    displayExecutionAt: recovery.observedAt,
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: recovery.previousObservedAt,
+    executionWindowEndAt: recovery.observedAt,
+    recoveryObservationId: recovery.id,
+    tiboAnnouncedAt: TARGET_TIBO_TWEET_CREATED_AT,
+    tiboPrimaryTweetId: TARGET_TIBO_TWEET_ID,
+    tiboSourceTweetIds: [TARGET_TIBO_TWEET_ID],
+    officialNoticeTweetId: TARGET_TIBO_TWEET_ID,
+    officialNoticeAt: TARGET_TIBO_TWEET_CREATED_AT,
+    estimatorVersion: "usage-execution-monitor-v1",
+  };
+  const data = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [signal],
+    recentTiboSignals: [signal as any],
+    activeTiboSignals: [signal as any],
+    codexRecoveryObservations: [recovery as any],
+    resetExecutionEstimates: [estimate as any],
+    resetDisplayNames: [{
+      event_key: estimate.resetEventKey,
+      source_tweet_id: null,
+      manual_name_ja: "Codex利用制限改善対応リセット",
+      ai_name_ja: null,
+      ai_confidence: null,
+      ai_evidence: null,
+      ai_reason: null,
+      ai_model: null,
+      ai_prompt_version: null,
+      ai_input_mode: null,
+      ai_status: null,
+      ai_flags: null,
+      ai_generated_at: null,
+      input_hash: null,
+    }],
+  });
+
+  const expected = {
+    ja: {
+      title: "Codex利用制限改善対応リセット",
+      reason: "詫びリセット",
+      noticeType: "公式告知あり",
+      noticeToExecution: "42分",
+    },
+    en: {
+      title: "Codex Usage Limit Improvement Reset",
+      reason: "Compensation reset",
+      noticeType: "Official notice",
+      noticeToExecution: "42 minutes",
+    },
+    zh: {
+      title: "Codex 使用限制改进重置",
+      reason: "故障补偿重置",
+      noticeType: "有官方预告",
+      noticeToExecution: "42 分钟",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const item = getRadarViewModel(data, locale, false, undefined, calculationNow).recentHistory.find(
+      (historyItem) => historyItem.key === estimate.resetEventKey,
+    );
+
+    assert.ok(item, `${locale} target history item should be present`);
+    assert.equal(item.title, expected[locale].title);
+    assert.equal(item.details?.reasonType, expected[locale].reason);
+    assert.equal(item.details?.noticeType, expected[locale].noticeType);
+    assert.equal(item.details?.noticeToExecution, expected[locale].noticeToExecution);
+    assert.equal(item.signalAt, TARGET_TIBO_TWEET_CREATED_AT);
+    assert.equal(item.resetAt, recovery.observedAt);
+    assert.equal(item.source, TARGET_TIBO_TWEET_URL);
+  }
 });
 
 test("converted event uses a conservative scope and a fixed factual summary", () => {

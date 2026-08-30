@@ -949,8 +949,19 @@ function getResetDisplayNameRecord(
 ): ResetDisplayNameRecord | null {
   if (!item) return null;
   const eventKey = getResetDisplayNameEventKey(item);
-  if (!eventKey) return null;
-  return data?.reset_display_names?.find((record) => record.event_key === eventKey) ?? null;
+  const records = data?.reset_display_names ?? [];
+  const directRecord = eventKey
+    ? records.find((record) => record.event_key === eventKey)
+    : undefined;
+  if (directRecord) return directRecord;
+
+  // A Monitor-backed event can be merged with a Tibo source event for public
+  // history. Resolve the display metadata through that estimate so the
+  // canonical Monitor event name remains visible after source enrichment.
+  const estimate = getResetExecutionEstimateForHistoryItem(data ?? null, item);
+  return estimate
+    ? records.find((record) => record.event_key === estimate.resetEventKey) ?? null
+    : null;
 }
 
 function getHistoryDisplayTitle(

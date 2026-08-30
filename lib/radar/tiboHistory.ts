@@ -1119,6 +1119,11 @@ function buildNoticeBackedRecoveryEvent(
         ),
       )
     : null;
+  const isCurrentUsageResetAnnouncementNotice = Boolean(
+    officialNoticeTweetId &&
+      rawNotice &&
+      isCurrentUsageResetAnnouncement(rawNotice.text ?? ""),
+  );
   const notice: TiboNoticeSignal | null = rawNotice &&
       officialNoticeTweetId &&
       rawNotice.signal_type === "reset_executed"
@@ -1193,7 +1198,9 @@ function buildNoticeBackedRecoveryEvent(
       scope: isMonitorObserved && !hasOfficialNotice && !hasTeaserNotice ? "" : "全有料プラン",
       noticeToExecution: hasNoticeLead ? formatNoticeToExecution(noticeMinutes) : "",
       noticeType: hasOfficialNotice
-        ? "公式予告あり"
+        ? isCurrentUsageResetAnnouncementNotice
+          ? "公式告知あり"
+          : "公式予告あり"
         : hasTeaserNotice || (isTeaserCorroborated && notice?.signal_type === "teaser")
           ? "匂わせ投稿あり"
           : "なし",
@@ -1351,6 +1358,7 @@ export function combineResetHistory(
       // Preserve notice-backed recovery canonical execution time (observedAt) & title/summary
       dynamicItems.push({
         ...merged,
+        id: noticeEvent.id ?? merged.id,
         closed_at: noticeEvent.closed_at,
         completed_at: noticeEvent.completed_at,
         title: noticeEvent.title ?? merged.title,
