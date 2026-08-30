@@ -1429,7 +1429,7 @@ test("keeps the AIE reset button event aligned with its one-hour notice window",
   const data = getLocalRadarData({ calculationNow });
   const expected = {
     ja: { signalLabel: "告知", noticeToExecution: "1時間", windowLength: "1時間" },
-    en: { signalLabel: "Announcement", noticeToExecution: "1 hour" },
+    en: { signalLabel: "Announcement", noticeToExecution: "1 hour", windowLength: "1 hour" },
     zh: { signalLabel: "告知", noticeToExecution: "1小时", windowLength: "1小时" },
   } as const;
 
@@ -1444,9 +1444,7 @@ test("keeps the AIE reset button event aligned with its one-hour notice window",
     assert.equal(aieViewItem.resetAt, stored.completed_at);
     assert.equal(aieViewItem.signalLabel, expected[locale].signalLabel);
     assert.equal(aieViewItem.details?.noticeToExecution, expected[locale].noticeToExecution);
-    if (locale !== "en") {
-      assert.equal(aieViewItem.windowLength, expected[locale].windowLength);
-    }
+    assert.equal(aieViewItem.windowLength, expected[locale].windowLength);
     assert.notEqual(aieViewItem.windowLength, locale === "en" ? "Immediate reset" : locale === "zh" ? "即时重置" : "即時リセット");
   }
 });

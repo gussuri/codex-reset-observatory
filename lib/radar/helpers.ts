@@ -381,14 +381,14 @@ export function formatWindowLength(value: number | undefined, locale: Locale = "
 
   if (hours > 0) {
     return locale === "en"
-      ? `${hours} hours`
+      ? `${hours} ${hours === 1 ? "hour" : "hours"}`
       : locale === "zh"
         ? `${hours}小时`
         : `${hours}時間`;
   }
 
   return locale === "en"
-    ? `${minutes} minutes`
+    ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
     : locale === "zh"
       ? `${minutes}分钟`
       : `${minutes}分`;

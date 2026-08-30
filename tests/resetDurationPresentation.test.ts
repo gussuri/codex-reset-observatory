@@ -10,7 +10,7 @@ import {
 } from "../lib/radar/probability";
 import { getLastRandomRecoveryResetAt } from "../lib/radar/recoveryBoundary";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
-import { formatElapsedResetDuration } from "../lib/radar/helpers";
+import { formatElapsedResetDuration, formatWindowLength } from "../lib/radar/helpers";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -110,6 +110,28 @@ test("formats Chinese elapsed reset durations without spaces", () => {
   assert.equal(formatElapsedResetDuration(HOUR_MS, "zh"), "1小时");
   assert.equal(formatElapsedResetDuration(90 * HOUR_MS, "zh"), "3天18小时");
   assert.equal(formatElapsedResetDuration(4 * 24 * HOUR_MS, "zh"), "4天");
+});
+
+test("formats reset window lengths with English singular and plural units", () => {
+  const expectedEnglish = [
+    [0, "Immediate reset"],
+    [1, "1 minute"],
+    [2, "2 minutes"],
+    [59, "59 minutes"],
+    [60, "1 hour"],
+    [61, "1h 1m"],
+    [120, "2 hours"],
+    [121, "2h 1m"],
+  ] as const;
+
+  for (const [minutes, expected] of expectedEnglish) {
+    assert.equal(formatWindowLength(minutes, "en"), expected);
+  }
+
+  assert.equal(formatWindowLength(1, "ja"), "1分");
+  assert.equal(formatWindowLength(60, "ja"), "1時間");
+  assert.equal(formatWindowLength(1, "zh"), "1分钟");
+  assert.equal(formatWindowLength(60, "zh"), "1小时");
 });
 
 test("uses the latest broad regular recovery boundary, ignoring newer narrow records", () => {
