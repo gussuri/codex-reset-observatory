@@ -76,8 +76,20 @@ const CURRENT_EXECUTION_PATTERNS = [
   /\breset\s+landed\b/i,
 ];
 
+// A present-progressive usage-limit announcement describes an execution that
+// is being carried out now. Keep the domain narrow so technical resets such as
+// "resetting the server" do not enter the usage-reset taxonomy.
+const CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN =
+  /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
+const EXPLICIT_FUTURE_USAGE_RESET_PATTERN =
+  /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
+
 function normalizedClassificationText(text: string) {
   return text.toLowerCase().replace(/[’‘]/g, "'");
+}
+
+export function isCurrentUsageResetAnnouncement(text: string) {
+  return CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN.test(normalizedClassificationText(text));
 }
 
 function hasRecentResetButtonAcquisition(text: string) {
@@ -126,7 +138,8 @@ export function hasCurrentResetExecution(text: string) {
     );
   if (hasHistoricalTimestampAfterFirstPersonExecution) return false;
 
-  const hasDirectExecution = CURRENT_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized));
+  const hasDirectExecution = isCurrentUsageResetAnnouncement(normalized) ||
+    CURRENT_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized));
   const hasReconsideredExecution =
     (/\bchanged\s+my\s+mind\b[^\r\n]{0,80}\benjoy\b/i.test(normalized) && /\breset\b/i.test(normalized)) ||
     (/\b(?:changed\s+my\s+mind|reconsidered)\b[^\r\n]{0,80}\b(?:done|complete|reset\s+now|reset\s+(?:everyone|limits?))\b/i.test(
@@ -334,6 +347,21 @@ export function classifyTiboTweet(
   }
 
   // 2. 即時実施・完了報告 (reset_executed)
+  // An explicit future usage-limit announcement must win over the legacy
+  // broad "reset usage limits" completion phrase below.
+  if (
+    EXPLICIT_FUTURE_USAGE_RESET_PATTERN.test(normalizedClassificationText(text)) &&
+    !isCurrentUsageResetAnnouncement(text)
+  ) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "official_notice",
+      confidence: 0.96,
+      reason: "Matched explicit future usage-limit reset announcement.",
+      isReply,
+      isQuote,
+    });
+  }
+
   const executedPatterns = [
     "i've reset usage limits",
     "i have reset usage limits",

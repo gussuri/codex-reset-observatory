@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
-import { classifyTiboTweet } from "@/lib/radar/classification";
+import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/classification";
 import { classifyWithGemini } from "@/lib/radar/geminiClassification";
 import {
   buildTiboClassificationResponse,
@@ -45,6 +45,10 @@ import {
   resolveTiboTemporalSchedule,
   TIBO_SOURCE_TIME_ZONE,
 } from "@/lib/radar/tiboTemporal";
+
+// Keep the webhook bounded while accepting X long-form/note text. The former
+// 2,000-character ceiling rejected fully expanded posts before classification.
+const MAX_TIBO_SOURCE_TEXT_LENGTH = 25_000;
 
 function isMissingTiboOptionalColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -161,7 +165,7 @@ export async function POST(req: NextRequest) {
     if (
       typeof text !== "string" ||
       text.trim().length === 0 ||
-      text.length > 2000
+      text.length > MAX_TIBO_SOURCE_TEXT_LENGTH
     ) {
       return NextResponse.json({ error: "Invalid text" }, { status: 400 });
     }
@@ -624,14 +628,21 @@ export async function POST(req: NextRequest) {
             formalCandidate.tweet_created_at,
           );
           if (!cluster.error) {
+            const isExecutionAnnouncement = isCurrentUsageResetAnnouncement(formalCandidate.text);
             const estimateResult = await upsertResetExecutionEstimate(supabase, {
               resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
-              tiboAnnouncedAt: cluster.announcedAt,
+              tiboAnnouncedAt: isExecutionAnnouncement
+                ? formalCandidate.tweet_created_at
+                : cluster.announcedAt,
               tiboPrimaryTweetId: cluster.representativeTweetId,
               tiboSourceTweetIds: cluster.sourceTweetIds,
               usageObservation: recoveryMatch.observation,
-              officialNoticeTweetId: cluster.representativeNoticeId,
-              officialNoticeAt: cluster.representativeNoticeAt,
+              officialNoticeTweetId: isExecutionAnnouncement
+                ? formalCandidate.tweet_id
+                : cluster.representativeNoticeId,
+              officialNoticeAt: isExecutionAnnouncement
+                ? formalCandidate.tweet_created_at
+                : cluster.representativeNoticeAt,
             });
             if (estimateResult.error) {
               console.warn("[Tibo Warning] Reset execution estimate write failed", {

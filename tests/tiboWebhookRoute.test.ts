@@ -6,6 +6,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/tibo/route";
+import { TARGET_TIBO_TWEET_CREATED_AT, TARGET_TIBO_TWEET_ID, TARGET_TIBO_TWEET_TEXT, TARGET_TIBO_TWEET_URL } from "./fixtures/tiboLongFormReset";
 
 const ENV_KEYS = [
   "TIBO_WEBHOOK_SECRET",
@@ -184,6 +185,53 @@ test("empty and whitespace-only source text are rejected before any database cal
       assert.deepEqual(await response.json(), { error: "Invalid text" });
     }
     assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
+test("long-form current reset announcement is accepted by the webhook", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  globalThis.fetch = async (_input, init) => {
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    const method = init?.method ?? "GET";
+    return new Response(JSON.stringify({ data: method === "GET" ? null : [], error: null }), {
+      status: method === "GET" ? 200 : 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: TARGET_TIBO_TWEET_ID,
+      text: TARGET_TIBO_TWEET_TEXT,
+      tweetUrl: TARGET_TIBO_TWEET_URL,
+      tweetCreatedAt: TARGET_TIBO_TWEET_CREATED_AT,
+    }));
+
+    assert.notEqual(response.status, 400);
+    assert.equal(response.status, 200);
+    assert.equal(requestBodies.some((body: any) => body.tweet_id === TARGET_TIBO_TWEET_ID), true);
+    const persistedBody = requestBodies.find(
+      (body): body is { tweet_id: string; signal_type: string } =>
+        typeof body === "object" &&
+        body !== null &&
+        "tweet_id" in body &&
+        "signal_type" in body &&
+        body.tweet_id === TARGET_TIBO_TWEET_ID,
+    );
+    assert.equal(persistedBody?.signal_type, "reset_executed");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment(previous);

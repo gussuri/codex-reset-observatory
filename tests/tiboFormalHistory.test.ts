@@ -23,6 +23,12 @@ import {
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
+import {
+  TARGET_TIBO_TWEET_CREATED_AT,
+  TARGET_TIBO_TWEET_ID,
+  TARGET_TIBO_TWEET_TEXT,
+  TARGET_TIBO_TWEET_URL,
+} from "./fixtures/tiboLongFormReset";
 
 function resetSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
   return {
@@ -393,6 +399,60 @@ test("notice-to-execution duration and notice type are stored in the converted e
   assert.equal(event.window_minutes, 120);
   assert.equal(event.details?.noticeToExecution, "2時間");
   assert.equal(event.details?.noticeType, "公式予告あり");
+});
+
+test("current usage-limit announcement can provide official history provenance for the matching Monitor event", () => {
+  const recovery = {
+    id: "41c8ec4e-f752-4e5b-b685-4af67a1e6925",
+    observedAt: "2026-08-29T21:25:40.549Z",
+    previousObservedAt: "2026-08-29T21:21:40.487Z",
+    confidence: "strong" as const,
+    cycleHint: "unexpected" as const,
+    status: "observed" as const,
+  };
+  const signal = resetSignal({
+    tweet_id: TARGET_TIBO_TWEET_ID,
+    text: TARGET_TIBO_TWEET_TEXT,
+    tweet_url: TARGET_TIBO_TWEET_URL,
+    tweet_created_at: TARGET_TIBO_TWEET_CREATED_AT,
+    classification_source: "rule",
+  });
+  const estimate = {
+    resetEventKey: "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925",
+    displayExecutionAt: recovery.observedAt,
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: recovery.previousObservedAt,
+    executionWindowEndAt: recovery.observedAt,
+    recoveryObservationId: recovery.id,
+    tiboAnnouncedAt: TARGET_TIBO_TWEET_CREATED_AT,
+    tiboPrimaryTweetId: TARGET_TIBO_TWEET_ID,
+    tiboSourceTweetIds: [TARGET_TIBO_TWEET_ID],
+    officialNoticeTweetId: TARGET_TIBO_TWEET_ID,
+    officialNoticeAt: TARGET_TIBO_TWEET_CREATED_AT,
+    estimatorVersion: "usage-execution-monitor-v1",
+  };
+
+  const events = combineResetHistory(
+    [],
+    [signal],
+    [],
+    [],
+    [signal as any],
+    [recovery],
+    [estimate as any],
+  );
+  const event = events.find((candidate) => candidate.officialNoticeTweetId === TARGET_TIBO_TWEET_ID);
+
+  assert.ok(event);
+  assert.equal(events.filter((candidate) => candidate.recordKind === "confirmed_global").length, 1);
+  assert.equal(event.completed_at, recovery.observedAt);
+  assert.equal(event.source_url, TARGET_TIBO_TWEET_URL);
+  assert.deepEqual(event.sourceTweetIds, [TARGET_TIBO_TWEET_ID]);
+  assert.equal(event.details?.noticeType, "公式予告あり");
+  assert.equal(event.details?.noticeToExecution, "42分");
+  assert.equal(event.details?.reasonType, "詫びリセット");
 });
 
 test("converted event uses a conservative scope and a fixed factual summary", () => {

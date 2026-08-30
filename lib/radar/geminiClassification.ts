@@ -131,6 +131,9 @@ You analyze tweets from Tibo (@thsottiaux), an OpenAI engineer leading the Codex
 Classify each tweet into EXACTLY ONE of the following 4 categories:
 1. "reset_executed": A statement confirming that a usage/rate limit reset HAS ALREADY BEEN COMPLETED or IS NOW EFFECTIVE.
    Examples: "I've reset usage limits", "The usage limits have been reset", "We reset all paid accounts", "Limits are refreshed now".
+   A present-progressive usage-limit reset announcement such as "We are resetting usage limits"
+   (including the common typo "reseting") describes current execution, not a future official notice;
+   the Usage Monitor may confirm that execution after the post is received.
 
 2. "official_notice": An explicit announcement of an upcoming reset scheduled in the near future.
    Examples: "We will reset limits tonight", "Reset scheduled in two hours", "Full reset coming tomorrow".

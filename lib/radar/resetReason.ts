@@ -33,9 +33,11 @@ export type ResetReasonContext = {
 };
 
 const REGULAR_RESET_PATTERN =
-  /定期|weekly|one[- ]?week|regular\s+(?:reset|refresh|update)|1週間サイクル|常规|每周|周期更新/i;
+  /定期|weekly\s+(?:reset|refresh|update|cycle|schedule|timing)|one[- ]?week|regular\s+(?:reset|refresh|update)|1週間サイクル|常规|每周|周期更新/i;
 const COMPENSATION_PATTERN =
   /compensation|reliability|incident|outage|bug|degradation|rate[- ]?limit|rate[- ]?limiting|障害|不具合|補償|詫び|復旧|信頼性|故障|补偿|可靠性|事故|中断|限流|速率限制/i;
+const USAGE_FIX_COMPENSATION_PATTERN =
+  /(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)[\s\S]{0,240}\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b|\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b[\s\S]{0,240}(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)/i;
 const PERSONAL_RESET_PATTERN =
   /任意|manual\s+reset|banked\s+reset|reset\s+credit|referral|account[- ]specific|招待|个人/i;
 
@@ -64,6 +66,10 @@ export function isRegularResetContext(input: ResetReasonContext) {
 
 function hasCompensationEvidence(input: ResetReasonContext) {
   return COMPENSATION_PATTERN.test(getContextText(input));
+}
+
+function hasUsageFixCompensationEvidence(input: ResetReasonContext) {
+  return USAGE_FIX_COMPENSATION_PATTERN.test(getContextText(input));
 }
 
 export function inferResetCycleType(input: ResetReasonContext): ResetCycleType {
@@ -97,7 +103,7 @@ export function normalizeResetReasonType(input: ResetReasonContext): ResetReason
     return "ご祝儀リセット";
   }
 
-  if (hasCompensationEvidence(input)) return "詫びリセット";
+  if (hasCompensationEvidence(input) || hasUsageFixCompensationEvidence(input)) return "詫びリセット";
   if (CELEBRATION_PATTERN.test(getContextText(input))) return "ご祝儀リセット";
 
   return undefined;

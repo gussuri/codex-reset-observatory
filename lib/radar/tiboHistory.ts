@@ -25,7 +25,10 @@ import {
   inferResetCycleType,
   normalizeResetReasonType,
 } from "./resetReason";
-import { getTiboClassificationSafetyDecision } from "./classification";
+import {
+  getTiboClassificationSafetyDecision,
+  isCurrentUsageResetAnnouncement,
+} from "./classification";
 import type { ResetReasonType } from "./types";
 import {
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
@@ -898,24 +901,33 @@ export function collectOfficialTiboNoticeSignals(
 function collectTiboRecoveryEvidenceSignals(
   recentSignals: ReadonlyArray<ActiveTiboSignal | FormalTiboResetSignal> = [],
   activeSignals: ReadonlyArray<ActiveTiboSignal | FormalTiboResetSignal> = [],
+  officialNoticeTweetIds: ReadonlySet<string> = new Set(),
 ): TiboNoticeSignal[] {
   const seen = new Set<string>();
   const result: TiboNoticeSignal[] = [];
   for (const signal of expandTiboSignalVariants([...recentSignals, ...activeSignals])) {
+    const isLinkedExecutionAnnouncement = signal.signal_type === "reset_executed" &&
+      officialNoticeTweetIds.has(signal.tweet_id) &&
+      isCurrentUsageResetAnnouncement(signal.text ?? "");
     if (
-      (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") ||
+      (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser" && !isLinkedExecutionAnnouncement) ||
       signal.is_reply === true ||
       seen.has(signal.tweet_id)
     ) {
       continue;
     }
+    const signalType: TiboNoticeSignal["signal_type"] = isLinkedExecutionAnnouncement
+      ? "official_notice"
+      : signal.signal_type === "official_notice" || signal.signal_type === "teaser"
+        ? signal.signal_type
+        : "official_notice";
     seen.add(signal.tweet_id);
     result.push({
       tweet_id: signal.tweet_id,
       text: signal.text ?? "",
       tweet_url: signal.tweet_url ?? "",
       tweet_created_at: signal.tweet_created_at,
-      signal_type: signal.signal_type,
+      signal_type: signalType,
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
       expires_at: signal.expires_at ?? null,
@@ -975,9 +987,16 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
     ) === index;
   });
 
+  const estimates = data?.reset_execution_estimates ?? [];
+  const officialNoticeTweetIds = new Set(
+    estimates
+      .map((estimate) => estimate.officialNoticeTweetId?.trim())
+      .filter((tweetId): tweetId is string => Boolean(tweetId)),
+  );
   const recoveryEvidenceSignals = collectTiboRecoveryEvidenceSignals(
     data?.recent_tibo_signals ?? [],
     data?.active_tibo_signals ?? [],
+    officialNoticeTweetIds,
   );
 
   return {
@@ -987,7 +1006,7 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
       data?.active_tibo_signals ?? [],
     ),
     recoveryObservations,
-    estimates: data?.reset_execution_estimates ?? [],
+    estimates,
   };
 }
 
@@ -1089,12 +1108,27 @@ function buildNoticeBackedRecoveryEvent(
 
   const evidenceTweetId = officialNoticeTweetId ?? teaserTweetId ?? null;
 
-  const notice = evidenceTweetId
+  const rawNotice = evidenceTweetId
     ? noticeSignals.find(
-        (signal) => signal.tweet_id === evidenceTweetId &&
-          (officialNoticeTweetId ? signal.signal_type === "official_notice" : signal.signal_type === "teaser"),
+        (signal) => signal.tweet_id === evidenceTweetId && (
+          signal.signal_type === "teaser" ||
+          signal.signal_type === "official_notice" ||
+          (officialNoticeTweetId &&
+            signal.signal_type === "reset_executed" &&
+            isCurrentUsageResetAnnouncement(signal.text ?? ""))
+        ),
       )
     : null;
+  const notice: TiboNoticeSignal | null = rawNotice &&
+      officialNoticeTweetId &&
+      rawNotice.signal_type === "reset_executed"
+    ? {
+        ...rawNotice,
+        signal_type: "official_notice",
+      }
+    : rawNotice?.signal_type === "official_notice" || rawNotice?.signal_type === "teaser"
+      ? rawNotice as TiboNoticeSignal
+      : null;
 
   const openedAt =
     getTimestamp(estimate.tiboAnnouncedAt) !== null
@@ -1126,9 +1160,9 @@ function buildNoticeBackedRecoveryEvent(
   const sourceTweetIds = sortTweetIdsChronologically([
     ...estimate.tiboSourceTweetIds,
     ...(officialNoticeTweetId ? [officialNoticeTweetId] : []),
-  ], noticeSignals.filter((signal): signal is TiboNoticeSignal =>
-    estimate.tiboSourceTweetIds.includes(signal.tweet_id),
-  ));
+  ], noticeSignals
+    .filter((signal) => estimate.tiboSourceTweetIds.includes(signal.tweet_id))
+    .map((signal) => ({ tweet_id: signal.tweet_id, tweet_created_at: signal.tweet_created_at })));
 
   const explicitReason = getNoticeBackedRecoveryReasonType(estimate.resetEventKey);
   const inferredReason = notice?.text ? normalizeResetReasonType({ text: notice.text }) : undefined;

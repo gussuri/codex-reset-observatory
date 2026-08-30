@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyTiboTweet,
   getTiboClassificationSafetyDecision,
+  hasCurrentResetExecution,
 } from "../lib/radar/classification";
 import {
   applyTiboClassificationSafetyGuard,
@@ -13,6 +14,7 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { parseTiboTemporalSemantics } from "../lib/radar/tiboTemporal";
+import { TARGET_TIBO_TWEET_TEXT } from "./fixtures/tiboLongFormReset";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
 const compositeResetText =
@@ -86,6 +88,29 @@ test("usage-limit reset positive controls remain eligible", () => {
   }
 });
 
+test("current usage-limit announcements are execution signals, while future and technical resets stay distinct", () => {
+  const executionCases = [
+    "We are resetting usage for all paid users of Codex and ChatGPT Work.",
+    "We are reseting usage for all paid users of Codex and ChatGPT Work.",
+    "We're resetting usage limits for Codex users.",
+    TARGET_TIBO_TWEET_TEXT,
+  ];
+
+  for (const text of executionCases) {
+    assert.equal(hasCurrentResetExecution(text), true, text);
+    assert.equal(classifyTiboTweet(text, url).signalType, "reset_executed", text);
+  }
+
+  for (const text of ["We are resetting the server.", "We are resetting the cache."]) {
+    assert.equal(classifyTiboTweet(text, url).signalType, "irrelevant", text);
+  }
+
+  assert.equal(
+    classifyTiboTweet("We will reset usage limits tonight.", url).signalType,
+    "official_notice",
+  );
+});
+
 test("BANKED distribution completion is not a generic usage-limit reset", () => {
   const bankedCompletionTexts = [
     "The banked reset has landed.",
@@ -157,6 +182,11 @@ test("Gemini prompt distinguishes recent reset-button acquisition from historica
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /past tense describes/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /receiving the button/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /years ago|UI\/product|product feature/i);
+});
+
+test("Gemini prompt treats present-progressive usage-limit announcements as current execution", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /present-progressive[\s\S]*usage-limit reset[\s\S]*current execution/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /we are resetting[\s\S]*not a future official notice/i);
 });
 
 test("Gemini weak teaser guidance is intentionally high-recall without becoming keyword-only", () => {
