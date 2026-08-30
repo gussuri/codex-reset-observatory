@@ -1,0 +1,93 @@
+name: Verify Supabase Migrations
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tests/supabaseFoundation.test.ts'
+      - '.github/workflows/verify-supabase-migrations.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  local-migrations:
+    name: Fresh local Supabase migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+
+      - name: Install compatible Corepack
+        run: npm install --global corepack@0.35.0
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.18.0 --activate
+
+      - name: Install locked dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Verify local-only CLI configuration
+        run: |
+          $version = (& corepack pnpm exec supabase --version).Trim()
+          if ($version -ne '2.116.0') {
+            throw "Unexpected Supabase CLI version: $version"
+          }
+
+          foreach ($name in @(
+            'SUPABASE_ACCESS_TOKEN',
+            'SUPABASE_DB_PASSWORD',
+            'SUPABASE_SERVICE_ROLE_KEY',
+            'SUPABASE_URL'
+          )) {
+            if (-not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($name))) {
+              throw "Production credential environment variable is present: $name"
+            }
+          }
+
+      - name: Start local Supabase stack
+        run: corepack pnpm exec supabase start
+
+      - name: Fresh migration reset 1
+        run: corepack pnpm exec supabase db reset --local --no-seed
+
+      - name: Fresh migration reset 2
+        run: corepack pnpm exec supabase db reset --local --no-seed
+
+      - name: Focused foundation tests
+        run: corepack pnpm exec tsx --test tests/supabaseFoundation.test.ts
+
+      - name: Full test suite
+        run: corepack pnpm test
+
+      - name: Lint
+        run: corepack pnpm run lint
+
+      - name: Typecheck
+        run: corepack pnpm run typecheck
+
+      - name: Production build
+        run: corepack pnpm run build
+
+      - name: Check migration verification diff
+        run: git diff --check
+
+      - name: Stop local Supabase stack
+        if: always()
+        continue-on-error: true
+        run: corepack pnpm exec supabase stop --no-backup
