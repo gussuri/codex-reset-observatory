@@ -191,10 +191,6 @@ async function handleLogRequest(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
-  return handleLogRequest(request);
-}
-
 export async function POST(request: NextRequest) {
   return handleLogRequest(request);
 }

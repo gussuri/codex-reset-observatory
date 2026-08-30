@@ -28,6 +28,7 @@ jobs:
           # 一時ファイルにレスポンスを保存し、ステータスコードを取得
           RESPONSE_FILE=$(mktemp)
           HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
+            -X POST \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "$APP_URL/api/log-probability")
           

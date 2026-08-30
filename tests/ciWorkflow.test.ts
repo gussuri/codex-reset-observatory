@@ -96,4 +96,12 @@ test("probability logging keeps a six-hour research cadence", () => {
     .replace(/\r\n/g, "\n");
 
   assert.match(workflow, /cron:\s*'34 \*\/6 \* \* \*'/);
+
+  const requestBlock = workflow.slice(
+    workflow.indexOf("HTTP_STATUS=$(curl"),
+    workflow.indexOf('echo "HTTP Status Code'),
+  );
+  assert.match(requestBlock, /-X POST/);
+  assert.match(requestBlock, /-H "Authorization: Bearer \$\{\{ secrets\.CRON_SECRET \}\}"/);
+  assert.match(requestBlock, /"\$APP_URL\/api\/log-probability"/);
 });

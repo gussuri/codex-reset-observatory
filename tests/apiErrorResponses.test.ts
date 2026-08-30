@@ -4,9 +4,15 @@ import { join } from "node:path";
 import test from "node:test";
 import { NextRequest } from "next/server";
 
+import * as logProbabilityRoute from "../app/api/log-probability/route";
 import { POST as postLogProbability } from "../app/api/log-probability/route";
 
 const root = process.cwd();
+
+test("log probability is POST-only so GET cannot reach the write handler", () => {
+  assert.equal("GET" in logProbabilityRoute, false);
+  assert.equal(typeof logProbabilityRoute.POST, "function");
+});
 
 test("internal 500 responses do not include exception details", () => {
   const logProbabilityRoute = readFileSync(
