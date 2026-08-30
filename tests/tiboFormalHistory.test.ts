@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   getHistoryRecordKind,
@@ -8,6 +9,7 @@ import {
   getLocalRadarData,
   getRadarViewModel,
 } from "../lib/radar";
+import { isNewFormalAdoption } from "../lib/radar/formalAdoption";
 import {
   getLastGlobalResetAt,
   getRecent7DayResetCount,
@@ -932,9 +934,82 @@ test("rejected dynamic reset allows the latest reset to fall back to static hist
   assert.notEqual(rejectedLatest, new Date(resetSignal().tweet_created_at).getTime());
 });
 
-test("the corrected static 2026-08-01 record points to the executed tweet", () => {
+test("the static 2026-08-01 Luna record preserves the teaser provenance and execution time", () => {
   const record = LOCAL_RESET_HISTORY.find((item) => item.id === "local-luna-100k-threads-efficiency-reset-2026-08-01");
-  assert.equal(record?.source_url, "https://x.com/thsottiaux/status/2083395449814229287");
+  assert.ok(record);
+  assert.equal(record.opened_at, "2026-07-31T04:53:19.170Z");
+  assert.equal(record.closed_at, "2026-08-01T12:32:00+09:00");
+  assert.equal(record.completed_at, "2026-08-01T12:32:00+09:00");
+  assert.equal(record.window_minutes, 1359);
+  assert.equal(record.details?.noticeToExecution, "22時間39分");
+  assert.equal(record.details?.noticeType, "匂わせ投稿あり");
+  assert.equal(record.source_url, "https://x.com/thsottiaux/status/2083053369351090254");
+  assert.deepEqual(record.sourceTweetIds, [
+    "2083053369351090254",
+    "2083395449814229287",
+  ]);
+
+  const observation = LOCAL_OBSERVATION_SIGNALS.find(
+    (signal) => signal.id === "official-tibo-signs-resets-teaser-2026-07-31",
+  );
+  assert.ok(observation);
+  assert.equal(observation.observedAt, "2026-07-31T04:53:19.170Z");
+  assert.equal(observation.resolvedAt, "2026-08-01T03:32:00.000Z");
+  assert.equal(observation.source, "https://x.com/thsottiaux/status/2083053369351090254");
+
+  const timestampDeltaMinutes = Math.round(
+    (Date.parse(record.closed_at) - Date.parse(record.opened_at)) / (60 * 1000),
+  );
+  assert.equal(timestampDeltaMinutes, 1359);
+
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const expectedSignalLabels = {
+    ja: "告知",
+    en: "Announcement",
+    zh: "告知",
+  } as const;
+  const expectedResetLabels = {
+    ja: "実施",
+    en: "Reset",
+    zh: "执行",
+  } as const;
+  const recordId = record.id;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const viewModel = getRadarViewModel(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      false,
+      undefined,
+      calculationNow,
+    );
+    const item = viewModel.recentHistory.find((historyItem) => historyItem.key === recordId);
+
+    assert.ok(item, `${locale} Luna history item should be present`);
+    assert.equal(item.signalAt, record.opened_at);
+    assert.equal(item.signalLabel, expectedSignalLabels[locale]);
+    assert.equal(item.resetAt, new Date(record.closed_at).toISOString());
+    assert.equal(item.resetLabel, expectedResetLabels[locale]);
+  }
+});
+
+test("Luna provenance blocks formal adoption for its related execution tweet", () => {
+  const record = LOCAL_RESET_HISTORY.find((item) => item.id === "local-luna-100k-threads-efficiency-reset-2026-08-01");
+  assert.ok(record);
+  assert.equal(record.source_url, "https://x.com/thsottiaux/status/2083053369351090254");
+  assert.equal(record.sourceTweetIds?.includes("2083395449814229287"), true);
+
+  const relatedExecution = resetSignal({
+    tweet_id: "2083395449814229287",
+    tweet_url: "https://x.com/thsottiaux/status/2083395449814229287",
+  });
+  assert.equal(isNewFormalAdoption(relatedExecution, null, true), false);
+
+  const unrelatedTweet = resetSignal({
+    tweet_id: "2083395449814229999",
+    tweet_url: "https://x.com/thsottiaux/status/2083395449814229999",
+  });
+  assert.equal(isNewFormalAdoption(unrelatedTweet, null, true), true);
 });
 
 test("weekly reference dates remain visible in history without becoming latest random resets", () => {

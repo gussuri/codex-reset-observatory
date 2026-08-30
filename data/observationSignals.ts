@@ -22,7 +22,7 @@ export type LocalObservationSignal = {
 export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
   {
     id: "official-tibo-signs-resets-teaser-2026-07-31",
-    observedAt: "2026-07-31T13:50:00.000Z",
+    observedAt: "2026-07-31T04:53:19.170Z",
     type: "probability_boost",
     status: "resolved",
     resolvedAt: "2026-08-01T03:32:00.000Z",
@@ -32,7 +32,7 @@ export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [
     boostDecayHours: 48,
     boostReason: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
     title: "Tibo氏の「There will be signs... Resets」匂わせ投稿",
-    source: "https://x.com/thsottiaux/status/206987654321",
+    source: "https://x.com/thsottiaux/status/2083053369351090254",
     sourceLabel: "Tibo氏（OpenAI Codex開発責任者）のXポストより",
   },
   {
