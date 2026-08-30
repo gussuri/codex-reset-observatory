@@ -72,6 +72,28 @@ jobs:
       - name: Focused foundation tests
         run: corepack pnpm exec tsx --test tests/supabaseFoundation.test.ts
 
+      - name: Export local Supabase test credentials
+        run: |
+          $status = & corepack pnpm exec supabase status -o env
+          $apiUrl = $null
+          $serviceRoleKey = $null
+          foreach ($line in $status) {
+            if ($line -match '^API_URL=(.*)$') {
+              $apiUrl = $matches[1].Trim().Trim('"')
+            }
+            if ($line -match '^SERVICE_ROLE_KEY=(.*)$') {
+              $serviceRoleKey = $matches[1].Trim().Trim('"')
+            }
+          }
+          if ([string]::IsNullOrEmpty($apiUrl) -or [string]::IsNullOrEmpty($serviceRoleKey)) {
+            throw 'Local Supabase status did not expose API_URL and SERVICE_ROLE_KEY'
+          }
+          "SUPABASE_LOCAL_URL=$apiUrl" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "SUPABASE_LOCAL_SERVICE_ROLE_KEY=$serviceRoleKey" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Atomic webhook database integration tests
+        run: corepack pnpm exec tsx --test tests/integration/codexUsageAtomic.integration.test.ts
+
       - name: Full test suite
         run: corepack pnpm test
 
