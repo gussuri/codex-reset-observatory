@@ -1411,6 +1411,46 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
   );
 });
 
+test("keeps the AIE reset button event aligned with its one-hour notice window", () => {
+  const stored = LOCAL_RESET_HISTORY.find(
+    (item) => item.id === "personal-codex-reset-button-aie-2026-07-02",
+  );
+  assert.ok(stored);
+
+  const openedAt = Date.parse(stored.opened_at ?? "");
+  const completedAt = Date.parse(stored.completed_at ?? stored.closed_at ?? "");
+  assert.equal(Math.round((completedAt - openedAt) / 60000), 60);
+  assert.equal(stored.window_minutes, 60);
+  assert.equal(stored.details?.noticeToExecution, "1時間");
+  assert.equal(stored.details?.noticeType, "告知投稿あり");
+  assert.equal(stored.recordKind, "banked_distribution");
+
+  const calculationNow = new Date("2026-07-03T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+  const expected = {
+    ja: { signalLabel: "告知", noticeToExecution: "1時間", windowLength: "1時間" },
+    en: { signalLabel: "Announcement", noticeToExecution: "1 hour" },
+    zh: { signalLabel: "告知", noticeToExecution: "1小时", windowLength: "1小时" },
+  } as const;
+
+  const aieHistoryKey = "personal-codex-reset-button-aie-2026-07-02";
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const viewModel = getRadarViewModel(data, locale, false, undefined, calculationNow);
+    const aieViewItem = viewModel.recentHistory.find(
+      (historyItem) => historyItem.key === aieHistoryKey,
+    );
+    assert.ok(aieViewItem, `${locale} AIE history item should be present`);
+    assert.equal(aieViewItem.signalAt, stored.opened_at);
+    assert.equal(aieViewItem.resetAt, stored.completed_at);
+    assert.equal(aieViewItem.signalLabel, expected[locale].signalLabel);
+    assert.equal(aieViewItem.details?.noticeToExecution, expected[locale].noticeToExecution);
+    if (locale !== "en") {
+      assert.equal(aieViewItem.windowLength, expected[locale].windowLength);
+    }
+    assert.notEqual(aieViewItem.windowLength, locale === "en" ? "Immediate reset" : locale === "zh" ? "即时重置" : "即時リセット");
+  }
+});
+
 test("maps stored history notice types to the three presentation states", () => {
   const cases = [
     ["公式予告あり", "announcement"],

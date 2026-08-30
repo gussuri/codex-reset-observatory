@@ -398,7 +398,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "opened_at": "2026-07-02T04:50:00+09:00",
     "closed_at": "2026-07-02T05:50:00+09:00",
     "completed_at": "2026-07-02T05:50:00+09:00",
-    "window_minutes": 0,
+    "window_minutes": 60,
     "scope": "全有料プラン",
     "summary": "AI Engineer World's Fair のデモにおいて Codex reset button が押され、全有料ユーザー（Codex Go/Plus/Pro）に対して任意リセット（マニュアルリセット）1回分が配布されました。",
     "source_url": "https://x.com/dkundel",
