@@ -25,14 +25,21 @@ function clientOrThrow() {
 }
 
 async function clearLocalWebhookData(client: SupabaseClient<any>) {
-  const deletes = await Promise.all([
-    client.from("reset_execution_estimates").delete().neq("reset_event_key", "__atomic_test_keep__"),
-    client.from("codex_recovery_observations").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
-    client.from("regular_reset_events").delete().neq("schedule_key", "__atomic_test_keep__"),
-    client.from("codex_usage_monitor_state").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
-    client.from("tibo_signals").delete().neq("tweet_id", "__atomic_test_keep__"),
-  ]);
+  // Delete FK dependents before their recovery observations; requests must also be
+  // sequential because each PostgREST request commits independently.
+  const deletes = [
+    await client.from("reset_execution_estimates").delete().neq("reset_event_key", "__atomic_test_keep__"),
+    await client.from("codex_recovery_observations").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
+    await client.from("regular_reset_events").delete().neq("schedule_key", "__atomic_test_keep__"),
+    await client.from("codex_usage_monitor_state").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
+    await client.from("tibo_signals").delete().neq("tweet_id", "__atomic_test_keep__"),
+  ];
   for (const result of deletes) assert.equal(result.error, null, result.error?.message);
+}
+
+function assertTimestampEqual(actual: string | null | undefined, expected: string) {
+  assert.ok(actual);
+  assert.equal(new Date(actual).toISOString(), new Date(expected).toISOString());
 }
 
 function baselineSnapshot(): CodexUsageSnapshot {
@@ -190,7 +197,7 @@ test("atomic webhook success commits observation, regular event, estimate, promo
     assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", `usage-reset-${data.observation_id}`), 1);
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
     assert.equal(state.error, null, state.error?.message);
-    assert.equal(state.data?.observed_at, snapshot.observedAt);
+    assertTimestampEqual(state.data?.observed_at, snapshot.observedAt);
     const promoted = await client.from("tibo_signals").select("signal_type").eq("tweet_id", "atomic-deferred-reset").single();
     assert.equal(promoted.data?.signal_type, "reset_executed");
   } finally {
@@ -220,7 +227,7 @@ test("a later write failure rolls back observation, regular event, estimate, and
     assert.equal(await count(client, "regular_reset_events", "schedule_key", "weekly-regular-reset:2026-08-30T00:00:00.000Z"), 0);
     assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", "atomic-rollback-estimate"), 0);
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
-    assert.equal(state.data?.observed_at, baselineSnapshot().observedAt);
+    assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
   } finally {
     await clearLocalWebhookData(client);
   }
@@ -269,7 +276,7 @@ test("a stale compare-and-swap plan performs no side writes or state regression"
     assert.equal(result.retry_required, true);
     assert.equal(await count(client, "codex_recovery_observations", "source_key", CODEX_USAGE_SOURCE_KEY), 0);
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
-    assert.equal(state.data?.observed_at, baselineSnapshot().observedAt);
+    assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
   } finally {
     await clearLocalWebhookData(client);
   }
@@ -298,7 +305,7 @@ test("BANKED estimate and state roll back together when the later state write fa
     assert.notEqual(result.error, null);
     assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", "atomic-banked-rollback"), 0);
     const state = await client.from("codex_usage_monitor_state").select("observed_at,used_percent").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
-    assert.equal(state.data?.observed_at, baselineSnapshot().observedAt);
+    assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
     assert.equal(state.data?.used_percent, 100);
   } finally {
     await clearLocalWebhookData(client);
