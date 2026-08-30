@@ -36,13 +36,10 @@ import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
+import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { TiboActivityCard } from "@/components/TiboActivityCard";
 import { formatElapsedResetDuration, isSafeHttpUrl } from "@/lib/radar/helpers";
-
-const DeferredRandomResetTimeHeatmap = dynamic(
-  () => import("@/components/RandomResetTimeHeatmap").then((module) => module.RandomResetTimeHeatmap),
-);
 
 function createUnavailableRadarViewModel(locale: Locale): PublicRadarSnapshot["viewModel"] {
   const unknown = translateUI("unknownProbability", locale);
@@ -1081,7 +1078,7 @@ export function RadarDashboard({
           ) : null}
         </section>
 
-        <DeferredRandomResetTimeHeatmap
+        <RandomResetTimeHeatmap
           eventTimes={randomResetHeatmapEventTimes}
           locale={locale}
         />
