@@ -250,7 +250,8 @@ test("resending one plan is idempotent and does not duplicate rows", { skip: !is
     assert.equal(second.status, "stale");
     assert.equal(second.retry_required, false);
     assert.equal(await count(client, "codex_recovery_observations", "source_key", CODEX_USAGE_SOURCE_KEY), 1);
-    assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", "atomic-idempotent-estimate"), 1);
+    assert.ok(first.observation_id);
+    assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", `usage-reset-${first.observation_id}`), 1);
   } finally {
     await clearLocalWebhookData(client);
   }
