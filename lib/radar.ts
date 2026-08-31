@@ -40,6 +40,7 @@ import {
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
   getResetDisplayNameEventKey,
+  getManualResetDisplayName,
   isGenericResetDisplayTitle,
   isSafeStoredAiResetName,
   resolveJapaneseResetDisplayName,
@@ -982,6 +983,9 @@ function getHistoryDisplayTitle(
   locale: Locale,
 ) {
   const record = getResetDisplayNameRecord(data, item);
+
+  const localizedManualName = getManualResetDisplayName(record, locale);
+  if (localizedManualName) return localizedManualName;
 
   // Manual names are stored in Japanese. Reuse them for other locales only
   // when the normal dynamic dictionary has a matching localized title.

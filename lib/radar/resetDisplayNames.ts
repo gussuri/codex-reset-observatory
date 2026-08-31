@@ -106,11 +106,36 @@ export function resolveJapaneseResetDisplayName(
   return currentTitle || "ランダムリセット";
 }
 
+export function hasCompleteManualResetDisplayNames(
+  record: ResetDisplayNameRecord | null | undefined,
+) {
+  return Boolean(
+    record?.manual_name_ja?.trim() &&
+      record.manual_name_en?.trim() &&
+      record.manual_name_zh?.trim(),
+  );
+}
+
+export function getManualResetDisplayName(
+  record: ResetDisplayNameRecord | null | undefined,
+  locale: Locale,
+) {
+  if (!hasCompleteManualResetDisplayNames(record)) return null;
+  const value = locale === "ja"
+    ? record!.manual_name_ja
+    : locale === "en"
+      ? record!.manual_name_en
+      : record!.manual_name_zh;
+  return value?.trim() || null;
+}
+
 export function resolveResetDisplayTitle(
   item: WindowEventLike,
   record: ResetDisplayNameRecord | null | undefined,
   locale: Locale,
 ) {
+  const manualName = getManualResetDisplayName(record, locale);
+  if (manualName) return manualName;
   if (locale === "ja") return resolveJapaneseResetDisplayName(item, record);
   if (isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
     const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;

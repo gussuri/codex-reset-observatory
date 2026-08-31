@@ -18,9 +18,38 @@ import {
   getResetDisplayNameSourceTweetId,
   isGenericResetDisplayTitle,
 } from "./resetDisplayNames";
+import {
+  runManualResetDisplayNameOverride,
+  validateManualResetDisplayNameInput,
+  type ManualResetDisplayNameOverrideInput,
+  type ManualResetDisplayNameUpdatePayload,
+} from "./manualResetDisplayNameOverride";
 import type { ResetDisplayNameRecord, WindowEventLike } from "./types";
 
 export const RESET_DISPLAY_NAME_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "manual_name_en",
+  "manual_name_zh",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_reason",
+  "ai_model",
+  "ai_prompt_version",
+  "ai_input_mode",
+  "ai_status",
+  "ai_flags",
+  "ai_generated_at",
+  "input_hash",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS = [
   "event_key",
   "source_tweet_id",
   "manual_name_ja",
@@ -94,7 +123,7 @@ function isMissingLocalizedColumnsError(error: unknown) {
   const message = [value.message, value.details]
     .filter((item): item is string => typeof item === "string")
     .join(" ");
-  return code === "PGRST204" || /ai_name_(?:en|zh)|column .* does not exist/i.test(message);
+  return code === "PGRST204" || /(?:ai_name|manual_name)_(?:en|zh)|column .* does not exist/i.test(message);
 }
 
 async function selectResetDisplayNames(
@@ -107,6 +136,14 @@ async function selectResetDisplayNames(
   const scopedQuery = eventKey ? query.eq("event_key", eventKey).maybeSingle() : query.limit(2000);
   const result = await scopedQuery;
   if (!isMissingLocalizedColumnsError(result.error)) return result;
+
+  const aiLocalizedQuery = supabase
+    .from("reset_display_names")
+    .select(RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS);
+  const aiLocalizedResult = eventKey
+    ? await aiLocalizedQuery.eq("event_key", eventKey).maybeSingle()
+    : await aiLocalizedQuery.limit(2000);
+  if (!isMissingLocalizedColumnsError(aiLocalizedResult.error)) return aiLocalizedResult;
 
   const legacyQuery = supabase
     .from("reset_display_names")
@@ -385,6 +422,40 @@ export async function applyAcceptedResetDisplayName(
   if (acceptance.status !== "accepted") return false;
   await upsertResetDisplayName(supabase, record);
   return true;
+}
+
+export async function applyManualResetDisplayNameOverride(
+  input: ManualResetDisplayNameOverrideInput,
+  options: {
+    apply?: boolean;
+    updatedAt?: string;
+    supabase?: SupabaseClient;
+  } = {},
+) {
+  const normalizedInput = validateManualResetDisplayNameInput(input);
+  const supabase = options.supabase ?? getServerSupabaseClient();
+  if (!supabase) throw new Error("Supabase configuration is unavailable");
+
+  return runManualResetDisplayNameOverride({
+    input: normalizedInput,
+    apply: options.apply === true,
+    updatedAt: options.updatedAt ?? new Date().toISOString(),
+    store: {
+      findByEventKey: (eventKey) => fetchResetDisplayNameByKey(supabase, eventKey),
+      updateManualNames: async (
+        eventKey: string,
+        payload: ManualResetDisplayNameUpdatePayload,
+      ) => {
+        const { data, error } = await supabase
+          .from("reset_display_names")
+          .update(payload)
+          .eq("event_key", eventKey)
+          .select("event_key,manual_name_ja,manual_name_en,manual_name_zh,updated_at")
+          .maybeSingle();
+        if (error || !data) throw new Error("Manual reset display name update failed");
+      },
+    },
+  });
 }
 
 function recordToResult(record: ReturnType<typeof getResetDisplayNameWritePayload>): RandomResetNameGenerationResult {
