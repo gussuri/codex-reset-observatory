@@ -25,6 +25,7 @@ import {
 } from "./tiboHistory";
 import { isSupersededBankedNotice } from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
+import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 import type {
   Locale,
   PublicDataHealth,
@@ -200,7 +201,7 @@ export function toPublicTiboActivity(
   if (!Number.isFinite(nowTime)) return null;
 
   const recentSignals = internal.recent_tibo_signals;
-  const sourceSignals = recentSignals ?? internal.active_tibo_signals ?? [];
+  const sourceSignals = getTiboReadSideSignals(internal, "recent");
   const resetExecutionWindow = latestTeaserExecutionWindow &&
       latestResetAt &&
       Date.parse(latestTeaserExecutionWindow.executionWindowEndAt ?? "") === Date.parse(latestResetAt)
@@ -453,7 +454,7 @@ export function toPublicRadarSnapshot(
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
     resetTeaserStatus: aggregateResetTeaserStatus(
-      internal.recent_tibo_signals ?? internal.active_tibo_signals,
+      getTiboReadSideSignals(internal, "recent"),
       latestTeaserConsumingResetAt,
       calculationNow,
       latestTeaserExecutionWindow,

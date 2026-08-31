@@ -55,6 +55,7 @@ import {
 import { getTiboDisplayLabel } from "./tiboHandle";
 import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
+import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 
 export type LocalSignalEvaluation = {
   environment: NonNullable<RadarData["codex_environment"]>;
@@ -183,10 +184,9 @@ function getProbabilityComponents(
   now: Date,
 ) {
   const environment = signalEvaluation.environment;
-  const sortedSignals = expandTiboSignalVariants([
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.formal_tibo_resets ?? []),
-  ])
+  const sortedSignals = expandTiboSignalVariants(
+    getTiboReadSideSignals(data, "probability"),
+  )
     .slice()
     .sort(
       (left, right) =>
@@ -902,6 +902,9 @@ function getLatestAcceptedTiboExecutionAt(
   data: RadarData | null | undefined,
   now: Date = new Date(),
 ) {
+  // Keep the historical execution cutoff on raw/formal inputs. The logical
+  // projection may suppress a superseded public version, but it must not erase
+  // the reset boundary used to evaluate subsequent signals.
   const executions = [
     ...(data?.active_tibo_signals ?? []),
     ...(data?.formal_tibo_resets ?? []),
@@ -953,12 +956,13 @@ export function getActiveOfficialNotice(
         latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
       );
   const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(
-    data?.active_tibo_signals ?? [],
+    getTiboReadSideSignals(data, "active"),
   );
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
     .flatMap((signal) => {
       if (
         signal.signal_type !== "official_notice" ||
+        signal.is_reply === true ||
         (signal.confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected" ||
         isSupersededBankedNotice(signal, rawSignals)
@@ -1653,7 +1657,7 @@ function getTimedTeaserForOutlook(
   now: Date,
   strength: "strong" | "weak",
 ) {
-  const sourceSignals = data.recent_tibo_signals ?? data.active_tibo_signals ?? [];
+  const sourceSignals = getTiboReadSideSignals(data, "recent");
   return getTeaserStrengthSignals(sourceSignals, latestResetAt, now, { includeReplies: true })
     .filter((signal) => {
       const effectiveStrength = getEffectiveTeaserStrength(signal);
@@ -1738,7 +1742,7 @@ export function getDisplayProbabilityReason(
   const issueAnomalyCount = environment.issue_or_limit_anomalies_24h ?? 0;
   const latestResetAt = getLastDisplayResetAt(data, now)?.toISOString() ?? null;
   const teaserStatus = aggregateResetTeaserStatus(
-    data.recent_tibo_signals ?? data.active_tibo_signals,
+    getTiboReadSideSignals(data, "recent"),
     latestResetAt,
     now,
   );

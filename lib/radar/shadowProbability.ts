@@ -44,6 +44,7 @@ import {
   getTeaserStrengthSignals,
 } from "./teaserStrength";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
+import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 import { getLastRandomRecoveryResetWindow } from "./recoveryBoundary";
 import {
   getTemporalExecutionWindowRelation,
@@ -592,10 +593,7 @@ function getEligibleFormalTeaserSignals(
     ? latestResetTime
     : Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
 
-  return expandTiboSignalVariants([
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.formal_tibo_resets ?? []),
-  ]).filter((signal) => {
+  return expandTiboSignalVariants(getTiboReadSideSignals(data, "probability")).filter((signal) => {
     const createdAt = getTimestamp(signal.tweet_created_at);
     const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
       getTimestamp(signal.primary_event_at) === cutoff;
@@ -755,11 +753,13 @@ function getTeaserStrengthSourceSignals(
   includeFormalTiboResets = false,
 ) {
   const seen = new Set<string>();
-  return expandTiboSignalVariants([
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.recent_tibo_signals ?? []),
-    ...(includeFormalTiboResets ? data?.formal_tibo_resets ?? [] : []),
-  ]).flatMap((signal) => {
+  return expandTiboSignalVariants(
+    getTiboReadSideSignals(
+      data,
+      "teaser",
+      includeFormalTiboResets,
+    ),
+  ).flatMap((signal) => {
     const key = signal.tweet_id ?? `${signal.tweet_created_at}:${signal.signal_type}`;
     if (seen.has(key)) return [];
     seen.add(key);
