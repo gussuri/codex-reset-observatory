@@ -460,14 +460,9 @@ function getHistorySortTime(
   return Number.isNaN(time) ? 0 : time;
 }
 
-function getHistoryDedupeKey(item: RadarViewModel["recentHistory"][number]) {
-  const resetAt = item.resetAt ? new Date(item.resetAt).getTime() : null;
-  const resetKey =
-    typeof resetAt === "number" && !Number.isNaN(resetAt)
-      ? String(resetAt)
-      : item.resetAt ?? item.date ?? "";
-
-  return `${item.title}-${resetKey}`;
+function getHistoryDedupeKey(item: WindowEventLike): string | null {
+  const stableId = item.id?.trim() || item.guid?.trim();
+  return stableId ? `event:${stableId}` : null;
 }
 
 function getHistoryTiboTweetIds(item: WindowLike) {
@@ -1055,14 +1050,21 @@ function getValue(
 }
 
 function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: boolean = true) {
-  const items = getCombinedResetHistory(data).filter((item): item is WindowEventLike =>
-    Boolean(item?.title),
-  );
-
   const seen = new Set<string>();
+  const items = getCombinedResetHistory(data)
+    .filter((item): item is WindowEventLike => Boolean(item?.title))
+    .filter((item) => {
+      const dedupeKey = getHistoryDedupeKey(item);
+
+      if (!dedupeKey) return true;
+      if (seen.has(dedupeKey)) return false;
+
+      seen.add(dedupeKey);
+      return true;
+    });
 
   const result = items
-    .map((item) => {
+    .map((item, rawIndex) => {
       const isRegular = isRegularHistoryItem(item);
       const isPendingNotice = isPendingResetNotice(item);
       const canonicalResetAt = isPendingNotice
@@ -1074,7 +1076,8 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         canonicalResetAt,
       );
       const resetAt = executionPresentation.resetAt;
-      const key = item.id ?? item.guid ?? `${item.title}-${resetAt ?? item.date ?? ""}`;
+      const stableKey = item.id?.trim() ? item.id : item.guid?.trim() ? item.guid : null;
+      const key = stableKey ?? `history-fallback:${rawIndex}`;
       const source = getEventSource(item);
       const recordKind = getHistoryRecordKind(item);
       const sourceKind = getHistorySourceKind(item);
@@ -1130,16 +1133,6 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
             ? translateDynamic(item.summary, locale)
             : null,
       };
-    })
-    .filter((item) => {
-      const dedupeKey = getHistoryDedupeKey(item);
-
-      if (seen.has(dedupeKey)) {
-        return false;
-      }
-
-      seen.add(dedupeKey);
-      return true;
     })
     .sort((a, b) => {
       const aTime = getHistorySortTime(a);
