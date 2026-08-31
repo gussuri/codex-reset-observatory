@@ -12,6 +12,12 @@ const foundationPath = path.join(
 );
 const configPath = path.join(root, "supabase", "config.toml");
 const envExamplePath = path.join(root, ".env.example");
+const editChainMigrationPath = path.join(
+  root,
+  "supabase",
+  "migrations",
+  "20260831050000_add_tibo_edit_chain_metadata.sql",
+);
 
 test("foundation recreates only the pre-20260731 base schema", () => {
   const sql = fs.readFileSync(foundationPath, "utf8");
@@ -63,6 +69,7 @@ test("env example lists names without real values", () => {
     "GEMINI_MODEL",
     "GEMINI_CLASSIFICATION_MODE",
     "GEMINI_TRANSLATION_MODE",
+    "X_API_BEARER_TOKEN",
     "CODEX_CLI_PATH",
     "CODEX_USAGE_WEBHOOK_URL",
     "CODEX_USAGE_POLL_INTERVAL_MS",
@@ -72,4 +79,27 @@ test("env example lists names without real values", () => {
   for (const name of requiredNames) {
     assert.match(envExample, new RegExp(`^${name}=$`, "m"));
   }
+});
+
+test("edit-chain metadata migration is additive and initializes legacy rows without merging them", () => {
+  const sql = fs.readFileSync(editChainMigrationPath, "utf8");
+
+  for (const column of [
+    "logical_post_id text",
+    "edit_history_tweet_ids text[]",
+    "edit_version integer",
+    "edit_metadata_source text",
+  ]) {
+    assert.match(sql, new RegExp(`ADD COLUMN IF NOT EXISTS ${column.replace(/[\[\]]/g, "\\$&")}`));
+  }
+
+  assert.match(sql, /logical_post_id = COALESCE\(logical_post_id, tweet_id\)/);
+  assert.match(sql, /edit_history_tweet_ids = COALESCE\(edit_history_tweet_ids, ARRAY\[tweet_id\]::text\[\]\)/);
+  assert.match(sql, /edit_version = COALESCE\(edit_version, 1\)/);
+  assert.match(sql, /edit_metadata_source = COALESCE\(edit_metadata_source, 'none'\)/);
+  assert.match(sql, /tibo_signals_edit_version_positive_check/);
+  assert.match(sql, /tibo_signals_edit_metadata_source_check/);
+  assert.match(sql, /IN \('x_api', 'none'\)/);
+  assert.match(sql, /tibo_signals_logical_post_id_idx/);
+  assert.doesNotMatch(sql, /DROP TABLE|DELETE FROM|UPDATE public\.tibo_signals[\s\S]*text\s*=/i);
 });

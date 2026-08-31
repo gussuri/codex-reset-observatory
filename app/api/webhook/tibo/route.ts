@@ -45,6 +45,7 @@ import {
   resolveTiboTemporalSchedule,
   TIBO_SOURCE_TIME_ZONE,
 } from "@/lib/radar/tiboTemporal";
+import { resolveTiboPostEditHistory } from "@/lib/radar/xPostEditHistory";
 
 // Keep the webhook bounded while accepting X long-form/note text. The former
 // 2,000-character ceiling rejected fully expanded posts before classification.
@@ -59,7 +60,7 @@ function isMissingTiboOptionalColumnError(error: unknown) {
     .join(" ");
 
   return (
-    /(secondary_signal|teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle))/i.test(message) &&
+    /(secondary_signal|teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle)|logical_post_id|edit_history_tweet_ids|edit_version|edit_metadata_source)/i.test(message) &&
     (code === "PGRST204" ||
       code === "42703" ||
       /column|schema cache|does not exist/i.test(message))
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid reply metadata" }, { status: 400 });
     }
     const replyMetadata = replyMetadataResult.value;
+    const editHistoryMetadata = await resolveTiboPostEditHistory(tweetId);
 
     // 3. Existing Rule Classification
     const ruleResult = classifyTiboTweet(text, tweetUrl, replyMetadata);
@@ -339,6 +341,10 @@ export async function POST(req: NextRequest) {
       quote_context_text: replyMetadata.quoteContextText ?? null,
       quote_tweet_url: replyMetadata.quoteTweetUrl ?? null,
       quote_author_handle: replyMetadata.quoteAuthorHandle ?? null,
+      logical_post_id: editHistoryMetadata.logicalPostId,
+      edit_history_tweet_ids: editHistoryMetadata.editHistoryTweetIds,
+      edit_version: editHistoryMetadata.editVersion,
+      edit_metadata_source: editHistoryMetadata.editMetadataSource,
 
       // Audit columns
       rule_signal_type: ruleResult.signalType,
@@ -594,6 +600,10 @@ export async function POST(req: NextRequest) {
         quote_context_text: _quoteContextText,
         quote_tweet_url: _quoteTweetUrl,
         quote_author_handle: _quoteAuthorHandle,
+        logical_post_id: _logicalPostId,
+        edit_history_tweet_ids: _editHistoryTweetIds,
+        edit_version: _editVersion,
+        edit_metadata_source: _editMetadataSource,
         secondary_signal: _secondarySignal,
         ...legacyPayload
       } = persistedPayload;
