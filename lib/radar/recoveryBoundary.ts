@@ -108,7 +108,13 @@ function getCombinedHistory(
   data: RadarData | null,
   staticHistory: Array<WindowEventLike>,
 ) {
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
 
   return combineResetHistory(
     staticHistory,
@@ -119,6 +125,7 @@ function getCombinedHistory(
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
 }
 

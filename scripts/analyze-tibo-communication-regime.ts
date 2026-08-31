@@ -392,7 +392,7 @@ function getAllNoticeSignals(data: RadarData) {
 }
 
 function getCombinedHistory(data: RadarData) {
-  const { recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const { recoveryObservations, estimates, identityContext } = getNoticeBackedHistoryInputs(data);
   return combineResetHistory(
     LOCAL_RESET_HISTORY,
     data.formal_tibo_resets ?? [],
@@ -401,6 +401,8 @@ function getCombinedHistory(data: RadarData) {
     getAllNoticeSignals(data),
     recoveryObservations,
     estimates,
+    [],
+    identityContext,
   );
 }
 

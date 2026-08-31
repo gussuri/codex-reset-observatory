@@ -28,6 +28,8 @@ export type TiboResetExecutionEstimateReference = {
   resetEventKey: string;
   recoveryObservationId?: string | null;
   tiboSourceTweetIds?: readonly string[] | null;
+  executionTimeSource?: string | null;
+  estimatorVersion?: string | null;
 };
 
 export type TiboResetEventReference = {
@@ -134,6 +136,15 @@ function getReferenceTweetIds(reference: TiboResetEventReference) {
 function hasAliasOverlap(left: readonly string[], right: readonly string[]) {
   const rightIds = new Set(right);
   return left.some((id) => rightIds.has(id));
+}
+
+function isMonitorBackedEstimate(reference: TiboResetExecutionEstimateReference) {
+  return reference.executionTimeSource === "usage_observation" &&
+    reference.estimatorVersion === "usage-execution-monitor-v1";
+}
+
+function isSelfLogicalEventKey(eventKey: string, logicalPostId: string) {
+  return eventKey === `tibo-reset-${logicalPostId}`;
 }
 
 function isCompatibleLedgerChain(
@@ -255,19 +266,46 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
   if (evidenceCollection.conflictingEventKeys.length > 0) {
     existingConflictReason = "conflicting_event_keys";
   } else if (eventKeys.length > 1) {
-    const externallyProvenLedgerKeys = ledgerEventKeys.filter((key) =>
-      externalEventKeys.includes(key),
+    const monitorEstimateKeys = uniqueStrings(
+      matches
+        .filter((match) => match.kind === "existing_estimate")
+        .filter((match) => (evidence.estimates ?? []).some((estimate) =>
+          normalizedEventKey(estimate.resetEventKey) === match.resetEventKey &&
+          isMonitorBackedEstimate(estimate),
+        ))
+        .map((match) => match.resetEventKey),
     );
-    if (
-      ledgerEventKeys.length > 1 &&
-      externallyProvenLedgerKeys.length === 1 &&
-      externalEventKeys.every((key) => key === externallyProvenLedgerKeys[0])
-    ) {
-      existingEventKey = externallyProvenLedgerKeys[0];
-    } else if (ledgerEventKeys.length > 1) {
-      existingConflictReason = "ambiguous_existing_claims";
+    if (monitorEstimateKeys.length === 1) {
+      const monitorEstimateKey = monitorEstimateKeys[0];
+      const nonMonitorMatches = matches.filter(
+        (match) => match.resetEventKey !== monitorEstimateKey,
+      );
+      const onlySelfReferences = nonMonitorMatches.length > 0 && nonMonitorMatches.every(
+        (match) =>
+          (match.kind === "existing_ledger" || match.kind === "existing_dynamic") &&
+          isSelfLogicalEventKey(match.resetEventKey, base.logicalPostId),
+      );
+      if (onlySelfReferences) existingEventKey = monitorEstimateKey;
+    }
+
+    if (existingEventKey) {
+      // A monitor-backed estimate is the canonical event evidence when the
+      // other matches are only self-derived tibo-reset keys.
     } else {
-      existingConflictReason = "conflicting_event_keys";
+      const externallyProvenLedgerKeys = ledgerEventKeys.filter((key) =>
+        externalEventKeys.includes(key),
+      );
+      if (
+        ledgerEventKeys.length > 1 &&
+        externallyProvenLedgerKeys.length === 1 &&
+        externalEventKeys.every((key) => key === externallyProvenLedgerKeys[0])
+      ) {
+        existingEventKey = externallyProvenLedgerKeys[0];
+      } else if (ledgerEventKeys.length > 1) {
+        existingConflictReason = "ambiguous_existing_claims";
+      } else {
+        existingConflictReason = "conflicting_event_keys";
+      }
     }
   }
 

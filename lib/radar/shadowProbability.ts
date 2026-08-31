@@ -256,7 +256,13 @@ export function getShadowCompletedResetEvents(
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     staticHistory,
     data?.formal_tibo_resets ?? [],
@@ -266,6 +272,7 @@ export function getShadowCompletedResetEvents(
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
   const seen = new Set<string>();
 

@@ -668,7 +668,7 @@ test("static and dynamic history entries with the same tweet URL are merged once
   const combined = combineResetHistory([staticItem], [resetSignal()]);
 
   assert.equal(combined.length, 1);
-  assert.equal(combined[0].id, dynamic.id);
+  assert.equal(combined[0].id, staticItem.id);
   assert.equal(combined[0].title, staticItem.title);
   assert.equal(combined[0].summary, staticItem.summary);
 });
@@ -703,7 +703,7 @@ test("manual static history overrides automatic Tibo values for the same tweet",
   };
 
   const combined = combineResetHistory([manualItem], [signal]);
-  const merged = combined.find((item) => item.id === `tibo-reset-${signal.tweet_id}`);
+  const merged = combined.find((item) => item.id === manualItem.id);
 
   assert.ok(merged);
   assert.equal(merged.title, manualItem.title);

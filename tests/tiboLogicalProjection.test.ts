@@ -561,6 +561,19 @@ test("public DTO keeps public-v1 and excludes logical identity metadata in all l
   const radarData = getLocalRadarData({
     activeTiboSignals: [trustedRow([A, B], A), trustedRow([A, B], B)],
     recentTiboSignals: [trustedRow([A, B], A), trustedRow([A, B], B)],
+    tiboFormalAdoptions: [{
+      id: "ledger-id-only",
+      logicalPostId: "ledger-logical-id-only",
+      logicalPostTweetIds: [A, B],
+      resetEventKey: "ledger-event-key-only",
+      representativeTweetId: A,
+      sourceTweetIds: [A, B, "ledger-source-id-only"],
+      claimSource: "new_adoption",
+      adoptedAt: "2026-08-31T00:00:00.000Z",
+      claimedAt: "2026-08-31T00:00:01.000Z",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      updatedAt: "2026-08-31T00:00:01.000Z",
+    }],
   });
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -571,6 +584,10 @@ test("public DTO keeps public-v1 and excludes logical identity metadata in all l
     assert.equal(serialized.includes("edit_history_tweet_ids"), false);
     assert.equal(serialized.includes("edit_version"), false);
     assert.equal(serialized.includes("edit_metadata_source"), false);
+    assert.equal(serialized.includes("ledger-id-only"), false);
+    assert.equal(serialized.includes("ledger-logical-id-only"), false);
+    assert.equal(serialized.includes("ledger-event-key-only"), false);
+    assert.equal(serialized.includes("ledger-source-id-only"), false);
   }
 });
 
@@ -645,6 +662,50 @@ test("suppressing an edited public signal does not erase the existing formal res
     toPublicRadarSnapshot(withEditedSignal, "en", { calculationNow: NOW }).latestTiboActivity?.sourceUrl,
     edited.tweet_url,
   );
+});
+
+test("adding edited versions of one logical reset leaves probability invariants unchanged", () => {
+  const original = trustedRow([A, B, C], A, "reset_executed", {
+    text: "We reset usage for everyone.",
+    tweet_created_at: "2026-08-31T11:00:00.000Z",
+    confidence: 0.99,
+    verification_status: "confirmed",
+  });
+  const edited = trustedRow([A, B, C], B, "irrelevant", {
+    text: "No reset discussion in the edited version.",
+    tweet_created_at: "2026-08-31T11:01:00.000Z",
+  });
+  const editedAgain = trustedRow([A, B, C], C, "irrelevant", {
+    text: "Still no reset discussion in the latest version.",
+    tweet_created_at: "2026-08-31T11:02:00.000Z",
+  });
+  const buildData = (rows: ActiveTiboSignal[]) => getLocalRadarData({
+    activeTiboSignals: rows,
+    recentTiboSignals: rows,
+  });
+  const oneVersion = buildData([original]);
+  const twoVersions = buildData([original, edited]);
+  const threeVersions = buildData([original, edited, editedAgain]);
+
+  const invariantSnapshot = (radarData: RadarData) => {
+    const audit = getLocalProbabilityCalculation(radarData, { now: NOW });
+    return {
+      lastGlobalResetAt: getLastGlobalResetAt(radarData, NOW)?.toISOString() ?? null,
+      recent7DayResetCount: getRecent7DayResetCount(radarData, NOW),
+      momentum: {
+        probability24h: getMomentumBoost("24h", radarData, NOW),
+        probability48h: getMomentumBoost("48h", radarData, NOW),
+      },
+      elapsedSinceReset: audit.breakdown.contributions.elapsedSinceReset,
+      historicalIntervalPressure: audit.breakdown.contributions.historicalIntervalPressure,
+      probability24h: audit.probability24h,
+      probability48h: audit.probability48h,
+    };
+  };
+
+  const expected = invariantSnapshot(oneVersion);
+  assert.deepEqual(invariantSnapshot(twoVersions), expected);
+  assert.deepEqual(invariantSnapshot(threeVersions), expected);
 });
 
 test("the raw formal execution cutoff still suppresses a pre-reset teaser after edit suppression", () => {

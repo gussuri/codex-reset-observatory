@@ -21,6 +21,7 @@ import type {
   ExecutionTimePrecision,
   ResetExecutionEstimate,
 } from "./resetExecution";
+import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
 
 export type Locale = "ja" | "en" | "zh";
 
@@ -130,6 +131,8 @@ export type WindowLike = {
   source_url?: string | null;
   sourceKind?: HistorySourceKind;
   sourceTweetIds?: string[];
+  /** Internal trusted X logical-post identity used to keep separate posts apart. */
+  tiboLogicalPostId?: string;
   recordKind?: HistoryRecordKind;
   presentation?: "notice_backed_recovery";
   officialNoticeTweetId?: string;
@@ -345,6 +348,9 @@ export type RadarData = {
   codex_usage_recovery?: CodexRecoveryObservation | null;
   codex_recovery_observations?: Array<CodexRecoveryObservation>;
   reset_execution_estimates?: Array<ResetExecutionEstimate>;
+  tibo_formal_adoptions?: Array<TiboFormalAdoptionRecord>;
+  /** Internal read health for the optional adoption ledger; not public DTO data. */
+  tibo_formal_adoptions_health?: DataSourceHealth;
   reset_display_names?: Array<ResetDisplayNameRecord>;
   codex_environment?: {
     updated_at?: string;

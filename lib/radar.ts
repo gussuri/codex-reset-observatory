@@ -133,6 +133,8 @@ export function getLocalRadarData({
   regularResetEvents = [],
   resetDisplayNames = [],
   resetExecutionEstimates = [],
+  tiboFormalAdoptions = [],
+  tiboFormalAdoptionsHealth,
   codexRecoveryObservation = null,
   codexRecoveryObservations = [],
 }: {
@@ -147,6 +149,8 @@ export function getLocalRadarData({
   regularResetEvents?: RadarData["regular_reset_events"];
   resetDisplayNames?: RadarData["reset_display_names"];
   resetExecutionEstimates?: RadarData["reset_execution_estimates"];
+  tiboFormalAdoptions?: RadarData["tibo_formal_adoptions"];
+  tiboFormalAdoptionsHealth?: RadarData["tibo_formal_adoptions_health"];
   codexRecoveryObservation?: CodexRecoveryObservation | null;
   codexRecoveryObservations?: RadarData["codex_recovery_observations"];
 } = {}): RadarData {
@@ -178,6 +182,8 @@ export function getLocalRadarData({
     regular_reset_events: regularResetEvents,
     reset_display_names: resetDisplayNames,
     reset_execution_estimates: resetExecutionEstimates,
+    tibo_formal_adoptions: tiboFormalAdoptions,
+    tibo_formal_adoptions_health: tiboFormalAdoptionsHealth,
     codex_usage_recovery: codexRecoveryObservation,
     codex_recovery_observations: codexRecoveryObservations,
   };
@@ -1332,7 +1338,13 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     };
   });
 
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
 
   return combineResetHistory(
     [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
@@ -1343,5 +1355,6 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
 }

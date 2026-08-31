@@ -27,6 +27,10 @@ import {
   readResetExecutionEstimates,
 } from "@/lib/codexUsageRecoveryStore";
 import {
+  readTiboFormalAdoptions,
+  type TiboFormalAdoptionRecord,
+} from "@/lib/radar/tiboFormalAdoptionStore";
+import {
   findRelatedTiboNotices,
   getNoticeBackedRecoveryObservationIds,
   isFormalTiboResetSignal,
@@ -379,6 +383,48 @@ const getCachedResetExecutionEstimates = unstable_cache(
   },
 );
 
+async function fetchRawTiboFormalAdoptions(): Promise<
+  DataFetchResult<TiboFormalAdoptionRecord[]>
+> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return { data: [], health: configuration };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const result = await readTiboFormalAdoptions(supabase);
+    const health = getDatabaseReadHealth(configuration, {
+      hasData: result.ledgers.length > 0 || result.error === null,
+      hasError: Boolean(result.error),
+    });
+    if (result.error) {
+      console.error("Tibo formal adoption ledger query failed", { detail: "database_error" });
+    }
+    return { data: result.ledgers, health };
+  } catch {
+    console.error("Failed to load Tibo formal adoption ledger", { detail: "request_failed" });
+    return { data: [], health: { state: "degraded", detail: "request_failed" } };
+  }
+}
+
+const getCachedTiboFormalAdoptions = unstable_cache(
+  () => fetchRawTiboFormalAdoptions(),
+  ["tibo-formal-adoptions-cache-v1"],
+  {
+    revalidate: 30,
+    tags: ["radar-data"],
+  },
+);
+
 const getCachedResetDisplayNames = unstable_cache(
   () => fetchResetDisplayNames(),
   ["reset-display-names-cache-v1"],
@@ -619,13 +665,14 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
-  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery, resetExecutionEstimates] = await Promise.all([
+  const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery, resetExecutionEstimates, tiboFormalAdoptions] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow, options.bypassCache === true),
     options.bypassCache ? fetchRawRegularResetEvents() : getCachedRegularResetEvents(),
     options.bypassCache ? fetchResetDisplayNames() : getCachedResetDisplayNames(),
     options.bypassCache ? fetchRawCodexRecoveryObservations() : getCachedCodexRecoveryObservations(),
     options.bypassCache ? fetchRawResetExecutionEstimates() : getCachedResetExecutionEstimates(),
+    options.bypassCache ? fetchRawTiboFormalAdoptions() : getCachedTiboFormalAdoptions(),
   ]);
 
   const codexRecoveryObservation = codexRecovery.data.find((observation) =>
@@ -657,6 +704,8 @@ export async function fetchCurrentRadarData(
     regularResetEvents: regularResetEvents.data,
     resetDisplayNames,
     resetExecutionEstimates: resetExecutionEstimates.data,
+    tiboFormalAdoptions: tiboFormalAdoptions.data,
+    tiboFormalAdoptionsHealth: tiboFormalAdoptions.health,
     codexRecoveryObservation,
     codexRecoveryObservations: codexRecovery.data,
   });

@@ -665,7 +665,13 @@ export function getHistoricalResetPressure(
 }
 
 function getRandomResetIntervals(data: RadarData | null, now: Date) {
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
   const historicalItems = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -675,6 +681,7 @@ function getRandomResetIntervals(data: RadarData | null, now: Date) {
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
   const resetTimes = historicalItems
     .filter((item) => isEligibleRandomResetEvent(
@@ -1118,7 +1125,13 @@ export function getRecent7DayResetCount(
 ): number {
   const nowTime = now.getTime();
   const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -1128,6 +1141,7 @@ export function getRecent7DayResetCount(
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
 
   return combinedHistory.filter((item) => {
@@ -1210,7 +1224,13 @@ export function getLastGlobalResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ) {
-  const { noticeSignals, bankedSignals, recoveryObservations, estimates } = getNoticeBackedHistoryInputs(data);
+  const {
+    noticeSignals,
+    bankedSignals,
+    recoveryObservations,
+    estimates,
+    identityContext,
+  } = getNoticeBackedHistoryInputs(data);
   const combinedHistory = combineResetHistory(
     LOCAL_RESET_HISTORY,
     data?.formal_tibo_resets ?? [],
@@ -1220,6 +1240,7 @@ export function getLastGlobalResetAt(
     recoveryObservations,
     estimates,
     bankedSignals,
+    identityContext,
   );
   const candidates = combinedHistory.map((item) => {
     const time = getCompletedResetTimestamp(item);
