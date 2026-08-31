@@ -66,6 +66,7 @@ export type TiboResetEventIdentityResolution = {
   reason?:
     | "conflicting_event_keys"
     | "ambiguous_existing_claims"
+    | "canonical_existing_claims"
     | "missing_authoritative_tail"
     | "manual_conflict"
     | "unresolved_classification";
@@ -228,7 +229,11 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
   );
 
   let existingEventKey: string | null = eventKeys.length === 1 ? eventKeys[0] : null;
-  let existingConflictReason: "conflicting_event_keys" | "ambiguous_existing_claims" | null = null;
+  let existingConflictReason:
+    | "conflicting_event_keys"
+    | "ambiguous_existing_claims"
+    | "canonical_existing_claims"
+    | null = null;
   if (evidenceCollection.conflictingEventKeys.length > 0) {
     existingConflictReason = "conflicting_event_keys";
   } else if (eventKeys.length > 1) {
@@ -245,6 +250,23 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       existingConflictReason = "ambiguous_existing_claims";
     } else {
       existingConflictReason = "conflicting_event_keys";
+    }
+  }
+
+  if (existingEventKey) {
+    const selectedLedger = (evidence.adoptionLedgers ?? []).find(
+      (ledger) => normalizedEventKey(ledger.resetEventKey) === existingEventKey,
+    );
+    const hasExistingRootLedger = (evidence.adoptionLedgers ?? []).some(
+      (ledger) => normalizedEventKey(ledger.resetEventKey) !== existingEventKey &&
+        ledger.logicalPostId === base.logicalPostId,
+    );
+    if (
+      selectedLedger &&
+      selectedLedger.logicalPostId !== base.logicalPostId &&
+      hasExistingRootLedger
+    ) {
+      existingConflictReason = "canonical_existing_claims";
     }
   }
 

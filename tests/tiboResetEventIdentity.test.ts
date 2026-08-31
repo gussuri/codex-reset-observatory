@@ -176,6 +176,34 @@ test("unique existing estimate evidence selects one existing key from dual self 
   assert.equal(result.canCreateNewSideEffects, false);
 });
 
+test("canonical evidence selecting a non-root dual claim fails closed", () => {
+  const result = resolveTiboResetEventIdentity(
+    post([trustedRow([A, B], B)]),
+    {
+      adoptionLedgers: [
+        ledger(),
+        ledger({
+          logicalPostId: B,
+          logicalPostTweetIds: [B],
+          resetEventKey: `tibo-reset-${B}`,
+          representativeTweetId: B,
+          sourceTweetIds: [B],
+        }),
+      ],
+      estimates: [{
+        resetEventKey: `tibo-reset-${B}`,
+        tiboSourceTweetIds: [B],
+      }],
+      sourceTweetIds: [A, B],
+    },
+  );
+
+  assert.equal(result.status, "conflict");
+  assert.equal(result.reason, "canonical_existing_claims");
+  assert.equal(result.resetEventKey, null);
+  assert.equal(result.canCreateNewSideEffects, false);
+});
+
 test("trusted chain extensions retain the existing event key", () => {
   const first = resolveTiboResetEventIdentity(post([trustedRow([A], A)]), {
     sourceTweetIds: [A],

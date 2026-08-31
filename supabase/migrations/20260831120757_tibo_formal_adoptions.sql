@@ -270,6 +270,23 @@ begin
     else v_existing_ids
   end;
   v_selected_root := v_selected_ids[1];
+
+  -- Do not physically merge two previously claimed ledgers when external
+  -- evidence selects the non-root row. Preserve both immutable event keys and
+  -- report the collision instead of relying on the logical root UNIQUE error.
+  if v_existing.logical_post_id <> v_selected_root and exists (
+       select 1
+       from public.tibo_formal_adoptions as collision
+       where collision.logical_post_id = v_selected_root
+         and collision.id <> v_existing.id
+     ) then
+    return jsonb_build_object(
+      'status', 'conflict',
+      'reason', 'canonical_existing_claims',
+      'record', to_jsonb(v_existing)
+    );
+  end if;
+
   v_selected_sources := array(
      select distinct items.value
     from unnest(

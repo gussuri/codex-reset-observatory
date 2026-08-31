@@ -174,6 +174,33 @@ test("RPC conflict reasons are retained without becoming a new claim", async () 
   assert.equal(result.reason, "ambiguous_existing_claims");
 });
 
+test("a canonical non-root collision is an explicit conflict, not a new claim", async () => {
+  const client = fakeClient({
+    data: {
+      status: "conflict",
+      reason: "canonical_existing_claims",
+      record: {
+        ...databaseRecord(record({
+          logicalPostId: "2094252447271366730",
+          logicalPostTweetIds: ["2094252447271366730"],
+          resetEventKey: "tibo-reset-2094252447271366730",
+          representativeTweetId: "2094252447271366730",
+          sourceTweetIds: ["2094252447271366730"],
+          claimSource: "new_adoption",
+        })),
+      },
+    },
+    error: null,
+  });
+
+  const result = await claimTiboFormalAdoption(client, input);
+
+  assert.equal(result.status, "conflict");
+  assert.equal(result.claimedNew, false);
+  assert.equal(result.reason, "canonical_existing_claims");
+  assert.equal(result.record?.resetEventKey, "tibo-reset-2094252447271366730");
+});
+
 test("database migration uses an atomic claim, immutable keys, and bounded claim sources", () => {
   const sql = fs.readFileSync(migrationPath, "utf8");
 
@@ -198,7 +225,10 @@ test("database migration uses an atomic claim, immutable keys, and bounded claim
   assert.match(sql, /RETURNING \*/i);
   assert.match(sql, /case when p_claim_source = 'new_adoption' then 'claimed_new' else 'existing' end/i);
   assert.match(sql, /ambiguous_existing_claims/i);
+  assert.match(sql, /canonical_existing_claims/i);
   assert.match(sql, /p_claim_source <> 'new_adoption'/i);
+  assert.match(sql, /v_existing\.logical_post_id <> v_selected_root/i);
+  assert.match(sql, /where collision\.logical_post_id = v_selected_root/i);
   assert.match(sql, /reset_event_key is immutable/i);
   const updateBlock = sql.match(/if v_changed then[\s\S]*?return jsonb_build_object\('status', 'reconciled'/i)?.[0] ?? "";
   assert.doesNotMatch(updateBlock, /representative_tweet_id\s*=/i);

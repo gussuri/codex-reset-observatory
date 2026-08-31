@@ -41,7 +41,8 @@ export type TiboFormalAdoptionClaimStatus =
 
 export type TiboFormalAdoptionConflictReason =
   | "ambiguous_existing_claims"
-  | "conflicting_trusted_identity";
+  | "conflicting_trusted_identity"
+  | "canonical_existing_claims";
 
 export type TiboFormalAdoptionClaimResult = {
   status: TiboFormalAdoptionClaimStatus;
@@ -182,7 +183,8 @@ export async function claimTiboFormalAdoption(
   }
   const reason = response.data.reason;
   const conflictReason = reason === "ambiguous_existing_claims" ||
-    reason === "conflicting_trusted_identity"
+    reason === "conflicting_trusted_identity" ||
+    reason === "canonical_existing_claims"
     ? reason
     : undefined;
   return {
