@@ -1340,6 +1340,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "20 Million Active Users Milestone Reset",
     zh: "活跃用户突破2000万纪念重置",
   },
+  "2500万人アクティブユーザー突破記念リセット": {
+    ja: "2500万人アクティブユーザー突破記念リセット",
+    en: "25 Million Active Users Milestone Reset",
+    zh: "活跃用户突破2500万纪念重置",
+  },
   "Codex利用制限改善対応リセット": {
     ja: "Codex利用制限改善対応リセット",
     en: "Codex Usage Limit Improvement Reset",

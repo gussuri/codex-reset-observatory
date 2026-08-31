@@ -180,6 +180,14 @@ test("i18n Automated Check: Common history noticeType values have valid English 
   }
 });
 
+test("25M active users reset title has English and Chinese translations", () => {
+  const title = "2500万人アクティブユーザー突破記念リセット";
+
+  assert.equal(translateDynamic(title, "ja"), title);
+  assert.equal(translateDynamic(title, "en"), "25 Million Active Users Milestone Reset");
+  assert.equal(translateDynamic(title, "zh"), "活跃用户突破2500万纪念重置");
+});
+
 test("i18n Automated Check: RadarViewModel reasoningSummary contains zero Japanese characters in English locale", () => {
   const radarData = getLocalRadarData();
   const enViewModel = getRadarViewModel(radarData, "en");
