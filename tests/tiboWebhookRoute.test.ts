@@ -105,10 +105,34 @@ function installGeminiHttpErrorMock(statusCode = 503) {
 function installSupabaseWebhookMock(requestBodies: unknown[]) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
+    const url = _input instanceof Request ? _input.url : String(_input);
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     const method = init?.method ?? "GET";
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const input = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+      const now = new Date().toISOString();
+      return new Response(JSON.stringify({
+        status: "claimed_new",
+        record: {
+          id: "00000000-0000-0000-0000-000000000001",
+          logical_post_id: input.p_logical_post_id,
+          logical_post_tweet_ids: input.p_logical_post_tweet_ids,
+          reset_event_key: input.p_reset_event_key,
+          representative_tweet_id: input.p_representative_tweet_id,
+          source_tweet_ids: input.p_source_tweet_ids,
+          claim_source: input.p_claim_source,
+          adopted_at: input.p_adopted_at,
+          claimed_at: input.p_claimed_at ?? now,
+          created_at: now,
+          updated_at: now,
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (method === "GET") {
-      return new Response(JSON.stringify({ data: null, error: null }), {
+      return new Response(JSON.stringify([]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -702,7 +726,7 @@ test("webhook reclassification updates secondary AI fields but preserves a manua
     const url = input instanceof Request ? input.url : String(input);
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     if (method === "GET" && url.includes("/tibo_signals")) {
-      return new Response(JSON.stringify({
+      const signal = {
         tweet_id: tweetId,
         text,
         tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
@@ -726,7 +750,38 @@ test("webhook reclassification updates secondary AI fields but preserves a manua
         ai_teaser_strength_confidence: 1,
         ai_teaser_strength_evidence_quote: null,
         ai_teaser_strength_reason_ja: "AIは追加更新と判定しました。",
-      }), { status: 200, headers: { "content-type": "application/json" } });
+        logical_post_id: tweetId,
+        edit_history_tweet_ids: [tweetId],
+        edit_version: 1,
+        edit_metadata_source: "none",
+      };
+      return new Response(JSON.stringify(url.includes("tweet_id=in.") ? [signal] : signal), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const input = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+      const now = new Date().toISOString();
+      return new Response(JSON.stringify({
+        status: "claimed_new",
+        record: {
+          id: "00000000-0000-0000-0000-000000000001",
+          logical_post_id: input.p_logical_post_id,
+          logical_post_tweet_ids: input.p_logical_post_tweet_ids,
+          reset_event_key: input.p_reset_event_key,
+          representative_tweet_id: input.p_representative_tweet_id,
+          source_tweet_ids: input.p_source_tweet_ids,
+          claim_source: input.p_claim_source,
+          adopted_at: input.p_adopted_at,
+          claimed_at: input.p_claimed_at ?? now,
+          created_at: now,
+          updated_at: now,
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
     if (method === "POST") {
       return new Response(JSON.stringify([]), {
@@ -1084,14 +1139,9 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
   process.env.GEMINI_TRANSLATION_MODE = "on";
   globalThis.fetch = async (input, init) => {
     fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
+    const url = input instanceof Request ? input.url : String(input);
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
-    if (fetchMethods.length === 1) {
-      return new Response(JSON.stringify({ data: null, error: null }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    if (fetchMethods.length === 2) {
+    if (url.includes("generativelanguage.googleapis.com")) {
       return new Response(
         JSON.stringify({
           candidates: [
@@ -1112,8 +1162,31 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
-    return new Response(JSON.stringify({ data: [], error: null }), {
-      status: 201,
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const input = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+      const now = new Date().toISOString();
+      return new Response(JSON.stringify({
+        status: "claimed_new",
+        record: {
+          id: "00000000-0000-0000-0000-000000000001",
+          logical_post_id: input.p_logical_post_id,
+          logical_post_tweet_ids: input.p_logical_post_tweet_ids,
+          reset_event_key: input.p_reset_event_key,
+          representative_tweet_id: input.p_representative_tweet_id,
+          source_tweet_ids: input.p_source_tweet_ids,
+          claim_source: input.p_claim_source,
+          adopted_at: input.p_adopted_at,
+          claimed_at: input.p_claimed_at ?? now,
+          created_at: now,
+          updated_at: now,
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify([]), {
+      status: 200,
       headers: { "content-type": "application/json" },
     });
   };
@@ -1126,7 +1199,10 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "POST", "GET", "GET", "POST", "GET", "GET", "POST", "POST"]);
+    assert.deepEqual(fetchMethods, [
+      "GET", "POST", "GET", "POST", "GET", "GET", "GET", "GET",
+      "POST", "GET", "GET", "GET", "POST", "POST",
+    ]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");

@@ -254,7 +254,7 @@ function installRouteFetchMock() {
 
     if (url.includes("/tibo_signals") && method === "GET") {
       const tweetId = decodeURIComponent(url.match(/tweet_id=eq\.([^&]+)/)?.[1] ?? "");
-      return response({ data: rows.get(tweetId) ?? null, error: null });
+      return response(tweetId ? rows.get(tweetId) ?? null : []);
     }
 
     if (url.includes("/tibo_signals") && method !== "GET") {
@@ -266,6 +266,33 @@ function installRouteFetchMock() {
       return response({ data: nextRows, error: null }, 201);
     }
 
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const args = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      const aliases = Array.isArray(args.p_logical_post_tweet_ids)
+        ? args.p_logical_post_tweet_ids.filter((value): value is string => typeof value === "string")
+        : [EDITED_ID];
+      const now = new Date().toISOString();
+      return response({
+        status: "claimed_new",
+        record: {
+          id: "00000000-0000-4000-8000-000000000001",
+          logical_post_id: String(args.p_logical_post_id ?? EDITED_ID),
+          logical_post_tweet_ids: aliases,
+          reset_event_key: String(args.p_reset_event_key ?? `tibo-reset-${EDITED_ID}`),
+          representative_tweet_id: String(args.p_representative_tweet_id ?? EDITED_ID),
+          source_tweet_ids: Array.isArray(args.p_source_tweet_ids)
+            ? args.p_source_tweet_ids
+            : [EDITED_ID],
+          claim_source: "new_adoption",
+          adopted_at: now,
+          claimed_at: now,
+          created_at: now,
+          updated_at: now,
+        },
+      });
+    }
+
+    if (method === "GET") return response([]);
     return response({ data: null, error: null });
   };
 
@@ -316,11 +343,40 @@ test("X API identity failure does not block normal webhook classification", asyn
     const url = input instanceof Request ? input.url : String(input);
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     if (url.startsWith("https://api.x.com/2/tweets/")) return response({}, 429);
-    if (url.includes("/tibo_signals") && method === "GET") return response({ data: null, error: null });
+    if (url.includes("/tibo_signals") && method === "GET") {
+      const tweetId = decodeURIComponent(url.match(/tweet_id=eq\.([^&]+)/)?.[1] ?? "");
+      return response(tweetId ? null : []);
+    }
     if (url.includes("/tibo_signals") && method !== "GET") {
       upsertBody = JSON.parse(String(init?.body)) as StoredRow;
       return response({ data: [], error: null }, 201);
     }
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const args = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      const aliases = Array.isArray(args.p_logical_post_tweet_ids)
+        ? args.p_logical_post_tweet_ids.filter((value): value is string => typeof value === "string")
+        : [EDITED_ID];
+      const now = new Date().toISOString();
+      return response({
+        status: "claimed_new",
+        record: {
+          id: "00000000-0000-4000-8000-000000000002",
+          logical_post_id: String(args.p_logical_post_id ?? EDITED_ID),
+          logical_post_tweet_ids: aliases,
+          reset_event_key: String(args.p_reset_event_key ?? `tibo-reset-${EDITED_ID}`),
+          representative_tweet_id: String(args.p_representative_tweet_id ?? EDITED_ID),
+          source_tweet_ids: Array.isArray(args.p_source_tweet_ids)
+            ? args.p_source_tweet_ids
+            : [EDITED_ID],
+          claim_source: "new_adoption",
+          adopted_at: now,
+          claimed_at: now,
+          created_at: now,
+          updated_at: now,
+        },
+      });
+    }
+    if (method === "GET") return response([]);
     return response({ data: null, error: null });
   };
 

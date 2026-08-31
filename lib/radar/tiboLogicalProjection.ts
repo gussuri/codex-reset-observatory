@@ -3,6 +3,7 @@ import type { FormalTiboResetSignal } from "./tiboHistory";
 import { getTrustedTiboEditIdentity } from "./tiboEditIdentity";
 import {
   collapseTrustedTiboEditChains,
+  toEffectiveTiboLogicalPostRow,
   type TiboLogicalPost,
   type TiboLogicalPostRow,
   type TiboLogicalPostConflict,
@@ -435,32 +436,15 @@ function isBlockedByRawConflict(
 function toEffectiveSignal(
   logicalPost: TiboLogicalPost<TiboLogicalPostRow>,
 ): ActiveTiboSignal | null {
-  const content = logicalPost.effectiveContent;
-  const classification = logicalPost.effectiveClassification;
-  if (
-    !content ||
-    !logicalPost.latestVersionPresent ||
-    classification.status !== "resolved"
-  ) {
-    return null;
-  }
-
-  const editVersion = logicalPost.sourceTweetIds.indexOf(content.tweet_id) + 1;
+  const row = toEffectiveTiboLogicalPostRow(logicalPost);
+  if (!row) return null;
   return {
-    ...content,
-    tweet_id: content.tweet_id,
-    text: content.text,
-    tweet_url: content.tweet_url ?? undefined,
-    tweet_created_at: content.tweet_created_at,
-    signal_type: classification.signalType,
-    confidence: classification.confidence ?? undefined,
-    classification_reason: classification.classificationReason ?? undefined,
-    classification_source: classification.classificationSource ?? undefined,
-    verification_status: classification.verificationStatus ?? undefined,
-    logical_post_id: logicalPost.logicalPostId,
-    edit_history_tweet_ids: logicalPost.sourceTweetIds.slice(),
-    edit_version: editVersion > 0 ? editVersion : content.edit_version ?? undefined,
-    edit_metadata_source: logicalPost.authoritative ? "x_api" : "none",
+    ...row,
+    tweet_url: row.tweet_url ?? undefined,
+    confidence: row.confidence ?? undefined,
+    classification_reason: row.classification_reason ?? undefined,
+    classification_source: row.classification_source ?? undefined,
+    verification_status: row.verification_status ?? undefined,
   } as ActiveTiboSignal;
 }
 

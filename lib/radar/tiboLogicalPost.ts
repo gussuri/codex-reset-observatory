@@ -293,6 +293,44 @@ export function resolveTiboLogicalPost<T extends TiboLogicalPostRow>(
   };
 }
 
+/**
+ * Projects one logical post into the row shape consumed by existing Tibo
+ * helpers. Content fields come from the latest stored version while
+ * classification fields come from the logical post's resolved classification
+ * (which may be a protected manual representative).
+ */
+export function toEffectiveTiboLogicalPostRow<T extends TiboLogicalPostRow>(
+  logicalPost: TiboLogicalPost<T>,
+): T | null {
+  const content = logicalPost.effectiveContent;
+  const classification = logicalPost.effectiveClassification;
+  if (
+    !content ||
+    !logicalPost.latestVersionPresent ||
+    classification.status !== "resolved"
+  ) {
+    return null;
+  }
+
+  const editVersion = logicalPost.sourceTweetIds.indexOf(content.tweet_id) + 1;
+  return {
+    ...content,
+    tweet_id: content.tweet_id,
+    text: content.text,
+    tweet_url: content.tweet_url ?? null,
+    tweet_created_at: content.tweet_created_at,
+    signal_type: classification.signalType,
+    confidence: classification.confidence,
+    classification_reason: classification.classificationReason,
+    classification_source: classification.classificationSource,
+    verification_status: classification.verificationStatus,
+    logical_post_id: logicalPost.logicalPostId,
+    edit_history_tweet_ids: logicalPost.sourceTweetIds.slice(),
+    edit_version: editVersion > 0 ? editVersion : content.edit_version ?? undefined,
+    edit_metadata_source: logicalPost.authoritative ? "x_api" : "none",
+  } as T;
+}
+
 function toVersion<T extends TiboLogicalPostRow>(
   entry: IndexedRow<T>,
   sourceTweetIds: readonly string[],

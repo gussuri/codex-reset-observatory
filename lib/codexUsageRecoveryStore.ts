@@ -531,6 +531,7 @@ export async function confirmNearestCodexRecoveryObservation(
   tiboTweetCreatedAt: string,
   matchWindowMs: number,
   confirmedAt: string,
+  tiboTweetIds: readonly string[] = [tiboTweetId],
 ) {
   const time = Date.parse(tiboTweetCreatedAt);
   if (!Number.isFinite(time)) return { matched: false, observation: null, error: null };
@@ -571,8 +572,9 @@ export async function confirmNearestCodexRecoveryObservation(
       .filter((row): row is CodexRecoveryObservation => Boolean(row))
       .filter((row) => {
         const observedTime = Date.parse(row.observedAt);
-        return row.matchedTiboTweetId === tiboTweetId ||
-          (Number.isFinite(observedTime) && Math.abs(observedTime - time) <= matchWindowMs);
+        const matchedTiboTweetId = row.matchedTiboTweetId?.trim() || null;
+        return tiboTweetIds.includes(matchedTiboTweetId ?? "") ||
+          (!matchedTiboTweetId && Number.isFinite(observedTime) && Math.abs(observedTime - time) <= matchWindowMs);
       })
       .sort((left, right) => Math.abs(Date.parse(left.observedAt) - time) - Math.abs(Date.parse(right.observedAt) - time));
 
@@ -592,18 +594,52 @@ export async function confirmNearestCodexRecoveryObservation(
       updated_at: confirmedAt,
     })
     .eq("id", nearest.id)
-    .eq("status", "observed");
+    .eq("status", "observed")
+    .select(OBSERVATION_COLUMNS)
+    .maybeSingle();
+  if (update.error) {
+    return { matched: false, observation: null, error: update.error };
+  }
+
+  const updatedObservation = toCodexRecoveryObservation(
+    update.data as CodexRecoveryObservationRow | null,
+  );
+  if (updatedObservation) {
+    return {
+      matched: true,
+      observation: updatedObservation,
+      error: null,
+    };
+  }
+
+  // A zero-row CAS result means another request won the observation. Re-read
+  // the same recovery event before treating the confirmation as successful.
+  const currentResult = await client
+    .from("codex_recovery_observations")
+    .select(OBSERVATION_COLUMNS)
+    .eq("id", nearest.id)
+    .maybeSingle();
+  if (currentResult.error) {
+    return { matched: false, observation: null, error: currentResult.error };
+  }
+  const currentObservation = toCodexRecoveryObservation(
+    currentResult.data as CodexRecoveryObservationRow | null,
+  );
+  if (
+    currentObservation?.status === "confirmed" &&
+    tiboTweetIds.includes(currentObservation.matchedTiboTweetId ?? "")
+  ) {
+    return {
+      matched: true,
+      observation: currentObservation,
+      error: null,
+    };
+  }
+
   return {
-    matched: !update.error,
-    observation: update.error
-      ? null
-      : {
-          ...nearest,
-          status: "confirmed" as const,
-          matchedTiboTweetId: tiboTweetId,
-          confirmedAt,
-        },
-    error: update.error,
+    matched: false,
+    observation: null,
+    error: new Error("Recovery observation confirmation lost its CAS race"),
   };
 }
 
@@ -780,7 +816,6 @@ export async function upsertResetExecutionEstimate(
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
-      .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds!)
       .limit(1)
       .maybeSingle();
@@ -797,6 +832,10 @@ export async function upsertResetExecutionEstimate(
     ? {
         ...input,
         resetEventKey: existingEstimate.resetEventKey,
+        tiboAnnouncedAt: existingEstimate.tiboAnnouncedAt ?? input.tiboAnnouncedAt,
+        tiboPrimaryTweetId: existingEstimate.tiboPrimaryTweetId ?? input.tiboPrimaryTweetId,
+        officialNoticeTweetId: existingEstimate.officialNoticeTweetId ?? input.officialNoticeTweetId,
+        officialNoticeAt: existingEstimate.officialNoticeAt ?? input.officialNoticeAt,
         tiboSourceTweetIds: Array.from(new Set([
           ...(input.tiboSourceTweetIds ?? []),
           ...existingEstimate.tiboSourceTweetIds,
@@ -821,10 +860,10 @@ export async function upsertResetExecutionEstimate(
       recovery_previous_observed_at: estimate.recoveryPreviousObservedAt,
       recovery_observed_at: estimate.recoveryObservedAt,
       tibo_announced_at: estimate.tiboAnnouncedAt,
-      tibo_primary_tweet_id: estimate.tiboPrimaryTweetId,
+      tibo_primary_tweet_id: existingEstimate?.tiboPrimaryTweetId ?? estimate.tiboPrimaryTweetId,
       tibo_source_tweet_ids: estimate.tiboSourceTweetIds,
-      official_notice_tweet_id: input.officialNoticeTweetId ?? existingEstimate?.officialNoticeTweetId ?? null,
-      official_notice_at: input.officialNoticeAt ?? existingEstimate?.officialNoticeAt ?? null,
+      official_notice_tweet_id: estimate.officialNoticeTweetId,
+      official_notice_at: estimate.officialNoticeAt,
       estimator_version: estimate.estimatorVersion,
       manual_override_at: estimate.manualOverrideAt,
       manual_override_by: estimate.manualOverrideBy,

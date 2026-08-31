@@ -59,6 +59,7 @@ export type TiboResetEventIdentityResolution = {
   resetEventKey: string | null;
   authoritative: boolean;
   canCreateNewSideEffects: boolean;
+  canRunFormalEnrichments: boolean;
   matchedEvidence: {
     kind: TiboResetEventEvidenceKind;
     resetEventKey: string;
@@ -82,6 +83,23 @@ type EvidenceCollection = {
   matches: EvidenceMatch[];
   conflictingEventKeys: string[];
 };
+
+function canRunFormalEnrichments<T extends TiboLogicalPostRow>(
+  logicalPost: TiboLogicalPost<T>,
+) {
+  const classification = logicalPost.effectiveClassification;
+  const row = classification.status === "resolved" ? classification.row : null;
+  return Boolean(
+    logicalPost.latestVersionPresent &&
+      logicalPost.manualState.kind !== "conflict" &&
+      classification.status === "resolved" &&
+      classification.signalType === "reset_executed" &&
+      typeof classification.confidence === "number" &&
+      classification.confidence >= 0.95 &&
+      classification.verificationStatus !== "rejected" &&
+      (row as TiboLogicalPostRow & { is_reply?: boolean | null } | null)?.is_reply !== true,
+  );
+}
 
 function uniqueStrings(values: readonly string[]) {
   return Array.from(new Set(values.filter((value) => typeof value === "string" && value.length > 0)));
@@ -276,6 +294,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       status: "conflict",
       resetEventKey: null,
       canCreateNewSideEffects: false,
+      canRunFormalEnrichments: false,
       matchedEvidence: null,
       reason: existingConflictReason,
     };
@@ -290,6 +309,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       status: "existing",
       resetEventKey: existingEventKey,
       canCreateNewSideEffects: false,
+      canRunFormalEnrichments: canRunFormalEnrichments(logicalPost),
       matchedEvidence: match
         ? { kind: match.kind, resetEventKey: match.resetEventKey }
         : null,
@@ -302,6 +322,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       status: "blocked",
       resetEventKey: null,
       canCreateNewSideEffects: false,
+      canRunFormalEnrichments: false,
       matchedEvidence: null,
       reason: "missing_authoritative_tail",
     };
@@ -313,6 +334,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       status: "blocked",
       resetEventKey: null,
       canCreateNewSideEffects: false,
+      canRunFormalEnrichments: false,
       matchedEvidence: null,
       reason: "manual_conflict",
     };
@@ -324,6 +346,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       status: "blocked",
       resetEventKey: null,
       canCreateNewSideEffects: false,
+      canRunFormalEnrichments: false,
       matchedEvidence: null,
       reason: "unresolved_classification",
     };
@@ -334,6 +357,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
     status: "new",
     resetEventKey: `tibo-reset-${logicalPost.logicalPostId}`,
     canCreateNewSideEffects: true,
+    canRunFormalEnrichments: canRunFormalEnrichments(logicalPost),
     matchedEvidence: null,
   };
 }

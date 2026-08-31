@@ -56,7 +56,18 @@ export type TiboFormalAdoptionRpcClient = {
   rpc(
     functionName: string,
     args: Record<string, unknown>,
-  ): Promise<{ data: unknown; error: unknown | null }>;
+  ): PromiseLike<{ data: unknown; error: unknown | null }>;
+};
+
+export type TiboFormalAdoptionReadClient = {
+  from(table: string): {
+    select(columns: string): {
+      order(
+        column: string,
+        options: { ascending: boolean },
+      ): PromiseLike<{ data: unknown[] | null; error: unknown | null }>;
+    };
+  };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -193,4 +204,35 @@ export async function claimTiboFormalAdoption(
     record,
     ...(conflictReason === undefined ? {} : { reason: conflictReason }),
   };
+}
+
+export async function readTiboFormalAdoptions(
+  client: TiboFormalAdoptionReadClient,
+) {
+  try {
+    const result = await client
+      .from("tibo_formal_adoptions")
+      .select(TIBO_FORMAL_ADOPTION_COLUMNS)
+      .order("created_at", { ascending: true });
+    if (result.error) return { ledgers: [], error: result.error };
+    if (result.data !== null && !Array.isArray(result.data)) {
+      return {
+        ledgers: [],
+        error: new Error("Formal adoption ledger returned an invalid result"),
+      };
+    }
+
+    const ledgers = (result.data ?? [])
+      .map(toRecord)
+      .filter((record): record is TiboFormalAdoptionRecord => Boolean(record));
+    if (ledgers.length !== (result.data ?? []).length) {
+      return {
+        ledgers: [],
+        error: new Error("Formal adoption ledger contains an invalid record"),
+      };
+    }
+    return { ledgers, error: null };
+  } catch (error) {
+    return { ledgers: [], error };
+  }
 }

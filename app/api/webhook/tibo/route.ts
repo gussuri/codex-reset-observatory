@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
+import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/classification";
 import { classifyWithGemini } from "@/lib/radar/geminiClassification";
 import {
@@ -19,6 +20,7 @@ import {
   findNearestCodexRecoveryObservation,
   findFormalTiboResetCluster,
   readCodexUsageMonitorState,
+  readResetExecutionEstimates,
   upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
 import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
@@ -26,7 +28,6 @@ import { getUsageMonitorCoverageAtEvent } from "@/lib/codexUsageMonitorCoverage"
 import {
   buildFormalAdoptionResult,
   hasExistingFormalResetCluster,
-  isNewFormalAdoption,
   shouldDeferFormalTiboReset,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
@@ -54,6 +55,22 @@ import {
   toTiboEditIdentityFields,
   type TiboEditIdentityStore,
 } from "@/lib/radar/tiboEditIdentity";
+import {
+  collapseTrustedTiboEditChains,
+  toEffectiveTiboLogicalPostRow,
+  type TiboLogicalPost,
+  type TiboLogicalPostRow,
+} from "@/lib/radar/tiboLogicalPost";
+import {
+  claimTiboFormalAdoption,
+  readTiboFormalAdoptions,
+  type TiboFormalAdoptionRecord,
+  type TiboFormalAdoptionClaimResult,
+} from "@/lib/radar/tiboFormalAdoptionStore";
+import {
+  resolveTiboResetEventIdentity,
+  type TiboResetEventIdentityResolution,
+} from "@/lib/radar/tiboResetEventIdentity";
 
 // Keep the webhook bounded while accepting X long-form/note text. The former
 // 2,000-character ceiling rejected fully expanded posts before classification.
@@ -79,6 +96,122 @@ function normalizeStoredTranslation(value: unknown) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\r\n?/g, "\n").trim();
   return normalized && normalized.length <= 6000 ? normalized : null;
+}
+
+const FORMAL_FLOW_STATUSES = new Set(["claimed_new", "existing", "reconciled"]);
+
+function isTiboSignalType(value: unknown): value is FormalTiboResetSignal["signal_type"] {
+  return value === "official_notice" ||
+    value === "reset_executed" ||
+    value === "teaser" ||
+    value === "irrelevant";
+}
+
+function toLogicalPostRow(value: unknown): TiboLogicalPostRow | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  if (
+    typeof source.tweet_id !== "string" ||
+    typeof source.tweet_created_at !== "string" ||
+    typeof source.text !== "string" ||
+    !isTiboSignalType(source.signal_type)
+  ) {
+    return null;
+  }
+
+  return {
+    ...source,
+    tweet_id: source.tweet_id,
+    text: source.text,
+    tweet_url: typeof source.tweet_url === "string" ? source.tweet_url : null,
+    tweet_created_at: source.tweet_created_at,
+    signal_type: source.signal_type,
+    confidence: typeof source.confidence === "number" ? source.confidence : null,
+    classification_reason: typeof source.classification_reason === "string"
+      ? source.classification_reason
+      : null,
+    classification_source: typeof source.classification_source === "string"
+      ? source.classification_source
+      : null,
+    verification_status: typeof source.verification_status === "string"
+      ? source.verification_status
+      : null,
+    logical_post_id: typeof source.logical_post_id === "string"
+      ? source.logical_post_id
+      : null,
+    edit_history_tweet_ids: Array.isArray(source.edit_history_tweet_ids)
+      ? source.edit_history_tweet_ids.filter((id): id is string => typeof id === "string")
+      : null,
+    edit_version: typeof source.edit_version === "number" ? source.edit_version : null,
+    edit_metadata_source: source.edit_metadata_source === "x_api" || source.edit_metadata_source === "none"
+      ? source.edit_metadata_source
+      : null,
+  } as TiboLogicalPostRow;
+}
+
+function toFormalTiboResetSignal(value: TiboLogicalPostRow | Record<string, unknown>): FormalTiboResetSignal | null {
+  const row = toLogicalPostRow(value);
+  if (!row || !row.tweet_url || !row.verification_status || row.confidence === null) return null;
+  return {
+    ...row,
+    tweet_url: row.tweet_url,
+    confidence: row.confidence,
+    verification_status: row.verification_status as FormalTiboResetSignal["verification_status"],
+  } as FormalTiboResetSignal;
+}
+
+function getStaticHistoryEvidence() {
+  return LOCAL_RESET_HISTORY
+    .map((item) => ({
+      eventKey: item.id?.trim() || item.guid?.trim() || "",
+      sourceTweetIds: item.sourceTweetIds ?? [],
+      sourceUrl: item.source_url ?? null,
+    }))
+    .filter((item) => item.eventKey.length > 0);
+}
+
+function getDynamicHistoryEvidence(rows: readonly TiboLogicalPostRow[]) {
+  return rows
+    .filter((row) => row.signal_type === "reset_executed")
+    .map((row) => ({
+      eventKey: `tibo-reset-${row.tweet_id}`,
+      sourceTweetIds: row.edit_history_tweet_ids ?? [row.tweet_id],
+      sourceUrl: row.tweet_url ?? null,
+    }));
+}
+
+function hasFormalRawVersion(logicalPost: TiboLogicalPost<TiboLogicalPostRow>) {
+  return logicalPost.rawVersions.some((row) =>
+    row.signal_type === "reset_executed" &&
+    typeof row.confidence === "number" &&
+    row.confidence >= 0.95 &&
+    row.verification_status !== "rejected" &&
+    (row as TiboLogicalPostRow & { is_reply?: boolean | null }).is_reply !== true,
+  );
+}
+
+function getClaimSource(
+  resolution: TiboResetEventIdentityResolution,
+  ledger: TiboFormalAdoptionRecord | null,
+) {
+  if (ledger) return ledger.claimSource;
+  switch (resolution.matchedEvidence?.kind) {
+    case "existing_estimate":
+      return "existing_estimate" as const;
+    case "existing_history":
+      return "existing_history" as const;
+    case "existing_dynamic":
+      return "existing_dynamic" as const;
+    default:
+      return "new_adoption" as const;
+  }
+}
+
+function getFormalCandidateForDisplay(
+  logicalPost: TiboLogicalPost<TiboLogicalPostRow>,
+) {
+  const row = toEffectiveTiboLogicalPostRow(logicalPost);
+  return row ? toFormalTiboResetSignal(row) : null;
 }
 
 function buildSecondarySignal(
@@ -389,8 +522,8 @@ export async function POST(req: NextRequest) {
       classification_source: selectedClassification.classificationSource,
     };
 
-    // 7. Detect a first formal adoption before the upsert. State lookup is
-    // fail-closed so an unknown existing state can never be overwritten.
+    // 7. Load existing state before the upsert. State lookup is fail-closed
+    // so an unknown existing state can never be overwritten.
     const supabase = getSupabaseServiceClient();
     let existingSignal: Partial<FormalTiboResetSignal> | null = null;
     try {
@@ -450,6 +583,7 @@ export async function POST(req: NextRequest) {
       tweetId,
     );
     let editIdentityForPayload = editIdentityMerge.identity;
+    let editIdentityFlowBlocked = editIdentityMerge.status === "conflict";
 
     if (editHistoryMetadata.trusted) {
       const reconciliation = await reconcileTiboEditChainMetadata(
@@ -458,6 +592,7 @@ export async function POST(req: NextRequest) {
         incomingEditIdentity,
       );
       if (reconciliation.status === "conflict") {
+        editIdentityFlowBlocked = true;
         console.warn("[Tibo Warning] Conflicting edit-chain metadata; incoming identity was not applied", {
           reason: "identity_conflict",
         });
@@ -471,6 +606,7 @@ export async function POST(req: NextRequest) {
       ) {
         editIdentityForPayload = reconciliation.identity;
       } else if (reconciliation.status === "error") {
+        editIdentityFlowBlocked = true;
         console.warn("[Tibo Warning] Edit-chain metadata reconciliation unavailable", {
           reason: "identity_lookup_failed",
         });
@@ -509,32 +645,12 @@ export async function POST(req: NextRequest) {
       receivedAt,
     );
 
-    let formalCandidate: FormalTiboResetSignal = {
-      tweet_id: persistedPayload.tweet_id,
-      text: persistedPayload.text,
-      tweet_url: persistedPayload.tweet_url,
-      tweet_created_at: persistedPayload.tweet_created_at,
-      detected_at: persistedPayload.detected_at,
-      signal_type: persistedPayload.signal_type,
-      confidence: persistedPayload.confidence,
-      verification_status: persistedPayload.verification_status,
-      classification_source: persistedPayload.classification_source,
-      rule_signal_type: persistedPayload.rule_signal_type,
-      ai_signal_type: persistedPayload.ai_signal_type,
-      ai_classification_status: persistedPayload.ai_classification_status,
-      ai_reset_type_ja: persistedPayload.ai_reset_type_ja,
-      ai_notice_to_execution: persistedPayload.ai_notice_to_execution,
-      expires_at: persistedPayload.expires_at,
-      is_reply: persistedPayload.is_reply,
-      is_quote: persistedPayload.is_quote,
-      quote_context_text: persistedPayload.quote_context_text,
-      quote_tweet_url: persistedPayload.quote_tweet_url,
-      quote_author_handle: persistedPayload.quote_author_handle,
-      logical_post_id: persistedPayload.logical_post_id,
-      edit_history_tweet_ids: persistedPayload.edit_history_tweet_ids,
-      edit_version: persistedPayload.edit_version,
-      edit_metadata_source: persistedPayload.edit_metadata_source,
-    };
+    const initialFormalCandidate = toFormalTiboResetSignal(persistedPayload);
+    if (!initialFormalCandidate) {
+      return NextResponse.json({ error: "Invalid Tibo classification payload" }, { status: 500 });
+    }
+    let formalCandidate = initialFormalCandidate;
+    let preflightRecoveryLookup: Awaited<ReturnType<typeof findNearestCodexRecoveryObservation>> | null = null;
 
     // A fresh local quota observation is the only state in which absence of
     // recovery can safely defer an unverified Tibo completion. If the monitor
@@ -558,6 +674,7 @@ export async function POST(req: NextRequest) {
             formalCandidate.tweet_created_at,
             USAGE_TIBO_MATCH_WINDOW_MS,
           );
+          preflightRecoveryLookup = recoveryLookup;
           const shouldDefer = shouldDeferFormalTiboReset(
             formalCandidate,
             coverage,
@@ -580,40 +697,6 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-
-    let existingFormalCluster = false;
-    const adoptionEligible = isNewFormalAdoption(formalCandidate, existingSignal);
-    if (adoptionEligible) {
-      const createdTime = Date.parse(formalCandidate.tweet_created_at);
-      if (Number.isFinite(createdTime)) {
-        try {
-          const { data: nearbySignals, error: nearbyLookupError } = await supabase
-            .from("tibo_signals")
-            .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,is_reply")
-            .eq("signal_type", "reset_executed")
-            .neq("tweet_id", tweetId)
-            .gte("tweet_created_at", new Date(createdTime - 5 * 60 * 1000).toISOString())
-            .lte("tweet_created_at", new Date(createdTime + 5 * 60 * 1000).toISOString())
-            .limit(20);
-
-          if (nearbyLookupError) {
-            console.warn("[Tibo Warning] Formal cluster lookup unavailable", {
-              reason: "lookup_failed",
-            });
-          } else {
-            existingFormalCluster = hasExistingFormalResetCluster(
-              formalCandidate,
-              (nearbySignals ?? []) as Array<FormalTiboResetSignal>,
-            );
-          }
-        } catch {
-          console.warn("[Tibo Warning] Formal cluster lookup unavailable", {
-            reason: "lookup_failed",
-          });
-        }
-      }
-    }
-    const newlyAdopted = adoptionEligible && !existingFormalCluster;
 
     // 8. Supabase Upsert
     let upsertResult = await supabase
@@ -666,88 +749,416 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
-    if (isFormalTiboResetSignal(formalCandidate)) {
+    const shouldResolveFormalFlow =
+      isFormalTiboResetSignal(formalCandidate) ||
+      editHistoryMetadata.trusted ||
+      existingSignal?.signal_type === "reset_executed";
+    let logicalPost: TiboLogicalPost<TiboLogicalPostRow> | null = null;
+    let effectiveFormalCandidate: FormalTiboResetSignal | null = null;
+    let adoptionResolution: TiboResetEventIdentityResolution | null = null;
+    let adoptionClaim: TiboFormalAdoptionClaimResult | null = null;
+    let matchedLedger: TiboFormalAdoptionRecord | null = null;
+    let formalFlowError: unknown = null;
+    let formalFlowRecoveryLookup = preflightRecoveryLookup;
+    let formalFlowCluster: Awaited<ReturnType<typeof findFormalTiboResetCluster>> | null = null;
+    let formalFlowSourceTweetIds: string[] = [];
+    let formalEnrichmentFailed = false;
+
+    if (shouldResolveFormalFlow && !editIdentityFlowBlocked) {
+      const incomingRow = toLogicalPostRow(persistedPayload);
+      if (!incomingRow) {
+        formalFlowError = new Error("Invalid persisted Tibo signal row");
+      } else {
+        let existingChainRows: TiboLogicalPostRow[] = [];
+        const flowIdentity = getTrustedTiboEditIdentity(
+          editIdentityForPayload,
+          tweetId,
+        );
+        if (editIdentityForPayload.edit_metadata_source === "x_api" && !flowIdentity) {
+          formalFlowError = new Error("Trusted Tibo edit identity is invalid");
+        } else if (flowIdentity) {
+          try {
+            const chainResult = await supabase
+              .from("tibo_signals")
+              .select("*")
+              .in("tweet_id", flowIdentity.edit_history_tweet_ids);
+            if (chainResult.error) {
+              formalFlowError = chainResult.error;
+            } else {
+              existingChainRows = (chainResult.data ?? [])
+                .map(toLogicalPostRow)
+                .filter((row): row is TiboLogicalPostRow => Boolean(row));
+            }
+          } catch (error) {
+            formalFlowError = error;
+          }
+        }
+
+        if (!formalFlowError) {
+          const rawRows = [
+            incomingRow,
+            ...existingChainRows.filter((row) => row.tweet_id !== incomingRow.tweet_id),
+          ];
+          const collapsed = collapseTrustedTiboEditChains(rawRows);
+          if (collapsed.conflicts.length > 0) {
+            console.warn("[Tibo Warning] Logical edit-chain conflict; formal side effects skipped", {
+              reason: "identity_conflict",
+            });
+          } else {
+            logicalPost = collapsed.posts.find((post) =>
+              post.rawVersions.some((row) => row.tweet_id === incomingRow.tweet_id),
+            ) ?? null;
+            if (!logicalPost) {
+              formalFlowError = new Error("Tibo logical post could not be resolved");
+            } else {
+              effectiveFormalCandidate = getFormalCandidateForDisplay(logicalPost);
+              const hasFormalVersionInPost = hasFormalRawVersion(logicalPost);
+              const existingDynamicRows = existingChainRows.filter((row) =>
+                row.tweet_id !== incomingRow.tweet_id && row.signal_type === "reset_executed",
+              );
+              const dynamicEvents = getDynamicHistoryEvidence(existingDynamicRows);
+
+              const existingSameTweet = toLogicalPostRow({
+                ...createUntrustedTiboEditIdentity(tweetId),
+                ...(existingSignal ?? {}),
+                tweet_id: existingSignal?.tweet_id ?? tweetId,
+                text: existingSignal?.text ?? "",
+                tweet_url: existingSignal?.tweet_url ?? tweetUrl,
+                tweet_created_at: existingSignal?.tweet_created_at ?? createdDate.toISOString(),
+                signal_type: existingSignal?.signal_type ?? "irrelevant",
+                confidence: existingSignal?.confidence ?? null,
+                classification_reason: existingSignal?.classification_reason ?? null,
+                classification_source: existingSignal?.classification_source ?? null,
+                verification_status: existingSignal?.verification_status ?? "auto_unverified",
+              });
+              if (existingSameTweet?.signal_type === "reset_executed") {
+                dynamicEvents.push(...getDynamicHistoryEvidence([existingSameTweet]));
+              }
+
+              // Preserve the legacy five-minute suppression only for self
+              // identities. Trusted X edit identities use the authoritative
+              // chain instead of time or text as identity evidence.
+              if (
+                !logicalPost.authoritative &&
+                effectiveFormalCandidate &&
+                isFormalTiboResetSignal(effectiveFormalCandidate)
+              ) {
+                const createdTime = Date.parse(effectiveFormalCandidate.tweet_created_at);
+                if (Number.isFinite(createdTime)) {
+                  try {
+                    const nearbyResult = await supabase
+                      .from("tibo_signals")
+                      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,is_reply")
+                      .eq("signal_type", "reset_executed")
+                      .neq("tweet_id", tweetId)
+                      .gte("tweet_created_at", new Date(createdTime - 5 * 60 * 1000).toISOString())
+                      .lte("tweet_created_at", new Date(createdTime + 5 * 60 * 1000).toISOString())
+                      .limit(20);
+                    if (!nearbyResult.error && hasExistingFormalResetCluster(
+                      effectiveFormalCandidate,
+                      (nearbyResult.data ?? []) as Array<FormalTiboResetSignal>,
+                    )) {
+                      dynamicEvents.push({
+                        eventKey: `tibo-reset-${tweetId}`,
+                        sourceTweetIds: [tweetId],
+                        sourceUrl: tweetUrl,
+                      });
+                    }
+                  } catch {
+                    console.warn("[Tibo Warning] Legacy formal cluster lookup unavailable", {
+                      reason: "lookup_failed",
+                    });
+                  }
+                }
+              }
+
+              const flowTweetCreatedAt = effectiveFormalCandidate?.tweet_created_at ??
+                logicalPost.effectiveContent?.tweet_created_at ??
+                formalCandidate.tweet_created_at;
+              if (hasFormalVersionInPost || (
+                effectiveFormalCandidate &&
+                isFormalTiboResetSignal(effectiveFormalCandidate)
+              )) {
+                if (!formalFlowRecoveryLookup) {
+                  formalFlowRecoveryLookup = await findNearestCodexRecoveryObservation(
+                    supabase,
+                    flowTweetCreatedAt,
+                    USAGE_TIBO_MATCH_WINDOW_MS,
+                  );
+                }
+                if (formalFlowRecoveryLookup.error) {
+                  formalFlowError = formalFlowRecoveryLookup.error;
+                }
+              }
+
+              if (!formalFlowError && (hasFormalVersionInPost || effectiveFormalCandidate)) {
+                const [ledgerResult, estimateResult] = await Promise.all([
+                  readTiboFormalAdoptions(supabase),
+                  readResetExecutionEstimates(supabase),
+                ]);
+                if (ledgerResult.error) {
+                  formalFlowError = ledgerResult.error;
+                } else if (estimateResult.error) {
+                  formalFlowError = estimateResult.error;
+                } else {
+                  const evidence = {
+                    recoveryObservationId: formalFlowRecoveryLookup?.observation?.id ?? null,
+                    adoptionLedgers: ledgerResult.ledgers,
+                    estimates: estimateResult.rows.map((estimate) => ({
+                      resetEventKey: estimate.resetEventKey,
+                      recoveryObservationId: estimate.recoveryObservationId ?? null,
+                      tiboSourceTweetIds: estimate.tiboSourceTweetIds,
+                    })),
+                    staticHistory: getStaticHistoryEvidence(),
+                    dynamicEvents,
+                    sourceTweetIds: logicalPost.sourceTweetIds,
+                  };
+                  adoptionResolution = resolveTiboResetEventIdentity(logicalPost, evidence);
+                  matchedLedger = adoptionResolution.resetEventKey
+                    ? ledgerResult.ledgers.find((ledger) =>
+                      ledger.resetEventKey === adoptionResolution!.resetEventKey,
+                    ) ?? null
+                    : null;
+
+                  const effectiveIsFormal = Boolean(
+                    effectiveFormalCandidate &&
+                    isFormalTiboResetSignal(effectiveFormalCandidate),
+                  );
+                  const resolvedResetEventKey = adoptionResolution.resetEventKey;
+                  const shouldReconcileExisting = adoptionResolution.status === "existing" &&
+                    adoptionResolution.matchedEvidence !== null &&
+                    hasFormalVersionInPost &&
+                    logicalPost.manualState.kind !== "conflict";
+                  const shouldClaim = !editIdentityMerge.status.includes("conflict") &&
+                    resolvedResetEventKey !== null &&
+                    (
+                      (adoptionResolution.status === "new" && effectiveIsFormal) ||
+                      shouldReconcileExisting
+                    );
+
+                  if (shouldClaim && resolvedResetEventKey) {
+                    const matchedEstimate = estimateResult.rows.find((estimate) =>
+                      estimate.resetEventKey === resolvedResetEventKey,
+                    );
+                    const matchedStaticHistory = getStaticHistoryEvidence().filter((item) =>
+                      item.eventKey === resolvedResetEventKey,
+                    );
+                    const matchedDynamicEvents = dynamicEvents.filter((item) =>
+                      item.eventKey === resolvedResetEventKey,
+                    );
+                    formalFlowSourceTweetIds = Array.from(new Set([
+                      ...adoptionResolution.sourceTweetIds,
+                      ...(matchedLedger?.sourceTweetIds ?? []),
+                      ...(matchedEstimate?.tiboSourceTweetIds ?? []),
+                      ...matchedStaticHistory.flatMap((item) => item.sourceTweetIds),
+                      ...matchedDynamicEvents.flatMap((item) => item.sourceTweetIds ?? []),
+                    ]));
+                    const resolvedClassification = logicalPost.effectiveClassification.status === "resolved"
+                      ? logicalPost.effectiveClassification
+                      : null;
+                    const representativeTweetId = matchedLedger?.representativeTweetId ??
+                      matchedEstimate?.tiboPrimaryTweetId ??
+                      matchedStaticHistory.flatMap((item) => item.sourceTweetIds)[0] ??
+                      matchedDynamicEvents.flatMap((item) => item.sourceTweetIds ?? [])[0] ??
+                      resolvedClassification?.representativeTweetId ??
+                      logicalPost.effectiveContent?.tweet_id ??
+                      tweetId;
+                    adoptionClaim = await claimTiboFormalAdoption(supabase, {
+                      logicalPostId: adoptionResolution.logicalPostId,
+                      logicalPostTweetIds: adoptionResolution.logicalPostTweetIds,
+                      resetEventKey: resolvedResetEventKey,
+                      representativeTweetId,
+                      sourceTweetIds: formalFlowSourceTweetIds,
+                      claimSource: getClaimSource(adoptionResolution, matchedLedger),
+                      identitySource: adoptionResolution.authoritative ? "x_api" : "none",
+                      adoptedAt: getClaimSource(adoptionResolution, matchedLedger) === "new_adoption"
+                        ? receivedAt
+                        : null,
+                      claimedAt: receivedAt,
+                    });
+                    if (adoptionClaim.status === "error") {
+                      formalFlowError = adoptionClaim.error ?? new Error("Formal adoption claim failed");
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const formalCandidateForResponse = effectiveFormalCandidate ?? formalCandidate;
+    const canEnrichFormalEvent = Boolean(
+      adoptionClaim &&
+      FORMAL_FLOW_STATUSES.has(adoptionClaim.status) &&
+      adoptionResolution?.canRunFormalEnrichments &&
+      effectiveFormalCandidate &&
+      isFormalTiboResetSignal(effectiveFormalCandidate),
+    );
+
+    if (canEnrichFormalEvent && effectiveFormalCandidate && adoptionResolution?.resetEventKey) {
       try {
         const recoveryMatch = await confirmNearestCodexRecoveryObservation(
           supabase,
-          formalCandidate.tweet_id,
-          formalCandidate.tweet_created_at,
+          effectiveFormalCandidate.tweet_id,
+          effectiveFormalCandidate.tweet_created_at,
           USAGE_TIBO_MATCH_WINDOW_MS,
           receivedAt,
+          logicalPost?.sourceTweetIds ?? [effectiveFormalCandidate.tweet_id],
         );
         if (recoveryMatch.error) {
+          formalEnrichmentFailed = true;
           console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
             reason: "lookup_failed",
           });
         } else if (recoveryMatch.observation) {
-          const cluster = await findFormalTiboResetCluster(
+          formalFlowCluster = await findFormalTiboResetCluster(
             supabase,
-            formalCandidate.tweet_id,
-            formalCandidate.tweet_created_at,
+            effectiveFormalCandidate.tweet_id,
+            effectiveFormalCandidate.tweet_created_at,
+            undefined,
+            {
+              tweet_id: effectiveFormalCandidate.tweet_id,
+              tweet_created_at: effectiveFormalCandidate.tweet_created_at,
+              confidence: effectiveFormalCandidate.confidence ?? 0,
+            },
           );
-          if (!cluster.error) {
-            const isExecutionAnnouncement = isCurrentUsageResetAnnouncement(formalCandidate.text);
-            const estimateResult = await upsertResetExecutionEstimate(supabase, {
-              resetEventKey: `tibo-reset-${cluster.primaryTweetId}`,
-              tiboAnnouncedAt: isExecutionAnnouncement
-                ? formalCandidate.tweet_created_at
-                : cluster.announcedAt,
-              tiboPrimaryTweetId: cluster.representativeTweetId,
-              tiboSourceTweetIds: cluster.sourceTweetIds,
-              usageObservation: recoveryMatch.observation,
-              officialNoticeTweetId: isExecutionAnnouncement
-                ? formalCandidate.tweet_id
-                : cluster.representativeNoticeId,
-              officialNoticeAt: isExecutionAnnouncement
-                ? formalCandidate.tweet_created_at
-                : cluster.representativeNoticeAt,
-            });
-            if (estimateResult.error) {
-              console.warn("[Tibo Warning] Reset execution estimate write failed", {
-                reason: "database_error",
+          if (formalFlowCluster.error) {
+            formalEnrichmentFailed = true;
+          } else {
+            const enrichedSourceTweetIds = Array.from(new Set([
+              ...formalFlowSourceTweetIds,
+              ...formalFlowCluster.sourceTweetIds,
+            ]));
+            if (
+              enrichedSourceTweetIds.length !== formalFlowSourceTweetIds.length &&
+              adoptionClaim?.record &&
+              adoptionResolution.resetEventKey
+            ) {
+              const provenanceClaim = await claimTiboFormalAdoption(supabase, {
+                logicalPostId: adoptionResolution.logicalPostId,
+                logicalPostTweetIds: adoptionResolution.logicalPostTweetIds,
+                resetEventKey: adoptionResolution.resetEventKey,
+                representativeTweetId: adoptionClaim.record.representativeTweetId,
+                sourceTweetIds: enrichedSourceTweetIds,
+                claimSource: adoptionClaim.record.claimSource,
+                identitySource: adoptionResolution.authoritative ? "x_api" : "none",
+                adoptedAt: null,
+                claimedAt: receivedAt,
               });
+              if (provenanceClaim.status === "error" || provenanceClaim.status === "conflict") {
+                formalEnrichmentFailed = true;
+                console.warn("[Tibo Warning] Formal adoption provenance reconciliation unavailable", {
+                  reason: provenanceClaim.status,
+                });
+              } else {
+                formalFlowSourceTweetIds = enrichedSourceTweetIds;
+              }
+            }
+
+            if (!formalEnrichmentFailed) {
+              const isExecutionAnnouncement = isCurrentUsageResetAnnouncement(effectiveFormalCandidate.text);
+              const estimateResult = await upsertResetExecutionEstimate(supabase, {
+                resetEventKey: adoptionResolution.resetEventKey,
+                tiboAnnouncedAt: isExecutionAnnouncement
+                  ? effectiveFormalCandidate.tweet_created_at
+                  : formalFlowCluster.announcedAt ?? effectiveFormalCandidate.tweet_created_at,
+                tiboPrimaryTweetId: effectiveFormalCandidate.tweet_id,
+                tiboSourceTweetIds: enrichedSourceTweetIds,
+                usageObservation: recoveryMatch.observation,
+                officialNoticeTweetId: isExecutionAnnouncement
+                  ? effectiveFormalCandidate.tweet_id
+                  : formalFlowCluster.representativeNoticeId,
+                officialNoticeAt: isExecutionAnnouncement
+                  ? effectiveFormalCandidate.tweet_created_at
+                  : formalFlowCluster.representativeNoticeAt,
+              });
+              if (estimateResult.error) {
+                formalEnrichmentFailed = true;
+                console.warn("[Tibo Warning] Reset execution estimate write failed", {
+                  reason: "database_error",
+                });
+              }
             }
           }
         }
+
+        if (!formalEnrichmentFailed) {
+          try {
+            const displayNameItem = {
+              ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),
+              id: adoptionResolution.resetEventKey,
+              source_url: effectiveFormalCandidate.tweet_url,
+              sourceTweetIds: Array.from(new Set([
+                ...formalFlowSourceTweetIds,
+                ...logicalPost?.sourceTweetIds ?? [],
+                ...(formalFlowCluster?.sourceTweetIds ?? []),
+              ])),
+            };
+            const displayNameResult = await ensureResetDisplayNameForEvent(
+              displayNameItem,
+              {
+                sourcePostText: effectiveFormalCandidate.text.trim(),
+                sourceTweetId: effectiveFormalCandidate.tweet_id,
+                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+                model: RANDOM_RESET_NAME_MODEL,
+                timeoutMs: 8_000,
+              },
+            );
+            // Display-name generation remains best-effort. The raw signal and
+            // formal ledger are already durable, so a naming-model failure must
+            // not turn an otherwise successful webhook into a retry storm.
+            if (displayNameResult.status === "api_error") {
+              console.warn("[Webhook Warning] Reset display-name generation skipped", {
+                reason: "best_effort_failed",
+              });
+            }
+          } catch {
+            console.warn("[Webhook Warning] Reset display-name generation skipped", {
+              reason: "best_effort_failed",
+            });
+          }
+        }
       } catch {
+        formalEnrichmentFailed = true;
         console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
           reason: "request_failed",
         });
       }
     }
 
-    const formalAdoption = buildFormalAdoptionResult(newlyAdopted, formalCandidate);
+    if (formalFlowError) {
+      console.warn("[Tibo Warning] Formal adoption flow unavailable after raw save", {
+        reason: "retryable_database_error",
+      });
+      return NextResponse.json(
+        { error: "Formal adoption flow unavailable" },
+        { status: 503 },
+      );
+    }
+
+    if (formalEnrichmentFailed) {
+      console.warn("[Tibo Warning] Formal adoption enrichment unavailable after ledger claim", {
+        reason: "retryable_enrichment_error",
+      });
+      return NextResponse.json(
+        { error: "Formal adoption enrichment unavailable" },
+        { status: 503 },
+      );
+    }
+
+    const newlyAdopted = adoptionClaim?.status === "claimed_new";
+    const formalAdoption = buildFormalAdoptionResult(newlyAdopted, formalCandidateForResponse);
 
     if (newlyAdopted) {
       console.info("[Tibo Formal Adoption]", {
-        tweetId,
-        signalType: selectedClassification.signalType,
-        confidence: selectedClassification.confidence,
-        sourceUrl: tweetUrl,
+        tweetId: formalCandidateForResponse.tweet_id,
+        signalType: formalCandidateForResponse.signal_type,
+        confidence: formalCandidateForResponse.confidence,
+        sourceUrl: formalCandidateForResponse.tweet_url,
         adoptedAt: new Date().toISOString(),
       });
-    }
-
-    // Display-name generation is deliberately best-effort. The formal reset
-    // row is already durable, and a naming failure must never turn collection
-    // into a failed webhook delivery.
-    if (formalCandidate.is_reply !== true && isFormalTiboResetSignal(formalCandidate)) {
-      try {
-        await ensureResetDisplayNameForEvent(
-          convertTiboResetSignalToHistoryEvent(formalCandidate),
-          {
-            sourcePostText: text.trim(),
-            sourceTweetId: tweetId,
-            apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-            model: RANDOM_RESET_NAME_MODEL,
-            timeoutMs: 8_000,
-          },
-        );
-      } catch {
-        console.warn("[Webhook Warning] Reset display-name generation skipped", {
-          reason: "best_effort_failed",
-        });
-      }
     }
 
     // 9. Purge Next.js Cache
