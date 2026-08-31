@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert";
 import {
+  applyTiboClassificationSafetyGuard,
   buildGeminiPrompt,
   classifyWithGemini,
   GeminiClassificationOutput,
@@ -306,6 +307,74 @@ test("9. Known rule/Gemini disagreement examples adopt the fixed Gemini labels i
   assert.strictEqual(teaserSelected.classificationSource, "gemini");
   assert.strictEqual(irrelevantSelected.signalType, "irrelevant");
   assert.strictEqual(irrelevantSelected.classificationSource, "gemini");
+});
+
+test("completed usage reset rule overrides contradictory completed-now Gemini labels while preserving raw audit", () => {
+  const text = "What I wanted to say yesterday is that we hit 25M active users and to celebrate we have now reset usage for all paid subscriptions for ChatGPT Work and Codex.";
+  const ruleResult = classifyTiboTweet(text, "https://x.com/thsottiaux/status/2090000000000000004");
+  assert.equal(ruleResult.signalType, "reset_executed");
+
+  for (const signalType of ["irrelevant", "official_notice"] as const) {
+    const rawAiResult: GeminiClassificationOutput = {
+      signalType,
+      confidence: 0.9,
+      temporalDirection: "completed_now",
+      evidenceQuote: "we have now reset usage for all paid subscriptions for ChatGPT Work and Codex",
+      reasonJa: "Geminiの生判定",
+      resetTypeJa: null,
+      noticeToExecution: null,
+      model: "test-model",
+      status: "success",
+      classifiedAt: new Date().toISOString(),
+      rawAudit: {
+        signalType,
+        temporalDirection: "completed_now",
+        reasonJa: "Geminiの生判定",
+      },
+    };
+    const guarded = applyTiboClassificationSafetyGuard(text, rawAiResult);
+    const selected = selectTiboClassification("primary", ruleResult, guarded);
+    const response = buildTiboClassificationResponse("primary", ruleResult, guarded);
+
+    assert.equal(guarded.signalType, "reset_executed", signalType);
+    assert.equal(selected.signalType, "reset_executed", signalType);
+    assert.equal(selected.classificationSource, "rule_fallback", signalType);
+    assert.equal(response.signalType, "reset_executed", signalType);
+    assert.equal(response.ruleSignalType, "reset_executed", signalType);
+    assert.equal(response.aiSignalType, signalType, signalType);
+    assert.equal(guarded.rawAudit?.temporalDirection, "completed_now", signalType);
+    assert.equal(guarded.rawAudit?.reasonJa, "Geminiの生判定", signalType);
+  }
+});
+
+test("the edited production completion post stays executed despite a trailing soon", () => {
+  const text = "What I wanted to say yesterday is that we hit 25M active users and to celebrate we have now reset usage for all paid subscriptions for ChatGPT Work and Codex.\n\nSee you soon for more news from The Reset Company.";
+  const ruleResult = classifyTiboTweet(text, "https://x.com/thsottiaux/status/2090000000000000005");
+  assert.equal(ruleResult.signalType, "reset_executed");
+
+  const rawAiResult: GeminiClassificationOutput = {
+    signalType: "official_notice",
+    confidence: 0.9,
+    temporalDirection: "completed_now",
+    evidenceQuote: "we have now reset usage for all paid subscriptions for ChatGPT Work and Codex",
+    reasonJa: "Geminiの生判定",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "test-model",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+    rawAudit: {
+      signalType: "official_notice",
+      temporalDirection: "completed_now",
+      reasonJa: "Geminiの生判定",
+    },
+  };
+  const guarded = applyTiboClassificationSafetyGuard(text, rawAiResult);
+  const response = buildTiboClassificationResponse("primary", ruleResult, guarded);
+
+  assert.equal(guarded.signalType, "reset_executed");
+  assert.equal(response.signalType, "reset_executed");
+  assert.equal(response.aiSignalType, "official_notice");
 });
 
 test("10. Invalid evidenceQuote (not substring of original text) returns invalid_evidence status", async () => {

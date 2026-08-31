@@ -122,6 +122,12 @@ export type GeminiClassificationOutput = {
   model: string | null;
   status: GeminiClassificationStatus;
   classifiedAt: string | null;
+  /** Raw validated Gemini fields retained when the safety guard changes the effective result. */
+  rawAudit?: {
+    signalType: GeminiClassificationOutput["signalType"];
+    temporalDirection: GeminiClassificationOutput["temporalDirection"];
+    reasonJa: string | null;
+  };
 };
 
 export const TIBO_GEMINI_SYSTEM_PROMPT = `
@@ -935,37 +941,46 @@ export async function classifyWithGemini(
       validQuote,
     );
 
-    return applyTiboClassificationSafetyGuard(
+    const rawResult: GeminiClassificationOutput = {
+      signalType: parsed.signalType,
+      confidence: parsed.confidence,
+      temporalDirection: parsed.temporalDirection,
+      evidenceQuote: validQuote,
+      reasonJa,
+      resetTypeJa,
+      noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
+      ...teaserStrengthAssessment,
+      futureSignal,
+      temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
+      temporalKind: rawTemporalSemantics?.temporalKind ?? null,
+      temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
+      weekday: rawTemporalSemantics?.weekday ?? null,
+      relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
+      relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
+      relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
+      explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
+      explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
+      daypart: rawTemporalSemantics?.daypart ?? null,
+      rangeKind: rawTemporalSemantics?.rangeKind ?? null,
+      explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
+      temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
+      model,
+      status: "success",
+      classifiedAt: nowIso,
+    };
+    const guardedResult = applyTiboClassificationSafetyGuard(
       input.text,
-      {
-        signalType: parsed.signalType,
-        confidence: parsed.confidence,
-        temporalDirection: parsed.temporalDirection,
-        evidenceQuote: validQuote,
-        reasonJa,
-        resetTypeJa,
-        noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
-        ...teaserStrengthAssessment,
-        futureSignal,
-        temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
-        temporalKind: rawTemporalSemantics?.temporalKind ?? null,
-        temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
-        weekday: rawTemporalSemantics?.weekday ?? null,
-        relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
-        relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
-        relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
-        explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
-        explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
-        daypart: rawTemporalSemantics?.daypart ?? null,
-        rangeKind: rawTemporalSemantics?.rangeKind ?? null,
-        explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
-        temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
-        model,
-        status: "success",
-        classifiedAt: nowIso,
-      },
+      rawResult,
       { futureSignalProvided: parsed.futureSignal !== undefined && parsed.futureSignal !== null },
     );
+    return {
+      ...guardedResult,
+      rawAudit: {
+        signalType: rawResult.signalType,
+        temporalDirection: rawResult.temporalDirection,
+        reasonJa: rawResult.reasonJa,
+      },
+    };
   } catch (err: any) {
     const msg = err?.message || "";
     if (msg === "TIMEOUT") {

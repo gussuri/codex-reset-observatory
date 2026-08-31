@@ -40,6 +40,44 @@ test("classifyTiboTweet correctly classifies reset_executed (immediate resets)",
   }
 });
 
+test("first-person present-perfect usage resets are deterministic completion signals", () => {
+  const executionCases = [
+    "What I wanted to say yesterday is that we hit 25M active users and to celebrate we have now reset usage for all paid subscriptions for ChatGPT Work and Codex.",
+    "We have reset usage for all paid subscriptions for ChatGPT Work and Codex.",
+    "I have now reset usage for all paid users of Codex and ChatGPT Work.",
+    "I've now reset usage for all paid users of Codex and ChatGPT Work.",
+  ];
+
+  for (const text of executionCases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2090000000000000001").signalType,
+      "reset_executed",
+      text,
+    );
+  }
+
+  for (const text of [
+    "We have now reset the server.",
+    "We have now reset the cache.",
+    "We reset usage yesterday.",
+    "I reset everyone's limits last week.",
+  ]) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2090000000000000002").signalType,
+      "irrelevant",
+      text,
+    );
+  }
+
+  assert.equal(
+    classifyTiboTweet(
+      "We will reset usage tomorrow.",
+      "https://x.com/thsottiaux/status/2090000000000000003",
+    ).signalType,
+    "official_notice",
+  );
+});
+
 test("classifyTiboTweet correctly classifies real past Tibo reset execution tweets", () => {
   const t1 = classifyTiboTweet("We just reset all paid users limits for Codex!", "https://x.com/thsottiaux/status/2061106703446450392");
   assert.strictEqual(t1.signalType, "reset_executed");

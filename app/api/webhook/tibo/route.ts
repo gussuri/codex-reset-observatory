@@ -301,6 +301,7 @@ export async function POST(req: NextRequest) {
       ? new Date(getTemporalNoticeExpiry(temporalResolution, createdDate.toISOString()) ?? createdDate.toISOString())
       : new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
     const receivedAt = new Date().toISOString();
+    const rawAiAudit = aiResult?.rawAudit;
 
     // 6. Build Supabase Payload
     const secondarySignal = buildSecondarySignal(
@@ -342,11 +343,11 @@ export async function POST(req: NextRequest) {
       // Audit columns
       rule_signal_type: ruleResult.signalType,
       rule_confidence: ruleResult.confidence,
-      ai_signal_type: aiResult?.signalType ?? null,
+      ai_signal_type: rawAiAudit ? rawAiAudit.signalType : aiResult?.signalType ?? null,
       ai_confidence: aiResult?.confidence ?? null,
-      ai_temporal_direction: aiResult?.temporalDirection || null,
+      ai_temporal_direction: rawAiAudit ? rawAiAudit.temporalDirection : aiResult?.temporalDirection || null,
       ai_evidence_quote: aiResult?.evidenceQuote || null,
-      ai_reason_ja: aiResult?.reasonJa || null,
+      ai_reason_ja: rawAiAudit ? rawAiAudit.reasonJa : aiResult?.reasonJa || null,
       ai_reset_type_ja: aiResult?.resetTypeJa || null,
       ai_notice_to_execution: aiResult?.noticeToExecution || null,
       ai_teaser_strength: aiResult?.teaserStrength || null,

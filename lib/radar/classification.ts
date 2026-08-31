@@ -63,11 +63,15 @@ const RECENT_RESET_BUTTON_CUE_PATTERN = /\b(?:just|today|recently|new)\b/i;
 const HISTORICAL_RESET_BUTTON_ACQUISITION_PATTERN =
   /\b(?:years?|months?|long)\s+ago\b|\blast\s+(?:year|month)\b/i;
 
+const FIRST_PERSON_USAGE_RESET_COMPLETION_PATTERN =
+  /\b(?:i|we)(?:\s+have|'ve)\s+(?:now\s+)?reset\s+(?:(?:the|our|all)\s+)?usage(?:\s+(?:limits?|allowances?))?(?=\s*(?:for|across|to|on|of|[.!?,;:]|$))/i;
+
 const CURRENT_EXECUTION_PATTERNS = [
   /\b(?:one\s+|a\s+)?reset\s+now\b/i,
   /\b(?:reset|limits?|usage\s+limits?)\s+(?:is|are|was|were)\s+(?:already\s+)?(?:done|complete|completed|landed|reset|refreshed)\b/i,
   /\b(?:reset|usage\s+limits?)\s+(?:has|have|was|were|are)\s+been\s+(?:reset|completed|refreshed)\b/i,
   /\b(?:reset|usage\s+limits?|rate\s+limits?)\s+(?:has|have)\s+been\s+(?:propagated|applied)\s+to\s+(?:accounts?|users?|everyone)\b/i,
+  FIRST_PERSON_USAGE_RESET_COMPLETION_PATTERN,
   /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b/i,
   /\b(?:i|we)\s+reset\b[^.!?]{0,80}\bnow\b/i,
   /\b(?:enjoy|go\s+use)\s+(?:a\s+)?reset\b/i,
@@ -133,7 +137,7 @@ export function hasCurrentResetExecution(text: string) {
   const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized) &&
     !UNRELATED_HISTORICAL_REFERENCE_PATTERN.test(normalized);
   const hasHistoricalTimestampAfterFirstPersonExecution =
-    /\b(?:i|we)\s+(?:have|has|just|already)\s+reset\b[^.!?]{0,100}\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago)\b/i.test(
+    /\b(?:i|we)(?:\s+(?:have|has|just|already)|'ve)(?:\s+now)?\s+reset\b[^.!?]{0,100}\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago)\b/i.test(
       normalized,
     );
   if (hasHistoricalTimestampAfterFirstPersonExecution) return false;
@@ -357,6 +361,16 @@ export function classifyTiboTweet(
       signalType: "official_notice",
       confidence: 0.96,
       reason: "Matched explicit future usage-limit reset announcement.",
+      isReply,
+      isQuote,
+    });
+  }
+
+  if (FIRST_PERSON_USAGE_RESET_COMPLETION_PATTERN.test(normalizedClassificationText(text))) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "reset_executed",
+      confidence: 0.98,
+      reason: "Matched first-person present-perfect usage reset completion.",
       isReply,
       isQuote,
     });

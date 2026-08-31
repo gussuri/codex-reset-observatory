@@ -68,6 +68,19 @@ function isValidGeminiClassification(
   );
 }
 
+function hasContradictoryCompletedReset(
+  ruleResult: ClassificationResult,
+  aiResult: GeminiClassificationOutput,
+) {
+  const rawAudit = aiResult.rawAudit;
+  const aiSignalType = rawAudit ? rawAudit.signalType : aiResult.signalType;
+  const aiTemporalDirection = rawAudit ? rawAudit.temporalDirection : aiResult.temporalDirection;
+
+  return ruleResult.signalType === "reset_executed" &&
+    aiTemporalDirection === "completed_now" &&
+    (aiSignalType === "irrelevant" || aiSignalType === "official_notice");
+}
+
 export function selectTiboClassification(
   modeValue: string | undefined,
   ruleResult: ClassificationResult,
@@ -77,6 +90,15 @@ export function selectTiboClassification(
 
   if (mode === "primary" || mode === "hybrid") {
     if (isValidGeminiClassification(aiResult)) {
+      if (hasContradictoryCompletedReset(ruleResult, aiResult)) {
+        return {
+          signalType: ruleResult.signalType,
+          confidence: ruleResult.confidence,
+          reason: ruleResult.reason,
+          classificationSource: "rule_fallback",
+        };
+      }
+
       return {
         signalType: aiResult.signalType,
         confidence: aiResult.confidence,
@@ -107,6 +129,9 @@ export function buildTiboClassificationResponse(
   aiResult: GeminiClassificationOutput | null | undefined,
 ): TiboClassificationResponse {
   const selected = selectTiboClassification(modeValue, ruleResult, aiResult);
+  const aiSignalType = aiResult?.rawAudit
+    ? aiResult.rawAudit.signalType
+    : aiResult?.signalType ?? null;
 
   return {
     signalType: selected.signalType,
@@ -114,7 +139,7 @@ export function buildTiboClassificationResponse(
     classificationSource: selected.classificationSource,
     aiStatus: aiResult?.status ?? "skipped",
     ruleSignalType: ruleResult.signalType,
-    aiSignalType: aiResult?.signalType ?? null,
+    aiSignalType,
     teaserStrength: aiResult?.teaserStrength ?? null,
   };
 }
