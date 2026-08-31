@@ -46,6 +46,14 @@ import {
   TIBO_SOURCE_TIME_ZONE,
 } from "@/lib/radar/tiboTemporal";
 import { resolveTiboPostEditHistory } from "@/lib/radar/xPostEditHistory";
+import {
+  createUntrustedTiboEditIdentity,
+  getTrustedTiboEditIdentity,
+  mergeTiboEditIdentity,
+  reconcileTiboEditChainMetadata,
+  toTiboEditIdentityFields,
+  type TiboEditIdentityStore,
+} from "@/lib/radar/tiboEditIdentity";
 
 // Keep the webhook bounded while accepting X long-form/note text. The former
 // 2,000-character ceiling rejected fully expanded posts before classification.
@@ -388,7 +396,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -435,6 +443,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const incomingEditIdentity = toTiboEditIdentityFields(editHistoryMetadata);
+    const editIdentityMerge = mergeTiboEditIdentity(
+      existingSignal,
+      incomingEditIdentity,
+      tweetId,
+    );
+    let editIdentityForPayload = editIdentityMerge.identity;
+
+    if (editHistoryMetadata.trusted) {
+      const reconciliation = await reconcileTiboEditChainMetadata(
+        supabase as unknown as TiboEditIdentityStore,
+        tweetId,
+        incomingEditIdentity,
+      );
+      if (reconciliation.status === "conflict") {
+        console.warn("[Tibo Warning] Conflicting edit-chain metadata; incoming identity was not applied", {
+          reason: "identity_conflict",
+        });
+        editIdentityForPayload = getTrustedTiboEditIdentity(existingSignal, tweetId) ??
+          (existingSignal?.edit_metadata_source === "x_api"
+            ? editIdentityMerge.identity
+            : createUntrustedTiboEditIdentity(tweetId));
+      } else if (
+        reconciliation.status === "reconciled" ||
+        reconciliation.status === "unchanged"
+      ) {
+        editIdentityForPayload = reconciliation.identity;
+      } else if (reconciliation.status === "error") {
+        console.warn("[Tibo Warning] Edit-chain metadata reconciliation unavailable", {
+          reason: "identity_lookup_failed",
+        });
+      }
+    }
+
     const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja);
     const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh);
     let translationResult: Awaited<ReturnType<typeof translateWithGemini>> | null = null;
@@ -457,6 +499,7 @@ export async function POST(req: NextRequest) {
 
     const payloadWithTranslations = {
       ...payload,
+      ...editIdentityForPayload,
       translated_text_ja: translationResult?.textJa ?? existingTranslationJa,
       translated_text_zh: translationResult?.textZh ?? existingTranslationZh,
     };
@@ -487,6 +530,10 @@ export async function POST(req: NextRequest) {
       quote_context_text: persistedPayload.quote_context_text,
       quote_tweet_url: persistedPayload.quote_tweet_url,
       quote_author_handle: persistedPayload.quote_author_handle,
+      logical_post_id: persistedPayload.logical_post_id,
+      edit_history_tweet_ids: persistedPayload.edit_history_tweet_ids,
+      edit_version: persistedPayload.edit_version,
+      edit_metadata_source: persistedPayload.edit_metadata_source,
     };
 
     // A fresh local quota observation is the only state in which absence of

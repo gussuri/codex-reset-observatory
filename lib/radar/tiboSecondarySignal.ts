@@ -1,5 +1,6 @@
 import type { TeaserStrength } from "./teaserStrength";
 import type { TiboTemporalResolution } from "./tiboTemporal";
+import type { TiboEditIdentityFields } from "./tiboEditIdentity";
 
 export type TiboSecondarySignalType = "official_notice" | "teaser" | "none";
 
@@ -42,7 +43,7 @@ export type TiboSecondarySignal = {
   > | null;
 };
 
-export type TiboSecondarySignalParent = {
+export type TiboSecondarySignalParent = TiboEditIdentityFields & {
   tweet_id?: string;
   signal_type?: string | null;
   classification_source?: string | null;

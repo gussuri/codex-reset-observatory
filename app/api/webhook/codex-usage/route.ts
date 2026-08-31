@@ -49,7 +49,7 @@ import {
 } from "@/lib/radar/bankedReset";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
 
 function getSupabaseServiceClient() {
@@ -89,6 +89,10 @@ function toTiboSignal(signal: ActiveTiboSignal): TiboNoticeSignal {
     verification_status: signal.verification_status ?? "auto_unverified",
     expires_at: signal.expires_at ?? null,
     is_reply: signal.is_reply ?? null,
+    logical_post_id: signal.logical_post_id ?? null,
+    edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
+    edit_version: signal.edit_version ?? null,
+    edit_metadata_source: signal.edit_metadata_source ?? null,
   };
 }
 

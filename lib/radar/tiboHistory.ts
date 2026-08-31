@@ -30,6 +30,7 @@ import {
   isCurrentUsageResetAnnouncement,
 } from "./classification";
 import type { ResetReasonType } from "./types";
+import type { TiboEditIdentityFields } from "./tiboEditIdentity";
 import {
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   isBankedDistributionCompletionSignal,
@@ -52,7 +53,7 @@ export type TiboClassificationSource =
   | "manual"
   | string;
 
-export type TiboNoticeSignal = {
+export type TiboNoticeSignal = TiboEditIdentityFields & {
   tweet_id: string;
   text: string;
   tweet_url: string;
@@ -77,7 +78,7 @@ export type TiboNoticeSignal = {
   is_reply?: boolean | null;
 };
 
-export type BankedDistributionCompletionSignal = {
+export type BankedDistributionCompletionSignal = TiboEditIdentityFields & {
   tweet_id: string;
   text: string;
   tweet_url: string;
@@ -127,7 +128,7 @@ function getNoticeBackedRecoveryTitle(resetEventKey: string) {
   return NOTICE_BACKED_RECOVERY_TITLES[resetEventKey] ?? "ランダムリセット";
 }
 
-export type FormalTiboResetSignal = {
+export type FormalTiboResetSignal = TiboEditIdentityFields & {
   tweet_id: string;
   text: string;
   tweet_url: string;
@@ -892,6 +893,10 @@ export function collectOfficialTiboNoticeSignals(
       expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
       is_reply: signal.is_reply ?? null,
+      logical_post_id: signal.logical_post_id ?? null,
+      edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
+      edit_version: signal.edit_version ?? null,
+      edit_metadata_source: signal.edit_metadata_source ?? null,
     });
   }
 
@@ -933,6 +938,10 @@ function collectTiboRecoveryEvidenceSignals(
       expires_at: signal.expires_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
       is_reply: signal.is_reply ?? null,
+      logical_post_id: signal.logical_post_id ?? null,
+      edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
+      edit_version: signal.edit_version ?? null,
+      edit_metadata_source: signal.edit_metadata_source ?? null,
     });
   }
   return result;
@@ -966,6 +975,10 @@ export function collectBankedDistributionSignals(
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
       is_reply: signal.is_reply ?? null,
+      logical_post_id: signal.logical_post_id ?? null,
+      edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
+      edit_version: signal.edit_version ?? null,
+      edit_metadata_source: signal.edit_metadata_source ?? null,
     });
   }
 

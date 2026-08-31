@@ -2,8 +2,13 @@ import type { TeaserStrength } from "./teaserStrength";
 import type { TiboSecondarySignal } from "./tiboSecondarySignal";
 
 import type { TiboVerificationStatus } from "./tiboHistory";
+import {
+  mergeTiboEditIdentity,
+  type TiboEditIdentityFields,
+} from "./tiboEditIdentity";
 
-export type ExistingTiboWebhookState = {
+export type ExistingTiboWebhookState = TiboEditIdentityFields & {
+  tweet_id?: string | null;
   detected_at?: string | null;
   verification_status?: TiboVerificationStatus | null;
   signal_type?: string | null;
@@ -18,7 +23,8 @@ export type ExistingTiboWebhookState = {
   source_timeline?: string | null;
 };
 
-type TiboWebhookPayload = {
+type TiboWebhookPayload = TiboEditIdentityFields & {
+  tweet_id?: string;
   detected_at: string;
   verification_status: TiboVerificationStatus;
   signal_type?: string | null;
@@ -60,6 +66,30 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
     detected_at: existing?.detected_at ?? receivedAt,
     verification_status: existing?.verification_status ?? "auto_unverified",
   } as TiboWebhookPayload;
+
+  const hasEditIdentity = [
+    payload.logical_post_id,
+    payload.edit_history_tweet_ids,
+    payload.edit_version,
+    payload.edit_metadata_source,
+    existing?.logical_post_id,
+    existing?.edit_history_tweet_ids,
+    existing?.edit_version,
+    existing?.edit_metadata_source,
+  ].some((value) => value !== undefined);
+  if (hasEditIdentity) {
+    const identity = mergeTiboEditIdentity(
+      existing,
+      {
+        logical_post_id: payload.logical_post_id,
+        edit_history_tweet_ids: payload.edit_history_tweet_ids,
+        edit_version: payload.edit_version,
+        edit_metadata_source: payload.edit_metadata_source,
+      },
+      payload.tweet_id ?? "",
+    );
+    Object.assign(preserved, identity.identity);
+  }
 
   if (payload.secondary_signal !== undefined || existing?.secondary_signal !== undefined) {
     preserved.secondary_signal = preserveSecondaryManualOverride(

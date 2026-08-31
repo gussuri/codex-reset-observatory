@@ -12,6 +12,7 @@ import type {
   TemporalResolutionStatus,
 } from "./tiboTemporal";
 import type { RegularResetEventRow } from "./regularResetSchedule";
+import type { TiboEditIdentityFields } from "./tiboEditIdentity";
 import type {
   CodexRecoveryObservation,
   PublicRecoveryObservation,
@@ -159,7 +160,7 @@ export type SignalSummaryLike = {
   counts?: Record<string, number>;
 };
 
-export type ActiveTiboSignal = {
+export type ActiveTiboSignal = TiboEditIdentityFields & {
   tweet_id: string;
   signal_type: "official_notice" | "reset_executed" | "teaser" | "irrelevant";
   text?: string;
