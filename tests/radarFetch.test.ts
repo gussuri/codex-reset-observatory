@@ -5,6 +5,7 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
+  getRandomResetHeatmapCacheDimensions,
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
   PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
@@ -64,6 +65,31 @@ test("public snapshot cache keys use locale, ten-minute bucket, and history limi
     calculationBucket: getPublicRadarSnapshotCalculationBucket(start),
     limitHistory: false,
   });
+});
+
+test("homepage snapshot and heatmap share the calculation bucket contract", () => {
+  const start = Date.parse("2026-09-01T00:00:00.000Z");
+  const sameBucket = start + 5 * 60 * 1000;
+  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+
+  assert.deepEqual(
+    getRandomResetHeatmapCacheDimensions(start),
+    getRandomResetHeatmapCacheDimensions(sameBucket),
+  );
+  assert.notDeepEqual(
+    getRandomResetHeatmapCacheDimensions(start),
+    getRandomResetHeatmapCacheDimensions(nextBucket),
+  );
+  assert.equal(
+    getPublicRadarSnapshotCacheDimensions("ja", start).calculationBucket,
+    getRandomResetHeatmapCacheDimensions(start).calculationBucket,
+  );
+  for (const locale of ["en", "zh"] as const) {
+    assert.equal(
+      getPublicRadarSnapshotCacheDimensions(locale, start).calculationBucket,
+      getRandomResetHeatmapCacheDimensions(start).calculationBucket,
+    );
+  }
 });
 
 test("active Tibo filters are applied before ordering and limit", () => {

@@ -743,6 +743,14 @@ export function getPublicRadarSnapshotCacheDimensions(
   };
 }
 
+export function getRandomResetHeatmapCacheDimensions(
+  calculationNow: Date | number,
+) {
+  return {
+    calculationBucket: getPublicRadarSnapshotCalculationBucket(calculationNow),
+  };
+}
+
 /**
  * One locale-independent Data Cache entry feeds the pages and the API. Next's
  * persistent Data Cache keeps the last successful value available during a
@@ -799,6 +807,21 @@ const getCachedPublicRadarSnapshot = unstable_cache(
     });
   },
   ["radar-public-snapshot-cache-v1"],
+  {
+    revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
+    tags: ["radar-data"],
+  },
+);
+
+const getCachedRandomResetHeatmapEventTimes = unstable_cache(
+  async (calculationBucket: number): Promise<string[]> => {
+    const core = await fetchSharedRadarCore();
+    return getRandomResetHeatmapEventTimes(
+      core.data,
+      new Date(calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS),
+    );
+  },
+  ["radar-random-reset-heatmap-cache-v1"],
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
@@ -863,11 +886,11 @@ export async function fetchSharedRadarCore() {
 
 export async function fetchPublicRadarSnapshot(
   locale: Locale,
-  options: { limitHistory?: boolean } = {},
+  options: { limitHistory?: boolean; calculationNow?: Date | number } = {},
 ): Promise<PublicRadarSnapshot> {
   const dimensions = getPublicRadarSnapshotCacheDimensions(
     locale,
-    new Date(),
+    options.calculationNow ?? new Date(),
     options.limitHistory ?? true,
   );
   return getCachedPublicRadarSnapshot(
@@ -877,16 +900,22 @@ export async function fetchPublicRadarSnapshot(
   );
 }
 
+export async function fetchRandomResetHeatmapEventTimes(
+  calculationNow: Date | number = new Date(),
+) {
+  const { calculationBucket } = getRandomResetHeatmapCacheDimensions(calculationNow);
+  return getCachedRandomResetHeatmapEventTimes(calculationBucket);
+}
+
 export async function fetchRadarPageData(locale: Locale) {
   const calculationNow = new Date();
-  const core = await fetchSharedRadarCore();
+  const [initialData, randomResetHeatmapEventTimes] = await Promise.all([
+    fetchPublicRadarSnapshot(locale, { calculationNow }),
+    fetchRandomResetHeatmapEventTimes(calculationNow),
+  ]);
 
   return {
-    initialData: toPublicRadarSnapshot(core.data, locale, {
-      stale: core.stale,
-      generatedAt: core.generatedAt,
-      calculationNow,
-    }),
-    randomResetHeatmapEventTimes: getRandomResetHeatmapEventTimes(core.data, calculationNow),
+    initialData,
+    randomResetHeatmapEventTimes,
   };
 }
