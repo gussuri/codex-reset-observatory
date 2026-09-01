@@ -17,6 +17,11 @@ export const CALIBRATED_SHADOW_ARCHIVED_MODEL_VERSIONS = [
 export const REGIME_ELAPSED_FULL_MODEL_VERSION = "hazard-regime-elapsed-v1";
 export const ELAPSED_ONLY_MODEL_VERSION = "hazard-elapsed-v1";
 export const NEXT_GENERATION_B_MODEL_VERSION = "hazard-regime-random-continuous-calibrated-v1";
+export const NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION =
+  "hazard-regime-random-continuous-calibrated-post-reset-age-v2";
+export const NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION =
+  "post-reset-regime-attenuation-0-24h-v1";
+export const NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS = 24;
 export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;

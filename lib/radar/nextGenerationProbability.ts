@@ -3,6 +3,8 @@ import {
   NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
   NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
@@ -28,6 +30,7 @@ import {
 } from "./regimeElapsedProbability";
 import {
   calculateRandomContinuousProbability,
+  type RandomContinuousRegimeMultiplierPolicy,
   type RandomContinuousProbabilityResult,
 } from "./randomContinuousProbability";
 import { getActiveOfficialNotice } from "./probability";
@@ -35,6 +38,8 @@ import { getActiveOfficialNotice } from "./probability";
 export {
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
 } from "@/data/shadowProbabilityConfig";
@@ -83,6 +88,14 @@ export type NextGenerationBResult = {
   randomContinuousResult: RandomContinuousProbabilityResult;
   freezeAt: typeof NEXT_GENERATION_FREEZE_AT;
   freezePolicy: typeof NEXT_GENERATION_FREEZE_POLICY;
+};
+
+export type NextGenerationBPostResetAgeCandidateResult = Omit<
+  NextGenerationBResult,
+  "modelVersion"
+> & {
+  modelVersion: typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+  regimeMultiplierPolicyVersion: typeof NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -190,10 +203,18 @@ export type NextGenerationBCalculationOptions = ShadowProbabilityOptions & {
   trainingReadStatus?: NextGenerationTrainingReadStatus;
 };
 
-export function calculateNextGenerationBProbability(
+function calculateNextGenerationBProbabilityVariant<TModelVersion extends string>(
   data: RadarData | null,
   options: NextGenerationBCalculationOptions = {},
-): NextGenerationBResult {
+  variant: {
+    modelVersion: TModelVersion;
+    regimeMultiplierPolicy?: RandomContinuousRegimeMultiplierPolicy;
+    regimeMultiplierPolicyVersion?: string;
+  },
+): Omit<NextGenerationBResult, "modelVersion"> & {
+  modelVersion: TModelVersion;
+  regimeMultiplierPolicyVersion?: string;
+} {
   const now = options.now ?? new Date();
   const trainingReadStatus = options.trainingReadStatus ?? "ok";
   const regimeResult = calculateRegimeElapsedProbability(
@@ -210,7 +231,10 @@ export function calculateNextGenerationBProbability(
     data,
     options,
     regimeResult,
-    NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
+    {
+      ...NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
+      regimeMultiplierPolicy: variant.regimeMultiplierPolicy,
+    },
   );
   const rawHorizons = getRawSignalAdjustedHorizons(randomContinuousResult);
   const selectedRows24h = selectNextGenerationCalibrationRows(options.trainingRows ?? [], now, 24);
@@ -275,8 +299,11 @@ export function calculateNextGenerationBProbability(
     ),
   };
   const fallbackUsed = trainingReadStatus === "error";
-  return {
-    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+  const result: Omit<NextGenerationBResult, "modelVersion"> & {
+    modelVersion: TModelVersion;
+    regimeMultiplierPolicyVersion?: string;
+  } = {
+    modelVersion: variant.modelVersion,
     rawModelVersion: NEXT_GENERATION_B_RAW_MODEL_VERSION,
     calculatedAt: now.toISOString(),
     targetDefinition: randomContinuousResult.targetDefinition,
@@ -309,4 +336,28 @@ export function calculateNextGenerationBProbability(
     freezeAt: NEXT_GENERATION_FREEZE_AT,
     freezePolicy: NEXT_GENERATION_FREEZE_POLICY,
   };
+  if (variant.regimeMultiplierPolicyVersion) {
+    result.regimeMultiplierPolicyVersion = variant.regimeMultiplierPolicyVersion;
+  }
+  return result;
+}
+
+export function calculateNextGenerationBProbability(
+  data: RadarData | null,
+  options: NextGenerationBCalculationOptions = {},
+): NextGenerationBResult {
+  return calculateNextGenerationBProbabilityVariant(data, options, {
+    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+  });
+}
+
+export function calculateNextGenerationBPostResetAgeCandidate(
+  data: RadarData | null,
+  options: NextGenerationBCalculationOptions = {},
+): NextGenerationBPostResetAgeCandidateResult {
+  return calculateNextGenerationBProbabilityVariant(data, options, {
+    modelVersion: NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+    regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  }) as NextGenerationBPostResetAgeCandidateResult;
 }

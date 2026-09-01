@@ -3,6 +3,8 @@ import {
   GLOBAL_PRIOR_EXPOSURE_DAYS,
   MAX_BASELINE_DAILY_PROBABILITY,
   MIN_BASELINE_DAILY_PROBABILITY,
+  NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS,
   RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS,
   RANDOM_CONTINUOUS_SHADOW_FREEZE_AT,
   RANDOM_CONTINUOUS_SHADOW_FREEZE_POLICY,
@@ -48,7 +50,17 @@ export type RandomContinuousModelOptions = {
   globalPriorExposureDays?: number;
   minimumDailyProbability?: number;
   maximumDailyProbability?: number;
+  regimeMultiplierPolicy?: RandomContinuousRegimeMultiplierPolicy;
 };
+
+export type RandomContinuousRegimeMultiplierPolicy =
+  | "constant"
+  | typeof NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION;
+
+export type RegimeMultiplierAtAge = (
+  ageHours: number,
+  regimeMultiplier: number,
+) => number;
 
 type ExposureCell = {
   centerHours: number;
@@ -360,6 +372,7 @@ export function integrateRandomContinuousHazard(
   startAgeHours: number,
   horizonHours: number,
   regimeMultiplier = 1,
+  getRegimeMultiplierAtAge?: RegimeMultiplierAtAge,
 ) {
   return integrateRandomContinuousHazardWithGetter(
     startAgeHours,
@@ -367,7 +380,21 @@ export function integrateRandomContinuousHazard(
     regimeMultiplier,
     (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
     hazard.integrationStepHours,
+    getRegimeMultiplierAtAge,
   );
+}
+
+export function getPostResetRegimeMultiplierAtAge(
+  ageHours: number,
+  regimeMultiplier: number,
+) {
+  const fullMultiplier = Number.isFinite(regimeMultiplier)
+    ? Math.max(0, regimeMultiplier)
+    : 1;
+  if (!Number.isFinite(ageHours) || ageHours < NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS) {
+    return 1;
+  }
+  return fullMultiplier;
 }
 
 function integrateRandomContinuousHazardWithGetter(
@@ -376,6 +403,7 @@ function integrateRandomContinuousHazardWithGetter(
   regimeMultiplier: number,
   getHazardAtAge: (ageHours: number) => number,
   integrationStepHours = INTEGRATION_STEP_HOURS,
+  getRegimeMultiplierAtAge?: RegimeMultiplierAtAge,
 ) {
   if (!Number.isFinite(startAgeHours) || !Number.isFinite(horizonHours) || horizonHours <= 0) return 0;
 
@@ -389,9 +417,19 @@ function integrateRandomContinuousHazardWithGetter(
     if (!Number.isFinite(stepEnd) || stepEnd <= cursor) break;
     const stepHours = stepEnd - cursor;
     const nextLambda = getHazardAtAge(stepEnd);
-    cumulativeHazard += (
-      (currentLambda + nextLambda) / 2
-    ) * stepHours * Math.max(0, regimeMultiplier);
+    if (getRegimeMultiplierAtAge) {
+      const midpoint = cursor + stepHours / 2;
+      const midpointMultiplier = getRegimeMultiplierAtAge(midpoint, regimeMultiplier);
+      cumulativeHazard += (
+        (currentLambda + nextLambda) / 2
+      ) * stepHours * (
+        Number.isFinite(midpointMultiplier) ? Math.max(0, midpointMultiplier) : 0
+      );
+    } else {
+      cumulativeHazard += (
+        (currentLambda + nextLambda) / 2
+      ) * stepHours * Math.max(0, regimeMultiplier);
+    }
     cursor = stepEnd;
     currentLambda = nextLambda;
   }
@@ -404,12 +442,13 @@ function makeHorizons(
   randomElapsedHours: number,
   regimeMultiplier: number,
   getHazardAtAge: (ageHours: number) => number = (ageHours) => getRandomContinuousHazardAtAge(hazard, ageHours),
+  getRegimeMultiplierAtAge?: RegimeMultiplierAtAge,
 ): ShadowProbabilityHorizons {
   return {
-    probability12h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 12, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
-    probability24h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 24, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
-    probability48h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 48, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
-    probability72h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 72, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours),
+    probability12h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 12, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours, getRegimeMultiplierAtAge),
+    probability24h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 24, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours, getRegimeMultiplierAtAge),
+    probability48h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 48, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours, getRegimeMultiplierAtAge),
+    probability72h: integrateRandomContinuousHazardWithGetter(randomElapsedHours, 72, regimeMultiplier, getHazardAtAge, hazard.integrationStepHours, getRegimeMultiplierAtAge),
   };
 }
 
@@ -448,12 +487,16 @@ export function calculateRandomContinuousProbability(
   const randomElapsedHours = getLatestElapsedHours(randomBoundaries, now);
   const recoveryElapsedHours = getLatestElapsedHours(boundaries, now);
   const regimeMultiplier = recoveryResult.regimeElapsed.regime.regimeMultiplier;
+  const getRegimeMultiplierAtAge = modelOptions.regimeMultiplierPolicy === NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION
+    ? getPostResetRegimeMultiplierAtAge
+    : undefined;
   const evaluator = createContinuousHazardEvaluator(hazard);
   const baseline = makeHorizons(
     hazard,
     randomElapsedHours,
     regimeMultiplier,
     evaluator.getHazardAtAge,
+    getRegimeMultiplierAtAge,
   );
   const adjusted: ShadowProbabilityHorizons = {
     probability12h: applyOddsMultiplier(
@@ -482,6 +525,9 @@ export function calculateRandomContinuousProbability(
       }
     : adjusted;
   const currentDiagnostics = evaluator.getDiagnosticsAtAge(randomElapsedHours);
+  const effectiveRegimeMultiplier = getRegimeMultiplierAtAge
+    ? getRegimeMultiplierAtAge(randomElapsedHours, regimeMultiplier)
+    : regimeMultiplier;
   const confidence = makeConfidence(hazard, recoveryResult.officialNoticeOverride.active);
   const warnings: string[] = [];
   if (hazard.completedIntervalCount < 2) {
@@ -512,7 +558,7 @@ export function calculateRandomContinuousProbability(
       randomElapsedHours,
       recoveryElapsedHours,
       regimeMultiplier,
-      effectiveRegimeMultiplier: regimeMultiplier,
+      effectiveRegimeMultiplier,
       recentRatePerDay: recoveryResult.regimeElapsed.regime.recentRatePerDay,
       longTermRatePerDay: recoveryResult.regimeElapsed.regime.longTermRatePerDay,
       rawRateRatio: recoveryResult.regimeElapsed.regime.rawRateRatio,
