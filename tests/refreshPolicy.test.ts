@@ -89,7 +89,7 @@ const FRESH_AT = "2026-08-04T00:56:00.000Z";
 test("fresh initial data respects the probability-based update interval", () => {
   assert.deepEqual(getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW), {
     action: "wait",
-    delayMs: 15 * 60 * 1000 - 4 * 60 * 1000,
+    delayMs: 30 * 60 * 1000 - 4 * 60 * 1000,
   });
 });
 
@@ -100,7 +100,7 @@ test("wake events wait for fresh data and coalesce rapid events", () => {
   );
   assert.deepEqual(
     getEventRefreshPlan(snapshot(FRESH_AT), FRESH_AT, Date.parse(FRESH_AT) + 30_000),
-    { action: "wait", delayMs: 15 * 60 * 1000 - 30_000 },
+    { action: "wait", delayMs: 30 * 60 * 1000 - 30_000 },
   );
 });
 
@@ -110,7 +110,7 @@ test("wake events fetch once the probability-based freshness interval expires", 
     getEventRefreshPlan(
       snapshot(FRESH_AT, { probability24h: 0.3 }),
       FRESH_AT,
-      fetchedAt + 10 * 60 * 1000 - 1,
+      fetchedAt + 30 * 60 * 1000 - 1,
     ),
     { action: "wait", delayMs: 1 },
   );
@@ -118,7 +118,7 @@ test("wake events fetch once the probability-based freshness interval expires", 
     getEventRefreshPlan(
       snapshot(FRESH_AT, { probability24h: 0.3 }),
       FRESH_AT,
-      fetchedAt + 10 * 60 * 1000,
+      fetchedAt + 30 * 60 * 1000,
     ),
     { action: "fetch", delayMs: 0 },
   );
@@ -136,14 +136,14 @@ test("stale data waits five minutes while still coalescing rapid wake events", (
   );
 });
 
-test("normal refresh intervals remain low 15 minutes, medium 10 minutes, high 10 minutes, and very high 5 minutes", () => {
+test("normal refresh intervals are low 30 minutes, medium 30 minutes, high 20 minutes, and very high 10 minutes", () => {
   const fetchedAt = Date.parse(FRESH_AT);
   const cases = [
-    [0.02, 15 * 60 * 1000],
-    [0.2, 10 * 60 * 1000],
-    [0.3, 10 * 60 * 1000],
-    [0.7, 10 * 60 * 1000],
-    [0.9, 5 * 60 * 1000],
+    [0.02, 30 * 60 * 1000],
+    [0.2, 30 * 60 * 1000],
+    [0.3, 30 * 60 * 1000],
+    [0.7, 20 * 60 * 1000],
+    [0.9, 10 * 60 * 1000],
   ] as const;
 
   for (const [probability24h, intervalMs] of cases) {
@@ -208,7 +208,7 @@ test("missing or invalid data fetches immediately, while stale or degraded succe
     { action: "wait", delayMs: STALE_DATA_REFRESH_INTERVAL_MS },
   );
   assert.deepEqual(
-    getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW + 15 * 60 * 1000),
+    getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW + 30 * 60 * 1000),
     { action: "fetch", delayMs: 0 },
   );
 });
