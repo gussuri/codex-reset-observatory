@@ -144,7 +144,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(publishedDebug.source, "calibrated");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionMode: string }).adoptionMode, "manual");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionGateStatus: string }).adoptionGateStatus, "not_met");
-  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string | null }).adoptionDate, null);
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string | null }).adoptionDate, "2026-09-01");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionAt: string | null }).adoptionAt, PUBLISHED_PROBABILITY_ADOPTION_AT);
   assert.equal((debugInfo.publishedProbabilityModel as { previousAdoptionAt: string }).previousAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT);
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);

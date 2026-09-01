@@ -31,15 +31,15 @@ const GOVERNANCE_DOC = resolve("docs/probability/published-model-governance.md")
 const PUBLISHED_EVALUATION_DOC = resolve("docs/prospective-published-model-evaluation.md");
 const NEXT_GENERATION_DOC = resolve("docs/probability/next-generation-shadow-models.md");
 
-test("published model governance config records the pending manual v2 promotion", () => {
+test("published model governance config records the manual v2 activation boundary", () => {
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_MODE, "manual");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, null);
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, null);
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-09-01");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-01T08:00:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-08-23T02:04:00.000Z");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS, "pending_production_deploy");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS, "production_boundary_set");
   assert.equal(
     NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     NEXT_GENERATION_B_MODEL_VERSION,
@@ -52,7 +52,7 @@ test("published model governance config records the pending manual v2 promotion"
   assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
 });
 
-test("the previous B remains effective until the explicit v2 boundary", () => {
+test("the previous B remains effective before the explicit v2 boundary", () => {
   const now = new Date("2026-08-23T02:10:00.000Z");
   const published = calculatePublishedProbability(
     getLocalRadarData({ calculationNow: now }),
@@ -69,7 +69,7 @@ test("the previous B remains effective until the explicit v2 boundary", () => {
   assert.equal(published.fallbackReason, null);
 });
 
-test("prospective evaluation notes name v2 as pending and B v1 as its baseline", () => {
+test("prospective evaluation notes name the v2 boundary and B v1 as its baseline", () => {
   const report = evaluatePublishedModelProspectively(
     [],
     [],
@@ -79,7 +79,7 @@ test("prospective evaluation notes name v2 as pending and B v1 as its baseline",
 
   assert.match(notes, new RegExp(`${PUBLISHED_PROBABILITY_MODEL_VERSION}.*boundary`));
   assert.match(notes, new RegExp(`${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline`));
-  assert.match(notes, /pending/);
+  assert.match(notes, /manual adoption boundary/);
   assert.doesNotMatch(notes, /calibrated .* public model was manually adopted/);
 });
 
@@ -92,11 +92,13 @@ test("current governance documents do not claim that v3 is still public", () => 
   assert.match(governance, new RegExp(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION));
   assert.match(governance, /manual/);
   assert.match(governance, /not_met/);
+  assert.match(governance, /production_boundary_set/);
   assert.match(governance, /retrospective documentation/i);
   assert.match(governance, /material calibration regression/i);
 
   assert.match(publishedEvaluation, new RegExp(PUBLISHED_PROBABILITY_MODEL_VERSION));
   assert.match(publishedEvaluation, new RegExp(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION));
+  assert.match(publishedEvaluation, /2026-09-01T08:00:00\.000Z/);
   assert.doesNotMatch(
     publishedEvaluation,
     /現在の公開モデルは、`hazard-odds-v4-logit-calibrated-prequential-v3`/,

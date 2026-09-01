@@ -6,16 +6,16 @@
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開切替候補 | `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（post-reset-age candidate） |
-| 現在のruntime/public baseline | `hazard-regime-random-continuous-calibrated-v1`（Model B） |
+| 公開モデル（boundary以後） | `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（post-reset-age model） |
+| boundary前のruntime/public baseline | `hazard-regime-random-continuous-calibrated-v1`（Model B） |
 | 比較用のprevious model | `hazard-regime-random-continuous-calibrated-v1`（Model B） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
-| v2 adoption date | 未設定（Production deploy後の明示boundary待ち） |
-| v2 adoption timestamp | `null` |
+| v2 adoption date | `2026-09-01` |
+| v2 adoption timestamp | `2026-09-01T08:00:00.000Z` |
 | previous B adoption timestamp | `2026-08-23T02:04:00.000Z` |
 | prospective gate status | `not_met` |
-| v2 boundary status | `pending_production_deploy` |
+| v2 boundary status | `production_boundary_set` |
 | v2 calibration training source | `hazard-regime-random-continuous-calibrated-v1` |
 
 Model A（`hazard-ensemble-logit-stack-v1`）とModel C（`hazard-contextual-burst-circadian-v1`）はshadow/evaluation用です。v2候補はB v1のcalibration training rowsを継承し、post-reset ageのregime attenuationだけを追加します。signal policy、calibration、過去rowのラベルは変更しません。
@@ -24,9 +24,9 @@ Model A（`hazard-ensemble-logit-stack-v1`）とModel C（`hazard-contextual-bur
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでv2を自動publishしたり、旧Bを自動rollbackしたりしません。
 
-今回のcommitではv2のProduction adoption timestampを設定していません。明示的なProduction deploy/switch boundaryが設定されるまでは、runtimeは旧B v1を使用します。boundary以後はv2の予測が有効な場合にv2を選択し、無効・例外の場合は従来どおりのfallback chainへ退避します。過去のforecast rowをv2として再ラベルしません。
+v2のProduction adoption boundaryは`2026-09-01T08:00:00.000Z`（UTC）に設定しています。boundary前はruntimeが旧B v1を使用し、boundary以後はv2の予測が有効な場合にv2を選択します。無効・例外の場合は従来どおりのfallback chainへ退避し、過去のforecast rowをv2として再ラベルしません。
 
-logging cycleでは、同じoriginについてv2と旧B v1を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは明示的boundary以後のforecastだけをv2と旧Bの比較対象にし、boundary前のrowは保持するだけです。
+logging cycleでは、同じoriginについてv2と旧B v1を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは`2026-09-01T08:00:00.000Z`以後に生成されたforecastだけをv2と旧Bの比較対象にし、boundary前のrowは保持するだけです。
 
 ## 2026-08-23 previous B adoption record
 

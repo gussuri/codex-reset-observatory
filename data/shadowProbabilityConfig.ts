@@ -30,13 +30,13 @@ export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_
 export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
-// Set this explicit boundary in the Production switch change after the v2
-// deployment. Keeping it unset prevents pre-deployment rows from becoming v2.
-export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = null;
-export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = null;
+// This explicit UTC boundary is after the promotion-ready deployment and is
+// the point from which v2 becomes the public model. Earlier rows stay historic.
+export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = "2026-09-01";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-01T08:00:00.000Z";
 export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS =
-  "pending_production_deploy" as const;
+  "production_boundary_set" as const;
 export const PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION =
   NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;

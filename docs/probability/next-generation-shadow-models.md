@@ -1,9 +1,9 @@
 # 次世代確率モデルの運用と公開状態
 
-現在のruntime/public baselineは `hazard-regime-random-continuous-calibrated-v1`（Model B）です。公開モデル候補は `hazard-regime-random-continuous-calibrated-post-reset-age-v2` ですが、v2のmanual adoption boundaryはまだ未設定です。明示的なProduction deploy boundaryまでは旧B v1を使用し、boundary以後だけv2をpublic modelとして選択します。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/Cはshadowとして観測します。
+公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）のmanual adoption boundary前は `hazard-regime-random-continuous-calibrated-v1`（Model B）、boundary以後は `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/Cはshadowとして観測します。
 
-- B v1: `hazard-regime-random-continuous-calibrated-v1`（現在のruntime/public baseline）
-- B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（公開切替候補、boundary待ち）
+- B v1: `hazard-regime-random-continuous-calibrated-v1`（boundary前のruntime/public baseline、v2のprevious model）
+- B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（boundary以後のruntime/public model）
 - A: `hazard-ensemble-logit-stack-v1`（shadow）
 - C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
@@ -13,7 +13,7 @@
 - adoption mode: manual
 - gate status: not_met
 - auto publish: false（gateはmanual review only）
-- v2 adoption boundary: 未設定（`pending_production_deploy`）
+- v2 adoption boundary: `2026-09-01T08:00:00.000Z`（`production_boundary_set`）
 - v2 calibration training source: B v1
 - backfill: false
 

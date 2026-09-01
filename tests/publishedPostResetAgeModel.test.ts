@@ -24,7 +24,7 @@ import {
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import type { NextGenerationTrainingState } from "../lib/radar/nextGenerationTraining";
 
-const BOUNDARY = "2026-09-01T01:04:00.000Z";
+const BOUNDARY = "2026-09-01T01:00:00.000Z";
 
 function trainingState(): NextGenerationTrainingState {
   return {
@@ -74,14 +74,16 @@ test("promotion metadata names v2 with B v1 as its previous and calibration sour
     NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     NEXT_GENERATION_B_MODEL_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, null);
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-01T08:00:00.000Z");
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
 });
 
 test("the explicit promotion boundary selects old B before it and v2 after it", () => {
-  const before = new Date("2026-09-01T00:59:59.999Z");
-  const after = new Date("2026-09-01T01:10:00.000Z");
+  const boundaryTime = Date.parse(BOUNDARY);
+  const before = new Date(boundaryTime - 1);
+  const exact = new Date(boundaryTime);
+  const after = new Date(boundaryTime + 1);
   const beforeResult = calculatePublishedProbability(
     getLocalRadarData({ calculationNow: before }),
     { now: before, activeOfficialNotice: null, publishedModelAdoptionAt: BOUNDARY },
@@ -95,6 +97,13 @@ test("the explicit promotion boundary selects old B before it and v2 after it", 
 
   assert.equal(beforeResult.adoptedModel, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(beforeResult.nextGenerationB?.modelVersion, NEXT_GENERATION_B_MODEL_VERSION);
+  const exactResult = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: exact }),
+    { now: exact, activeOfficialNotice: null, publishedModelAdoptionAt: BOUNDARY },
+    { logFallback: false },
+  );
+  assert.equal(exactResult.adoptedModel, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(exactResult.nextGenerationB?.modelVersion, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(afterResult.adoptedModel, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(afterResult.nextGenerationB?.modelVersion, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });

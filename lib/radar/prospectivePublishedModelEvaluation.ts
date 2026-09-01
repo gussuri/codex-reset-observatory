@@ -390,10 +390,10 @@ export function evaluatePublishedModelProspectively(
           : "promising";
 
   const adoptionBoundaryNote = adoptionBoundaryPending
-    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} production adoption boundary is intentionally unset until the v2 deployment; no forecast rows are evaluated as v2 and no history is relabeled.`
+    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} production adoption boundary is not configured; no forecast rows are evaluated as v2 and no history is relabeled.`
     : `Only forecasts generated at or after the manual adoption boundary ${new Date(adoptionAt!).toISOString()} are evaluated as the adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}; earlier rows remain historical data and are not relabeled.`;
   const adoptionStatusNote = adoptionBoundaryPending
-    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion is pending its explicit Production deployment boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime until then, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`
+    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion has no explicit Production adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`
     : `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model is manually governed at the explicit adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`;
 
   return {
