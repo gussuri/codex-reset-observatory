@@ -5,6 +5,9 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
+  getPublicRadarSnapshotCacheDimensions,
+  getPublicRadarSnapshotCalculationBucket,
+  PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
 import type { FormalTiboResetSignal, TiboNoticeSignal } from "../lib/radar/tiboHistory";
@@ -36,6 +39,31 @@ function noticeSignal(tweetId: string, createdAt: string): TiboNoticeSignal {
 
 test("shared Radar core uses a fifteen-minute normal cache TTL", () => {
   assert.equal(RADAR_CORE_CACHE_TTL_SECONDS, 15 * 60);
+});
+
+test("public snapshot cache keys use locale, ten-minute bucket, and history limit", () => {
+  const start = Date.parse("2026-09-01T00:00:00.000Z");
+  const beforeBoundary = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000 - 1;
+  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+
+  assert.equal(
+    getPublicRadarSnapshotCalculationBucket(start),
+    getPublicRadarSnapshotCalculationBucket(beforeBoundary),
+  );
+  assert.notEqual(
+    getPublicRadarSnapshotCalculationBucket(start),
+    getPublicRadarSnapshotCalculationBucket(nextBucket),
+  );
+  assert.deepEqual(getPublicRadarSnapshotCacheDimensions("ja", start), {
+    locale: "ja",
+    calculationBucket: getPublicRadarSnapshotCalculationBucket(start),
+    limitHistory: true,
+  });
+  assert.deepEqual(getPublicRadarSnapshotCacheDimensions("en", start, false), {
+    locale: "en",
+    calculationBucket: getPublicRadarSnapshotCalculationBucket(start),
+    limitHistory: false,
+  });
 });
 
 test("active Tibo filters are applied before ordering and limit", () => {

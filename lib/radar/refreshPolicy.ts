@@ -4,6 +4,7 @@ import type { PublicRadarSnapshot } from "./types";
 export const RADAR_FETCH_TIMEOUT_MS = 15_000;
 export const OFFICIAL_NOTICE_NO_TIME_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 export const STRONG_RECOVERY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+export const STALE_DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 export const REFRESH_EVENT_MIN_INTERVAL_MS = 30 * 1000;
 
 const REFRESH_RETRY_INTERVALS_MS = [
@@ -49,9 +50,7 @@ function getFreshDataRemainingMs(
   fetchedAt: string | null | undefined,
   nowMs: number,
 ) {
-  if (!data || data.dataHealth.stale || data.dataHealth.overall === "degraded") {
-    return null;
-  }
+  if (!data) return null;
 
   const fetchedTime = getValidTime(fetchedAt);
   if (fetchedTime === null || !Number.isFinite(nowMs)) return null;
@@ -59,15 +58,19 @@ function getFreshDataRemainingMs(
   const elapsedMs = nowMs - fetchedTime;
   if (elapsedMs < 0) return null;
 
-  const hasActiveOfficialNotice =
-    data.viewModel.activeWindow.active && data.viewModel.activeWindow.kind === "official";
-  const hasActiveStrongRecovery = data.recoveryObservation?.status === "observed_unconfirmed" &&
-    data.recoveryObservation.confidence === "strong";
-  const intervalMs = hasActiveOfficialNotice
-    ? getOfficialNoticeRefreshIntervalMs(data.viewModel.activeWindow, nowMs)
-    : hasActiveStrongRecovery
-      ? STRONG_RECOVERY_REFRESH_INTERVAL_MS
-      : getRefreshIntervalMs(data.viewModel.probability24h);
+  const intervalMs = data.dataHealth.stale || data.dataHealth.overall === "degraded"
+    ? STALE_DATA_REFRESH_INTERVAL_MS
+    : (() => {
+        const hasActiveOfficialNotice =
+          data.viewModel.activeWindow.active && data.viewModel.activeWindow.kind === "official";
+        const hasActiveStrongRecovery = data.recoveryObservation?.status === "observed_unconfirmed" &&
+          data.recoveryObservation.confidence === "strong";
+        return hasActiveOfficialNotice
+          ? getOfficialNoticeRefreshIntervalMs(data.viewModel.activeWindow, nowMs)
+          : hasActiveStrongRecovery
+            ? STRONG_RECOVERY_REFRESH_INTERVAL_MS
+            : getRefreshIntervalMs(data.viewModel.probability24h);
+      })();
   return Math.max(0, intervalMs - elapsedMs);
 }
 

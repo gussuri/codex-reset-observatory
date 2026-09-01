@@ -52,6 +52,8 @@ import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
+export const PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS = 10 * 60;
+const PUBLIC_RADAR_SNAPSHOT_BUCKET_MS = PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
 
 export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
   "official_notice",
@@ -718,6 +720,29 @@ type SharedRadarCore = {
   generatedAt: string;
 };
 
+export function getPublicRadarSnapshotCalculationBucket(
+  calculationNow: Date | number = Date.now(),
+) {
+  const timestamp = typeof calculationNow === "number"
+    ? calculationNow
+    : calculationNow.getTime();
+  return Number.isFinite(timestamp)
+    ? Math.floor(timestamp / PUBLIC_RADAR_SNAPSHOT_BUCKET_MS)
+    : 0;
+}
+
+export function getPublicRadarSnapshotCacheDimensions(
+  locale: Locale,
+  calculationNow: Date | number,
+  limitHistory = true,
+) {
+  return {
+    locale,
+    calculationBucket: getPublicRadarSnapshotCalculationBucket(calculationNow),
+    limitHistory,
+  };
+}
+
 /**
  * One locale-independent Data Cache entry feeds the pages and the API. Next's
  * persistent Data Cache keeps the last successful value available during a
@@ -750,6 +775,32 @@ const getCachedTiboRecentSignals = unstable_cache(
   ["tibo-recent-signals-cache-v1"],
   {
     revalidate: 60,
+    tags: ["radar-data"],
+  },
+);
+
+/**
+ * The arguments to unstable_cache are part of Next's generated cache key.
+ * Keeping the calculation time at the bucket boundary makes the public
+ * snapshot deterministic for every origin invocation in the same bucket.
+ */
+const getCachedPublicRadarSnapshot = unstable_cache(
+  async (
+    locale: Locale,
+    calculationBucket: number,
+    limitHistory: boolean,
+  ): Promise<PublicRadarSnapshot> => {
+    const core = await fetchSharedRadarCore();
+    return toPublicRadarSnapshot(core.data, locale, {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      limitHistory,
+      calculationNow: new Date(calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS),
+    });
+  },
+  ["radar-public-snapshot-cache-v1"],
+  {
+    revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
   },
 );
@@ -814,14 +865,16 @@ export async function fetchPublicRadarSnapshot(
   locale: Locale,
   options: { limitHistory?: boolean } = {},
 ): Promise<PublicRadarSnapshot> {
-  const calculationNow = new Date();
-  const core = await fetchSharedRadarCore();
-  return toPublicRadarSnapshot(core.data, locale, {
-    stale: core.stale,
-    generatedAt: core.generatedAt,
-    limitHistory: options.limitHistory,
-    calculationNow,
-  });
+  const dimensions = getPublicRadarSnapshotCacheDimensions(
+    locale,
+    new Date(),
+    options.limitHistory ?? true,
+  );
+  return getCachedPublicRadarSnapshot(
+    dimensions.locale,
+    dimensions.calculationBucket,
+    dimensions.limitHistory,
+  );
 }
 
 export async function fetchRadarPageData(locale: Locale) {

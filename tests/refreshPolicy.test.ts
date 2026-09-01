@@ -7,6 +7,7 @@ import {
   getInitialRefreshPlan,
   getRefreshRetryDelayMs,
   RADAR_FETCH_TIMEOUT_MS,
+  STALE_DATA_REFRESH_INTERVAL_MS,
   startAbortTimeout,
 } from "../lib/radar/refreshPolicy";
 import type { PublicRadarSnapshot } from "../lib/radar/types";
@@ -123,7 +124,7 @@ test("wake events fetch once the probability-based freshness interval expires", 
   );
 });
 
-test("stale data also coalesces wake events within thirty seconds of a success", () => {
+test("stale data waits five minutes while still coalescing rapid wake events", () => {
   const stale = snapshot(FRESH_AT, { stale: true });
   assert.deepEqual(
     getEventRefreshPlan(stale, FRESH_AT, Date.parse(FRESH_AT) + 29_000),
@@ -131,7 +132,7 @@ test("stale data also coalesces wake events within thirty seconds of a success",
   );
   assert.deepEqual(
     getEventRefreshPlan(stale, FRESH_AT, Date.parse(FRESH_AT) + 30_000),
-    { action: "fetch", delayMs: 0 },
+    { action: "wait", delayMs: STALE_DATA_REFRESH_INTERVAL_MS - 30_000 },
   );
 });
 
@@ -195,16 +196,16 @@ test("active strong provisional recovery refreshes every five minutes", () => {
   );
 });
 
-test("missing, invalid, stale, degraded, and expired initial data fetch immediately", () => {
+test("missing or invalid data fetches immediately, while stale or degraded success waits five minutes", () => {
   assert.deepEqual(getInitialRefreshPlan(null, null, NOW), { action: "fetch", delayMs: 0 });
   assert.deepEqual(getInitialRefreshPlan(snapshot(FRESH_AT), "invalid", NOW), { action: "fetch", delayMs: 0 });
   assert.deepEqual(
-    getInitialRefreshPlan(snapshot(FRESH_AT, { stale: true }), FRESH_AT, NOW),
-    { action: "fetch", delayMs: 0 },
+    getInitialRefreshPlan(snapshot(FRESH_AT, { stale: true }), FRESH_AT, Date.parse(FRESH_AT)),
+    { action: "wait", delayMs: STALE_DATA_REFRESH_INTERVAL_MS },
   );
   assert.deepEqual(
-    getInitialRefreshPlan(snapshot(FRESH_AT, { overall: "degraded" }), FRESH_AT, NOW),
-    { action: "fetch", delayMs: 0 },
+    getInitialRefreshPlan(snapshot(FRESH_AT, { overall: "degraded" }), FRESH_AT, Date.parse(FRESH_AT)),
+    { action: "wait", delayMs: STALE_DATA_REFRESH_INTERVAL_MS },
   );
   assert.deepEqual(
     getInitialRefreshPlan(snapshot(FRESH_AT), FRESH_AT, NOW + 15 * 60 * 1000),
