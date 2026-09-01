@@ -1,8 +1,10 @@
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -24,6 +26,7 @@ import {
   type CalibratedShadowProbabilityResult,
 } from "./calibratedShadowProbability";
 import {
+  calculateNextGenerationBPostResetAgeCandidate,
   calculateNextGenerationBProbability,
   type NextGenerationBResult,
   type NextGenerationCalibrationRow,
@@ -50,7 +53,40 @@ export type PublishedProbabilityFallbackReason =
   | "shadow_invalid_prediction";
 
 const PUBLIC_CALCULATION_INTERVAL_MS = 10 * 60 * 1000;
-const PUBLISHED_PROBABILITY_ADOPTION_TIME = new Date(PUBLISHED_PROBABILITY_ADOPTION_AT).getTime();
+
+function parseAdoptionTime(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME = parseAdoptionTime(
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
+);
+
+export type PublishedNextGenerationBModel =
+  | "post-reset-age-candidate"
+  | "previous-b"
+  | null;
+
+export function getPublishedNextGenerationBModel(
+  now: Date,
+  adoptionAt: string | null | undefined = PUBLISHED_PROBABILITY_ADOPTION_AT,
+): PublishedNextGenerationBModel {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return null;
+  const candidateAdoptionTime = parseAdoptionTime(adoptionAt);
+  if (candidateAdoptionTime !== null && nowTime >= candidateAdoptionTime) {
+    return "post-reset-age-candidate";
+  }
+  if (
+    PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME !== null
+    && nowTime >= PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME
+  ) {
+    return "previous-b";
+  }
+  return null;
+}
 
 export function roundPublicProbabilityTime(now: Date) {
   const time = now.getTime();
@@ -103,7 +139,8 @@ export function isValidNextGenerationBPrediction(
 ) {
   const { predictions } = result;
   return (
-    result.modelVersion === NEXT_GENERATION_B_MODEL_VERSION &&
+    (result.modelVersion === NEXT_GENERATION_B_MODEL_VERSION
+      || result.modelVersion === NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION) &&
     Number.isFinite(predictions.probability12h) &&
     Number.isFinite(predictions.probability24h) &&
     Number.isFinite(predictions.probability48h) &&
@@ -329,6 +366,8 @@ export type PublishedProbabilityOptions = {
   regularResetExpectedAt?: string | null;
   nextGenerationBTrainingRows?: Array<NextGenerationCalibrationRow>;
   nextGenerationBTrainingReadStatus?: NextGenerationTrainingReadStatus;
+  /** Explicit Production switch boundary; omitted uses the committed boundary. */
+  publishedModelAdoptionAt?: string | null;
 };
 
 export function calculatePublishedProbability(
@@ -340,6 +379,7 @@ export function calculatePublishedProbability(
   const {
     nextGenerationBTrainingRows,
     nextGenerationBTrainingReadStatus,
+    publishedModelAdoptionAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -350,9 +390,12 @@ export function calculatePublishedProbability(
     ...calculationOptions,
     now: roundPublicProbabilityTime(calculationOptions.now ?? new Date()),
   };
-  const useNextGenerationB =
-    Number.isFinite(PUBLISHED_PROBABILITY_ADOPTION_TIME) &&
-    publicModelOptions.now.getTime() >= PUBLISHED_PROBABILITY_ADOPTION_TIME;
+  const nextGenerationBModel = getPublishedNextGenerationBModel(
+    publicModelOptions.now,
+    publishedModelAdoptionAt === undefined
+      ? PUBLISHED_PROBABILITY_ADOPTION_AT
+      : publishedModelAdoptionAt,
+  );
 
   let nextGenerationB: NextGenerationBResult | null = null;
   let rawShadow: ShadowProbabilityResult | null = null;
@@ -360,9 +403,12 @@ export function calculatePublishedProbability(
   let stableShadow: ShadowProbabilityResult | null = null;
   let fallbackReason: PublishedProbabilityFallbackReason | null = null;
 
-  if (useNextGenerationB) {
+  if (nextGenerationBModel !== null) {
     try {
-      nextGenerationB = calculateNextGenerationBProbability(data, {
+      const calculateB = nextGenerationBModel === "post-reset-age-candidate"
+        ? calculateNextGenerationBPostResetAgeCandidate
+        : calculateNextGenerationBProbability;
+      nextGenerationB = calculateB(data, {
         ...publicModelOptions,
         trainingRows: resolvedTrainingRows,
         trainingReadStatus: resolvedTrainingReadStatus,

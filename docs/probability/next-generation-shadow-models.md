@@ -1,8 +1,9 @@
 # 次世代確率モデルの運用と公開状態
 
-現在の公開モデルは `hazard-regime-random-continuous-calibrated-v1`（Model B）です。Bは2026-08-23T02:04:00.000Zに`manual`で採用され、`hazard-odds-v4-logit-calibrated-prequential-v3`は比較用のprevious baselineとして維持します。prospective gateは`not_met`ですが、manual adoptionでは診断状態であり、Bを自動rollbackするruntime switchではありません。Model A/Cはshadowとして観測します。
+現在のruntime/public baselineは `hazard-regime-random-continuous-calibrated-v1`（Model B）です。公開モデル候補は `hazard-regime-random-continuous-calibrated-post-reset-age-v2` ですが、v2のmanual adoption boundaryはまだ未設定です。明示的なProduction deploy boundaryまでは旧B v1を使用し、boundary以後だけv2をpublic modelとして選択します。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/Cはshadowとして観測します。
 
-- B: `hazard-regime-random-continuous-calibrated-v1`（現在の公開モデル）
+- B v1: `hazard-regime-random-continuous-calibrated-v1`（現在のruntime/public baseline）
+- B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（公開切替候補、boundary待ち）
 - A: `hazard-ensemble-logit-stack-v1`（shadow）
 - C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
@@ -12,10 +13,15 @@
 - adoption mode: manual
 - gate status: not_met
 - auto publish: false（gateはmanual review only）
+- v2 adoption boundary: 未設定（`pending_production_deploy`）
+- v2 calibration training source: B v1
+- backfill: false
 
 ## 保存経路
 
-Bの公開forecastは公開確率pathで計算され、logging cycleでは`prediction_history.debug_info.experimentalProbabilityForecasts`へ評価用の同一origin forecastも保存します。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
+B v1の公開forecastは公開確率pathで計算されます。logging cycleでは同一originについてB v1とB v2を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存し、v2のProduction boundary前後を分離して比較できるようにします。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
+
+B v2の差分は0–24h post-reset ageに対するregime multiplier attenuationだけです。prequential calibration rows、alpha、sample count、signal policy、official notice/teaser policyはB v1から継承し、過去training rowやprediction rowを再ラベルしません。prospective evaluatorは明示的なv2 boundary以後に生成された同一originのB v2/B v1だけを比較します。
 
 prediction historyはlogging cycleで1回だけreadし、Bのraw forecast calibration、Aのensemble training、Cのfuture-only calibrationで共有する。Cのcontext係数自体はprediction historyから学習するのではなく、各origin時点までに利用可能なeligible random-reset履歴からpoint-in-timeで推定する。
 
@@ -35,7 +41,7 @@ corepack pnpm run evaluate:prospective-next-generation
 
 ## B: Explainable Random Continuous
 
-Bはrandom-reset-only Gaussian continuous hazardを主軸とする、現在の公開モデルです。
+B v1はrandom-reset-only Gaussian continuous hazardを主軸とする現在のruntime/public baselineです。B v2はこのB v1を継承した公開切替候補で、boundary設定後だけpublic pathへ昇格します。
 
 - Gaussian bandwidth: 24h
 - exposure grid: 1h
@@ -45,6 +51,8 @@ Bはrandom-reset-only Gaussian continuous hazardを主軸とする、現在の�
 - ordinary semantic signals: frozen B v1 policy
 - 24h/48h future-only logit calibration
 - official notice: `official-notice-window-v3`
+
+B v2ではpost-reset ageが24時間未満のintegration stepだけregime multiplierをattenuateします。24時間以上はB v1と同じregime multiplierへ戻ります。calibrationとsignal policyは変更しません。
 
 Bは「経過時間に対する滑らかなhazard」と「最近のrandom-reset activity regime」を組み合わせる。
 

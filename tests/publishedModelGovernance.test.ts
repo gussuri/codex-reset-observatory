@@ -4,15 +4,17 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 import {
-  CALIBRATED_SHADOW_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_AUTO_PUBLISH,
   NEXT_GENERATION_BACKFILL,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_EVALUATION_MODE,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_ADOPTION_MODE,
@@ -29,14 +31,19 @@ const GOVERNANCE_DOC = resolve("docs/probability/published-model-governance.md")
 const PUBLISHED_EVALUATION_DOC = resolve("docs/prospective-published-model-evaluation.md");
 const NEXT_GENERATION_DOC = resolve("docs/probability/next-generation-shadow-models.md");
 
-test("published model governance config records the current manual B adoption", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+test("published model governance config records the pending manual v2 promotion", () => {
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_MODE, "manual");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-08-23");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-08-23T02:04:00.000Z");
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, null);
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, null);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-08-23T02:04:00.000Z");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS, "pending_production_deploy");
+  assert.equal(
+    NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
+    NEXT_GENERATION_B_MODEL_VERSION,
+  );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS, "not_met");
   assert.equal(NEXT_GENERATION_EVALUATION_MODE, "prospective");
   assert.equal(NEXT_GENERATION_BACKFILL, false);
@@ -45,7 +52,7 @@ test("published model governance config records the current manual B adoption", 
   assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
 });
 
-test("manual adoption remains effective even while the diagnostic gate is not met", () => {
+test("the previous B remains effective until the explicit v2 boundary", () => {
   const now = new Date("2026-08-23T02:10:00.000Z");
   const published = calculatePublishedProbability(
     getLocalRadarData({ calculationNow: now }),
@@ -62,7 +69,7 @@ test("manual adoption remains effective even while the diagnostic gate is not me
   assert.equal(published.fallbackReason, null);
 });
 
-test("prospective evaluation notes name B as adopted and v3 as its baseline", () => {
+test("prospective evaluation notes name v2 as pending and B v1 as its baseline", () => {
   const report = evaluatePublishedModelProspectively(
     [],
     [],
@@ -70,9 +77,9 @@ test("prospective evaluation notes name B as adopted and v3 as its baseline", ()
   );
   const notes = report.notes.join("\n");
 
-  assert.match(notes, new RegExp(`adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}`));
+  assert.match(notes, new RegExp(`${PUBLISHED_PROBABILITY_MODEL_VERSION}.*boundary`));
   assert.match(notes, new RegExp(`${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline`));
-  assert.doesNotMatch(notes, /evaluated as public v3/);
+  assert.match(notes, /pending/);
   assert.doesNotMatch(notes, /calibrated .* public model was manually adopted/);
 });
 

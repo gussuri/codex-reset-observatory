@@ -271,7 +271,7 @@ test("candidate evaluation model stays separate from the public recency model", 
   const publicResult = calculatePublishedProbability(data, options, { logFallback: false });
   const candidateResult = calculateBoundaryCensoredProbability(data, options);
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, "hazard-regime-random-continuous-calibrated-post-reset-age-v2");
   assert.equal(publicResult.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(candidateResult.modelVersion, BOUNDARY_CENSORED_MODEL_VERSION);
 });

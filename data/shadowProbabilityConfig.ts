@@ -22,13 +22,23 @@ export const NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION =
 export const NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION =
   "post-reset-regime-attenuation-0-24h-v1";
 export const NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS = 24;
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
+// The candidate reuses B v1's frozen prequential calibration rows. This is an
+// audit identity, not a new calibration fit or a backfill instruction.
+export const NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION =
+  NEXT_GENERATION_B_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
-export const PUBLISHED_PROBABILITY_ADOPTION_DATE = "2026-08-23";
-export const PUBLISHED_PROBABILITY_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
-export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-20T11:21:37.105Z";
+// Set this explicit boundary in the Production switch change after the v2
+// deployment. Keeping it unset prevents pre-deployment rows from becoming v2.
+export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = null;
+export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = null;
+export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
+export const PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS =
+  "pending_production_deploy" as const;
+export const PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION =
+  NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS = "not_met" as const;
 // Shadow-only comparison: the random-event hazard clock ignores regular recovery boundaries.
 // Keep these parameters frozen until the prospective sample is sufficient for manual review.

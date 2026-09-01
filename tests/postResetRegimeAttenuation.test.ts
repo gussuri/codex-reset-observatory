@@ -241,7 +241,7 @@ test("prospective post-reset audit keeps plain outcomes separate from a strong t
   assert.ok(Number.isFinite(teaserMetrics.logLoss));
 });
 
-test("the age-attenuated B candidate has a distinct version while published B remains unchanged", () => {
+test("the age-attenuated B candidate has a distinct version and is the configured public model", () => {
   const now = new Date("2026-08-10T12:00:00.000Z");
   const history = [resetEvent("random-a", new Date(now.getTime() - 12 * HOUR_MS).toISOString())];
   const data = getLocalRadarData({ calculationNow: now });
@@ -261,7 +261,7 @@ test("the age-attenuated B candidate has a distinct version while published B re
     candidate.regimeMultiplierPolicyVersion,
     NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
 test("the candidate preserves the existing signal multiplier policy", () => {

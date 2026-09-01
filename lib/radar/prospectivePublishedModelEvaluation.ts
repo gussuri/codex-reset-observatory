@@ -1,7 +1,6 @@
 import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
-  PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
@@ -322,14 +321,20 @@ export function evaluatePublishedModelProspectively(
 ): PublishedProspectiveEvaluationReport {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
 
-  const adoptionAt = timestamp(
-    options.adoptionAt === undefined
-      ? PUBLISHED_PROBABILITY_ADOPTION_AT
-      : options.adoptionAt,
-  );
+  const usesConfiguredBoundary = options.adoptionAt === undefined;
+  const configuredAdoptionValue = usesConfiguredBoundary
+    ? PUBLISHED_PROBABILITY_ADOPTION_AT
+    : options.adoptionAt;
+  const adoptionAt = timestamp(configuredAdoptionValue);
+  // An explicit null remains a useful test/audit override meaning "evaluate
+  // without a boundary". The committed production default is different:
+  // null means v2 has not been cut over and must not score any rows yet.
+  const adoptionBoundaryPending = usesConfiguredBoundary && adoptionAt === null;
   const isAfterAdoption = (generatedAt: string) => {
     const generatedTime = timestamp(generatedAt);
-    return generatedTime !== null && (adoptionAt === null || generatedTime >= adoptionAt!);
+    return generatedTime !== null
+      && !adoptionBoundaryPending
+      && (adoptionAt === null || generatedTime >= adoptionAt);
   };
 
   const comparableRows = selectComparablePublishedForecasts(rows).filter((row) => {
@@ -384,6 +389,13 @@ export function evaluatePublishedModelProspectively(
           ? "no_meaningful_difference"
           : "promising";
 
+  const adoptionBoundaryNote = adoptionBoundaryPending
+    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} production adoption boundary is intentionally unset until the v2 deployment; no forecast rows are evaluated as v2 and no history is relabeled.`
+    : `Only forecasts generated at or after the manual adoption boundary ${new Date(adoptionAt!).toISOString()} are evaluated as the adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}; earlier rows remain historical data and are not relabeled.`;
+  const adoptionStatusNote = adoptionBoundaryPending
+    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion is pending its explicit Production deployment boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime until then, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`
+    : `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model is manually governed at the explicit adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`;
+
   return {
     schemaVersion: "prospective-published-model-evaluation-v1",
     status,
@@ -432,10 +444,10 @@ export function evaluatePublishedModelProspectively(
       "Rows before the first comparable forecast are not backfilled and are not relabeled.",
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
-      `Only forecasts generated at or after the manual adoption boundary ${PUBLISHED_PROBABILITY_ADOPTION_AT} are evaluated as the adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}; earlier rows remain historical data and are not relabeled.`,
+      adoptionBoundaryNote,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
-      `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model was manually adopted on ${PUBLISHED_PROBABILITY_ADOPTION_DATE}; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`,
+      adoptionStatusNote,
     ],
   };
 }

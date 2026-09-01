@@ -2,6 +2,8 @@ import {
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
+  PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
+  PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_MODE,
@@ -79,6 +81,8 @@ export type ExperimentalProbabilityForecast = {
   calibrationSampleCount48h?: number;
   positiveCalibrationCount24h?: number;
   positiveCalibrationCount48h?: number;
+  calibrationTrainingModelVersion?: string;
+  regimeMultiplierPolicyVersion?: string;
   priorStdDev?: number;
   minimumSamples?: number;
   lastResolvedOrigin24h?: string | null;
@@ -433,6 +437,7 @@ export function buildProbabilityDebugInfo(
             previousModelVersion: PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
             previousAdoptionAt: PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
+            adoptionBoundaryStatus: PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
             rawModelVersion: publishedB?.rawModelVersion ?? rawShadow?.modelVersion ?? null,
             calibratedFallbackUsed: publishedB?.fallbackUsed ?? publishedProbability.calibrated?.fallbackUsed ?? null,
             calibrationAlpha24h: publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
@@ -443,6 +448,11 @@ export function buildProbabilityDebugInfo(
             positiveCalibrationCount48h: publishedB?.positiveCalibrationCount48h ?? publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
             trainingReadStatus: publishedB?.trainingReadStatus ?? null,
             modelFallbackReason: publishedB?.fallbackReason ?? null,
+            calibrationTrainingModelVersion:
+              publishedB?.calibrationTrainingModelVersion
+              ?? PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
+            regimeMultiplierPolicyVersion:
+              publishedB?.regimeMultiplierPolicyVersion ?? null,
           },
         }
       : {}),

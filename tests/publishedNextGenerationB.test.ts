@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
@@ -12,7 +13,7 @@ import { calculatePublishedProbability } from "../lib/radar/publishedProbability
 // first rounded bucket at or after the 02:04 adoption timestamp.
 const NOW = new Date("2026-08-23T02:10:00.000Z");
 
-test("next-generation B is the manually adopted public probability model", () => {
+test("the v2 promotion is configured while B v1 remains active before its boundary", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const published = calculatePublishedProbability(data, {
     now: NOW,
@@ -21,7 +22,7 @@ test("next-generation B is the manually adopted public probability model", () =>
     nextGenerationBTrainingReadStatus: "ok",
   });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(published.adoptedModel, NEXT_GENERATION_B_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);

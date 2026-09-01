@@ -3,6 +3,7 @@ import {
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
@@ -21,6 +22,7 @@ import {
   type NextGenerationComponentForecast,
 } from "./radar/nextGenerationEnsemble";
 import {
+  calculateNextGenerationBPostResetAgeCandidate,
   calculateNextGenerationBProbability,
   type NextGenerationBResult,
 } from "./radar/nextGenerationProbability";
@@ -66,6 +68,8 @@ function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilit
     calibrationSampleCount48h: result.calibrationSampleCount48h,
     positiveCalibrationCount24h: result.positiveCalibrationCount24h,
     positiveCalibrationCount48h: result.positiveCalibrationCount48h,
+    calibrationTrainingModelVersion: result.calibrationTrainingModelVersion,
+    regimeMultiplierPolicyVersion: result.regimeMultiplierPolicyVersion,
     priorStdDev: 0.5,
     minimumSamples: 10,
     lastResolvedOrigin24h: result.lastResolvedOrigin24h,
@@ -303,11 +307,12 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     return options.existingForecasts;
   }
 
-  const bResult = calculateNextGenerationBProbability(options.data, {
+  const bCalculationOptions = {
     ...options.calculationOptions,
     trainingRows: options.trainingState.bRows,
     trainingReadStatus: options.trainingState.status,
-  });
+  };
+  const bResult = calculateNextGenerationBProbability(options.data, bCalculationOptions);
   const bValid = isValidBResult(bResult);
   const withB: ExperimentalProbabilityForecasts = bValid
     ? {
@@ -315,8 +320,19 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
         [NEXT_GENERATION_B_MODEL_VERSION]: toCommonForecast(bResult),
       }
     : options.existingForecasts;
+  const postResetAgeResult = calculateNextGenerationBPostResetAgeCandidate(
+    options.data,
+    bCalculationOptions,
+  );
+  const postResetAgeValid = isValidBResult(postResetAgeResult);
+  const withBVariants: ExperimentalProbabilityForecasts = postResetAgeValid
+    ? {
+        ...withB,
+        [NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION]: toCommonForecast(postResetAgeResult),
+      }
+    : withB;
 
-  let withA = withB;
+  let withA = withBVariants;
   if (bValid) {
     const components = Object.fromEntries(
       NEXT_GENERATION_A_COMPONENT_VERSIONS.map((modelVersion) => {
@@ -337,7 +353,7 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
       );
       if (aResult) {
         withA = {
-          ...withB,
+          ...withBVariants,
           [NEXT_GENERATION_A_MODEL_VERSION]: toEnsembleForecast(aResult, bResult),
         };
       }

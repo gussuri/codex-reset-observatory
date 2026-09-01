@@ -3,6 +3,7 @@ import {
   NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
   NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
@@ -56,7 +57,9 @@ export type NextGenerationCalibrationRow = {
 export type NextGenerationTrainingReadStatus = "ok" | "error";
 
 export type NextGenerationBResult = {
-  modelVersion: typeof NEXT_GENERATION_B_MODEL_VERSION;
+  modelVersion:
+    | typeof NEXT_GENERATION_B_MODEL_VERSION
+    | typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
   rawModelVersion: typeof NEXT_GENERATION_B_RAW_MODEL_VERSION;
   calculatedAt: string;
   targetDefinition: string;
@@ -69,6 +72,8 @@ export type NextGenerationBResult = {
   calibrationSampleCount48h: number;
   positiveCalibrationCount24h: number;
   positiveCalibrationCount48h: number;
+  calibrationTrainingModelVersion: typeof NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION;
+  regimeMultiplierPolicyVersion?: string;
   lastResolvedOrigin24h: string | null;
   lastResolvedOrigin48h: string | null;
   horizonCoherenceAdjusted: boolean;
@@ -316,6 +321,8 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     calibrationSampleCount48h: fallbackUsed ? 0 : calibration48h.calibrationSampleCount48h,
     positiveCalibrationCount24h: fallbackUsed ? 0 : calibration24h.positiveCalibrationCount24h,
     positiveCalibrationCount48h: fallbackUsed ? 0 : calibration48h.positiveCalibrationCount48h,
+    calibrationTrainingModelVersion:
+      NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
     lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
     horizonCoherenceAdjusted: calibrated.adjusted || (noticeHorizons ? finalPair.adjusted : false),
