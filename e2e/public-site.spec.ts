@@ -33,6 +33,21 @@ async function prepareLocalPage(page: Page) {
       body: "",
     }),
   );
+  // The local E2E server intentionally has no Supabase credentials. Provide
+  // an empty marker baseline so that this optional read does not create a
+  // browser console error while the marker route itself is tested separately.
+  await page.route("**/api/reset-marker", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "public, max-age=0, s-maxage=60" },
+      body: JSON.stringify({
+        schemaVersion: "reset-marker-v1",
+        marker: null,
+        resetAt: null,
+      }),
+    }),
+  );
   return captureBrowserErrors(page);
 }
 

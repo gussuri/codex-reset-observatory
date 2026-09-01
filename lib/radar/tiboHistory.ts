@@ -11,8 +11,8 @@ import type {
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 import {
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
-  RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
+  isPublicRandomResetExecutionEstimate,
   type ResetExecutionEstimate,
 } from "./resetExecution";
 import {
@@ -1470,39 +1470,7 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
 }
 
 function isValidNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
-  const displayExecutionAt = getTimestamp(estimate.displayExecutionAt);
-  const windowStartAt = getTimestamp(estimate.executionWindowStartAt);
-  const windowEndAt = getTimestamp(estimate.executionWindowEndAt);
-  const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
-  const teaserTweetId = estimate.tiboPrimaryTweetId?.trim();
-  const recoveryObservationId = estimate.recoveryObservationId?.trim();
-
-  const isNoticeBacked = Boolean(officialNoticeTweetId);
-  const isTeaserCorroborated =
-    !officialNoticeTweetId &&
-    estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
-    Boolean(teaserTweetId);
-  const isMonitorObserved =
-    !officialNoticeTweetId &&
-    !isTeaserCorroborated &&
-    (estimate.estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
-      (!teaserTweetId && Boolean(recoveryObservationId)));
-
-  return Boolean(
-    estimate.executionTimeSource === "usage_observation" &&
-      estimate.executionTimeConfidence === "high" &&
-      estimate.executionTimePrecision === "approximate" &&
-      recoveryObservationId &&
-      (isNoticeBacked || isTeaserCorroborated || isMonitorObserved) &&
-      displayExecutionAt !== null &&
-      windowStartAt !== null &&
-      windowEndAt !== null &&
-      windowStartAt < windowEndAt &&
-      displayExecutionAt === windowEndAt &&
-    (isMonitorObserved || (officialNoticeTweetId
-      ? estimate.tiboSourceTweetIds.includes(officialNoticeTweetId)
-      : isTeaserCorroborated && estimate.tiboSourceTweetIds.includes(teaserTweetId!))),
-  );
+  return isPublicRandomResetExecutionEstimate(estimate);
 }
 
 function isValidSupportingRecoveryObservation(

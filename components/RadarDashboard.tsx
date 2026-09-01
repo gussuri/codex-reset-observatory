@@ -32,6 +32,24 @@ import {
   RADAR_FETCH_TIMEOUT_MS,
   startAbortTimeout,
 } from "@/lib/radar/refreshPolicy";
+import {
+  beginResetMarkerRefresh,
+  buildCurrentRadarFetchUrl,
+  createResetMarkerState,
+  deferResetMarker,
+  getResetMarkerCatchUpPlan,
+  getInitialResetMarkerPlan,
+  getResetMarkerPollPlan,
+  getResetMarkerRequestUrl,
+  markResetMarkerAccepted,
+  markResetMarkerRetry,
+  observeResetMarker,
+  parseResetMarkerPayload,
+  RESET_MARKER_CATCH_UP_RETRY_DELAY_MS,
+  RESET_MARKER_MAX_CATCH_UP_RETRIES,
+  RESET_MARKER_POLL_INTERVAL_MS,
+  type ResetMarkerPayload,
+} from "@/lib/radar/resetMarker";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
@@ -384,7 +402,10 @@ export function RadarDashboard({
     }
   }, [cacheKey, locale]);
 
-  const fetchRadar = useCallback(async (lifecycleId: number) => {
+  const fetchRadar = useCallback(async (
+    lifecycleId: number,
+    options: { resetMarker?: string | null; resetMarkerRetry?: number } = {},
+  ) => {
     const isCurrentLifecycle = () => lifecycleIdRef.current === lifecycleId;
     const environment = {
       visibilityState: typeof document === "undefined" ? "visible" : document.visibilityState,
@@ -406,10 +427,13 @@ export function RadarDashboard({
     );
 
     try {
-      const response = await fetch(`/api/current?locale=${locale}`, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        buildCurrentRadarFetchUrl(locale, options.resetMarker, options.resetMarkerRetry),
+        {
+          cache: "no-store",
+          signal: controller.signal,
+        },
+      );
 
       if (!response.ok) {
         throw new Error("Failed to fetch current data");
@@ -492,6 +516,29 @@ export function RadarDashboard({
 
     const isCurrentLifecycle = () => lifecycleIdRef.current === lifecycleId;
 
+    let markerTimer: number | null = null;
+    let markerCheckInFlight = false;
+    let markerLastCheckedAt: number | null = null;
+    let markerState = createResetMarkerState();
+
+    const clearMarkerTimer = () => {
+      if (markerTimer !== null) {
+        window.clearTimeout(markerTimer);
+        markerTimer = null;
+      }
+    };
+
+    const scheduleMarkerCheck = (delayMs: number) => {
+      if (!isCurrentLifecycle()) return;
+      if (document.visibilityState !== "visible" || navigator.onLine === false) return;
+
+      clearMarkerTimer();
+      markerTimer = window.setTimeout(() => {
+        markerTimer = null;
+        void checkResetMarker();
+      }, Math.max(0, delayMs));
+    };
+
     const scheduleNextRefresh = (delayMs: number) => {
       if (!isCurrentLifecycle()) return;
 
@@ -509,10 +556,16 @@ export function RadarDashboard({
       }, Math.max(0, delayMs));
     };
 
-    const runRefresh = async () => {
+    const runRefresh = async (markerRefresh?: {
+      marker: ResetMarkerPayload;
+      retryCount: number;
+    }) => {
       if (!isCurrentLifecycle()) return;
 
-      const result = await fetchRadar(lifecycleId);
+      const result = await fetchRadar(lifecycleId, markerRefresh ? {
+        resetMarker: markerRefresh.marker.marker,
+        resetMarkerRetry: markerRefresh.retryCount,
+      } : undefined);
       if (!isCurrentLifecycle()) return;
 
       if (result.kind === "success") {
@@ -524,6 +577,83 @@ export function RadarDashboard({
         );
       } else if (result.kind === "failure") {
         scheduleNextRefresh(result.retryDelayMs);
+      }
+      return result;
+    };
+
+    const runMarkerCatchUp = async (marker: ResetMarkerPayload, retryCount: number) => {
+      const result = await runRefresh({ marker, retryCount });
+      if (!isCurrentLifecycle()) return null;
+
+      if (result?.kind === "success") {
+        const plan = getResetMarkerCatchUpPlan(result.data, marker, retryCount);
+        if (plan.action === "accepted") {
+          markerState = markResetMarkerAccepted(markerState, marker);
+          return plan.delayMs;
+        }
+        if (plan.action === "retry") {
+          markerState = markResetMarkerRetry(markerState, marker, retryCount + 1);
+          return plan.delayMs;
+        }
+        markerState = deferResetMarker(markerState, marker);
+        return plan.delayMs;
+      }
+
+      if (retryCount < RESET_MARKER_MAX_CATCH_UP_RETRIES) {
+        markerState = markResetMarkerRetry(markerState, marker, retryCount + 1);
+        return RESET_MARKER_CATCH_UP_RETRY_DELAY_MS;
+      }
+      markerState = deferResetMarker(markerState, marker);
+      return RESET_MARKER_POLL_INTERVAL_MS;
+    };
+
+    const checkResetMarker = async () => {
+      if (!isCurrentLifecycle() || markerCheckInFlight) return;
+      if (document.visibilityState !== "visible" || navigator.onLine === false) return;
+
+      markerCheckInFlight = true;
+      markerLastCheckedAt = Date.now();
+      let nextDelayMs = RESET_MARKER_POLL_INTERVAL_MS;
+      try {
+        const response = await fetch(getResetMarkerRequestUrl(), { cache: "no-store" });
+        if (!response.ok) return;
+        const incoming = parseResetMarkerPayload(await response.json());
+        if (!incoming || !isCurrentLifecycle()) return;
+
+        if (!markerState.initialized) {
+          const initialPlan = getInitialResetMarkerPlan(latestDataRef.current, incoming);
+          if (initialPlan.action === "refresh") {
+            markerState = beginResetMarkerRefresh(markerState, incoming);
+            nextDelayMs = (await runMarkerCatchUp(incoming, 0)) ?? nextDelayMs;
+            return;
+          }
+        }
+
+        const observation = observeResetMarker(markerState, incoming);
+        markerState = observation.state;
+        if (observation.action === "refresh" && observation.marker) {
+          nextDelayMs = (await runMarkerCatchUp(observation.marker, markerState.retryCount)) ?? nextDelayMs;
+        }
+      } catch {
+        // Marker failures are lightweight and must not disturb full snapshot state.
+      } finally {
+        markerCheckInFlight = false;
+        if (isCurrentLifecycle()) scheduleMarkerCheck(nextDelayMs);
+      }
+    };
+
+    const resumeMarkerLifecycle = () => {
+      if (!isCurrentLifecycle()) return;
+      const plan = getResetMarkerPollPlan(
+        markerLastCheckedAt,
+        Date.now(),
+        document.visibilityState,
+        navigator.onLine !== false,
+      );
+      if (plan.action === "check") {
+        void checkResetMarker();
+      } else if (plan.action === "wait") {
+        scheduleMarkerCheck(plan.delayMs);
       }
     };
 
@@ -545,18 +675,22 @@ export function RadarDashboard({
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") {
         clearRefreshTimer();
+        clearMarkerTimer();
         return;
       }
 
       resumeRefreshLifecycle();
+      resumeMarkerLifecycle();
     };
 
     const handleOnline = () => {
       resumeRefreshLifecycle();
+      resumeMarkerLifecycle();
     };
 
     const handleFocus = () => {
       resumeRefreshLifecycle();
+      resumeMarkerLifecycle();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -573,10 +707,12 @@ export function RadarDashboard({
     } else {
       scheduleNextRefresh(initialPlan.delayMs);
     }
+    scheduleMarkerCheck(0);
 
     return () => {
       lifecycleIdRef.current += 1;
       clearRefreshTimer();
+      clearMarkerTimer();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("focus", handleFocus);

@@ -751,6 +751,18 @@ export function getRandomResetHeatmapCacheDimensions(
   };
 }
 
+export function getEffectiveRadarCalculationNow(
+  calculationBucket: number,
+  coreGeneratedAt: string,
+) {
+  const bucketStart = calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS;
+  const generatedAt = Date.parse(coreGeneratedAt);
+  const effectiveTime = Number.isFinite(generatedAt)
+    ? Math.max(bucketStart, generatedAt)
+    : bucketStart;
+  return new Date(effectiveTime);
+}
+
 /**
  * One locale-independent Data Cache entry feeds the pages and the API. Next's
  * persistent Data Cache keeps the last successful value available during a
@@ -789,8 +801,8 @@ const getCachedTiboRecentSignals = unstable_cache(
 
 /**
  * The arguments to unstable_cache are part of Next's generated cache key.
- * Keeping the calculation time at the bucket boundary makes the public
- * snapshot deterministic for every origin invocation in the same bucket.
+ * The bucket remains the cache identity, while a refreshed core timestamp
+ * lets an invalidated entry observe a mid-bucket reset immediately.
  */
 const getCachedPublicRadarSnapshot = unstable_cache(
   async (
@@ -803,7 +815,7 @@ const getCachedPublicRadarSnapshot = unstable_cache(
       stale: core.stale,
       generatedAt: core.generatedAt,
       limitHistory,
-      calculationNow: new Date(calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS),
+      calculationNow: getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
     });
   },
   ["radar-public-snapshot-cache-v1"],
@@ -818,7 +830,7 @@ const getCachedRandomResetHeatmapEventTimes = unstable_cache(
     const core = await fetchSharedRadarCore();
     return getRandomResetHeatmapEventTimes(
       core.data,
-      new Date(calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS),
+      getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
     );
   },
   ["radar-random-reset-heatmap-cache-v1"],

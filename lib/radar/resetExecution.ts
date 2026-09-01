@@ -3,6 +3,11 @@ import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 export const RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-v1";
 export const TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-teaser-v1";
 export const MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-monitor-v1";
+export const PUBLIC_RANDOM_RESET_EXECUTION_ESTIMATOR_VERSIONS = [
+  RESET_EXECUTION_ESTIMATOR_VERSION,
+  TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
+  MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
+] as const;
 
 export type ExecutionTimeSource =
   | "usage_observation"
@@ -50,6 +55,70 @@ export type ResetExecutionEstimate = {
   createdAt?: string | null;
   updatedAt?: string | null;
 };
+
+export function isPublicRandomResetExecutionEstimate(
+  estimate: Partial<ResetExecutionEstimate> | null | undefined,
+) {
+  if (!estimate) return false;
+
+  const displayExecutionAt = typeof estimate.displayExecutionAt === "string"
+    ? parseTimestamp(estimate.displayExecutionAt)
+    : null;
+  const windowStartAt = typeof estimate.executionWindowStartAt === "string"
+    ? parseTimestamp(estimate.executionWindowStartAt)
+    : null;
+  const windowEndAt = typeof estimate.executionWindowEndAt === "string"
+    ? parseTimestamp(estimate.executionWindowEndAt)
+    : null;
+  const officialNoticeTweetId = typeof estimate.officialNoticeTweetId === "string"
+    ? estimate.officialNoticeTweetId.trim()
+    : "";
+  const teaserTweetId = typeof estimate.tiboPrimaryTweetId === "string"
+    ? estimate.tiboPrimaryTweetId.trim()
+    : "";
+  const recoveryObservationId = typeof estimate.recoveryObservationId === "string"
+    ? estimate.recoveryObservationId.trim()
+    : "";
+  const estimatorVersion = typeof estimate.estimatorVersion === "string"
+    ? estimate.estimatorVersion
+    : "";
+  const sourceTweetIds = new Set(
+    (Array.isArray(estimate.tiboSourceTweetIds) ? estimate.tiboSourceTweetIds : [])
+      .filter((tweetId): tweetId is string => typeof tweetId === "string")
+      .map((tweetId) => tweetId.trim())
+      .filter(Boolean),
+  );
+
+  const isNoticeBacked = Boolean(officialNoticeTweetId);
+  const isTeaserCorroborated =
+    !officialNoticeTweetId &&
+    estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
+    Boolean(teaserTweetId);
+  const isMonitorObserved =
+    !officialNoticeTweetId &&
+    !isTeaserCorroborated &&
+    (estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
+      (!teaserTweetId && Boolean(recoveryObservationId)));
+
+  return Boolean(
+    PUBLIC_RANDOM_RESET_EXECUTION_ESTIMATOR_VERSIONS.includes(
+      estimatorVersion as (typeof PUBLIC_RANDOM_RESET_EXECUTION_ESTIMATOR_VERSIONS)[number],
+    ) &&
+      estimate.executionTimeSource === "usage_observation" &&
+      estimate.executionTimeConfidence === "high" &&
+      estimate.executionTimePrecision === "approximate" &&
+      recoveryObservationId &&
+      (isNoticeBacked || isTeaserCorroborated || isMonitorObserved) &&
+      displayExecutionAt !== null &&
+      windowStartAt !== null &&
+      windowEndAt !== null &&
+      windowStartAt < windowEndAt &&
+      displayExecutionAt === windowEndAt &&
+      (isMonitorObserved || (officialNoticeTweetId
+        ? sourceTweetIds.has(officialNoticeTweetId)
+        : isTeaserCorroborated && sourceTweetIds.has(teaserTweetId))),
+  );
+}
 
 export type DisplayExecutionDecision = {
   displayExecutionAt: string | null;

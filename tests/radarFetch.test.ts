@@ -5,6 +5,7 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
+  getEffectiveRadarCalculationNow,
   getRandomResetHeatmapCacheDimensions,
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
@@ -90,6 +91,28 @@ test("homepage snapshot and heatmap share the calculation bucket contract", () =
       getRandomResetHeatmapCacheDimensions(start).calculationBucket,
     );
   }
+});
+
+test("cached projections use refreshed core time within the bucket without changing the cache key", () => {
+  const bucketStart = Date.parse("2026-09-01T00:00:00.000Z");
+  const bucket = getPublicRadarSnapshotCalculationBucket(bucketStart);
+
+  assert.equal(
+    getEffectiveRadarCalculationNow(bucket, "2026-09-01T00:05:00.000Z").toISOString(),
+    "2026-09-01T00:05:00.000Z",
+  );
+  assert.equal(
+    getEffectiveRadarCalculationNow(bucket, "2026-08-31T23:59:59.000Z").toISOString(),
+    "2026-09-01T00:00:00.000Z",
+  );
+  assert.equal(
+    getEffectiveRadarCalculationNow(bucket, "invalid").toISOString(),
+    "2026-09-01T00:00:00.000Z",
+  );
+  assert.equal(
+    getPublicRadarSnapshotCacheDimensions("ja", bucketStart).calculationBucket,
+    getPublicRadarSnapshotCacheDimensions("ja", bucketStart + 9 * 60 * 1000).calculationBucket,
+  );
 });
 
 test("active Tibo filters are applied before ordering and limit", () => {
