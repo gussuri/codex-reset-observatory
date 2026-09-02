@@ -82,6 +82,11 @@ export type ExperimentalProbabilityForecast = {
   positiveCalibrationCount24h?: number;
   positiveCalibrationCount48h?: number;
   calibrationTrainingModelVersion?: string;
+  confidence?: "low" | "medium" | "high";
+  confidenceReason?: string;
+  calibrationApplied?: boolean;
+  integrationStepHours?: number;
+  experimentRole?: "control" | "challenger";
   regimeMultiplierPolicyVersion?: string;
   priorStdDev?: number;
   minimumSamples?: number;
@@ -292,7 +297,7 @@ function toRandomElapsedExperimentalProbabilityForecast(
   };
 }
 
-function toRandomContinuousExperimentalProbabilityForecast(
+export function toRandomContinuousExperimentalProbabilityForecast(
   result: RandomContinuousProbabilityResult,
 ): ExperimentalProbabilityForecast {
   const forecast = toExperimentalProbabilityForecast(result, null);

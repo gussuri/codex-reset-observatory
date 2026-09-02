@@ -4,10 +4,15 @@ import {
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
@@ -15,6 +20,9 @@ import {
 import type {
   ExperimentalProbabilityForecast,
   ExperimentalProbabilityForecasts,
+} from "./logProbability";
+import {
+  toRandomContinuousExperimentalProbabilityForecast,
 } from "./logProbability";
 import {
   calculateNextGenerationAEnsemble,
@@ -33,6 +41,9 @@ import {
 import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining";
 import type { RadarData } from "./radar/types";
 import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
+import {
+  calculateRandomContinuousBandwidthShadowPair,
+} from "./radar/randomContinuousBandwidthShadow";
 
 function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilityForecast {
   const random = result.randomContinuousResult;
@@ -112,6 +123,25 @@ function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilit
     freezeAt: result.freezeAt,
     freezePolicy: result.freezePolicy,
     nextGenerationRole: "candidate-b",
+  };
+}
+
+function toRawBandwidthForecast(
+  result: ReturnType<typeof calculateRandomContinuousBandwidthShadowPair>["control"],
+  experimentRole: "control" | "challenger",
+): ExperimentalProbabilityForecast {
+  const forecast = toRandomContinuousExperimentalProbabilityForecast(result);
+  return {
+    ...forecast,
+    confidence: result.confidence.level,
+    confidenceReason: result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: result.randomContinuous.integrationStepHours,
+    regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    evaluationMode: "prospective",
+    experimentRole,
+    freezeAt: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT,
+    freezePolicy: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY,
   };
 }
 
@@ -360,17 +390,36 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     }
   }
 
+  let withBandwidthExperiment = withA;
+  if (generatedAt.getTime() >= new Date(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT).getTime()) {
+    const pair = calculateRandomContinuousBandwidthShadowPair(
+      options.data,
+      options.calculationOptions,
+    );
+    withBandwidthExperiment = {
+      ...withA,
+      [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_MODEL_VERSION]: toRawBandwidthForecast(
+        pair.control,
+        "control",
+      ),
+      [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]: toRawBandwidthForecast(
+        pair.challenger,
+        "challenger",
+      ),
+    };
+  }
+
   if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
-    return withA;
+    return withBandwidthExperiment;
   }
   const cResult = calculateContextualBurstProbability(options.data, {
     ...options.calculationOptions,
     trainingRows: options.trainingState.cRows,
     trainingReadStatus: options.trainingState.status,
   });
-  if (!isValidCResult(cResult)) return withA;
+  if (!isValidCResult(cResult)) return withBandwidthExperiment;
   return {
-    ...withA,
+    ...withBandwidthExperiment,
     [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
   };
 }

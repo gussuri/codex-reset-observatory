@@ -127,6 +127,30 @@ export const NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG = {
   maximumCombinedOddsMultiplier48h: 6,
 } as const;
 
+// Prospective-only raw Gaussian bandwidth/truncation experiment. Both arms
+// inherit the frozen Production-equivalent B regime and signal policy; only
+// the kernel bandwidth and truncation differ.
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_MODEL_VERSION =
+  "hazard-regime-random-continuous-post-reset-age-raw-bw24-tr72-v1";
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION =
+  "hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1";
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT = "2026-09-02T09:00:00.000Z";
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY =
+  "The 18/54 parameters are preregistered before prospective evaluation; no historical backfill, retuning, or auto-publish is allowed.";
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_TARGET_DEFINITION =
+  RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION;
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS = {
+  ...NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
+  bandwidthHours: 24,
+  truncationHours: 72,
+  regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+} as const;
+export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS = {
+  ...RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS,
+  bandwidthHours: 18,
+  truncationHours: 54,
+} as const;
+
 // Third next-generation shadow. Keep its identity, fit constants, and freeze
 // boundary independent from A/B so future changes require a new C version.
 export const NEXT_GENERATION_C_MODEL_VERSION = "hazard-contextual-burst-circadian-v1";

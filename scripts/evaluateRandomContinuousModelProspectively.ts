@@ -38,7 +38,7 @@ function parseAsOf(args: Array<string>) {
   return asOf;
 }
 
-async function loadProductionBoundaries(asOf: Date): Promise<{
+export async function loadProductionBoundaries(asOf: Date): Promise<{
   boundaries: Array<RecoveryResetBoundary>;
   reason: string | null;
 }> {

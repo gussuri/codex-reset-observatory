@@ -93,6 +93,8 @@ export type RandomContinuousAudit = {
   recoveryElapsedHours: number;
   regimeMultiplier: number;
   effectiveRegimeMultiplier: number;
+  regimeMultiplierPolicyVersion?: RandomContinuousRegimeMultiplierPolicy;
+  integrationStepHours: number;
   recentRatePerDay: number;
   longTermRatePerDay: number;
   rawRateRatio: number;
@@ -559,6 +561,8 @@ export function calculateRandomContinuousProbability(
       recoveryElapsedHours,
       regimeMultiplier,
       effectiveRegimeMultiplier,
+      regimeMultiplierPolicyVersion: modelOptions.regimeMultiplierPolicy,
+      integrationStepHours: hazard.integrationStepHours,
       recentRatePerDay: recoveryResult.regimeElapsed.regime.recentRatePerDay,
       longTermRatePerDay: recoveryResult.regimeElapsed.regime.longTermRatePerDay,
       rawRateRatio: recoveryResult.regimeElapsed.regime.rawRateRatio,
