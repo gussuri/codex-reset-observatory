@@ -430,7 +430,6 @@ export function RadarDashboard({
       const response = await fetch(
         buildCurrentRadarFetchUrl(locale, options.resetMarker, options.resetMarkerRetry),
         {
-          cache: "no-store",
           signal: controller.signal,
         },
       );
@@ -615,7 +614,7 @@ export function RadarDashboard({
       markerLastCheckedAt = Date.now();
       let nextDelayMs = RESET_MARKER_POLL_INTERVAL_MS;
       try {
-        const response = await fetch(getResetMarkerRequestUrl(), { cache: "no-store" });
+        const response = await fetch(getResetMarkerRequestUrl());
         if (!response.ok) return;
         const incoming = parseResetMarkerPayload(await response.json());
         if (!incoming || !isCurrentLifecycle()) return;

@@ -112,6 +112,7 @@ test("catch-up retries are bounded and stop after the marker is reflected", () =
 });
 
 test("marker polling is visible-only and visibility resume is bounded by the last check", () => {
+  assert.equal(RESET_MARKER_POLL_INTERVAL_MS, 5 * 60 * 1000);
   const now = Date.parse("2026-09-01T00:10:00.000Z");
   assert.deepEqual(getResetMarkerPollPlan(null, now, "visible", true), {
     action: "check",
@@ -119,7 +120,7 @@ test("marker polling is visible-only and visibility resume is bounded by the las
   });
   assert.deepEqual(getResetMarkerPollPlan(now - 30_000, now, "visible", true), {
     action: "wait",
-    delayMs: 30_000,
+    delayMs: RESET_MARKER_POLL_INTERVAL_MS - 30_000,
   });
   assert.deepEqual(getResetMarkerPollPlan(now - RESET_MARKER_POLL_INTERVAL_MS, now, "visible", true), {
     action: "check",
@@ -142,13 +143,14 @@ test("RadarDashboard owns marker polling while retaining the existing full refre
   assert.match(source, /getResetMarkerPollPlan/);
   assert.match(source, /resetMarker/);
   assert.match(source, /getInitialRefreshPlan/);
+  assert.doesNotMatch(source, /cache:\s*"no-store"/);
 });
 
 test("reset-marker route is a lightweight endpoint and does not build Radar data", () => {
   const source = readFileSync(resolve("app/api/reset-marker/route.ts"), "utf8");
   assert.doesNotMatch(source, /fetchCurrentRadarData|getRadarViewModel|toPublicRadarSnapshot|calculatePublishedProbability/);
   assert.match(source, /RESET_MARKER_CACHE_CONTROL/);
-  assert.equal(RESET_MARKER_CACHE_CONTROL, "public, max-age=0, s-maxage=60");
+  assert.equal(RESET_MARKER_CACHE_CONTROL, "public, max-age=0, s-maxage=300");
 });
 
 test("reset-marker route performs one bounded estimate query and returns the public marker contract", async () => {

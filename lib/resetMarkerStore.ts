@@ -9,7 +9,7 @@ import {
 } from "@/lib/radar/resetMarker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export const RESET_MARKER_CACHE_CONTROL = "public, max-age=0, s-maxage=60";
+export const RESET_MARKER_CACHE_CONTROL = "public, max-age=0, s-maxage=300";
 const RESET_MARKER_COLUMNS = "reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,estimator_version";
 
 type ResetMarkerRow = {

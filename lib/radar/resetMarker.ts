@@ -1,7 +1,7 @@
 import type { Locale, PublicRadarSnapshot } from "./types";
 
 export const RESET_MARKER_SCHEMA_VERSION = "reset-marker-v1" as const;
-export const RESET_MARKER_POLL_INTERVAL_MS = 60 * 1000;
+export const RESET_MARKER_POLL_INTERVAL_MS = 5 * 60 * 1000;
 export const RESET_MARKER_CATCH_UP_RETRY_DELAY_MS = 5 * 1000;
 export const RESET_MARKER_MAX_CATCH_UP_RETRIES = 2;
 
