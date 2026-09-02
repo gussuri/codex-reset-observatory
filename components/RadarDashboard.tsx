@@ -183,6 +183,46 @@ function getHistoryDisplayTitle(
       ? `${title}（参考记录）`
       : `${title}（参考記録）`;
 }
+
+const HOMEPAGE_EXPLANATION_CONTENT = {
+  ja: {
+    title: "Codexリセット観測所について",
+    paragraphs: [
+      "Codexリセット観測所は、Codexの利用上限リセットに関する公開情報を整理する非公式サイトです。過去に確認された全体リセットや任意リセット配布、公式・開発関係者による予告、OpenAI Statusなどをもとに、現在の状況をまとめています。",
+      "24時間・48時間以内のリセット期待度は、過去のランダムリセット間隔と現在の観測シグナルから算出した統計的な参考値です。OpenAIによる公式な確率ではありません。確定済みの事例はリセット履歴で、予測方法や用語についてはFAQで確認できます。",
+    ],
+    links: [
+      { href: "/history", label: "リセット履歴" },
+      { href: "/faq", label: "FAQ" },
+      { href: "/about", label: "このサイトについて" },
+    ],
+  },
+  en: {
+    title: "About Codex Reset Observatory",
+    paragraphs: [
+      "Codex Reset Observatory is an unofficial site that organizes public information about Codex usage-limit resets. It summarizes the current situation using confirmed global resets and account-specific reset grants, official notices from OpenAI and people involved in development, and OpenAI Status.",
+      "The 24-hour and 48-hour reset likelihoods are statistical reference values calculated from past random reset intervals and current observed signals. They are not official probabilities from OpenAI. Confirmed cases are listed in the reset history, while the FAQ explains how the forecast is calculated and how the site's terms are used.",
+    ],
+    links: [
+      { href: "/en/history", label: "Reset history" },
+      { href: "/en/faq", label: "FAQ" },
+      { href: "/en/about", label: "About this site" },
+    ],
+  },
+  zh: {
+    title: "关于 Codex 重置观测站",
+    paragraphs: [
+      "Codex 重置观测站是一个整理 Codex 使用上限重置公开信息的非官方网站。本站参考过去确认的全局重置和按需发放的重置、OpenAI 及开发相关人员发布的官方预告，以及 OpenAI Status，汇总当前状况。",
+      "未来24小时和48小时内的重置期望度，是根据过去的随机重置间隔和当前观测信号计算的统计参考值，并非 OpenAI 官方概率。已确认的事件会记录在重置历史中；预测方法和相关术语可在常见问题中查看。",
+    ],
+    links: [
+      { href: "/zh/history", label: "重置历史" },
+      { href: "/zh/faq", label: "常见问题" },
+      { href: "/zh/about", label: "关于本网站" },
+    ],
+  },
+} as const;
+
 type IncidentStatus = "active" | "none" | "unknown";
 
 function getIncidentStatusFromReason(
@@ -824,6 +864,7 @@ export function RadarDashboard({
     card: "border-amber-300 bg-amber-50 text-amber-950",
     icon: "text-amber-700",
   };
+  const homepageExplanation = HOMEPAGE_EXPLANATION_CONTENT[locale];
 
   return (
     <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-5 lg:px-8" lang={locale}>
@@ -1217,6 +1258,37 @@ export function RadarDashboard({
         />
 
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
+
+        <section
+          aria-labelledby="homepage-explanation-title"
+          className="border-t border-slate-200/80 pt-5 text-sm leading-6 text-slate-600"
+        >
+          <h2
+            id="homepage-explanation-title"
+            className="text-base font-semibold leading-6 text-slate-800"
+          >
+            {homepageExplanation.title}
+          </h2>
+          <div className="mt-2 space-y-3">
+            {homepageExplanation.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          <nav
+            aria-label={homepageExplanation.title}
+            className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm"
+          >
+            {homepageExplanation.links.map((link) => (
+              <Link
+                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
+                href={link.href}
+                key={link.href}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav

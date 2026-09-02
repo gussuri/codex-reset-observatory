@@ -418,6 +418,78 @@ test("renders the random reset time heatmap after history with a timezone-free S
   }
 });
 
+test("renders a crawlable localized homepage explanation before the footer", () => {
+  const content = {
+    ja: {
+      heading: "Codexリセット観測所について",
+      paragraphs: [
+        "Codexリセット観測所は、Codexの利用上限リセットに関する公開情報を整理する非公式サイトです。過去に確認された全体リセットや任意リセット配布、公式・開発関係者による予告、OpenAI Statusなどをもとに、現在の状況をまとめています。",
+        "24時間・48時間以内のリセット期待度は、過去のランダムリセット間隔と現在の観測シグナルから算出した統計的な参考値です。OpenAIによる公式な確率ではありません。確定済みの事例はリセット履歴で、予測方法や用語についてはFAQで確認できます。",
+      ],
+      links: [
+        ["/history", "リセット履歴"],
+        ["/faq", "FAQ"],
+        ["/about", "このサイトについて"],
+      ],
+    },
+    en: {
+      heading: "About Codex Reset Observatory",
+      paragraphs: [
+        "Codex Reset Observatory is an unofficial site that organizes public information about Codex usage-limit resets. It summarizes the current situation using confirmed global resets and account-specific reset grants, official notices from OpenAI and people involved in development, and OpenAI Status.",
+        "The 24-hour and 48-hour reset likelihoods are statistical reference values calculated from past random reset intervals and current observed signals. They are not official probabilities from OpenAI. Confirmed cases are listed in the reset history, while the FAQ explains how the forecast is calculated and how the site's terms are used.",
+      ],
+      links: [
+        ["/en/history", "Reset history"],
+        ["/en/faq", "FAQ"],
+        ["/en/about", "About this site"],
+      ],
+    },
+    zh: {
+      heading: "关于 Codex 重置观测站",
+      paragraphs: [
+        "Codex 重置观测站是一个整理 Codex 使用上限重置公开信息的非官方网站。本站参考过去确认的全局重置和按需发放的重置、OpenAI 及开发相关人员发布的官方预告，以及 OpenAI Status，汇总当前状况。",
+        "未来24小时和48小时内的重置期望度，是根据过去的随机重置间隔和当前观测信号计算的统计参考值，并非 OpenAI 官方概率。已确认的事件会记录在重置历史中；预测方法和相关术语可在常见问题中查看。",
+      ],
+      links: [
+        ["/zh/history", "重置历史"],
+        ["/zh/faq", "常见问题"],
+        ["/zh/about", "关于本网站"],
+      ],
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const calculationNow = new Date("2026-08-06T00:00:00.000Z");
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(
+          getLocalRadarData({ calculationNow }),
+          locale,
+          { calculationNow },
+        ),
+        locale,
+      }),
+    );
+    const sectionStart = html.indexOf('aria-labelledby="homepage-explanation-title"');
+    const footerIndex = html.indexOf("<footer");
+    assert.ok(sectionStart >= 0, `${locale} explanation section should be in SSR HTML`);
+    assert.ok(sectionStart < footerIndex, `${locale} explanation should precede the footer`);
+
+    const sectionEnd = html.indexOf("</section>", sectionStart);
+    const sectionHtml = html.slice(sectionStart, sectionEnd);
+    assert.ok(sectionHtml.includes(content[locale].heading));
+    for (const paragraph of content[locale].paragraphs) {
+      const renderedParagraph = paragraph.replace(/'/g, "&#x27;");
+      assert.ok(sectionHtml.includes(renderedParagraph), `${locale} paragraph should be crawlable`);
+    }
+    for (const [href, label] of content[locale].links) {
+      assert.ok(sectionHtml.includes(`href="${href}"`));
+      assert.ok(sectionHtml.includes(`>${label}</a>`));
+    }
+    assert.doesNotMatch(sectionHtml, /\bhidden\b|sr-only|opacity-0|invisible|display:\s*none|visibility:\s*hidden/);
+  }
+});
+
 test("does not render the omitted 12-hour and 72-hour metrics", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(
