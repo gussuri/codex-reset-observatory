@@ -39,6 +39,10 @@ import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
 import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
+import {
+  buildResetDisplayNameSourceContext,
+  type ResetDisplayNameSourceRow,
+} from "@/lib/radar/resetDisplayNameSourceContext";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
   getTemporalNoticeExpiry,
@@ -279,6 +283,56 @@ function getSupabaseServiceClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { persistSession: false },
   });
+}
+
+async function fetchCanonicalTiboSourceRows(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  sourceTweetIds: readonly string[],
+): Promise<ResetDisplayNameSourceRow[]> {
+  const tweetIds = Array.from(new Set(
+    sourceTweetIds.map((tweetId) => tweetId.trim()).filter(Boolean),
+  ));
+  if (tweetIds.length === 0) return [];
+
+  try {
+    const result = await supabase
+      .from("tibo_signals")
+      .select("tweet_id,text,tweet_created_at,is_reply,verification_status")
+      .in("tweet_id", tweetIds)
+      .limit(32);
+    if (result.error) {
+      console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
+        reason: "lookup_failed",
+      });
+      return [];
+    }
+
+    return (result.data ?? []).flatMap((row) => {
+      if (
+        !row ||
+        typeof row.tweet_id !== "string" ||
+        typeof row.text !== "string"
+      ) {
+        return [];
+      }
+      return [{
+        tweet_id: row.tweet_id,
+        text: row.text,
+        tweet_created_at: typeof row.tweet_created_at === "string"
+          ? row.tweet_created_at
+          : null,
+        is_reply: row.is_reply === true,
+        verification_status: typeof row.verification_status === "string"
+          ? row.verification_status
+          : null,
+      }];
+    });
+  } catch {
+    console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
+      reason: "request_failed",
+    });
+    return [];
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -1086,20 +1140,30 @@ export async function POST(req: NextRequest) {
 
         if (!formalEnrichmentFailed) {
           try {
+            const displayNameSourceTweetIds = Array.from(new Set([
+              ...formalFlowSourceTweetIds,
+              ...logicalPost?.sourceTweetIds ?? [],
+              ...(formalFlowCluster?.sourceTweetIds ?? []),
+            ]));
+            const canonicalSourceRows = await fetchCanonicalTiboSourceRows(
+              supabase,
+              displayNameSourceTweetIds,
+            );
+            const sourcePostText = buildResetDisplayNameSourceContext({
+              effectiveFormalCandidate,
+              sourceTweetIds: displayNameSourceTweetIds,
+              sourceRows: canonicalSourceRows,
+            });
             const displayNameItem = {
               ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),
               id: adoptionResolution.resetEventKey,
               source_url: effectiveFormalCandidate.tweet_url,
-              sourceTweetIds: Array.from(new Set([
-                ...formalFlowSourceTweetIds,
-                ...logicalPost?.sourceTweetIds ?? [],
-                ...(formalFlowCluster?.sourceTweetIds ?? []),
-              ])),
+              sourceTweetIds: displayNameSourceTweetIds,
             };
             const displayNameResult = await ensureResetDisplayNameForEvent(
               displayNameItem,
               {
-                sourcePostText: effectiveFormalCandidate.text.trim(),
+                sourcePostText,
                 sourceTweetId: effectiveFormalCandidate.tweet_id,
                 apiKey: process.env.GEMINI_API_KEY?.trim() || null,
                 model: RANDOM_RESET_NAME_MODEL,

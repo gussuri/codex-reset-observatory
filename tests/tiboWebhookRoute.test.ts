@@ -1201,7 +1201,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     assert.equal(response.status, 200);
     assert.deepEqual(fetchMethods, [
       "GET", "POST", "GET", "POST", "GET", "GET", "GET", "GET",
-      "POST", "GET", "GET", "GET", "POST", "POST",
+      "POST", "GET", "GET", "GET", "GET", "POST", "POST",
     ]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");

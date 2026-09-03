@@ -4,6 +4,8 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/tibo/route";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import type { RadarData } from "../lib/radar/types";
 
 const A = "2095000000000000001";
 const B = "2095000000000000002";
@@ -31,6 +33,12 @@ type WebhookState = {
   rpcResult?: unknown;
   estimateError?: unknown;
   geminiApiError?: boolean;
+  geminiNameResult?: {
+    nameJa: string | null;
+    nameEn: string | null;
+    nameZh: string | null;
+    reason: string;
+  };
 };
 
 function rememberEnvironment() {
@@ -266,8 +274,17 @@ function installSupabaseAndXMock(state: WebhookState) {
       }
     }
 
-    if (state.geminiApiError && url.includes("generativelanguage.googleapis.com")) {
-      return jsonResponse({ error: "Gemini unavailable" }, 503);
+    if (url.includes("generativelanguage.googleapis.com")) {
+      if (state.geminiApiError) return jsonResponse({ error: "Gemini unavailable" }, 503);
+      if (state.geminiNameResult) {
+        return jsonResponse({
+          candidates: [{
+            content: {
+              parts: [{ text: JSON.stringify(state.geminiNameResult) }],
+            },
+          }],
+        });
+      }
     }
 
     if (table === "tibo_formal_adoptions" && method === "GET") {
@@ -341,7 +358,7 @@ async function runWebhook(
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   process.env.GEMINI_CLASSIFICATION_MODE = "off";
   process.env.GEMINI_TRANSLATION_MODE = "off";
-  if (state.geminiApiError) process.env.GEMINI_API_KEY = "test-gemini-key";
+  if (state.geminiApiError || state.geminiNameResult) process.env.GEMINI_API_KEY = "test-gemini-key";
   else delete process.env.GEMINI_API_KEY;
   if (state.xApiChain) process.env.X_API_BEARER_TOKEN = "test-x-api-token";
   else delete process.env.X_API_BEARER_TOKEN;
@@ -762,4 +779,134 @@ test("related notice provenance is reconciled without a second new adoption", as
   assert.deepEqual(claimCalls[1].body?.p_source_tweet_ids, [A, noticeId]);
   assert.deepEqual(state.ledgers[0].source_tweet_ids, [A, noticeId]);
   assert.deepEqual(state.estimates[0]?.tibo_source_tweet_ids, [A, noticeId]);
+});
+
+test("Monitor-first formal adoption names one canonical event from its Tibo provenance", async () => {
+  const contextId = A;
+  const formalId = B;
+  const unrelatedId = "2095000000000000003";
+  const recoveryId = "recovery-monitor-e2e";
+  const recoveryObservedAt = "2026-08-31T00:01:30.000Z";
+  const state = createState({
+    signals: new Map([
+      [contextId, signal(contextId, {
+        text: "GPT Astra is launching today.",
+        tweet_created_at: "2026-08-30T23:58:00.000Z",
+        signal_type: "official_notice",
+        classification_source: "gemini",
+      })],
+      [unrelatedId, signal(unrelatedId, {
+        text: "GPT Nova is launching today.",
+        tweet_created_at: "2026-08-30T23:59:00.000Z",
+        signal_type: "irrelevant",
+      })],
+    ]),
+    recoveries: [recovery(recoveryId)],
+    estimates: [{
+      id: "estimate-monitor-e2e",
+      reset_event_key: "usage-reset-monitor-e2e",
+      display_execution_at: recoveryObservedAt,
+      execution_time_source: "usage_observation",
+      execution_time_confidence: "high",
+      execution_time_precision: "approximate",
+      execution_window_start_at: "2026-08-31T00:00:30.000Z",
+      execution_window_end_at: recoveryObservedAt,
+      recovery_observation_id: recoveryId,
+      recovery_previous_observed_at: "2026-08-31T00:00:30.000Z",
+      recovery_observed_at: recoveryObservedAt,
+      tibo_announced_at: "2026-08-30T23:58:00.000Z",
+      tibo_primary_tweet_id: formalId,
+      tibo_source_tweet_ids: [contextId],
+      official_notice_tweet_id: contextId,
+      official_notice_at: "2026-08-30T23:58:00.000Z",
+      estimator_version: "usage-execution-v1",
+      manual_override_at: null,
+      manual_override_by: null,
+      manual_override_reason: null,
+      manual_execution_at: null,
+      manual_execution_precision: null,
+      created_at: recoveryObservedAt,
+      updated_at: recoveryObservedAt,
+    }],
+    geminiNameResult: {
+      nameJa: "GPT Astraリリース記念リセット",
+      nameEn: "GPT Astra Release Reset",
+      nameZh: "GPT Astra 发布纪念重置",
+      reason: "GPT Astraのリリースという投稿内の特徴を使った。",
+    },
+  });
+
+  const response = await runWebhook(state, {
+    tweetId: formalId,
+    text: "We have reset usage limits for all paid users. Reset is live.",
+    tweetUrl: `https://x.com/thsottiaux/status/${formalId}`,
+    tweetCreatedAt: "2026-08-31T00:00:00.000Z",
+  });
+  const displayNameWrite = state.calls.find((call) =>
+    call.method === "POST" && call.url.includes("reset_display_names"),
+  )?.body;
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).formalAdoption.newlyAdopted, false);
+  assert.equal(state.ledgers.length, 1);
+  assert.equal(state.ledgers[0]?.reset_event_key, "usage-reset-monitor-e2e");
+  assert.equal(state.ledgers[0]?.claim_source, "existing_estimate");
+  assert.ok(state.ledgers[0]?.source_tweet_ids.includes(contextId));
+  assert.ok(state.ledgers[0]?.source_tweet_ids.includes(formalId));
+  assert.equal(state.estimates[0]?.display_execution_at, recoveryObservedAt);
+  assert.equal(state.estimates[0]?.tibo_primary_tweet_id, formalId);
+  assert.deepEqual(
+    state.estimates[0]?.tibo_source_tweet_ids.sort(),
+    [contextId, formalId].sort(),
+  );
+  assert.equal(displayNameWrite?.event_key, "usage-reset-monitor-e2e");
+  assert.equal(displayNameWrite?.ai_name_ja, "GPT Astraリリース記念リセット");
+  assert.equal(displayNameWrite?.ai_name_en, "GPT Astra Release Reset");
+  assert.equal(displayNameWrite?.ai_name_zh, "GPT Astra 发布纪念重置");
+
+  const namingRequest = state.calls.find((call) =>
+    call.url.includes("generativelanguage.googleapis.com"),
+  );
+  const namingPayload = JSON.stringify(namingRequest?.body);
+  assert.match(namingPayload, /GPT Astra is launching today\./);
+  assert.match(namingPayload, /Reset is live\./);
+  assert.equal(namingPayload.includes("GPT Nova is launching today."), false);
+
+  const publicData = {
+    reset_execution_estimates: [{
+      resetEventKey: "usage-reset-monitor-e2e",
+      displayExecutionAt: recoveryObservedAt,
+      executionTimeSource: "usage_observation",
+      executionTimeConfidence: "high",
+      executionTimePrecision: "approximate",
+      executionWindowStartAt: "2026-08-31T00:00:30.000Z",
+      executionWindowEndAt: recoveryObservedAt,
+      recoveryObservationId: recoveryId,
+      recoveryPreviousObservedAt: "2026-08-31T00:00:30.000Z",
+      recoveryObservedAt,
+      tiboAnnouncedAt: "2026-08-30T23:58:00.000Z",
+      tiboPrimaryTweetId: formalId,
+      tiboSourceTweetIds: [contextId, formalId],
+      officialNoticeTweetId: contextId,
+      officialNoticeAt: "2026-08-30T23:58:00.000Z",
+      estimatorVersion: "usage-execution-v1",
+    }],
+    reset_display_names: displayNameWrite ? [displayNameWrite] : [],
+  } as unknown as RadarData;
+  const expectedTitles = {
+    ja: "GPT Astraリリース記念リセット",
+    en: "GPT Astra Release Reset",
+    zh: "GPT Astra 发布纪念重置",
+  } as const;
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(publicData, locale, {
+      calculationNow: new Date("2026-09-01T00:00:00.000Z"),
+      limitHistory: false,
+    });
+    const event = snapshot.viewModel.recentHistory.find((item) =>
+      item.key === "usage-reset-monitor-e2e",
+    );
+    assert.equal(event?.title, expectedTitles[locale]);
+    assert.equal(event?.resetAt, recoveryObservedAt);
+  }
 });
