@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -6,9 +8,11 @@ import {
   applyActiveTiboQueryFilters,
   associateTiboNotices,
   getEffectiveRadarCalculationNow,
+  getRadarPageCacheDimensions,
   getRandomResetHeatmapCacheDimensions,
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
+  RADAR_PAGE_CACHE_TTL_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
@@ -41,6 +45,43 @@ function noticeSignal(tweetId: string, createdAt: string): TiboNoticeSignal {
 
 test("shared Radar core uses a fifteen-minute normal cache TTL", () => {
   assert.equal(RADAR_CORE_CACHE_TTL_SECONDS, 15 * 60);
+});
+
+test("page projections use a one-hour cache while API snapshots keep ten minutes", () => {
+  assert.equal(RADAR_PAGE_CACHE_TTL_SECONDS, 60 * 60);
+  assert.equal(PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS, 10 * 60);
+
+  const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
+  const pageFetchSource = source.slice(source.indexOf("export async function fetchRadarPageData"));
+
+  assert.match(source, /getCachedRadarPageData = unstable_cache/);
+  assert.match(source, /revalidate: RADAR_PAGE_CACHE_TTL_SECONDS/);
+  assert.match(source, /tags: \["radar-data"\]/);
+  assert.match(pageFetchSource, /getCachedRadarPageData/);
+  assert.doesNotMatch(pageFetchSource, /fetchPublicRadarSnapshot|fetchRandomResetHeatmapEventTimes/);
+});
+
+test("page cache dimensions use a one-hour bucket and preserve home/history variants", () => {
+  const start = Date.parse("2026-09-01T00:00:00.000Z");
+  const beforeBoundary = start + RADAR_PAGE_CACHE_TTL_SECONDS * 1000 - 1;
+  const nextBucket = start + RADAR_PAGE_CACHE_TTL_SECONDS * 1000;
+
+  assert.deepEqual(
+    getRadarPageCacheDimensions("ja", start),
+    { locale: "ja", calculationBucket: Math.floor(start / (RADAR_PAGE_CACHE_TTL_SECONDS * 1000)), limitHistory: true, includeHeatmap: true },
+  );
+  assert.equal(
+    getRadarPageCacheDimensions("ja", start).calculationBucket,
+    getRadarPageCacheDimensions("ja", beforeBoundary).calculationBucket,
+  );
+  assert.notEqual(
+    getRadarPageCacheDimensions("ja", start).calculationBucket,
+    getRadarPageCacheDimensions("ja", nextBucket).calculationBucket,
+  );
+  assert.deepEqual(
+    getRadarPageCacheDimensions("en", start, false, false),
+    { locale: "en", calculationBucket: Math.floor(start / (RADAR_PAGE_CACHE_TTL_SECONDS * 1000)), limitHistory: false, includeHeatmap: false },
+  );
 });
 
 test("public snapshot cache keys use locale, ten-minute bucket, and history limit", () => {

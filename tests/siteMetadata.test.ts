@@ -33,9 +33,9 @@ import { metadata as zhAboutMetadata } from "../app/(zh)/zh/about/page";
 import { metadata as jaFaqMetadata } from "../app/(ja)/faq/page";
 import { metadata as enFaqMetadata } from "../app/(en)/en/faq/page";
 import { metadata as zhFaqMetadata } from "../app/(zh)/zh/faq/page";
-import { metadata as jaHistoryMetadata } from "../app/(ja)/history/page";
-import { metadata as enHistoryMetadata } from "../app/(en)/en/history/page";
-import { metadata as zhHistoryMetadata } from "../app/(zh)/zh/history/page";
+import { metadata as jaHistoryMetadata, revalidate as jaHistoryRevalidate } from "../app/(ja)/history/page";
+import { metadata as enHistoryMetadata, revalidate as enHistoryRevalidate } from "../app/(en)/en/history/page";
+import { metadata as zhHistoryMetadata, revalidate as zhHistoryRevalidate } from "../app/(zh)/zh/history/page";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -117,10 +117,17 @@ test("home metadata preserves exact localized SEO contracts", () => {
   }
 });
 
-test("localized home pages use a 15-minute ISR interval", () => {
+test("localized radar pages use a one-hour ISR interval", () => {
   assert.deepStrictEqual(
-    [jaHomeRevalidate, enHomeRevalidate, zhHomeRevalidate],
-    [900, 900, 900],
+    [
+      jaHomeRevalidate,
+      enHomeRevalidate,
+      zhHomeRevalidate,
+      jaHistoryRevalidate,
+      enHistoryRevalidate,
+      zhHistoryRevalidate,
+    ],
+    [3600, 3600, 3600, 3600, 3600, 3600],
   );
 });
 

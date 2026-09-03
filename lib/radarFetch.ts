@@ -53,7 +53,9 @@ export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
 export const PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS = 10 * 60;
+export const RADAR_PAGE_CACHE_TTL_SECONDS = 60 * 60;
 const PUBLIC_RADAR_SNAPSHOT_BUCKET_MS = PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+const RADAR_PAGE_CACHE_BUCKET_MS = RADAR_PAGE_CACHE_TTL_SECONDS * 1000;
 
 export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
   "official_notice",
@@ -751,16 +753,47 @@ export function getRandomResetHeatmapCacheDimensions(
   };
 }
 
-export function getEffectiveRadarCalculationNow(
+export function getRadarPageCacheDimensions(
+  locale: Locale,
+  calculationNow: Date | number,
+  limitHistory = true,
+  includeHeatmap = true,
+) {
+  const timestamp = typeof calculationNow === "number"
+    ? calculationNow
+    : calculationNow.getTime();
+  return {
+    locale,
+    calculationBucket: Number.isFinite(timestamp)
+      ? Math.floor(timestamp / RADAR_PAGE_CACHE_BUCKET_MS)
+      : 0,
+    limitHistory,
+    includeHeatmap,
+  };
+}
+
+function getEffectiveRadarCalculationNowForBucket(
   calculationBucket: number,
   coreGeneratedAt: string,
+  bucketMs: number,
 ) {
-  const bucketStart = calculationBucket * PUBLIC_RADAR_SNAPSHOT_BUCKET_MS;
+  const bucketStart = calculationBucket * bucketMs;
   const generatedAt = Date.parse(coreGeneratedAt);
   const effectiveTime = Number.isFinite(generatedAt)
     ? Math.max(bucketStart, generatedAt)
     : bucketStart;
   return new Date(effectiveTime);
+}
+
+export function getEffectiveRadarCalculationNow(
+  calculationBucket: number,
+  coreGeneratedAt: string,
+) {
+  return getEffectiveRadarCalculationNowForBucket(
+    calculationBucket,
+    coreGeneratedAt,
+    PUBLIC_RADAR_SNAPSHOT_BUCKET_MS,
+  );
 }
 
 /**
@@ -836,6 +869,40 @@ const getCachedRandomResetHeatmapEventTimes = unstable_cache(
   ["radar-random-reset-heatmap-cache-v1"],
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
+    tags: ["radar-data"],
+  },
+);
+
+const getCachedRadarPageData = unstable_cache(
+  async (
+    locale: Locale,
+    calculationBucket: number,
+    limitHistory: boolean,
+    includeHeatmap: boolean,
+  ) => {
+    const core = await fetchSharedRadarCore();
+    const calculationNow = getEffectiveRadarCalculationNowForBucket(
+      calculationBucket,
+      core.generatedAt,
+      RADAR_PAGE_CACHE_BUCKET_MS,
+    );
+    const initialData = toPublicRadarSnapshot(core.data, locale, {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      limitHistory,
+      calculationNow,
+    });
+
+    return {
+      initialData,
+      randomResetHeatmapEventTimes: includeHeatmap
+        ? getRandomResetHeatmapEventTimes(core.data, calculationNow)
+        : [],
+    };
+  },
+  ["radar-page-cache-v1"],
+  {
+    revalidate: RADAR_PAGE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
   },
 );
@@ -919,15 +986,21 @@ export async function fetchRandomResetHeatmapEventTimes(
   return getCachedRandomResetHeatmapEventTimes(calculationBucket);
 }
 
-export async function fetchRadarPageData(locale: Locale) {
+export async function fetchRadarPageData(
+  locale: Locale,
+  options: { limitHistory?: boolean; includeHeatmap?: boolean } = {},
+) {
   const calculationNow = new Date();
-  const [initialData, randomResetHeatmapEventTimes] = await Promise.all([
-    fetchPublicRadarSnapshot(locale, { calculationNow }),
-    fetchRandomResetHeatmapEventTimes(calculationNow),
-  ]);
-
-  return {
-    initialData,
-    randomResetHeatmapEventTimes,
-  };
+  const dimensions = getRadarPageCacheDimensions(
+    locale,
+    calculationNow,
+    options.limitHistory ?? true,
+    options.includeHeatmap ?? true,
+  );
+  return getCachedRadarPageData(
+    dimensions.locale,
+    dimensions.calculationBucket,
+    dimensions.limitHistory,
+    dimensions.includeHeatmap,
+  );
 }
