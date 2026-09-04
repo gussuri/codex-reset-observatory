@@ -332,6 +332,89 @@ test("the Astra paid-plan BANKED notice plus a matching local credit grant creat
   }
 });
 
+test("a terminated Astra notice remains BANKED evidence but cannot back an ordinary recovery", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const astraSignal = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-06T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    is_reply: false,
+  };
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "terminated-astra-observation");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-04T22:40:00.000Z",
+        received_at: "2026-09-04T22:40:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-09-04T22:00:00.000Z",
+        banked_reset_available_count: 1,
+        last_banked_grant_at: "2026-09-04T03:34:46.386Z",
+        updated_at: "2026-09-04T22:40:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const formalResetQuery = query.searchParams.getAll("or")
+        .some((value) => value.includes("signal_type.eq.reset_executed"));
+      return new Response(JSON.stringify(formalResetQuery ? [] : [astraSignal]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-04T22:45:00.000Z",
+      usedPercent: 0,
+      resetsAt: currentResetsAt,
+      bankedResetAvailableCount: 2,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    const bankedEstimate = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(bankedEstimate?.official_notice_tweet_id, "2095651088502591861");
+    const recoveryEstimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(recoveryEstimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(recoveryEstimate?.official_notice_tweet_id, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("BANKED count growth and an unexpected recovery use separate notice contexts", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",

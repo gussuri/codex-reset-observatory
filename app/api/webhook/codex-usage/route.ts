@@ -151,6 +151,7 @@ async function hasActiveOfficialNotice(
   client: SupabaseClient<any>,
   observedAt: Date,
   executionWindow: ResetExecutionWindow | null = null,
+  includeTerminatedExecutionEvidence = false,
 ): Promise<OfficialNoticeLookup> {
   const observedAtIso = observedAt.toISOString();
   const noticeLookbackStartIso = new Date(
@@ -231,6 +232,7 @@ async function hasActiveOfficialNotice(
     undefined,
     executionWindow,
     true,
+    includeTerminatedExecutionEvidence,
   );
   const activeBankedNotice = getActiveOfficialNotice(
     {
@@ -242,6 +244,7 @@ async function hasActiveOfficialNotice(
     undefined,
     executionWindow,
     true,
+    includeTerminatedExecutionEvidence,
   );
   const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
   const teaserSignal = findRecentTiboTeaser(signals, observedAt, executionWindow);
@@ -400,7 +403,7 @@ async function processCodexUsageSnapshot(
   const effectiveBankedResetCountChange =
     snapshot.bankedResetCountChange === true || serverObservedBankedIncrease;
   const bankedNotice = effectiveBankedResetCountChange
-    ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt))
+    ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt), null, true)
     : null;
   if (bankedNotice?.error) {
     console.warn("[Codex usage] BANKED notice lookup failed", { reason: "database_error" });

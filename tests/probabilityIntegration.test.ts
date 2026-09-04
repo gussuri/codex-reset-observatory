@@ -212,6 +212,79 @@ test("a recurring BANKED policy remains visible after its first delivery window 
   assert.equal(activeNotice?.temporalPrecision, "unknown");
 });
 
+test("manual notice termination is time-aware and can be opted into only for BANKED execution evidence", () => {
+  const beforeTermination = new Date("2026-09-04T22:30:28.999Z");
+  const terminationAt = new Date("2026-09-04T22:30:29.000Z");
+  const astraNotice = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    signal_type: "official_notice" as const,
+    confidence: 0.98,
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-06T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    is_reply: false,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:30:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const data = getLocalRadarData({ activeTiboSignals: [astraNotice] });
+
+  assert.equal(getActiveOfficialNotice(data, null, beforeTermination)?.id, astraNotice.tweet_id);
+  assert.equal(getActiveOfficialNotice(data, null, terminationAt), null);
+  assert.equal(getOngoingBankedNotice(data, terminationAt), null);
+  assert.equal(
+    getActiveOfficialNotice(data, null, terminationAt, undefined, null, false, true)?.id,
+    astraNotice.tweet_id,
+  );
+
+  const calculation = getLocalProbabilityCalculation(data, { now: terminationAt });
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
+  assert.notEqual(getRadarViewModel(data, "ja", false, undefined, terminationAt).activeWindow.kind, "official");
+});
+
+test("manual termination also suppresses the registered one-shot notice after its rollout evidence", () => {
+  const beforeTermination = new Date("2026-09-04T22:30:28.999Z");
+  const terminationAt = new Date("2026-09-04T22:30:29.000Z");
+  const notice = {
+    tweet_id: "2095979536043401428",
+    text: "We will reset usage for all paid ChatGPT users tomorrow.",
+    tweet_url: "https://x.com/thsottiaux/status/2095979536043401428",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    tweet_created_at: "2026-09-04T20:57:00.000Z",
+    expires_at: "2026-09-05T06:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    is_reply: false,
+    expected_start_at: "2026-09-05T02:00:00.000Z",
+    expected_end_at: "2026-09-05T03:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const data = getLocalRadarData({ activeTiboSignals: [notice] });
+
+  assert.equal(getActiveOfficialNotice(data, null, beforeTermination)?.id, notice.tweet_id);
+  assert.equal(getActiveOfficialNotice(data, null, terminationAt), null);
+});
+
+test("an unrelated official notice is unaffected by the Astra termination registry", () => {
+  const now = new Date("2026-09-04T22:30:29.000Z");
+  const notice = {
+    tweet_id: "unrelated-official-notice-after-astra",
+    text: "We will reset usage for everyone during the next maintenance window.",
+    tweet_url: "https://x.com/thsottiaux/status/unrelated-official-notice-after-astra",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    tweet_created_at: "2026-09-04T22:00:00.000Z",
+    expires_at: "2026-09-05T06:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    is_reply: false,
+  };
+  const data = getLocalRadarData({ activeTiboSignals: [notice] });
+
+  assert.equal(getActiveOfficialNotice(data, null, now)?.id, notice.tweet_id);
+});
+
 test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({

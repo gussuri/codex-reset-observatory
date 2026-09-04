@@ -60,6 +60,7 @@ import {
 } from "./bankedReset";
 import {
   getOfficialNoticeConsumption,
+  isOfficialNoticeTerminatedAt,
   type OfficialNoticeConsumption,
 } from "./officialNoticePolicy";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
@@ -996,6 +997,7 @@ export function getActiveOfficialNotice(
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
   resetExecutionWindow: ResetExecutionWindow | null = null,
   requireExecutionWindowMatch = false,
+  includeTerminatedExecutionEvidence = false,
 ): ActiveOfficialNotice | null {
   const recoveryBoundaryAt = getLastResetBoundaryAt(data, now);
   const suppliedResetTime = latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
@@ -1034,6 +1036,7 @@ export function getActiveOfficialNotice(
         signal.is_reply === true ||
         (signal.confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected" ||
+        (isOfficialNoticeTerminatedAt(signal.tweet_id, now) && !includeTerminatedExecutionEvidence) ||
         (!isPersistent && isSupersededBankedNotice(signal, rawSignals))
       ) {
         return [];
@@ -1190,6 +1193,7 @@ export function getOngoingBankedNotice(
         signal.is_reply === true ||
         (signal.confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected" ||
+        isOfficialNoticeTerminatedAt(signal.tweet_id, now) ||
         !isRecurringConditionalBankedDistributionNotice(signal.text) ||
         isSupersededBankedNotice(signal, rawSignals)
       ) {
