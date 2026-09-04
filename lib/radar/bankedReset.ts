@@ -21,9 +21,19 @@ function hasFutureAvailabilityTerm(text: string) {
 
 const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:reset|credit)|reset\s+credit)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|is\s+(?:now\s+)?available)\b/i;
 const BANKED_FUTURE_CUE_PATTERN = /\b(?:will|going\s+to|tomorrow|tonight|later|soon|next\s+(?:day|week|month)|by\s+\d)\b/i;
+const GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN =
+  /\bfor\s+(?:each|every)\s+day\s+you\s+(?:do\s+not|don't)\s+have\s+access\s+to\b[\s\S]{0,120}\bon\s+your\s+paid\s+chatgpt\s+plan\b/i;
+const PERSONAL_DIRECT_ADDRESS_PATTERN =
+  /\bI\s+(?:(?:can|could|will|would)\s+)?(?:(?:have|just)\s+)?(?:give|gave|given|provide|provided|am\s+giving)\s+you\b/i;
+
+function hasGeneralizedPaidChatGptPlanScopeTerm(text: string) {
+  return GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN.test(text) &&
+    !PERSONAL_DIRECT_ADDRESS_PATTERN.test(text);
+}
 
 function hasBroadScopeTerm(text: string) {
-  return /\b(?:everyone|global)\b|\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b|\b(?:all|every)\s+paid\s+users?\s+of\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\b|\b(?:all|every)\s+(?:users?|accounts?)\b|全(?:ての|て|有料)?(?:ユーザー|利用者|アカウント|プラン)/i.test(text);
+  return /\b(?:everyone|global)\b|\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b|\b(?:all|every)\s+paid\s+users?\s+of\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\b|\b(?:all|every)\s+(?:users?|accounts?)\b|全(?:ての|て|有料)?(?:ユーザー|利用者|アカウント|プラン)/i.test(text) ||
+    hasGeneralizedPaidChatGptPlanScopeTerm(text);
 }
 
 /** Detects a distribution statement, not generic reset-button language. */

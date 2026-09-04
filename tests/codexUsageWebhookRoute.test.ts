@@ -244,7 +244,7 @@ test("the first valid snapshot is stored as a baseline only", async () => {
   }
 });
 
-test("a broad BANKED notice plus a matching local credit grant creates one banked estimate without a reset recovery", async () => {
+test("the Astra paid-plan BANKED notice plus a matching local credit grant creates one banked estimate", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -265,31 +265,32 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
         source_key: "local-codex-app-server",
-        observed_at: "2026-08-11T00:00:00.000Z",
-        received_at: "2026-08-11T00:00:01.000Z",
+        observed_at: "2026-09-04T03:00:00.000Z",
+        received_at: "2026-09-04T03:00:01.000Z",
         limit_id: "codex",
         plan_type: "plus",
         used_percent: 20,
         window_duration_mins: 10080,
         resets_at: 1_787_012_727,
-        coverage_started_at: "2026-08-10T23:00:00.000Z",
+        coverage_started_at: "2026-09-04T02:00:00.000Z",
+        banked_reset_available_count: 1,
         updated_at: "2026-08-11T00:00:01.000Z",
       }), { status: 200 });
     }
     if (method === "GET" && url.includes("tibo_signals")) {
       return new Response(JSON.stringify([{
-        tweet_id: "banked-notice-route-test",
-        text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
-        tweet_url: "https://x.com/thsottiaux/status/banked-notice-route-test",
-        tweet_created_at: "2026-08-10T23:00:00.000Z",
-        expires_at: "2026-08-12T00:00:00.000Z",
+        tweet_id: "2095651088502591861",
+        text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today. Team is moving mountains to give access as fast as we can.\n\nFirst one will land in ~ 3 hours. There is still time to create your account if you don't have one.",
+        tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+        tweet_created_at: "2026-09-03T23:12:09.000Z",
+        expires_at: "2026-09-05T00:00:00.000Z",
         signal_type: "official_notice",
-        confidence: 0.99,
+        confidence: 0.98,
         verification_status: "auto_unverified",
         is_reply: false,
         ai_temporal_precision: "daypart",
-        expected_start_at: "2026-08-11T00:00:00.000Z",
-        expected_end_at: "2026-08-11T23:59:59.000Z",
+        expected_start_at: "2026-09-04T02:12:09.000Z",
+        expected_end_at: "2026-09-04T02:12:09.000Z",
         temporal_resolution_status: "resolved",
         ai_temporal_timezone: "America/Los_Angeles",
         ai_temporal_confidence: 0.98,
@@ -309,16 +310,19 @@ test("a broad BANKED notice plus a matching local credit grant creates one banke
 
   try {
     const response = await POST(buildRequest({
-      observedAt: "2026-08-11T00:02:00.000Z",
-      bankedResetAvailableCount: 1,
+      observedAt: "2026-09-04T03:34:46.386Z",
+      bankedResetAvailableCount: 2,
       bankedResetCountChange: true,
     }));
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
     const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
-    assert.equal(estimateWrite?.reset_event_key, "banked-reset-banked-notice-route-test");
-    assert.equal(estimateWrite?.display_execution_at, "2026-08-11T00:02:00.000Z");
+    assert.equal(estimateWrite?.reset_event_key, "banked-reset-2095651088502591861");
+    assert.equal(estimateWrite?.display_execution_at, "2026-09-04T03:34:46.386Z");
+    assert.equal(estimateWrite?.tibo_announced_at, "2026-09-03T23:12:09.000Z");
+    assert.equal(estimateWrite?.official_notice_tweet_id, "2095651088502591861");
+    assert.deepEqual(estimateWrite?.tibo_source_tweet_ids, ["2095651088502591861"]);
     const atomicPlan = getAtomicPlanFromRequests(requests);
     assert.equal(atomicPlan.observation, undefined);
     assert.equal(atomicPlan.regular_reset_event, undefined);

@@ -61,6 +61,19 @@ test("recognizes a broad BANKED distribution notice without treating generic res
   assert.equal(isBroadBankedDistributionNotice("I gave all my friends a BANKED reset."), false);
 });
 
+test("recognizes the generalized paid ChatGPT-plan condition in the Astra BANKED announcement", () => {
+  const text = "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today. Team is moving mountains to give access as fast as we can.\n\nFirst one will land in ~ 3 hours. There is still time to create your account if you don't have one.";
+
+  assert.equal(isBankedDistributionNotice(text), true);
+  assert.equal(isBroadBankedDistributionNotice(text), true);
+  assert.equal(isBroadBankedDistributionNotice("I gave you one banked reset."), false);
+  assert.equal(isBroadBankedDistributionNotice("I can give you one banked reset for every day you don't have access to Astra on your paid ChatGPT plan."), false);
+  assert.equal(isBroadBankedDistributionNotice("Your banked reset is ready."), false);
+  assert.equal(isBroadBankedDistributionNotice("You have 2 banked resets."), false);
+  assert.equal(isBroadBankedDistributionNotice("A paid ChatGPT user got one reset."), false);
+  assert.equal(isBroadBankedDistributionNotice("My paid ChatGPT plan has a reset."), false);
+});
+
 test("a BANKED completion post does not create generic or distribution history by itself", () => {
   const completion = {
     ...notice,
@@ -133,6 +146,49 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked[0].details?.resetMethod, "任意リセット権配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
+});
+
+test("creates the observed Astra BANKED event without promoting it to generic global history", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today. Team is moving mountains to give access as fast as we can.\n\nFirst one will land in ~ 3 hours. There is still time to create your account if you don't have one.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    confidence: 0.98,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:12:09.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const astraEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2095651088502591861",
+    displayExecutionAt: "2026-09-04T03:34:46.386Z",
+    tiboAnnouncedAt: "2026-09-03T23:12:09.000Z",
+    tiboPrimaryTweetId: "2095651088502591861",
+    tiboSourceTweetIds: ["2095651088502591861"],
+    officialNoticeTweetId: "2095651088502591861",
+    officialNoticeAt: "2026-09-03T23:12:09.000Z",
+  };
+
+  const history = combineResetHistory([], [], [], [], [astraNotice], [], [astraEstimate]);
+  const banked = history.filter((item) => item.recordKind === "banked_distribution");
+
+  assert.equal(banked.length, 1);
+  assert.equal(banked[0]?.id, "banked-reset-2095651088502591861");
+  assert.equal(banked[0]?.opened_at, "2026-09-03T23:12:09.000Z");
+  assert.equal(banked[0]?.completed_at, "2026-09-04T03:34:46.386Z");
+  assert.equal(banked[0]?.details?.cycleType, "ランダムリセット");
+  assert.equal(history.some((item) => item.recordKind === "confirmed_global"), false);
+
+  const viewModel = getRadarViewModel(getLocalRadarData({
+    calculationNow: new Date("2026-09-04T04:00:00.000Z"),
+    recentTiboSignals: [astraNotice],
+    resetExecutionEstimates: [astraEstimate],
+  }), "ja", false, undefined, new Date("2026-09-04T04:00:00.000Z"));
+  const publicBanked = viewModel.recentHistory.find((item) => item.key === "banked-reset-2095651088502591861");
+  assert.equal(publicBanked?.resetAt, "2026-09-04T03:34:46.386Z");
+  assert.equal(publicBanked?.executionTimePrecision, "approximate");
 });
 
 test("uses the accepted event display name for the 20M BANKED event in every locale", () => {

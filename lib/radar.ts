@@ -509,6 +509,16 @@ function getHistoryExecutionPresentation(
     return { resetAt: canonicalResetAt, executionTimePrecision: null } as const;
   }
 
+  // BANKED history already carries the observed execution time in its
+  // completed/closed fields. Keep that Monitor observation visible even when
+  // the persisted estimate does not have a recoverable observation window.
+  if (item.recordKind === "banked_distribution" && estimate) {
+    return {
+      resetAt: canonicalResetAt,
+      executionTimePrecision: estimate.executionTimePrecision ?? null,
+    } as const;
+  }
+
   const decision = resolveDisplayExecutionTime({
     resetEventKey: getResetDisplayNameEventKey(item) ?? item.id ?? "history-event",
     tiboAnnouncedAt: estimate?.tiboAnnouncedAt ?? canonicalResetAt,
