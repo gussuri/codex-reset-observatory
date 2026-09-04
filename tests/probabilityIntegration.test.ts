@@ -177,7 +177,7 @@ test("a consumed recurring conditional BANKED policy stays presentation-only", (
   assert.equal(viewModel.activeWindow.active, true);
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
   assert.equal(viewModel.activeWindow.expectedAt, null);
-  assert.match(viewModel.activeWindow.summary, /BANKEDリセットが配布される継続方針/);
+  assert.match(viewModel.activeWindow.summary, /BANKEDリセットが毎日配布される方針/);
 });
 
 test("a recurring BANKED policy remains visible after its first delivery window expires", () => {

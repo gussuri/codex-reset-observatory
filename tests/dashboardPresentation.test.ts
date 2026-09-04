@@ -1282,9 +1282,9 @@ test("renders a consumed recurring BANKED policy as an informational notice with
   });
 
   const localized = {
-    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが配布される継続方針が案内されています。",
-    en: "A continuing BANKED Reset distribution policy has been announced for paid ChatGPT users who still do not have access to GPT-6 Astra.",
-    zh: "已公布面向仍无法访问 GPT-6 Astra 的付费 ChatGPT 用户持续发放 BANKED 重置的安排。",
+    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが毎日配布される方針が案内されています。",
+    en: "A policy has been announced to distribute BANKED Resets every day to paid ChatGPT users who still do not have access to GPT-6 Astra.",
+    zh: "已公布一项政策：每天向仍无法访问 GPT-6 Astra 的付费 ChatGPT 用户发放 BANKED 重置。",
   } as const;
   const noSchedule = /時刻未定|time not specified|时间未定/;
 
