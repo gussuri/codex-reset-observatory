@@ -1149,7 +1149,10 @@ export function getOngoingBankedNotice(
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
-  const rawSignals = expandTiboSignalVariants(getTiboReadSideSignals(data, "active"));
+  // A recurring policy remains informational after its first delivery window
+  // expires. Use the retained recent signal set so that the one-shot delivery
+  // expiry does not consume the ongoing policy notice.
+  const rawSignals = expandTiboSignalVariants(getTiboReadSideSignals(data, "recent"));
   return rawSignals
     .filter((signal) => {
       if (
@@ -1164,11 +1167,7 @@ export function getOngoingBankedNotice(
       }
 
       const observedTime = Date.parse(signal.tweet_created_at);
-      const expiresTime = Date.parse(signal.expires_at ?? "");
-      return Number.isFinite(observedTime) &&
-        observedTime <= nowTime &&
-        Number.isFinite(expiresTime) &&
-        expiresTime > nowTime;
+      return Number.isFinite(observedTime) && observedTime <= nowTime;
     })
     .map((signal) => toDynamicOfficialNotice(signal, { ongoingBankedDistribution: true }))
     .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;

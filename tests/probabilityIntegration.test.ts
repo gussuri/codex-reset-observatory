@@ -180,6 +180,25 @@ test("a consumed recurring conditional BANKED policy stays presentation-only", (
   assert.match(viewModel.activeWindow.summary, /BANKEDリセットが配布される継続方針/);
 });
 
+test("a recurring BANKED policy remains visible after its first delivery window expires", () => {
+  const now = new Date("2026-09-04T06:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    recentTiboSignals: [{
+      tweet_id: "2095651088502591861",
+      text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+      tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+      signal_type: "official_notice",
+      confidence: 0.98,
+      tweet_created_at: "2026-09-03T23:12:09.000Z",
+      expires_at: "2026-09-04T05:12:09.000Z",
+      verification_status: "auto_unverified",
+    }],
+  });
+
+  assert.equal(getOngoingBankedNotice(data, now)?.id, "2095651088502591861");
+});
+
 test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({
