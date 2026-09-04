@@ -1,0 +1,54 @@
+name: Reconcile reset display names
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: reset-display-name-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reconcile production reset display names
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured"
+            exit 1
+          fi
+
+          RESPONSE_FILE="$(mktemp)"
+          trap 'rm -f "$RESPONSE_FILE"' EXIT
+          HTTP_STATUS="$(curl --silent --show-error --max-time 90 --output "$RESPONSE_FILE" --write-out "%{http_code}" --request POST --header "Authorization: Bearer ${CRON_SECRET}" "https://codex.gussuriworks.com/api/internal/reconcile-reset-display-names")"
+          echo "http_status=$HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            ERROR_CODE="$(jq -r 'if (.error | type) == "string" then .error else "unknown" end' "$RESPONSE_FILE" 2>/dev/null || echo "invalid_response")"
+            case "$ERROR_CODE" in
+              configuration_unavailable|Unauthorized|reconciliation_failed) ;;
+              *) ERROR_CODE="unknown" ;;
+            esac
+            echo "error=$ERROR_CODE"
+            exit 1
+          fi
+
+          jq -e '
+            .status == "completed" and
+            (.scanned | type) == "number" and
+            (.candidates | type) == "number" and
+            (.attempted | type) == "number" and
+            (.geminiRequests | type) == "number" and
+            (.writes | type) == "number" and
+            (.invalidated | type) == "boolean" and
+            (.statusSummary | type) == "object"
+          ' "$RESPONSE_FILE" > /dev/null
+          jq -c '{status, scanned, candidates, attempted, geminiRequests, writes, invalidated, statusSummary}' "$RESPONSE_FILE"

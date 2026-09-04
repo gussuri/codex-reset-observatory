@@ -67,6 +67,26 @@ function acceptedOutcome(eventKey: string): ResetDisplayNameGenerationOutcome {
   };
 }
 
+function transientExisting(status: "api_error" | "invalid_response", updatedAt: string): ResetDisplayNameRecord {
+  return {
+    event_key: "canonical-event-key",
+    source_tweet_id: TWEET_ID,
+    manual_name_ja: null,
+    ai_name_ja: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: "metadata+source",
+    ai_status: status,
+    ai_flags: [],
+    ai_generated_at: null,
+    input_hash: null,
+    updated_at: updatedAt,
+  };
+}
+
 test("conditional BANKED events are naming candidates but not probability candidates", () => {
   const item = resetEvent({ randomResetTargetScope: "conditional" });
   const completedAt = getCompletedResetTimestamp(item);
@@ -190,6 +210,49 @@ test("reconciliation bounds Gemini work and passes only the canonical event key"
   assert.equal(result.outcomes.filter((outcome) => outcome.status === "gemini_cap_reached").length, 1);
 });
 
+test("the scheduled adoption boundary is opt-in and excludes only older events", async () => {
+  const adoptionAt = new Date("2026-09-04T09:30:00.000Z");
+  const before = resetEvent({
+    closed_at: "2026-09-04T09:29:59.999Z",
+    completed_at: "2026-09-04T09:29:59.999Z",
+  });
+  const atBoundary = resetEvent({
+    closed_at: adoptionAt.toISOString(),
+    completed_at: adoptionAt.toISOString(),
+  });
+  const common = {
+    data: { reset_display_names: [] } as RadarData,
+    sourceRows: [sourceSignal()],
+    now: NOW,
+    apiKey: "test-key",
+    dryRun: true,
+  };
+
+  const beforeResult = await reconcileResetDisplayNames({
+    ...common,
+    canonicalHistory: [before],
+    adoptionAt,
+  });
+  assert.equal(beforeResult.candidates, 0);
+  assert.equal(beforeResult.outcomes[0]?.status, "before_adoption_boundary");
+  assert.equal(beforeResult.geminiRequests, 0);
+
+  const boundaryResult = await reconcileResetDisplayNames({
+    ...common,
+    canonicalHistory: [atBoundary],
+    adoptionAt,
+  });
+  assert.equal(boundaryResult.candidates, 1);
+  assert.equal(boundaryResult.outcomes[0]?.status, "dry_run");
+
+  const cliAuditResult = await reconcileResetDisplayNames({
+    ...common,
+    canonicalHistory: [before],
+  });
+  assert.equal(cliAuditResult.candidates, 1);
+  assert.equal(cliAuditResult.outcomes[0]?.status, "dry_run");
+});
+
 test("transient generation failures remain retryable on the next reconciliation", async () => {
   let calls = 0;
   const ensure = async (
@@ -226,6 +289,63 @@ test("transient generation failures remain retryable on the next reconciliation"
   assert.equal(first.attempted, 1);
   assert.equal(second.attempted, 1);
   assert.equal(calls, 2);
+});
+
+test("recent transient failures use a one-hour cooldown while source-unavailable rows remain retryable", async () => {
+  let calls = 0;
+  const ensure = async (): Promise<ResetDisplayNameGenerationOutcome> => {
+    calls += 1;
+    return acceptedOutcome("canonical-event-key");
+  };
+  const existing = transientExisting("api_error", "2026-09-04T11:30:00.000Z");
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [sourceSignal()],
+      reset_display_names: [existing],
+    } as RadarData,
+    canonicalHistory: [resetEvent()],
+    now: NOW,
+    apiKey: "test-key",
+    ensure,
+  });
+
+  assert.equal(result.outcomes[0]?.status, "retry_cooldown");
+  assert.equal(result.geminiRequests, 0);
+  assert.equal(calls, 0);
+
+  const sourceUnavailable = await reconcileResetDisplayNames({
+    data: {
+      reset_display_names: [existing],
+    } as RadarData,
+    canonicalHistory: [resetEvent({ source_url: null, sourceTweetIds: [] })],
+    now: NOW,
+    apiKey: "test-key",
+    ensure,
+  });
+  assert.equal(sourceUnavailable.outcomes[0]?.status, "source_unavailable");
+  assert.equal(calls, 0);
+});
+
+test("expired invalid-response cooldowns can be retried", async () => {
+  let calls = 0;
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [sourceSignal()],
+      reset_display_names: [transientExisting("invalid_response", "2026-09-04T10:00:00.000Z")],
+    } as RadarData,
+    canonicalHistory: [resetEvent()],
+    now: NOW,
+    apiKey: "test-key",
+    ensure: async () => {
+      calls += 1;
+      return acceptedOutcome("canonical-event-key");
+    },
+  });
+
+  assert.equal(result.outcomes[0]?.status, "accepted");
+  assert.equal(result.geminiRequests, 1);
+  assert.equal(result.writes, 1);
+  assert.equal(calls, 1);
 });
 
 test("manual and legacy accepted V2 names are protected before Gemini", async () => {

@@ -50,6 +50,7 @@ export type ResetDisplayNameReconciliationOptions = {
   canonicalHistory?: ReadonlyArray<WindowEventLike>;
   sourceRows?: ReadonlyArray<ResetDisplayNameSourceRow>;
   now?: Date;
+  adoptionAt?: Date;
   apiKey?: string | null;
   model?: string;
   timeoutMs?: number;
@@ -59,6 +60,8 @@ export type ResetDisplayNameReconciliationOptions = {
   ensure?: typeof ensureResetDisplayNameForEvent;
   invalidateRadarData?: () => void | Promise<void>;
 };
+
+export const RESET_DISPLAY_NAME_TRANSIENT_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
 
 type ReconciliationCandidate = {
   item: WindowEventLike;
@@ -199,6 +202,20 @@ function getMaxGeminiRequests(value: number | undefined) {
   return Math.max(0, Math.min(DEFAULT_MAX_GEMINI_REQUESTS, value as number));
 }
 
+function isWithinTransientRetryCooldown(
+  record: ResetDisplayNameRecord | null,
+  now: Date,
+) {
+  if (!record || !["api_error", "invalid_response"].includes(record.ai_status ?? "")) {
+    return false;
+  }
+  const updatedAt = record.updated_at ? Date.parse(record.updated_at) : Number.NaN;
+  const elapsed = now.getTime() - updatedAt;
+  return Number.isFinite(elapsed) &&
+    elapsed >= 0 &&
+    elapsed < RESET_DISPLAY_NAME_TRANSIENT_RETRY_COOLDOWN_MS;
+}
+
 function isSupabaseReadUnavailable(data: RadarData) {
   const state = data.data_health?.sources.supabaseSignals.state;
   const resetDisplayNamesState = data.reset_display_names_health?.state;
@@ -300,6 +317,18 @@ export async function reconcileResetDisplayNames(
 
     const completedAt = getCompletedResetTimestamp(item);
     if (completedAt === null) continue;
+    const adoptionAt = options.adoptionAt?.getTime();
+    if (adoptionAt !== undefined && Number.isFinite(adoptionAt) && completedAt < adoptionAt) {
+      results.outcomes.push({
+        eventKey,
+        sourceTweetId: null,
+        sourceReady: false,
+        attempted: false,
+        status: "before_adoption_boundary",
+        displayName: null,
+      });
+      continue;
+    }
     const sourceTweetIds = getCanonicalSourceTweetIds(item);
     const effectiveSource = resolveCandidateSource(sourceTweetIds, sourceRows);
     const sourcePostText = effectiveSource
@@ -357,6 +386,10 @@ export async function reconcileResetDisplayNames(
         false,
         candidate.existing?.ai_status === "accepted" ? candidate.existing.ai_name_ja : null,
       ));
+      continue;
+    }
+    if (isWithinTransientRetryCooldown(candidate.existing, now)) {
+      results.outcomes.push(outcome(candidate, "retry_cooldown"));
       continue;
     }
     if (shouldReuseResetDisplayNameResult(candidate.existing, candidate.inputHash, model)) {
