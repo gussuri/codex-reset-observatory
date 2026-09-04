@@ -602,9 +602,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "部分用户",
   },
   astraBankedHistoryNote: {
-    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。",
-    en: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra.",
-    zh: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。",
+    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
+    en: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra. It may be distributed progressively to eligible users rather than all at once.",
+    zh: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。可能会向符合条件的用户分批逐步发放，而不是一次性全部到账。",
   },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
