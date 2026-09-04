@@ -332,6 +332,96 @@ test("the Astra paid-plan BANKED notice plus a matching local credit grant creat
   }
 });
 
+test("a later persistent BANKED observation gets a distinct event key without source-overlap reuse", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const firstObservedAt = "2026-09-04T03:34:46.386Z";
+  const observedAt = "2026-09-04T04:34:46.386Z";
+  const firstEventKey = "banked-reset-2095651088502591861";
+  let latestEstimate: Record<string, unknown> = {
+    reset_event_key: firstEventKey,
+    display_execution_at: firstObservedAt,
+    created_at: firstObservedAt,
+    official_notice_tweet_id: "2095651088502591861",
+  };
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-04T03:00:00.000Z",
+        received_at: "2026-09-04T03:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 20,
+        window_duration_mins: 10080,
+        resets_at: 1_787_012_727,
+        coverage_started_at: "2026-09-04T02:00:00.000Z",
+        banked_reset_available_count: 1,
+        last_banked_grant_at: firstObservedAt,
+        updated_at: "2026-09-04T03:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: "2095651088502591861",
+        text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+        tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+        tweet_created_at: "2026-09-03T23:12:09.000Z",
+        expires_at: "2026-09-04T04:00:00.000Z",
+        signal_type: "official_notice",
+        confidence: 0.98,
+        verification_status: "auto_unverified",
+        is_reply: false,
+        expected_start_at: "2026-09-04T02:12:09.000Z",
+        expected_end_at: "2026-09-04T02:30:00.000Z",
+        temporal_resolution_status: "resolved",
+      }]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: latestEstimate, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      bankedResetAvailableCount: 2,
+      bankedResetCountChange: true,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(
+      estimateWrite?.reset_event_key,
+      "banked-reset-2095651088502591861-observation-20260904T043446386Z",
+    );
+    assert.deepEqual(estimateWrite?.tibo_source_tweet_ids, []);
+    assert.equal(estimateWrite?.official_notice_tweet_id, "2095651088502591861");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("bounded notice lookup keeps the latest signal available beyond 1000 old rows", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
@@ -430,6 +520,95 @@ test("bounded notice lookup keeps the latest signal available beyond 1000 old ro
     assertUsageWebhookQueryBounds(requests, observedAt);
     const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
     assert.equal(estimateWrite?.reset_event_key, "banked-reset-latest-banked-notice-after-old-rows");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("registered persistent notice lookup restores an expired Astra notice without widening one-shot lookup", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const observedAt = "2026-09-04T00:00:00.000Z";
+  const astraNotice = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-01T23:12:09.000Z",
+    expires_at: "2026-09-02T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    ai_temporal_precision: "daypart",
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:12:09.000Z",
+    temporal_resolution_status: "resolved",
+    ai_temporal_timezone: "America/Los_Angeles",
+    ai_temporal_confidence: 0.98,
+  };
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-03T23:59:00.000Z",
+        received_at: "2026-09-03T23:59:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 20,
+        window_duration_mins: 10080,
+        resets_at: 1_787_012_727,
+        coverage_started_at: "2026-09-03T22:00:00.000Z",
+        banked_reset_available_count: 1,
+        updated_at: "2026-09-03T23:59:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const persistentLookup = query.searchParams.get("tweet_id") === "in.(2095651088502591861)";
+      return new Response(JSON.stringify(persistentLookup ? [astraNotice] : []), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 20,
+      bankedResetAvailableCount: 2,
+      bankedResetCountChange: true,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    const tiboRequests = requests.filter((request) => request.method === "GET" && request.url.includes("tibo_signals"));
+    assert.equal(tiboRequests.length, 2);
+    const boundedRequest = tiboRequests.find((request) => !new URL(request.url).searchParams.has("tweet_id"));
+    assert.ok(boundedRequest);
+    const persistentRequest = tiboRequests.find((request) => new URL(request.url).searchParams.get("tweet_id") === "in.(2095651088502591861)");
+    assert.ok(persistentRequest);
+    const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(estimateWrite?.reset_event_key, "banked-reset-2095651088502591861");
+    assert.equal(estimateWrite?.official_notice_tweet_id, "2095651088502591861");
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -720,7 +899,9 @@ test("regular recovery records the observation and canonical event without match
 
     assert.equal(response.status, 200);
     assert.equal(regularRowsReturned, "latest");
-    assert.equal(requests.filter((request) => request.url.includes("tibo_signals") && request.method === "GET").length, 1, JSON.stringify(requests));
+    const tiboRequests = requests.filter((request) => request.url.includes("tibo_signals") && request.method === "GET");
+    assert.equal(tiboRequests.filter((request) => !new URL(request.url).searchParams.has("tweet_id")).length, 1, JSON.stringify(requests));
+    assert.equal(tiboRequests.filter((request) => new URL(request.url).searchParams.has("tweet_id")).length, 1, JSON.stringify(requests));
     assert.equal(getAtomicPlanFromRequests(requests).promotion, undefined);
     const observation = getAtomicPlanPart(requests, "observation");
     assert.equal(observation?.matched_tibo_tweet_id, null);

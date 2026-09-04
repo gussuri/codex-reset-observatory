@@ -45,11 +45,12 @@ import {
   type TiboLogicalPostRow,
 } from "./tiboLogicalPost";
 import {
-  BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   isBankedDistributionCompletionSignal,
+  isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
 } from "./bankedReset";
+import { getOfficialNoticeConsumption } from "./officialNoticePolicy";
 
 export type TiboSignalType =
   | "official_notice"
@@ -1678,12 +1679,13 @@ function buildBankedDistributionEvent(
     (estimate.manualExecutionPrecision === "approximate" || estimate.manualExecutionPrecision === "exact") &&
     getTimestamp(estimate.manualExecutionAt) === displayTime;
   if (
-    estimate.estimatorVersion !== BANKED_DISTRIBUTION_ESTIMATOR_VERSION ||
+    !isBankedDistributionEstimatorVersion(estimate.estimatorVersion) ||
     (!isUsageObservationEstimate && !isManualOverrideEstimate) ||
     estimate.recoveryObservationId ||
     !estimate.officialNoticeTweetId ||
     estimate.officialNoticeTweetId !== notice.tweet_id ||
-    !estimate.tiboSourceTweetIds.includes(notice.tweet_id) ||
+    (getOfficialNoticeConsumption(notice.tweet_id) !== "persistent" &&
+      !estimate.tiboSourceTweetIds.includes(notice.tweet_id)) ||
     notice.signal_type !== "official_notice" ||
     notice.verification_status === "rejected" ||
     (notice.confidence ?? 0) < FORMAL_RESET_CONFIDENCE ||
@@ -1742,6 +1744,7 @@ export function findBankedDistributionEvents(
 ): Array<WindowEventLike> {
   const seen = new Set<string>();
   return estimates.flatMap((estimate) => {
+    if (!isBankedDistributionEstimatorVersion(estimate.estimatorVersion)) return [];
     if (seen.has(estimate.resetEventKey)) return [];
     seen.add(estimate.resetEventKey);
     const notice = noticeSignals.find((signal): signal is TiboNoticeSignal =>
@@ -1749,7 +1752,8 @@ export function findBankedDistributionEvents(
       signal.tweet_id === estimate.officialNoticeTweetId,
     );
     const relatedNotices = noticeSignals.filter((signal) =>
-      estimate.tiboSourceTweetIds.includes(signal.tweet_id),
+      estimate.tiboSourceTweetIds.includes(signal.tweet_id) ||
+      signal.tweet_id === estimate.officialNoticeTweetId,
     );
     const event = notice ? buildBankedDistributionEvent(estimate, notice, relatedNotices) : null;
     return event ? [event] : [];

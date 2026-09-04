@@ -58,6 +58,10 @@ import {
   isRecurringConditionalBankedDistributionNotice,
   isSupersededBankedNotice,
 } from "./bankedReset";
+import {
+  getOfficialNoticeConsumption,
+  type OfficialNoticeConsumption,
+} from "./officialNoticePolicy";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 
@@ -82,6 +86,7 @@ export type ActiveOfficialNotice = {
   text?: string | null;
   isBankedDistribution?: boolean;
   isOngoingBankedDistribution?: boolean;
+  consumption?: OfficialNoticeConsumption;
   temporalPrecision?: TemporalPrecision | null;
   temporalConfidence?: number | null;
   temporalResolutionStatus?: TemporalResolutionStatus | null;
@@ -179,25 +184,37 @@ function getSignalTemporalWindow(signal: {
 
 function toDynamicOfficialNotice(
   signal: ActiveTiboSignal,
-  options: { ongoingBankedDistribution?: boolean } = {},
+  options: {
+    ongoingBankedDistribution?: boolean;
+    persistentAfterInitialWindow?: boolean;
+  } = {},
 ): ActiveOfficialNotice {
   const isOngoingBankedDistribution = options.ongoingBankedDistribution === true;
+  const persistentAfterInitialWindow = options.persistentAfterInitialWindow === true;
+  const hideInitialSchedule = isOngoingBankedDistribution || persistentAfterInitialWindow;
+  const consumption = getOfficialNoticeConsumption(signal.tweet_id);
   return {
     origin: "dynamic",
     id: signal.tweet_id,
     title: signal.text ?? null,
     summary: signal.text ?? null,
     observedAt: signal.tweet_created_at,
-    expectedAt: isOngoingBankedDistribution ? null : signal.expected_start_at ?? null,
-    expectedEndAt: isOngoingBankedDistribution ? null : signal.expected_end_at ?? null,
+    expectedAt: hideInitialSchedule ? null : signal.expected_start_at ?? null,
+    expectedEndAt: hideInitialSchedule ? null : signal.expected_end_at ?? null,
     expiresAt: signal.expires_at ?? null,
     source: signal.tweet_url ?? null,
     sourceLabel: getTiboDisplayLabel(signal.tweet_url),
     text: signal.text ?? null,
     isBankedDistribution: isBankedDistributionNotice(signal.text),
+    consumption,
     ...(isOngoingBankedDistribution ? {
       isOngoingBankedDistribution: true,
       temporalPrecision: "unknown" as const,
+    } : persistentAfterInitialWindow ? {
+      temporalPrecision: "unknown" as const,
+      temporalConfidence: null,
+      temporalResolutionStatus: "unresolved" as const,
+      temporalTimezone: null,
     } : {
       temporalPrecision: getEffectiveTemporalPrecision({
         status: signal.temporal_resolution_status,
@@ -1002,23 +1019,35 @@ export function getActiveOfficialNotice(
         resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
         latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
       );
-  const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(
-    getTiboReadSideSignals(data, "active"),
-  );
+  const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(Array.from(new Map(
+    [
+      ...getTiboReadSideSignals(data, "active"),
+      ...getTiboReadSideSignals(data, "recent"),
+    ].map((signal) => [signal.tweet_id, signal] as const),
+  ).values()));
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
     .flatMap((signal) => {
+      const consumption = getOfficialNoticeConsumption(signal.tweet_id);
+      const isPersistent = consumption === "persistent";
       if (
         signal.signal_type !== "official_notice" ||
         signal.is_reply === true ||
         (signal.confidence ?? 0) < 0.95 ||
         signal.verification_status === "rejected" ||
-        isSupersededBankedNotice(signal, rawSignals)
+        (!isPersistent && isSupersededBankedNotice(signal, rawSignals))
       ) {
         return [];
       }
 
       const observedTime = new Date(signal.tweet_created_at).getTime();
       const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
+      const initialWindowEnd = [signal.expected_end_at, signal.expires_at]
+        .map((value) => typeof value === "string" ? Date.parse(value) : Number.NaN)
+        .filter((value) => Number.isFinite(value))
+        .sort((left, right) => left - right)[0];
+      const persistentAfterInitialWindow = isPersistent &&
+        Number.isFinite(initialWindowEnd) &&
+        initialWindowEnd <= now.getTime();
       const latestBoundaryTime = cutoff === Number.NEGATIVE_INFINITY ? null : cutoff;
       const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
         new Date(signal.primary_event_at ?? "").getTime() === cutoff;
@@ -1063,16 +1092,16 @@ export function getActiveOfficialNotice(
       if (
         Number.isNaN(observedTime) ||
         observedTime > now.getTime() ||
-        Number.isNaN(expiresTime) ||
-        expiresTime <= now.getTime() ||
-        (!executionWindowMatched && temporalRelation === "after" && !secondaryFollowsThisBoundary) ||
-        (!executionWindowMatched && observedTime < cutoff && consumedByExecutionWindow) ||
-        (!executionWindowMatched && observedTime === cutoff && !secondaryFollowsThisBoundary && consumedByExecutionWindow)
+        (!isPersistent && Number.isNaN(expiresTime)) ||
+        (!isPersistent && expiresTime <= now.getTime()) ||
+        (!isPersistent && !executionWindowMatched && temporalRelation === "after" && !secondaryFollowsThisBoundary) ||
+        (!isPersistent && !executionWindowMatched && observedTime < cutoff && consumedByExecutionWindow) ||
+        (!isPersistent && !executionWindowMatched && observedTime === cutoff && !secondaryFollowsThisBoundary && consumedByExecutionWindow)
       ) {
         return [];
       }
 
-      return [toDynamicOfficialNotice(signal)];
+      return [toDynamicOfficialNotice(signal, { persistentAfterInitialWindow })];
     });
   const localNotices = localObservationSignals
     .filter(
@@ -1094,6 +1123,7 @@ export function getActiveOfficialNotice(
       source: signal.source ?? null,
       sourceLabel: signal.sourceLabel,
       isBankedDistribution: false,
+      consumption: "one_shot",
     }));
 
   const representativeDynamicNotice = dynamicNotices
@@ -1138,9 +1168,9 @@ export function getActiveOfficialNotice(
 }
 
 /**
- * Selects a recurring conditional BANKED policy for presentation only. It is
- * intentionally separate from getActiveOfficialNotice so it cannot activate
- * the official-notice probability override after an observed delivery.
+ * Legacy compatibility selector for callers that still need the old
+ * presentation-only policy view. The production dashboard now resolves
+ * registered persistent notices through getActiveOfficialNotice instead.
  */
 export function getOngoingBankedNotice(
   data: RadarData | null,

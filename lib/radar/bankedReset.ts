@@ -1,5 +1,53 @@
 export const BANKED_NOTICE_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "banked-distribution-observation-v2";
+export const LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "usage-execution-banked-v1";
+export const BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS = [
+  BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
+  LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
+] as const;
+
+const bankedDistributionEstimatorVersions = new Set<string>(BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS);
+
+export function isBankedDistributionEstimatorVersion(value: string | null | undefined) {
+  return typeof value === "string" && bankedDistributionEstimatorVersions.has(value);
+}
+
+export type BankedDistributionEventKeyInput = {
+  noticeTweetId: string;
+  observedAt: string;
+  persistent: boolean;
+  previousGrantAt?: string | null;
+  previousEventKey?: string | null;
+};
+
+function getStableObservationToken(observedAt: string) {
+  const timestamp = Date.parse(observedAt);
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toISOString().replace(/[-:.]/g, "")
+    : null;
+}
+
+/** Keeps retries idempotent while giving each later persistent observation its own event. */
+export function getBankedDistributionEventKey(input: BankedDistributionEventKeyInput) {
+  const baseKey = `banked-reset-${input.noticeTweetId}`;
+  if (!input.persistent) return baseKey;
+
+  const observedTime = Date.parse(input.observedAt);
+  const previousTime = Date.parse(input.previousGrantAt ?? "");
+  if (
+    input.previousEventKey &&
+    Number.isFinite(observedTime) &&
+    Number.isFinite(previousTime) &&
+    observedTime === previousTime
+  ) {
+    return input.previousEventKey;
+  }
+
+  const hasPreviousGrant = typeof input.previousGrantAt === "string" && input.previousGrantAt.trim().length > 0;
+  const observationToken = getStableObservationToken(input.observedAt);
+  if (!hasPreviousGrant || !observationToken) return baseKey;
+  return `${baseKey}-observation-${observationToken}`;
+}
 
 export type BankedNoticeTiming = {
   observedAt: string;

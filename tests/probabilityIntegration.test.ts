@@ -124,7 +124,7 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
 });
 
-test("a consumed recurring conditional BANKED policy stays presentation-only", () => {
+test("an explicitly registered persistent BANKED policy stays active after delivery", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const astraNotice = {
     tweet_id: "2095651088502591861",
@@ -160,7 +160,12 @@ test("a consumed recurring conditional BANKED policy stays presentation-only", (
     formalTiboResets: [execution],
   });
 
-  assert.equal(getActiveOfficialNotice(data, null, now), null);
+  const activeNotice = getActiveOfficialNotice(data, null, now);
+  assert.equal(activeNotice?.id, astraNotice.tweet_id);
+  assert.equal(activeNotice?.consumption, "persistent");
+  assert.equal(activeNotice?.expectedAt, null);
+  assert.equal(activeNotice?.expectedEndAt, null);
+  assert.equal(activeNotice?.temporalPrecision, "unknown");
   const ongoingNotice = getOngoingBankedNotice(data, now);
   assert.equal(ongoingNotice?.id, astraNotice.tweet_id);
   assert.equal(ongoingNotice?.expectedAt, null);
@@ -169,15 +174,18 @@ test("a consumed recurring conditional BANKED policy stays presentation-only", (
 
   const calculation = getLocalProbabilityCalculation(data, { now });
   const baselineCalculation = getLocalProbabilityCalculation(baselineData, { now });
-  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
-  assert.equal(calculation.probability24h, baselineCalculation.probability24h);
-  assert.equal(calculation.probability48h, baselineCalculation.probability48h);
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, true);
+  assert.equal(calculation.probability24h, 0.9);
+  assert.equal(calculation.probability48h, 0.96);
+  assert.notEqual(calculation.probability24h, baselineCalculation.probability24h);
+  assert.notEqual(calculation.probability48h, baselineCalculation.probability48h);
 
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
   assert.equal(viewModel.activeWindow.active, true);
+  assert.equal(viewModel.activeWindow.kind, "official");
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
   assert.equal(viewModel.activeWindow.expectedAt, null);
-  assert.match(viewModel.activeWindow.summary, /BANKEDリセットが毎日配布される方針/);
+  assert.match(viewModel.activeWindow.summary, /BANKEDリセット.*配布が予告されています/);
 });
 
 test("a recurring BANKED policy remains visible after its first delivery window expires", () => {
@@ -197,6 +205,11 @@ test("a recurring BANKED policy remains visible after its first delivery window 
   });
 
   assert.equal(getOngoingBankedNotice(data, now)?.id, "2095651088502591861");
+  const activeNotice = getActiveOfficialNotice(data, null, now);
+  assert.equal(activeNotice?.id, "2095651088502591861");
+  assert.equal(activeNotice?.expectedAt, null);
+  assert.equal(activeNotice?.expectedEndAt, null);
+  assert.equal(activeNotice?.temporalPrecision, "unknown");
 });
 
 test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
@@ -219,6 +232,26 @@ test("a conditional but non-recurring BANKED notice keeps the existing one-shot 
   assert.equal(getActiveOfficialNotice(data, null, now)?.id, "conditional-one-shot-banked");
   const calculation = getLocalProbabilityCalculation(data, { now });
   assert.equal(calculation.breakdown.officialNoticeOverride.active, true);
+
+  const afterExpiry = getActiveOfficialNotice(data, null, new Date("2026-09-06T00:00:00.000Z"));
+  assert.equal(afterExpiry, null);
+});
+
+test("recurring wording alone does not make an unregistered notice persistent", () => {
+  const data = getLocalRadarData({
+    activeTiboSignals: [{
+      tweet_id: "recurring-but-unregistered",
+      text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan.",
+      tweet_url: "https://x.com/thsottiaux/status/recurring-but-unregistered",
+      signal_type: "official_notice",
+      confidence: 0.98,
+      tweet_created_at: "2026-09-03T23:12:09.000Z",
+      expires_at: "2026-09-04T05:12:09.000Z",
+      verification_status: "auto_unverified",
+    }],
+  });
+
+  assert.equal(getActiveOfficialNotice(data, null, new Date("2026-09-04T06:00:00.000Z")), null);
 });
 
 test("a concrete BANKED deadline is an active range and supersedes its older broad notice", () => {

@@ -7,6 +7,8 @@ import {
   BANKED_NOTICE_MATCH_WINDOW_MS,
   isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
+  getBankedDistributionEventKey,
+  isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
   isRecurringConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
@@ -61,6 +63,14 @@ const estimate = {
 
 test("uses the dedicated BANKED distribution estimator version", () => {
   assert.equal(BANKED_DISTRIBUTION_ESTIMATOR_VERSION, "banked-distribution-observation-v2");
+});
+
+test("accepts only the canonical and Production legacy BANKED estimator versions", () => {
+  assert.equal(isBankedDistributionEstimatorVersion("banked-distribution-observation-v2"), true);
+  assert.equal(isBankedDistributionEstimatorVersion("usage-execution-banked-v1"), true);
+  assert.equal(isBankedDistributionEstimatorVersion("usage-execution-v1"), false);
+  assert.equal(isBankedDistributionEstimatorVersion("usage-execution-monitor-v1"), false);
+  assert.equal(isBankedDistributionEstimatorVersion(null), false);
 });
 
 test("recognizes a broad BANKED distribution notice without treating generic reset wording as one", () => {
@@ -125,6 +135,41 @@ test("accepts only a positive explicit BANKED reset count transition", () => {
   assert.equal(isBankedResetAvailableCountGrant(1, 0), false);
   assert.equal(isBankedResetAvailableCountGrant(1, 1), false);
   assert.equal(isBankedResetAvailableCountGrant(null, 1), false);
+});
+
+test("gives persistent BANKED observations stable, distinct event keys", () => {
+  const noticeTweetId = "2095651088502591861";
+  const firstObservedAt = "2026-09-04T03:34:46.386Z";
+  const secondObservedAt = "2026-09-05T03:34:46.386Z";
+  const firstKey = `banked-reset-${noticeTweetId}`;
+  const secondKey = `${firstKey}-observation-20260905T033446386Z`;
+
+  assert.equal(getBankedDistributionEventKey({
+    noticeTweetId,
+    observedAt: firstObservedAt,
+    persistent: true,
+  }), firstKey);
+  assert.equal(getBankedDistributionEventKey({
+    noticeTweetId,
+    observedAt: secondObservedAt,
+    persistent: true,
+    previousGrantAt: firstObservedAt,
+    previousEventKey: firstKey,
+  }), secondKey);
+  assert.equal(getBankedDistributionEventKey({
+    noticeTweetId,
+    observedAt: secondObservedAt,
+    persistent: true,
+    previousGrantAt: secondObservedAt,
+    previousEventKey: secondKey,
+  }), secondKey);
+  assert.equal(getBankedDistributionEventKey({
+    noticeTweetId,
+    observedAt: secondObservedAt,
+    persistent: false,
+    previousGrantAt: firstObservedAt,
+    previousEventKey: firstKey,
+  }), firstKey);
 });
 
 test("matches a credit observation to the resolved BANKED notice window", () => {
@@ -257,6 +302,50 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     assert.equal(publicBanked.details?.noticeToExecution, expected[locale].noticeToExecution);
     assert.equal(publicBanked.details?.note, expected[locale].note);
   }
+});
+
+test("keeps later persistent BANKED observations as separate history events", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+  };
+  const firstEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2095651088502591861",
+    displayExecutionAt: "2026-09-04T03:34:46.386Z",
+    tiboAnnouncedAt: astraNotice.tweet_created_at,
+    tiboPrimaryTweetId: astraNotice.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id],
+    officialNoticeTweetId: astraNotice.tweet_id,
+    officialNoticeAt: astraNotice.tweet_created_at,
+  };
+  const secondEstimate = {
+    ...firstEstimate,
+    resetEventKey: "banked-reset-2095651088502591861-observation-20260905T033446386Z",
+    displayExecutionAt: "2026-09-05T03:34:46.386Z",
+    tiboSourceTweetIds: [],
+    estimatorVersion: "usage-execution-banked-v1",
+  };
+
+  const events = findBankedDistributionEvents([astraNotice], [firstEstimate, secondEstimate]);
+
+  assert.deepEqual(events.map((event) => event.id), [
+    firstEstimate.resetEventKey,
+    secondEstimate.resetEventKey,
+  ]);
+  assert.deepEqual(events[1]?.sourceTweetIds, [astraNotice.tweet_id]);
+});
+
+test("does not treat generic or monitor estimator versions as BANKED distribution events", () => {
+  const unsupportedEstimates = [
+    { ...estimate, estimatorVersion: "usage-execution-v1" },
+    { ...estimate, estimatorVersion: "usage-execution-monitor-v1" },
+  ];
+
+  assert.deepEqual(findBankedDistributionEvents([notice], unsupportedEstimates), []);
 });
 
 test("excludes conditional Astra BANKED distribution from the random-reset target", () => {

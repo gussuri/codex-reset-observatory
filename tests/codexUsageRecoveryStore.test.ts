@@ -7,6 +7,7 @@ import {
 } from "../lib/codexUsageRecovery";
 import {
   confirmNearestCodexRecoveryObservation,
+  findLatestBankedGrant,
   getNextUsageMonitorLastBankedGrantAt,
   upsertResetExecutionEstimate,
 } from "../lib/codexUsageRecoveryStore";
@@ -462,4 +463,47 @@ test("an existing execution estimate keeps its event and primary provenance duri
   assert.equal(persistedUpdatePayload?.display_execution_at, "2026-08-31T00:10:00.000Z");
   assert.equal(persistedUpdatePayload?.official_notice_tweet_id, "notice-old");
   assert.deepEqual(persistedUpdatePayload?.tibo_source_tweet_ids, ["tweet-A", "tweet-B", "notice-old"]);
+});
+
+test("findLatestBankedGrant includes the legacy Production BANKED estimator version", async () => {
+  let estimatorVersions: string[] = [];
+  const client = {
+    from(table: string) {
+      assert.equal(table, "reset_execution_estimates");
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.in = (column: string, values: string[]) => {
+        assert.equal(column, "estimator_version");
+        estimatorVersions = values;
+        return builder;
+      };
+      builder.lte = () => builder;
+      builder.eq = () => builder;
+      builder.order = () => builder;
+      builder.limit = () => builder;
+      builder.maybeSingle = async () => ({
+        data: {
+          reset_event_key: "banked-reset-legacy-production",
+          display_execution_at: "2026-09-04T03:34:46.386Z",
+          created_at: "2026-09-04T03:34:46.386Z",
+        },
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findLatestBankedGrant(
+    client as never,
+    "2026-09-05T03:34:46.386Z",
+  );
+
+  assert.deepEqual(estimatorVersions, [
+    "banked-distribution-observation-v2",
+    "usage-execution-banked-v1",
+  ]);
+  assert.deepEqual(result, {
+    resetEventKey: "banked-reset-legacy-production",
+    observedAt: "2026-09-04T03:34:46.386Z",
+  });
 });

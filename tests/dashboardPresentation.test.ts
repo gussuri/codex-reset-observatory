@@ -1251,7 +1251,7 @@ test("keeps the simplified official notice card above the probability card", (t:
   assert.doesNotMatch(html, /border-slate-50/);
 });
 
-test("renders a consumed recurring BANKED policy as an informational notice without a schedule", () => {
+test("renders a persistent BANKED policy as an official notice without a stale schedule", () => {
   const calculationNow = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({
     calculationNow,
@@ -1282,9 +1282,9 @@ test("renders a consumed recurring BANKED policy as an informational notice with
   });
 
   const localized = {
-    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが毎日配布される方針が案内されています。",
-    en: "A policy has been announced to distribute BANKED Resets every day to paid ChatGPT users who still do not have access to GPT-6 Astra.",
-    zh: "已公布一项政策：每天向仍无法访问 GPT-6 Astra 的付费 ChatGPT 用户发放 BANKED 重置。",
+    ja: "BANKEDリセット（任意リセット権）の配布が予告されています。",
+    en: "A BANKED Reset distribution has been announced.",
+    zh: "已发布 BANKED 重置发放预告。",
   } as const;
   const noSchedule = /時刻未定|time not specified|时间未定/;
 
@@ -1297,12 +1297,14 @@ test("renders a consumed recurring BANKED policy as an informational notice with
     );
 
     assert.match(html, new RegExp(localized[locale].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(html, new RegExp(`${locale === "ja" ? "公式リセット予告" : locale === "en" ? "Official reset notice" : "官方重置预告"}[\\s\\S]*${locale === "ja" ? "予告あり" : locale === "en" ? "Notice available" : "已有预告"}`));
+    assert.doesNotMatch(html, /継続中のBANKED配布方針|Ongoing BANKED distribution policy|持续中的 BANKED 发放政策/);
     assert.doesNotMatch(html, noSchedule);
     assert.match(html, /href="https:\/\/x\.com\/thsottiaux\/status\/2095651088502591861"/);
   }
 });
 
-test("uses the informational BANKED heading and keeps official reset status absent", () => {
+test("uses the official BANKED heading and reports an available official notice", () => {
   const calculationNow = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({
     calculationNow,
@@ -1332,9 +1334,9 @@ test("uses the informational BANKED heading and keeps official reset status abse
     }],
   });
   const expected = {
-    ja: { heading: "BANKEDリセット配布案内", noticeLabel: "公式リセット予告", noticeValue: "なし" },
-    en: { heading: "BANKED Reset Distribution Notice", noticeLabel: "Official reset notice", noticeValue: "None" },
-    zh: { heading: "BANKED 重置发放说明", noticeLabel: "官方重置预告", noticeValue: "无" },
+    ja: { heading: "BANKEDリセット（任意リセット権）の配布が予告されています。", noticeLabel: "公式リセット予告", noticeValue: "予告あり" },
+    en: { heading: "A BANKED Reset distribution has been announced.", noticeLabel: "Official reset notice", noticeValue: "Notice available" },
+    zh: { heading: "已发布 BANKED 重置发放预告。", noticeLabel: "官方重置预告", noticeValue: "已有预告" },
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -1343,12 +1345,12 @@ test("uses the informational BANKED heading and keeps official reset status abse
       React.createElement(RadarDashboard, { initialData: snapshot, locale }),
     );
 
-    assert.equal(snapshot.viewModel.activeWindow.kind, "none");
+    assert.equal(snapshot.viewModel.activeWindow.kind, "official");
     assert.equal(snapshot.viewModel.activeWindow.noticeKind, "banked");
     assert.equal(snapshot.viewModel.activeWindow.label, expected[locale].heading);
     assert.match(html, new RegExp(expected[locale].heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(html, new RegExp(`${expected[locale].noticeLabel}[\\s\\S]*${expected[locale].noticeValue}`));
-    assert.doesNotMatch(html, new RegExp(`${expected[locale].noticeLabel}[\\s\\S]*(予告あり|Notice available|已有预告)`));
+    assert.doesNotMatch(html, /継続中のBANKED配布方針|Ongoing BANKED distribution policy|持续中的 BANKED 发放政策/);
   }
 });
 

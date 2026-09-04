@@ -17,7 +17,10 @@ import {
   type ResetExecutionEstimate,
   type ResolveDisplayExecutionTimeInput,
 } from "./radar/resetExecution";
-import { BANKED_DISTRIBUTION_ESTIMATOR_VERSION } from "./radar/bankedReset";
+import {
+  BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
+  BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS,
+} from "./radar/bankedReset";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
 import {
   findRelatedTiboNotices,
@@ -247,18 +250,28 @@ export function getNextUsageMonitorLastBankedGrantAt(
   return previousState?.lastBankedGrantAt ?? null;
 }
 
-export async function findLatestBankedGrantAt(
+export type LatestBankedGrant = {
+  resetEventKey: string | null;
+  observedAt: string | null;
+};
+
+export async function findLatestBankedGrant(
   client: SupabaseClient<any>,
   observedAt: string,
-): Promise<string | null> {
+  officialNoticeTweetId?: string | null,
+): Promise<LatestBankedGrant | null> {
   const time = Date.parse(observedAt);
   if (!Number.isFinite(time)) return null;
 
-  const result = await client
+  let query = client
     .from("reset_execution_estimates")
-    .select("display_execution_at,created_at,tibo_announced_at,official_notice_at")
-    .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
+    .select("reset_event_key,display_execution_at,created_at,tibo_announced_at,official_notice_tweet_id,official_notice_at")
+    .in("estimator_version", [...BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS])
     .lte("display_execution_at", observedAt)
+  if (officialNoticeTweetId) {
+    query = query.eq("official_notice_tweet_id", officialNoticeTweetId);
+  }
+  const result = await query
     .order("display_execution_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -267,7 +280,19 @@ export async function findLatestBankedGrantAt(
     return null;
   }
 
-  return result.data.display_execution_at ?? result.data.created_at ?? null;
+  return {
+    resetEventKey: typeof result.data.reset_event_key === "string"
+      ? result.data.reset_event_key
+      : null,
+    observedAt: result.data.display_execution_at ?? result.data.created_at ?? null,
+  };
+}
+
+export async function findLatestBankedGrantAt(
+  client: SupabaseClient<any>,
+  observedAt: string,
+): Promise<string | null> {
+  return (await findLatestBankedGrant(client, observedAt))?.observedAt ?? null;
 }
 
 export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {

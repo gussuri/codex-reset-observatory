@@ -15,7 +15,7 @@ import {
 } from "@/lib/codexUsageRecovery";
 import {
   findFormalTiboResetCluster,
-  findLatestBankedGrantAt,
+  findLatestBankedGrant,
   findRecentFormalTiboReset,
   readCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
@@ -44,9 +44,11 @@ import {
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import {
+  getBankedDistributionEventKey,
   isBankedObservationWithinNoticeWindow,
   isBroadBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
+import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 
 const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
@@ -154,7 +156,20 @@ async function hasActiveOfficialNotice(
   const noticeLookbackStartIso = new Date(
     observedAt.getTime() - NOTICE_LOOKBACK_MS,
   ).toISOString();
-  const [tiboResult, regularResult] = await Promise.all([
+  const persistentTiboResultPromise = PERSISTENT_OFFICIAL_NOTICE_IDS.length > 0
+    ? client
+      .from("tibo_signals")
+      .select(NOTICE_COLUMNS)
+      .in("tweet_id", [...PERSISTENT_OFFICIAL_NOTICE_IDS])
+      .in("signal_type", ["official_notice", "reset_executed", "teaser", "irrelevant"])
+      .or("is_reply.is.null,is_reply.eq.false")
+      .neq("verification_status", "rejected")
+      .lte("tweet_created_at", observedAtIso)
+      .order("tweet_created_at", { ascending: false })
+      .order("tweet_id", { ascending: false })
+      .limit(1000)
+    : Promise.resolve({ data: [], error: null });
+  const [tiboResult, persistentTiboResult, regularResult] = await Promise.all([
     client
       .from("tibo_signals")
       .select(NOTICE_COLUMNS)
@@ -166,6 +181,7 @@ async function hasActiveOfficialNotice(
       .order("tweet_created_at", { ascending: false })
       .order("tweet_id", { ascending: false })
       .limit(1000),
+    persistentTiboResultPromise,
     client
       .from("regular_reset_events")
       .select(REGULAR_COLUMNS)
@@ -177,7 +193,7 @@ async function hasActiveOfficialNotice(
       .limit(1),
   ]);
 
-  if (tiboResult.error || regularResult.error) {
+  if (tiboResult.error || persistentTiboResult.error || regularResult.error) {
     return {
       active: false,
       noticeSignal: null,
@@ -185,11 +201,16 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       bankedNoticeSignals: [],
-      error: tiboResult.error ?? regularResult.error,
+      error: tiboResult.error ?? persistentTiboResult.error ?? regularResult.error,
     };
   }
 
-  const signals = (tiboResult.data ?? []) as unknown as ActiveTiboSignal[];
+  const signals = Array.from(new Map(
+    [
+      ...((tiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
+      ...((persistentTiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
+    ].map((signal) => [signal.tweet_id, signal] as const),
+  ).values());
   const data: RadarData = {
     active_tibo_signals: signals,
     formal_tibo_resets: signals
@@ -245,6 +266,8 @@ function getCorroboratedBankedDistribution(
   snapshot: CodexUsageSnapshot,
   lookup: OfficialNoticeLookup | null,
   effectiveBankedResetCountChange: boolean,
+  previousBankedGrantAt: string | null = null,
+  previousBankedGrantEventKey: string | null = null,
 ) {
   const notice = lookup?.bankedNoticeSignal;
   const relatedNotices = lookup?.bankedNoticeSignals?.length
@@ -258,25 +281,42 @@ function getCorroboratedBankedDistribution(
   const representativeNotice = selectRepresentativeTiboNotice(officialNotices) ??
     (notice ? toTiboNoticeSignal(notice) : null);
   const firstAnnouncement = officialNotices[0] ?? representativeNotice;
+  const isPersistentNotice = notice?.consumption === "persistent";
+  const eventNoticeTweetId = firstAnnouncement?.tweet_id ?? notice?.id ?? null;
   if (
     effectiveBankedResetCountChange !== true ||
     typeof snapshot.bankedResetAvailableCount !== "number" ||
     snapshot.bankedResetAvailableCount < 1 ||
     !notice?.isBankedDistribution ||
     !isBroadBankedDistributionNotice(notice.text) ||
-    !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt)
+    (!isPersistentNotice && !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt))
   ) {
     return { observed: false, input: null };
   }
 
+  const eventKey = getBankedDistributionEventKey({
+    noticeTweetId: eventNoticeTweetId ?? notice.id,
+    observedAt: snapshot.observedAt,
+    persistent: isPersistentNotice,
+    previousGrantAt: previousBankedGrantAt,
+    previousEventKey: previousBankedGrantEventKey,
+  });
+  const isSubsequentPersistentObservation = isPersistentNotice &&
+    eventKey !== `banked-reset-${eventNoticeTweetId ?? notice.id}`;
+
   return {
     observed: true,
     input: {
-      resetEventKey: `banked-reset-${firstAnnouncement?.tweet_id ?? notice.id}`,
+      resetEventKey: eventKey,
       displayExecutionAt: snapshot.observedAt,
       tiboAnnouncedAt: firstAnnouncement?.tweet_created_at ?? notice.observedAt,
       tiboPrimaryTweetId: representativeNotice?.tweet_id ?? notice.id,
-      tiboSourceTweetIds: relatedNotices.map((item) => item.tweet_id),
+      // Later persistent observations retain the official notice separately;
+      // omitting it here prevents the legacy source-overlap lookup from
+      // collapsing a new observation into the first estimate.
+      tiboSourceTweetIds: isSubsequentPersistentObservation
+        ? []
+        : relatedNotices.map((item) => item.tweet_id),
       officialNoticeTweetId: representativeNotice?.tweet_id ?? notice.id,
       officialNoticeAt: representativeNotice?.tweet_created_at ?? notice.observedAt,
     },
@@ -367,12 +407,23 @@ async function processCodexUsageSnapshot(
     return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
   }
 
+  const latestBankedGrant = previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
+    ? await findLatestBankedGrant(
+        client,
+        snapshot.observedAt,
+        bankedNotice?.bankedNoticeSignal?.consumption === "persistent"
+          ? bankedNotice.bankedNoticeSignal.id
+          : null,
+      )
+    : null;
   const lastBankedGrantAt =
     previousResult.row?.lastBankedGrantAt ??
     previousResult.state?.lastBankedGrantAt ??
-    (previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
-      ? await findLatestBankedGrantAt(client, snapshot.observedAt)
-      : null);
+    latestBankedGrant?.observedAt ??
+    null;
+  const lastBankedGrantEventKey = bankedNotice?.bankedNoticeSignal?.consumption === "persistent"
+    ? latestBankedGrant?.resetEventKey ?? null
+    : null;
 
   const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
     lastBankedGrantAt,
@@ -389,6 +440,8 @@ async function processCodexUsageSnapshot(
       snapshot,
       bankedNotice,
       effectiveBankedResetCountChange,
+      lastBankedGrantAt,
+      lastBankedGrantEventKey,
     );
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
@@ -598,6 +651,8 @@ async function processCodexUsageSnapshot(
     snapshot,
     notice,
     effectiveBankedResetCountChange,
+    lastBankedGrantAt,
+    lastBankedGrantEventKey,
   );
   const plan = buildCodexUsageAtomicWritePlan({
     expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
