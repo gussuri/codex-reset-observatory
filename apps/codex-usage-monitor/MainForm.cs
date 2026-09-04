@@ -472,6 +472,7 @@ internal sealed class MainForm : Form
     private static string FormatBankedResetCount(JsonElement root)
     {
         const long maxAvailableCount = 1_000;
+        var source = ReadString(root, "bankedResetCountSource");
         if (!root.TryGetProperty("bankedResetDisplayCount", out var countValue) ||
             countValue.ValueKind != JsonValueKind.Number ||
             !countValue.TryGetInt64(out var count) ||
@@ -480,7 +481,16 @@ internal sealed class MainForm : Form
         {
             return "--";
         }
-        return $"{count}回";
+        if (string.IsNullOrEmpty(source))
+        {
+            return $"{count}回";
+        }
+        return source switch
+        {
+            "explicit" => $"{count}回",
+            "last_known" => $"{count}回（前回確認）",
+            _ => "--",
+        };
     }
 
     private static string FormatPercent(double value)

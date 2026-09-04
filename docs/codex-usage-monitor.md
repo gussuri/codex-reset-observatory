@@ -71,8 +71,10 @@ When the read-only app-server response reports the explicit
 the local BANKED reset count. The monitor sends only the new count and the
 boolean `bankedResetCountChange` marker for a positive count transition. The
 ordinary `credits` object is a separate product and is never used as a BANKED
-count or distribution signal. Missing or unsupported reset-credit metadata is
-shown locally as `--` and never creates a distribution event.
+count or distribution signal. Missing or unsupported reset-credit metadata
+never creates a distribution event. If the monitor has a previously explicit
+count, the GUI keeps it with the `（前回確認）` marker until a new explicit
+count is available; otherwise it shows `--`.
 
 The monitor selects the weekly window by `windowDurationMins = 10080`, preferring
 the `codex` limit id. It does not assume that the weekly window is `primary` or

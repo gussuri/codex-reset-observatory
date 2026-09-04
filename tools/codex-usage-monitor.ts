@@ -26,6 +26,19 @@ type JsonObject = Record<string, unknown>;
 type MessageHandler = (message: JsonObject) => void;
 type MalformedHandler = () => void;
 
+export function createAppServerRequest(
+  method: string,
+  id: string,
+  params?: JsonObject,
+) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    method,
+    ...(params === undefined ? {} : { params }),
+  };
+}
+
 export function createJsonLineParser(
   onMessage: MessageHandler,
   onMalformed: MalformedHandler,
@@ -143,8 +156,61 @@ export function getMonitorResetEventKey(snapshot: Pick<CodexUsageSnapshot, "rese
 export type MonitorSnapshotState = {
   previousLocalSnapshot: CodexUsageSnapshot | null;
   lastSuccessfulPostAt: number | null;
+  lastKnownBankedResetAvailableCount?: number | null;
   pendingPosts?: PendingMonitorPost[];
 };
+
+export type MonitorBankedResetCountSource =
+  | "explicit"
+  | "last_known"
+  | "unavailable";
+
+export type MonitorBankedResetDisplayState = {
+  bankedResetDisplayCount: number | null;
+  bankedResetCountSource: MonitorBankedResetCountSource;
+};
+
+function isValidBankedResetCount(value: unknown): value is number {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_BANKED_RESET_AVAILABLE_COUNT;
+}
+
+function getLastKnownBankedResetAvailableCount(state: MonitorSnapshotState) {
+  if (state.lastKnownBankedResetAvailableCount !== undefined) {
+    return isValidBankedResetCount(state.lastKnownBankedResetAvailableCount)
+      ? state.lastKnownBankedResetAvailableCount
+      : null;
+  }
+
+  const previousCount = state.previousLocalSnapshot?.bankedResetAvailableCount;
+  return isValidBankedResetCount(previousCount) ? previousCount : null;
+}
+
+export function getMonitorBankedResetDisplayState(
+  snapshot: Pick<CodexUsageSnapshot, "bankedResetAvailableCount">,
+  lastKnownBankedResetAvailableCount: number | null | undefined,
+): MonitorBankedResetDisplayState {
+  if (isValidBankedResetCount(snapshot.bankedResetAvailableCount)) {
+    return {
+      bankedResetDisplayCount: snapshot.bankedResetAvailableCount,
+      bankedResetCountSource: "explicit",
+    };
+  }
+
+  if (isValidBankedResetCount(lastKnownBankedResetAvailableCount)) {
+    return {
+      bankedResetDisplayCount: lastKnownBankedResetAvailableCount,
+      bankedResetCountSource: "last_known",
+    };
+  }
+
+  return {
+    bankedResetDisplayCount: null,
+    bankedResetCountSource: "unavailable",
+  };
+}
 
 export function getPendingMonitorPosts(state: MonitorSnapshotState) {
   return [...(state.pendingPosts ?? [])];
@@ -190,14 +256,14 @@ export function getMonitorSnapshotPostReason(
   if (state.lastSuccessfulPostAt === null) return "initial";
 
   const previous = state.previousLocalSnapshot;
-  if (previous) {
-    if (isBankedResetAvailableCountGrant(
-      previous.bankedResetAvailableCount,
-      snapshot.bankedResetAvailableCount,
-    )) {
-      return "banked_reset_count_change";
-    }
+  if (isBankedResetAvailableCountGrant(
+    getLastKnownBankedResetAvailableCount(state),
+    snapshot.bankedResetAvailableCount,
+  )) {
+    return "banked_reset_count_change";
+  }
 
+  if (previous) {
     const usageDecrease = previous.usedPercent - snapshot.usedPercent;
     const resetsAtAdvance = snapshot.resetsAt - previous.resetsAt;
     if (usageDecrease >= 1 && resetsAtAdvance >= 60 * 60) {
@@ -232,6 +298,9 @@ export function updateMonitorSnapshotState(
 ): MonitorSnapshotState {
   return {
     previousLocalSnapshot: snapshot,
+    lastKnownBankedResetAvailableCount: isValidBankedResetCount(snapshot.bankedResetAvailableCount)
+      ? snapshot.bankedResetAvailableCount
+      : getLastKnownBankedResetAvailableCount(state),
     lastSuccessfulPostAt: postSucceeded && Number.isFinite(postCompletedAtMs)
       ? postCompletedAtMs
       : state.lastSuccessfulPostAt,
@@ -503,10 +572,15 @@ async function runAppServerSession(
 
     const sendNotification = (method: string, params: JsonObject = {}) => {
       if (settled || !child.stdin.writable) return;
-      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
+      const message = {
+        jsonrpc: "2.0",
+        method,
+        ...(Object.keys(params).length > 0 ? { params } : {}),
+      };
+      child.stdin.write(`${JSON.stringify(message)}\n`);
     };
 
-    const sendRequest = (method: string, params: JsonObject = {}) => new Promise<JsonObject>((resolveRequest, rejectRequest) => {
+    const sendRequest = (method: string, params?: JsonObject) => new Promise<JsonObject>((resolveRequest, rejectRequest) => {
       const id = String(nextRequestId++);
       const timeout = setTimeout(() => {
         pending.delete(id);
@@ -518,7 +592,7 @@ async function runAppServerSession(
         timeout,
       });
       try {
-        child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+        child.stdin.write(`${JSON.stringify(createAppServerRequest(method, id, params))}\n`);
       } catch {
         clearTimeout(timeout);
         pending.delete(id);
@@ -530,6 +604,10 @@ async function runAppServerSession(
       reason: MonitorSnapshotPostReason,
       snapshot: CodexUsageSnapshot,
     ) => {
+      const displayState = getMonitorBankedResetDisplayState(
+        snapshot,
+        monitorSnapshotState.lastKnownBankedResetAvailableCount,
+      );
       logger("snapshot_sent", {
         reason,
         observedAt: snapshot.observedAt,
@@ -538,8 +616,7 @@ async function runAppServerSession(
         planType: snapshot.planType,
         windowDurationMins: snapshot.windowDurationMins,
         bankedResetCountChange: reason === "banked_reset_count_change",
-        bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
-        bankedResetCountSource: snapshot.bankedResetCountSource,
+        ...displayState,
       });
     };
 
@@ -596,8 +673,10 @@ async function runAppServerSession(
           resetsAt: snapshot.resetsAt,
           planType: snapshot.planType,
           windowDurationMins: snapshot.windowDurationMins,
-          bankedResetDisplayCount: snapshot.bankedResetDisplayCount,
-          bankedResetCountSource: snapshot.bankedResetCountSource,
+          ...getMonitorBankedResetDisplayState(
+            snapshot,
+            monitorSnapshotState.lastKnownBankedResetAvailableCount,
+          ),
         });
 
         const previousLocalSnapshot = monitorSnapshotState.previousLocalSnapshot;

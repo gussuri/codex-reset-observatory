@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createAppServerRequest,
   createJsonMonitorLogger,
   createJsonLineParser,
   createNotificationDebouncer,
   enqueueMonitorSnapshotPost,
+  getMonitorBankedResetDisplayState,
   getPendingMonitorPosts,
   getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
@@ -57,6 +59,17 @@ test("JSONL parser emits complete messages and fails closed on malformed lines",
     { result: { ok: true } },
   ]);
   assert.equal(malformed, 1);
+});
+
+test("omits params for the app-server rate-limits request while retaining initialize params", () => {
+  assert.deepEqual(
+    createAppServerRequest("account/rateLimits/read", "2"),
+    { jsonrpc: "2.0", id: "2", method: "account/rateLimits/read" },
+  );
+  assert.deepEqual(
+    createAppServerRequest("initialize", "1", { clientInfo: { name: "test" } }),
+    { jsonrpc: "2.0", id: "1", method: "initialize", params: { clientInfo: { name: "test" } } },
+  );
 });
 
 test("notification refreshes are debounced into one read", async () => {
@@ -164,6 +177,68 @@ test("an explicit BANKED reset count increase from one to two is posted", () => 
   );
 });
 
+test("keeps the last explicit BANKED count through unavailable polls and detects later grants", () => {
+  const cases = [
+    { previous: 1, current: 2, expected: "banked_reset_count_change" },
+    { previous: 1, current: 1, expected: null },
+    { previous: 0, current: 1, expected: "banked_reset_count_change" },
+    { previous: 2, current: 1, expected: null },
+  ] as const;
+
+  for (const { previous, current, expected } of cases) {
+    let state = updateMonitorSnapshotState({
+      previousLocalSnapshot: null,
+      lastSuccessfulPostAt: null,
+    }, snapshot({ bankedResetAvailableCount: previous }), true, 0);
+    state = updateMonitorSnapshotState(
+      state,
+      snapshot({
+        observedAt: "2026-08-21T00:02:00.000Z",
+        bankedResetAvailableCount: null,
+      }),
+      true,
+      120_000,
+    );
+
+    assert.equal(state.lastKnownBankedResetAvailableCount, previous);
+    assert.deepEqual(
+      getMonitorBankedResetDisplayState(
+        snapshot({ bankedResetAvailableCount: null }),
+        state.lastKnownBankedResetAvailableCount,
+      ),
+      { bankedResetDisplayCount: previous, bankedResetCountSource: "last_known" },
+    );
+    assert.equal(
+      getMonitorSnapshotPostReason(
+        snapshot({ bankedResetAvailableCount: current }),
+        state,
+        240_000,
+      ),
+      expected,
+    );
+  }
+});
+
+test("an initial explicit BANKED count is a baseline, not a locally inferred grant", () => {
+  let state = updateMonitorSnapshotState({
+    previousLocalSnapshot: null,
+    lastSuccessfulPostAt: null,
+  }, snapshot({ bankedResetAvailableCount: null }), false, 0);
+
+  assert.equal(
+    getMonitorSnapshotPostReason(snapshot({ bankedResetAvailableCount: 1 }), state, 120_000),
+    "initial",
+  );
+
+  state = updateMonitorSnapshotState(
+    state,
+    snapshot({ bankedResetAvailableCount: 1 }),
+    true,
+    120_000,
+  );
+  assert.equal(state.lastKnownBankedResetAvailableCount, 1);
+});
+
 test("a BANKED reset count change remains explicit when it coincides with weekly recovery", () => {
   assert.equal(
     getMonitorSnapshotPostReason(snapshot({
@@ -224,6 +299,16 @@ test("an explicit BANKED reset count change is sent without generic credits", ()
     bankedResetAvailableCount: 1,
     bankedResetCountChange: true,
   });
+});
+
+test("a cached BANKED display count is never sent as the current webhook value", () => {
+  const payload = toSafeMonitorPayload(snapshot({
+    bankedResetAvailableCount: null,
+    bankedResetDisplayCount: 1,
+  }), "banked_reset_count_change");
+
+  assert.equal("bankedResetAvailableCount" in payload, false);
+  assert.equal("bankedResetCountChange" in payload, false);
 });
 
 test("a failed event post stays pending with its detection snapshot until success", () => {
@@ -525,6 +610,36 @@ test("local GUI snapshot events omit an unavailable BANKED reset count", () => {
 
   const event = JSON.parse(lines[0]) as Record<string, unknown>;
   assert.equal("bankedResetDisplayCount" in event, false);
+});
+
+test("local GUI snapshot events identify a retained BANKED count as last known", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  logger("snapshot_observed", {
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 6,
+    resetsAt: 1787012727,
+    planType: "plus",
+    windowDurationMins: 10080,
+    bankedResetDisplayCount: 1,
+    bankedResetCountSource: "last_known",
+  });
+
+  const event = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.equal(event.bankedResetDisplayCount, 1);
+  assert.equal(event.bankedResetCountSource, "last_known");
+});
+
+test("local BANKED display state distinguishes explicit zero from unavailable", () => {
+  assert.deepEqual(
+    getMonitorBankedResetDisplayState(snapshot({ bankedResetAvailableCount: 0 }), 1),
+    { bankedResetDisplayCount: 0, bankedResetCountSource: "explicit" },
+  );
+  assert.deepEqual(
+    getMonitorBankedResetDisplayState(snapshot({ bankedResetAvailableCount: null }), null),
+    { bankedResetDisplayCount: null, bankedResetCountSource: "unavailable" },
+  );
 });
 
 test("only a successful recovery-candidate response confirms a reset for notification", () => {
