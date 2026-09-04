@@ -47,6 +47,7 @@ import {
 import {
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   isBankedDistributionCompletionSignal,
+  isConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
 } from "./bankedReset";
 
@@ -1699,6 +1700,9 @@ function buildBankedDistributionEvent(
   const completedAt = new Date(displayTime).toISOString();
   const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
   const summary = "任意リセット権の配布が確認されました。";
+  const randomResetTargetScope = isConditionalBankedDistributionNotice(notice.text)
+    ? "conditional" as const
+    : undefined;
 
   return {
     id: estimate.resetEventKey,
@@ -1714,6 +1718,7 @@ function buildBankedDistributionEvent(
     summary,
     source_url: notice.tweet_url,
     sourceKind: "direct_post",
+    ...(randomResetTargetScope ? { randomResetTargetScope } : {}),
     sourceTweetIds: sortTweetIdsChronologically([
       ...estimate.tiboSourceTweetIds,
       notice.tweet_id,

@@ -25,6 +25,8 @@ const GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN =
   /\bfor\s+(?:each|every)\s+day\s+you\s+(?:do\s+not|don't)\s+have\s+access\s+to\b[\s\S]{0,120}\bon\s+your\s+paid\s+chatgpt\s+plan\b/i;
 const PERSONAL_DIRECT_ADDRESS_PATTERN =
   /\bI\s+(?:(?:can|could|will|would)\s+)?(?:(?:have|just)\s+)?(?:give|gave|given|provide|provided|am\s+giving)\s+you\b/i;
+const CONDITIONAL_BROAD_SCOPE_PATTERN =
+  /\b(?:everyone|all|every|each)\b[\s\S]{0,160}\b(?:who|that|without|if|unless|only|don't|do\s+not|not\s+yet|with\s+(?:no|out|limited|restricted|ineligible|eligible))\b/i;
 
 function hasGeneralizedPaidChatGptPlanScopeTerm(text: string) {
   return GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN.test(text) &&
@@ -48,6 +50,19 @@ export function isBankedDistributionNotice(text: string | null | undefined) {
 /** Canonical history requires the post to explicitly cover a broad audience. */
 export function isBroadBankedDistributionNotice(text: string | null | undefined) {
   return isBankedDistributionNotice(text) && hasBroadScopeTerm(text ?? "");
+}
+
+/**
+ * Identifies broad-audience BANKED delivery that is still conditional on
+ * user eligibility. This is separate from the history broad-scope gate:
+ * the event can remain canonical history while staying out of the random
+ * reset probability target.
+ */
+export function isConditionalBankedDistributionNotice(text: string | null | undefined) {
+  if (typeof text !== "string" || !isBankedDistributionNotice(text)) return false;
+  const normalized = text.trim();
+  return hasGeneralizedPaidChatGptPlanScopeTerm(normalized) ||
+    (hasBroadScopeTerm(normalized) && CONDITIONAL_BROAD_SCOPE_PATTERN.test(normalized));
 }
 
 /**

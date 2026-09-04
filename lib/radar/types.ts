@@ -133,6 +133,8 @@ export type WindowLike = {
   sourceTweetIds?: string[];
   /** Internal trusted X logical-post identity used to keep separate posts apart. */
   tiboLogicalPostId?: string;
+  /** Internal probability-target marker; intentionally omitted from public DTOs. */
+  randomResetTargetScope?: "conditional";
   recordKind?: HistoryRecordKind;
   presentation?: "notice_backed_recovery";
   officialNoticeTweetId?: string;

@@ -21,6 +21,9 @@ export function isEligibleRandomResetEvent(
   if (item.recordKind !== "confirmed_global" && item.recordKind !== "banked_distribution") {
     return false;
   }
+  if (item.randomResetTargetScope === "conditional") {
+    return false;
+  }
   if (item.details?.cycleType !== "ランダムリセット") {
     return false;
   }

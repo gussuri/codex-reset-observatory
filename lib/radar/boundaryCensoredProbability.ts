@@ -23,7 +23,7 @@ import {
   type ShadowProbabilityResult,
 } from "./shadowProbability";
 import { getCompletedResetTimestamp } from "./probability";
-import { isBroadResetScope } from "./resetEligibility";
+import { isEligibleRandomResetEvent, isBroadResetScope } from "./resetEligibility";
 import type {
   HistoryRecordKind,
   RadarData,
@@ -237,7 +237,7 @@ export function collectBoundaryCensoredBoundaries(
       acceptedRegularAudits.push(audit);
     } else if (item.recordKind !== "confirmed_global" && item.recordKind !== "banked_distribution") {
       continue;
-    } else if (!isBroadResetScope(item)) {
+    } else if (!isEligibleRandomResetEvent(item, getCompletedResetTimestamp(item), nowTime)) {
       continue;
     }
 

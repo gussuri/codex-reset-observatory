@@ -7,13 +7,22 @@ import {
   BANKED_NOTICE_MATCH_WINDOW_MS,
   isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
+  isConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
-import { getLastGlobalResetAt } from "../lib/radar/probability";
+import { getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { collectBoundaryCensoredBoundaries } from "../lib/radar/boundaryCensoredProbability";
+import { selectEligibleCommunicationEvents } from "../lib/radar/communicationRegime";
+import { calculateRandomContinuousBandwidthShadowPair } from "../lib/radar/randomContinuousBandwidthShadow";
+import { calculateRandomContinuousProbability } from "../lib/radar/randomContinuousProbability";
+import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
+import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
+import { getShadowCompletedResetEvents } from "../lib/radar/shadowProbability";
+import { calculateNextGenerationBPostResetAgeCandidate } from "../lib/radar/nextGenerationProbability";
 import {
   combineResetHistory,
   findRelatedBankedDistributionNotices,
@@ -239,6 +248,154 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     assert.equal(publicBanked.details?.noticeType, expected[locale].noticeType);
     assert.equal(publicBanked.details?.noticeToExecution, expected[locale].noticeToExecution);
     assert.equal(publicBanked.details?.note, expected[locale].note);
+  }
+});
+
+test("excludes conditional Astra BANKED distribution from the random-reset target", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    confidence: 0.98,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:12:09.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const astraEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2095651088502591861",
+    displayExecutionAt: "2026-09-04T03:34:46.386Z",
+    tiboAnnouncedAt: astraNotice.tweet_created_at,
+    tiboPrimaryTweetId: astraNotice.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id],
+    officialNoticeTweetId: astraNotice.tweet_id,
+    officialNoticeAt: astraNotice.tweet_created_at,
+  };
+  const astraEvent = findBankedDistributionEvents([astraNotice], [astraEstimate])[0];
+
+  assert.ok(astraEvent);
+  assert.equal(astraEvent.recordKind, "banked_distribution");
+  assert.equal(isBroadBankedDistributionNotice(astraNotice.text), true);
+  assert.equal(
+    isEligibleRandomResetEvent(
+      astraEvent,
+      Date.parse(astraEvent.completed_at ?? ""),
+      Date.parse("2026-09-04T04:00:00.000Z"),
+    ),
+    false,
+  );
+});
+
+test("keeps conditional BANKED history out of every random probability input", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    confidence: 0.98,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:12:09.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const astraEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2095651088502591861",
+    displayExecutionAt: "2026-09-04T03:34:46.386Z",
+    tiboAnnouncedAt: astraNotice.tweet_created_at,
+    tiboPrimaryTweetId: astraNotice.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id],
+    officialNoticeTweetId: astraNotice.tweet_id,
+    officialNoticeAt: astraNotice.tweet_created_at,
+  };
+  const astraEvent = findBankedDistributionEvents([astraNotice], [astraEstimate])[0];
+  const genericEvent = findBankedDistributionEvents([notice], [estimate])[0];
+  const previousBroadReset = {
+    id: "random-2026-08-31-022450",
+    recordKind: "confirmed_global" as const,
+    title: "ランダムリセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-08-31T02:24:50.909Z",
+    closed_at: "2026-08-31T02:24:50.909Z",
+    completed_at: "2026-08-31T02:24:50.909Z",
+    scope: "全有料プラン",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "0分",
+    },
+  };
+  const now = new Date("2026-09-04T04:00:00.000Z");
+  assert.ok(astraEvent);
+  assert.ok(genericEvent);
+  assert.equal(isConditionalBankedDistributionNotice(astraNotice.text), true);
+  assert.equal(isConditionalBankedDistributionNotice(notice.text), false);
+  assert.equal(isEligibleRandomResetEvent(genericEvent, Date.parse(genericEvent.completed_at ?? ""), now.getTime()), true);
+  assert.equal(isEligibleRandomResetEvent(previousBroadReset, Date.parse(previousBroadReset.completed_at ?? ""), now.getTime()), true);
+
+  const history = [previousBroadReset, astraEvent];
+  const baseline = calculateRandomContinuousProbability(null, {
+    now,
+    staticHistory: [previousBroadReset],
+  });
+  const withAstra = calculateRandomContinuousProbability(null, {
+    now,
+    staticHistory: history,
+  });
+
+  assert.deepEqual(withAstra.randomContinuous.randomBoundaryIds, baseline.randomContinuous.randomBoundaryIds);
+  assert.equal(withAstra.randomContinuous.latestRandomResetAt, previousBroadReset.completed_at);
+  assert.equal(withAstra.randomContinuous.randomBoundaryCount, baseline.randomContinuous.randomBoundaryCount);
+  assert.equal(withAstra.hazard.completedIntervalCount, baseline.hazard.completedIntervalCount);
+  assert.equal(withAstra.hazard.weightedEventCount, baseline.hazard.weightedEventCount);
+  assert.equal(
+    withAstra.randomContinuous.currentKernelWeightedEvents,
+    baseline.randomContinuous.currentKernelWeightedEvents,
+  );
+
+  assert.deepEqual(getRecoveryResetEvents(null, now, history).map((item) => item.id), [previousBroadReset.id]);
+  assert.deepEqual(getShadowCompletedResetEvents(null, now, history).map((item) => item.id), [previousBroadReset.id]);
+  assert.deepEqual(
+    selectEligibleCommunicationEvents(history, now.getTime()).map((item) => item.id),
+    [previousBroadReset.id],
+  );
+  const censored = collectBoundaryCensoredBoundaries(null, now, history);
+  assert.deepEqual(censored.randomEvents.map((item) => item.id), [previousBroadReset.id]);
+
+  const bandwidthPair = calculateRandomContinuousBandwidthShadowPair(null, {
+    now,
+    staticHistory: history,
+  });
+  assert.deepEqual(bandwidthPair.control.randomContinuous.randomBoundaryIds, [previousBroadReset.id]);
+  assert.deepEqual(bandwidthPair.challenger.randomContinuous.randomBoundaryIds, [previousBroadReset.id]);
+
+  const nextGeneration = calculateNextGenerationBPostResetAgeCandidate(null, {
+    now,
+    staticHistory: history,
+    activeOfficialNotice: null,
+  });
+  assert.deepEqual(nextGeneration.randomContinuous.randomBoundaryIds, [previousBroadReset.id]);
+
+  const originalHistory = LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, previousBroadReset);
+  try {
+    const data = getLocalRadarData({
+      calculationNow: now,
+      recentTiboSignals: [astraNotice],
+      resetExecutionEstimates: [astraEstimate],
+    });
+    assert.equal(getLastGlobalResetAt(data, now)?.toISOString(), previousBroadReset.completed_at);
+    assert.equal(getRecent7DayResetCount(data, now), 1);
+    const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: now, limitHistory: false });
+    const publicAstra = snapshot.viewModel.recentHistory.find((item) => item.key === astraEstimate.resetEventKey);
+    assert.ok(publicAstra);
+    assert.equal(Object.prototype.hasOwnProperty.call(publicAstra, "randomResetTargetScope"), false);
+  } finally {
+    LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...originalHistory);
   }
 });
 
