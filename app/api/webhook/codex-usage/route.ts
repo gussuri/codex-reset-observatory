@@ -471,19 +471,19 @@ async function processCodexUsageSnapshot(
     executionWindowStartAt: initialDecision.previous.observedAt,
     executionWindowEndAt: snapshot.observedAt,
   };
-  const notice = bankedNotice ?? await hasActiveOfficialNotice(
+  const recoveryNotice = await hasActiveOfficialNotice(
     client,
     new Date(snapshot.observedAt),
     recoveryExecutionWindow,
   );
-  if (notice.error) {
+  if (recoveryNotice.error) {
     console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
     return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
   }
 
   const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
-    activeOfficialNotice: notice.active,
-    activeResetEvidence: notice.active || Boolean(notice.teaserSignal),
+    activeOfficialNotice: recoveryNotice.active,
+    activeResetEvidence: recoveryNotice.active || Boolean(recoveryNotice.teaserSignal),
     lastBankedGrantAt,
   });
   if (decision.kind !== "recovery") {
@@ -530,8 +530,8 @@ async function processCodexUsageSnapshot(
     return recoveryResponse("personal_reset");
   }
 
-  const noticeSignal = notice.noticeSignal;
-  const teaserSignal = notice.teaserSignal;
+  const noticeSignal = recoveryNotice.noticeSignal;
+  const teaserSignal = recoveryNotice.teaserSignal;
   let teaserEstimateObserved = false;
   let estimateObserved = false;
   let executionEstimate = null;
@@ -573,8 +573,8 @@ async function processCodexUsageSnapshot(
     }
   } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observation)) {
     try {
-      const noticeSignals = notice.noticeSignals.length > 0
-        ? notice.noticeSignals
+      const noticeSignals = recoveryNotice.noticeSignals.length > 0
+        ? recoveryNotice.noticeSignals
         : [toTiboNoticeSignal(noticeSignal)];
       const relatedNoticeSignals = findRelatedTiboNoticeCluster(
         noticeSignals,
@@ -649,7 +649,7 @@ async function processCodexUsageSnapshot(
 
   const bankedResult = getCorroboratedBankedDistribution(
     snapshot,
-    notice,
+    bankedNotice,
     effectiveBankedResetCountChange,
     lastBankedGrantAt,
     lastBankedGrantEventKey,

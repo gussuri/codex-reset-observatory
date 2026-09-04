@@ -332,6 +332,288 @@ test("the Astra paid-plan BANKED notice plus a matching local credit grant creat
   }
 });
 
+test("BANKED count growth and an unexpected recovery use separate notice contexts", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const astraSignal = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-04T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:30:00.000Z",
+    temporal_resolution_status: "resolved",
+  };
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "simultaneous-banked-recovery");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-04T03:55:00.000Z",
+        received_at: "2026-09-04T03:55:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-09-04T02:00:00.000Z",
+        banked_reset_available_count: 2,
+        last_banked_grant_at: "2026-09-04T03:00:00.000Z",
+        updated_at: "2026-09-04T03:55:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const formalResetQuery = query.searchParams.getAll("or")
+        .some((value) => value.includes("signal_type.eq.reset_executed"));
+      return new Response(JSON.stringify(formalResetQuery ? [] : [astraSignal]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-04T04:00:00.000Z",
+      usedPercent: 0,
+      resetsAt: currentResetsAt,
+      bankedResetAvailableCount: 3,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+
+    const bankedEstimate = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(bankedEstimate?.reset_event_key, "banked-reset-2095651088502591861-observation-20260904T040000000Z");
+    assert.equal(bankedEstimate?.official_notice_tweet_id, "2095651088502591861");
+
+    const recoveryEstimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(recoveryEstimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(recoveryEstimate?.official_notice_tweet_id, null);
+    assert.deepEqual(recoveryEstimate?.tibo_source_tweet_ids, []);
+    assert.equal(getAtomicPlanFromRequests(requests).regular_reset_event, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("a simultaneous unexpected recovery uses a matching one-shot notice instead of the persistent BANKED notice", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const astraSignal = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-04T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:30:00.000Z",
+    temporal_resolution_status: "resolved",
+  };
+  const recoveryNotice = {
+    tweet_id: "recovery-one-shot-notice",
+    text: "We are resetting usage for everyone now.",
+    tweet_url: "https://x.com/thsottiaux/status/recovery-one-shot-notice",
+    tweet_created_at: "2026-09-04T03:58:00.000Z",
+    expires_at: "2026-09-04T05:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    expected_start_at: "2026-09-04T03:55:00.000Z",
+    expected_end_at: "2026-09-04T04:05:00.000Z",
+    temporal_resolution_status: "resolved",
+  };
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "simultaneous-one-shot-recovery");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-04T03:55:00.000Z",
+        received_at: "2026-09-04T03:55:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-09-04T02:00:00.000Z",
+        banked_reset_available_count: 2,
+        last_banked_grant_at: "2026-09-04T03:00:00.000Z",
+        updated_at: "2026-09-04T03:55:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const formalResetQuery = query.searchParams.getAll("or")
+        .some((value) => value.includes("signal_type.eq.reset_executed"));
+      return new Response(JSON.stringify(formalResetQuery ? [] : [astraSignal, recoveryNotice]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-04T04:00:00.000Z",
+      usedPercent: 0,
+      resetsAt: currentResetsAt,
+      bankedResetAvailableCount: 3,
+    }));
+
+    assert.equal(response.status, 200);
+    const plan = getAtomicPlanFromRequests(requests);
+    const bankedEstimate = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(bankedEstimate?.official_notice_tweet_id, "2095651088502591861");
+
+    const recoveryEstimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(recoveryEstimate?.reset_event_key, "tibo-reset-recovery-one-shot-notice");
+    assert.equal(recoveryEstimate?.official_notice_tweet_id, "recovery-one-shot-notice");
+    assert.deepEqual(recoveryEstimate?.tibo_source_tweet_ids, ["recovery-one-shot-notice"]);
+    assert.equal(plan.regular_reset_event, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("a simultaneous BANKED grant and near-regular recovery keep the recovery regular", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const astraSignal = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-04T00:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    is_reply: false,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:30:00.000Z",
+    temporal_resolution_status: "resolved",
+  };
+  const previousResetsAt = Math.floor(Date.parse("2026-09-04T03:59:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-11T03:59:00.000Z") / 1000);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "simultaneous-regular-recovery");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-04T03:55:00.000Z",
+        received_at: "2026-09-04T03:55:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-09-04T02:00:00.000Z",
+        banked_reset_available_count: 2,
+        last_banked_grant_at: "2026-09-04T03:00:00.000Z",
+        updated_at: "2026-09-04T03:55:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const formalResetQuery = query.searchParams.getAll("or")
+        .some((value) => value.includes("signal_type.eq.reset_executed"));
+      return new Response(JSON.stringify(formalResetQuery ? [] : [astraSignal]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-04T04:00:00.000Z",
+      usedPercent: 0,
+      resetsAt: currentResetsAt,
+      bankedResetAvailableCount: 3,
+    }));
+
+    assert.equal(response.status, 200);
+    const plan = getAtomicPlanFromRequests(requests);
+    const bankedEstimate = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    assert.equal(bankedEstimate?.official_notice_tweet_id, "2095651088502591861");
+
+    const regularCompletion = getAtomicPlanPart(requests, "regular_reset_event");
+    assert.equal(regularCompletion?.scheduled_at, "2026-09-04T03:59:00.000Z");
+    assert.equal(regularCompletion?.completed_at, "2026-09-04T04:00:00.000Z");
+    assert.equal(plan.execution_estimate, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("a later persistent BANKED observation gets a distinct event key without source-overlap reuse", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
