@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   BANKED_NOTICE_MATCH_WINDOW_MS,
@@ -12,6 +13,7 @@ import {
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { getLastGlobalResetAt } from "../lib/radar/probability";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
   combineResetHistory,
   findRelatedBankedDistributionNotices,
@@ -181,14 +183,136 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
   assert.equal(banked[0]?.details?.cycleType, "ランダムリセット");
   assert.equal(history.some((item) => item.recordKind === "confirmed_global"), false);
 
-  const viewModel = getRadarViewModel(getLocalRadarData({
+  const data = getLocalRadarData({
     calculationNow: new Date("2026-09-04T04:00:00.000Z"),
     recentTiboSignals: [astraNotice],
     resetExecutionEstimates: [astraEstimate],
-  }), "ja", false, undefined, new Date("2026-09-04T04:00:00.000Z"));
-  const publicBanked = viewModel.recentHistory.find((item) => item.key === "banked-reset-2095651088502591861");
-  assert.equal(publicBanked?.resetAt, "2026-09-04T03:34:46.386Z");
-  assert.equal(publicBanked?.executionTimePrecision, "approximate");
+  });
+  const expected = {
+    ja: {
+      title: "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布",
+      classification: "ランダムリセット",
+      reason: "詫びリセット",
+      method: "任意リセット権配布",
+      scope: "一部ユーザー",
+      noticeType: "告知あり",
+      noticeToExecution: "4時間23分",
+      note: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。",
+    },
+    en: {
+      title: "BANKED Reset Distribution for Users Without GPT-6 Astra Access",
+      classification: "Random reset",
+      reason: "Compensation reset",
+      method: "Banked Reset distribution",
+      scope: "Some users",
+      noticeType: "Announcement",
+      noticeToExecution: "4 hours 23 minutes",
+      note: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra.",
+    },
+    zh: {
+      title: "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放",
+      classification: "随机重置",
+      reason: "故障补偿重置",
+      method: "BANKED 重置发放",
+      scope: "部分用户",
+      noticeType: "有告知",
+      noticeToExecution: "4 小时 23 分钟",
+      note: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow: new Date("2026-09-04T04:00:00.000Z"),
+      limitHistory: false,
+    });
+    const publicBanked = snapshot.viewModel.recentHistory.find((item) => item.key === "banked-reset-2095651088502591861");
+    assert.ok(publicBanked, `${locale} Astra BANKED history should be present`);
+    assert.equal(publicBanked.resetAt, "2026-09-04T03:34:46.386Z");
+    assert.equal(publicBanked.executionTimePrecision, "approximate");
+    assert.equal(publicBanked.title, expected[locale].title);
+    assert.equal(publicBanked.details?.cycleType, expected[locale].classification);
+    assert.equal(publicBanked.details?.reasonType, expected[locale].reason);
+    assert.equal(publicBanked.details?.resetMethod, expected[locale].method);
+    assert.equal(publicBanked.details?.scope, expected[locale].scope);
+    assert.equal(publicBanked.scope, expected[locale].scope);
+    assert.equal(publicBanked.details?.noticeType, expected[locale].noticeType);
+    assert.equal(publicBanked.details?.noticeToExecution, expected[locale].noticeToExecution);
+    assert.equal(publicBanked.details?.note, expected[locale].note);
+  }
+});
+
+test("keeps generic all-paid BANKED scope while localizing its history classification", () => {
+  const data = getLocalRadarData({
+    calculationNow: new Date("2026-08-22T02:00:00.000Z"),
+    recentTiboSignals: [notice],
+    resetExecutionEstimates: [estimate],
+  });
+
+  const expected = {
+    ja: { classification: "ランダムリセット", scope: "全有料プラン" },
+    en: { classification: "Random reset", scope: "All paid plans" },
+    zh: { classification: "随机重置", scope: "所有付费套餐" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const item = getRadarViewModel(data, locale, false, undefined, new Date("2026-08-22T02:00:00.000Z"))
+      .recentHistory.find((historyItem) => historyItem.recordKind === "banked_distribution");
+    assert.ok(item, `${locale} generic BANKED history should be present`);
+    assert.equal(item.details?.cycleType, expected[locale].classification);
+    assert.equal(item.details?.scope, expected[locale].scope);
+    assert.equal(item.scope, expected[locale].scope);
+    assert.notEqual(item.details?.scope, locale === "ja" ? "一部ユーザー" : locale === "en" ? "Some users" : "部分用户");
+  }
+});
+
+test("does not apply the Astra presentation to another personal or reply-like BANKED event", () => {
+  const personalEvent = {
+    id: "banked-reset-personal-reply",
+    recordKind: "banked_distribution" as const,
+    title: "ランダムリセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-08-22T12:00:00.000Z",
+    closed_at: "2026-08-22T13:00:00.000Z",
+    completed_at: "2026-08-22T13:00:00.000Z",
+    window_minutes: 60,
+    scope: "全有料プラン",
+    summary: "I gave you one banked reset in reply.",
+    source_url: "https://x.com/thsottiaux/status/2090000000000000000",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "任意リセット権配布",
+      scope: "全有料プラン",
+      noticeToExecution: "1時間",
+      noticeType: "公式告知あり",
+      note: "I gave you one banked reset in reply.",
+    },
+  };
+  const originalHistory = LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, personalEvent);
+
+  try {
+    const data = getLocalRadarData({ calculationNow: new Date("2026-08-22T14:00:00.000Z") });
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const item = getRadarViewModel(
+        data,
+        locale,
+        false,
+        undefined,
+        new Date("2026-08-22T14:00:00.000Z"),
+      ).recentHistory[0];
+      assert.ok(item, `${locale} personal BANKED history should be present`);
+      assert.notEqual(item.title, locale === "ja"
+        ? "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布"
+        : locale === "en"
+          ? "BANKED Reset Distribution for Users Without GPT-6 Astra Access"
+          : "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放");
+      assert.equal(item.details?.scope, locale === "ja" ? "全有料プラン" : locale === "en" ? "All paid plans" : "所有付费套餐");
+    }
+  } finally {
+    LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...originalHistory);
+  }
 });
 
 test("uses the accepted event display name for the 20M BANKED event in every locale", () => {

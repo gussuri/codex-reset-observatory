@@ -593,6 +593,8 @@ const REGULAR_RESET_SUMMARY =
 const REGULAR_RESET_NOTE =
   "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。";
 const BANKED_RESET_METHOD = "任意リセット権配布";
+const ASTRA_BANKED_HISTORY_EVENT_KEY = "banked-reset-2095651088502591861";
+const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
 
 function isRegularHistoryItem(item: WindowLike) {
   return item.recordKind === "regular_completed" || item.details?.cycleType === "定期リセット";
@@ -724,6 +726,16 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
   return translateDynamic("不明", locale);
 }
 
+function isAstraBankedHistoryEvent(item: WindowLike) {
+  if (getHistoryRecordKind(item) !== "banked_distribution") return false;
+
+  const eventKey = getResetDisplayNameEventKey(item);
+  if (eventKey === ASTRA_BANKED_HISTORY_EVENT_KEY) return true;
+  if (item.officialNoticeTweetId?.trim() === ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID) return true;
+
+  return getHistoryTiboTweetIds(item).includes(ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID);
+}
+
 export type HistoryNoticePresentation = "announcement" | "teaser" | "none";
 
 const ANNOUNCEMENT_HISTORY_NOTICE_TYPES = new Set([
@@ -770,14 +782,19 @@ function getHistoryDetails(
   }
 
   if (item.details) {
+    const isAstraBanked = isAstraBankedHistoryEvent(item);
     const reason = getHistoryReasonTypeValue(item);
     const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: reason ? translateDynamic(reason, locale) : "",
+      reasonType: isAstraBanked
+        ? translateDynamic("詫びリセット", locale)
+        : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: translateDynamic(item.details.scope, locale),
+      scope: isAstraBanked
+        ? translateUI("astraBankedHistoryScope", locale)
+        : translateDynamic(item.details.scope, locale),
       noticeToExecution: noticePresentation === "none" || !storedNoticeToExecution
         ? ""
         : translateDynamic(storedNoticeToExecution, locale),
@@ -786,22 +803,29 @@ function getHistoryDetails(
         : noticePresentation === "teaser"
           ? translateUI("historyNoticeTeaserValue", locale)
           : undefined,
-      note: item.details.note
-        ? translateDynamic(item.details.note, locale)
-        : null,
+      note: isAstraBanked
+        ? translateUI("astraBankedHistoryNote", locale)
+        : item.details.note
+          ? translateDynamic(item.details.note, locale)
+          : null,
     };
   }
 
+  const isAstraBanked = isAstraBankedHistoryEvent(item);
   const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
 
   return {
     cycleType: getHistoryCycleType(item, locale),
-    reasonType: getHistoryReasonType(item, locale),
+    reasonType: isAstraBanked
+      ? translateDynamic("詫びリセット", locale)
+      : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
-    scope,
+    scope: isAstraBanked ? translateUI("astraBankedHistoryScope", locale) : scope,
     noticeToExecution: "",
     noticeType: undefined,
-    note: item.summary ? translateDynamic(item.summary, locale) : null,
+    note: isAstraBanked
+      ? translateUI("astraBankedHistoryNote", locale)
+      : item.summary ? translateDynamic(item.summary, locale) : null,
   };
 }
 
@@ -1013,6 +1037,10 @@ function getHistoryDisplayTitle(
     }
   }
 
+  if (isAstraBankedHistoryEvent(item)) {
+    return translateUI("astraBankedHistoryTitle", locale);
+  }
+
   if (locale !== "ja" && isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
     const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;
     if (localizedName?.trim()) return localizedName.trim();
@@ -1138,7 +1166,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: isRegular
+        scope: isRegular || isAstraBankedHistoryEvent(item)
           ? details.scope
           : translateDynamic(item.scope, locale),
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,

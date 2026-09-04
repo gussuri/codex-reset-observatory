@@ -51,6 +51,11 @@ export function ResetHistoryDetails({
       label: translateUI("historyResetMethod", locale),
       value: details.resetMethod,
     },
+    {
+      id: "scope",
+      label: translateUI("historyScope", locale),
+      value: details.scope,
+    },
     ...(details.noticeType
       ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType }]
       : []),

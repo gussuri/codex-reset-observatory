@@ -20,6 +20,7 @@ import {
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
+import { translateDynamic } from "../lib/radar/i18n";
 import {
   buildResetExecutionEstimate,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -1395,7 +1396,7 @@ test("adds stable ChatGPT reset FAQ anchors and keeps the whole-service distinct
   }
 });
 
-test("hides all scope values from public history details while retaining internal scope data", () => {
+test("renders the history scope row while retaining localized scope values", () => {
   const calculationNow = new Date("2026-08-10T12:00:00.000Z");
   const template = toPublicRadarSnapshot(
     getLocalRadarData({ calculationNow }),
@@ -1430,9 +1431,9 @@ test("hides all scope values from public history details while retaining interna
     "Go / Plus / Pro",
   ] as const;
   const scopeLabels = {
-    ja: "対象プラン",
-    en: "Scope",
-    zh: "适用套餐",
+    ja: "対象",
+    en: "Eligibility",
+    zh: "适用对象",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -1443,8 +1444,11 @@ test("hides all scope values from public history details while retaining interna
           locale,
         }),
       );
-      assert.doesNotMatch(html, new RegExp(scopeLabels[locale]));
-      assert.doesNotMatch(html, new RegExp(scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(html, new RegExp(scopeLabels[locale]));
+      assert.match(
+        html,
+        new RegExp(translateDynamic(scope, locale).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
     }
   }
 });

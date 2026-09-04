@@ -586,6 +586,26 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Reset method",
     zh: "重置方式",
   },
+  historyScope: {
+    ja: "対象",
+    en: "Eligibility",
+    zh: "适用对象",
+  },
+  astraBankedHistoryTitle: {
+    ja: "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布",
+    en: "BANKED Reset Distribution for Users Without GPT-6 Astra Access",
+    zh: "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放",
+  },
+  astraBankedHistoryScope: {
+    ja: "一部ユーザー",
+    en: "Some users",
+    zh: "部分用户",
+  },
+  astraBankedHistoryNote: {
+    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。",
+    en: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra.",
+    zh: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。",
+  },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
     en: "Time from notice to reset",
