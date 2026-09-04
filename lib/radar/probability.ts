@@ -53,7 +53,11 @@ import {
   type ResetExecutionWindow,
 } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
-import { isBankedDistributionNotice, isSupersededBankedNotice } from "./bankedReset";
+import {
+  isBankedDistributionNotice,
+  isRecurringConditionalBankedDistributionNotice,
+  isSupersededBankedNotice,
+} from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 
@@ -77,6 +81,7 @@ export type ActiveOfficialNotice = {
   sourceLabel: string;
   text?: string | null;
   isBankedDistribution?: boolean;
+  isOngoingBankedDistribution?: boolean;
   temporalPrecision?: TemporalPrecision | null;
   temporalConfidence?: number | null;
   temporalResolutionStatus?: TemporalResolutionStatus | null;
@@ -170,6 +175,41 @@ function getSignalTemporalWindow(signal: {
         expectedEndAt: signal.expected_end_at ?? null,
       }
     : null;
+}
+
+function toDynamicOfficialNotice(
+  signal: ActiveTiboSignal,
+  options: { ongoingBankedDistribution?: boolean } = {},
+): ActiveOfficialNotice {
+  const isOngoingBankedDistribution = options.ongoingBankedDistribution === true;
+  return {
+    origin: "dynamic",
+    id: signal.tweet_id,
+    title: signal.text ?? null,
+    summary: signal.text ?? null,
+    observedAt: signal.tweet_created_at,
+    expectedAt: isOngoingBankedDistribution ? null : signal.expected_start_at ?? null,
+    expectedEndAt: isOngoingBankedDistribution ? null : signal.expected_end_at ?? null,
+    expiresAt: signal.expires_at ?? null,
+    source: signal.tweet_url ?? null,
+    sourceLabel: getTiboDisplayLabel(signal.tweet_url),
+    text: signal.text ?? null,
+    isBankedDistribution: isBankedDistributionNotice(signal.text),
+    ...(isOngoingBankedDistribution ? {
+      isOngoingBankedDistribution: true,
+      temporalPrecision: "unknown" as const,
+    } : {
+      temporalPrecision: getEffectiveTemporalPrecision({
+        status: signal.temporal_resolution_status,
+        temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
+        expectedStartAt: signal.expected_start_at,
+        expectedEndAt: signal.expected_end_at,
+      }),
+      temporalConfidence: signal.temporal_confidence ?? signal.ai_temporal_confidence ?? null,
+      temporalResolutionStatus: signal.temporal_resolution_status ?? null,
+      temporalTimezone: signal.temporal_timezone ?? signal.ai_temporal_timezone ?? null,
+    }),
+  };
 }
 
 function getOfficialNoticeTimingReason(
@@ -1032,29 +1072,7 @@ export function getActiveOfficialNotice(
         return [];
       }
 
-      return [{
-        origin: "dynamic" as const,
-        id: signal.tweet_id,
-        title: signal.text ?? null,
-        summary: signal.text ?? null,
-        observedAt: signal.tweet_created_at,
-        expectedAt: signal.expected_start_at ?? null,
-        expectedEndAt: signal.expected_end_at ?? null,
-        expiresAt: signal.expires_at ?? null,
-        source: signal.tweet_url ?? null,
-        sourceLabel: getTiboDisplayLabel(signal.tweet_url),
-        text: signal.text ?? null,
-        isBankedDistribution: isBankedDistributionNotice(signal.text),
-        temporalPrecision: getEffectiveTemporalPrecision({
-          status: signal.temporal_resolution_status,
-          temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
-          expectedStartAt: signal.expected_start_at,
-          expectedEndAt: signal.expected_end_at,
-        }),
-        temporalConfidence: signal.temporal_confidence ?? signal.ai_temporal_confidence ?? null,
-        temporalResolutionStatus: signal.temporal_resolution_status ?? null,
-        temporalTimezone: signal.temporal_timezone ?? signal.ai_temporal_timezone ?? null,
-      }];
+      return [toDynamicOfficialNotice(signal)];
     });
   const localNotices = localObservationSignals
     .filter(
@@ -1117,6 +1135,43 @@ export function getActiveOfficialNotice(
   ]
     .sort((left, right) => new Date(right.observedAt).getTime() - new Date(left.observedAt).getTime())
     .at(0) ?? null;
+}
+
+/**
+ * Selects a recurring conditional BANKED policy for presentation only. It is
+ * intentionally separate from getActiveOfficialNotice so it cannot activate
+ * the official-notice probability override after an observed delivery.
+ */
+export function getOngoingBankedNotice(
+  data: RadarData | null,
+  now: Date = new Date(),
+): ActiveOfficialNotice | null {
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return null;
+
+  const rawSignals = expandTiboSignalVariants(getTiboReadSideSignals(data, "active"));
+  return rawSignals
+    .filter((signal) => {
+      if (
+        signal.signal_type !== "official_notice" ||
+        signal.is_reply === true ||
+        (signal.confidence ?? 0) < 0.95 ||
+        signal.verification_status === "rejected" ||
+        !isRecurringConditionalBankedDistributionNotice(signal.text) ||
+        isSupersededBankedNotice(signal, rawSignals)
+      ) {
+        return false;
+      }
+
+      const observedTime = Date.parse(signal.tweet_created_at);
+      const expiresTime = Date.parse(signal.expires_at ?? "");
+      return Number.isFinite(observedTime) &&
+        observedTime <= nowTime &&
+        Number.isFinite(expiresTime) &&
+        expiresTime > nowTime;
+    })
+    .map((signal) => toDynamicOfficialNotice(signal, { ongoingBankedDistribution: true }))
+    .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;
 }
 
 export function getRecent7DayResetCount(

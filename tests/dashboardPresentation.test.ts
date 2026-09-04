@@ -1251,6 +1251,57 @@ test("keeps the simplified official notice card above the probability card", (t:
   assert.doesNotMatch(html, /border-slate-50/);
 });
 
+test("renders a consumed recurring BANKED policy as an informational notice without a schedule", () => {
+  const calculationNow = new Date("2026-09-04T04:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [{
+      tweet_id: "2095651088502591861",
+      signal_type: "official_notice",
+      text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+      tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+      tweet_created_at: "2026-09-03T23:12:09.000Z",
+      expires_at: "2026-09-06T00:00:00.000Z",
+      confidence: 0.98,
+      verification_status: "auto_unverified",
+      expected_start_at: "2026-09-04T02:12:09.000Z",
+      expected_end_at: "2026-09-04T02:30:00.000Z",
+      temporal_resolution_status: "resolved",
+      ai_temporal_precision: "exact_time",
+      ai_temporal_timezone: "UTC",
+    }],
+    formalTiboResets: [{
+      tweet_id: "astra-distribution-execution",
+      signal_type: "reset_executed",
+      text: "A reset was observed.",
+      tweet_url: "https://x.com/thsottiaux/status/astra-distribution-execution",
+      tweet_created_at: "2026-09-04T03:34:46.386Z",
+      confidence: 0.98,
+      verification_status: "confirmed",
+    }],
+  });
+
+  const localized = {
+    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが配布される継続方針が案内されています。",
+    en: "A continuing BANKED Reset distribution policy has been announced for paid ChatGPT users who still do not have access to GPT-6 Astra.",
+    zh: "已公布面向仍无法访问 GPT-6 Astra 的付费 ChatGPT 用户持续发放 BANKED 重置的安排。",
+  } as const;
+  const noSchedule = /時刻未定|time not specified|时间未定/;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(data, locale, { calculationNow }),
+        locale,
+      }),
+    );
+
+    assert.match(html, new RegExp(localized[locale].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(html, noSchedule);
+    assert.match(html, /href="https:\/\/x\.com\/thsottiaux\/status\/2095651088502591861"/);
+  }
+});
+
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
     { locale: "ja" as const, notice: "公式リセット予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },

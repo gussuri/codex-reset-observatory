@@ -8,6 +8,7 @@ import {
   isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
   isConditionalBankedDistributionNotice,
+  isRecurringConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
@@ -79,6 +80,13 @@ test("recognizes the generalized paid ChatGPT-plan condition in the Astra BANKED
   assert.equal(isBroadBankedDistributionNotice(text), true);
   assert.equal(isBroadBankedDistributionNotice("I gave you one banked reset."), false);
   assert.equal(isBroadBankedDistributionNotice("I can give you one banked reset for every day you don't have access to Astra on your paid ChatGPT plan."), false);
+  assert.equal(isRecurringConditionalBankedDistributionNotice(text), true);
+  assert.equal(
+    isRecurringConditionalBankedDistributionNotice(
+      "We will give a banked reset to everyone who does not have access to Astra.",
+    ),
+    false,
+  );
   assert.equal(isBroadBankedDistributionNotice("Your banked reset is ready."), false);
   assert.equal(isBroadBankedDistributionNotice("You have 2 banked resets."), false);
   assert.equal(isBroadBankedDistributionNotice("A paid ChatGPT user got one reset."), false);

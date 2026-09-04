@@ -79,6 +79,7 @@ import {
 } from "./radar/helpers";
 import {
   getActiveOfficialNotice,
+  getOngoingBankedNotice,
   getLocalSignalEnvironment,
   getLocalSignalEvaluation,
   getSignalEnvironment,
@@ -204,6 +205,7 @@ export function getRadarViewModel(
     signalEvaluation.latestResetAt,
     calculationNow,
   );
+  const ongoingBankedNotice = getOngoingBankedNotice(source, calculationNow);
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
@@ -236,7 +238,12 @@ export function getRadarViewModel(
       ? observedLatestWindow
       : undefined) ?? latestCompletedLocalWindow;
   const activeWindow = getDisplayResetNotice(
-    getActiveWindow(activeOfficialNotice, locale, signalEvaluation.latestResetAt, calculationNow),
+    getActiveWindow(
+      activeOfficialNotice ?? ongoingBankedNotice,
+      locale,
+      signalEvaluation.latestResetAt,
+      calculationNow,
+    ),
   );
   const recentHistory = addPersonalResetEventsToHistory(
     observedHistory,

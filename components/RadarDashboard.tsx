@@ -791,6 +791,10 @@ export function RadarDashboard({
     state.data?.recoveryObservation?.status === "observed_unconfirmed" &&
     state.data.recoveryObservation.confidence === "strong";
   const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const hideUntimedBankedSchedule = viewModel.activeWindow.noticeKind === "banked" &&
+    viewModel.activeWindow.expectedPrecision === "unknown" &&
+    !viewModel.activeWindow.expectedAt &&
+    !viewModel.activeWindow.expectedEndAt;
   const showTiboLocalTimeNote = shouldShowTiboLocalTimeNote(viewModel.activeWindow);
   const probability24h = isDataUnavailable
     ? undefined
@@ -960,7 +964,7 @@ export function RadarDashboard({
                 </p>
                 <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
                   {viewModel.activeWindow.noticeKind === "banked"
-                    ? translateUI("bankedNoticeLabel", locale)
+                    ? viewModel.activeWindow.summary
                     : translateUI("activeNoticeLabel", locale)}
                 </h2>
                 {viewModel.activeWindow.noticeKind === "banked" ? (
@@ -972,50 +976,52 @@ export function RadarDashboard({
             </div>
 
             <dl className="mt-4 space-y-3 border-t border-amber-200/80 pt-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-                <dt className="shrink-0 text-sm font-semibold text-slate-600">
-                  {translateUI("scheduledResetTime", locale)}{locale === "en" ? ": " : "："}
-                </dt>
-                <dd className="min-w-0 text-lg font-semibold leading-tight text-slate-950 sm:text-xl">
-                  {viewModel.activeWindow.expectedAt ? (
-                    <span className="inline-flex flex-wrap items-baseline gap-y-1">
-                      <LocalizedDateTime
-                        value={viewModel.activeWindow.expectedAt}
-                        locale={locale}
-                        weekday="short"
-                        approximate={
-                          viewModel.activeWindow.kind === "official" &&
-                          viewModel.activeWindow.expectedPrecision === "exact_time"
-                        }
-                      />
-                      {viewModel.activeWindow.expectedPrecision !== "exact_time" && viewModel.activeWindow.expectedEndAt ? (
-                        <>
-                          <span className="mx-1.5 font-normal text-slate-500">
-                            {translateUI("timeRangeSeparator", locale)}
-                          </span>
-                          <LocalizedDateTime
-                            value={viewModel.activeWindow.expectedEndAt}
-                            locale={locale}
-                            weekday="short"
-                          />
-                        </>
-                      ) : null}
-                    </span>
-                  ) : (
-                    translateUI("scheduledResetTimeUnknown", locale)
-                  )}
-                  {showTiboLocalTimeNote ? (
-                    <p className="mt-2 text-base font-normal leading-6 text-slate-600">
-                      {translateUI("tiboNoticeLocalTime", locale)}
-                    </p>
-                  ) : null}
-                  {viewModel.activeWindow.isOverduePending && viewModel.activeWindow.overdueText ? (
-                    <p className="mt-2 text-base font-normal leading-6 text-slate-600">
-                      {viewModel.activeWindow.overdueText}
-                    </p>
-                  ) : null}
-                </dd>
-              </div>
+              {!hideUntimedBankedSchedule ? (
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                  <dt className="shrink-0 text-sm font-semibold text-slate-600">
+                    {translateUI("scheduledResetTime", locale)}{locale === "en" ? ": " : "："}
+                  </dt>
+                  <dd className="min-w-0 text-lg font-semibold leading-tight text-slate-950 sm:text-xl">
+                    {viewModel.activeWindow.expectedAt ? (
+                      <span className="inline-flex flex-wrap items-baseline gap-y-1">
+                        <LocalizedDateTime
+                          value={viewModel.activeWindow.expectedAt}
+                          locale={locale}
+                          weekday="short"
+                          approximate={
+                            viewModel.activeWindow.kind === "official" &&
+                            viewModel.activeWindow.expectedPrecision === "exact_time"
+                          }
+                        />
+                        {viewModel.activeWindow.expectedPrecision !== "exact_time" && viewModel.activeWindow.expectedEndAt ? (
+                          <>
+                            <span className="mx-1.5 font-normal text-slate-500">
+                              {translateUI("timeRangeSeparator", locale)}
+                            </span>
+                            <LocalizedDateTime
+                              value={viewModel.activeWindow.expectedEndAt}
+                              locale={locale}
+                              weekday="short"
+                            />
+                          </>
+                        ) : null}
+                      </span>
+                    ) : (
+                      translateUI("scheduledResetTimeUnknown", locale)
+                    )}
+                    {showTiboLocalTimeNote ? (
+                      <p className="mt-2 text-base font-normal leading-6 text-slate-600">
+                        {translateUI("tiboNoticeLocalTime", locale)}
+                      </p>
+                    ) : null}
+                    {viewModel.activeWindow.isOverduePending && viewModel.activeWindow.overdueText ? (
+                      <p className="mt-2 text-base font-normal leading-6 text-slate-600">
+                        {viewModel.activeWindow.overdueText}
+                      </p>
+                    ) : null}
+                  </dd>
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-1 border-t border-amber-200/80 pt-3 sm:flex-row sm:items-baseline sm:gap-3">
                 <dt className="shrink-0 text-sm font-semibold text-slate-600">

@@ -4,8 +4,10 @@ import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import {
   getActiveOfficialNotice,
+  getLocalProbabilityCalculation,
   getLocalResetProbability,
   getDaysSinceLastGlobalReset,
+  getOngoingBankedNotice,
 } from "../lib/radar/probability";
 
 test("reset_executed resets days since last reset to 0 and updates effectiveLatestResetAt", () => {
@@ -120,6 +122,84 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
+});
+
+test("a consumed recurring conditional BANKED policy stays presentation-only", () => {
+  const now = new Date("2026-09-04T04:00:00.000Z");
+  const astraNotice = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    signal_type: "official_notice" as const,
+    confidence: 0.98,
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    expires_at: "2026-09-06T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:30:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    ai_temporal_precision: "exact_time" as const,
+    ai_temporal_timezone: "UTC",
+  };
+  const execution = {
+    tweet_id: "astra-distribution-execution",
+    text: "A reset was observed.",
+    tweet_url: "https://x.com/thsottiaux/status/astra-distribution-execution",
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    tweet_created_at: "2026-09-04T03:34:46.386Z",
+    verification_status: "confirmed" as const,
+  };
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [astraNotice],
+    formalTiboResets: [execution],
+  });
+  const baselineData = getLocalRadarData({
+    calculationNow: now,
+    formalTiboResets: [execution],
+  });
+
+  assert.equal(getActiveOfficialNotice(data, null, now), null);
+  const ongoingNotice = getOngoingBankedNotice(data, now);
+  assert.equal(ongoingNotice?.id, astraNotice.tweet_id);
+  assert.equal(ongoingNotice?.expectedAt, null);
+  assert.equal(ongoingNotice?.expectedEndAt, null);
+  assert.equal(ongoingNotice?.temporalPrecision, "unknown");
+
+  const calculation = getLocalProbabilityCalculation(data, { now });
+  const baselineCalculation = getLocalProbabilityCalculation(baselineData, { now });
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
+  assert.equal(calculation.probability24h, baselineCalculation.probability24h);
+  assert.equal(calculation.probability48h, baselineCalculation.probability48h);
+
+  const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
+  assert.equal(viewModel.activeWindow.active, true);
+  assert.equal(viewModel.activeWindow.noticeKind, "banked");
+  assert.equal(viewModel.activeWindow.expectedAt, null);
+  assert.match(viewModel.activeWindow.summary, /BANKEDリセットが配布される継続方針/);
+});
+
+test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
+  const now = new Date("2026-09-04T04:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [{
+      tweet_id: "conditional-one-shot-banked",
+      text: "We will give a banked reset to everyone who does not have access to Astra.",
+      tweet_url: "https://x.com/thsottiaux/status/conditional-one-shot-banked",
+      signal_type: "official_notice",
+      confidence: 0.98,
+      tweet_created_at: "2026-09-04T03:00:00.000Z",
+      expires_at: "2026-09-05T00:00:00.000Z",
+      verification_status: "auto_unverified",
+    }],
+  });
+
+  assert.equal(getOngoingBankedNotice(data, now), null);
+  assert.equal(getActiveOfficialNotice(data, null, now)?.id, "conditional-one-shot-banked");
+  const calculation = getLocalProbabilityCalculation(data, { now });
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, true);
 });
 
 test("a concrete BANKED deadline is an active range and supersedes its older broad notice", () => {

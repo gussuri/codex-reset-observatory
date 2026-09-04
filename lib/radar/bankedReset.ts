@@ -65,6 +65,14 @@ export function isConditionalBankedDistributionNotice(text: string | null | unde
     (hasBroadScopeTerm(normalized) && CONDITIONAL_BROAD_SCOPE_PATTERN.test(normalized));
 }
 
+const RECURRING_BANKED_POLICY_PATTERN = /\b(?:for\s+)?(?:every|each)\s+(?:day|week|month)\b|\b(?:daily|weekly|monthly)\b/i;
+
+/** Requires explicit recurrence evidence in addition to conditional eligibility. */
+export function isRecurringConditionalBankedDistributionNotice(text: string | null | undefined) {
+  return isConditionalBankedDistributionNotice(text) &&
+    RECURRING_BANKED_POLICY_PATTERN.test(text ?? "");
+}
+
 /**
  * A completed BANKED delivery is not evidence that the global usage limits
  * were reset. Keep it out of the generic Tibo reset adoption path; a real

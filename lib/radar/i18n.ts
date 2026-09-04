@@ -81,6 +81,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A BANKED Reset distribution has been announced.",
     zh: "已发布 BANKED 重置发放预告。",
   },
+  ongoingBankedNoticeSummary: {
+    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが配布される継続方針が案内されています。",
+    en: "A continuing BANKED Reset distribution policy has been announced for paid ChatGPT users who still do not have access to GPT-6 Astra.",
+    zh: "已公布面向仍无法访问 GPT-6 Astra 的付费 ChatGPT 用户持续发放 BANKED 重置的安排。",
+  },
   bankedNoticeAdvice: {
     ja: "任意のタイミングで使用できるため、無理にCodexの使用量を使い切る必要はありません。",
     en: "Because it can be used at any time, you do not need to use up your Codex quota.",

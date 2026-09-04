@@ -1,5 +1,6 @@
 import type { Locale } from "./types";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
+import { translateUI } from "./i18n";
 
 export type OfficialNoticePresentationInput = {
   expectedAt?: string | null;
@@ -8,6 +9,7 @@ export type OfficialNoticePresentationInput = {
   temporalResolutionStatus?: TemporalResolutionStatus | null;
   temporalTimezone?: string | null;
   isBankedDistribution?: boolean;
+  isOngoingBankedDistribution?: boolean;
 };
 
 type NoticeTimingWindow = "24h" | "48h" | "outside";
@@ -111,6 +113,9 @@ export function formatOfficialNoticeSummary(
   locale: Locale,
 ) {
   if (notice.isBankedDistribution) {
+    if (notice.isOngoingBankedDistribution) {
+      return translateUI("ongoingBankedNoticeSummary", locale);
+    }
     if (locale === "en") return "A BANKED Reset distribution has been announced.";
     if (locale === "zh") return "已发布 BANKED 重置发放预告。";
     return "BANKEDリセット（任意リセット権）の配布が予告されています。";
