@@ -309,6 +309,31 @@ test("the completed Astra rollout teaser is excluded from probability inputs aft
   });
 });
 
+test("an expired confirmed weak teaser is excluded from probability inputs", () => {
+  const beforeExpiry = new Date("2026-09-04T15:46:10.999Z");
+  const expiry = new Date("2026-09-04T15:46:11.000Z");
+  const data = getLocalRadarData({
+    activeTiboSignals: [{
+      tweet_id: "2095538856296898868",
+      text: "Something was felt across the internet today",
+      tweet_url: "https://x.com/thsottiaux/status/2095538856296898868",
+      tweet_created_at: "2026-09-03T15:46:11.000Z",
+      signal_type: "teaser",
+      teaser_strength: "weak",
+      confidence: 0.9,
+      verification_status: "confirmed",
+    }],
+  });
+
+  assert.equal(getLocalProbabilityCalculation(data, { now: beforeExpiry }).inputSnapshot.activeTeaserCount, 1);
+  const afterExpiry = getLocalProbabilityCalculation(data, { now: expiry });
+  assert.equal(afterExpiry.inputSnapshot.activeTeaserCount, 0);
+  assert.deepEqual(afterExpiry.breakdown.contributions.teaserOrEvent, {
+    probability24h: 0,
+    probability48h: 0,
+  });
+});
+
 test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({

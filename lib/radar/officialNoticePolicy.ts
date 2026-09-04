@@ -7,7 +7,7 @@ export type OfficialNoticeConsumption = "one_shot" | "persistent";
 
 export type OfficialNoticeTermination = {
   endedAt: string;
-  sourceTweetId: string;
+  sourceTweetId?: string;
 };
 
 export const PERSISTENT_OFFICIAL_NOTICE_IDS = [
@@ -27,6 +27,9 @@ export const TIBO_FORECAST_SIGNAL_TERMINATIONS: Readonly<Record<string, Official
   "2095597168816226335": {
     endedAt: "2026-09-04T22:30:29.000Z",
     sourceTweetId: "2096002992046796932",
+  },
+  "2095538856296898868": {
+    endedAt: "2026-09-04T15:46:11.000Z",
   },
 };
 

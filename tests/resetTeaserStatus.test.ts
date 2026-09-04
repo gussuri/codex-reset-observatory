@@ -418,6 +418,23 @@ test("terminates the Astra rollout teaser at its explicit completion boundary wi
   assert.equal(aggregateResetTeaserStatus([unrelatedTeaser], null, terminationAt), "weak");
 });
 
+test("expires the confirmed weak teaser at its own explicit expires_at boundary", () => {
+  const beforeExpiry = new Date("2026-09-04T15:46:10.999Z");
+  const expiry = new Date("2026-09-04T15:46:11.000Z");
+  const teaser = activitySignal(
+    "2095538856296898868",
+    "2026-09-03T15:46:11.000Z",
+    "weak",
+  );
+
+  assert.equal(aggregateResetTeaserStatus([teaser], null, beforeExpiry), "weak");
+  assert.equal(aggregateResetTeaserStatus([teaser], null, expiry), "none");
+  assert.equal(aggregateResetTeaserStatus([
+    teaser,
+    activitySignal("unrelated-after-expiry", "2026-09-04T15:00:00.000Z", "weak"),
+  ], null, expiry), "weak");
+});
+
 test("teaser strength changes calibrated probabilities while preserving UI status", () => {
   const makeSnapshot = (teaserStrength: TeaserSignal["teaser_strength"]) =>
     toPublicRadarSnapshot(
