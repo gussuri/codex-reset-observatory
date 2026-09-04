@@ -17,7 +17,7 @@ import type {
   RadarData,
 } from "@/lib/radar/types";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
-import { fetchResetDisplayNames } from "@/lib/radar/resetDisplayNameStore";
+import { fetchResetDisplayNamesResult } from "@/lib/radar/resetDisplayNameStore";
 import {
   getPublicRecoveryObservation,
   type CodexRecoveryObservation,
@@ -430,8 +430,8 @@ const getCachedTiboFormalAdoptions = unstable_cache(
 );
 
 const getCachedResetDisplayNames = unstable_cache(
-  () => fetchResetDisplayNames(),
-  ["reset-display-names-cache-v1"],
+  () => fetchResetDisplayNamesResult(),
+  ["reset-display-names-cache-v2"],
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -673,7 +673,7 @@ export async function fetchCurrentRadarData(
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow, options.bypassCache === true),
     options.bypassCache ? fetchRawRegularResetEvents() : getCachedRegularResetEvents(),
-    options.bypassCache ? fetchResetDisplayNames() : getCachedResetDisplayNames(),
+    options.bypassCache ? fetchResetDisplayNamesResult() : getCachedResetDisplayNames(),
     options.bypassCache ? fetchRawCodexRecoveryObservations() : getCachedCodexRecoveryObservations(),
     options.bypassCache ? fetchRawResetExecutionEstimates() : getCachedResetExecutionEstimates(),
     options.bypassCache ? fetchRawTiboFormalAdoptions() : getCachedTiboFormalAdoptions(),
@@ -706,7 +706,8 @@ export async function fetchCurrentRadarData(
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
     regularResetEvents: regularResetEvents.data,
-    resetDisplayNames,
+    resetDisplayNames: resetDisplayNames.data,
+    resetDisplayNamesHealth: resetDisplayNames.health,
     resetExecutionEstimates: resetExecutionEstimates.data,
     tiboFormalAdoptions: tiboFormalAdoptions.data,
     tiboFormalAdoptionsHealth: tiboFormalAdoptions.health,

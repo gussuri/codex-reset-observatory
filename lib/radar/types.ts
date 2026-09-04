@@ -354,6 +354,8 @@ export type RadarData = {
   /** Internal read health for the optional adoption ledger; not public DTO data. */
   tibo_formal_adoptions_health?: DataSourceHealth;
   reset_display_names?: Array<ResetDisplayNameRecord>;
+  /** Internal read health for display-name reconciliation; never public DTO data. */
+  reset_display_names_health?: DataSourceHealth;
   codex_environment?: {
     updated_at?: string;
     status_incidents_24h?: number;

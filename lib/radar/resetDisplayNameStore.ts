@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  getDatabaseReadHealth,
+  getRequiredConfigurationHealth,
+} from "./dataHealth";
+import {
   assessRandomResetNameResult,
   generateRandomResetName,
   RANDOM_RESET_NAME_MODEL,
@@ -12,11 +16,12 @@ import {
   type RandomResetNameGenerationResult,
 } from "./randomResetNaming";
 import { getCompletedResetTimestamp } from "./probability";
-import { isEligibleRandomResetEvent } from "./resetEligibility";
 import {
-  getResetDisplayNameEventKey,
+  getCanonicalResetDisplayNameEventKey,
+  isAutoNameableCanonicalEvent,
+} from "./resetDisplayNameEligibility";
+import {
   getResetDisplayNameSourceTweetId,
-  isGenericResetDisplayTitle,
 } from "./resetDisplayNames";
 import {
   runManualResetDisplayNameOverride,
@@ -24,7 +29,11 @@ import {
   type ManualResetDisplayNameOverrideInput,
   type ManualResetDisplayNameUpdatePayload,
 } from "./manualResetDisplayNameOverride";
-import type { ResetDisplayNameRecord, WindowEventLike } from "./types";
+import type {
+  DataFetchResult,
+  ResetDisplayNameRecord,
+  WindowEventLike,
+} from "./types";
 
 export const RESET_DISPLAY_NAME_COLUMNS = [
   "event_key",
@@ -153,9 +162,17 @@ async function selectResetDisplayNames(
     : legacyQuery.limit(2000);
 }
 
-export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]> {
+export async function fetchResetDisplayNamesResult(): Promise<
+  DataFetchResult<ResetDisplayNameRecord[]>
+> {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    serviceRoleKey,
+  ]);
   const supabase = getServerSupabaseClient();
-  if (!supabase) return [];
+  if (!supabase) return { data: [], health: configuration };
 
   try {
     const { data, error } = await selectResetDisplayNames(supabase);
@@ -163,13 +180,32 @@ export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]
       console.warn("[Reset display names] read skipped", {
         detail: isMissingTableError(error) ? "table_unavailable" : "database_error",
       });
-      return [];
+      return {
+        data: [],
+        health: getDatabaseReadHealth(configuration, {
+          hasData: false,
+          hasError: true,
+        }),
+      };
     }
-    return (data ?? []) as unknown as ResetDisplayNameRecord[];
+    return {
+      data: (data ?? []) as unknown as ResetDisplayNameRecord[],
+      health: getDatabaseReadHealth(configuration, {
+        hasData: true,
+        hasError: false,
+      }),
+    };
   } catch {
     console.warn("[Reset display names] read skipped", { detail: "request_failed" });
-    return [];
+    return {
+      data: [],
+      health: { state: "degraded", detail: "request_failed" },
+    };
   }
+}
+
+export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]> {
+  return (await fetchResetDisplayNamesResult()).data;
 }
 
 async function fetchResetDisplayNameByKey(
@@ -300,6 +336,10 @@ async function upsertResetDisplayName(
 export async function ensureResetDisplayNameForEvent(
   item: WindowEventLike,
   options: {
+    /** The current canonical history key is the only permitted write key. */
+    canonicalEventKey?: string;
+    /** A bounded reconciler may pass its one-read result to avoid N+1 reads. */
+    existingRecord?: ResetDisplayNameRecord | null;
     sourcePostText?: string | null;
     sourceTweetId?: string | null;
     now?: Date;
@@ -308,14 +348,13 @@ export async function ensureResetDisplayNameForEvent(
     timeoutMs?: number;
   },
 ): Promise<ResetDisplayNameGenerationOutcome> {
-  const eventKey = getResetDisplayNameEventKey(item);
   const now = options.now ?? new Date();
+  const eventKey = options.canonicalEventKey?.trim() || getCanonicalResetDisplayNameEventKey(item);
   const completedAt = getCompletedResetTimestamp(item);
   if (
     !eventKey ||
     completedAt === null ||
-    !isEligibleRandomResetEvent(item, completedAt, now.getTime()) ||
-    !isGenericResetDisplayTitle(item.title)
+    !isAutoNameableCanonicalEvent(item, now)
   ) {
     return { eventKey, status: "skipped", displayName: null, inputMode: null, skipped: true };
   }
@@ -331,10 +370,14 @@ export async function ensureResetDisplayNameForEvent(
   const inputMode = sourcePostText ? "metadata+source" : "metadata";
   const inputHash = hashResetDisplayNameInput(input, sourcePostText);
   let existing: ResetDisplayNameRecord | null = null;
-  try {
-    existing = await fetchResetDisplayNameByKey(supabase, eventKey);
-  } catch {
-    return { eventKey, status: "api_error", displayName: null, inputMode, skipped: true };
+  if (options.existingRecord !== undefined) {
+    existing = options.existingRecord;
+  } else {
+    try {
+      existing = await fetchResetDisplayNameByKey(supabase, eventKey);
+    } catch {
+      return { eventKey, status: "api_error", displayName: null, inputMode, skipped: true };
+    }
   }
 
   if (existing?.manual_name_ja?.trim()) {

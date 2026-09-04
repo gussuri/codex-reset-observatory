@@ -1163,6 +1163,7 @@ export async function POST(req: NextRequest) {
             const displayNameResult = await ensureResetDisplayNameForEvent(
               displayNameItem,
               {
+                canonicalEventKey: adoptionResolution.resetEventKey,
                 sourcePostText,
                 sourceTweetId: effectiveFormalCandidate.tweet_id,
                 apiKey: process.env.GEMINI_API_KEY?.trim() || null,

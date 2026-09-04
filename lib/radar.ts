@@ -133,6 +133,7 @@ export function getLocalRadarData({
   rejectedTiboResets = [],
   regularResetEvents = [],
   resetDisplayNames = [],
+  resetDisplayNamesHealth,
   resetExecutionEstimates = [],
   tiboFormalAdoptions = [],
   tiboFormalAdoptionsHealth,
@@ -149,6 +150,7 @@ export function getLocalRadarData({
   rejectedTiboResets?: RadarData["rejected_tibo_resets"];
   regularResetEvents?: RadarData["regular_reset_events"];
   resetDisplayNames?: RadarData["reset_display_names"];
+  resetDisplayNamesHealth?: RadarData["reset_display_names_health"];
   resetExecutionEstimates?: RadarData["reset_execution_estimates"];
   tiboFormalAdoptions?: RadarData["tibo_formal_adoptions"];
   tiboFormalAdoptionsHealth?: RadarData["tibo_formal_adoptions_health"];
@@ -182,6 +184,7 @@ export function getLocalRadarData({
     rejected_tibo_resets: rejectedTiboResets,
     regular_reset_events: regularResetEvents,
     reset_display_names: resetDisplayNames,
+    reset_display_names_health: resetDisplayNamesHealth,
     reset_execution_estimates: resetExecutionEstimates,
     tibo_formal_adoptions: tiboFormalAdoptions,
     tibo_formal_adoptions_health: tiboFormalAdoptionsHealth,
@@ -1402,4 +1405,11 @@ function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike
     bankedSignals,
     identityContext,
   );
+}
+
+/** Single canonical history entry point for bounded server-side reconcilers. */
+export function getCanonicalResetHistoryForDisplayNameReconciliation(
+  data?: RadarData | null,
+) {
+  return getCombinedResetHistory(data);
 }
