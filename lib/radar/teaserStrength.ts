@@ -4,6 +4,7 @@ import {
   getTemporalExecutionWindowRelation,
   type ResetExecutionWindow,
 } from "./tiboTemporal";
+import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
 
 export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 
@@ -79,7 +80,10 @@ export function getTeaserStrengthSignals(
   const resetExecutionWindow = options.resetExecutionWindow ?? (latestResetTime === null
     ? null
     : { executionWindowStartAt: null, executionWindowEndAt: new Date(latestResetTime).toISOString() });
-  const expandedSignals = expandTiboSignalVariants(signals ?? []);
+  const activeForecastSignals = (signals ?? []).filter((signal) =>
+    !isTiboForecastSignalTerminatedAt(signal.tweet_id, now)
+  );
+  const expandedSignals = expandTiboSignalVariants(activeForecastSignals);
 
   return expandedSignals.filter((signal) => {
     const createdTime = getTimestamp(signal.tweet_created_at);

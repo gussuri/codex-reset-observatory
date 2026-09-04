@@ -399,6 +399,25 @@ test("keeps an eligible UI teaser related after its expires_at", () => {
   assert.equal(snapshot.latestTiboActivity?.teaserStrength, "weak");
 });
 
+test("terminates the Astra rollout teaser at its explicit completion boundary without affecting unrelated teasers", () => {
+  const beforeTermination = new Date("2026-09-04T22:30:28.999Z");
+  const terminationAt = new Date("2026-09-04T22:30:29.000Z");
+  const astraTeaser = activitySignal(
+    "2095597168816226335",
+    "2026-09-03T19:37:54.000Z",
+    "weak",
+  );
+  const unrelatedTeaser = activitySignal(
+    "unrelated-weak-teaser",
+    "2026-09-04T21:30:00.000Z",
+    "weak",
+  );
+
+  assert.equal(aggregateResetTeaserStatus([astraTeaser], null, beforeTermination), "weak");
+  assert.equal(aggregateResetTeaserStatus([astraTeaser], null, terminationAt), "none");
+  assert.equal(aggregateResetTeaserStatus([unrelatedTeaser], null, terminationAt), "weak");
+});
+
 test("teaser strength changes calibrated probabilities while preserving UI status", () => {
   const makeSnapshot = (teaserStrength: TeaserSignal["teaser_strength"]) =>
     toPublicRadarSnapshot(

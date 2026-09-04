@@ -61,6 +61,7 @@ import {
 import {
   getOfficialNoticeConsumption,
   isOfficialNoticeTerminatedAt,
+  isTiboForecastSignalTerminatedAt,
   type OfficialNoticeConsumption,
 } from "./officialNoticePolicy";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
@@ -287,6 +288,7 @@ function getProbabilityComponents(
     );
     const isFutureWindowAfterReset = temporalRelation === "before";
     return signal.signal_type === "teaser" &&
+      !isTiboForecastSignalTerminatedAt(signal.tweet_id, now) &&
       (signal.confidence ?? 0) >= 0.8 &&
       (
         createdTime > executionTime ||

@@ -285,6 +285,30 @@ test("an unrelated official notice is unaffected by the Astra termination regist
   assert.equal(getActiveOfficialNotice(data, null, now)?.id, notice.tweet_id);
 });
 
+test("the completed Astra rollout teaser is excluded from probability inputs after termination", () => {
+  const terminationAt = new Date("2026-09-04T22:30:29.000Z");
+  const data = getLocalRadarData({
+    activeTiboSignals: [{
+      tweet_id: "2095597168816226335",
+      text: "We are starting to release GPT-6 Astra.",
+      tweet_url: "https://x.com/thsottiaux/status/2095597168816226335",
+      tweet_created_at: "2026-09-03T19:37:54.000Z",
+      signal_type: "teaser",
+      teaser_strength: "weak",
+      confidence: 0.9,
+      verification_status: "auto_unverified",
+    }],
+  });
+
+  const calculation = getLocalProbabilityCalculation(data, { now: terminationAt });
+
+  assert.equal(calculation.inputSnapshot.activeTeaserCount, 0);
+  assert.deepEqual(calculation.breakdown.contributions.teaserOrEvent, {
+    probability24h: 0,
+    probability48h: 0,
+  });
+});
+
 test("a conditional but non-recurring BANKED notice keeps the existing one-shot path", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const data = getLocalRadarData({

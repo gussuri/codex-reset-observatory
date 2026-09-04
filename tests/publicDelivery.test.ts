@@ -387,6 +387,53 @@ test("public Tibo activity uses the newest stored post even when it is irrelevan
   });
 });
 
+test("completed Astra rollout removes terminated notices from related activity and keeps the rollout post as latest", () => {
+  const beforeTermination = new Date("2026-09-04T22:30:28.999Z");
+  const terminationAt = new Date("2026-09-04T22:30:29.000Z");
+  const bankedNotice = {
+    tweet_id: "2095979536043401428",
+    signal_type: "official_notice" as const,
+    text: "We will distribute a BANKED reset to eligible users.",
+    tweet_url: "https://x.com/thsottiaux/status/2095979536043401428",
+    tweet_created_at: "2026-09-04T20:57:00.000Z",
+    expires_at: "2026-09-06T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    confidence: 0.99,
+  };
+  const astraTeaser = {
+    tweet_id: "2095597168816226335",
+    signal_type: "teaser" as const,
+    text: "We are starting to release GPT-6 Astra.",
+    tweet_url: "https://x.com/thsottiaux/status/2095597168816226335",
+    tweet_created_at: "2026-09-03T19:37:54.000Z",
+    expires_at: "2026-09-06T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    confidence: 0.9,
+    teaser_strength: "weak" as const,
+  };
+  const rolloutCompletion = {
+    tweet_id: "2096002992046796932",
+    signal_type: "irrelevant" as const,
+    text: "Astra is now rolled out to all Plus and Business users too.",
+    tweet_url: "https://x.com/thsottiaux/status/2096002992046796932",
+    tweet_created_at: "2026-09-04T22:30:29.000Z",
+    verification_status: "auto_unverified" as const,
+  };
+  const internal = getLocalRadarData({
+    recentTiboSignals: [bankedNotice, astraTeaser, rolloutCompletion],
+    calculationNow: terminationAt,
+  });
+
+  const before = toPublicRadarSnapshot(internal, "en", { calculationNow: beforeTermination });
+  const after = toPublicRadarSnapshot(internal, "en", { calculationNow: terminationAt });
+
+  assert.equal(before.latestTiboActivity?.classification, "official_notice");
+  assert.equal(before.latestTiboActivity?.sourceUrl, bankedNotice.tweet_url);
+  assert.equal(after.latestTiboActivity?.classification, "irrelevant");
+  assert.equal(after.latestTiboActivity?.sourceUrl, rolloutCompletion.tweet_url);
+  assert.doesNotMatch(JSON.stringify(after.latestTiboActivity), /2095979536043401428|2095597168816226335/);
+});
+
 test("public Tibo activity translates known post text for each page locale", () => {
   const calculationNow = new Date("2026-08-07T00:00:00.000Z");
   const internal = getLocalRadarData({

@@ -26,6 +26,7 @@ import {
 import { isSupersededBankedNotice } from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTiboReadSideSignals } from "./tiboLogicalProjection";
+import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
 import type {
   Locale,
   PublicDataHealth,
@@ -136,6 +137,7 @@ function isCurrentOfficialNotice(
   resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
   if (signal.signal_type !== "official_notice" || signal.is_reply === true) return false;
+  if (isTiboForecastSignalTerminatedAt(signal.tweet_id, new Date(nowTime))) return false;
   if (signal.verification_status === "rejected") return false;
   if (isSupersededBankedNotice(signal, sourceSignals)) return false;
 
@@ -209,6 +211,7 @@ export function toPublicTiboActivity(
     : null;
   const candidates = sourceSignals
     .filter((signal) => {
+      if (isTiboForecastSignalTerminatedAt(signal.tweet_id, now)) return false;
       if (signal.is_reply === true) return false;
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
         return false;
@@ -245,7 +248,9 @@ export function toPublicTiboActivity(
       .map((signal) => signal.tweet_id)
       .filter((tweetId): tweetId is string => typeof tweetId === "string"),
   );
-  const expandedSignals = expandTiboSignalVariants(sourceSignals);
+  const expandedSignals = expandTiboSignalVariants(sourceSignals.filter((signal) =>
+    !isTiboForecastSignalTerminatedAt(signal.tweet_id, now)
+  ));
   // UI teaser eligibility is the source of truth here; unlike official notices,
   // teaser expiry is intentionally not reapplied to the related card.
   const relatedCandidates = expandedSignals

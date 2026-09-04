@@ -14,8 +14,8 @@ export const PERSISTENT_OFFICIAL_NOTICE_IDS = [
   "2095651088502591861",
 ] as const;
 
-/** Explicit lifecycle corrections; notice text is never inspected to infer termination. */
-export const OFFICIAL_NOTICE_TERMINATIONS: Readonly<Record<string, OfficialNoticeTermination>> = {
+/** Explicit lifecycle corrections; signal text is never inspected to infer termination. */
+export const TIBO_FORECAST_SIGNAL_TERMINATIONS: Readonly<Record<string, OfficialNoticeTermination>> = {
   "2095651088502591861": {
     endedAt: "2026-09-04T22:30:29.000Z",
     sourceTweetId: "2096002992046796932",
@@ -24,10 +24,17 @@ export const OFFICIAL_NOTICE_TERMINATIONS: Readonly<Record<string, OfficialNotic
     endedAt: "2026-09-04T22:30:29.000Z",
     sourceTweetId: "2096002992046796932",
   },
+  "2095597168816226335": {
+    endedAt: "2026-09-04T22:30:29.000Z",
+    sourceTweetId: "2096002992046796932",
+  },
 };
 
+/** Backwards-compatible name for callers that only handle official notices. */
+export const OFFICIAL_NOTICE_TERMINATIONS = TIBO_FORECAST_SIGNAL_TERMINATIONS;
+
 const persistentOfficialNoticeIds = new Set<string>(PERSISTENT_OFFICIAL_NOTICE_IDS);
-const officialNoticeTerminations = new Map(Object.entries(OFFICIAL_NOTICE_TERMINATIONS));
+const tiboForecastSignalTerminations = new Map(Object.entries(TIBO_FORECAST_SIGNAL_TERMINATIONS));
 
 export function getOfficialNoticeConsumption(
   noticeId: string | null | undefined,
@@ -37,15 +44,22 @@ export function getOfficialNoticeConsumption(
     : "one_shot";
 }
 
-export function isOfficialNoticeTerminatedAt(
-  noticeId: string | null | undefined,
+export function isTiboForecastSignalTerminatedAt(
+  signalId: string | null | undefined,
   now: Date = new Date(),
 ) {
-  if (typeof noticeId !== "string") return false;
-  const termination = officialNoticeTerminations.get(noticeId.trim());
+  if (typeof signalId !== "string") return false;
+  const termination = tiboForecastSignalTerminations.get(signalId.trim());
   if (!termination) return false;
 
   const nowTime = now.getTime();
   const endedAt = Date.parse(termination.endedAt);
   return Number.isFinite(nowTime) && Number.isFinite(endedAt) && nowTime >= endedAt;
+}
+
+export function isOfficialNoticeTerminatedAt(
+  noticeId: string | null | undefined,
+  now: Date = new Date(),
+) {
+  return isTiboForecastSignalTerminatedAt(noticeId, now);
 }
