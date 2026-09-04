@@ -152,6 +152,14 @@ function shouldShowTiboLocalTimeNote(
     activeWindow.expectedPrecision !== "unknown";
 }
 
+function isOngoingBankedNotice(
+  activeWindow: PublicRadarSnapshot["viewModel"]["activeWindow"],
+) {
+  return activeWindow.active &&
+    activeWindow.kind === "none" &&
+    activeWindow.noticeKind === "banked";
+}
+
 function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
   switch (sourceKind) {
     case "direct_post":
@@ -790,7 +798,9 @@ export function RadarDashboard({
   const hasProvisionalRecovery = !isDataUnavailable &&
     state.data?.recoveryObservation?.status === "observed_unconfirmed" &&
     state.data.recoveryObservation.confidence === "strong";
-  const hasOfficialNotice = viewModel.activeWindow.kind === "official";
+  const hasOfficialNotice = viewModel.activeWindow.active && viewModel.activeWindow.kind === "official";
+  const hasOngoingBankedNotice = isOngoingBankedNotice(viewModel.activeWindow);
+  const hasNoticePresentation = hasOfficialNotice || hasOngoingBankedNotice;
   const hideUntimedBankedSchedule = viewModel.activeWindow.noticeKind === "banked" &&
     viewModel.activeWindow.expectedPrecision === "unknown" &&
     !viewModel.activeWindow.expectedAt &&
@@ -829,7 +839,7 @@ export function RadarDashboard({
   );
   const shouldRenderRelatedTibo = !isDataUnavailable &&
     hasSelectedRelatedTibo &&
-    (hasOfficialNotice || resetTeaserStatus === "strong" || resetTeaserStatus === "weak");
+    (hasNoticePresentation || resetTeaserStatus === "strong" || resetTeaserStatus === "weak");
   const tiboActivityCard = state.data?.latestTiboActivity ? (
     <TiboActivityCard
       activity={state.data.latestTiboActivity}
@@ -954,19 +964,28 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        {!hasProvisionalRecovery && hasOfficialNotice ? (
+        {!hasProvisionalRecovery && hasNoticePresentation ? (
           <section className={`rounded-lg border p-4 shadow-sm sm:p-5 ${resetNoticeTone.card}`}>
             <div className="flex items-start gap-3">
               <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-500">
-                  {translateUI("officialNotice", locale)}
+                  {hasOngoingBankedNotice
+                    ? translateUI("ongoingBankedNoticeContext", locale)
+                    : translateUI("officialNotice", locale)}
                 </p>
                 <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950 sm:text-2xl">
-                  {viewModel.activeWindow.noticeKind === "banked"
+                  {hasOngoingBankedNotice
+                    ? viewModel.activeWindow.label
+                    : viewModel.activeWindow.noticeKind === "banked"
                     ? viewModel.activeWindow.summary
                     : translateUI("activeNoticeLabel", locale)}
                 </h2>
+                {hasOngoingBankedNotice ? (
+                  <p className="mt-2 text-base font-normal leading-6 text-slate-700">
+                    {viewModel.activeWindow.summary}
+                  </p>
+                ) : null}
                 {viewModel.activeWindow.noticeKind === "banked" ? (
                   <p className="mt-2 text-base font-normal leading-6 text-slate-700">
                     {translateUI("bankedNoticeAdvice", locale)}

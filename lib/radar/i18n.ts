@@ -81,6 +81,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A BANKED Reset distribution has been announced.",
     zh: "已发布 BANKED 重置发放预告。",
   },
+  ongoingBankedNoticeLabel: {
+    ja: "BANKEDリセット配布案内",
+    en: "BANKED Reset Distribution Notice",
+    zh: "BANKED 重置发放说明",
+  },
+  ongoingBankedNoticeContext: {
+    ja: "継続中のBANKED配布方針",
+    en: "Ongoing BANKED distribution policy",
+    zh: "持续中的 BANKED 发放政策",
+  },
   ongoingBankedNoticeSummary: {
     ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーには、BANKEDリセットが毎日配布される方針が案内されています。",
     en: "A policy has been announced to distribute BANKED Resets every day to paid ChatGPT users who still do not have access to GPT-6 Astra.",

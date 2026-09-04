@@ -1302,6 +1302,95 @@ test("renders a consumed recurring BANKED policy as an informational notice with
   }
 });
 
+test("uses the informational BANKED heading and keeps official reset status absent", () => {
+  const calculationNow = new Date("2026-09-04T04:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [{
+      tweet_id: "2095651088502591861",
+      signal_type: "official_notice",
+      text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+      tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+      tweet_created_at: "2026-09-03T23:12:09.000Z",
+      expires_at: "2026-09-06T00:00:00.000Z",
+      confidence: 0.98,
+      verification_status: "auto_unverified",
+      expected_start_at: "2026-09-04T02:12:09.000Z",
+      expected_end_at: "2026-09-04T02:30:00.000Z",
+      temporal_resolution_status: "resolved",
+      ai_temporal_precision: "exact_time",
+      ai_temporal_timezone: "UTC",
+    }],
+    formalTiboResets: [{
+      tweet_id: "astra-distribution-execution",
+      signal_type: "reset_executed",
+      text: "A reset was observed.",
+      tweet_url: "https://x.com/thsottiaux/status/astra-distribution-execution",
+      tweet_created_at: "2026-09-04T03:34:46.386Z",
+      confidence: 0.98,
+      verification_status: "confirmed",
+    }],
+  });
+  const expected = {
+    ja: { heading: "BANKEDリセット配布案内", noticeLabel: "公式リセット予告", noticeValue: "なし" },
+    en: { heading: "BANKED Reset Distribution Notice", noticeLabel: "Official reset notice", noticeValue: "None" },
+    zh: { heading: "BANKED 重置发放说明", noticeLabel: "官方重置预告", noticeValue: "无" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale }),
+    );
+
+    assert.equal(snapshot.viewModel.activeWindow.kind, "none");
+    assert.equal(snapshot.viewModel.activeWindow.noticeKind, "banked");
+    assert.equal(snapshot.viewModel.activeWindow.label, expected[locale].heading);
+    assert.match(html, new RegExp(expected[locale].heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(html, new RegExp(`${expected[locale].noticeLabel}[\\s\\S]*${expected[locale].noticeValue}`));
+    assert.doesNotMatch(html, new RegExp(`${expected[locale].noticeLabel}[\\s\\S]*(予告あり|Notice available|已有预告)`));
+  }
+});
+
+test("prioritizes a normal official notice over an ongoing BANKED informational notice", () => {
+  const calculationNow = new Date("2026-09-04T04:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [
+      {
+        tweet_id: "2095651088502591861",
+        signal_type: "official_notice",
+        text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+        tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+        tweet_created_at: "2026-09-03T23:12:09.000Z",
+        expires_at: "2026-09-06T00:00:00.000Z",
+        confidence: 0.98,
+        verification_status: "auto_unverified",
+      },
+      {
+        tweet_id: "normal-official-notice",
+        signal_type: "official_notice",
+        text: "A reset is planned tomorrow for all users.",
+        tweet_url: "https://x.com/thsottiaux/status/normal-official-notice",
+        tweet_created_at: "2026-09-04T03:00:00.000Z",
+        expires_at: "2026-09-05T00:00:00.000Z",
+        confidence: 0.98,
+        verification_status: "auto_unverified",
+        expected_start_at: "2026-09-04T12:00:00.000Z",
+        temporal_resolution_status: "resolved",
+        ai_temporal_precision: "exact_time",
+        ai_temporal_timezone: "UTC",
+      },
+    ],
+  });
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+
+  assert.equal(snapshot.viewModel.activeWindow.kind, "official");
+  assert.equal(snapshot.viewModel.activeWindow.noticeKind, "forced");
+  assert.equal(snapshot.viewModel.activeWindow.source, "https://x.com/thsottiaux/status/normal-official-notice");
+  assert.doesNotMatch(snapshot.viewModel.activeWindow.summary, /BANKEDリセットが毎日配布される方針/);
+});
+
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
     { locale: "ja" as const, notice: "公式リセット予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },

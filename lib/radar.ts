@@ -1208,6 +1208,7 @@ function getActiveWindow(
   now: Date = new Date(),
 ): RadarViewModel["activeWindow"] {
   const active = Boolean(officialNotice);
+  const isOngoingBankedDistribution = officialNotice?.isOngoingBankedDistribution === true;
   const openedAt = officialNotice?.observedAt ?? null;
   const expectedAt = officialNotice?.expectedAt ?? null;
   const expectedEndAt = officialNotice?.expectedEndAt ?? null;
@@ -1226,11 +1227,15 @@ function getActiveWindow(
   if (active) {
     return {
       active,
-      kind: "official",
+      // Preserve the public-v1 shape while making the presentation-only
+      // ongoing BANKED policy distinct from an official reset notice.
+      kind: isOngoingBankedDistribution ? "none" : "official",
       noticeKind: officialNotice?.isBankedDistribution ? "banked" : "forced",
-      label: officialNotice?.isBankedDistribution
-        ? translateUI("bankedNoticeLabel", locale)
-        : translateUI("activeNoticeLabel", locale),
+      label: isOngoingBankedDistribution
+        ? translateUI("ongoingBankedNoticeLabel", locale)
+        : officialNotice?.isBankedDistribution
+          ? translateUI("bankedNoticeLabel", locale)
+          : translateUI("activeNoticeLabel", locale),
       summary: formatOfficialNoticeSummary({
         ...(officialNotice ?? {}),
         isBankedDistribution: officialNotice?.isBankedDistribution,
