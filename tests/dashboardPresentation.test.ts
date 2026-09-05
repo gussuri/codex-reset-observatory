@@ -712,15 +712,34 @@ test("renders a reset end-of-day notice as a deadline without changing its inter
     en: ["Planned reset", "Source"],
     zh: ["重置安排", "来源"],
   } as const;
+  const bankedPresentation = {
+    ja: {
+      heading: "BANKEDリセット（任意リセット権）の配布が予告されています。",
+      advice: "任意のタイミングで使用できるため、無理にCodexの使用量を使い切る必要はありません。",
+    },
+    en: {
+      heading: "A BANKED Reset distribution has been announced.",
+      advice: "Because it can be used at any time, you do not need to use up your Codex quota.",
+    },
+    zh: {
+      heading: "已发布 BANKED 重置发放预告。",
+      advice: "由于可以在任意时间使用，无需为了重置而用完 Codex 的使用额度。",
+    },
+  } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow: new Date("2026-09-05T01:00:00.000Z") });
     assert.equal(snapshot.viewModel.activeWindow.expectedAt, expectedStartAt);
     assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, expectedEndAt);
+    assert.equal(snapshot.viewModel.activeWindow.kind, "official");
+    assert.equal(snapshot.viewModel.activeWindow.noticeKind, "banked");
 
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, { initialData: snapshot, locale }),
     );
+    assert.equal(snapshot.viewModel.activeWindow.label, bankedPresentation[locale].heading);
+    assert.match(html, new RegExp(bankedPresentation[locale].heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(html, new RegExp(bankedPresentation[locale].advice.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     const scheduleStart = html.indexOf(scheduleLabels[locale][0]);
     const sourceStart = html.indexOf(scheduleLabels[locale][1], scheduleStart);
     assert.ok(scheduleStart >= 0 && sourceStart > scheduleStart);

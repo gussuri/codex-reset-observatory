@@ -83,6 +83,83 @@ test("recognizes a broad BANKED distribution notice without treating generic res
   assert.equal(isBroadBankedDistributionNotice("I gave all my friends a BANKED reset."), false);
 });
 
+test("recognizes future BANKED execution language without treating personal operations as notices", () => {
+  const text = "We will do the full banked reset today too for all Plus, Pro and Business users.";
+
+  assert.equal(isBankedDistributionNotice(text), true);
+  assert.equal(isBroadBankedDistributionNotice(text), true);
+  assert.equal(isConditionalBankedDistributionNotice(text), false);
+
+  for (const negative of [
+    "You can do a banked reset whenever you want.",
+    "I did a banked reset.",
+    "Here's how to do a banked reset.",
+    "We will do a reset.",
+    "Banked resets are useful.",
+    "I gave all my friends a BANKED reset.",
+  ]) {
+    assert.equal(isBankedDistributionNotice(negative), false, negative);
+  }
+});
+
+test("recognizes limited paid-plan audiences and keeps later eligibility cutoffs local", () => {
+  const target = "We will do the full banked reset today too for all Plus, Pro and Business users. PS: If you create the account or upgrade before 8pm PT you will get it too.";
+
+  assert.equal(isBroadBankedDistributionNotice(target), true);
+  assert.equal(isConditionalBankedDistributionNotice(target), false);
+  assert.equal(isConditionalBankedDistributionNotice("We will give a BANKED reset to all users who still don't have Astra."), true);
+  assert.equal(isConditionalBankedDistributionNotice("We will give a BANKED reset to all paid users without Astra."), true);
+  assert.equal(isConditionalBankedDistributionNotice("We will give a BANKED reset to every user who meets the requirement."), true);
+
+  for (const scope of [
+    "all Plus users",
+    "all Plus and Pro users",
+    "all Plus, Pro and Business users",
+    "all Plus, Pro, Business and Enterprise users",
+  ]) {
+    assert.equal(
+      isBroadBankedDistributionNotice(`We will give a BANKED reset to ${scope}.`),
+      true,
+      scope,
+    );
+  }
+
+  for (const scope of ["some Plus users", "selected Business users", "few Pro users"]) {
+    assert.equal(
+      isBroadBankedDistributionNotice(`We will give a BANKED reset to ${scope}.`),
+      false,
+      scope,
+    );
+  }
+});
+
+test("classifies the target BANKED announcement for existing matching without changing its identity", () => {
+  const targetNotice = {
+    ...notice,
+    tweet_id: "2096035437299237298",
+    text: "Because we are beyond happy to have Astra rolled out today ahead of schedule and you have been super patient with us (not really, but it’s ok!)… we will do the full banked reset today too for all Plus, Pro and Business users. Lands end of day. Happy Astra day and enjoy a phenomenal weekend. PS: If you create the account or upgrade before 8pm PT you will get it too. Still time!",
+    tweet_url: "https://x.com/thsottiaux/status/2096035437299237298",
+    tweet_created_at: "2026-09-05T00:39:25.000Z",
+  };
+  const targetEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2096035437299237298",
+    displayExecutionAt: "2026-09-05T07:00:00.000Z",
+    tiboAnnouncedAt: targetNotice.tweet_created_at,
+    tiboPrimaryTweetId: targetNotice.tweet_id,
+    tiboSourceTweetIds: [targetNotice.tweet_id],
+    officialNoticeTweetId: targetNotice.tweet_id,
+    officialNoticeAt: targetNotice.tweet_created_at,
+  };
+
+  assert.equal(isBankedDistributionNotice(targetNotice.text), true);
+  assert.equal(isBroadBankedDistributionNotice(targetNotice.text), true);
+  assert.equal(isConditionalBankedDistributionNotice(targetNotice.text), false);
+  const events = findBankedDistributionEvents([targetNotice], [targetEstimate]);
+  assert.equal(events[0]?.recordKind, "banked_distribution");
+  assert.equal(events[0]?.id, targetEstimate.resetEventKey);
+});
+
 test("recognizes the generalized paid ChatGPT-plan condition in the Astra BANKED announcement", () => {
   const text = "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today. Team is moving mountains to give access as fast as we can.\n\nFirst one will land in ~ 3 hours. There is still time to create your account if you don't have one.";
 
