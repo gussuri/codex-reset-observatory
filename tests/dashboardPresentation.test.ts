@@ -1716,11 +1716,20 @@ test("renders the history scope row while retaining localized scope values", () 
           locale,
         }),
       );
-      assert.match(html, new RegExp(scopeLabels[locale]));
-      assert.match(
-        html,
-        new RegExp(translateDynamic(scope, locale).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-      );
+      const translatedScope = translateDynamic(scope, locale);
+      if (scope === "全有料プラン") {
+        assert.doesNotMatch(html, new RegExp(scopeLabels[locale]));
+        assert.doesNotMatch(
+          html,
+          new RegExp(translatedScope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        );
+      } else {
+        assert.match(html, new RegExp(scopeLabels[locale]));
+        assert.match(
+          html,
+          new RegExp(translatedScope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        );
+      }
     }
   }
 });

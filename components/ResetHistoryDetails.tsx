@@ -18,6 +18,12 @@ function isMeaningfulValue(value: string | null | undefined) {
   return !new Set(["不明", "unknown", "未知", "なし", "none", "null"]).has(value.trim().toLowerCase());
 }
 
+const ALL_PAID_PLAN_SCOPES = new Set(["全有料プラン", "All paid plans", "所有付费套餐"]);
+
+function isAllPaidPlanScope(value: string | null | undefined) {
+  return Boolean(value && ALL_PAID_PLAN_SCOPES.has(value.trim()));
+}
+
 export function ResetHistoryDetails({
   item,
   locale,
@@ -51,11 +57,13 @@ export function ResetHistoryDetails({
       label: translateUI("historyResetMethod", locale),
       value: details.resetMethod,
     },
-    {
-      id: "scope",
-      label: translateUI("historyScope", locale),
-      value: details.scope,
-    },
+    ...(isAllPaidPlanScope(details.scope)
+      ? []
+      : [{
+          id: "scope",
+          label: translateUI("historyScope", locale),
+          value: details.scope,
+        }]),
     ...(details.noticeType
       ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType }]
       : []),
