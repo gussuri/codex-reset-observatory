@@ -56,7 +56,7 @@ export type BankedNoticeTiming = {
 };
 
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
-const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|give|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
+const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
 const NOTICE_CLAUSE_SEPARATOR = /[.!?。！？]+|\bPS\s*:\s*/i;
 
 function hasResetCreditTerm(text: string) {
@@ -85,14 +85,22 @@ function hasFutureBankedExecutionCue(text: string) {
     hasFutureAvailabilityTerm(text);
 }
 
-const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:reset|credit)|reset\s+credit)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|is\s+(?:now\s+)?available)\b/i;
-const BANKED_FUTURE_CUE_PATTERN = /\b(?:will|going\s+to|tomorrow|tonight|later|soon|next\s+(?:day|week|month)|by\s+\d)\b/i;
+/** Detects an explicit future BANKED delivery/execution clause. */
+export function hasFutureBankedDistributionIntent(text: string | null | undefined) {
+  if (typeof text !== "string") return false;
+  const normalized = text.trim();
+  return normalized.length > 0 && normalized.split(NOTICE_CLAUSE_SEPARATOR).some((clause) =>
+    hasResetCreditTerm(clause) && hasFutureBankedExecutionCue(clause)
+  );
+}
+
+const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:resets?|credits?)|reset\s+credits?)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|(?:is|are)\s+(?:now\s+)?available)\b/i;
 const GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN =
   /\bfor\s+(?:each|every)\s+day\s+you\s+(?:do\s+not|don't)\s+have\s+access\s+to\b[\s\S]{0,120}\bon\s+your\s+paid\s+chatgpt\s+plan\b/i;
 const PERSONAL_DIRECT_ADDRESS_PATTERN =
   /\bI\s+(?:(?:can|could|will|would)\s+)?(?:(?:have|just)\s+)?(?:give|gave|given|provide|provided|am\s+giving)\s+you\b/i;
 const PERSONAL_BANKED_OPERATION_PATTERN =
-  /\b(?:I|you)\s+(?:(?:can|could|will|would|have|has|just|am|are)\s+)*(?:do|run|perform|execute|give|gave|provided|provide|granted|grant|issued|issue|delivered|deliver|distributed|distribute)\b[\s\S]{0,80}\b(?:banked\s+resets?|reset\s+credits?)\b|\b(?:I|you)\s+did\b[\s\S]{0,80}\b(?:banked\s+resets?|reset\s+credits?)\b/i;
+  /\b(?:i|you)\b[\s\S]{0,80}\b(?:use|used|using|spend|spent|consume|consumed|apply|applied|do|did|run|ran|perform|performed|execute|executed|give|gave|given|giving|provide|provided|grant|granted|issue|issued|deliver|delivered|distribute|distributed)\b[\s\S]{0,80}\b(?:banked\s+resets?|reset\s+credits?)\b|\b(?:here(?:'s|\s+is)\s+how\s+to|how\s+to)\s+(?:use|do|run|perform|execute|spend|consume|apply)\b[\s\S]{0,80}\b(?:banked\s+resets?|reset\s+credits?)\b|\b(?:my|your|one\s+of\s+(?:my|your))\s+(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:use|used|using|spend|spent|consume|consumed|apply|applied)\b/i;
 const CHATGPT_PLAN_SCOPE_PATTERN = "(?:plus|pro|business|enterprise)";
 const BROAD_PLAN_SCOPE_PATTERN = new RegExp(
   `\\b(?:all|every)\\s+${CHATGPT_PLAN_SCOPE_PATTERN}(?:(?:\\s*,\\s*|\\s*(?:,\\s*)?and\\s+)${CHATGPT_PLAN_SCOPE_PATTERN}){0,3}\\s+users?\\b`,
@@ -126,6 +134,15 @@ function hasBroadScopeTerm(text: string) {
   return getBroadScopeMatch(text) !== null || hasGeneralizedPaidChatGptPlanScopeTerm(text);
 }
 
+function hasBroadBankedDistributionClause(text: string) {
+  return hasBroadScopeTerm(text) &&
+    (hasDistributionTerm(text) || hasFutureBankedExecutionCue(text));
+}
+
+function hasPersonalBankedOperation(text: string) {
+  return PERSONAL_BANKED_OPERATION_PATTERN.test(text);
+}
+
 function hasLocallyAttachedConditionalAudience(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => {
     const scopeMatch = getBroadScopeMatch(clause);
@@ -143,10 +160,11 @@ function hasLocallyAttachedConditionalAudience(text: string) {
 export function isBankedDistributionNotice(text: string | null | undefined) {
   if (typeof text !== "string") return false;
   const normalized = text.trim();
-  return normalized.length > 0 &&
-    hasResetCreditTerm(normalized) &&
-    !PERSONAL_BANKED_OPERATION_PATTERN.test(normalized) &&
-    (hasDistributionTerm(normalized) || hasFutureBankedExecutionCue(normalized));
+  return normalized.length > 0 && normalized.split(NOTICE_CLAUSE_SEPARATOR).some((clause) =>
+    hasResetCreditTerm(clause) &&
+    (!hasPersonalBankedOperation(clause) || hasBroadBankedDistributionClause(clause)) &&
+    (hasDistributionTerm(clause) || hasFutureBankedExecutionCue(clause))
+  );
 }
 
 /** Canonical history requires the post to explicitly cover a broad audience. */
@@ -183,9 +201,10 @@ export function isRecurringConditionalBankedDistributionNotice(text: string | nu
 export function isBankedDistributionCompletionSignal(text: string | null | undefined) {
   if (typeof text !== "string") return false;
   const normalized = text.trim();
-  return normalized.length > 0 &&
-    BANKED_COMPLETION_PATTERN.test(normalized) &&
-    !BANKED_FUTURE_CUE_PATTERN.test(normalized);
+  return normalized.length > 0 && normalized.split(NOTICE_CLAUSE_SEPARATOR).some((clause) =>
+    BANKED_COMPLETION_PATTERN.test(clause) &&
+    !hasFutureBankedExecutionCue(clause)
+  );
 }
 
 export type BankedNoticeSupersessionInput = {

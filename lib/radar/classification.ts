@@ -1,4 +1,7 @@
-import { isBankedDistributionCompletionSignal } from "./bankedReset";
+import {
+  hasFutureBankedDistributionIntent,
+  isBankedDistributionCompletionSignal,
+} from "./bankedReset";
 
 export type ClassificationSignalType =
   | "official_notice"
@@ -167,9 +170,12 @@ export function getTiboClassificationSafetyDecision(
   candidate: ClassificationSignalType,
 ): TiboClassificationSafetyDecision {
   if (isBankedDistributionCompletionSignal(text) && candidate !== "irrelevant") {
+    const hasFutureBankedDistribution = hasFutureBankedDistributionIntent(text);
     return {
-      signalType: "irrelevant",
-      reasonJa: "BANKEDリセット権の配布完了であり、全体の利用上限リセット実施とは別のため、正式resetには採用しません。",
+      signalType: hasFutureBankedDistribution ? "official_notice" : "irrelevant",
+      reasonJa: hasFutureBankedDistribution
+        ? "完了済みのBANKED配布は全体resetとして扱わず、明示された将来のBANKED配布予告のみを採用します。"
+        : "BANKEDリセット権の配布完了であり、全体の利用上限リセット実施とは別のため、正式resetには採用しません。",
       reasonCode: "banked_distribution_completion",
       suppressTeaserStrength: true,
     };

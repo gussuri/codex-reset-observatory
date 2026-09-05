@@ -14,6 +14,7 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { parseTiboTemporalSemantics } from "../lib/radar/tiboTemporal";
+import { hasFutureBankedDistributionIntent } from "../lib/radar/bankedReset";
 import { TARGET_TIBO_TWEET_TEXT } from "./fixtures/tiboLongFormReset";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
@@ -114,9 +115,11 @@ test("current usage-limit announcements are execution signals, while future and 
 test("BANKED distribution completion is not a generic usage-limit reset", () => {
   const bankedCompletionTexts = [
     "The banked reset has landed.",
+    "The banked resets have landed.",
     "The banked reset is available.",
     "The banked reset has arrived.",
     "The reset credit has been distributed to everyone.",
+    "The reset credits are now available.",
   ];
 
   for (const text of bankedCompletionTexts) {
@@ -125,11 +128,37 @@ test("BANKED distribution completion is not a generic usage-limit reset", () => 
       "irrelevant",
       text,
     );
+    assert.equal(
+      getTiboClassificationSafetyDecision(text, "reset_executed").reasonCode,
+      "banked_distribution_completion",
+      text,
+    );
 
     const guarded = applyTiboClassificationSafetyGuard(text, geminiResult("reset_executed"));
     assert.equal(guarded.signalType, "irrelevant", text);
     assert.equal(guarded.teaserStrength, "none", text);
   }
+
+  const completionWithUnrelatedFuture =
+    "The banked resets have landed. We will announce something else tomorrow.";
+  const completionDecision = getTiboClassificationSafetyDecision(
+    completionWithUnrelatedFuture,
+    "reset_executed",
+  );
+  assert.equal(completionDecision.signalType, "irrelevant");
+  assert.equal(completionDecision.reasonCode, "banked_distribution_completion");
+
+  const mixedBankedPost =
+    "The banked resets have landed. We will issue another BANKED reset tomorrow.";
+  assert.equal(hasFutureBankedDistributionIntent(mixedBankedPost), true);
+  const mixedDecision = getTiboClassificationSafetyDecision(mixedBankedPost, "reset_executed");
+  assert.equal(mixedDecision.signalType, "official_notice");
+  assert.equal(mixedDecision.reasonCode, "banked_distribution_completion");
+  const mixedGuarded = applyTiboClassificationSafetyGuard(
+    mixedBankedPost,
+    geminiResult("reset_executed"),
+  );
+  assert.equal(mixedGuarded.signalType, "official_notice");
 
   const usageLimitReset = "The usage limits have been reset for all paid users of Codex.";
   assert.equal(

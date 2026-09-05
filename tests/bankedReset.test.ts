@@ -6,6 +6,7 @@ import {
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   BANKED_NOTICE_MATCH_WINDOW_MS,
   isBankedDistributionCompletionSignal,
+  hasFutureBankedDistributionIntent,
   isBankedDistributionNotice,
   getBankedDistributionEventKey,
   isBankedDistributionEstimatorVersion,
@@ -99,6 +100,68 @@ test("recognizes future BANKED execution language without treating personal oper
     "I gave all my friends a BANKED reset.",
   ]) {
     assert.equal(isBankedDistributionNotice(negative), false, negative);
+  }
+});
+
+test("keeps BANKED completion detection plural-aware and clause-local", () => {
+  for (const text of [
+    "The banked reset has landed.",
+    "The banked resets have landed.",
+    "The reset credit has arrived.",
+    "The reset credits have arrived.",
+    "The banked resets have been distributed.",
+    "The reset credits are now available.",
+  ]) {
+    assert.equal(isBankedDistributionCompletionSignal(text), true, text);
+  }
+
+  for (const text of [
+    "The banked resets have landed. See you tomorrow.",
+    "The banked resets have landed. More ships next week.",
+    "The reset credits are now available. We will announce something later.",
+    "The banked resets have landed. We will issue another BANKED reset tomorrow.",
+  ]) {
+    assert.equal(isBankedDistributionCompletionSignal(text), true, text);
+  }
+
+  for (const text of [
+    "The banked reset will land tomorrow.",
+    "The banked resets will be distributed tomorrow.",
+    "The reset credits will be available next week.",
+  ]) {
+    assert.equal(isBankedDistributionCompletionSignal(text), false, text);
+  }
+
+  assert.equal(hasFutureBankedDistributionIntent("The banked resets have landed."), false);
+  assert.equal(
+    hasFutureBankedDistributionIntent(
+      "The banked resets have landed. We will issue another BANKED reset tomorrow.",
+    ),
+    true,
+  );
+});
+
+test("separates individual BANKED operations from broad speaker-led distribution", () => {
+  for (const text of [
+    "I will use my BANKED reset.",
+    "I used my BANKED reset.",
+    "I did a BANKED reset for myself.",
+    "You can use your BANKED reset whenever you want.",
+    "Here is how to use your BANKED reset.",
+    "I just used one of my reset credits.",
+  ]) {
+    assert.equal(isBankedDistributionNotice(text), false, text);
+  }
+
+  for (const text of [
+    "I will give everyone a BANKED reset today.",
+    "I will give all Plus users a BANKED reset.",
+    "We will grant every Pro user a BANKED reset.",
+    "I am giving all paid users a BANKED reset.",
+    "We will distribute BANKED resets to everyone.",
+  ]) {
+    assert.equal(isBankedDistributionNotice(text), true, text);
+    assert.equal(isBroadBankedDistributionNotice(text), true, text);
   }
 });
 
