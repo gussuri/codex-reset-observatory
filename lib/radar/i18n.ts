@@ -361,6 +361,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Planned reset",
     zh: "重置安排",
   },
+  scheduledResetDeadlinePrefix: {
+    ja: "",
+    en: "by ",
+    zh: "",
+  },
+  scheduledResetDeadlineSuffix: {
+    ja: "まで",
+    en: "",
+    zh: "前",
+  },
   tiboNoticeLocalTime: {
     ja: "Tibo氏の予告日時をお使いの地域の時間に変換して表示しています",
     en: "Tibo's notice date and time are shown in your local time.",

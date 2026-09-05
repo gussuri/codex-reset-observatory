@@ -152,6 +152,44 @@ function shouldShowTiboLocalTimeNote(
     activeWindow.expectedPrecision !== "unknown";
 }
 
+const RESET_DELIVERY_END_OF_DAY_PATTERN =
+  /\b(?:lands?|arrives?|is\s+(?:delivered|available)|will\s+(?:land|arrive))\s+(?:by\s+)?end\s+of\s+day\b/i;
+const RESET_DELIVERY_CONTEXT_PATTERN =
+  /\b(?:reset|banked|distribution|grant|credit(?:s)?|quota)\b/i;
+
+function isResetDeliveryEndOfDayDeadline(
+  activeWindow: PublicRadarSnapshot["viewModel"]["activeWindow"],
+  activity: PublicRadarSnapshot["latestTiboActivity"],
+) {
+  if (
+    activeWindow.kind !== "official" ||
+    !activeWindow.expectedAt ||
+    !activeWindow.expectedEndAt ||
+    !activeWindow.source ||
+    !activity ||
+    activity.classification !== "official_notice" ||
+    activity.isReply ||
+    activity.sourceUrl !== activeWindow.source ||
+    !activity.text
+  ) {
+    return false;
+  }
+
+  const startAt = Date.parse(activeWindow.expectedAt);
+  const endAt = Date.parse(activeWindow.expectedEndAt);
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt) {
+    return false;
+  }
+
+  const deadlineMatch = RESET_DELIVERY_END_OF_DAY_PATTERN.exec(activity.text);
+  if (!deadlineMatch || deadlineMatch.index === undefined) {
+    return false;
+  }
+
+  const contextStart = Math.max(0, deadlineMatch.index - 240);
+  return RESET_DELIVERY_CONTEXT_PATTERN.test(activity.text.slice(contextStart, deadlineMatch.index));
+}
+
 function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
   switch (sourceKind) {
     case "direct_post":
@@ -794,6 +832,10 @@ export function RadarDashboard({
     !viewModel.activeWindow.expectedAt &&
     !viewModel.activeWindow.expectedEndAt;
   const showTiboLocalTimeNote = shouldShowTiboLocalTimeNote(viewModel.activeWindow);
+  const showResetDeliveryDeadline = isResetDeliveryEndOfDayDeadline(
+    viewModel.activeWindow,
+    state.data?.latestTiboActivity,
+  );
   const probability24h = isDataUnavailable
     ? undefined
     : viewModel.probability24h;
@@ -956,7 +998,18 @@ export function RadarDashboard({
                     {translateUI("scheduledResetTime", locale)}{locale === "en" ? ": " : "："}
                   </dt>
                   <dd className="min-w-0 text-lg font-semibold leading-tight text-slate-950 sm:text-xl">
-                    {viewModel.activeWindow.expectedAt ? (
+                    {showResetDeliveryDeadline ? (
+                      <span className="inline-flex flex-wrap items-baseline gap-y-1">
+                        {translateUI("scheduledResetDeadlinePrefix", locale)}
+                        <LocalizedDateTime
+                          value={viewModel.activeWindow.expectedEndAt}
+                          locale={locale}
+                          weekday="short"
+                          approximate
+                        />
+                        {translateUI("scheduledResetDeadlineSuffix", locale)}
+                      </span>
+                    ) : viewModel.activeWindow.expectedAt ? (
                       <span className="inline-flex flex-wrap items-baseline gap-y-1">
                         <LocalizedDateTime
                           value={viewModel.activeWindow.expectedAt}

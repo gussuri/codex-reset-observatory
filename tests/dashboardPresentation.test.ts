@@ -666,6 +666,70 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 
+test("renders a reset end-of-day notice as a deadline without changing its internal window", () => {
+  const openedAt = "2026-09-05T00:39:25.000Z";
+  const expectedStartAt = "2026-09-05T00:39:25.000Z";
+  const expectedEndAt = "2026-09-05T07:00:00.000Z";
+  const data = getLocalRadarData({
+    calculationNow: new Date("2026-09-05T01:00:00.000Z"),
+    activeTiboSignals: [
+      {
+        tweet_id: "2096035437299237298",
+        signal_type: "official_notice",
+        text: "Because we are beyond happy to have Astra rolled out today ahead of schedule and you have been super patient with us (not really, but it’s ok!)… we will do the full banked reset today too for all Plus, Pro and Business users. Lands end of day. Happy Astra day and enjoy a phenomenal weekend. PS: If you create the account or upgrade before 8pm PT you will get it too. Still time!",
+        tweet_url: "https://x.com/thsottiaux/status/2096035437299237298",
+        tweet_created_at: openedAt,
+        expires_at: "2026-09-06T00:39:25.000Z",
+        confidence: 0.98,
+        verification_status: "auto_unverified",
+        temporal_expression: "Lands end of day",
+        temporal_kind: "daypart",
+        temporal_precision: "daypart",
+        temporal_timezone: "America/Los_Angeles",
+        temporal_confidence: 0.95,
+        ai_temporal_expression: "Lands end of day",
+        ai_temporal_kind: "daypart",
+        ai_temporal_precision: "daypart",
+        ai_temporal_timezone: "America/Los_Angeles",
+        ai_temporal_confidence: 0.95,
+        expected_start_at: expectedStartAt,
+        expected_end_at: expectedEndAt,
+        temporal_resolution_status: "resolved",
+        temporal_resolution_version: "tibo-temporal-v1",
+      },
+    ],
+  });
+
+  const expectedSchedule = {
+    ja: /16:00頃 JSTまで/,
+    en: /by around .*4:00 PM JST/,
+    zh: /约.*16:00 JST前/,
+  } as const;
+  const scheduleLabels = {
+    ja: ["リセット予定", "ソース"],
+    en: ["Planned reset", "Source"],
+    zh: ["重置安排", "来源"],
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow: new Date("2026-09-05T01:00:00.000Z") });
+    assert.equal(snapshot.viewModel.activeWindow.expectedAt, expectedStartAt);
+    assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, expectedEndAt);
+
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale }),
+    );
+    const scheduleStart = html.indexOf(scheduleLabels[locale][0]);
+    const sourceStart = html.indexOf(scheduleLabels[locale][1], scheduleStart);
+    assert.ok(scheduleStart >= 0 && sourceStart > scheduleStart);
+    const schedule = html.slice(scheduleStart, sourceStart);
+    const scheduleText = schedule.replace(/<[^>]*>/g, "");
+
+    assert.match(scheduleText, expectedSchedule[locale]);
+    assert.doesNotMatch(scheduleText, /09:39|9:39|20:00|8:00 PM|～| to | 至 /);
+  }
+});
+
 test("renders a BANKED notice separately and does not recommend exhausting the quota", () => {
   const openedAt = "2026-08-21T12:30:00.000Z";
   const data = getLocalRadarData({
