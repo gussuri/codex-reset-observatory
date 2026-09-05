@@ -354,7 +354,13 @@ function createRecoveryObservation(
     currentResetsAt: decision.current.resetsAt,
     cycleHint: decision.cycleHint,
     confidence: decision.confidence,
-    status: matchingTibo.tweetId ? "confirmed" as const : "observed" as const,
+    // A personal BANKED consumption remains an audit observation, but it is
+    // explicitly rejected as a public/global recovery candidate.
+    status: decision.isPersonalReset
+      ? "rejected" as const
+      : matchingTibo.tweetId
+        ? "confirmed" as const
+        : "observed" as const,
     matchedTiboTweetId: matchingTibo.tweetId,
     confirmedAt,
   };

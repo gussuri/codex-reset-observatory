@@ -73,6 +73,51 @@ test("renders unknown probabilities without aria-valuenow and with localized val
   assert.strictEqual((html.match(/aria-valuetext="Unknown"/g) ?? []).length, 2);
 });
 
+test("keeps normal dashboard presentation when recovery is provisional", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  );
+  const displayReasoningSummary = snapshot.viewModel.displayReasoningSummary;
+  assert.ok(displayReasoningSummary);
+
+  const provisionalSnapshot = {
+    ...snapshot,
+    recoveryObservation: {
+      status: "observed_unconfirmed" as const,
+      observedAt: "2026-08-03T23:30:00.000Z",
+      confidence: "strong" as const,
+      cycleHint: "unexpected" as const,
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: provisionalSnapshot,
+      locale: "ja",
+    }),
+  );
+
+  assert.match(html, /aria-label="24時間以内"/);
+  assert.match(html, /aria-label="48時間以内"/);
+  assert.ok(html.includes(displayReasoningSummary), "normal reasoning summary should remain visible");
+  assert.match(html, /公式リセット予告[\s\S]*なし/);
+  assert.doesNotMatch(html, /利用枠の回復を観測/);
+  assert.doesNotMatch(html, /Tiboによる全体リセットの完了発表を確認中です。/);
+  assert.doesNotMatch(html, /確認中/);
+  assert.doesNotMatch(html, /aria-valuetext="不明"/);
+});
+
+test("keeps unknown dashboard values when data is truly unavailable", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: null, locale: "ja" }),
+  );
+
+  assert.strictEqual((html.match(/aria-valuetext="不明"/g) ?? []).length, 2);
+  assert.match(html, /データを取得できません|確率表示を一時停止しています/);
+});
+
 test("dashboard shows the latest Tibo activity below history for the experiment", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(

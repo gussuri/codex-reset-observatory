@@ -245,6 +245,33 @@ test("public recovery projection exposes only the provisional status fields", ()
   assert.doesNotMatch(serialized, /usedPercent|previousResetsAt|currentResetsAt|planType|matchedTiboTweetId/);
 });
 
+test("rejected recovery observations stay out of the public snapshot", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      codexRecoveryObservation: {
+        sourceKey: "local-codex-app-server",
+        observedAt: "2026-08-03T23:30:00.000Z",
+        previousUsedPercent: 100,
+        currentUsedPercent: 0,
+        previousResetsAt: 1780000000,
+        currentResetsAt: 1780600000,
+        cycleHint: "unexpected",
+        confidence: "strong",
+        status: "rejected",
+        matchedTiboTweetId: null,
+        confirmedAt: null,
+      },
+    }),
+    "ja",
+    { calculationNow },
+  );
+
+  assert.equal(snapshot.recoveryObservation, null);
+  assert.doesNotMatch(JSON.stringify(snapshot), /利用枠の回復を観測/);
+});
+
 test("usage recovery presentation does not change published probabilities", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const base = toPublicRadarSnapshot(

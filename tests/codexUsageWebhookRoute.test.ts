@@ -1736,12 +1736,12 @@ test("personal banked reset consumption records observation and updates state bu
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { accepted: true, recovery: "personal_reset" });
 
-    // 1. Observation is recorded as an unconfirmed personal observation
+    // 1. Observation is recorded as a rejected public/global recovery candidate
     const observationWrite = getAtomicPlanPart(requests, "observation");
     assert.ok(observationWrite, "Observation should be written for audit");
     assert.equal(observationWrite?.cycle_hint, "unexpected");
     assert.equal(observationWrite?.confidence, "strong");
-    assert.equal(observationWrite?.status, "observed");
+    assert.equal(observationWrite?.status, "rejected");
     assert.equal(observationWrite?.matched_tibo_tweet_id, null);
 
     // 2. State is updated to reflect banked count 0 and carry forward grant timestamp

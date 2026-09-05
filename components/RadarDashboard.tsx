@@ -787,9 +787,6 @@ export function RadarDashboard({
   const isDataUnavailable = dashboardDataState === "unavailable";
   const shouldShowDataWarning =
     dashboardDataState === "degraded" || dashboardDataState === "unavailable";
-  const hasProvisionalRecovery = !isDataUnavailable &&
-    state.data?.recoveryObservation?.status === "observed_unconfirmed" &&
-    state.data.recoveryObservation.confidence === "strong";
   const hasOfficialNotice = viewModel.activeWindow.active && viewModel.activeWindow.kind === "official";
   const hasNoticePresentation = hasOfficialNotice;
   const hideUntimedBankedSchedule = viewModel.activeWindow.noticeKind === "banked" &&
@@ -799,18 +796,12 @@ export function RadarDashboard({
   const showTiboLocalTimeNote = shouldShowTiboLocalTimeNote(viewModel.activeWindow);
   const probability24h = isDataUnavailable
     ? undefined
-    : hasProvisionalRecovery
-      ? undefined
-      : viewModel.probability24h;
+    : viewModel.probability24h;
   const probability48h = isDataUnavailable
     ? undefined
-    : hasProvisionalRecovery
-      ? undefined
-      : viewModel.probability48h;
+    : viewModel.probability48h;
   const officialNoticeValue = isDataUnavailable
     ? translateUI("unknownProbability", locale)
-    : hasProvisionalRecovery
-      ? translateUI("observedRecoveryChecking", locale)
     : viewModel.activeWindow.active && hasOfficialNotice
       ? translateUI("activeNoticeLabel", locale)
       : translateUI("noOfficialNotice", locale);
@@ -848,9 +839,7 @@ export function RadarDashboard({
   const compactOutlookReason = getCompactOutlookReason(
     isDataUnavailable
       ? null
-      : hasProvisionalRecovery
-        ? translateUI("observedRecoveryBody", locale)
-        : viewModel.displayReasoningSummary,
+      : viewModel.displayReasoningSummary,
     locale,
   );
   const timedTeaserOutlook = getTimedTeaserOutlookTemplate(
@@ -939,23 +928,7 @@ export function RadarDashboard({
           </section>
         ) : null}
 
-        {hasProvisionalRecovery ? (
-          <section className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sky-950 shadow-sm sm:p-5" role="status">
-            <div className="flex items-start gap-3">
-              <Radio className="mt-0.5 h-6 w-6 shrink-0 text-sky-700" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-sky-700">
-                  {translateUI("observedRecoveryTitle", locale)}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-sky-950 sm:text-base">
-                  {translateUI("observedRecoveryBody", locale)}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        {!hasProvisionalRecovery && hasNoticePresentation ? (
+        {hasNoticePresentation ? (
           <section className={`rounded-lg border p-4 shadow-sm sm:p-5 ${resetNoticeTone.card}`}>
             <div className="flex items-start gap-3">
               <Bell className={`mt-0.5 h-6 w-6 shrink-0 ${resetNoticeTone.icon}`} />
