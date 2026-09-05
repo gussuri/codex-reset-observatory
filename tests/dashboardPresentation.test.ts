@@ -677,6 +677,8 @@ test("renders a reset end-of-day notice as a deadline without changing its inter
         tweet_id: "2096035437299237298",
         signal_type: "official_notice",
         text: "Because we are beyond happy to have Astra rolled out today ahead of schedule and you have been super patient with us (not really, but it’s ok!)… we will do the full banked reset today too for all Plus, Pro and Business users. Lands end of day. Happy Astra day and enjoy a phenomenal weekend. PS: If you create the account or upgrade before 8pm PT you will get it too. Still time!",
+        translated_text_ja: "Plus、Pro、Businessの全ユーザーにフルバンクリセットを実施します。一日の終わりに適用されます。アカウント作成またはアップグレードはPT午後8時までに行えば対象です。",
+        translated_text_zh: "我们今天也将为所有 Plus、Pro 和 Business 用户进行完整的储蓄重置。将在今天结束时落地。如果您在太平洋时间晚上 8 点之前创建账户或升级，也可以获得。",
         tweet_url: "https://x.com/thsottiaux/status/2096035437299237298",
         tweet_created_at: openedAt,
         expires_at: "2026-09-06T00:39:25.000Z",

@@ -154,8 +154,12 @@ function shouldShowTiboLocalTimeNote(
 
 const RESET_DELIVERY_END_OF_DAY_PATTERN =
   /\b(?:lands?|arrives?|is\s+(?:delivered|available)|will\s+(?:land|arrive))\s+(?:by\s+)?end\s+of\s+day\b/i;
+const RESET_DELIVERY_LOCALIZED_END_OF_DAY_PATTERNS = [
+  /(?:一日の終わり|今日の終わり)(?:に)?(?:適用|実施|配布|付与|届|到着)/,
+  /(?:今天结束时|一天结束时|日终)(?:落地|发放|执行|生效)/,
+];
 const RESET_DELIVERY_CONTEXT_PATTERN =
-  /\b(?:reset|banked|distribution|grant|credit(?:s)?|quota)\b/i;
+  /(?:\b(?:reset|banked|distribution|grant|credit(?:s)?|quota)\b|リセット|配布|付与|储蓄重置|重置|发放)/i;
 
 function isResetDeliveryEndOfDayDeadline(
   activeWindow: PublicRadarSnapshot["viewModel"]["activeWindow"],
@@ -181,13 +185,19 @@ function isResetDeliveryEndOfDayDeadline(
     return false;
   }
 
-  const deadlineMatch = RESET_DELIVERY_END_OF_DAY_PATTERN.exec(activity.text);
+  const activityText = activity.text;
+  const deadlineMatch = [
+    RESET_DELIVERY_END_OF_DAY_PATTERN,
+    ...RESET_DELIVERY_LOCALIZED_END_OF_DAY_PATTERNS,
+  ]
+    .map((pattern) => pattern.exec(activityText))
+    .find((match) => match !== null);
   if (!deadlineMatch || deadlineMatch.index === undefined) {
     return false;
   }
 
   const contextStart = Math.max(0, deadlineMatch.index - 240);
-  return RESET_DELIVERY_CONTEXT_PATTERN.test(activity.text.slice(contextStart, deadlineMatch.index));
+  return RESET_DELIVERY_CONTEXT_PATTERN.test(activityText.slice(contextStart, deadlineMatch.index));
 }
 
 function getSourceLabel(sourceKind: HistorySourceKind | undefined, locale: Locale) {
