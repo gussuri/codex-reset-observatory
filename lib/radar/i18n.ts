@@ -151,6 +151,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "An official reset notice is active, but it is outside the next 24- and 48-hour forecast windows.",
     zh: "已有官方重置预告，但目前仍在未来 24 小时和 48 小时预测范围之外。",
   },
+  outlookMajorModelRelease: {
+    ja: "GPT-6 Astraのリリース直後のため、通常よりリセット確率を高めに予測しています。",
+    en: "Because GPT-6 Astra was just released, we are forecasting a higher reset probability than usual.",
+    zh: "由于 GPT-6 Astra 刚刚发布，我们预测重置概率将高于平时。",
+  },
   outlookStrongTeaser: {
     ja: "リセットを示唆する投稿が確認されています。通常時よりリセットの見込みが高まっています。",
     en: "A post suggesting a reset has been confirmed. The outlook is higher than usual.",

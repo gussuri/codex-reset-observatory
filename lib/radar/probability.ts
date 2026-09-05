@@ -58,6 +58,7 @@ import {
   isRecurringConditionalBankedDistributionNotice,
   isSupersededBankedNotice,
 } from "./bankedReset";
+import type { MajorModelReleaseAdjustment } from "@/data/majorModelReleases";
 import {
   getOfficialNoticeConsumption,
   isOfficialNoticeTerminatedAt,
@@ -1588,6 +1589,7 @@ type DisplayProbabilityModelContext = {
     | "heuristic-fallback";
   shadow?: unknown;
   stableShadow?: unknown;
+  majorModelReleaseAdjustment?: MajorModelReleaseAdjustment;
 };
 
 type DisplayHazardBin = {
@@ -1669,6 +1671,16 @@ function getPublishedElapsedDiagnostics(
   }
 
   return { bins, globalLambdaPerHour };
+}
+
+function isMajorModelReleaseFloorApplied(
+  publishedCalculation?: DisplayProbabilityModelContext,
+) {
+  const adjustment = publishedCalculation?.majorModelReleaseAdjustment;
+  return adjustment?.active === true && (
+    adjustment.applied24h > adjustment.baseProbability24h ||
+    adjustment.applied48h > adjustment.baseProbability48h
+  );
 }
 
 function getDisplayHazardRateAtAge(
@@ -1866,6 +1878,10 @@ export function getDisplayProbabilityReason(
 
   if (activeIncidentCount > 0) {
     return translateUI("outlookActiveIncident", locale);
+  }
+
+  if (isMajorModelReleaseFloorApplied(publishedCalculation)) {
+    return translateUI("outlookMajorModelRelease", locale);
   }
 
   if (teaserStatus === "weak") {

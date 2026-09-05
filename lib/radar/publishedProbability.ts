@@ -9,6 +9,10 @@ import {
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
+import {
+  getMajorModelReleaseRegime,
+  type MajorModelReleaseAdjustment,
+} from "@/data/majorModelReleases";
 import type {
   ActiveOfficialNotice,
   LocalSignalEvaluation,
@@ -132,6 +136,7 @@ export type PublishedProbabilityCalculation = {
   rawShadow: ShadowProbabilityResult | null;
   stableShadow: ShadowProbabilityResult | null;
   shadow: ShadowProbabilityResult | null;
+  majorModelReleaseAdjustment: MajorModelReleaseAdjustment;
 };
 
 export function isValidNextGenerationBPrediction(
@@ -260,6 +265,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
 
@@ -278,6 +284,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
 
@@ -296,6 +303,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: stableShadow,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
 
@@ -314,6 +322,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: legacyShadow,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
 
@@ -333,6 +342,57 @@ export function selectPublishedProbability(
     rawShadow,
     stableShadow,
     shadow: stableShadow,
+    majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
+  };
+}
+
+const INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT: MajorModelReleaseAdjustment = {
+  active: false,
+  releaseId: null,
+  displayName: null,
+  releaseStartAt: null,
+  phase: null,
+  floor24h: null,
+  floor48h: null,
+  baseProbability24h: null,
+  baseProbability48h: null,
+  applied24h: null,
+  applied48h: null,
+};
+
+function applyMajorModelReleaseAdjustment(
+  calculation: PublishedProbabilityCalculation,
+  now: Date,
+): PublishedProbabilityCalculation {
+  const regime = getMajorModelReleaseRegime(now);
+  if (!regime) {
+    return {
+      ...calculation,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
+    };
+  }
+
+  const applied24h = Math.max(calculation.probability24h, regime.floor24h);
+  const applied48h = Math.max(calculation.probability48h, regime.floor48h);
+
+  return {
+    ...calculation,
+    probability24h: applied24h,
+    probability48h: applied48h,
+    probability72h: Math.max(calculation.probability72h, applied48h),
+    majorModelReleaseAdjustment: {
+      active: true,
+      releaseId: regime.id,
+      displayName: regime.displayName,
+      releaseStartAt: regime.releaseStartAt,
+      phase: regime.phase,
+      floor24h: regime.floor24h,
+      floor48h: regime.floor48h,
+      baseProbability24h: calculation.probability24h,
+      baseProbability48h: calculation.probability48h,
+      applied24h,
+      applied48h,
+    },
   };
 }
 
@@ -385,10 +445,15 @@ export function calculatePublishedProbability(
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
   const resolvedTrainingReadStatus =
     nextGenerationBTrainingReadStatus ?? attachedTraining?.trainingReadStatus ?? "ok";
-  const primary = getLocalProbabilityCalculation(data, calculationOptions);
-  const publicModelOptions = {
+  const calculationNow = calculationOptions.now ?? new Date();
+  const calculationOptionsWithNow = {
     ...calculationOptions,
-    now: roundPublicProbabilityTime(calculationOptions.now ?? new Date()),
+    now: calculationNow,
+  };
+  const primary = getLocalProbabilityCalculation(data, calculationOptionsWithNow);
+  const publicModelOptions = {
+    ...calculationOptionsWithNow,
+    now: roundPublicProbabilityTime(calculationNow),
   };
   const nextGenerationBModel = getPublishedNextGenerationBModel(
     publicModelOptions.now,
@@ -473,6 +538,7 @@ export function calculatePublishedProbability(
     rawShadow,
     nextGenerationB,
   );
-  if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
-  return selected;
+  const adjusted = applyMajorModelReleaseAdjustment(selected, calculationNow);
+  if (runtime.logFallback !== false) logPublishedProbabilityFallback(adjusted);
+  return adjusted;
 }

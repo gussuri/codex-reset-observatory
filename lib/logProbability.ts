@@ -458,6 +458,7 @@ export function buildProbabilityDebugInfo(
               ?? PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
             regimeMultiplierPolicyVersion:
               publishedB?.regimeMultiplierPolicyVersion ?? null,
+            majorModelReleaseAdjustment: publishedProbability.majorModelReleaseAdjustment,
           },
         }
       : {}),
