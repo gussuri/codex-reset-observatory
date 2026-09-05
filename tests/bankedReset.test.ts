@@ -23,7 +23,7 @@ import { collectBoundaryCensoredBoundaries } from "../lib/radar/boundaryCensored
 import { selectEligibleCommunicationEvents } from "../lib/radar/communicationRegime";
 import { calculateRandomContinuousBandwidthShadowPair } from "../lib/radar/randomContinuousBandwidthShadow";
 import { calculateRandomContinuousProbability } from "../lib/radar/randomContinuousProbability";
-import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
+import { getLastRandomRecoveryResetAt, getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { getShadowCompletedResetEvents } from "../lib/radar/shadowProbability";
 import { calculateNextGenerationBPostResetAgeCandidate } from "../lib/radar/nextGenerationProbability";
@@ -392,34 +392,34 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
   });
   const expected = {
     ja: {
-      title: "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布",
+      title: "GPT-6 Astraリリース記念BANKEDリセット配布",
       classification: "ランダムリセット",
       reason: "詫びリセット",
       method: "任意リセット権配布",
-      scope: "一部ユーザー",
+      scope: "全有料プラン",
       noticeType: "告知あり",
       noticeToExecution: "4時間23分",
-      note: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
+      note: "GPT-6 Astraの提供開始にあわせ、全有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
     },
     en: {
-      title: "BANKED Reset Distribution for Users Without GPT-6 Astra Access",
+      title: "GPT-6 Astra Launch BANKED Reset Distribution",
       classification: "Random reset",
       reason: "Compensation reset",
       method: "Banked Reset distribution",
-      scope: "Some users",
+      scope: "All paid plans",
       noticeType: "Announcement",
       noticeToExecution: "4 hours 23 minutes",
-      note: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra. It may be distributed progressively to eligible users rather than all at once.",
+      note: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed to all paid ChatGPT users. Distribution may reach users progressively rather than all at once.",
     },
     zh: {
-      title: "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放",
+      title: "GPT-6 Astra 发布纪念 BANKED 重置发放",
       classification: "随机重置",
       reason: "故障补偿重置",
       method: "BANKED 重置发放",
-      scope: "部分用户",
+      scope: "所有付费套餐",
       noticeType: "有告知",
       noticeToExecution: "4 小时 23 分钟",
-      note: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。可能会向符合条件的用户分批逐步发放，而不是一次性全部到账。",
+      note: "配合 GPT-6 Astra 发布，已向所有付费 ChatGPT 用户发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
     },
   } as const;
 
@@ -442,6 +442,89 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     assert.equal(publicBanked.details?.noticeToExecution, expected[locale].noticeToExecution);
     assert.equal(publicBanked.details?.note, expected[locale].note);
   }
+});
+
+test("applies the corrected all-paid scope to both observed Astra BANKED events", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    confidence: 0.98,
+  };
+  const firstEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-2095651088502591861",
+    displayExecutionAt: "2026-09-04T03:34:46.386Z",
+    tiboAnnouncedAt: astraNotice.tweet_created_at,
+    tiboPrimaryTweetId: astraNotice.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id],
+    officialNoticeTweetId: astraNotice.tweet_id,
+    officialNoticeAt: astraNotice.tweet_created_at,
+  };
+  const secondEstimate = {
+    ...firstEstimate,
+    resetEventKey: "banked-reset-2095651088502591861-observation-20260904T234601897Z",
+    displayExecutionAt: "2026-09-04T23:46:01.897Z",
+    tiboSourceTweetIds: [],
+    estimatorVersion: "usage-execution-banked-v1",
+  };
+
+  const data = getLocalRadarData({
+    calculationNow: new Date("2026-09-05T01:00:00.000Z"),
+    recentTiboSignals: [astraNotice],
+    resetExecutionEstimates: [firstEstimate, secondEstimate],
+  });
+  const events = combineResetHistory(
+    [],
+    [],
+    [],
+    [],
+    [astraNotice],
+    [],
+    [firstEstimate, secondEstimate],
+    [astraNotice],
+  ).filter((item) => item.recordKind === "banked_distribution");
+
+  assert.deepEqual(events.map((item) => item.id), [
+    firstEstimate.resetEventKey,
+    secondEstimate.resetEventKey,
+  ]);
+  for (const event of events) {
+    assert.equal(event.scope, "全有料プラン");
+    assert.equal(event.details?.scope, "全有料プラン");
+    assert.equal(event.randomResetTargetScope, undefined);
+    assert.equal(
+      isEligibleRandomResetEvent(event, Date.parse(event.completed_at ?? ""), Date.parse("2026-09-05T01:00:00.000Z")),
+      true,
+    );
+  }
+
+  const expectedScope = {
+    ja: "全有料プラン",
+    en: "All paid plans",
+    zh: "所有付费套餐",
+  } as const;
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow: new Date("2026-09-05T01:00:00.000Z"),
+      limitHistory: false,
+    });
+    const publicEvents = snapshot.viewModel.recentHistory.filter((item) =>
+      item.key === firstEstimate.resetEventKey || item.key === secondEstimate.resetEventKey,
+    );
+    assert.equal(publicEvents.length, 2);
+    for (const event of publicEvents) {
+      assert.equal(event.scope, expectedScope[locale]);
+      assert.equal(event.details?.scope, expectedScope[locale]);
+    }
+  }
+
+  assert.equal(
+    getLastRandomRecoveryResetAt(data, new Date("2026-09-05T01:00:00.000Z"), []),
+    secondEstimate.displayExecutionAt,
+  );
 });
 
 test("keeps later persistent BANKED observations as separate history events", () => {
@@ -488,7 +571,7 @@ test("does not treat generic or monitor estimator versions as BANKED distributio
   assert.deepEqual(findBankedDistributionEvents([notice], unsupportedEstimates), []);
 });
 
-test("excludes conditional Astra BANKED distribution from the random-reset target", () => {
+test("excludes an uncorrected conditional BANKED distribution from the random-reset target", () => {
   const astraNotice = {
     ...notice,
     tweet_id: "2095651088502591861",
@@ -502,7 +585,7 @@ test("excludes conditional Astra BANKED distribution from the random-reset targe
   };
   const astraEstimate = {
     ...estimate,
-    resetEventKey: "banked-reset-2095651088502591861",
+    resetEventKey: "banked-reset-conditional-unrelated",
     displayExecutionAt: "2026-09-04T03:34:46.386Z",
     tiboAnnouncedAt: astraNotice.tweet_created_at,
     tiboPrimaryTweetId: astraNotice.tweet_id,
@@ -539,7 +622,7 @@ test("keeps conditional BANKED history out of every random probability input", (
   };
   const astraEstimate = {
     ...estimate,
-    resetEventKey: "banked-reset-2095651088502591861",
+    resetEventKey: "banked-reset-conditional-unrelated",
     displayExecutionAt: "2026-09-04T03:34:46.386Z",
     tiboAnnouncedAt: astraNotice.tweet_created_at,
     tiboPrimaryTweetId: astraNotice.tweet_id,
@@ -656,7 +739,7 @@ test("keeps generic all-paid BANKED scope while localizing its history classific
     assert.equal(item.details?.cycleType, expected[locale].classification);
     assert.equal(item.details?.scope, expected[locale].scope);
     assert.equal(item.scope, expected[locale].scope);
-    assert.notEqual(item.details?.scope, locale === "ja" ? "一部ユーザー" : locale === "en" ? "Some users" : "部分用户");
+    assert.equal(item.details?.scope, expected[locale].scope);
   }
 });
 
@@ -698,10 +781,10 @@ test("does not apply the Astra presentation to another personal or reply-like BA
       ).recentHistory[0];
       assert.ok(item, `${locale} personal BANKED history should be present`);
       assert.notEqual(item.title, locale === "ja"
-        ? "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布"
+        ? "GPT-6 Astraリリース記念BANKEDリセット配布"
         : locale === "en"
-          ? "BANKED Reset Distribution for Users Without GPT-6 Astra Access"
-          : "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放");
+          ? "GPT-6 Astra Launch BANKED Reset Distribution"
+          : "GPT-6 Astra 发布纪念 BANKED 重置发放");
       assert.equal(item.details?.scope, locale === "ja" ? "全有料プラン" : locale === "en" ? "All paid plans" : "所有付费套餐");
     }
   } finally {

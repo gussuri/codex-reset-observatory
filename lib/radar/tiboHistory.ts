@@ -49,6 +49,7 @@ import {
   isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
+  isManualBroadBankedScopeCorrection,
 } from "./bankedReset";
 import { getOfficialNoticeConsumption } from "./officialNoticePolicy";
 
@@ -1702,7 +1703,8 @@ function buildBankedDistributionEvent(
   const completedAt = new Date(displayTime).toISOString();
   const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
   const summary = "任意リセット権の配布が確認されました。";
-  const randomResetTargetScope = isConditionalBankedDistributionNotice(notice.text)
+  const randomResetTargetScope = !isManualBroadBankedScopeCorrection(estimate.resetEventKey) &&
+    isConditionalBankedDistributionNotice(notice.text)
     ? "conditional" as const
     : undefined;
 

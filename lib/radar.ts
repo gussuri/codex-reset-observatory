@@ -97,6 +97,10 @@ import {
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
 import {
+  ASTRA_BANKED_HISTORY_EVENT_KEY,
+  ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID,
+} from "./radar/bankedReset";
+import {
   inferResetCycleType,
   normalizeResetReasonType,
   type ResetReasonContext,
@@ -601,9 +605,6 @@ const REGULAR_RESET_SUMMARY =
 const REGULAR_RESET_NOTE =
   "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。";
 const BANKED_RESET_METHOD = "任意リセット権配布";
-const ASTRA_BANKED_HISTORY_EVENT_KEY = "banked-reset-2095651088502591861";
-const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
-
 function isRegularHistoryItem(item: WindowLike) {
   return item.recordKind === "regular_completed" || item.details?.cycleType === "定期リセット";
 }
@@ -800,9 +801,7 @@ function getHistoryDetails(
         ? translateDynamic("詫びリセット", locale)
         : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: isAstraBanked
-        ? translateUI("astraBankedHistoryScope", locale)
-        : translateDynamic(item.details.scope, locale),
+      scope: translateDynamic(item.details.scope, locale),
       noticeToExecution: noticePresentation === "none" || !storedNoticeToExecution
         ? ""
         : translateDynamic(storedNoticeToExecution, locale),
@@ -828,7 +827,7 @@ function getHistoryDetails(
       ? translateDynamic("詫びリセット", locale)
       : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
-    scope: isAstraBanked ? translateUI("astraBankedHistoryScope", locale) : scope,
+    scope,
     noticeToExecution: "",
     noticeType: undefined,
     note: isAstraBanked
@@ -1174,7 +1173,7 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: isRegular || isAstraBankedHistoryEvent(item)
+        scope: isRegular
           ? details.scope
           : translateDynamic(item.scope, locale),
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,

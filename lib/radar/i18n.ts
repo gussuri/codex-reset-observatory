@@ -622,19 +622,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "适用对象",
   },
   astraBankedHistoryTitle: {
-    ja: "GPT-6 Astra未提供ユーザー向けBANKEDリセット配布",
-    en: "BANKED Reset Distribution for Users Without GPT-6 Astra Access",
-    zh: "面向尚未获得 GPT-6 Astra 访问权限用户的 BANKED 重置发放",
-  },
-  astraBankedHistoryScope: {
-    ja: "一部ユーザー",
-    en: "Some users",
-    zh: "部分用户",
+    ja: "GPT-6 Astraリリース記念BANKEDリセット配布",
+    en: "GPT-6 Astra Launch BANKED Reset Distribution",
+    zh: "GPT-6 Astra 发布纪念 BANKED 重置发放",
   },
   astraBankedHistoryNote: {
-    ja: "GPT-6 Astraにまだアクセスできない有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
-    en: "A BANKED Reset was distributed to paid ChatGPT users who still do not have access to GPT-6 Astra. It may be distributed progressively to eligible users rather than all at once.",
-    zh: "面向尚未获得 GPT-6 Astra 访问权限的付费 ChatGPT 用户发放了 BANKED 重置。可能会向符合条件的用户分批逐步发放，而不是一次性全部到账。",
+    ja: "GPT-6 Astraの提供開始にあわせ、全有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
+    en: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed to all paid ChatGPT users. Distribution may reach users progressively rather than all at once.",
+    zh: "配合 GPT-6 Astra 发布，已向所有付费 ChatGPT 用户发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
   },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
