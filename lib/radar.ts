@@ -98,6 +98,7 @@ import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
 import {
   ASTRA_BANKED_HISTORY_EVENT_KEY,
+  ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY,
   ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID,
 } from "./radar/bankedReset";
 import {
@@ -1045,7 +1046,12 @@ function getHistoryDisplayTitle(
   }
 
   if (isAstraBankedHistoryEvent(item)) {
-    return translateUI("astraBankedHistoryTitle", locale);
+    return translateUI(
+      getResetDisplayNameEventKey(item) === ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY
+        ? "astraBankedHistorySecondTitle"
+        : "astraBankedHistoryTitle",
+      locale,
+    );
   }
 
   if (locale !== "ja" && isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {

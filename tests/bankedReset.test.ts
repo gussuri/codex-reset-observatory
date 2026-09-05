@@ -506,6 +506,20 @@ test("applies the corrected all-paid scope to both observed Astra BANKED events"
     en: "All paid plans",
     zh: "所有付费套餐",
   } as const;
+  const expectedTitles = {
+    ja: {
+      first: "GPT-6 Astraリリース記念BANKEDリセット配布",
+      second: "GPT-6 Astraリリース記念BANKEDリセット配布（2回目）",
+    },
+    en: {
+      first: "GPT-6 Astra Launch BANKED Reset Distribution",
+      second: "GPT-6 Astra Launch BANKED Reset Distribution (2nd)",
+    },
+    zh: {
+      first: "GPT-6 Astra 发布纪念 BANKED 重置发放",
+      second: "GPT-6 Astra 发布纪念 BANKED 重置发放（第2次）",
+    },
+  } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, {
       calculationNow: new Date("2026-09-05T01:00:00.000Z"),
@@ -516,6 +530,12 @@ test("applies the corrected all-paid scope to both observed Astra BANKED events"
     );
     assert.equal(publicEvents.length, 2);
     for (const event of publicEvents) {
+      assert.equal(
+        event.title,
+        event.key === firstEstimate.resetEventKey
+          ? expectedTitles[locale].first
+          : expectedTitles[locale].second,
+      );
       assert.equal(event.scope, expectedScope[locale]);
       assert.equal(event.details?.scope, expectedScope[locale]);
     }
