@@ -29,7 +29,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
     overviewHeading: "利用枠上限への備えと予測シグナルの読み解き方",
     overviewParagraphs: [
       "CodexはAI支援コーディングの中核ツールですが、週次制限やレート制限の上限に達すると作業が一時停止します。本観測所では、過去の全体リセット実績、公式アナウンス、障害対応に伴う臨時リセット（詫びリセット・ご祝儀リセット）の動向をリアルタイムに集約し、開発作業の停滞を防ぐための判断材料を提供しています。",
-      "「リセット期待度（24時間・48時間以内）」は、過去のランダムリセット間隔から導出した基礎確率に、OpenAI Status（API・Codex障害の発生と復旧）、開発関係者による予告や匂わせ投稿（示唆された時間窓や強さの解析）、コミュニティからの報告を統計的に統合して算出しています。OpenAI公式の保証値ではありませんが、計画的な利用や任意リセット（Banked Reset）の使用タイミング判断にお役立ていただけます。",
+      "「リセット期待度（24時間・48時間以内）」は、過去の発生間隔データをもとにした統計モデルに、OpenAI Status（API・Codex障害の発生と復旧）、開発関係者による予告や匂わせ投稿（示唆された時間窓や強さの解析）、コミュニティからの報告を機械的に統合して算出しています。OpenAI公式の保証値ではありませんが、計画的な利用や任意リセット（Banked Reset）の使用タイミング判断にお役立ていただけます。",
     ],
     faqHeading: "よくある質問（FAQ）",
     faqSubheading: "Codex・ChatGPT Workのリセットに関する要点をまとめています。",
@@ -39,7 +39,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
         id: "forecast-method",
         question: "リセット期待度とは何ですか？どのように計算されますか？",
         answer:
-          "今後リセットが行われる可能性の統計的な目安です。過去のリセット間隔から算出した基礎確率に、OpenAI公式予告、OpenAI Statusの障害情報、コミュニティの動きなど現在の観測シグナルを統合・補正して算出しています。OpenAI公式の確定情報ではありません。",
+          "今後リセットが行われる可能性の統計的な目安です。過去の発生間隔データをもとにした基準モデルに、OpenAI公式予告、OpenAI Statusの障害情報、コミュニティの動きなど現在の観測シグナルを統合・補正して算出しています。OpenAI公式の確定情報ではありません。",
       },
       {
         id: "reset-types",
@@ -72,7 +72,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
     overviewHeading: "Preparing for usage limits and reading forecast signals",
     overviewParagraphs: [
       "Codex is an essential agentic coding companion, but hitting weekly allowance limits or rate caps halts productive development. This observatory aggregates confirmed global reset events, official notices, and incident-driven compensation resets (wabi-resets) in real time to help developers plan ahead and prevent costly downtime.",
-      "The 24-hour and 48-hour reset likelihoods combine an empirical baseline derived from past random reset intervals with real-time indicators: OpenAI Status incidents, developer teaser posts (evaluating hinted time windows and confidence levels), and community signals. These statistical reference values are not official OpenAI guarantees, but serve as practical guidance for pacing tasks or deciding when to redeem a Banked Reset.",
+      "The 24-hour and 48-hour reset likelihoods combine an empirical baseline derived from historical event cadence with real-time indicators: OpenAI Status incidents, developer teaser posts (evaluating hinted time windows and confidence levels), and community signals. These statistical reference values serve as practical guidance for pacing tasks or deciding when to redeem a Banked Reset.",
     ],
     faqHeading: "Frequently Asked Questions",
     faqSubheading: "Key points regarding Codex and ChatGPT Work usage limit resets.",
@@ -82,7 +82,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
         id: "forecast-method",
         question: "What is the reset likelihood and how is it calculated?",
         answer:
-          "It is a statistical reference forecast indicating the likelihood of an upcoming reset. A baseline derived from past reset intervals is adjusted dynamically using official notices, OpenAI Status incident logs, and community signals. It is not an official probability from OpenAI.",
+          "It is a statistical reference forecast indicating the likelihood of an upcoming reset. An empirical baseline derived from historical cadence is dynamically calibrated using official notices, OpenAI Status incident logs, and community signals. It is not an official probability from OpenAI.",
       },
       {
         id: "reset-types",
@@ -115,7 +115,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
     overviewHeading: "应对使用额度上限与理解预测信号",
     overviewParagraphs: [
       "Codex 是不可或缺的开发助手，但遇到周期限额或速率上限时会导致开发流程中断。本站实时汇总全局重置历史、官方公告以及因故障引发的补偿重置（赔偿重置/庆祝重置），协助开发者合理规划工作、减少等待时间。",
-      "24小时及48小时重置可能性基于历史随机重置间隔的基础概率，并结合 OpenAI Status 故障状态、开发团队成员的暗示发帖（解析提及的时间窗口与暗示强度）及社区反馈综合计算得出。该数值为统计参考指标，并非 OpenAI 官方公布的保证概率，可作为日常调度或使用手动重置（Banked Reset）时的决策参考。",
+      "24小时及48小时重置可能性基于历史重置周期数据建立的基准模型，并结合 OpenAI Status 故障状态、开发团队成员的暗示发帖（解析提及的时间窗口与暗示强度）及社区反馈综合计算得出。该数值为统计参考指标，可作为日常调度或使用手动重置（Banked Reset）时的决策参考。",
     ],
     faqHeading: "常见问题解答（FAQ）",
     faqSubheading: "汇总有关 Codex 与 ChatGPT Work 重置机制的关键信息。",
@@ -125,7 +125,7 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
         id: "forecast-method",
         question: "重置可能性是什么意思？如何计算？",
         answer:
-          "重置可能性是未来发生重置的统计参考指标。本站根据历史重置间隔得出基础概率，并结合 OpenAI 官方公告、OpenAI Status 故障信息及社区动态实时修正。该数据并非 OpenAI 官方保证。",
+          "重置可能性是未来发生重置的统计参考指标。本站根据历史重置周期数据建立基准模型，并结合 OpenAI 官方公告、OpenAI Status 故障信息及社区动态实时修正。该数据并非 OpenAI 官方保证。",
       },
       {
         id: "reset-types",
