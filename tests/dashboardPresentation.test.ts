@@ -21,6 +21,7 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { translateDynamic } from "../lib/radar/i18n";
+import { getHistoricalResetPresentationCorrection } from "../lib/radar/historicalResetCorrections";
 import {
   buildResetExecutionEstimate,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -749,6 +750,113 @@ test("renders a reset end-of-day notice as a deadline without changing its inter
     assert.match(scheduleText, expectedSchedule[locale]);
     assert.doesNotMatch(scheduleText, /09:39|9:39|20:00|8:00 PM|～| to | 至 /);
   }
+});
+
+test("preserves Astra presentation fallbacks separately from the exact scope correction", () => {
+  const calculationNow = new Date("2026-09-06T00:00:00.000Z");
+  const astraSourceTweetId = "2095651088502591861";
+  const event = (id: string, completedAt: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    recordKind: "banked_distribution" as const,
+    title: "ランダムリセット",
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: completedAt,
+    closed_at: completedAt,
+    completed_at: completedAt,
+    window_minutes: 0,
+    scope: "全有料プラン",
+    summary: "BANKED reset",
+    source_url: "https://x.com/thsottiaux/status/unrelated-history-source",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "任意リセット権配布",
+      scope: "全有料プラン",
+      noticeToExecution: "0分",
+      noticeType: "公式告知あり",
+      note: "BANKED reset",
+    },
+    ...overrides,
+  });
+  const officialIdFallback = event("banked-astra-official-fallback", "2026-09-05T21:00:00.000Z", {
+    officialNoticeTweetId: astraSourceTweetId,
+  });
+  const sourceIdFallback = event("banked-astra-source-fallback", "2026-09-05T20:00:00.000Z", {
+    sourceTweetIds: [astraSourceTweetId],
+  });
+  const nonBankedSameSource = {
+    ...event("confirmed-global-same-astra-source", "2026-09-05T19:00:00.000Z", {
+      recordKind: "confirmed_global",
+      title: "既存全体リセット",
+      officialNoticeTweetId: astraSourceTweetId,
+    }),
+  };
+  const originalHistory = LOCAL_RESET_HISTORY.splice(
+    0,
+    LOCAL_RESET_HISTORY.length,
+    officialIdFallback,
+    sourceIdFallback,
+    nonBankedSameSource,
+  );
+
+  try {
+    const viewModel = getRadarViewModel(
+      getLocalRadarData({ calculationNow }),
+      "ja",
+      false,
+      undefined,
+      calculationNow,
+    );
+    const officialPresentation = viewModel.recentHistory.find(
+      (item) => item.key === officialIdFallback.id,
+    );
+    const sourcePresentation = viewModel.recentHistory.find(
+      (item) => item.key === sourceIdFallback.id,
+    );
+    const nonBankedPresentation = viewModel.recentHistory.find(
+      (item) => item.key === nonBankedSameSource.id,
+    );
+
+    assert.equal(officialPresentation?.title, "GPT-6 Astraリリース記念BANKEDリセット配布");
+    assert.equal(sourcePresentation?.title, "GPT-6 Astraリリース記念BANKEDリセット配布");
+    assert.equal(nonBankedPresentation?.title, "既存全体リセット");
+  } finally {
+    LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...originalHistory);
+  }
+});
+
+test("preserves the legacy Astra presentation identity matching semantics", () => {
+  const baseKey = "banked-reset-2095651088502591861";
+  const secondKey = `${baseKey}-observation-20260904T234601897Z`;
+  const sourceTweetId = "2095651088502591861";
+  const lookup = (overrides: {
+    eventKey?: string | null;
+    officialNoticeTweetId?: string | null;
+    sourceTweetIds?: ReadonlyArray<string | null | undefined> | null;
+  }) => getHistoricalResetPresentationCorrection({
+    recordKind: "banked_distribution",
+    ...overrides,
+  });
+
+  assert.equal(
+    lookup({ eventKey: baseKey })?.titleTranslationKey,
+    "astraBankedHistoryTitle",
+  );
+  assert.equal(lookup({ eventKey: secondKey }), null);
+  assert.equal(
+    lookup({ eventKey: secondKey, officialNoticeTweetId: ` ${sourceTweetId} ` })?.titleTranslationKey,
+    "astraBankedHistorySecondTitle",
+  );
+  assert.equal(
+    lookup({ eventKey: secondKey, sourceTweetIds: [sourceTweetId] })?.titleTranslationKey,
+    "astraBankedHistorySecondTitle",
+  );
+  assert.equal(lookup({ eventKey: ` ${baseKey} ` }), null);
+  assert.equal(
+    lookup({ eventKey: "banked-astra-source-whitespace", sourceTweetIds: [` ${sourceTweetId} `] }),
+    null,
+  );
 });
 
 test("renders a BANKED notice separately and does not recommend exhausting the quota", () => {

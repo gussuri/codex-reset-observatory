@@ -1,23 +1,21 @@
+import { hasHistoricalResetScopeCorrection } from "./historicalResetCorrections";
+
 export const BANKED_NOTICE_MATCH_WINDOW_MS = 90 * 60 * 1000;
 export const BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "banked-distribution-observation-v2";
 export const LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "usage-execution-banked-v1";
-export const ASTRA_BANKED_HISTORY_EVENT_KEY = "banked-reset-2095651088502591861";
-export const ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260904T234601897Z`;
-export const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
+
+export {
+  ASTRA_BANKED_HISTORY_EVENT_KEY,
+  ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY,
+  ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID,
+} from "./historicalResetCorrections";
 export const BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS = [
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
 ] as const;
 
-// Post-hoc factual scope correction for the two observed Astra distributions.
-// This is a history-data correction, not a new BANKED classification rule.
-const MANUAL_BROAD_BANKED_SCOPE_CORRECTION_EVENT_KEYS = new Set([
-  ASTRA_BANKED_HISTORY_EVENT_KEY,
-  ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY,
-]);
-
 export function isManualBroadBankedScopeCorrection(eventKey: string | null | undefined) {
-  return typeof eventKey === "string" && MANUAL_BROAD_BANKED_SCOPE_CORRECTION_EVENT_KEYS.has(eventKey);
+  return hasHistoricalResetScopeCorrection(eventKey);
 }
 
 const bankedDistributionEstimatorVersions = new Set<string>(BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS);

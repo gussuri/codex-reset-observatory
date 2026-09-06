@@ -97,10 +97,8 @@ import {
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
 import {
-  ASTRA_BANKED_HISTORY_EVENT_KEY,
-  ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY,
-  ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID,
-} from "./radar/bankedReset";
+  getHistoricalResetPresentationCorrection,
+} from "./radar/historicalResetCorrections";
 import {
   inferResetCycleType,
   normalizeResetReasonType,
@@ -736,14 +734,13 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
   return translateDynamic("不明", locale);
 }
 
-function isAstraBankedHistoryEvent(item: WindowLike) {
-  if (getHistoryRecordKind(item) !== "banked_distribution") return false;
-
-  const eventKey = getResetDisplayNameEventKey(item);
-  if (eventKey === ASTRA_BANKED_HISTORY_EVENT_KEY) return true;
-  if (item.officialNoticeTweetId?.trim() === ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID) return true;
-
-  return getHistoryTiboTweetIds(item).includes(ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID);
+function getAstraBankedHistoryCorrection(item: WindowLike) {
+  return getHistoricalResetPresentationCorrection({
+    recordKind: getHistoryRecordKind(item),
+    eventKey: getResetDisplayNameEventKey(item),
+    officialNoticeTweetId: item.officialNoticeTweetId,
+    sourceTweetIds: getHistoryTiboTweetIds(item),
+  });
 }
 
 export type HistoryNoticePresentation = "announcement" | "teaser" | "none";
@@ -792,14 +789,14 @@ function getHistoryDetails(
   }
 
   if (item.details) {
-    const isAstraBanked = isAstraBankedHistoryEvent(item);
+    const astraCorrection = getAstraBankedHistoryCorrection(item);
     const reason = getHistoryReasonTypeValue(item);
     const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: isAstraBanked
-        ? translateDynamic("ご祝儀リセット", locale)
+      reasonType: astraCorrection
+        ? translateDynamic(astraCorrection.reasonType, locale)
         : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
@@ -811,28 +808,28 @@ function getHistoryDetails(
         : noticePresentation === "teaser"
           ? translateUI("historyNoticeTeaserValue", locale)
           : undefined,
-      note: isAstraBanked
-        ? translateUI("astraBankedHistoryNote", locale)
+      note: astraCorrection
+        ? translateUI(astraCorrection.noteTranslationKey, locale)
         : item.details.note
           ? translateDynamic(item.details.note, locale)
           : null,
     };
   }
 
-  const isAstraBanked = isAstraBankedHistoryEvent(item);
+  const astraCorrection = getAstraBankedHistoryCorrection(item);
   const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
 
   return {
     cycleType: getHistoryCycleType(item, locale),
-    reasonType: isAstraBanked
-      ? translateDynamic("ご祝儀リセット", locale)
+    reasonType: astraCorrection
+      ? translateDynamic(astraCorrection.reasonType, locale)
       : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
     scope,
     noticeToExecution: "",
     noticeType: undefined,
-    note: isAstraBanked
-      ? translateUI("astraBankedHistoryNote", locale)
+    note: astraCorrection
+      ? translateUI(astraCorrection.noteTranslationKey, locale)
       : item.summary ? translateDynamic(item.summary, locale) : null,
   };
 }
@@ -1045,13 +1042,9 @@ function getHistoryDisplayTitle(
     }
   }
 
-  if (isAstraBankedHistoryEvent(item)) {
-    return translateUI(
-      getResetDisplayNameEventKey(item) === ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY
-        ? "astraBankedHistorySecondTitle"
-        : "astraBankedHistoryTitle",
-      locale,
-    );
+  const astraCorrection = getAstraBankedHistoryCorrection(item);
+  if (astraCorrection) {
+    return translateUI(astraCorrection.titleTranslationKey, locale);
   }
 
   if (locale !== "ja" && isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {

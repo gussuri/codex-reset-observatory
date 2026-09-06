@@ -3,8 +3,11 @@ import test from "node:test";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
+  ASTRA_BANKED_HISTORY_EVENT_KEY,
+  ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY,
   BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
   BANKED_NOTICE_MATCH_WINDOW_MS,
+  isManualBroadBankedScopeCorrection,
   isBankedDistributionCompletionSignal,
   hasFutureBankedDistributionIntent,
   isBankedDistributionNotice,
@@ -72,6 +75,17 @@ test("accepts only the canonical and Production legacy BANKED estimator versions
   assert.equal(isBankedDistributionEstimatorVersion("usage-execution-v1"), false);
   assert.equal(isBankedDistributionEstimatorVersion("usage-execution-monitor-v1"), false);
   assert.equal(isBankedDistributionEstimatorVersion(null), false);
+});
+
+test("keeps Astra broad-scope correction limited to the two exact event keys", () => {
+  assert.equal(isManualBroadBankedScopeCorrection(ASTRA_BANKED_HISTORY_EVENT_KEY), true);
+  assert.equal(isManualBroadBankedScopeCorrection(ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY), true);
+  assert.equal(isManualBroadBankedScopeCorrection("2095651088502591861"), false);
+  assert.equal(
+    isManualBroadBankedScopeCorrection(`${ASTRA_BANKED_HISTORY_EVENT_KEY}-other-observation`),
+    false,
+  );
+  assert.equal(isManualBroadBankedScopeCorrection("banked-reset-unrelated"), false);
 });
 
 test("recognizes a broad BANKED distribution notice without treating generic reset wording as one", () => {
