@@ -52,6 +52,7 @@ import {
 } from "@/lib/radar/resetMarker";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
+import { ObservationGuide } from "./ObservationGuide";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
@@ -1333,6 +1334,8 @@ export function RadarDashboard({
           </nav>
         </section>
 
+        <ObservationGuide locale={locale} />
+
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav
             aria-label={SITE_NAME}
@@ -1376,11 +1379,19 @@ export function RadarDashboard({
               </>
             )}
           </nav>
-          <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs text-slate-400">
             <DeveloperLink
               locale={locale}
               className="text-xs text-slate-400 hover:text-white"
             />
+            <a
+              className="transition-colors hover:text-white"
+              href="https://gussuriworks.com/"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              by Gussuri Works
+            </a>
           </div>
         </footer>
       </div>

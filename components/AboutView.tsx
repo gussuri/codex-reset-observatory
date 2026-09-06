@@ -86,11 +86,19 @@ export function AboutView({ locale }: AboutViewProps) {
             ))}
             <p>{translateUI("aboutDeveloper", locale)}</p>
           </div>
-          <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
             <DeveloperLink
               locale={locale}
               className="text-slate-600 hover:text-teal-700"
             />
+            <a
+              className="text-sm font-medium text-slate-600 transition-colors hover:text-teal-700"
+              href="https://gussuriworks.com/"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              by Gussuri Works
+            </a>
           </div>
         </section>
 

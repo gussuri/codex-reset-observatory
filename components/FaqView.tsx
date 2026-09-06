@@ -395,11 +395,19 @@ export function FaqView({ locale }: FaqViewProps) {
             </>
           )}
         </nav>
-        <footer className="border-t border-slate-200 pt-4">
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
           <DeveloperLink
             locale={locale}
             className="text-slate-600 hover:text-teal-700"
           />
+          <a
+            className="text-sm font-medium text-slate-600 transition-colors hover:text-teal-700"
+            href="https://gussuriworks.com/"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            by Gussuri Works
+          </a>
         </footer>
       </div>
     </main>

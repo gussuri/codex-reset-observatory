@@ -155,6 +155,14 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
               locale={locale}
               className="text-slate-300 hover:text-white"
             />
+            <a
+              className="text-sm font-medium text-slate-300 transition-colors hover:text-white"
+              href="https://gussuriworks.com/"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              by Gussuri Works
+            </a>
           </nav>
           <p className="font-semibold text-slate-300">{content.footerText}</p>
         </footer>
