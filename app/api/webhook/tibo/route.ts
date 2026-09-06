@@ -75,26 +75,11 @@ import {
   resolveTiboResetEventIdentity,
   type TiboResetEventIdentityResolution,
 } from "@/lib/radar/tiboResetEventIdentity";
+import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
 
 // Keep the webhook bounded while accepting X long-form/note text. The former
 // 2,000-character ceiling rejected fully expanded posts before classification.
 const MAX_TIBO_SOURCE_TEXT_LENGTH = 25_000;
-
-function isMissingTiboOptionalColumnError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const value = error as { code?: unknown; message?: unknown; details?: unknown };
-  const code = typeof value.code === "string" ? value.code : "";
-  const message = [value.message, value.details]
-    .filter((item): item is string => typeof item === "string")
-    .join(" ");
-
-  return (
-    /(secondary_signal|teaser_strength|translated_text_(ja|zh)|ai_teaser_strength(?:_confidence|_evidence_quote|_reason_ja)?|ai_temporal_|temporal_(expression|kind|precision|timezone|confidence|resolution_source)|expected_(start|end)_at|temporal_resolution_|quote_(context_text|tweet_url|author_handle)|logical_post_id|edit_history_tweet_ids|edit_version|edit_metadata_source)/i.test(message) &&
-    (code === "PGRST204" ||
-      code === "42703" ||
-      /column|schema cache|does not exist/i.test(message))
-  );
-}
 
 function normalizeStoredTranslation(value: unknown) {
   if (typeof value !== "string") return null;
@@ -588,9 +573,9 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (lookupError) {
-        // The translation migration may be applied after the application is
-        // deployed. Keep the existing state lookup usable during that window,
-        // while all real lookup failures remain fail-closed.
+        // Optional Tibo schema migrations or schema-cache propagation may lag
+        // application deployment. Keep the existing state lookup usable during
+        // that window, while all real lookup failures remain fail-closed.
         if (isMissingTiboOptionalColumnError(lookupError)) {
           const legacyLookup = await supabase
             .from("tibo_signals")
