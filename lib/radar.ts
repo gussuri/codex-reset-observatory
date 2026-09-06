@@ -799,7 +799,7 @@ function getHistoryDetails(
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
       reasonType: isAstraBanked
-        ? translateDynamic("詫びリセット", locale)
+        ? translateDynamic("ご祝儀リセット", locale)
         : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
@@ -825,7 +825,7 @@ function getHistoryDetails(
   return {
     cycleType: getHistoryCycleType(item, locale),
     reasonType: isAstraBanked
-      ? translateDynamic("詫びリセット", locale)
+      ? translateDynamic("ご祝儀リセット", locale)
       : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
     scope,

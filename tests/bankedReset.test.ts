@@ -394,7 +394,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     ja: {
       title: "GPT-6 Astraリリース記念BANKEDリセット配布",
       classification: "ランダムリセット",
-      reason: "詫びリセット",
+      reason: "ご祝儀リセット",
       method: "任意リセット権配布",
       scope: "全有料プラン",
       noticeType: "告知あり",
@@ -404,7 +404,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     en: {
       title: "GPT-6 Astra Launch BANKED Reset Distribution",
       classification: "Random reset",
-      reason: "Compensation reset",
+      reason: "Celebration reset",
       method: "Banked Reset distribution",
       scope: "All paid plans",
       noticeType: "Announcement",
@@ -414,7 +414,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     zh: {
       title: "GPT-6 Astra 发布纪念 BANKED 重置发放",
       classification: "随机重置",
-      reason: "故障补偿重置",
+      reason: "庆祝重置",
       method: "BANKED 重置发放",
       scope: "所有付费套餐",
       noticeType: "有告知",
@@ -520,6 +520,11 @@ test("applies the corrected all-paid scope to both observed Astra BANKED events"
       second: "GPT-6 Astra 发布庆祝重置（第2次）",
     },
   } as const;
+  const expectedReasons = {
+    ja: "ご祝儀リセット",
+    en: "Celebration reset",
+    zh: "庆祝重置",
+  } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, {
       calculationNow: new Date("2026-09-05T01:00:00.000Z"),
@@ -536,6 +541,7 @@ test("applies the corrected all-paid scope to both observed Astra BANKED events"
           ? expectedTitles[locale].first
           : expectedTitles[locale].second,
       );
+      assert.equal(event.details?.reasonType, expectedReasons[locale]);
       assert.equal(event.scope, expectedScope[locale]);
       assert.equal(event.details?.scope, expectedScope[locale]);
     }
