@@ -1673,16 +1673,6 @@ function getPublishedElapsedDiagnostics(
   return { bins, globalLambdaPerHour };
 }
 
-function isMajorModelReleaseFloorApplied(
-  publishedCalculation?: DisplayProbabilityModelContext,
-) {
-  const adjustment = publishedCalculation?.majorModelReleaseAdjustment;
-  return adjustment?.active === true && (
-    adjustment.applied24h > adjustment.baseProbability24h ||
-    adjustment.applied48h > adjustment.baseProbability48h
-  );
-}
-
 function getDisplayHazardRateAtAge(
   bins: DisplayHazardBin[],
   ageHours: number,
@@ -1878,10 +1868,6 @@ export function getDisplayProbabilityReason(
 
   if (activeIncidentCount > 0) {
     return translateUI("outlookActiveIncident", locale);
-  }
-
-  if (isMajorModelReleaseFloorApplied(publishedCalculation)) {
-    return translateUI("outlookMajorModelRelease", locale);
   }
 
   if (teaserStatus === "weak") {

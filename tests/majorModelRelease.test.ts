@@ -37,7 +37,7 @@ function getAdjustment(result: ReturnType<typeof calculatePublishedProbability>)
   }).majorModelReleaseAdjustment;
 }
 
-test("release regime is inactive before start and uses exact phase boundaries", () => {
+test("release regime is inactive at every release age", () => {
   const before = calculateAt(atReleaseAge(0, -1));
   const strong = calculateAt(atReleaseAge(0));
   const medium = calculateAt(atReleaseAge(72));
@@ -45,40 +45,28 @@ test("release regime is inactive before start and uses exact phase boundaries", 
   const ended = calculateAt(atReleaseAge(240));
 
   assert.equal(getAdjustment(before)?.active, false);
-  assert.equal(getAdjustment(strong)?.active, true);
-  assert.equal(getAdjustment(strong)?.phase, "strong");
-  assert.equal(getAdjustment(strong)?.floor24h, 0.52);
-  assert.equal(getAdjustment(strong)?.floor48h, 0.75);
-  assert.equal(getAdjustment(medium)?.phase, "medium");
-  assert.equal(getAdjustment(medium)?.floor24h, 0.42);
-  assert.equal(getAdjustment(medium)?.floor48h, 0.65);
-  assert.equal(getAdjustment(weak)?.phase, "weak");
-  assert.equal(getAdjustment(weak)?.floor24h, 0.30);
-  assert.equal(getAdjustment(weak)?.floor48h, 0.50);
+  assert.equal(getAdjustment(strong)?.active, false);
+  assert.equal(getAdjustment(medium)?.active, false);
+  assert.equal(getAdjustment(weak)?.active, false);
   assert.equal(getAdjustment(ended)?.active, false);
 });
 
-test("release floor is applied after model selection without changing the raw model result", () => {
+test("release floor does not replace the selected model result", () => {
   const now = atReleaseAge(12);
   const result = calculateAt(now);
   const adjustment = getAdjustment(result);
 
-  assert.equal(adjustment?.active, true);
-  assert.equal(adjustment?.releaseId, "gpt-6-astra");
-  assert.equal(adjustment?.displayName, "GPT-6 Astra");
-  assert.equal(adjustment?.releaseStartAt, RELEASE_START);
-  assert.equal(adjustment?.baseProbability24h, result.nextGenerationB?.predictions.probability24h ?? adjustment?.baseProbability24h);
-  assert.equal(adjustment?.baseProbability48h, result.nextGenerationB?.predictions.probability48h ?? adjustment?.baseProbability48h);
-  assert.equal(adjustment?.applied24h, result.probability24h);
-  assert.equal(adjustment?.applied48h, result.probability48h);
-  assert.ok(result.probability24h >= 0.52);
-  assert.ok(result.probability48h >= 0.75);
+  assert.equal(adjustment?.active, false);
+  assert.equal(adjustment?.applied24h, null);
+  assert.equal(adjustment?.applied48h, null);
+  assert.ok(result.probability24h < 0.52);
+  assert.ok(result.probability48h < 0.75);
   assert.ok(result.probability12h <= result.probability24h);
   assert.ok(result.probability24h <= result.probability48h);
   assert.ok(result.probability48h <= result.probability72h);
 });
 
-test("release floor never lowers an already higher official-notice result", () => {
+test("official-notice probability remains unchanged without release adjustment", () => {
   const now = atReleaseAge(12);
   const result = calculateAt(now, {
     activeOfficialNotice: {
@@ -98,11 +86,10 @@ test("release floor never lowers an already higher official-notice result", () =
   assert.equal(result.nextGenerationB?.officialNoticeOverride.active, true);
   assert.equal(result.probability24h, 0.9);
   assert.equal(result.probability48h, 0.96);
-  assert.equal(getAdjustment(result)?.applied24h, 0.9);
-  assert.equal(getAdjustment(result)?.applied48h, 0.96);
+  assert.equal(getAdjustment(result)?.active, false);
 });
 
-test("release context continues after a reset event and is recorded separately in audit debug info", () => {
+test("release context is inactive in audit debug info", () => {
   const now = atReleaseAge(36);
   const data = getLocalRadarData({
     calculationNow: now,
@@ -130,12 +117,11 @@ test("release context continues after a reset event and is recorded separately i
     majorModelReleaseAdjustment: MajorModelReleaseAdjustment;
   };
 
-  assert.equal(getAdjustment(result)?.active, true);
-  assert.equal(getAdjustment(result)?.phase, "strong");
+  assert.equal(getAdjustment(result)?.active, false);
   assert.deepEqual(published.majorModelReleaseAdjustment, getAdjustment(result));
 });
 
-test("release explanation is localized and only appears when the floor actually changes the public value", () => {
+test("release-specific explanation is not used", () => {
   const now = atReleaseAge(12);
   const data = getLocalRadarData({ calculationNow: now, checkedAt: now.toISOString() });
 
@@ -143,7 +129,7 @@ test("release explanation is localized and only appears when the floor actually 
   const en = getRadarViewModel(data, "en", false, undefined, now);
   const zh = getRadarViewModel(data, "zh", false, undefined, now);
 
-  assert.equal(ja.displayReasoningSummary, "GPT-6 Astraのリリース直後のため、通常よりリセット確率を高めに予測しています。");
-  assert.equal(en.displayReasoningSummary, "Because GPT-6 Astra was just released, we are forecasting a higher reset probability than usual.");
-  assert.equal(zh.displayReasoningSummary, "由于 GPT-6 Astra 刚刚发布，我们预测重置概率将高于平时。");
+  assert.notEqual(ja.displayReasoningSummary, "GPT-6 Astraのリリース直後のため、通常よりリセット確率を高めに予測しています。");
+  assert.notEqual(en.displayReasoningSummary, "Because GPT-6 Astra was just released, we are forecasting a higher reset probability than usual.");
+  assert.notEqual(zh.displayReasoningSummary, "由于 GPT-6 Astra 刚刚发布，我们预测重置概率将高于平时。");
 });

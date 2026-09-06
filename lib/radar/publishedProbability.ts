@@ -10,7 +10,6 @@ import {
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import {
-  getMajorModelReleaseRegime,
   type MajorModelReleaseAdjustment,
 } from "@/data/majorModelReleases";
 import type {
@@ -360,42 +359,6 @@ const INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT: MajorModelReleaseAdjustment = {
   applied48h: null,
 };
 
-function applyMajorModelReleaseAdjustment(
-  calculation: PublishedProbabilityCalculation,
-  now: Date,
-): PublishedProbabilityCalculation {
-  const regime = getMajorModelReleaseRegime(now);
-  if (!regime) {
-    return {
-      ...calculation,
-      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
-    };
-  }
-
-  const applied24h = Math.max(calculation.probability24h, regime.floor24h);
-  const applied48h = Math.max(calculation.probability48h, regime.floor48h);
-
-  return {
-    ...calculation,
-    probability24h: applied24h,
-    probability48h: applied48h,
-    probability72h: Math.max(calculation.probability72h, applied48h),
-    majorModelReleaseAdjustment: {
-      active: true,
-      releaseId: regime.id,
-      displayName: regime.displayName,
-      releaseStartAt: regime.releaseStartAt,
-      phase: regime.phase,
-      floor24h: regime.floor24h,
-      floor48h: regime.floor48h,
-      baseProbability24h: calculation.probability24h,
-      baseProbability48h: calculation.probability48h,
-      applied24h,
-      applied48h,
-    },
-  };
-}
-
 function logPublishedProbabilityFallback(
   calculation: PublishedProbabilityCalculation,
 ) {
@@ -538,7 +501,6 @@ export function calculatePublishedProbability(
     rawShadow,
     nextGenerationB,
   );
-  const adjusted = applyMajorModelReleaseAdjustment(selected, calculationNow);
-  if (runtime.logFallback !== false) logPublishedProbabilityFallback(adjusted);
-  return adjusted;
+  if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
+  return selected;
 }
