@@ -627,9 +627,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "GPT-6 Astra 发布纪念 BANKED 重置发放",
   },
   astraBankedHistorySecondTitle: {
-    ja: "GPT-6 Astraリリース記念BANKEDリセット配布（2回目）",
-    en: "GPT-6 Astra Launch BANKED Reset Distribution (2nd)",
-    zh: "GPT-6 Astra 发布纪念 BANKED 重置发放（第2次）",
+    ja: "GPT-6 Astraリリース記念リセット（2回目）",
+    en: "GPT-6 Astra Launch Celebration Reset (2nd)",
+    zh: "GPT-6 Astra 发布庆祝重置（第2次）",
   },
   astraBankedHistoryNote: {
     ja: "GPT-6 Astraの提供開始にあわせ、全有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",

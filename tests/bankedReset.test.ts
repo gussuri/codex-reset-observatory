@@ -509,15 +509,15 @@ test("applies the corrected all-paid scope to both observed Astra BANKED events"
   const expectedTitles = {
     ja: {
       first: "GPT-6 Astraリリース記念BANKEDリセット配布",
-      second: "GPT-6 Astraリリース記念BANKEDリセット配布（2回目）",
+      second: "GPT-6 Astraリリース記念リセット（2回目）",
     },
     en: {
       first: "GPT-6 Astra Launch BANKED Reset Distribution",
-      second: "GPT-6 Astra Launch BANKED Reset Distribution (2nd)",
+      second: "GPT-6 Astra Launch Celebration Reset (2nd)",
     },
     zh: {
       first: "GPT-6 Astra 发布纪念 BANKED 重置发放",
-      second: "GPT-6 Astra 发布纪念 BANKED 重置发放（第2次）",
+      second: "GPT-6 Astra 发布庆祝重置（第2次）",
     },
   } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
