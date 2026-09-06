@@ -399,7 +399,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
       scope: "全有料プラン",
       noticeType: "告知あり",
       noticeToExecution: "4時間23分",
-      note: "GPT-6 Astraの提供開始にあわせ、全有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
+      note: "GPT-6 Astraの提供開始にあわせ、BANKEDリセットが配布されました。配布は一斉ではなく、順次行われる場合があります。",
     },
     en: {
       title: "GPT-6 Astra Launch BANKED Reset Distribution",
@@ -409,7 +409,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
       scope: "All paid plans",
       noticeType: "Announcement",
       noticeToExecution: "4 hours 23 minutes",
-      note: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed to all paid ChatGPT users. Distribution may reach users progressively rather than all at once.",
+      note: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed. Distribution may take place progressively rather than all at once.",
     },
     zh: {
       title: "GPT-6 Astra 发布纪念 BANKED 重置发放",
@@ -419,7 +419,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
       scope: "所有付费套餐",
       noticeType: "有告知",
       noticeToExecution: "4 小时 23 分钟",
-      note: "配合 GPT-6 Astra 发布，已向所有付费 ChatGPT 用户发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
+      note: "配合 GPT-6 Astra 发布，已发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
     },
   } as const;
 

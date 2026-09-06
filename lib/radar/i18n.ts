@@ -632,9 +632,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "GPT-6 Astra 发布庆祝重置（第2次）",
   },
   astraBankedHistoryNote: {
-    ja: "GPT-6 Astraの提供開始にあわせ、全有料ChatGPTユーザーを対象にBANKEDリセットが配布されました。対象ユーザーには一斉ではなく、順次配布される場合があります。",
-    en: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed to all paid ChatGPT users. Distribution may reach users progressively rather than all at once.",
-    zh: "配合 GPT-6 Astra 发布，已向所有付费 ChatGPT 用户发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
+    ja: "GPT-6 Astraの提供開始にあわせ、BANKEDリセットが配布されました。配布は一斉ではなく、順次行われる場合があります。",
+    en: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed. Distribution may take place progressively rather than all at once.",
+    zh: "配合 GPT-6 Astra 发布，已发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
   },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
