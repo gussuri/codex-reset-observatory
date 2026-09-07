@@ -205,9 +205,9 @@ export function createObservedRegularResetEventRow(
 
 /**
  * Returns only weekly occurrences after the supplied anchor whose
- * representative time has arrived. These are projections used to report a
- * due schedule; they are not completed history until Usage Monitor observes
- * the recovery and creates an observed row.
+ * representative time has arrived. Callers may use these deterministic rows
+ * as a read-side completion projection; persisted history still comes from an
+ * observed row when Usage Monitor confirms the recovery.
  */
 export function getDueRegularResetEventRows(
   now: Date,

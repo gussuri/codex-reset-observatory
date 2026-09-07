@@ -457,13 +457,22 @@ test("manual Japanese display names use localized fallbacks on history pages", (
     }],
   });
 
-  assert.equal(getRadarViewModel(data, "ja", true, undefined, now).recentHistory[0]?.title, manualName);
   assert.equal(
-    getRadarViewModel(data, "en", true, undefined, now).recentHistory[0]?.title,
+    getRadarViewModel(data, "ja", true, undefined, now).recentHistory.find(
+      (item) => item.key === "tibo-reset-2086188036493344823",
+    )?.title,
+    manualName,
+  );
+  assert.equal(
+    getRadarViewModel(data, "en", true, undefined, now).recentHistory.find(
+      (item) => item.key === "tibo-reset-2086188036493344823",
+    )?.title,
     "Codex Usage Limit Improvement Reset",
   );
   assert.equal(
-    getRadarViewModel(data, "zh", true, undefined, now).recentHistory[0]?.title,
+    getRadarViewModel(data, "zh", true, undefined, now).recentHistory.find(
+      (item) => item.key === "tibo-reset-2086188036493344823",
+    )?.title,
     "Codex 使用限制改进重置",
   );
 });

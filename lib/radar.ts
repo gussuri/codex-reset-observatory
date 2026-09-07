@@ -36,6 +36,7 @@ import {
 } from "./radar/tiboHistory";
 import {
   getLatestRegularScheduleAnchorAt as getLatestRegularScheduleAnchorFromEvents,
+  getDueRegularResetEventRows,
 } from "./radar/regularResetSchedule";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
@@ -195,6 +196,35 @@ export function getLocalRadarData({
   };
 }
 
+function withAutoCompletedRegularResetEvents(
+  data: RadarData | null,
+  now: Date,
+): RadarData | null {
+  if (!data) return null;
+
+  // A scheduled regular occurrence becomes a read-side completion projection
+  // once its reference time arrives. The raw data and persisted DB row remain
+  // unchanged until an observed recovery is available.
+  const anchorHistory = getCombinedResetHistory(data);
+  const latestAnchorAt = getLatestRegularScheduleAnchorFromEvents(anchorHistory, now);
+  if (!latestAnchorAt) return data;
+
+  const existingScheduleKeys = new Set(
+    (data.regular_reset_events ?? []).map((event) => event.schedule_key),
+  );
+  const projectedRows = getDueRegularResetEventRows(now, latestAnchorAt)
+    .filter((row) => !existingScheduleKeys.has(row.schedule_key));
+  if (projectedRows.length === 0) return data;
+
+  return {
+    ...data,
+    regular_reset_events: [
+      ...(data.regular_reset_events ?? []),
+      ...projectedRows,
+    ],
+  };
+}
+
 export function getRadarViewModel(
   data: RadarData | null,
   locale: Locale = "ja",
@@ -202,7 +232,10 @@ export function getRadarViewModel(
   signalEvaluationOverride?: LocalSignalEvaluation,
   calculationNow: Date = new Date(),
 ): RadarViewModel {
-  const source = unwrapRadarData(data);
+  const source = withAutoCompletedRegularResetEvents(
+    unwrapRadarData(data),
+    calculationNow,
+  );
   const signalEvaluation =
     signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow);
   const activeOfficialNotice = getActiveOfficialNotice(
@@ -327,8 +360,9 @@ export function getLatestRegularScheduleAnchorAt(
   data?: RadarData | null,
   now: Date = new Date(),
 ): string | null {
+  const source = withAutoCompletedRegularResetEvents(unwrapRadarData(data ?? null), now);
   return getLatestRegularScheduleAnchorFromEvents(
-    getCombinedResetHistory(data),
+    getCombinedResetHistory(source),
     now,
   );
 }
@@ -349,8 +383,8 @@ function getRegularResetForecast(
   const lastCompletedAt = autoLatestResetAt;
   const current = now;
 
-  // 基準イベントの次の1回だけを予測する。予定時刻を過ぎても
-  // Usage Monitorによる完了観測がない限り、次週へ先送りしない。
+  // 基準イベントの次の1回だけを予測する。予定時刻に到達した場合は、
+  // read-sideの定期リセット完了projectionが次の基準になる。
   const nextRegularReset = autoLatestResetAt
     ? getNextRegularResetDate(new Date(autoLatestResetAt))
     : null;

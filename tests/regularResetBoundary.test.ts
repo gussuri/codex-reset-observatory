@@ -207,25 +207,32 @@ test("time-only rejected Tibo proximity still removes a matching random candidat
   assert.deepEqual(combineResetHistory([random], [], [rejected], []), []);
 });
 
-test("regular forecast stays on the unconfirmed occurrence until recovery completes", () => {
+test("regular forecast auto-completes the due occurrence without a monitor observation", () => {
   const anchorAt = "2026-08-13T03:34:43.341Z";
   const expectedAt = "2026-08-20T03:34:43.341Z";
-  const beforeAndAfter = [
-    "2026-08-20T03:34:43.340Z",
-    "2026-08-20T03:34:43.341Z",
-    "2026-08-20T03:35:00.000Z",
-  ];
+  const beforeNow = new Date("2026-08-20T03:34:43.340Z");
+  const beforeForecast = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
+    const data = getLocalRadarData({ calculationNow: beforeNow });
+    return getRadarViewModel(data, "ja", false, undefined, beforeNow).regularResetForecast;
+  });
+  assert.equal(beforeForecast.expectedAt, expectedAt);
+  assert.equal(beforeForecast.isNoticeWindow, true);
+  assert.equal(beforeForecast.remaining.startsWith("-") || beforeForecast.remaining.includes("-"), false);
+  assert.ok((beforeForecast.remainingDays ?? 0) >= 0);
 
-  for (const nowValue of beforeAndAfter) {
-    const now = new Date(nowValue);
-    const forecast = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
-      const data = getLocalRadarData({ calculationNow: now });
-      return getRadarViewModel(data, "ja", false, undefined, now).regularResetForecast;
-    });
-    assert.equal(forecast.expectedAt, expectedAt, nowValue);
-    assert.equal(forecast.remaining.startsWith("-") || forecast.remaining.includes("-"), false, nowValue);
-    assert.ok((forecast.remainingDays ?? 0) >= 0, nowValue);
-  }
+  const dueNow = new Date("2026-08-20T03:35:00.000Z");
+  const dueData = getLocalRadarData({ calculationNow: dueNow });
+  const dueViewModel = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
+    return getRadarViewModel(dueData, "ja", false, undefined, dueNow);
+  });
+  const projectedRegular = dueViewModel.recentHistory.find(
+    (item) => item.recordKind === "regular_completed" && item.resetAt === expectedAt,
+  );
+  assert.ok(projectedRegular);
+  assert.equal(dueViewModel.regularResetForecast.sourceResetAt, expectedAt);
+  assert.equal(dueViewModel.regularResetForecast.expectedAt, "2026-08-27T03:34:43.341Z");
+  assert.equal(dueViewModel.regularResetForecast.isNoticeWindow, false);
+  assert.equal(dueData.regular_reset_events?.length ?? 0, 0);
 
   const completionNow = new Date("2026-08-20T03:40:00.000Z");
   const completedForecast = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
