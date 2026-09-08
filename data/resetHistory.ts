@@ -25,14 +25,14 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "closed_at": "2026-09-08T01:23:00.000Z",
     "completed_at": "2026-09-08T01:23:00.000Z",
     "window_minutes": 23,
-    "scope": "全有料プラン（順次適用中）",
+    "scope": "",
     "summary": "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
     "source_url": "https://x.com/thsottiaux",
     "details": {
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
-      "scope": "全有料プラン（順次適用中）",
+      "scope": "",
       "noticeToExecution": "23分",
       "noticeType": "公式予告あり",
       "note": "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。"
