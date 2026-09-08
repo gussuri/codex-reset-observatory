@@ -1415,6 +1415,16 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "Official Notice Reset (Rolling Out)",
     zh: "官方预告重置（分批应用中）",
   },
+  "Astra Blenderモデリング支援記念リセット": {
+    ja: "Astra Blenderモデリング支援記念リセット",
+    en: "Astra Blender Modeling Support Reset",
+    zh: "Astra Blender 建模支持纪念重置",
+  },
+  "Tibo氏よりBlenderでの3Dモデリング等でAstraを使い切ったユーザー向けに、週初めの作業再開を支援する全体リセットが実施されました。一部アカウントで順次反映中と見られます。": {
+    ja: "Tibo氏よりBlenderでの3Dモデリング等でAstraを使い切ったユーザー向けに、週初めの作業再開を支援する全体リセットが実施されました。一部アカウントで順次反映中と見られます。",
+    en: "A global usage limit reset was completed to support users who exhausted Astra quotas on 3D modeling in Blender, kicking off the work week. Sequential rollout appears to be underway.",
+    zh: "Tibo 宣布为在 Blender 3D 建模中消耗完 Astra 额度的用户执行了全局使用限制重置，以支持新工作周的开启。目前部分账号正在顺次生效中。",
+  },
   "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。": {
     ja: "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
     en: "Usage limit resets were observed for some users around the scheduled notice time. Some accounts report no reset yet, suggesting a progressive rollout is underway.",
@@ -1439,6 +1449,11 @@ export const DYNAMIC_TRANSLATIONS = {
     ja: "23分",
     en: "23 minutes",
     zh: "23 分钟",
+  },
+  "5時間58分": {
+    ja: "5時間58分",
+    en: "5 hours 58 minutes",
+    zh: "5 小时 58 分钟",
   },
   "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
