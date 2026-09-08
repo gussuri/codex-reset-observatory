@@ -39,7 +39,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
-      "note": "Tibo氏がRick Astley『Never Gonna Give You Up』の歌詞（頭文字で『RESET』の縦読み）で予告を行い、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了を告知しました。"
+      "note": "Tibo氏がRick Astley『Never Gonna Give You Up』の歌詞を引用したリックロール（おふざけ投稿）で予告を行い、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了を告知しました。"
     }
   },
   {
