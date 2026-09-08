@@ -20,6 +20,7 @@
 - Candidate acceptance uses `assessRandomResetNameResult()` and the existing JA/EN/ZH validator. `ai_confidence` and `ai_evidence` are audit fields, not acceptance or promotion gates.
 - Candidate V3 input never supplies a fake `completedAt`; the shared Gemini helper receives a V3 validation context including `sourcePostText` and preserves the existing named-token/number safety flags. Completed-event input/prompt/payload semantics remain unchanged.
 - The existing run-wide global Gemini cap is shared. Completed canonical reconciliation runs first; candidates use only the remaining budget.
+- A candidate result with `ai_status=rate_limited` is not retried on the next ten-minute run: persist a nullable `next_retry_at` and skip it until that time. The minimum candidate cooldown is one hour; a provider `retryAfterSeconds` value longer than one hour wins. No retry table or unbounded retry loop is added.
 - Candidate activation is fail-closed: `off` is the default and permits no candidate action, `seed` permits only webhook/self-healing seed writes, and `full` additionally permits candidate generation and promotion. `RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT` is a candidate-specific activation/adoption cutoff, separate from the existing completed-event reconciler adoption time; self-healing never considers a `tibo_signals` row whose `tweet_created_at` is before that cutoff. Invalid or missing mode/cutoff configuration resolves to `off`.
 - Promotion requires `resolveTiboResetEventIdentity()` to return `status="existing"`, a non-null key, and a matching persisted authoritative execution evidence record. A non-null key from `status="new"` is never promotable, and notice-only/static-history/dynamic-only matches are insufficient.
 - Candidate-only work never enters `RadarData`, `public-v1`, public history, probability, adoption, reset estimates, or `lastRandomResetAt`.
@@ -143,7 +144,7 @@ export function isCandidatePromotionAuthorized(
 ): boolean;
 ```
 
-Also define `ResetDisplayNameCandidateSeed` and `ResetDisplayNameCandidateRecord` with the exact nullable fields from the spec. The record includes `ai_flags`, `ai_input_mode`, `generation_attempts`, and `promoted_event_key`; hashes are `string | null`.
+Also define `ResetDisplayNameCandidateSeed` and `ResetDisplayNameCandidateRecord` with the exact nullable fields from the spec. The record includes `ai_flags`, `ai_input_mode`, `generation_attempts`, `promoted_event_key`, and `nextRetryAt: string | null`; hashes are `string | null`.
 
 The new `lib/radar/resetDisplayNameCandidateActivation.ts` exposes:
 
@@ -238,7 +239,7 @@ git commit -m "feat: define reset display name candidate policy"
 
 **Interfaces:**
 
-The migration creates `public.reset_display_name_candidates` with `candidate_id uuid primary key`, unique `notice_dedupe_key`, non-null `official_notice_tweet_id`, nullable `logical_post_id`, `source_snapshot_hash`, and `input_hash`, localized AI fields, `ai_flags`, `ai_input_mode`, generation counters, lifecycle fields, and timestamps. The same migration defines the atomic `public.upsert_reset_display_name_candidate_seed(p_seed jsonb)` RPC used by both webhook and reconciler seed paths.
+The migration creates `public.reset_display_name_candidates` with `candidate_id uuid primary key`, unique `notice_dedupe_key`, non-null `official_notice_tweet_id`, nullable `logical_post_id`, `source_snapshot_hash`, `input_hash`, nullable `next_retry_at`, localized AI fields, `ai_flags`, `ai_input_mode`, generation counters, lifecycle fields, and timestamps. The same migration defines the atomic `public.upsert_reset_display_name_candidate_seed(p_seed jsonb)` RPC used by both webhook and reconciler seed paths.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -259,8 +260,8 @@ test("candidate migration declares the identity and lifecycle contract", () => {
   assert.match(sql, /security invoker/i);
   assert.match(sql, /set search_path = pg_catalog, public, extensions/i);
   assert.match(sql, /revoke all on function public\.upsert_reset_display_name_candidate_seed/i);
-  assert.match(sql, /grant execute on function public\.upsert_reset_display_name_candidate/i);
-  assert.doesNotMatch(sql, /grant execute on function public\.upsert_reset_display_name_candidate[\s\S]*?to\s+(?:public|anon|authenticated)/i);
+  assert.match(sql, /grant execute on function public\.upsert_reset_display_name_candidate_seed\s*\([^)]*\)\s+to\s+service_role/i);
+  assert.doesNotMatch(sql, /grant execute on function public\.upsert_reset_display_name_candidate_seed\s*\([^)]*\)[\s\S]*?to\s+(?:public|anon|authenticated)/i);
 });
 ```
 
@@ -275,6 +276,7 @@ Expected: FAIL because the migration file is absent.
 Create the table with:
 
 - `source_snapshot_hash text null` and `input_hash text null` for unprocessed seeds.
+- `next_retry_at timestamptz null` for provider-directed rate-limit cooldown; it is not a separate retry queue.
 - `ai_status` defaulting to `unprocessed` and constrained to `unprocessed`, `pending`, `accepted`, `null`, `review_required`, `api_error`, `rate_limited`, and `invalid_response`.
 - `lifecycle_status` defaulting to `provisional` and constrained to `provisional`, `promoted`, `superseded`, and `expired`.
 - `ai_flags text[] not null default '{}'` and `ai_input_mode text null` constrained to `notice-precompute-v1` when present.
@@ -343,12 +345,13 @@ export async function writeResetDisplayNameCandidateGeneration(
     aiStatus: ResetDisplayNameCandidateAiStatus;
     aiInputMode: "notice-precompute-v1";
     result: RandomResetNameGenerationResult;
+    retryAfterSeconds: number | null;
     generatedAt: string;
   },
 ): Promise<void>;
 ```
 
-The test file defines `fakeCandidateClient(): ResetDisplayNameCandidateStoreClient` as an in-memory client that records seed, claim, and result writes. It also exposes the stored row through `client.rows` so idempotency and state transitions can be asserted without a database connection.
+The test file defines `fakeCandidateClient(): ResetDisplayNameCandidateStoreClient`, `candidate(id: string, overrides?: Partial<ResetDisplayNameCandidateRecord>): ResetDisplayNameCandidateRecord`, and a rate-limit response fixture as in-memory helpers. The client records seed, claim, and result writes and exposes the stored row through `client.rows` so idempotency, state transitions, and `nextRetryAt` can be asserted without a database connection.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -423,7 +426,7 @@ Map database snake_case rows to the typed record. `upsertResetDisplayNameCandida
 
 The seed RPC takes a trusted logical post identity when one is available, acquires the same kind of transaction-scoped advisory lock used by the formal-adoption RPC, and locks rows matching the exact official notice ID, exact logical post ID, or exact dedupe key. If a tweet-fallback row is the only compatible match, it upgrades that same opaque `candidate_id` in place, sets the trusted `logical_post_id`, recomputes `notice_dedupe_key`, and unions `notice_tweet_ids` and `source_tweet_ids`. It never rekeys the candidate or creates a canonical event key. If the official-ID lookup and logical-ID lookup resolve to different candidates, or the unique-key update conflicts with another candidate, the RPC returns `conflict` and performs no merge. Webhook and reconciler calls therefore share one atomic path and cannot create duplicates during concurrency. Identity upgrades are limited to the same explicitly verified edit chain; time, text, or nearby-post similarity is never used.
 
-The generation claim is a conditional update requiring `lifecycle_status=provisional`, a matching candidate ID, and a computed non-null hash. It sets `ai_status=pending` and the two hashes. A stale `pending` row is reclaimable using `updated_at`; no lease column or separate retry table is added. Generation result writes increment `generation_attempts`, preserve source identity, and store `ai_flags` exactly as returned by the V3 parser.
+The generation claim is a conditional update requiring `lifecycle_status=provisional`, a matching candidate ID, a computed non-null hash, and `next_retry_at <= now()` (or null). It sets `ai_status=pending` and the two hashes. A stale `pending` row is reclaimable using `updated_at`; no lease column or separate retry table is added. Generation result writes increment `generation_attempts`, preserve source identity, and store `ai_flags` exactly as returned by the V3 parser. A rate-limited result stores `ai_status=rate_limited` and computes `next_retry_at = now + max(3600, retryAfterSeconds)`; missing provider retry timing therefore waits at least one hour, while a longer provider delay is respected. Successful, accepted/null/review, and terminal error results clear `next_retry_at`. The scheduled ten-minute run skips any row whose `next_retry_at` is in the future.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -619,6 +622,7 @@ export type ResetDisplayNameCandidateNotice = {
   logicalPostId: string | null;
   noticeTweetIds: string[];
   sourceTweetIds: string[];
+  tweetCreatedAt: string;
   noticeObservedAt: string;
   expectedStartAt: string | null;
   expectedEndAt: string | null;
@@ -648,7 +652,7 @@ export function collectPersistedAuthoritativeCandidateExecutionEvidence(
 export type ResetDisplayNameReconciliationCandidateOptions = ResetDisplayNameCandidateActivation;
 ```
 
-The test file defines `notice(id: string, tweetCreatedAt?: string): ResetDisplayNameCandidateNotice` and `reconcileWithCandidateFixtures(input: { mode?: "off" | "seed" | "full"; adoptionAt?: string | null; existingCandidates?: ResetDisplayNameCandidateRecord[]; eligibleNotices?: ResetDisplayNameCandidateNotice[]; completedEventsNeedingNames?: number; maxGeminiRequests?: number; dryRun?: boolean; identityResolution?: ResetDisplayNameCandidatePromotionResolution; authoritativeEvidence?: ResetDisplayNameCandidateExecutionEvidence[] }): Promise<{ seedWrites: number; geminiRequests: number; candidateGeminiRequests: number; promotions: number; invalidated: boolean }>` as test-local in-memory fixtures. The fixture injects fake candidate storage and naming calls, so it can verify ordering, activation mode, authoritative-evidence gating, and shared-budget accounting without Supabase or Gemini.
+The test file defines `notice(id: string, overrides?: { tweetCreatedAt?: string; noticeObservedAt?: string }): ResetDisplayNameCandidateNotice` and `reconcileWithCandidateFixtures(input: { mode?: "off" | "seed" | "full"; adoptionAt?: string | null; now?: string; existingCandidates?: ResetDisplayNameCandidateRecord[]; eligibleNotices?: ResetDisplayNameCandidateNotice[]; completedEventsNeedingNames?: number; maxGeminiRequests?: number; dryRun?: boolean; candidateRetryAfterSeconds?: number | null; identityResolution?: ResetDisplayNameCandidatePromotionResolution; authoritativeEvidence?: ResetDisplayNameCandidateExecutionEvidence[] }): Promise<{ seedWrites: number; geminiRequests: number; candidateGeminiRequests: number; promotions: number; invalidated: boolean; nextRetryAt?: string | null }>` as test-local in-memory fixtures. The fixture injects fake candidate storage and naming calls, so it can verify ordering, activation mode, persisted-signal cutoff semantics, rate-limit cooldown, authoritative-evidence gating, and shared-budget accounting without Supabase or Gemini.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -701,6 +705,40 @@ test("a resolver-created key is not promoted without persisted authoritative evi
   });
   assert.equal(result.promotions, 0);
 });
+
+test("self-healing uses persisted tweetCreatedAt rather than noticeObservedAt for the cutoff", async () => {
+  const result = await reconcileWithCandidateFixtures({
+    mode: "seed",
+    adoptionAt: "2026-09-09T00:00:00.000Z",
+    eligibleNotices: [notice("notice-1", {
+      tweetCreatedAt: "2026-09-08T23:59:59.999Z",
+      noticeObservedAt: "2026-09-09T00:05:00.000Z",
+    })],
+  });
+  assert.equal(result.seedWrites, 0);
+});
+
+test("a rate-limited candidate is not retried on the next ten-minute reconciliation", async () => {
+  const result = await reconcileWithCandidateFixtures({
+    mode: "full",
+    adoptionAt: "2026-09-01T00:00:00.000Z",
+    now: "2026-09-09T00:10:00.000Z",
+    existingCandidates: [{ ...candidate("candidate-1"), aiStatus: "rate_limited", nextRetryAt: "2026-09-09T01:00:00.000Z" }],
+    eligibleNotices: [notice("notice-1", { tweetCreatedAt: "2026-09-08T00:00:00.000Z" })],
+  });
+  assert.equal(result.candidateGeminiRequests, 0);
+});
+
+test("a provider retry-after longer than one hour is respected", async () => {
+  const result = await reconcileWithCandidateFixtures({
+    mode: "full",
+    adoptionAt: "2026-09-01T00:00:00.000Z",
+    now: "2026-09-09T00:00:00.000Z",
+    candidateRetryAfterSeconds: 7200,
+    eligibleNotices: [notice("notice-1", { tweetCreatedAt: "2026-09-08T00:00:00.000Z" })],
+  });
+  assert.equal(result.nextRetryAt, "2026-09-09T02:00:00.000Z");
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -711,7 +749,7 @@ Expected: FAIL because missing-seed discovery and candidate reconciliation field
 
 - [ ] **Step 3: Write the minimal implementation**
 
-Expose an internal read of eligible `tibo_signals` through `lib/radarFetch.ts`; do not add candidates to `RadarData` or any public DTO. Add `candidateActivation: ResetDisplayNameReconciliationCandidateOptions` to the internal reconciliation options, with `getResetDisplayNameReconciliationOptions()` reading the fail-closed activation config. Discovery applies the candidate activation mode and requires `tweet_created_at >= candidateAdoptionAt`; it never self-heals rows before the candidate activation/adoption cutoff. Discovery matches exact official notice IDs and trusted logical post IDs only. It calls the same atomic seed RPC as the webhook and never merges by time, proximity, or text.
+Expose an internal read of eligible `tibo_signals` through `lib/radarFetch.ts`; do not add candidates to `RadarData` or any public DTO. Add `candidateActivation: ResetDisplayNameReconciliationCandidateOptions` to the internal reconciliation options, with `getResetDisplayNameReconciliationOptions()` reading the fail-closed activation config. Discovery applies the candidate activation mode and requires the persisted `tibo_signals.tweet_created_at >= candidateAdoptionAt`; `ResetDisplayNameCandidateNotice.tweetCreatedAt` is copied from that persisted column and is the only cutoff input. `noticeObservedAt` is observation metadata and can never substitute for `tweetCreatedAt`, so a row observed after activation but created before it is excluded. Discovery matches exact official notice IDs and trusted logical post IDs only. It calls the same atomic seed RPC as the webhook and never merges by time, proximity, or text.
 
 Extend `reconcileResetDisplayNames()` in this exact order. The existing completed-event branch runs in every candidate mode; `off` only skips candidate-table work and leaves that existing branch unchanged:
 
@@ -721,7 +759,7 @@ Extend `reconcileResetDisplayNames()` in this exact order. The existing complete
 4. In `mode="seed"`, stop the candidate branch after seed/self-healing; do not perform candidate lifecycle transitions, Gemini generation, or promotion. In `mode="off"`, skip the entire candidate branch.
 5. In `mode="full"`, expire or supersede only still-provisional candidates that are rejected, historical-only, or explicitly ended.
 6. In `mode="full"`, hydrate provisional candidates from explicit source IDs and compute nullable-to-populated `source_snapshot_hash` and `input_hash`.
-7. Reuse identical accepted/null/review results and apply the existing transient cooldown before any candidate call. Use the same run-wide `maxGeminiRequests` counter for candidate calls; the cap is not increased and no candidate reserve is added.
+7. Reuse identical accepted/null/review results and apply the existing transient cooldown before any candidate call. Skip `ai_status=rate_limited` while `next_retry_at > now`; when a candidate call returns 429, persist `ai_status=rate_limited` and `next_retry_at = now + max(3600, provider retryAfterSeconds)`, preferring the provider delay when longer. Use the same run-wide `maxGeminiRequests` counter for candidate calls; the cap is not increased and no candidate reserve is added.
 8. v1 has no automatic post-execution source-enrichment generation. If a candidate reaches authoritative execution without an accepted precomputed result, leave canonical naming to the existing completed-event reconciler; later regeneration is a separate versioned design.
 9. Before promotion, call `resolveTiboResetEventIdentity()` and collect persisted formal-adoption or Monitor-backed usage-observation evidence. Pass the resolver projection and evidence to `isCandidatePromotionAuthorized()`. Require `status="existing"`, a non-null key, matching resolver evidence, and an evidence row whose event key matches. A resolver result with `status="new"` is rejected even when it contains a non-null generated key; static-history or dynamic-only matches are also rejected.
 10. Invalidate `radar-data` only when canonical `reset_display_names` changed; candidate seed/result writes alone never invalidate public cache.
@@ -732,7 +770,7 @@ Use `ai_status=unprocessed` for a seed, `pending` only after the conditional cla
 
 Run: `pnpm exec tsx --test tests/resetDisplayNameCandidateReconciliation.test.ts tests/resetDisplayNameReconciliationRoute.test.ts`
 
-Expected: PASS for self-healing after the cutoff, mode-off/seed/full behavior, duplicate prevention, `status="new"` promotion rejection, persisted-evidence promotion eligibility, remaining-budget accounting, dry-run no-write behavior, cooldown reuse, and candidate-only invalidation remaining false.
+Expected: PASS for self-healing after the persisted `tweetCreatedAt` cutoff (with `noticeObservedAt` unable to bypass it), mode-off/seed/full behavior, duplicate prevention, `status="new"` promotion rejection, persisted-evidence promotion eligibility, remaining-budget accounting, dry-run no-write behavior, one-hour/provider-directed `rate_limited` cooldown, cooldown reuse, and candidate-only invalidation remaining false.
 
 - [ ] **Step 5: Commit**
 
@@ -1070,6 +1108,7 @@ After all task commits, review the combined diff for these exact properties:
 - Candidate generation shares the existing global cap and cannot consume more than the remaining per-run budget.
 - Promotion failure cannot rollback formal adoption, Monitor evidence, history, or reset boundaries.
 - `promoted` has no outgoing automatic lifecycle transition and no automatic regeneration path.
+- `rate_limited` candidates are skipped until `next_retry_at`, with a one-hour minimum and longer provider retry timing respected without a retry table.
 - Existing localized/legacy fallback, Tibo identity, adoption, history, probability, and public-v1 semantics have no unrelated changes.
 
 Run after implementation:
