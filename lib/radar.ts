@@ -23,7 +23,7 @@ import type {
 } from "@/lib/openaiStatus";
 
 // 分割したモジュールから型やヘルパー、確率計算をインポート
-import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord, ResetReasonType } from "./radar/types";
+import type { ActiveTiboSignal, HistoryRecordKind, HistorySourceKind, Locale, LocalizedString, ProbabilityLevel, RadarData, RadarDataHealth, WindowLike, WindowEventLike, RadarViewModel, CachedRadarData, PublicRadarSnapshot, PublicRadarViewModel, ResetDisplayNameRecord, ResetReasonType } from "./radar/types";
 import {
   resolveDisplayExecutionTime,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -51,6 +51,7 @@ import {
   translateUI,
   translateDynamic,
   translateExpectation,
+  resolveLocalizedText,
 } from "./radar/i18n";
 import { isOverdueNoticePending } from "./radar/tiboTemporal";
 import {
@@ -335,7 +336,7 @@ export function getRadarViewModel(
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,
       title: getHistoryDisplayTitle(source, latestWindow ?? {}, locale),
       summary: latestWindow?.summary
-        ? translateDynamic(latestWindow.summary, locale)
+        ? resolveLocalizedText(latestWindow.summary, locale)
         : (locale === "en" ? "No summary is available." : locale === "zh" ? "未能获取概要。" : "概要は取得できていません。"),
       scopeLabel: latestWindow?.scopeLabel ? translateDynamic(latestWindow.scopeLabel, locale) : undefined,
       scope: translateDynamic(latestWindow?.scope, locale),
@@ -578,8 +579,16 @@ function getHistoryExecutionPresentation(
   } as const;
 }
 
+function toPlainText(value: LocalizedString | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return [value.ja, value.en, value.zh].filter(Boolean).join(" ");
+  }
+  return value;
+}
+
 function getHistoryText(item: WindowLike & { kind?: string }) {
-  return `${item.title ?? ""} ${item.summary ?? ""} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
+  return `${toPlainText(item.title)} ${toPlainText(item.summary)} ${item.window_human ?? ""} ${item.scope ?? ""}`.toLowerCase();
 }
 
 function getHistoryReasonContext(item: WindowLike & { kind?: string }): ResetReasonContext {
@@ -587,8 +596,8 @@ function getHistoryReasonContext(item: WindowLike & { kind?: string }): ResetRea
     recordKind: item.recordKind,
     cycleType: item.details?.cycleType,
     reasonType: item.details?.reasonType,
-    title: item.title,
-    summary: item.summary,
+    title: toPlainText(item.title) || null,
+    summary: toPlainText(item.summary) || null,
     windowHuman: item.window_human,
     scope: item.scope ?? item.details?.scope,
     details: item.details,
@@ -818,7 +827,7 @@ function getHistoryDetails(
       scope: translateDynamic(scope, locale),
       noticeToExecution: "",
       noticeType: undefined,
-      note: translateDynamic(note, locale),
+      note: resolveLocalizedText(note, locale),
     };
   }
 
@@ -845,7 +854,7 @@ function getHistoryDetails(
       note: astraCorrection
         ? translateUI(astraCorrection.noteTranslationKey, locale)
         : item.details.note
-          ? translateDynamic(item.details.note, locale)
+          ? resolveLocalizedText(item.details.note, locale)
           : null,
     };
   }
@@ -864,7 +873,7 @@ function getHistoryDetails(
     noticeType: undefined,
     note: astraCorrection
       ? translateUI(astraCorrection.noteTranslationKey, locale)
-      : item.summary ? translateDynamic(item.summary, locale) : null,
+      : item.summary ? resolveLocalizedText(item.summary, locale) : null,
   };
 }
 
@@ -886,7 +895,7 @@ function getResetTypes(
     return reason ? [translateDynamic(reason, locale)] : [];
   }
 
-  const text = `${item.title ?? ""} ${item.summary ?? ""}`.toLowerCase();
+  const text = `${toPlainText(item.title)} ${toPlainText(item.summary)}`.toLowerCase();
 
   const types: Array<string> = [];
 
@@ -1081,6 +1090,16 @@ function getHistoryDisplayTitle(
     return translateUI(astraCorrection.titleTranslationKey, locale);
   }
 
+  if (typeof item.title === "object" && item.title !== null) {
+    const localized = item.title[locale]?.trim();
+    if (localized) return localized;
+    if (item.title.ja?.trim()) {
+      const translated = translateDynamic(item.title.ja.trim(), locale);
+      if (translated && translated !== item.title.ja.trim()) return translated;
+      return item.title.ja.trim();
+    }
+  }
+
   if (locale !== "ja" && isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
     const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;
     if (localizedName?.trim()) return localizedName.trim();
@@ -1216,9 +1235,9 @@ function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: 
         source: isRegular ? null : source,
         sourceKind: isRegular ? "none" : sourceKind,
         summary: isRegular
-          ? translateDynamic(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
+          ? resolveLocalizedText(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
           : item.summary
-            ? translateDynamic(item.summary, locale)
+            ? resolveLocalizedText(item.summary, locale)
             : null,
       };
     })
@@ -1353,7 +1372,7 @@ function getRecommendedAction(
 }
 
 function isRegularResetWindow(value: WindowLike | undefined) {
-  return Boolean(value?.id?.startsWith("regular-reset-") || value?.title?.includes("定期"));
+  return Boolean(value?.id?.startsWith("regular-reset-") || toPlainText(value?.title).includes("定期"));
 }
 
 export function getCompletedResetAt(item: WindowEventLike) {

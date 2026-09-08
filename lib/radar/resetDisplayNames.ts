@@ -1,4 +1,4 @@
-import type { Locale, ResetDisplayNameRecord, WindowEventLike } from "./types";
+import type { Locale, LocalizedString, ResetDisplayNameRecord, WindowEventLike } from "./types";
 import {
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
@@ -36,8 +36,9 @@ export function getResetDisplayNameEventKey(item: WindowEventLike) {
   return sourceTweetId ? `tibo-reset-${sourceTweetId}` : null;
 }
 
-export function isGenericResetDisplayTitle(title: string | null | undefined) {
-  return title ? GENERIC_RESET_DISPLAY_TITLES.has(title.trim()) : true;
+export function isGenericResetDisplayTitle(title: LocalizedString | null | undefined) {
+  const text = typeof title === "object" && title !== null ? title.ja : title;
+  return text ? GENERIC_RESET_DISPLAY_TITLES.has(text.trim()) : true;
 }
 
 export function isSafeStoredAiResetName(record: ResetDisplayNameRecord | null | undefined) {
@@ -94,7 +95,9 @@ export function resolveJapaneseResetDisplayName(
   const manualName = record?.manual_name_ja?.trim();
   if (manualName) return manualName;
 
-  const currentTitle = item.title?.trim();
+  const currentTitle = typeof item.title === "object" && item.title !== null
+    ? item.title.ja?.trim()
+    : item.title?.trim();
   if (currentTitle && !isGenericResetDisplayTitle(currentTitle)) {
     return currentTitle;
   }
@@ -136,12 +139,21 @@ export function resolveResetDisplayTitle(
 ) {
   const manualName = getManualResetDisplayName(record, locale);
   if (manualName) return manualName;
+
+  if (typeof item.title === "object" && item.title !== null) {
+    const localized = item.title[locale]?.trim();
+    if (localized) return localized;
+    if (item.title.ja?.trim()) {
+      return item.title.ja.trim();
+    }
+  }
+
   if (locale === "ja") return resolveJapaneseResetDisplayName(item, record);
   if (isGenericResetDisplayTitle(item.title) && isSafeStoredAiResetName(record)) {
     const localizedName = locale === "en" ? record?.ai_name_en : record?.ai_name_zh;
     if (localizedName?.trim()) return localizedName.trim();
   }
-  return item.title?.trim() || "ランダムリセット";
+  return (typeof item.title === "string" ? item.title.trim() : item.title?.ja?.trim()) || "ランダムリセット";
 }
 
 export function getResetDisplayNameSourceTweetId(item: WindowEventLike) {

@@ -18,7 +18,11 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-codex-rolling-notice-reset-2026-09-08",
     "recordKind": "confirmed_global",
-    "title": "Tiboの君を絶対に諦めないリセット",
+    "title": {
+      "ja": "Tiboの君を絶対に諦めないリセット",
+      "en": "Tibo's Never Gonna Give You Up Reset",
+      "zh": "Tibo 绝不放弃你重置"
+    },
     "kind": "reset_completed",
     "status": "closed",
     "opened_at": "2026-09-07T19:24:57.000Z",
@@ -26,7 +30,11 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "completed_at": "2026-09-08T01:30:00.000Z",
     "window_minutes": 365,
     "scope": "全有料プラン",
-    "summary": "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
+    "summary": {
+      "ja": "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
+      "en": "Following the 'Never Gonna Give You Up' teaser notice, usage limits for Codex and ChatGPT Work were forcibly reset for all users.",
+      "zh": "根据“绝不放弃你”（Never Gonna Give You Up）预告，Codex 和 ChatGPT Work 的使用额度对全体用户执行了强制重置。"
+    },
     "source_url": "https://x.com/thsottiaux/status/2097043464538264003",
     "sourceTweetIds": [
       "2097043464538264003"
@@ -39,7 +47,11 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
-      "note": "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。"
+      "note": {
+        "ja": "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。",
+        "en": "Following an official notice from Tibo, resets were rolled out sequentially across accounts.",
+        "zh": "在 Tibo 发布官方预告后，各账号陆续完成了重置。"
+      }
     }
   },
   {

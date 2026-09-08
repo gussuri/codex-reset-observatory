@@ -25,6 +25,14 @@ import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
 
 export type Locale = "ja" | "en" | "zh";
 
+export type LocalizedString =
+  | string
+  | {
+      ja: string;
+      en?: string;
+      zh?: string;
+    };
+
 export type ProbabilityLevel = "low" | "medium" | "high" | "very_high";
 
 export type ResetCycleType =
@@ -99,6 +107,10 @@ export type ResetHistoryDetails = {
   scope: ResetScopeType | string;
   noticeToExecution: string;
   noticeType?: HistoryNoticeType | string;
+  note?: LocalizedString | null;
+};
+
+export type LocalizedResetHistoryDetails = Omit<ResetHistoryDetails, "note"> & {
   note?: string | null;
 };
 
@@ -116,7 +128,7 @@ export type CanonicalResetHistoryDetails = Omit<
 export type WindowLike = {
   id?: string;
   guid?: string;
-  title?: string;
+  title?: LocalizedString;
   status?: string;
   opened_at?: string | null;
   closed_at?: string | null;
@@ -126,7 +138,7 @@ export type WindowLike = {
   window_human?: string;
   scopeLabel?: string;
   scope?: string;
-  summary?: string;
+  summary?: LocalizedString;
   source?: string | null;
   source_url?: string | null;
   sourceKind?: HistorySourceKind;
@@ -441,7 +453,7 @@ export type RadarViewModel = {
     resetType: string;
     resetTypes?: Array<string>;
     status: string;
-    details?: ResetHistoryDetails;
+    details?: LocalizedResetHistoryDetails;
     date?: string | null;
     signalAt?: string | null;
     resetAt?: string | null;

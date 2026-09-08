@@ -1,6 +1,7 @@
 import type {
   HistoryNoticeType,
   Locale,
+  LocalizedString,
   ResetCycleType,
   ResetMethodType,
   ResetReasonType,
@@ -2159,4 +2160,20 @@ export function translateExpectation(value: string, locale: Locale): string {
   };
 
   return dictionary[value]?.[locale] ?? value;
+}
+
+export function resolveLocalizedText(
+  value: LocalizedString | null | undefined,
+  locale: Locale,
+): string {
+  if (!value) return "";
+  if (typeof value === "object" && value !== null) {
+    const direct = value[locale]?.trim();
+    if (direct) return direct;
+    if (value.ja?.trim()) {
+      return translateDynamic(value.ja.trim(), locale);
+    }
+    return "";
+  }
+  return translateDynamic(value, locale);
 }

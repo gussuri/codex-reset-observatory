@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert";
 import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { translateDynamic, UI_TRANSLATIONS } from "../lib/radar/i18n";
+import { resolveLocalizedText, translateDynamic, UI_TRANSLATIONS } from "../lib/radar/i18n";
 import { getRadarViewModel, getLocalRadarData } from "../lib/radar";
 
 const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
@@ -47,13 +47,14 @@ test("i18n Automated Check: All LOCAL_OBSERVATION_SIGNALS have full English & Ch
 
 test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & Chinese translations", () => {
   for (const history of LOCAL_RESET_HISTORY) {
-    const historyIdentifier = history.id ?? history.title;
+    const historyTitle = typeof history.title === "object" && history.title !== null ? history.title.ja : history.title;
+    const historyIdentifier = history.id ?? historyTitle;
     const historyDate = history.completed_at ?? history.closed_at ?? history.opened_at;
     const historyLabel = historyIdentifier ?? historyDate;
 
     if (history.title) {
-      const enTitle = translateDynamic(history.title, "en");
-      const zhTitle = translateDynamic(history.title, "zh");
+      const enTitle = resolveLocalizedText(history.title, "en");
+      const zhTitle = resolveLocalizedText(history.title, "zh");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enTitle),
         false,
@@ -139,8 +140,8 @@ test("i18n Automated Check: All LOCAL_RESET_HISTORY items have valid English & C
     }
     const historyNote = history.details?.note;
     if (historyNote) {
-      const enNote = translateDynamic(historyNote, "en");
-      const zhNote = translateDynamic(historyNote, "zh");
+      const enNote = resolveLocalizedText(historyNote, "en");
+      const zhNote = resolveLocalizedText(historyNote, "zh");
       assert.strictEqual(
         JAPANESE_CHAR_REGEX.test(enNote),
         false,

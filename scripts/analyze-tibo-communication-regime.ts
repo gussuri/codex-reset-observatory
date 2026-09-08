@@ -504,7 +504,7 @@ function classifyEvents(
       elapsedSincePreviousRandomHours: previousRandomResetTime === null
         ? null
         : (item.completedTime - previousRandomResetTime) / HOUR_MS,
-      title: event.title ?? "",
+      title: (typeof event.title === "object" && event.title !== null ? event.title.ja : event.title) ?? "",
       recordKind: event.recordKind ?? null,
       cycleType: event.details?.cycleType ?? null,
       reasonType: event.details?.reasonType ?? null,

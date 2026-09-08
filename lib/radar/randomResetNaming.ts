@@ -1,5 +1,4 @@
-import { performance } from "node:perf_hooks";
-import type { WindowEventLike } from "./types";
+import type { LocalizedString, WindowEventLike } from "./types";
 import {
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_MIN_CONFIDENCE,
@@ -197,8 +196,16 @@ function displayValue(value: string | null | undefined) {
   return value?.trim() || "unknown";
 }
 
+function toPlainText(value: LocalizedString | null | undefined): string | null {
+  if (!value) return null;
+  if (typeof value === "object") {
+    return value.ja?.trim() || value.en?.trim() || value.zh?.trim() || null;
+  }
+  return value.trim() || null;
+}
+
 function getRecordedSummary(item: WindowEventLike) {
-  return item.summary?.trim() || item.details?.note?.trim() || null;
+  return toPlainText(item.summary) || toPlainText(item.details?.note) || null;
 }
 
 function getSourceUrl(item: WindowEventLike) {

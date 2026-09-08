@@ -126,7 +126,7 @@ function isSourceForEvent(source: SourceTweetRow, event: WindowEventLike, comple
 function fallbackDisplayName(item: WindowEventLike, record: ResetDisplayNameRecord | undefined) {
   const manual = record?.manual_name_ja?.trim();
   if (manual) return manual;
-  const title = item.title?.trim();
+  const title = typeof item.title === "object" && item.title !== null ? item.title.ja?.trim() : item.title?.trim();
   return title && !isGenericResetDisplayTitle(title) ? title : "ランダムリセット";
 }
 
@@ -183,7 +183,7 @@ function buildCandidates(
         eventKey,
         sourceTweetId,
         completedAt: new Date(completedTime).toISOString(),
-        currentTitle: item.title?.trim() || null,
+        currentTitle: (typeof item.title === "object" && item.title !== null ? item.title.ja?.trim() : item.title?.trim()) || null,
         sourceText,
         input,
         inputMode,

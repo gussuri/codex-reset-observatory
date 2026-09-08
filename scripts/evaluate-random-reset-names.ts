@@ -6,7 +6,7 @@ import { performance } from "node:perf_hooks";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getCompletedResetTimestamp } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
-import type { WindowEventLike } from "../lib/radar/types";
+import type { LocalizedString, WindowEventLike } from "../lib/radar/types";
 
 export const RANDOM_RESET_NAME_SYSTEM_PROMPT = `You are an editor helping people review Codex reset history later.
 
@@ -79,8 +79,16 @@ function displayValue(value: string | null | undefined) {
   return value?.trim() || "unknown";
 }
 
+function toPlainText(value: LocalizedString | null | undefined): string | null {
+  if (!value) return null;
+  if (typeof value === "object") {
+    return value.ja?.trim() || value.en?.trim() || value.zh?.trim() || null;
+  }
+  return value.trim() || null;
+}
+
 function getRecordedSummary(item: WindowEventLike) {
-  return item.summary?.trim() || item.details?.note?.trim() || null;
+  return toPlainText(item.summary) || toPlainText(item.details?.note) || null;
 }
 
 function getSourceUrl(item: WindowEventLike) {
