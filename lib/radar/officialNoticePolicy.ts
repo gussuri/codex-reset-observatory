@@ -16,6 +16,9 @@ export const PERSISTENT_OFFICIAL_NOTICE_IDS = [
 
 /** Explicit lifecycle corrections; signal text is never inspected to infer termination. */
 export const TIBO_FORECAST_SIGNAL_TERMINATIONS: Readonly<Record<string, OfficialNoticeTermination>> = {
+  "2097043464538264003": {
+    endedAt: "2026-09-08T01:23:00.000Z",
+  },
   "2095651088502591861": {
     endedAt: "2026-09-04T22:30:29.000Z",
     sourceTweetId: "2096002992046796932",

@@ -1017,8 +1017,10 @@ export function getActiveOfficialNotice(
     : resetExecutionWindow;
   // Prefer a dynamic canonical boundary over a later completion post. If the
   // current data has no dynamic boundary, preserve the legacy Tibo-only and
-  // static-history cutoff behavior.
-  const cutoff = dynamicRecoveryBoundaryAt
+  // static-history cutoff behavior. A newer confirmed reset boundary must never
+  // be superseded by an older dynamic boundary.
+  const cutoff = dynamicRecoveryBoundaryAt &&
+      getDateTime(dynamicRecoveryBoundaryAt) >= (resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
     ? getDateTime(dynamicRecoveryBoundaryAt)
     : Math.max(
         resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
