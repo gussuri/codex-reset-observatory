@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isResetDisplayNameCandidateOperationEnabled,
   isResetDisplayNameCandidateNoticeAfterAdoption,
   readResetDisplayNameCandidateActivation,
 } from "../lib/radar/resetDisplayNameCandidateActivation";
@@ -26,6 +27,18 @@ test("invalid mode or cutoff fails closed to off", () => {
   );
 });
 
+test("parseable non-ISO and impossible ISO-like cutoffs fail closed", () => {
+  for (const adoptionAt of ["09/08/2026", "2026-02-30T00:00:00.000Z", "2026-09-08 00:00:00Z"]) {
+    assert.deepEqual(
+      readResetDisplayNameCandidateActivation({
+        RESET_DISPLAY_NAME_CANDIDATE_MODE: "seed",
+        RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT: adoptionAt,
+      }),
+      { mode: "off", adoptionAt: null },
+    );
+  }
+});
+
 test("seed activation requires a valid adoption cutoff", () => {
   assert.deepEqual(
     readResetDisplayNameCandidateActivation({
@@ -44,6 +57,17 @@ test("full activation requires a valid adoption cutoff", () => {
     }),
     { mode: "full", adoptionAt: "2026-09-08T00:00:00.000Z" },
   );
+});
+
+test("seed enables only seed operations while full enables generation and promotion", () => {
+  const seed = { mode: "seed" as const, adoptionAt: "2026-09-08T00:00:00.000Z" };
+  const full = { mode: "full" as const, adoptionAt: "2026-09-08T00:00:00.000Z" };
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(seed, "seed"), true);
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(seed, "generate"), false);
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(seed, "promote"), false);
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(full, "seed"), true);
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(full, "generate"), true);
+  assert.equal(isResetDisplayNameCandidateOperationEnabled(full, "promote"), true);
 });
 
 test("notice cutoff is inclusive and uses tweet_created_at", () => {
