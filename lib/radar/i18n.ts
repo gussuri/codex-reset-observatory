@@ -1455,6 +1455,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "5 hours 58 minutes",
     zh: "5 小时 58 分钟",
   },
+  "6時間5分": {
+    ja: "6時間5分",
+    en: "6 hours 5 minutes",
+    zh: "6 小时 5 分钟",
+  },
   "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "To celebrate Codex surpassing 15 million active users, usage limits for ChatGPT Work and Codex were forcibly reset.",

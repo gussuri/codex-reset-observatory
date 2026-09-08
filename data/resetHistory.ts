@@ -22,9 +22,9 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "kind": "reset_completed",
     "status": "closed",
     "opened_at": "2026-09-07T19:24:57.000Z",
-    "closed_at": "2026-09-08T01:23:00.000Z",
-    "completed_at": "2026-09-08T01:23:00.000Z",
-    "window_minutes": 358,
+    "closed_at": "2026-09-08T01:30:00.000Z",
+    "completed_at": "2026-09-08T01:30:00.000Z",
+    "window_minutes": 365,
     "scope": "",
     "summary": "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
     "source_url": "https://x.com/thsottiaux/status/2097043464538264003",
@@ -37,7 +37,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
       "scope": "",
-      "noticeToExecution": "5時間58分",
+      "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
       "note": "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。"
     }

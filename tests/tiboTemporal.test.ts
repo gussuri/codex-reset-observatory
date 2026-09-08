@@ -377,6 +377,7 @@ test("consumes exact_time and range notices when reset occurs within grace perio
     expectedStartAt: "2026-09-08T02:00:00.000Z",
     expectedEndAt: "2026-09-08T02:00:00.000Z",
   };
+  assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-08T01:30:00.000Z"), true);
   assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-08T01:23:00.000Z"), true);
   assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-08T00:00:00.000Z"), true);
   assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-07T22:00:00.000Z"), false);
