@@ -1,4 +1,5 @@
 import type { Locale, LocalizedString, ResetDisplayNameRecord, WindowEventLike } from "./types";
+import { resolveLocalizedText } from "./i18n";
 import {
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
@@ -143,8 +144,8 @@ export function resolveResetDisplayTitle(
   if (typeof item.title === "object" && item.title !== null) {
     const localized = item.title[locale]?.trim();
     if (localized) return localized;
-    if (item.title.ja?.trim()) {
-      return item.title.ja.trim();
+    if (!isGenericResetDisplayTitle(item.title) || !isSafeStoredAiResetName(record)) {
+      return resolveLocalizedText(item.title, locale) || "ランダムリセット";
     }
   }
 

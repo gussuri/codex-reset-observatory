@@ -783,6 +783,46 @@ test("keeps generic all-paid BANKED scope while localizing its history classific
   }
 });
 
+test("does not merge a BANKED distribution into the 2026-09-08 rolling global event", () => {
+  const rollingNotice = {
+    tweet_id: "2097043464538264003",
+    text: "We will do the full banked reset today for all paid users. Lands end of day.",
+    tweet_url: "https://x.com/thsottiaux/status/2097043464538264003",
+    tweet_created_at: "2026-09-07T19:24:57.000Z",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    verification_status: "confirmed" as const,
+  };
+  const bankedEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-rolling-notice-separate",
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
+    tiboPrimaryTweetId: rollingNotice.tweet_id,
+    tiboSourceTweetIds: [rollingNotice.tweet_id],
+    officialNoticeTweetId: rollingNotice.tweet_id,
+    officialNoticeAt: rollingNotice.tweet_created_at,
+  };
+
+  const bankedEvent = findBankedDistributionEvents([rollingNotice], [bankedEstimate])[0];
+  assert.equal(bankedEvent?.recordKind, "banked_distribution");
+
+  const combined = combineResetHistory(
+    LOCAL_RESET_HISTORY,
+    [],
+    [],
+    [],
+    [rollingNotice],
+    [],
+    [bankedEstimate],
+  );
+
+  const rolling = combined.find((item) => item.id === "local-codex-rolling-notice-reset-2026-09-08");
+  const banked = combined.find((item) => item.id === bankedEstimate.resetEventKey);
+  assert.equal(rolling?.recordKind, "confirmed_global");
+  assert.equal(banked?.recordKind, "banked_distribution");
+  assert.notEqual(rolling?.id, banked?.id);
+});
+
 test("does not apply the Astra presentation to another personal or reply-like BANKED event", () => {
   const personalEvent = {
     id: "banked-reset-personal-reply",

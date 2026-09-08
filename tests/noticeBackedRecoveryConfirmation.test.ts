@@ -6,6 +6,7 @@ import {
   type CodexRecoveryObservationInput,
 } from "@/lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
+import { resolveLocalizedText } from "@/lib/radar/i18n";
 import {
   resolveDisplayExecutionTime,
   buildResetExecutionEstimate,
@@ -508,7 +509,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     }
   });
 
-  it("P. 2026-09-08 rolling notice reset absorbs delayed monitor recoveries without duplicating history", () => {
+  it("P. 2026-09-08 rolling notice does not absorb an unlinked delayed monitor recovery", () => {
     const lateObservation = {
       id: "rec-late-monitor-user",
       sourceKey: "local-codex-app-server",
@@ -549,11 +550,17 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       [lateEstimate],
     );
 
-    assert.equal(combined.length, LOCAL_RESET_HISTORY.length);
-    assert.equal(combined[0]?.id, "local-codex-rolling-notice-reset-2026-09-08");
-    assert.equal(combined[0]?.title, "Tiboの君を絶対に諦めないリセット");
-    assert.equal(combined[0]?.recoveryObservationId, "rec-late-monitor-user");
-    assert.equal(combined[0]?.scope, "全有料プラン");
-    assert.equal(combined[0]?.details?.scope, "全有料プラン");
+    assert.equal(combined.length, LOCAL_RESET_HISTORY.length + 1);
+    const rollingReset = combined.find(
+      (item) => item.id === "local-codex-rolling-notice-reset-2026-09-08",
+    );
+    const delayedRecovery = combined.find((item) => item.id === lateEstimate.resetEventKey);
+    assert.equal(
+      resolveLocalizedText(rollingReset?.title, "ja"),
+      "Tiboの君を絶対に諦めないリセット",
+    );
+    assert.equal(rollingReset?.recoveryObservationId, undefined);
+    assert.equal(delayedRecovery?.recoveryObservationId, "rec-late-monitor-user");
+    assert.notEqual(rollingReset?.id, delayedRecovery?.id);
   });
 });

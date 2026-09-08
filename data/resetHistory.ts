@@ -31,9 +31,9 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
     "window_minutes": 365,
     "scope": "全有料プラン",
     "summary": {
-      "ja": "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
-      "en": "Following the 'Never Gonna Give You Up' teaser notice, usage limits for Codex and ChatGPT Work were forcibly reset for all users.",
-      "zh": "根据“绝不放弃你”（Never Gonna Give You Up）预告，Codex 和 ChatGPT Work 的使用额度对全体用户执行了强制重置。"
+      "ja": "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が順次リセットされました。",
+      "en": "Following the 'Never Gonna Give You Up' teaser notice, usage limits for Codex and ChatGPT Work were rolled out sequentially.",
+      "zh": "根据“绝不放弃你”（Never Gonna Give You Up）预告，Codex 和 ChatGPT Work 的使用额度已陆续完成重置。"
     },
     "source_url": "https://x.com/thsottiaux/status/2097043464538264003",
     "sourceTweetIds": [

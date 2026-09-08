@@ -1070,47 +1070,13 @@ function buildCanonicalFormalHistory(
   };
 }
 
-const ROLLING_RESET_2026_09_08_ID = "local-codex-rolling-notice-reset-2026-09-08";
-const ROLLING_RESET_2026_09_08_NOTICE_ID = "2097043464538264003";
-const ROLLING_RESET_2026_09_08_START_MS = 1788721200000; // 2026-09-07T19:00:00.000Z
-const ROLLING_RESET_2026_09_08_END_MS = 1788922800000;   // 2026-09-09T03:00:00.000Z
-
-function isRollingReset20260908(item: WindowEventLike): boolean {
-  if (item.id === ROLLING_RESET_2026_09_08_ID) return true;
-  if (item.officialNoticeTweetId === ROLLING_RESET_2026_09_08_NOTICE_ID) return true;
-  if (item.sourceTweetIds?.includes(ROLLING_RESET_2026_09_08_NOTICE_ID)) return true;
-
-  if (item.details?.cycleType === "定期リセット" || item.recordKind === "regular_completed") {
-    return false;
-  }
-
-  // Corroborate delayed usage monitor recoveries for this rolling rollout
-  const isMonitorRecovery = Boolean(item.recoveryObservationId) ||
-    item.presentation === "notice_backed_recovery" ||
-    (typeof item.id === "string" && item.id.startsWith("usage-reset-"));
-
-  if (!isMonitorRecovery) return false;
-
-  const completedTime = getTimestamp(getCompletedAt(item));
-  if (
-    completedTime !== null &&
-    completedTime >= ROLLING_RESET_2026_09_08_START_MS &&
-    completedTime <= ROLLING_RESET_2026_09_08_END_MS
-  ) {
-    const method = item.details?.resetMethod;
-    if (method === "強制リセット" || !method || item.details?.cycleType === "ランダムリセット") {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function isSameReset(left: WindowEventLike, right: WindowEventLike) {
   if (left.id && right.id && left.id === right.id) return true;
 
-  if (isRollingReset20260908(left) && isRollingReset20260908(right)) {
-    return true;
+  // BANKED distributions are separate grants, even when they cite the same
+  // official notice as a global reset or another observation.
+  if (left.recordKind === "banked_distribution" || right.recordKind === "banked_distribution") {
+    return false;
   }
 
   if (

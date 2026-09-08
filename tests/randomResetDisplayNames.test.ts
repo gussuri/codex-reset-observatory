@@ -422,8 +422,10 @@ test("AI display names affect titles without changing public audit fields or pro
   const ja = getRadarViewModel(withName, "ja", true, undefined, now);
   const en = getRadarViewModel(withName, "en", true, undefined, now);
   const baseline = getRadarViewModel(withoutName, "ja", true, undefined, now);
-  assert.equal(ja.recentHistory[0]?.title, "週末の利用上限リセット");
-  assert.equal(en.recentHistory[0]?.title, "Random reset");
+  const jaItem = ja.recentHistory.find((item) => item.key === "tibo-reset-2086188036493344823");
+  const enItem = en.recentHistory.find((item) => item.key === "tibo-reset-2086188036493344823");
+  assert.equal(jaItem?.title, "週末の利用上限リセット");
+  assert.equal(enItem?.title, "Random reset");
   assert.equal(ja.probability24h, baseline.probability24h);
   assert.equal(ja.probability48h, baseline.probability48h);
 
@@ -639,16 +641,22 @@ test("localized AI display names are selected without changing the public DTO", 
     formalTiboResets: [formalSignal],
     resetDisplayNames: [record],
   });
-  assert.equal(
-    getRadarViewModel(localizedData, "en", true, undefined, new Date("2026-08-09T00:00:00.000Z"))
-      .recentHistory[0]?.title,
-    "Better Sleep, New Me Reset",
-  );
-  assert.equal(
-    getRadarViewModel(localizedData, "zh", true, undefined, new Date("2026-08-09T00:00:00.000Z"))
-      .recentHistory[0]?.title,
-    "睡得更好、焕然一新重置",
-  );
+  const localizedEnItem = getRadarViewModel(
+    localizedData,
+    "en",
+    true,
+    undefined,
+    new Date("2026-08-09T00:00:00.000Z"),
+  ).recentHistory.find((historyItem) => historyItem.key === "tibo-reset-2086188036493344823");
+  const localizedZhItem = getRadarViewModel(
+    localizedData,
+    "zh",
+    true,
+    undefined,
+    new Date("2026-08-09T00:00:00.000Z"),
+  ).recentHistory.find((historyItem) => historyItem.key === "tibo-reset-2086188036493344823");
+  assert.equal(localizedEnItem?.title, "Better Sleep, New Me Reset");
+  assert.equal(localizedZhItem?.title, "睡得更好、焕然一新重置");
 
   const snapshot = toPublicRadarSnapshot(
     localizedData,
@@ -658,4 +666,15 @@ test("localized AI display names are selected without changing the public DTO", 
   const serialized = JSON.stringify(snapshot);
   assert.equal(serialized.includes("ai_name_en"), false);
   assert.equal(serialized.includes("ai_name_zh"), false);
+});
+
+test("incomplete localized generic titles still use safe localized AI names", () => {
+  const item = resetItem({ title: { ja: "ランダムリセット" } });
+  const record = acceptedRecord({
+    ai_name_en: "Weekend Reset",
+    ai_name_zh: "周末重置",
+  });
+
+  assert.equal(resolveResetDisplayTitle(item, record, "en"), "Weekend Reset");
+  assert.equal(resolveResetDisplayTitle(item, record, "zh"), "周末重置");
 });

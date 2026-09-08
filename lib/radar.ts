@@ -1093,10 +1093,8 @@ function getHistoryDisplayTitle(
   if (typeof item.title === "object" && item.title !== null) {
     const localized = item.title[locale]?.trim();
     if (localized) return localized;
-    if (item.title.ja?.trim()) {
-      const translated = translateDynamic(item.title.ja.trim(), locale);
-      if (translated && translated !== item.title.ja.trim()) return translated;
-      return item.title.ja.trim();
+    if (!isGenericResetDisplayTitle(item.title) || !isSafeStoredAiResetName(record)) {
+      return resolveLocalizedText(item.title, locale) || "ランダムリセット";
     }
   }
 
