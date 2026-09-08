@@ -30,9 +30,11 @@ import {
   type ResetExecutionEstimate,
 } from "./radar/resetExecution";
 import {
-  combineResetHistory,
-  getNoticeBackedHistoryInputs,
+  buildCanonicalResetHistoryContext,
   isNoticeBackedRecoveryEvent,
+  rematerializeCanonicalResetHistoryContext,
+  type CanonicalHistoryBuildMetrics,
+  type CanonicalResetHistoryContext,
 } from "./radar/tiboHistory";
 import {
   getLatestRegularScheduleAnchorAt as getLatestRegularScheduleAnchorFromEvents,
@@ -197,16 +199,84 @@ export function getLocalRadarData({
   };
 }
 
+export type RadarCalculationContext = {
+  source: RadarData | null;
+  canonicalHistoryContext: CanonicalResetHistoryContext;
+};
+
+function getAutoResolvedHistoryItems(): Array<WindowEventLike> {
+  const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
+    (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved" && !sig.skipAutoHistoryMerge,
+  );
+
+  return autoResolvedSignals.map((sig): WindowEventLike => {
+    let title = "臨時リセット";
+    if (sig.id.includes("regular") || sig.title.includes("定期") || sig.keywords?.includes("weekly") || sig.keywords?.includes("定期")) {
+      title = "定期リセット";
+    } else if (sig.title.includes("補償") || sig.title.includes("障害") || sig.title.includes("詫び") || sig.keywords?.includes("補償") || sig.keywords?.includes("詫び")) {
+      title = "詫びリセット";
+    }
+
+    return {
+      id: sig.id,
+      recordKind: "confirmed_global",
+      title,
+      kind: "reset_completed",
+      status: "closed",
+      opened_at: sig.observedAt,
+      closed_at: sig.expectedAt ?? sig.observedAt,
+      completed_at: sig.expectedAt ?? sig.observedAt,
+      window_minutes: 0,
+      window_human: sig.title.includes("任意") || sig.title.includes("マニュアル") ? "任意リセット配布" : "リセット実施",
+      scope: "全有料プラン",
+      summary: sig.title,
+      source_url: sig.source ?? null,
+    };
+  });
+}
+
+export function createRadarCalculationContext(
+  data: RadarData | null,
+  now: Date,
+  metrics?: CanonicalHistoryBuildMetrics,
+): RadarCalculationContext {
+  const raw = unwrapRadarData(data);
+  const buildContext = (source: RadarData | null) =>
+    buildCanonicalResetHistoryContext(source, {
+      defaultStaticHistory: LOCAL_RESET_HISTORY,
+      displayStaticHistory: [...LOCAL_RESET_HISTORY, ...getAutoResolvedHistoryItems()],
+      dynamicStaticHistory: [],
+      metrics,
+    });
+  const initialHistoryContext = buildContext(raw);
+  const initialSource = withAutoCompletedRegularResetEvents(raw, now, initialHistoryContext);
+  if (initialSource === raw) {
+    return {
+      source: initialSource,
+      canonicalHistoryContext: initialHistoryContext,
+    };
+  }
+
+  return {
+    source: initialSource,
+    canonicalHistoryContext: rematerializeCanonicalResetHistoryContext(
+      initialHistoryContext,
+      initialSource?.regular_reset_events ?? [],
+    ),
+  };
+}
+
 function withAutoCompletedRegularResetEvents(
   data: RadarData | null,
   now: Date,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): RadarData | null {
   if (!data) return null;
 
   // A scheduled regular occurrence becomes a read-side completion projection
   // once its reference time arrives. The raw data and persisted DB row remain
   // unchanged until an observed recovery is available.
-  const anchorHistory = getCombinedResetHistory(data);
+  const anchorHistory = canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data);
   const latestAnchorAt = getLatestRegularScheduleAnchorFromEvents(anchorHistory, now);
   if (!latestAnchorAt) return data;
 
@@ -232,22 +302,27 @@ export function getRadarViewModel(
   limitHistory: boolean = true,
   signalEvaluationOverride?: LocalSignalEvaluation,
   calculationNow: Date = new Date(),
+  calculationContext?: RadarCalculationContext,
 ): RadarViewModel {
-  const source = withAutoCompletedRegularResetEvents(
-    unwrapRadarData(data),
-    calculationNow,
-  );
+  const resolvedCalculationContext = calculationContext ?? createRadarCalculationContext(data, calculationNow);
+  const source = resolvedCalculationContext.source;
+  const canonicalHistoryContext = resolvedCalculationContext.canonicalHistoryContext;
   const signalEvaluation =
-    signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow);
+    signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
   const activeOfficialNotice = getActiveOfficialNotice(
     source,
     signalEvaluation.latestResetAt,
     calculationNow,
+    LOCAL_OBSERVATION_SIGNALS,
+    null,
+    false,
+    false,
+    canonicalHistoryContext,
   );
   const observedLatestWindow = getLatestWindow(source);
-  const observedHistory = getRecentHistory(source, locale, limitHistory);
-  const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source);
-  const effectiveLatestResetAt = getLastGlobalResetAt(source, calculationNow)?.toISOString() ??
+  const observedHistory = getRecentHistory(source, locale, limitHistory, canonicalHistoryContext);
+  const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source, canonicalHistoryContext);
+  const effectiveLatestResetAt = getLastGlobalResetAt(source, calculationNow, canonicalHistoryContext)?.toISOString() ??
     observedHistory.find((item) => item.resetAt)?.resetAt ??
     null;
 
@@ -256,12 +331,14 @@ export function getRadarViewModel(
     locale,
     source,
     calculationNow,
+    canonicalHistoryContext,
   );
   const probabilityCalculation = calculatePublishedProbability(source, {
     now: calculationNow,
     signalEvaluation,
     activeOfficialNotice,
     regularResetExpectedAt: regularResetForecast.expectedAt,
+    canonicalHistoryContext,
   });
   const probability12h = probabilityCalculation.probability12h;
   const probability24h = probabilityCalculation.probability24h;
@@ -320,6 +397,7 @@ export function getRadarViewModel(
       calculationNow,
       probability12h,
       probability72h,
+      canonicalHistoryContext,
     ),
     displayReasoningSummary: getDisplayProbabilityReason(
       source,
@@ -330,6 +408,7 @@ export function getRadarViewModel(
       activeOfficialNotice,
       calculationNow,
       probabilityCalculation,
+      canonicalHistoryContext,
     ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
@@ -360,10 +439,12 @@ export function getRadarViewModel(
 export function getLatestRegularScheduleAnchorAt(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): string | null {
-  const source = withAutoCompletedRegularResetEvents(unwrapRadarData(data ?? null), now);
+  const source = unwrapRadarData(data ?? null);
+  const resolvedContext = canonicalHistoryContext ?? createRadarCalculationContext(source, now).canonicalHistoryContext;
   return getLatestRegularScheduleAnchorFromEvents(
-    getCombinedResetHistory(source),
+    resolvedContext.displayHistory,
     now,
   );
 }
@@ -373,9 +454,10 @@ function getRegularResetForecast(
   locale: Locale = "ja",
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
-  const autoLatestResetAt = getLatestRegularScheduleAnchorAt(data, now);
+  const autoLatestResetAt = getLatestRegularScheduleAnchorAt(data, now, canonicalHistoryContext);
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
@@ -483,8 +565,11 @@ function addPersonalResetEventsToHistory(
   return limit ? result.slice(0, HISTORY_LIMIT) : result;
 }
 
-function getLatestCompletedLocalWindow(data?: RadarData | null): WindowLike | undefined {
-  const globalHistory = getCombinedResetHistory(data);
+function getLatestCompletedLocalWindow(
+  data?: RadarData | null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+): WindowLike | undefined {
+  const globalHistory = canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data);
 
   return globalHistory
     .filter((item) =>
@@ -1154,9 +1239,14 @@ function getValue(
   return undefined;
 }
 
-function getRecentHistory(data: RadarData | null, locale: Locale = "ja", limit: boolean = true) {
+function getRecentHistory(
+  data: RadarData | null,
+  locale: Locale = "ja",
+  limit: boolean = true,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+) {
   const seen = new Set<string>();
-  const items = getCombinedResetHistory(data)
+  const items = (canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data))
     .filter((item): item is WindowEventLike => Boolean(item?.title))
     .filter((item) => {
       const dedupeKey = getHistoryDedupeKey(item);
@@ -1388,11 +1478,12 @@ export function getCompletedResetAt(item: WindowEventLike) {
 export function getRandomResetHeatmapEventTimes(
   data: RadarData | null | undefined,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
-  return getCombinedResetHistory(data).flatMap((item) => {
+  return (canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data)).flatMap((item) => {
     const completedAt = getCompletedResetAt(item);
     const completedTime = completedAt ? new Date(completedAt).getTime() : null;
     if (!isEligibleRandomResetEvent(item, completedTime, nowTime)) {
@@ -1404,54 +1495,11 @@ export function getRandomResetHeatmapEventTimes(
 }
 
 function getCombinedResetHistory(data?: RadarData | null): Array<WindowEventLike> {
-  const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
-    (sig) => sig.type === "official_notice" && getEffectiveSignalStatus(sig) === "resolved" && !sig.skipAutoHistoryMerge
-  );
-
-  const autoResolvedItems = autoResolvedSignals.map((sig): WindowEventLike => {
-    let title = "臨時リセット";
-    if (sig.id.includes("regular") || sig.title.includes("定期") || sig.keywords?.includes("weekly") || sig.keywords?.includes("定期")) {
-      title = "定期リセット";
-    } else if (sig.title.includes("補償") || sig.title.includes("障害") || sig.title.includes("詫び") || sig.keywords?.includes("補償") || sig.keywords?.includes("詫び")) {
-      title = "詫びリセット";
-    }
-
-    return {
-      id: sig.id,
-      recordKind: "confirmed_global",
-      title: title,
-      kind: "reset_completed",
-      status: "closed",
-      opened_at: sig.observedAt,
-      closed_at: sig.expectedAt ?? sig.observedAt,
-      completed_at: sig.expectedAt ?? sig.observedAt,
-      window_minutes: 0,
-      window_human: sig.title.includes("任意") || sig.title.includes("マニュアル") ? "任意リセット配布" : "リセット実施",
-      scope: "全有料プラン",
-      summary: sig.title,
-      source_url: sig.source ?? null,
-    };
-  });
-
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-
-  return combineResetHistory(
-    [...LOCAL_RESET_HISTORY, ...autoResolvedItems],
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+  return [...buildCanonicalResetHistoryContext(data, {
+    defaultStaticHistory: LOCAL_RESET_HISTORY,
+    displayStaticHistory: [...LOCAL_RESET_HISTORY, ...getAutoResolvedHistoryItems()],
+    dynamicStaticHistory: [],
+  }).displayHistory];
 }
 
 /** Single canonical history entry point for bounded server-side reconcilers. */

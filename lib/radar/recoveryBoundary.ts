@@ -1,6 +1,11 @@
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import type { RadarData, WindowEventLike } from "./types";
-import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
+import {
+  combineResetHistory,
+  getNoticeBackedHistoryInputs,
+  getCanonicalResetHistoryForStaticHistory,
+  type CanonicalResetHistoryContext,
+} from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import type { ResetExecutionWindow } from "./tiboTemporal";
 
@@ -107,7 +112,16 @@ function isEligibleRegularRecoveryResetEvent(
 function getCombinedHistory(
   data: RadarData | null,
   staticHistory: Array<WindowEventLike>,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
+  if (canonicalHistoryContext) {
+    const canonicalHistory = getCanonicalResetHistoryForStaticHistory(
+      canonicalHistoryContext,
+      staticHistory,
+    );
+    if (canonicalHistory) return canonicalHistory;
+  }
+
   const {
     noticeSignals,
     bankedSignals,
@@ -152,9 +166,10 @@ export function getRecoveryBoundaryAudit(
   data: RadarData | null,
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): RecoveryBoundaryAudit[] {
   const nowTime = now.getTime();
-  return getCombinedHistory(data, staticHistory).map((item, index) => {
+  return getCombinedHistory(data, staticHistory, canonicalHistoryContext).map((item, index) => {
     const completedAt = getCompletedTimestamp(item);
     const randomEligible = isEligibleRandomResetEvent(item, completedAt, nowTime) && !isRejectedOrVoided(item);
     const regularEligible = isEligibleRegularRecoveryResetEvent(item, completedAt, nowTime);
@@ -174,11 +189,12 @@ export function getRecoveryResetEvents(
   data: RadarData | null,
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): RecoveryResetBoundary[] {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
-  const candidates = getCombinedHistory(data, staticHistory)
+  const candidates = getCombinedHistory(data, staticHistory, canonicalHistoryContext)
     .flatMap((item, index) => {
       const completedAt = getCompletedTimestamp(item);
       const randomEligible = isEligibleRandomResetEvent(item, completedAt, nowTime) && !isRejectedOrVoided(item);
@@ -225,16 +241,18 @@ export function getLastRecoveryResetAt(
   data: RadarData | null,
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  return getRecoveryResetEvents(data, now, staticHistory).at(-1)?.resetAt ?? null;
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext).at(-1)?.resetAt ?? null;
 }
 
 export function getLastRandomRecoveryResetAt(
   data: RadarData | null,
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  return getRecoveryResetEvents(data, now, staticHistory)
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext)
     .filter((boundary) => boundary.isRandom)
     .at(-1)?.resetAt ?? null;
 }
@@ -243,8 +261,9 @@ export function getLastRandomRecoveryResetWindow(
   data: RadarData | null,
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ResetExecutionWindow | null {
-  const boundary = getRecoveryResetEvents(data, now, staticHistory)
+  const boundary = getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext)
     .filter((candidate) => candidate.isRandom)
     .at(-1);
   if (!boundary) return null;

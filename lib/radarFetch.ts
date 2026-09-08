@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { fetchOpenAIStatusSignals } from "@/lib/openaiStatus";
-import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "@/lib/radar";
+import { createRadarCalculationContext, getLocalRadarData, getRandomResetHeatmapEventTimes } from "@/lib/radar";
 import {
   combineDataSourceHealth,
   createRadarDataHealth,
@@ -1000,9 +1000,12 @@ const getCachedPublicRadarSnapshot = unstable_cache(
 const getCachedRandomResetHeatmapEventTimes = unstable_cache(
   async (calculationBucket: number): Promise<string[]> => {
     const core = await fetchSharedRadarCore();
+    const calculationNow = getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt);
+    const calculationContext = createRadarCalculationContext(core.data, calculationNow);
     return getRandomResetHeatmapEventTimes(
       core.data,
-      getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
+      calculationNow,
+      calculationContext.canonicalHistoryContext,
     );
   },
   ["radar-random-reset-heatmap-cache-v1"],
@@ -1025,17 +1028,23 @@ const getCachedRadarPageData = unstable_cache(
       core.generatedAt,
       RADAR_PAGE_CACHE_BUCKET_MS,
     );
+    const calculationContext = createRadarCalculationContext(core.data, calculationNow);
     const initialData = toPublicRadarSnapshot(core.data, locale, {
       stale: core.stale,
       generatedAt: core.generatedAt,
       limitHistory,
       calculationNow,
+      calculationContext,
     });
 
     return {
       initialData,
       randomResetHeatmapEventTimes: includeHeatmap
-        ? getRandomResetHeatmapEventTimes(core.data, calculationNow)
+        ? getRandomResetHeatmapEventTimes(
+            core.data,
+            calculationNow,
+            calculationContext.canonicalHistoryContext,
+          )
         : [],
     };
   },

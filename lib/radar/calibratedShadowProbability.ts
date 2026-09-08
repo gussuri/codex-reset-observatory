@@ -155,7 +155,13 @@ function getLastCalibrationAudit(
   if (cached && cached.expiresAt > Date.now()) {
     return cached.audit;
   }
-  const events = getShadowCompletedResetEvents(data, now, staticHistory);
+  const events = getShadowCompletedResetEvents(
+    data,
+    now,
+    staticHistory,
+    {},
+    options.canonicalHistoryContext,
+  );
   const origins = createPrequentialOrigins(events, now.toISOString(), undefined, 24);
   const rows: Array<PrequentialCalibrationRow> = [];
 

@@ -522,6 +522,30 @@ function indexEffectiveSignalsByRawTweetId(
   return byRawTweetId;
 }
 
+function selectTiboReadSideSignals(
+  data: RadarData,
+  scope: TiboReadSideSignalScope,
+  includeFormalTiboResets: boolean,
+  effectiveSignals: ReadonlyArray<ActiveTiboSignal>,
+  effectiveSignalByRawTweetId: ReadonlyMap<string, ActiveTiboSignal>,
+) {
+  if (scope === "all") return [...effectiveSignals];
+
+  const allowedTweetIds = getScopeTweetIds(data, scope, includeFormalTiboResets);
+  const allowedLogicalPostIds = new Set<string>();
+  allowedTweetIds.forEach((tweetId) => {
+    const effectiveSignal = effectiveSignalByRawTweetId.get(tweetId);
+    if (effectiveSignal) {
+      allowedLogicalPostIds.add(
+        effectiveSignal.logical_post_id ?? effectiveSignal.tweet_id,
+      );
+    }
+  });
+  return effectiveSignals.filter((signal) =>
+    allowedLogicalPostIds.has(signal.logical_post_id ?? signal.tweet_id),
+  );
+}
+
 /**
  * Returns the canonical read-side signal set for one consumer scope. The
  * projection is cached once per immutable RadarData object and recomputed when
@@ -532,8 +556,19 @@ export function getTiboReadSideSignals(
   data: RadarData | null | undefined,
   scope: TiboReadSideSignalScope = "all",
   includeFormalTiboResets = false,
+  projection?: TiboReadSideProjection,
 ) {
   if (!data) return [];
+
+  if (projection) {
+    return selectTiboReadSideSignals(
+      data,
+      scope,
+      includeFormalTiboResets,
+      projection.effectiveSignals,
+      indexEffectiveSignalsByRawTweetId(projection),
+    );
+  }
 
   const cached = readSideProjectionCache.get(data);
   const sameRawInputs = cached &&
@@ -552,19 +587,11 @@ export function getTiboReadSideSignals(
     };
     readSideProjectionCache.set(data, entry);
   }
-  if (scope === "all") return entry.effectiveSignals.slice();
-
-  const allowedTweetIds = getScopeTweetIds(data, scope, includeFormalTiboResets);
-  const allowedLogicalPostIds = new Set<string>();
-  allowedTweetIds.forEach((tweetId) => {
-    const effectiveSignal = entry.effectiveSignalByRawTweetId.get(tweetId);
-    if (effectiveSignal) {
-      allowedLogicalPostIds.add(
-        effectiveSignal.logical_post_id ?? effectiveSignal.tweet_id,
-      );
-    }
-  });
-  return entry.effectiveSignals.filter((signal) =>
-    allowedLogicalPostIds.has(signal.logical_post_id ?? signal.tweet_id),
+  return selectTiboReadSideSignals(
+    data,
+    scope,
+    includeFormalTiboResets,
+    entry.effectiveSignals,
+    entry.effectiveSignalByRawTweetId,
   );
 }

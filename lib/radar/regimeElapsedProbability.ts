@@ -491,8 +491,13 @@ export function calculateRegimeElapsedProbability(
   const now = options.now ?? new Date();
   const localObservationSignals = options.localObservationSignals;
   const signalEvaluation: LocalSignalEvaluation = options.signalEvaluation ??
-    getLocalSignalEvaluation(data, now, localObservationSignals);
-  const boundaries = getRecoveryResetEvents(data, now, options.staticHistory ?? LOCAL_RESET_HISTORY);
+    getLocalSignalEvaluation(data, now, localObservationSignals, options.canonicalHistoryContext);
+  const boundaries = getRecoveryResetEvents(
+    data,
+    now,
+    options.staticHistory ?? LOCAL_RESET_HISTORY,
+    options.canonicalHistoryContext,
+  );
   const hazard = buildRegimeElapsedHazard(boundaries, now, modelOptions);
   const regime = calculateRegimeDiagnostics(boundaries, now, modelOptions);
   const mode = modelOptions.mode ?? "full";
@@ -502,6 +507,7 @@ export function calculateRegimeElapsedProbability(
     data,
     now,
     options.staticHistory ?? LOCAL_RESET_HISTORY,
+    options.canonicalHistoryContext,
   );
   const resetExecutionWindow = randomExecutionWindow &&
       getTimestamp(randomExecutionWindow.executionWindowEndAt) === getTimestamp(latestRecoveryResetAt)
@@ -514,6 +520,10 @@ export function calculateRegimeElapsedProbability(
         latestRecoveryResetAt ? new Date(latestRecoveryResetAt) : null,
         now,
         localObservationSignals,
+        null,
+        false,
+        false,
+        options.canonicalHistoryContext,
       )
     : options.activeOfficialNotice;
   const inputs = getShadowSignalInputs(
@@ -526,6 +536,7 @@ export function calculateRegimeElapsedProbability(
     localObservationSignals,
     modelOptions.signalMultiplierConfig,
     resetExecutionWindow,
+    options.canonicalHistoryContext,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const regimeMultiplier = mode === "elapsed-only" ? 1 : regime.regimeMultiplier;
@@ -610,7 +621,12 @@ export function calculateRegimeElapsedProbability(
       recoveryBoundaryCount: hazard.recoveryBoundaryCount,
       randomBoundaryCount: hazard.randomBoundaryCount,
       regularBoundaryCount: hazard.regularBoundaryCount,
-      boundaryAudit: getRecoveryBoundaryAudit(data, now, options.staticHistory ?? LOCAL_RESET_HISTORY),
+      boundaryAudit: getRecoveryBoundaryAudit(
+        data,
+        now,
+        options.staticHistory ?? LOCAL_RESET_HISTORY,
+        options.canonicalHistoryContext,
+      ),
       officialNoticeTimingPolicyVersion: OFFICIAL_NOTICE_TIMING_POLICY_VERSION,
     },
   };

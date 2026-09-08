@@ -481,7 +481,12 @@ export function calculateRandomContinuousProbability(
 ): RandomContinuousProbabilityResult {
   const now = options.now ?? new Date();
   const recoveryResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(data, options);
-  const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
+  const boundaries = getRecoveryResetEvents(
+    data,
+    now,
+    options.staticHistory,
+    options.canonicalHistoryContext,
+  );
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomContinuousHazard(randomBoundaries, now, modelOptions);
   const latestRandomResetAt = randomBoundaries.at(-1)?.resetAt ?? null;
@@ -593,7 +598,12 @@ export function calculateRandomContinuousProbability(
       localPriorWindowHours: hazard.localPriorWindowHours,
       freezeAt: RANDOM_CONTINUOUS_SHADOW_FREEZE_AT,
       freezePolicy: RANDOM_CONTINUOUS_SHADOW_FREEZE_POLICY,
-      boundaryAudit: getRecoveryBoundaryAudit(data, now, options.staticHistory),
+      boundaryAudit: getRecoveryBoundaryAudit(
+        data,
+        now,
+        options.staticHistory,
+        options.canonicalHistoryContext,
+      ),
     },
   };
 }

@@ -31,6 +31,7 @@ import {
   compareTiboNoticeSpecificity,
   combineResetHistory,
   getNoticeBackedHistoryInputs,
+  type CanonicalResetHistoryContext,
   type TiboNoticeSignal,
 } from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
@@ -160,6 +161,7 @@ export type ProbabilityCalculationOptions = {
   signalEvaluation?: LocalSignalEvaluation;
   activeOfficialNotice?: ActiveOfficialNotice | null;
   regularResetExpectedAt?: string | null;
+  canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
 type ProbabilityContributions = ProbabilityBreakdown["contributions"];
@@ -242,10 +244,16 @@ function getProbabilityComponents(
   data: RadarData | null,
   signalEvaluation: LocalSignalEvaluation,
   now: Date,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const environment = signalEvaluation.environment;
   const sortedSignals = expandTiboSignalVariants(
-    getTiboReadSideSignals(data, "probability"),
+    getTiboReadSideSignals(
+      data,
+      "probability",
+      false,
+      canonicalHistoryContext?.readSideProjection,
+    ),
   )
     .slice()
     .sort(
@@ -255,8 +263,18 @@ function getProbabilityComponents(
     );
   const latestAcceptedTiboExecutionTime =
     getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
-  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, []);
-  const latestRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now);
+  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    [],
+    canonicalHistoryContext,
+  );
+  const latestRandomRecoveryWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
   const dynamicRandomRecoveryTime = dynamicRandomRecoveryWindow?.executionWindowEndAt ?? null;
   const latestRandomRecoveryTime = latestRandomRecoveryWindow?.executionWindowEndAt ?? null;
   // A dynamic canonical boundary represents the observed reset itself. A late
@@ -382,15 +400,16 @@ function getPeriodContributions(
   components: ReturnType<typeof getProbabilityComponents>,
   regularResetExpectedAt: string | null | undefined,
   now: Date,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): PeriodContributions {
   const weightKey = period === "24h" ? "within24h" : "within48h";
   return {
-    recentResetMomentum: getMomentumBoost(period, data, now),
-    elapsedSinceReset: getElapsedDayBoost(data, now),
+    recentResetMomentum: getMomentumBoost(period, data, now, canonicalHistoryContext),
+    elapsedSinceReset: getElapsedDayBoost(data, now, canonicalHistoryContext),
     localHistoryPressure: components.activeTeaserOrEvent
-      ? getLocalHistoryPressure(period, data, now)
+      ? getLocalHistoryPressure(period, data, now, canonicalHistoryContext)
       : 0,
-    historicalIntervalPressure: getHistoricalResetPressure(period, data, now),
+    historicalIntervalPressure: getHistoricalResetPressure(period, data, now, canonicalHistoryContext),
     regularResetProximity: getRegularResetProximityBoost(
       period,
       regularResetExpectedAt,
@@ -445,20 +464,24 @@ export function getLocalProbabilityCalculation(
 ): ProbabilityCalculationAudit {
   const now = options.now ?? new Date();
   const signalEvaluation =
-    options.signalEvaluation ?? getLocalSignalEvaluation(data, now);
+    options.signalEvaluation ?? getLocalSignalEvaluation(data, now, LOCAL_OBSERVATION_SIGNALS, options.canonicalHistoryContext);
   const activeOfficialNotice =
     options.activeOfficialNotice === undefined
-      ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now)
+      ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, options.canonicalHistoryContext)
       : options.activeOfficialNotice;
   const regularResetExpectedAt = options.regularResetExpectedAt ?? null;
-  const components = getProbabilityComponents(data, signalEvaluation, now);
-  const lastResetAt = getLastGlobalResetAt(data, now);
+  const components = getProbabilityComponents(data, signalEvaluation, now, options.canonicalHistoryContext);
+  const lastResetAt = getLastGlobalResetAt(data, now, options.canonicalHistoryContext);
   const elapsedMs = lastResetAt
     ? Math.max(0, now.getTime() - lastResetAt.getTime())
     : null;
   const elapsedHoursSinceReset = elapsedMs === null ? null : elapsedMs / (60 * 60 * 1000);
   const elapsedDaysSinceReset = elapsedMs === null ? null : elapsedMs / (24 * 60 * 60 * 1000);
-  const recentCompletedResetCount7d = getRecent7DayResetCount(data, now);
+  const recentCompletedResetCount7d = getRecent7DayResetCount(
+    data,
+    now,
+    options.canonicalHistoryContext,
+  );
   const inputSnapshot: ProbabilityInputSnapshot = {
     calculatedAt: now.toISOString(),
     lastCompletedResetAt: lastResetAt?.toISOString() ?? null,
@@ -526,6 +549,7 @@ export function getLocalProbabilityCalculation(
     components,
     regularResetExpectedAt,
     now,
+    options.canonicalHistoryContext,
   );
   const contributions48h = getPeriodContributions(
     "48h",
@@ -534,6 +558,7 @@ export function getLocalProbabilityCalculation(
     components,
     regularResetExpectedAt,
     now,
+    options.canonicalHistoryContext,
   );
   const contributions: ProbabilityContributions = {
     recentResetMomentum: {
@@ -623,12 +648,14 @@ export function getLocalResetProbability(
   activeOfficialNotice?: ActiveOfficialNotice | null,
   now: Date = new Date(),
   regularResetExpectedAt?: string | null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): number {
   const calculation = getLocalProbabilityCalculation(data, {
     now,
     signalEvaluation,
     activeOfficialNotice,
     regularResetExpectedAt,
+    canonicalHistoryContext,
   });
   return period === "24h"
     ? calculation.probability24h
@@ -693,13 +720,14 @@ export function getHistoricalResetPressure(
   period: "24h" | "48h",
   data: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now, canonicalHistoryContext);
   if (daysSinceLastReset === null) {
     return 0;
   }
 
-  const intervals = getRandomResetIntervals(data, now);
+  const intervals = getRandomResetIntervals(data, now, canonicalHistoryContext);
   if (intervals.length === 0) {
     return 0;
   }
@@ -725,25 +753,31 @@ export function getHistoricalResetPressure(
   return Math.min(weight.maxBoost, normalizedExcess * weight.maxBoost);
 }
 
-function getRandomResetIntervals(data: RadarData | null, now: Date) {
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-  const historicalItems = combineResetHistory(
-    LOCAL_RESET_HISTORY,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+function getRandomResetIntervals(
+  data: RadarData | null,
+  now: Date,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+) {
+  const historicalItems = canonicalHistoryContext?.defaultHistory ?? (() => {
+    const {
+      noticeSignals,
+      bankedSignals,
+      recoveryObservations,
+      estimates,
+      identityContext,
+    } = getNoticeBackedHistoryInputs(data);
+    return combineResetHistory(
+      LOCAL_RESET_HISTORY,
+      data?.formal_tibo_resets ?? [],
+      data?.rejected_tibo_resets ?? [],
+      data?.regular_reset_events ?? [],
+      noticeSignals,
+      recoveryObservations,
+      estimates,
+      bankedSignals,
+      identityContext,
+    );
+  })();
   const resetTimes = historicalItems
     .filter((item) => isEligibleRandomResetEvent(
       item,
@@ -866,9 +900,10 @@ export function getLocalSignalEvaluation(
   data: RadarData | null,
   now: Date = new Date(),
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): LocalSignalEvaluation {
   const environment = data?.codex_environment ?? getLocalSignalEnvironment(undefined, now, localObservationSignals);
-  const latestResetAt = getLastGlobalResetAt(data, now);
+  const latestResetAt = getLastGlobalResetAt(data, now, canonicalHistoryContext);
   const localStatusSignals = localObservationSignals.filter(
     (signal) =>
       signal.type === "status_incident" &&
@@ -1001,16 +1036,17 @@ export function getActiveOfficialNotice(
   resetExecutionWindow: ResetExecutionWindow | null = null,
   requireExecutionWindowMatch = false,
   includeTerminatedExecutionEvidence = false,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ActiveOfficialNotice | null {
-  const recoveryBoundaryAt = getLastResetBoundaryAt(data, now);
+  const recoveryBoundaryAt = getLastResetBoundaryAt(data, now, canonicalHistoryContext);
   const suppliedResetTime = latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const recoveryBoundaryTime = recoveryBoundaryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const resolvedLatestResetAt = suppliedResetTime >= recoveryBoundaryTime
     ? latestResetAt
     : recoveryBoundaryAt;
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
-  const dynamicRecoveryBoundaryAt = getLastRecoveryResetAt(data, now, []);
-  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, []);
+  const dynamicRecoveryBoundaryAt = getLastRecoveryResetAt(data, now, [], canonicalHistoryContext);
+  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, [], canonicalHistoryContext);
   const activeResetExecutionWindow = dynamicRecoveryBoundaryAt &&
       dynamicRandomRecoveryWindow?.executionWindowEndAt === dynamicRecoveryBoundaryAt
     ? dynamicRandomRecoveryWindow
@@ -1028,8 +1064,18 @@ export function getActiveOfficialNotice(
       );
   const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(Array.from(new Map(
     [
-      ...getTiboReadSideSignals(data, "active"),
-      ...getTiboReadSideSignals(data, "recent"),
+      ...getTiboReadSideSignals(
+        data,
+        "active",
+        false,
+        canonicalHistoryContext?.readSideProjection,
+      ),
+      ...getTiboReadSideSignals(
+        data,
+        "recent",
+        false,
+        canonicalHistoryContext?.readSideProjection,
+      ),
     ].map((signal) => [signal.tweet_id, signal] as const),
   ).values()));
   const dynamicNotices: Array<ActiveOfficialNotice> = rawSignals
@@ -1183,6 +1229,7 @@ export function getActiveOfficialNotice(
 export function getOngoingBankedNotice(
   data: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ActiveOfficialNotice | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
@@ -1190,7 +1237,12 @@ export function getOngoingBankedNotice(
   // A recurring policy remains informational after its first delivery window
   // expires. Use the retained recent signal set so that the one-shot delivery
   // expiry does not consume the ongoing policy notice.
-  const rawSignals = expandTiboSignalVariants(getTiboReadSideSignals(data, "recent"));
+  const rawSignals = expandTiboSignalVariants(getTiboReadSideSignals(
+    data,
+    "recent",
+    false,
+    canonicalHistoryContext?.readSideProjection,
+  ));
   return rawSignals
     .filter((signal) => {
       if (
@@ -1215,27 +1267,30 @@ export function getOngoingBankedNotice(
 export function getRecent7DayResetCount(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): number {
   const nowTime = now.getTime();
   const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-  const combinedHistory = combineResetHistory(
-    LOCAL_RESET_HISTORY,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+  const combinedHistory = canonicalHistoryContext?.defaultHistory ?? (() => {
+    const {
+      noticeSignals,
+      bankedSignals,
+      recoveryObservations,
+      estimates,
+      identityContext,
+    } = getNoticeBackedHistoryInputs(data);
+    return combineResetHistory(
+      LOCAL_RESET_HISTORY,
+      data?.formal_tibo_resets ?? [],
+      data?.rejected_tibo_resets ?? [],
+      data?.regular_reset_events ?? [],
+      noticeSignals,
+      recoveryObservations,
+      estimates,
+      bankedSignals,
+      identityContext,
+    );
+  })();
 
   return combinedHistory.filter((item) => {
     const time = getCompletedResetTimestamp(item);
@@ -1247,10 +1302,11 @@ export function getMomentumBoost(
   period: "24h" | "48h",
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): number {
-  const count = getRecent7DayResetCount(data, now);
+  const count = getRecent7DayResetCount(data, now, canonicalHistoryContext);
   const weightKey = period === "24h" ? "within24h" : "within48h";
-  const daysSince = getDaysSinceLastGlobalReset(data, now);
+  const daysSince = getDaysSinceLastGlobalReset(data, now, canonicalHistoryContext);
 
   let rawBoost = 0;
   if (count >= 4) {
@@ -1278,8 +1334,9 @@ export function getLocalHistoryPressure(
   period: "24h" | "48h",
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now, canonicalHistoryContext);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -1295,8 +1352,9 @@ export function getLocalHistoryPressure(
 export function getElapsedDayBoost(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now);
+  const daysSinceLastReset = getDaysSinceLastGlobalReset(data, now, canonicalHistoryContext);
   if (daysSinceLastReset === null) {
     return 0;
   }
@@ -1304,8 +1362,12 @@ export function getElapsedDayBoost(
   return daysSinceLastReset * LOCAL_PROBABILITY_WEIGHTS.elapsedDayBoost.perDay;
 }
 
-export function getDaysSinceLastGlobalReset(data?: RadarData | null, now: Date = new Date()) {
-  const lastReset = getLastGlobalResetAt(data, now);
+export function getDaysSinceLastGlobalReset(
+  data?: RadarData | null,
+  now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+) {
+  const lastReset = getLastGlobalResetAt(data, now, canonicalHistoryContext);
   if (!lastReset) {
     return null;
   }
@@ -1316,25 +1378,28 @@ export function getDaysSinceLastGlobalReset(data?: RadarData | null, now: Date =
 export function getLastGlobalResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-  const combinedHistory = combineResetHistory(
-    LOCAL_RESET_HISTORY,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+  const combinedHistory = canonicalHistoryContext?.defaultHistory ?? (() => {
+    const {
+      noticeSignals,
+      bankedSignals,
+      recoveryObservations,
+      estimates,
+      identityContext,
+    } = getNoticeBackedHistoryInputs(data);
+    return combineResetHistory(
+      LOCAL_RESET_HISTORY,
+      data?.formal_tibo_resets ?? [],
+      data?.rejected_tibo_resets ?? [],
+      data?.regular_reset_events ?? [],
+      noticeSignals,
+      recoveryObservations,
+      estimates,
+      bankedSignals,
+      identityContext,
+    );
+  })();
   const candidates = combinedHistory.map((item) => {
     const time = getCompletedResetTimestamp(item);
     return isEligibleRandomResetEvent(item, time, now.getTime())
@@ -1355,16 +1420,18 @@ export function getLastGlobalResetAt(
 export function getLastResetBoundaryAt(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const latestBoundary = getLastRecoveryResetAt(data ?? null, now, LOCAL_RESET_HISTORY);
+  const latestBoundary = getLastRecoveryResetAt(data ?? null, now, LOCAL_RESET_HISTORY, canonicalHistoryContext);
   return latestBoundary ? new Date(latestBoundary) : null;
 }
 
 export function getLastDisplayResetAt(
   data?: RadarData | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  return getLastResetBoundaryAt(data, now);
+  return getLastResetBoundaryAt(data, now, canonicalHistoryContext);
 }
 
 export function getLocalExpectationLevel(
@@ -1374,10 +1441,11 @@ export function getLocalExpectationLevel(
   activeOfficialNotice?: ActiveOfficialNotice | null,
   regularResetExpectedAt?: string | null,
   now: Date = new Date(),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
-    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, canonicalHistoryContext)
     : activeOfficialNotice;
   const probability24h = getLocalResetProbability(
     data,
@@ -1386,6 +1454,7 @@ export function getLocalExpectationLevel(
     resolvedOfficialNotice,
     now,
     regularResetExpectedAt,
+    canonicalHistoryContext,
   );
   const probability48h = getLocalResetProbability(
     data,
@@ -1394,6 +1463,7 @@ export function getLocalExpectationLevel(
     resolvedOfficialNotice,
     now,
     regularResetExpectedAt,
+    canonicalHistoryContext,
   );
   return getExpectationLabel({ p24h: probability24h, p48h: probability48h }, locale);
 }
@@ -1409,10 +1479,11 @@ export function getLocalProbabilityReason(
   now: Date = new Date(),
   probability12h?: number,
   probability72h?: number,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): string | null {
-  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
-    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, canonicalHistoryContext)
     : activeOfficialNotice;
   const environment = resolvedSignalEvaluation.environment;
   // Keep the 12h/72h inputs for the existing internal calculation path, while
@@ -1431,7 +1502,7 @@ export function getLocalProbabilityReason(
   const officialIncidentHints = environment.official_incident_hints_24h ?? 0;
   const officialUpdates = environment.official_updates_24h ?? 0;
   let lastResetLabel = "";
-  const displayLastReset = getLastDisplayResetAt(data, now);
+  const displayLastReset = getLastDisplayResetAt(data, now, canonicalHistoryContext);
   if (displayLastReset) {
     const elapsedDuration = formatElapsedResetDuration(
       Math.max(0, now.getTime() - displayLastReset.getTime()),
@@ -1556,8 +1627,8 @@ export function getLocalProbabilityReason(
     }
   }
 
-  const resetCount7d = getRecent7DayResetCount(data, now);
-  const currentMomentum = getMomentumBoost("48h", data, now);
+  const resetCount7d = getRecent7DayResetCount(data, now, canonicalHistoryContext);
+  const currentMomentum = getMomentumBoost("48h", data, now, canonicalHistoryContext);
   let momentumText = "";
   if (includeMomentumReason && currentMomentum > 0) {
     if (resetCount7d >= 4) {
@@ -1771,8 +1842,14 @@ function getTimedTeaserForOutlook(
   latestResetAt: string | null,
   now: Date,
   strength: "strong" | "weak",
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  const sourceSignals = getTiboReadSideSignals(data, "recent");
+  const sourceSignals = getTiboReadSideSignals(
+    data,
+    "recent",
+    false,
+    canonicalHistoryContext?.readSideProjection,
+  );
   return getTeaserStrengthSignals(sourceSignals, latestResetAt, now, { includeReplies: true })
     .filter((signal) => {
       const effectiveStrength = getEffectiveTeaserStrength(signal);
@@ -1838,14 +1915,15 @@ export function getDisplayProbabilityReason(
   activeOfficialNotice?: ActiveOfficialNotice | null,
   now: Date = new Date(),
   publishedCalculation?: DisplayProbabilityModelContext,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): string | null {
   if (!data) {
     return translateUI("outlookUnavailable", locale);
   }
 
-  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now);
+  const resolvedSignalEvaluation = signalEvaluation ?? getLocalSignalEvaluation(data, now, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
   const resolvedOfficialNotice = activeOfficialNotice === undefined
-    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now)
+    ? getActiveOfficialNotice(data, resolvedSignalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, canonicalHistoryContext)
     : activeOfficialNotice;
 
   if (resolvedOfficialNotice) {
@@ -1855,15 +1933,26 @@ export function getDisplayProbabilityReason(
   const environment = resolvedSignalEvaluation.environment;
   const activeIncidentCount = resolvedSignalEvaluation.statusIncidents.activeStatusIncidentCount;
   const issueAnomalyCount = environment.issue_or_limit_anomalies_24h ?? 0;
-  const latestResetAt = getLastDisplayResetAt(data, now)?.toISOString() ?? null;
+  const latestResetAt = getLastDisplayResetAt(data, now, canonicalHistoryContext)?.toISOString() ?? null;
   const teaserStatus = aggregateResetTeaserStatus(
-    getTiboReadSideSignals(data, "recent"),
+    getTiboReadSideSignals(
+      data,
+      "recent",
+      false,
+      canonicalHistoryContext?.readSideProjection,
+    ),
     latestResetAt,
     now,
   );
 
   if (teaserStatus === "strong") {
-    const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "strong");
+    const timedTeaser = getTimedTeaserForOutlook(
+      data,
+      latestResetAt,
+      now,
+      "strong",
+      canonicalHistoryContext,
+    );
     return getTimedTeaserOutlookText(locale, timedTeaser, "strong", now)
       ?? translateUI("outlookStrongTeaser", locale);
   }
@@ -1873,7 +1962,13 @@ export function getDisplayProbabilityReason(
   }
 
   if (teaserStatus === "weak") {
-    const timedTeaser = getTimedTeaserForOutlook(data, latestResetAt, now, "weak");
+    const timedTeaser = getTimedTeaserForOutlook(
+      data,
+      latestResetAt,
+      now,
+      "weak",
+      canonicalHistoryContext,
+    );
     return getTimedTeaserOutlookText(locale, timedTeaser, "weak", now)
       ?? translateUI("outlookWeakTeaser", locale);
   }
@@ -1887,7 +1982,7 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookUnavailable", locale);
   }
 
-  const latestRandomResetAt = getLastRandomRecoveryResetAt(data, now);
+  const latestRandomResetAt = getLastRandomRecoveryResetAt(data, now, LOCAL_RESET_HISTORY, canonicalHistoryContext);
   const elapsedMs = latestRandomResetAt
     ? Math.max(0, now.getTime() - new Date(latestRandomResetAt).getTime())
     : null;

@@ -1,4 +1,6 @@
 import { getRadarViewModel } from "@/lib/radar";
+import { createRadarCalculationContext } from "@/lib/radar";
+import type { RadarCalculationContext } from "@/lib/radar";
 import { translateTiboPostText } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
 import {
@@ -21,6 +23,7 @@ import {
 import {
   compareTiboNoticeSpecificity,
   getNoticeBackedRecoveryObservationIds,
+  type CanonicalResetHistoryContext,
   type TiboNoticeSignal,
 } from "./tiboHistory";
 import { isSupersededBankedNotice } from "./bankedReset";
@@ -42,6 +45,7 @@ export type PublicRadarSnapshotOptions = {
   generatedAt?: string;
   limitHistory?: boolean;
   calculationNow?: Date;
+  calculationContext?: RadarCalculationContext;
 };
 
 function safeHttpUrl(value: string | null | undefined) {
@@ -198,12 +202,18 @@ export function toPublicTiboActivity(
   latestResetAt: string | null = getLastResetBoundaryAt(internal, now)?.toISOString() ?? null,
   latestTeaserConsumingResetAt: string | null = getLastRandomRecoveryResetAt(internal, now),
   latestTeaserExecutionWindow: ResetExecutionWindow | null = getLastRandomRecoveryResetWindow(internal, now),
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): PublicTiboActivity | null {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
   const recentSignals = internal.recent_tibo_signals;
-  const sourceSignals = getTiboReadSideSignals(internal, "recent");
+  const sourceSignals = getTiboReadSideSignals(
+    internal,
+    "recent",
+    false,
+    canonicalHistoryContext?.readSideProjection,
+  );
   const resetExecutionWindow = latestTeaserExecutionWindow &&
       latestResetAt &&
       Date.parse(latestTeaserExecutionWindow.executionWindowEndAt ?? "") === Date.parse(latestResetAt)
@@ -437,16 +447,32 @@ export function toPublicRadarSnapshot(
 ): PublicRadarSnapshot {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = internal.checked_at ?? calculationNow.toISOString();
+  const calculationContext = options.calculationContext ?? createRadarCalculationContext(internal, calculationNow);
   const viewModel = getRadarViewModel(
     internal,
     locale,
     options.limitHistory ?? true,
     undefined,
     calculationNow,
+    calculationContext,
   );
-  const latestResetAt = getLastResetBoundaryAt(internal, calculationNow)?.toISOString() ?? null;
-  const latestTeaserConsumingResetAt = getLastRandomRecoveryResetAt(internal, calculationNow);
-  const latestTeaserExecutionWindow = getLastRandomRecoveryResetWindow(internal, calculationNow);
+  const latestResetAt = getLastResetBoundaryAt(
+    internal,
+    calculationNow,
+    calculationContext.canonicalHistoryContext,
+  )?.toISOString() ?? null;
+  const latestTeaserConsumingResetAt = getLastRandomRecoveryResetAt(
+    internal,
+    calculationNow,
+    undefined,
+    calculationContext.canonicalHistoryContext,
+  );
+  const latestTeaserExecutionWindow = getLastRandomRecoveryResetWindow(
+    internal,
+    calculationNow,
+    undefined,
+    calculationContext.canonicalHistoryContext,
+  );
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
   );
@@ -459,7 +485,12 @@ export function toPublicRadarSnapshot(
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
     resetTeaserStatus: aggregateResetTeaserStatus(
-      getTiboReadSideSignals(internal, "recent"),
+      getTiboReadSideSignals(
+        internal,
+        "recent",
+        false,
+        calculationContext.canonicalHistoryContext.readSideProjection,
+      ),
       latestTeaserConsumingResetAt,
       calculationNow,
       latestTeaserExecutionWindow,
@@ -471,6 +502,7 @@ export function toPublicRadarSnapshot(
       latestResetAt,
       latestTeaserConsumingResetAt,
       latestTeaserExecutionWindow,
+      calculationContext.canonicalHistoryContext,
     ),
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,

@@ -38,6 +38,7 @@ import {
 import { calculateRegimeElapsedProbability } from "./regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "./recencyWeightedProbability";
 import type { RadarData } from "./types";
+import type { CanonicalResetHistoryContext } from "./tiboHistory";
 
 export type PublishedProbabilitySource =
   | "calibrated"
@@ -391,6 +392,7 @@ export type PublishedProbabilityOptions = {
   nextGenerationBTrainingReadStatus?: NextGenerationTrainingReadStatus;
   /** Explicit Production switch boundary; omitted uses the committed boundary. */
   publishedModelAdoptionAt?: string | null;
+  canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
 export function calculatePublishedProbability(

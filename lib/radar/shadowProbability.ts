@@ -37,7 +37,12 @@ import {
   getTeaserDecayFactor,
 } from "./probability";
 import type { RadarData, WindowEventLike } from "./types";
-import { combineResetHistory, getNoticeBackedHistoryInputs } from "./tiboHistory";
+import {
+  combineResetHistory,
+  getCanonicalResetHistoryForStaticHistory,
+  getNoticeBackedHistoryInputs,
+  type CanonicalResetHistoryContext,
+} from "./tiboHistory";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
 import {
   getEffectiveTeaserStrength,
@@ -183,6 +188,7 @@ export type ShadowProbabilityOptions = {
   regularResetExpectedAt?: string | null;
   staticHistory?: Array<WindowEventLike>;
   localObservationSignals?: Array<LocalObservationSignal>;
+  canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
 export type ShadowSignalMultiplierConfig = {
@@ -257,28 +263,34 @@ export function getShadowCompletedResetEvents(
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   options: ShadowResetEventCollectionOptions = {},
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): Array<ShadowResetEvent> {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
 
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-  const combinedHistory = combineResetHistory(
-    staticHistory,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+  const canonicalHistory = canonicalHistoryContext
+    ? getCanonicalResetHistoryForStaticHistory(canonicalHistoryContext, staticHistory)
+    : undefined;
+  const combinedHistory = canonicalHistory ?? (() => {
+    const {
+      noticeSignals,
+      bankedSignals,
+      recoveryObservations,
+      estimates,
+      identityContext,
+    } = getNoticeBackedHistoryInputs(data);
+    return combineResetHistory(
+      staticHistory,
+      data?.formal_tibo_resets ?? [],
+      data?.rejected_tibo_resets ?? [],
+      data?.regular_reset_events ?? [],
+      noticeSignals,
+      recoveryObservations,
+      estimates,
+      bankedSignals,
+      identityContext,
+    );
+  })();
   const seen = new Set<string>();
 
   return combinedHistory
@@ -601,13 +613,19 @@ function getEligibleFormalTeaserSignals(
   now: Date,
   latestResetTime: number | null,
   resetExecutionWindow: ResetExecutionWindow | null = null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const latestTiboResetTime = getLatestAcceptedTiboResetTime(data, now);
   const cutoff = resetExecutionWindow && latestResetTime !== null
     ? latestResetTime
     : Math.max(latestTiboResetTime, latestResetTime ?? Number.NEGATIVE_INFINITY);
 
-  return expandTiboSignalVariants(getTiboReadSideSignals(data, "probability")).filter((signal) => {
+  return expandTiboSignalVariants(getTiboReadSideSignals(
+    data,
+    "probability",
+    false,
+    canonicalHistoryContext?.readSideProjection,
+  )).filter((signal) => {
     const createdAt = getTimestamp(signal.tweet_created_at);
     const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
       getTimestamp(signal.primary_event_at) === cutoff;
@@ -673,6 +691,7 @@ function getTimedFormalTeaserScores(
   latestResetTime: number | null,
   localObservationSignals: Array<LocalObservationSignal>,
   resetExecutionWindow: ResetExecutionWindow | null = null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const hasActiveLocalBoost = localObservationSignals.some((signal) => {
     const observedAt = getTimestamp(signal.observedAt);
@@ -693,6 +712,7 @@ function getTimedFormalTeaserScores(
     now,
     latestResetTime,
     resetExecutionWindow,
+    canonicalHistoryContext,
   );
   if (dynamicTeasers.length === 0) return null;
 
@@ -718,6 +738,7 @@ function getTeaserScore(
   latestResetTime: number | null,
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
   resetExecutionWindow: ResetExecutionWindow | null = null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const activeLocalBoosts = localObservationSignals.filter((signal) => {
     const observedAt = getTimestamp(signal.observedAt);
@@ -752,6 +773,7 @@ function getTeaserScore(
     now,
     latestResetTime,
     resetExecutionWindow,
+    canonicalHistoryContext,
   );
 
   if (dynamicTeasers.length === 0) return 0;
@@ -765,6 +787,7 @@ function getTeaserScore(
 function getTeaserStrengthSourceSignals(
   data: RadarData | null,
   includeFormalTiboResets = false,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const seen = new Set<string>();
   return expandTiboSignalVariants(
@@ -772,6 +795,7 @@ function getTeaserStrengthSourceSignals(
       data,
       "teaser",
       includeFormalTiboResets,
+      canonicalHistoryContext?.readSideProjection,
     ),
   ).flatMap((signal) => {
     const key = signal.tweet_id ?? `${signal.tweet_created_at}:${signal.signal_type}`;
@@ -837,16 +861,22 @@ export function getStrongTimedTeaserProbabilityFloor(
   now: Date,
   latestResetTime: number | null,
   resetExecutionWindow: ResetExecutionWindow | null = null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ShadowProbabilityPair | null {
   const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);
-  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(data, now);
+  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
   const effectiveExecutionWindow = resetExecutionWindow ?? (
     derivedExecutionWindow && getTimestamp(derivedExecutionWindow.executionWindowEndAt) === latestResetTime
       ? derivedExecutionWindow
       : null
   );
   const eligibleSignals = getTeaserStrengthSignals(
-    getTeaserStrengthSourceSignals(data, true),
+    getTeaserStrengthSourceSignals(data, true, canonicalHistoryContext),
     latestResetAt,
     now,
     { includeReplies: false, resetExecutionWindow: effectiveExecutionWindow },
@@ -912,12 +942,14 @@ function getTeaserStrengthMultiplier(
   latestResetTime: number | null,
   config: ShadowSignalMultiplierConfig,
   resetExecutionWindow: ResetExecutionWindow | null = null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
   const formalTeasers = getEligibleFormalTeaserSignals(
     data,
     now,
     latestResetTime,
     resetExecutionWindow,
+    canonicalHistoryContext,
   );
   if (formalTeasers.length > 0) {
     const timedFormalTeasers = formalTeasers
@@ -959,7 +991,7 @@ function getTeaserStrengthMultiplier(
 
   const latestResetAt = latestResetTime === null ? null : new Date(latestResetTime);
   const eligibleSignals = getTeaserStrengthSignals(
-    getTeaserStrengthSourceSignals(data),
+    getTeaserStrengthSourceSignals(data, false, canonicalHistoryContext),
     latestResetAt,
     now,
     { includeReplies: false, resetExecutionWindow },
@@ -1023,9 +1055,15 @@ export function getShadowSignalInputs(
   localObservationSignals: Array<LocalObservationSignal> = LOCAL_OBSERVATION_SIGNALS,
   signalMultiplierConfig: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
   resetExecutionWindow?: ResetExecutionWindow | null,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
-  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(data, now);
+  const derivedExecutionWindow = getLastRandomRecoveryResetWindow(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
   const effectiveExecutionWindow = resetExecutionWindow === undefined
     ? derivedExecutionWindow && getTimestamp(derivedExecutionWindow.executionWindowEndAt) === latestResetTime
       ? derivedExecutionWindow
@@ -1037,6 +1075,7 @@ export function getShadowSignalInputs(
     latestResetTime,
     localObservationSignals,
     effectiveExecutionWindow,
+    canonicalHistoryContext,
   );
   const timedTeaserScores = getTimedFormalTeaserScores(
     data,
@@ -1044,9 +1083,10 @@ export function getShadowSignalInputs(
     latestResetTime,
     localObservationSignals,
     effectiveExecutionWindow,
+    canonicalHistoryContext,
   );
   return {
-    recentResetCount7d: getRecent7DayResetCount(data, now),
+    recentResetCount7d: getRecent7DayResetCount(data, now, canonicalHistoryContext),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
     teaserScore,
     teaserScore24h: timedTeaserScores?.probability24h ?? teaserScore,
@@ -1058,6 +1098,7 @@ export function getShadowSignalInputs(
           latestResetTime,
           signalMultiplierConfig,
           effectiveExecutionWindow,
+          canonicalHistoryContext,
         )
       : pair(1, 1),
     normalizedStatusScore: clamp01(
@@ -1162,8 +1203,19 @@ export function calculateShadowProbabilityForModel(
 ): ShadowProbabilityResult {
   const now = options.now ?? new Date();
   const localObservationSignals = options.localObservationSignals ?? LOCAL_OBSERVATION_SIGNALS;
-  const signalEvaluation = options.signalEvaluation ?? getLocalSignalEvaluation(data, now, localObservationSignals);
-  const events = getShadowCompletedResetEvents(data, now, options.staticHistory);
+  const signalEvaluation = options.signalEvaluation ?? getLocalSignalEvaluation(
+    data,
+    now,
+    localObservationSignals,
+    options.canonicalHistoryContext,
+  );
+  const events = getShadowCompletedResetEvents(
+    data,
+    now,
+    options.staticHistory,
+    {},
+    options.canonicalHistoryContext,
+  );
   const hazard = buildShadowHazard(events, now, modelOptions.hazardOptions);
   const latestResetTime = events.length > 0
     ? getTimestamp(events[events.length - 1].resetAt)
@@ -1172,6 +1224,7 @@ export function calculateShadowProbabilityForModel(
     data,
     now,
     options.staticHistory ?? LOCAL_RESET_HISTORY,
+    options.canonicalHistoryContext,
   );
   const resetExecutionWindow = randomExecutionWindow &&
       getTimestamp(randomExecutionWindow.executionWindowEndAt) === latestResetTime
@@ -1183,6 +1236,10 @@ export function calculateShadowProbabilityForModel(
         latestResetTime === null ? null : new Date(latestResetTime),
         now,
         localObservationSignals,
+        null,
+        false,
+        false,
+        options.canonicalHistoryContext,
       )
     : options.activeOfficialNotice;
   const ageHours = latestResetTime === null
@@ -1204,6 +1261,7 @@ export function calculateShadowProbabilityForModel(
     localObservationSignals,
     modelOptions.signalMultiplierConfig,
     resetExecutionWindow,
+    options.canonicalHistoryContext,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const adjusted: ShadowProbabilityHorizons = {
@@ -1309,7 +1367,13 @@ export function getShadowResultWithoutSignals(
   options: ShadowProbabilityOptions = {},
 ) {
   const now = options.now ?? new Date();
-  const events = getShadowCompletedResetEvents(data, now, options.staticHistory);
+  const events = getShadowCompletedResetEvents(
+    data,
+    now,
+    options.staticHistory,
+    {},
+    options.canonicalHistoryContext,
+  );
   const hazard = buildShadowHazard(events, now);
   const ageHours = getShadowBaselineAgeHours(data, now, events);
   return pair(

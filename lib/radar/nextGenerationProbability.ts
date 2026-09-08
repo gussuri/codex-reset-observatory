@@ -270,6 +270,10 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
         latestRecoveryResetAt ? new Date(latestRecoveryResetAt) : null,
         now,
         options.localObservationSignals,
+        null,
+        false,
+        false,
+        options.canonicalHistoryContext,
       )
     : options.activeOfficialNotice;
   const calibratedHorizons: ShadowProbabilityHorizons = {
@@ -285,6 +289,8 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       data,
       now,
       timestamp(latestRecoveryResetAt),
+      undefined,
+      options.canonicalHistoryContext,
     );
   const policyHorizons = applyStrongTimedTeaserProbabilityFloor(
     noticeHorizons ?? calibratedHorizons,

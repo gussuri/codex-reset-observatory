@@ -33,6 +33,7 @@ import type { ResetReasonType } from "./types";
 import type { TiboEditIdentityFields } from "./tiboEditIdentity";
 import {
   buildTiboReadSideProjection,
+  type TiboReadSideProjection,
   type TiboReadSideSignal,
 } from "./tiboLogicalProjection";
 import {
@@ -211,6 +212,75 @@ export type TiboHistoryIdentityContext = {
   adoptionLedgerReadError?: boolean;
   dynamicEvents?: ReadonlyArray<WindowEventLike>;
 };
+
+/** Per-request diagnostics used by focused performance tests and benchmarks. */
+export type CanonicalHistoryBuildMetrics = {
+  canonicalHistoryBuilds: number;
+  identityProjectionBuilds: number;
+  noticeBackedHistoryInputBuilds: number;
+};
+
+export type CanonicalResetHistoryContext = Readonly<{
+  defaultStaticHistory: ReadonlyArray<WindowEventLike>;
+  displayStaticHistory: ReadonlyArray<WindowEventLike>;
+  dynamicStaticHistory: ReadonlyArray<WindowEventLike>;
+  defaultHistory: ReadonlyArray<WindowEventLike>;
+  displayHistory: ReadonlyArray<WindowEventLike>;
+  dynamicHistory: ReadonlyArray<WindowEventLike>;
+  canonicalParts: Readonly<{
+    defaultParts: CanonicalResetHistoryParts;
+    displayParts: CanonicalResetHistoryParts;
+    dynamicParts: CanonicalResetHistoryParts;
+  }>;
+  rejectedTiboResets: ReadonlyArray<RejectedTiboResetSignal>;
+  regularResetRows: ReadonlyArray<RegularResetEventRow>;
+  readSideProjection: TiboReadSideProjection;
+}>;
+
+export type CanonicalResetHistoryContextOptions = {
+  defaultStaticHistory: ReadonlyArray<WindowEventLike>;
+  displayStaticHistory?: ReadonlyArray<WindowEventLike>;
+  dynamicStaticHistory?: ReadonlyArray<WindowEventLike>;
+  metrics?: CanonicalHistoryBuildMetrics;
+};
+
+export function getCanonicalResetHistoryForStaticHistory(
+  context: CanonicalResetHistoryContext,
+  staticHistory: ReadonlyArray<WindowEventLike>,
+): ReadonlyArray<WindowEventLike> | undefined {
+  if (staticHistory.length === 0) return context.dynamicHistory;
+  if (staticHistory === context.displayStaticHistory) return context.displayHistory;
+  if (staticHistory === context.defaultStaticHistory) return context.defaultHistory;
+  return undefined;
+}
+
+export function rematerializeCanonicalResetHistoryContext(
+  context: CanonicalResetHistoryContext,
+  regularResetRows: ReadonlyArray<RegularResetEventRow>,
+): CanonicalResetHistoryContext {
+  return {
+    ...context,
+    regularResetRows,
+    defaultHistory: mergeCanonicalResetHistoryParts(
+      context.canonicalParts.defaultParts,
+      context.defaultStaticHistory,
+      context.rejectedTiboResets,
+      regularResetRows,
+    ),
+    displayHistory: mergeCanonicalResetHistoryParts(
+      context.canonicalParts.displayParts,
+      context.displayStaticHistory,
+      context.rejectedTiboResets,
+      regularResetRows,
+    ),
+    dynamicHistory: mergeCanonicalResetHistoryParts(
+      context.canonicalParts.dynamicParts,
+      context.dynamicStaticHistory,
+      context.rejectedTiboResets,
+      regularResetRows,
+    ),
+  };
+}
 
 const FORMAL_RESET_CONFIDENCE = 0.95;
 const OFFICIAL_NOTICE_CONFIDENCE = 0.95;
@@ -630,7 +700,7 @@ export function areFormalTiboResetSignalsSameCluster(
   return isBroadResetScope(leftEvent) && isBroadResetScope(rightEvent) && isSameReset(leftEvent, rightEvent);
 }
 
-function clusterFormalTiboResetSignals(signals: Array<FormalTiboResetSignal>) {
+function clusterFormalTiboResetSignals(signals: ReadonlyArray<FormalTiboResetSignal>) {
   const sorted = signals
     .slice()
     .sort((left, right) => {
@@ -914,10 +984,10 @@ function buildCanonicalFormalHistory(
   staticHistory: ReadonlyArray<WindowEventLike>,
   estimates: ReadonlyArray<ResetExecutionEstimate>,
   context: TiboHistoryIdentityContext,
-): CanonicalFormalHistoryResult {
-  const projection = buildTiboReadSideProjection(
+  projection: TiboReadSideProjection = buildTiboReadSideProjection(
     getHistoryIdentityProjectionInput(formalSignals, context),
-  );
+  ),
+): CanonicalFormalHistoryResult {
   const formalTweetIds = new Set(formalSignals.map((signal) => signal.tweet_id));
   const identityConflictTweetIds = new Set(
     projection.conflicts
@@ -1187,7 +1257,7 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
   };
 }
 
-function matchesRejected(item: WindowEventLike, rejectedSignals: Array<RejectedTiboResetSignal>) {
+function matchesRejected(item: WindowEventLike, rejectedSignals: ReadonlyArray<RejectedTiboResetSignal>) {
   return rejectedSignals.some((signal) => {
     const itemTweetId = getTweetId(item.source_url);
     const signalTweetId = getTweetId(signal.tweet_url);
@@ -1216,8 +1286,8 @@ function matchesRejected(item: WindowEventLike, rejectedSignals: Array<RejectedT
 }
 
 function mergePersistedRegularEvents(
-  staticHistory: Array<WindowEventLike>,
-  regularRows: Array<RegularResetEventRow>,
+  staticHistory: ReadonlyArray<WindowEventLike>,
+  regularRows: ReadonlyArray<RegularResetEventRow>,
 ) {
   const result = [...staticHistory];
 
@@ -1281,6 +1351,8 @@ export type NoticeBackedHistoryData = Pick<
   | "active_tibo_signals"
   | "recent_tibo_signals"
   | "formal_tibo_resets"
+  | "rejected_tibo_resets"
+  | "regular_reset_events"
   | "codex_usage_recovery"
   | "codex_recovery_observations"
   | "reset_execution_estimates"
@@ -1646,9 +1718,9 @@ function buildNoticeBackedRecoveryEvent(
 }
 
 export function findNoticeBackedRecoveryEvents(
-  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal>,
-  recoveryObservations: Array<CodexRecoveryObservationInput>,
-  estimates: Array<ResetExecutionEstimate> = [],
+  noticeSignals: ReadonlyArray<TiboNoticeSignal | FormalTiboResetSignal>,
+  recoveryObservations: ReadonlyArray<CodexRecoveryObservationInput>,
+  estimates: ReadonlyArray<ResetExecutionEstimate> = [],
 ): Array<WindowEventLike> {
   const seen = new Set<string>();
   return estimates.flatMap((estimate) => {
@@ -1748,7 +1820,7 @@ function buildBankedDistributionEvent(
 
 export function findBankedDistributionEvents(
   noticeSignals: ReadonlyArray<BankedDistributionSignal>,
-  estimates: Array<ResetExecutionEstimate> = [],
+  estimates: ReadonlyArray<ResetExecutionEstimate> = [],
 ): Array<WindowEventLike> {
   const seen = new Set<string>();
   return estimates.flatMap((estimate) => {
@@ -1787,21 +1859,25 @@ function enrichHistoryEventSourceIds(
   };
 }
 
-export function combineResetHistory(
-  staticHistory: Array<WindowEventLike>,
-  formalTiboResets: Array<FormalTiboResetSignal>,
-  rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
-  regularResetRows: Array<RegularResetEventRow> = [],
-  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal> = [],
-  recoveryObservations: Array<CodexRecoveryObservationInput> = [],
-  estimates: Array<ResetExecutionEstimate> = [],
-  bankedSignals: ReadonlyArray<BankedDistributionSignal> = [],
-  identityContext?: TiboHistoryIdentityContext,
-) {
+type CanonicalResetHistoryParts = {
+  dynamicItems: Array<WindowEventLike>;
+  sourceTweetIdsByEventKey: Map<string, string[]>;
+};
+
+function buildCanonicalResetHistoryParts(
+  formalTiboResets: ReadonlyArray<FormalTiboResetSignal>,
+  noticeSignals: ReadonlyArray<TiboNoticeSignal | FormalTiboResetSignal>,
+  recoveryObservations: ReadonlyArray<CodexRecoveryObservationInput>,
+  estimates: ReadonlyArray<ResetExecutionEstimate>,
+  bankedSignals: ReadonlyArray<BankedDistributionSignal>,
+  identityContext: TiboHistoryIdentityContext | undefined,
+  staticHistory: ReadonlyArray<WindowEventLike>,
+  projection?: TiboReadSideProjection,
+): CanonicalResetHistoryParts {
   const formalSignals = formalTiboResets
     .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
   const canonicalFormalHistory = identityContext
-    ? buildCanonicalFormalHistory(formalSignals, staticHistory, estimates, identityContext)
+    ? buildCanonicalFormalHistory(formalSignals, staticHistory, estimates, identityContext, projection)
     : {
         events: clusterFormalTiboResetSignals(formalSignals),
         sourceTweetIdsByEventKey: new Map<string, string[]>(),
@@ -1852,18 +1928,33 @@ export function combineResetHistory(
   ));
   dynamicItems.push(...tiboItems);
 
-  const regularMergedHistory = mergePersistedRegularEvents(staticHistory, regularResetRows)
-    .map((item) => enrichHistoryEventSourceIds(item, canonicalFormalHistory.sourceTweetIdsByEventKey));
+  return {
+    dynamicItems,
+    sourceTweetIdsByEventKey: canonicalFormalHistory.sourceTweetIdsByEventKey,
+  };
+}
+
+function mergeCanonicalResetHistoryParts(
+  parts: CanonicalResetHistoryParts,
+  staticHistory: ReadonlyArray<WindowEventLike>,
+  rejectedTiboResets: ReadonlyArray<RejectedTiboResetSignal>,
+  regularResetRows: ReadonlyArray<RegularResetEventRow>,
+) {
+  const regularMergedHistory = mergePersistedRegularEvents(
+    [...staticHistory],
+    [...regularResetRows],
+  )
+    .map((item) => enrichHistoryEventSourceIds(item, parts.sourceTweetIdsByEventKey));
   const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
-  const combined: Array<WindowEventLike> = [...dynamicItems];
+  const combined: Array<WindowEventLike> = [...parts.dynamicItems];
   const matchedDynamicIndexes = new Set<number>();
   const absorbedDynamicIndexes = new Set<number>();
 
   // Keep legacy static records intact. Only a dynamic Tibo record may merge with one static record.
   for (const item of filteredStaticHistory) {
     const matchingIndexes: number[] = [];
-    for (let i = 0; i < dynamicItems.length; i++) {
-      if (!matchedDynamicIndexes.has(i) && isSameReset(dynamicItems[i], item)) {
+    for (let i = 0; i < parts.dynamicItems.length; i++) {
+      if (!matchedDynamicIndexes.has(i) && isSameReset(parts.dynamicItems[i], item)) {
         matchingIndexes.push(i);
         matchedDynamicIndexes.add(i);
       }
@@ -1886,4 +1977,118 @@ export function combineResetHistory(
   return absorbedDynamicIndexes.size > 0
     ? combined.filter((_, index) => !absorbedDynamicIndexes.has(index))
     : combined;
+}
+
+function buildIdentityProjection(
+  formalSignals: ReadonlyArray<FormalTiboResetSignal>,
+  identityContext: TiboHistoryIdentityContext,
+  metrics?: CanonicalHistoryBuildMetrics,
+) {
+  if (metrics) metrics.identityProjectionBuilds += 1;
+  return buildTiboReadSideProjection(
+    getHistoryIdentityProjectionInput(formalSignals, identityContext),
+  );
+}
+
+export function buildCanonicalResetHistoryContext(
+  data: NoticeBackedHistoryData | null | undefined,
+  options: CanonicalResetHistoryContextOptions,
+): CanonicalResetHistoryContext {
+  const displayStaticHistory = options.displayStaticHistory ?? options.defaultStaticHistory;
+  const dynamicStaticHistory = options.dynamicStaticHistory ?? [];
+  if (options.metrics) options.metrics.noticeBackedHistoryInputBuilds += 1;
+  const inputs = getNoticeBackedHistoryInputs(data);
+  const formalSignals = (data?.formal_tibo_resets ?? [])
+    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
+  const projection = buildIdentityProjection(
+    formalSignals,
+    inputs.identityContext,
+    options.metrics,
+  );
+  const buildParts = (staticHistory: ReadonlyArray<WindowEventLike>) =>
+    buildCanonicalResetHistoryParts(
+      data?.formal_tibo_resets ?? [],
+      inputs.noticeSignals,
+      inputs.recoveryObservations,
+      inputs.estimates,
+      inputs.bankedSignals,
+      inputs.identityContext,
+      staticHistory,
+      projection,
+    );
+  const defaultParts = buildParts(options.defaultStaticHistory);
+  const displayParts = displayStaticHistory === options.defaultStaticHistory
+    ? defaultParts
+    : buildParts(displayStaticHistory);
+  const dynamicParts = dynamicStaticHistory.length === 0
+    ? buildParts(dynamicStaticHistory)
+    : dynamicStaticHistory === options.defaultStaticHistory
+      ? defaultParts
+      : dynamicStaticHistory === displayStaticHistory
+        ? displayParts
+        : buildParts(dynamicStaticHistory);
+
+  if (options.metrics) options.metrics.canonicalHistoryBuilds += 1;
+
+  const rejectedTiboResets = data?.rejected_tibo_resets ?? [];
+  const regularResetRows = data?.regular_reset_events ?? [];
+  return {
+    defaultStaticHistory: options.defaultStaticHistory,
+    displayStaticHistory,
+    dynamicStaticHistory,
+    canonicalParts: {
+      defaultParts,
+      displayParts,
+      dynamicParts,
+    },
+    rejectedTiboResets,
+    regularResetRows,
+    readSideProjection: projection,
+    defaultHistory: mergeCanonicalResetHistoryParts(
+      defaultParts,
+      options.defaultStaticHistory,
+      rejectedTiboResets,
+      regularResetRows,
+    ),
+    displayHistory: mergeCanonicalResetHistoryParts(
+      displayParts,
+      displayStaticHistory,
+      rejectedTiboResets,
+      regularResetRows,
+    ),
+    dynamicHistory: mergeCanonicalResetHistoryParts(
+      dynamicParts,
+      dynamicStaticHistory,
+      rejectedTiboResets,
+      regularResetRows,
+    ),
+  };
+}
+
+export function combineResetHistory(
+  staticHistory: Array<WindowEventLike>,
+  formalTiboResets: Array<FormalTiboResetSignal>,
+  rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
+  regularResetRows: Array<RegularResetEventRow> = [],
+  noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal> = [],
+  recoveryObservations: Array<CodexRecoveryObservationInput> = [],
+  estimates: Array<ResetExecutionEstimate> = [],
+  bankedSignals: ReadonlyArray<BankedDistributionSignal> = [],
+  identityContext?: TiboHistoryIdentityContext,
+) {
+  const parts = buildCanonicalResetHistoryParts(
+    formalTiboResets,
+    noticeSignals,
+    recoveryObservations,
+    estimates,
+    bankedSignals,
+    identityContext,
+    staticHistory,
+  );
+  return mergeCanonicalResetHistoryParts(
+    parts,
+    staticHistory,
+    rejectedTiboResets,
+    regularResetRows,
+  );
 }

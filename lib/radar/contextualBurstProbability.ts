@@ -310,7 +310,12 @@ export function calculateContextualBurstProbability(
 ): ContextualBurstProbabilityResult {
   const now = options.now ?? new Date();
   const trainingReadStatus = options.trainingReadStatus ?? "ok";
-  const allBoundaries = getRecoveryResetEvents(data, now, options.staticHistory);
+  const allBoundaries = getRecoveryResetEvents(
+    data,
+    now,
+    options.staticHistory,
+    options.canonicalHistoryContext,
+  );
   const randomBoundaries = allBoundaries.filter((boundary) => boundary.isRandom);
   const hazard = buildRandomContinuousHazard(
     randomBoundaries,
@@ -373,6 +378,10 @@ export function calculateContextualBurstProbability(
         latestRecoveryResetAt ? new Date(latestRecoveryResetAt) : null,
         now,
         options.localObservationSignals,
+        null,
+        false,
+        false,
+        options.canonicalHistoryContext,
       )
     : options.activeOfficialNotice;
   const noticeHorizons = applyOfficialNoticeTimingPolicy(calibratedHorizons, notice, now);

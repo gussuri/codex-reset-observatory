@@ -149,7 +149,12 @@ export function calculateRandomElapsedProbability(
 ): RandomElapsedProbabilityResult {
   const now = options.now ?? new Date();
   const recoveryResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(data, options, modelOptions);
-  const boundaries = getRecoveryResetEvents(data, now, options.staticHistory);
+  const boundaries = getRecoveryResetEvents(
+    data,
+    now,
+    options.staticHistory,
+    options.canonicalHistoryContext,
+  );
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomElapsedHazard(boundaries, now, modelOptions);
   const latestRecoveryResetAt = boundaries.at(-1)?.resetAt ?? null;
@@ -230,7 +235,12 @@ export function calculateRandomElapsedProbability(
       recoveryBoundaryCount: boundaries.length,
       randomBoundaryCount: randomBoundaries.length,
       regularBoundaryCount: boundaries.filter((boundary) => boundary.isRegular).length,
-      boundaryAudit: getRecoveryBoundaryAudit(data, now, options.staticHistory),
+      boundaryAudit: getRecoveryBoundaryAudit(
+        data,
+        now,
+        options.staticHistory,
+        options.canonicalHistoryContext,
+      ),
       officialNoticeTimingPolicyVersion: recoveryResult.regimeElapsed.officialNoticeTimingPolicyVersion,
       freezeAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT,
       freezePolicy: RANDOM_ELAPSED_SHADOW_FREEZE_POLICY,
