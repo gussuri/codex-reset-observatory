@@ -1879,6 +1879,30 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
   );
 });
 
+test("localizes the current reset supplement about per-account rollout timing", () => {
+  const calculationNow = new Date("2026-09-08T06:00:00.000Z");
+  const expected = {
+    ja: "リセットは全アカウントで同時ではなく順次実施され、実施時刻にはアカウントごとの差がありました。",
+    en: "The reset was carried out sequentially rather than simultaneously for all accounts, so the execution time varied by account.",
+    zh: "重置并非所有账号同时进行，而是按顺序执行，各账号的执行时间有所不同。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const viewModel = getRadarViewModel(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      false,
+      undefined,
+      calculationNow,
+    );
+    const item = viewModel.recentHistory.find(
+      (historyItem) => historyItem.key === "local-codex-rolling-notice-reset-2026-09-08",
+    );
+    assert.ok(item, `${locale} current reset history item should be present`);
+    assert.equal(item.details?.note, expected[locale]);
+  }
+});
+
 test("keeps the AIE reset button event aligned with its one-hour notice window", () => {
   const stored = LOCAL_RESET_HISTORY.find(
     (item) => item.id === "personal-codex-reset-button-aie-2026-07-02",

@@ -48,9 +48,9 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
       "note": {
-        "ja": "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。",
-        "en": "Following an official notice from Tibo, resets were rolled out sequentially across accounts.",
-        "zh": "在 Tibo 发布官方预告后，各账号陆续完成了重置。"
+        "ja": "リセットは全アカウントで同時ではなく順次実施され、実施時刻にはアカウントごとの差がありました。",
+        "en": "The reset was carried out sequentially rather than simultaneously for all accounts, so the execution time varied by account.",
+        "zh": "重置并非所有账号同时进行，而是按顺序执行，各账号的执行时间有所不同。"
       }
     }
   },
