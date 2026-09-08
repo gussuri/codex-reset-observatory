@@ -18,7 +18,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-codex-rolling-notice-reset-2026-09-08",
     "recordKind": "confirmed_global",
-    "title": "君を絶対に諦めないリセット",
+    "title": "Tiboの君を絶対に諦めないリセット",
     "kind": "reset_completed",
     "status": "closed",
     "opened_at": "2026-09-07T19:24:57.000Z",
@@ -39,7 +39,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
-      "note": "Tibo氏がRick Astley『Never Gonna Give You Up』の歌詞を引用したリックロール（おふざけ投稿）で予告を行い、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了を告知しました。"
+      "note": "Tibo氏より公式予告が行われ、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了が告知されました。"
     }
   },
   {
