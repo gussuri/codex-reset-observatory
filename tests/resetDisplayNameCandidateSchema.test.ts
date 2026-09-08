@@ -89,3 +89,36 @@ test("candidate promotion RPC is service-role-only and transaction-scoped", () =
   assert.doesNotMatch(sql, /insert\s+into\s+public\.reset_execution_estimates/i);
   assert.doesNotMatch(sql, /insert\s+into\s+public\.tibo_formal_adoptions/i);
 });
+
+test("candidate promotion RPC mirrors public-valid execution estimate semantics", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "utf8",
+  );
+  assert.match(sql, /execution_time_source\s*=\s*'usage_observation'/i);
+  assert.match(sql, /execution_time_confidence\s*=\s*'high'/i);
+  assert.match(sql, /execution_time_precision\s*=\s*'approximate'/i);
+  assert.match(sql, /recovery_observation_id\s+is\s+not\s+null/i);
+  assert.match(sql, /estimator_version\s+in\s*\([^)]*usage-execution-v1/i);
+  assert.match(sql, /execution_window_start_at\s+is\s+not\s+null/i);
+  assert.match(sql, /execution_window_end_at\s+is\s+not\s+null/i);
+  assert.match(sql, /(?:e\.)?execution_window_start_at\s*<\s*(?:e\.)?execution_window_end_at/i);
+  assert.match(sql, /(?:e\.)?display_execution_at\s*=\s*(?:e\.)?execution_window_end_at/i);
+  assert.match(sql, /official_notice_tweet_id\s*=\s*any\s*\(v_candidate\.notice_tweet_ids\)/i);
+  assert.match(sql, /official_notice_tweet_id\s*=\s*any\s*\((?:e\.)?tibo_source_tweet_ids\)/i);
+});
+
+test("candidate promotion replaces nonaccepted canonical AI fields consistently", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "utf8",
+  );
+  assert.match(sql, /ai_name_ja\s*=\s*v_candidate\.ai_name_ja/i);
+  assert.match(sql, /ai_name_en\s*=\s*v_candidate\.ai_name_en/i);
+  assert.match(sql, /ai_name_zh\s*=\s*v_candidate\.ai_name_zh/i);
+  assert.match(sql, /ai_confidence\s*=\s*v_candidate\.ai_confidence/i);
+  assert.match(sql, /ai_flags\s*=\s*v_candidate\.ai_flags/i);
+  assert.doesNotMatch(sql, /ai_name_ja\s*=\s*coalesce\s*\(v_existing_name\.ai_name_ja/i);
+  assert.doesNotMatch(sql, /ai_name_en\s*=\s*coalesce\s*\(v_existing_name\.ai_name_en/i);
+  assert.doesNotMatch(sql, /ai_name_zh\s*=\s*coalesce\s*\(v_existing_name\.ai_name_zh/i);
+});

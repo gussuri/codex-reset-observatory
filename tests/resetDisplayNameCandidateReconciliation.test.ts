@@ -553,6 +553,208 @@ test("full reconciliation promotes an accepted candidate only after persisted ex
   assert.equal(result.invalidated, false);
 });
 
+test("official notice backed by a public-valid usage estimate can promote", async () => {
+  const officialNoticeTweetId = "2090000000000000003";
+  const logicalPostId = "2090000000000000102";
+  const canonicalEventKey = "canonical-usage-estimate-key";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-estimate", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    aiNameJa: "Usage観測リセット",
+    aiNameEn: "Usage Observation Reset",
+    aiNameZh: "使用量观测重置",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const estimate: ResetExecutionEstimate = {
+    resetEventKey: canonicalEventKey,
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
+    executionTimeSource: "usage_observation",
+    executionTimeConfidence: "high",
+    executionTimePrecision: "approximate",
+    executionWindowStartAt: "2026-09-08T01:00:00.000Z",
+    executionWindowEndAt: "2026-09-08T02:00:00.000Z",
+    recoveryObservationId: "observation-usage-estimate",
+    tiboSourceTweetIds: [officialNoticeTweetId],
+    officialNoticeTweetId,
+    estimatorVersion: "usage-execution-v1",
+  };
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      reset_execution_estimates: [estimate],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent(canonicalEventKey)],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+  });
+
+  assert.equal(result.candidatePromotions, 1);
+  assert.equal(candidateStorage.promotionWrites, 1);
+});
+
+test("an estimate for an unrelated official notice cannot promote this candidate", async () => {
+  const officialNoticeTweetId = "2090000000000000005";
+  const unrelatedNoticeTweetId = "2090000000000000006";
+  const logicalPostId = "2090000000000000104";
+  const canonicalEventKey = "canonical-unrelated-estimate-key";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-unrelated-estimate", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    aiNameJa: "候補リセット",
+    aiNameEn: "Candidate Reset",
+    aiNameZh: "候选重置",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const unrelatedEstimate: ResetExecutionEstimate = {
+    resetEventKey: canonicalEventKey,
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
+    executionTimeSource: "usage_observation",
+    executionTimeConfidence: "high",
+    executionTimePrecision: "approximate",
+    executionWindowStartAt: "2026-09-08T01:00:00.000Z",
+    executionWindowEndAt: "2026-09-08T02:00:00.000Z",
+    recoveryObservationId: "observation-unrelated-estimate",
+    tiboSourceTweetIds: [unrelatedNoticeTweetId],
+    officialNoticeTweetId: unrelatedNoticeTweetId,
+    estimatorVersion: "usage-execution-v1",
+  };
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      reset_execution_estimates: [unrelatedEstimate],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent(canonicalEventKey)],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+  });
+
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(candidateStorage.promotionWrites, 0);
+});
+
+test("authoritative execution evidence prevents candidate Gemini generation", async () => {
+  const officialNoticeTweetId = "2090000000000000004";
+  const logicalPostId = "2090000000000000103";
+  const canonicalEventKey = "canonical-no-candidate-generation";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-unprocessed", {
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const estimate: ResetExecutionEstimate = {
+    resetEventKey: canonicalEventKey,
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
+    executionTimeSource: "usage_observation",
+    executionTimeConfidence: "high",
+    executionTimePrecision: "approximate",
+    executionWindowStartAt: "2026-09-08T01:00:00.000Z",
+    executionWindowEndAt: "2026-09-08T02:00:00.000Z",
+    recoveryObservationId: "observation-skip-generation",
+    tiboSourceTweetIds: [officialNoticeTweetId],
+    officialNoticeTweetId,
+    estimatorVersion: "usage-execution-v1",
+  };
+  let candidateGeminiCalls = 0;
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      reset_execution_estimates: [estimate],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent(canonicalEventKey)],
+    now: NOW,
+    apiKey: "test-key",
+    maxGeminiRequests: 1,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+    candidateGenerate: async () => {
+      candidateGeminiCalls += 1;
+      return successResult();
+    },
+  });
+
+  assert.equal(candidateGeminiCalls, 0);
+  assert.equal(result.candidateGeminiRequests, 0);
+  assert.equal(result.candidatePromotions, 0);
+});
+
 test("dry-run reconciliation never promotes an accepted candidate", async () => {
   const officialNoticeTweetId = "2090000000000000002";
   const logicalPostId = "2090000000000000101";
@@ -675,8 +877,16 @@ test("authoritative evidence comes only from formal adoption and monitor usage e
   const ledgers = [{ resetEventKey: "formal-1" }] as TiboFormalAdoptionRecord[];
   const estimates = [{
     resetEventKey: "estimate-1",
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
     executionTimeSource: "usage_observation",
+    executionTimeConfidence: "high",
+    executionTimePrecision: "approximate",
+    executionWindowStartAt: "2026-09-08T01:00:00.000Z",
+    executionWindowEndAt: "2026-09-08T02:00:00.000Z",
     recoveryObservationId: "observation-1",
+    tiboSourceTweetIds: ["notice-1"],
+    officialNoticeTweetId: "notice-1",
+    estimatorVersion: "usage-execution-v1",
   }] as ResetExecutionEstimate[];
   assert.deepEqual(
     collectPersistedAuthoritativeCandidateExecutionEvidence(ledgers, estimates),
@@ -685,4 +895,30 @@ test("authoritative evidence comes only from formal adoption and monitor usage e
       { resetEventKey: "estimate-1", kind: "monitor_usage_estimate" },
     ],
   );
+});
+
+test("non-public execution estimates are not authoritative candidate evidence", () => {
+  const base = {
+    resetEventKey: "estimate-invalid",
+    displayExecutionAt: "2026-09-08T02:00:00.000Z",
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: "2026-09-08T01:00:00.000Z",
+    executionWindowEndAt: "2026-09-08T02:00:00.000Z",
+    recoveryObservationId: "observation-invalid",
+    tiboSourceTweetIds: ["notice-1"],
+    officialNoticeTweetId: "notice-1",
+    estimatorVersion: "usage-execution-v1",
+  } satisfies ResetExecutionEstimate;
+  const variants: ResetExecutionEstimate[] = [
+    { ...base, executionTimeConfidence: "low" },
+    { ...base, executionTimePrecision: "window" },
+    { ...base, executionWindowStartAt: "2026-09-08T02:00:00.000Z" },
+    { ...base, displayExecutionAt: "2026-09-08T01:59:59.000Z" },
+  ];
+
+  for (const variant of variants) {
+    assert.deepEqual(collectPersistedAuthoritativeCandidateExecutionEvidence([], [variant]), []);
+  }
 });

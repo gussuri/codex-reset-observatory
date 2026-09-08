@@ -7,6 +7,7 @@ import {
   type ResetDisplayNameCandidateStoreClient,
 } from "../lib/radar/resetDisplayNameCandidateStore";
 import type { ResetDisplayNameCandidateRecord } from "../lib/radar/resetDisplayNameCandidateTypes";
+import type { ResetDisplayNameRecord } from "../lib/radar/types";
 
 const CANDIDATE_ID = "candidate-1";
 const CREATED_AT = "2026-09-08T00:00:00.000Z";
@@ -66,17 +67,43 @@ function promotionInput(canonicalEventKey: string): PromoteResetDisplayNameCandi
 
 type FakePromotionClient = ResetDisplayNameCandidateStoreClient & {
   candidate: ResetDisplayNameCandidateRecord;
+  canonical: ResetDisplayNameRecord | null;
   canonicalWrites: number;
   rpcCalls: number;
 };
 
 function fakePromotionClient(
   candidate: ResetDisplayNameCandidateRecord,
-  options: { canonicalNameState?: "missing" | "manual" | "accepted" } = {},
+  options: { canonicalNameState?: "missing" | "manual" | "accepted" | "review_required" } = {},
 ): FakePromotionClient {
   let canonicalEventKey: string | null = candidate.promotedEventKey;
+  const canonical = options.canonicalNameState === "missing"
+    ? null
+    : {
+        event_key: "canonical-event-1",
+        source_tweet_id: "old-source",
+        manual_name_ja: options.canonicalNameState === "manual" ? "手動リセット" : null,
+        manual_name_en: options.canonicalNameState === "manual" ? "Manual Reset" : null,
+        manual_name_zh: options.canonicalNameState === "manual" ? "手动重置" : null,
+        ai_name_ja: options.canonicalNameState === "review_required" ? "古い不安全な名前" : "既存AI名",
+        ai_name_en: options.canonicalNameState === "review_required" ? "Old unsafe name" : "Existing AI name",
+        ai_name_zh: options.canonicalNameState === "review_required" ? "旧的不安全名称" : "现有AI名称",
+        ai_confidence: 0.2,
+        ai_evidence: "old evidence",
+        ai_reason: "old reason",
+        ai_model: "old-model",
+        ai_prompt_version: "old-prompt",
+        ai_input_mode: "completed-event-v1",
+        ai_status: options.canonicalNameState === "review_required" ? "review_required" : "accepted",
+        ai_flags: options.canonicalNameState === "review_required" ? ["old-unsafe"] : [],
+        ai_generated_at: CREATED_AT,
+        input_hash: "old-hash",
+        created_at: CREATED_AT,
+        updated_at: CREATED_AT,
+      } satisfies ResetDisplayNameRecord;
   const client = {
     candidate,
+    canonical,
     canonicalWrites: 0,
     rpcCalls: 0,
     rpc(name: string, args: Record<string, unknown>) {
@@ -108,11 +135,33 @@ function fakePromotionClient(
       this.candidate.promotedEventKey = requestedKey;
       this.candidate.promotedAt = String(args.p_promoted_at);
       this.candidate.lifecycleStatus = "promoted";
-      if (options.canonicalNameState === "missing") this.canonicalWrites += 1;
+      if (options.canonicalNameState === "missing") {
+        this.canonicalWrites += 1;
+      } else if (options.canonicalNameState === "review_required" && this.canonical) {
+        this.canonical = {
+          ...this.canonical,
+          ai_name_ja: this.candidate.aiNameJa,
+          ai_name_en: this.candidate.aiNameEn,
+          ai_name_zh: this.candidate.aiNameZh,
+          ai_confidence: this.candidate.aiConfidence,
+          ai_evidence: this.candidate.aiEvidence,
+          ai_reason: this.candidate.aiReason,
+          ai_model: this.candidate.aiModel,
+          ai_prompt_version: this.candidate.aiPromptVersion,
+          ai_input_mode: this.candidate.aiInputMode,
+          ai_status: "accepted",
+          ai_flags: [...this.candidate.aiFlags],
+          ai_generated_at: this.candidate.lastGeneratedAt,
+          input_hash: this.candidate.inputHash,
+        };
+        this.canonicalWrites += 1;
+      }
+      const canonicalChanged = options.canonicalNameState === "missing" ||
+        options.canonicalNameState === "review_required";
       return Promise.resolve({
         data: {
-          status: options.canonicalNameState === "missing" ? "promoted" : "reused",
-          canonicalWrite: options.canonicalNameState === "missing",
+          status: canonicalChanged ? "promoted" : "reused",
+          canonicalWrite: canonicalChanged,
           canonicalEventKey: requestedKey,
         },
         error: null,
@@ -178,4 +227,21 @@ test("manual or existing accepted canonical names are reused without replacement
   assert.equal(result.status, "reused");
   assert.equal(result.canonicalWrite, false);
   assert.equal(client.canonicalWrites, 0);
+});
+
+test("promotion replaces unsafe nonaccepted canonical AI names with the accepted candidate", async () => {
+  const client = fakePromotionClient(acceptedCandidate(), { canonicalNameState: "review_required" });
+  const result = await promoteResetDisplayNameCandidate(client, promotionInput("canonical-event-1"));
+
+  assert.equal(result.status, "promoted");
+  assert.equal(result.canonicalWrite, true);
+  assert.equal(client.canonical?.ai_name_ja, "Astra記念リセット");
+  assert.equal(client.canonical?.ai_name_en, "Astra Celebration Reset");
+  assert.equal(client.canonical?.ai_name_zh, "Astra纪念重置");
+  assert.equal(client.canonical?.ai_status, "accepted");
+  assert.deepEqual(client.canonical?.ai_flags, []);
+  assert.equal(client.canonical?.input_hash, "notice-input-hash");
+  assert.equal(client.canonical?.ai_input_mode, "notice-precompute-v1");
+  assert.equal(client.canonical?.manual_name_ja, null);
+  assert.equal(client.canonicalWrites, 1);
 });

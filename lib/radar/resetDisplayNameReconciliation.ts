@@ -57,7 +57,10 @@ import {
   type ResetDisplayNameCandidateSeed,
 } from "./resetDisplayNameCandidateTypes";
 import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
-import type { ResetExecutionEstimate } from "./resetExecution";
+import {
+  isPublicRandomResetExecutionEstimate,
+  type ResetExecutionEstimate,
+} from "./resetExecution";
 import type { RadarData, ResetDisplayNameRecord, WindowEventLike } from "./types";
 
 export { isAutoNameableCanonicalEvent } from "./resetDisplayNameEligibility";
@@ -302,8 +305,7 @@ export function collectPersistedAuthoritativeCandidateExecutionEvidence(
     kind: "formal_adoption" as const,
   }));
   const monitorEvidence = estimates
-    .filter((estimate) => estimate.executionTimeSource === "usage_observation")
-    .filter((estimate) => typeof estimate.recoveryObservationId === "string" && estimate.recoveryObservationId.trim())
+    .filter((estimate) => isPublicRandomResetExecutionEstimate(estimate))
     .map((estimate) => ({
       resetEventKey: estimate.resetEventKey,
       kind: "monitor_usage_estimate" as const,
@@ -315,6 +317,37 @@ export function collectPersistedAuthoritativeCandidateExecutionEvidence(
     seen.add(key);
     return true;
   });
+}
+
+function hasExactIdentityOverlap(left: readonly string[], right: readonly string[]) {
+  const rightIds = new Set(right);
+  return left.some((id) => rightIds.has(id));
+}
+
+function hasPersistedAuthoritativeExecutionForCandidate(
+  candidate: ResetDisplayNameCandidateRecord,
+  adoptionLedgers: readonly TiboFormalAdoptionRecord[],
+  estimates: readonly ResetExecutionEstimate[],
+) {
+  const candidateIds = candidateIdentityIds(candidate);
+  const hasFormalAdoption = adoptionLedgers.some((ledger) =>
+    (candidate.logicalPostId !== null && ledger.logicalPostId === candidate.logicalPostId) ||
+    hasExactIdentityOverlap(candidateIds, [
+      ...ledger.logicalPostTweetIds,
+      ...ledger.sourceTweetIds,
+    ]),
+  );
+  if (hasFormalAdoption) return true;
+
+  const candidateNoticeIds = new Set(candidate.noticeTweetIds.map((id) => id.trim()));
+  const candidateSourceIds = new Set(candidateIds.map((id) => id.trim()));
+  return estimates
+    .filter((estimate) => isPublicRandomResetExecutionEstimate(estimate))
+    .some((estimate) => {
+      const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
+      if (officialNoticeTweetId) return candidateNoticeIds.has(officialNoticeTweetId);
+      return estimate.tiboSourceTweetIds.some((tweetId) => candidateSourceIds.has(tweetId.trim()));
+    });
 }
 
 function getCandidateStoreClient() {
@@ -809,6 +842,16 @@ export async function reconcileResetDisplayNames(
         notice.tweetCreatedAt,
         candidateActivation.adoptionAt,
       )) continue;
+
+      if (hasPersistedAuthoritativeExecutionForCandidate(
+        candidate,
+        data.tibo_formal_adoptions ?? [],
+        data.reset_execution_estimates ?? [],
+      )) {
+        // Authoritative execution is handed to the completed-event reconciler;
+        // candidate generation must never race that canonical path.
+        continue;
+      }
 
       const sourcePostText = candidateSourcePostText(candidate, notice, candidateNotices);
       if (!sourcePostText) continue;

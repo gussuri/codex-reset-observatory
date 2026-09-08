@@ -54,11 +54,43 @@ begin
      where reset_event_key = p_canonical_event_key
   ) or exists (
     select 1
-      from public.reset_execution_estimates
-     where reset_event_key = p_canonical_event_key
-       and execution_time_source = 'usage_observation'
-       and estimator_version = 'usage-execution-monitor-v1'
-       and recovery_observation_id is not null
+      from public.reset_execution_estimates e
+     where e.reset_event_key = p_canonical_event_key
+       and e.execution_time_source = 'usage_observation'
+       and e.execution_time_confidence = 'high'
+       and e.execution_time_precision = 'approximate'
+       and e.recovery_observation_id is not null
+       and e.estimator_version in (
+         'usage-execution-v1',
+         'usage-execution-teaser-v1',
+         'usage-execution-monitor-v1'
+       )
+       and e.execution_window_start_at is not null
+       and e.execution_window_end_at is not null
+       and e.execution_window_start_at < e.execution_window_end_at
+       and e.display_execution_at = e.execution_window_end_at
+       and (
+         (
+           e.official_notice_tweet_id is not null
+           and e.official_notice_tweet_id = any(v_candidate.notice_tweet_ids)
+           and e.official_notice_tweet_id = any(e.tibo_source_tweet_ids)
+         )
+         or (
+           e.official_notice_tweet_id is null
+           and (
+             (
+               e.estimator_version = 'usage-execution-teaser-v1'
+               and e.tibo_primary_tweet_id is not null
+               and e.tibo_primary_tweet_id = any(e.tibo_source_tweet_ids)
+               and e.tibo_primary_tweet_id = any(v_candidate.source_tweet_ids)
+             )
+             or (
+               e.estimator_version = 'usage-execution-monitor-v1'
+               and e.tibo_source_tweet_ids && v_candidate.source_tweet_ids
+             )
+           )
+         )
+       )
   ) into v_has_authoritative_evidence;
 
   if not v_has_authoritative_evidence then
@@ -107,9 +139,9 @@ begin
     if not v_has_protected_name then
       update public.reset_display_names
          set source_tweet_id = coalesce(v_existing_name.source_tweet_id, p_source_tweet_id),
-             ai_name_ja = coalesce(v_existing_name.ai_name_ja, v_candidate.ai_name_ja),
-             ai_name_en = coalesce(v_existing_name.ai_name_en, v_candidate.ai_name_en),
-             ai_name_zh = coalesce(v_existing_name.ai_name_zh, v_candidate.ai_name_zh),
+             ai_name_ja = v_candidate.ai_name_ja,
+             ai_name_en = v_candidate.ai_name_en,
+             ai_name_zh = v_candidate.ai_name_zh,
              ai_confidence = v_candidate.ai_confidence,
              ai_evidence = v_candidate.ai_evidence,
              ai_reason = v_candidate.ai_reason,
