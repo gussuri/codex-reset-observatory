@@ -84,7 +84,7 @@ begin
   );
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtext('reset-display-name-candidate:' || v_notice_dedupe_key)
+    pg_catalog.hashtext('reset-display-name-candidate:' || v_official_notice_tweet_id)
   );
 
   select * into v_by_official

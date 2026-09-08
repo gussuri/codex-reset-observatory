@@ -18,13 +18,33 @@ test("candidate migration declares the identity and lifecycle contract", () => {
   assert.match(sql, /create or replace function public\.upsert_reset_display_name_candidate_seed/i);
   assert.match(sql, /security invoker/i);
   assert.match(sql, /set search_path = pg_catalog, public, extensions/i);
-  assert.match(sql, /revoke all on function public\.upsert_reset_display_name_candidate_seed/i);
   assert.match(
     sql,
-    /grant execute on function public\.upsert_reset_display_name_candidate_seed\s*\([^)]*\)\s+to\s+service_role/i,
+    /revoke all on function public\.upsert_reset_display_name_candidate_seed\(jsonb\)\s+from\s+public,\s*anon,\s*authenticated/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.upsert_reset_display_name_candidate_seed\(jsonb\)\s+to\s+service_role/i,
   );
   assert.doesNotMatch(
     sql,
-    /grant execute on function public\.upsert_reset_display_name_candidate_seed\s*\([^)]*\)[\s\S]*?to\s+(?:public|anon|authenticated)/i,
+    /grant execute on function public\.upsert_reset_display_name_candidate_seed\(jsonb\)[\s\S]*?to\s+(?:public|anon|authenticated)/i,
   );
+});
+
+test("candidate seed serialization uses stable official notice identity", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20260908123000_create_reset_display_name_candidates.sql",
+    "utf8",
+  );
+  const lockStatement = sql.match(
+    /perform pg_catalog\.pg_advisory_xact_lock\([\s\S]*?\);/i,
+  )?.[0];
+
+  assert.ok(lockStatement, "candidate seed must acquire a transaction lock");
+  assert.match(
+    lockStatement,
+    /pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(\s*'reset-display-name-candidate:'\s*\|\|\s*v_official_notice_tweet_id\s*\)\s*\)/i,
+  );
+  assert.doesNotMatch(lockStatement, /v_notice_dedupe_key/i);
 });
