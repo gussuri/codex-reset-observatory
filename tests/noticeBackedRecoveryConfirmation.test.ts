@@ -551,7 +551,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
 
     assert.equal(combined.length, LOCAL_RESET_HISTORY.length);
     assert.equal(combined[0]?.id, "local-codex-rolling-notice-reset-2026-09-08");
-    assert.equal(combined[0]?.title, "君を絶対に諦めないリセット");
+    assert.equal(combined[0]?.title, "Tiboの君を絶対に諦めないリセット");
     assert.equal(combined[0]?.recoveryObservationId, "rec-late-monitor-user");
     assert.equal(combined[0]?.scope, "全有料プラン");
     assert.equal(combined[0]?.details?.scope, "全有料プラン");

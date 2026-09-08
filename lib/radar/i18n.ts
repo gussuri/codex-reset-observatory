@@ -1410,10 +1410,20 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "15 Million Active Users Milestone Reset",
     zh: "活跃用户突破1500万纪念重置",
   },
+  "Tiboの君を絶対に諦めないリセット": {
+    ja: "Tiboの君を絶対に諦めないリセット",
+    en: "Tibo's Never Gonna Give You Up Reset",
+    zh: "Tibo 绝不放弃你重置",
+  },
   "君を絶対に諦めないリセット": {
     ja: "君を絶対に諦めないリセット",
     en: "Never Gonna Give You Up Reset",
     zh: "绝不放弃你重置",
+  },
+  "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。": {
+    ja: "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。",
+    en: "Following an official notice from Tibo, resets were rolled out sequentially across accounts.",
+    zh: "在 Tibo 发布官方预告后，各账号陆续完成了重置。",
   },
   "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。": {
     ja: "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
