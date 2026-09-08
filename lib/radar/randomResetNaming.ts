@@ -477,7 +477,7 @@ function addV3SafetyFlags(
   names: Array<string | null>,
 ) {
   const flags: string[] = [];
-  const source = validationContext.evidenceValues
+  const source = [validationContext.sourcePostText, ...validationContext.evidenceValues]
     .filter((value): value is string => Boolean(value))
     .join("\n")
     .trim();

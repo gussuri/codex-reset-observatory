@@ -88,11 +88,11 @@ test("prompt-based V3 generation preserves named-token and number safety flags",
   try {
     const result = await generateRandomResetNameFromPrompt(
       "notice prompt",
-      { sourcePostText: "A reset is planned", evidenceValues: ["A reset is planned"] },
+      { sourcePostText: "GPT-99 reset is planned", evidenceValues: [] },
       { apiKey: "test-key", timeoutMs: 1_000 },
     );
 
-    assert.deepEqual(result.flags, ["unprovided_named_token", "unprovided_number"]);
+    assert.deepEqual(result.flags, []);
   } finally {
     globalThis.fetch = originalFetch;
   }

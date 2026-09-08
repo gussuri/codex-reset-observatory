@@ -180,13 +180,20 @@ function fakeCandidateClient(): FakeCandidateClient {
       };
       const byOfficial = Array.from(rows.values()).find((row) =>
         row.official_notice_tweet_id === seed.official_notice_tweet_id);
+      const noticeAliases = new Set([seed.official_notice_tweet_id, ...seed.notice_tweet_ids]);
+      const byAlias = Array.from(rows.values()).find((row) =>
+        row.notice_tweet_ids.some((id) => noticeAliases.has(id)));
       const byLogical = seed.logical_post_id === null
         ? undefined
         : Array.from(rows.values()).find((row) => row.logical_post_id === seed.logical_post_id);
-      if (byOfficial && byLogical && byOfficial.candidate_id !== byLogical.candidate_id) {
+      const identities = [byOfficial, byAlias, byLogical].filter((row): row is DatabaseCandidate => Boolean(row));
+      const distinctCandidates = Array.from(new Map(
+        identities.map((row) => [row.candidate_id, row]),
+      ).values());
+      if (distinctCandidates.length > 1) {
         return Promise.resolve({ data: null, error: new Error("Candidate seed identity conflict") });
       }
-      const existing = byOfficial ?? byLogical;
+      const existing = distinctCandidates[0];
       if (!existing) {
         const id = `candidate-${rows.size + 1}`;
         const record = databaseCandidate(candidate(id, {
@@ -201,9 +208,10 @@ function fakeCandidateClient(): FakeCandidateClient {
         rows.set(id, record);
         return Promise.resolve({ data: record, error: null });
       }
-      existing.notice_dedupe_key = seed.logical_post_id
-        ? `logical-post:${seed.logical_post_id}`
-        : existing.notice_dedupe_key;
+      const effectiveLogicalPostId = existing.logical_post_id ?? seed.logical_post_id;
+      existing.notice_dedupe_key = effectiveLogicalPostId
+        ? `logical-post:${effectiveLogicalPostId}`
+        : `official-notice:${seed.official_notice_tweet_id}`;
       existing.logical_post_id = seed.logical_post_id ?? existing.logical_post_id;
       existing.notice_tweet_ids = unique([...existing.notice_tweet_ids, ...seed.notice_tweet_ids]);
       existing.source_tweet_ids = unique([...existing.source_tweet_ids, ...seed.source_tweet_ids]);
@@ -266,6 +274,24 @@ function fakeCandidateClient(): FakeCandidateClient {
   return client as FakeCandidateClient;
 }
 
+async function claimCandidate(
+  client: FakeCandidateClient,
+  candidateId: string,
+  sourceSnapshotHash: string,
+  inputHash: string,
+  now: string,
+) {
+  const claimed = await claimResetDisplayNameCandidateGeneration(client, {
+    candidateId,
+    sourceSnapshotHash,
+    inputHash,
+    now,
+    stalePendingBefore: "2026-09-07T00:00:00.000Z",
+  });
+  assert.ok(claimed);
+  return claimed.updatedAt;
+}
+
 function rateLimitedResult(retryAfterSeconds: number | null): RandomResetNameGenerationResult {
   return {
     name: null,
@@ -319,6 +345,54 @@ test("trusted logical identity upgrades the same fallback row and unions provena
   assert.equal(upgraded.logicalPostId, "logical-1");
   assert.deepEqual(upgraded.noticeTweetIds, ["notice-1", "notice-2"]);
   assert.deepEqual(upgraded.sourceTweetIds, ["notice-1", "source-2"]);
+});
+
+test("a trusted logical identity is never downgraded by a logical-null retry", async () => {
+  const client = fakeCandidateClient();
+  const first = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: "logical-1",
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  const retried = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  assert.equal(retried.candidateId, first.candidateId);
+  assert.equal(retried.logicalPostId, "logical-1");
+  assert.equal(retried.noticeDedupeKey, "logical-post:logical-1");
+});
+
+test("a trusted edit alias rediscovers the same candidate on an old logical-null retry", async () => {
+  const client = fakeCandidateClient();
+  const initial = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  const trustedEdit = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-2",
+    logicalPostId: "logical-1",
+    noticeTweetIds: ["notice-1", "notice-2"],
+    sourceTweetIds: ["notice-1", "notice-2"],
+  });
+  const oldRetry = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  assert.equal(trustedEdit.candidateId, initial.candidateId);
+  assert.equal(oldRetry.candidateId, initial.candidateId);
+  assert.equal(oldRetry.noticeDedupeKey, "logical-post:logical-1");
+  assert.deepEqual(oldRetry.noticeTweetIds, ["notice-1", "notice-2"]);
 });
 
 test("a seed identity collision is reported without merging candidates", async () => {
@@ -430,6 +504,13 @@ test("rate-limited results preserve flags, increment attempts, and wait at least
     sourceTweetIds: ["notice-1"],
   });
 
+  const claimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "source-hash",
+    "input-hash",
+    "2026-09-08T00:00:00.000Z",
+  );
   await writeResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
     sourceSnapshotHash: "source-hash",
@@ -439,6 +520,7 @@ test("rate-limited results preserve flags, increment attempts, and wait at least
     result: rateLimitedResult(null),
     retryAfterSeconds: null,
     generatedAt: "2026-09-08T00:00:00.000Z",
+    claimedAt,
   });
 
   const record = fromDatabaseCandidate(client.rows.get(seeded.candidateId)!);
@@ -458,6 +540,13 @@ test("longer provider retry timing wins and terminal results clear cooldown", as
   });
   const result = rateLimitedResult(7_200);
 
+  const firstClaimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "source-hash",
+    "input-hash",
+    "2026-09-08T00:00:00.000Z",
+  );
   await writeResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
     sourceSnapshotHash: "source-hash",
@@ -467,7 +556,15 @@ test("longer provider retry timing wins and terminal results clear cooldown", as
     result,
     retryAfterSeconds: result.retryAfterSeconds,
     generatedAt: "2026-09-08T00:00:00.000Z",
+    claimedAt: firstClaimedAt,
   });
+  const secondClaimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "source-hash-2",
+    "input-hash-2",
+    "2026-09-08T03:00:00.000Z",
+  );
   await writeResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
     sourceSnapshotHash: "source-hash-2",
@@ -477,6 +574,7 @@ test("longer provider retry timing wins and terminal results clear cooldown", as
     result: { ...result, flags: ["api_error"], status: "api_error", retryAfterSeconds: null },
     retryAfterSeconds: null,
     generatedAt: "2026-09-08T03:00:00.000Z",
+    claimedAt: secondClaimedAt,
   });
 
   const record = fromDatabaseCandidate(client.rows.get(seeded.candidateId)!);
@@ -516,9 +614,118 @@ test("generation results cannot mutate a promoted candidate", async () => {
     },
     retryAfterSeconds: null,
     generatedAt: "2026-09-08T04:00:00.000Z",
+    claimedAt: "2026-09-08T04:00:00.000Z",
   }), /did not find the candidate/);
 
   assert.equal(row.lifecycle_status, "promoted");
   assert.equal(row.ai_name_ja, "Promoted name");
   assert.equal(client.resultWrites.length, 0);
+});
+
+test("a result write without a claim token is rejected", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  await assert.rejects(() => writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "api_error",
+    aiInputMode: "notice-precompute-v1",
+    result: rateLimitedResult(null),
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T00:00:00.000Z",
+    claimedAt: "",
+  }), /claim token/);
+  assert.equal(client.resultWrites.length, 0);
+});
+
+test("a claim owner can write only its matching result", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  const claimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "source-hash",
+    "input-hash",
+    "2026-09-08T00:00:00.000Z",
+  );
+
+  await writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "api_error",
+    aiInputMode: "notice-precompute-v1",
+    result: rateLimitedResult(null),
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T00:00:00.000Z",
+    claimedAt,
+  });
+
+  assert.equal(client.resultWrites.length, 1);
+});
+
+test("a stale worker cannot overwrite a reclaimed candidate result", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  const staleClaimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "source-hash",
+    "input-hash",
+    "2026-09-08T00:00:00.000Z",
+  );
+  const freshClaimedAt = await (async () => {
+    const claimed = await claimResetDisplayNameCandidateGeneration(client, {
+      candidateId: seeded.candidateId,
+      sourceSnapshotHash: "source-hash",
+      inputHash: "input-hash",
+      now: "2026-09-08T01:00:00.000Z",
+      stalePendingBefore: "2026-09-08T00:30:00.000Z",
+    });
+    assert.ok(claimed);
+    return claimed.updatedAt;
+  })();
+
+  await writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "api_error",
+    aiInputMode: "notice-precompute-v1",
+    result: rateLimitedResult(null),
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T01:00:00.000Z",
+    claimedAt: freshClaimedAt,
+  });
+  await assert.rejects(() => writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "api_error",
+    aiInputMode: "notice-precompute-v1",
+    result: { ...rateLimitedResult(null), flags: ["stale_worker"] },
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T02:00:00.000Z",
+    claimedAt: staleClaimedAt,
+  }), /did not find the candidate/);
+
+  assert.equal(client.resultWrites.length, 1);
+  assert.deepEqual(client.rows.get(seeded.candidateId)?.ai_flags, ["provider_rate_limited"]);
 });

@@ -64,8 +64,13 @@ declare
   v_notice_dedupe_key text;
   v_official_notice_tweet_id text;
   v_logical_post_id text;
+  v_notice_tweet_ids text[];
+  v_source_tweet_ids text[];
+  v_effective_logical_post_id text;
+  v_alias_candidate_count integer;
   v_candidate public.reset_display_name_candidates%rowtype;
   v_by_official public.reset_display_name_candidates%rowtype;
+  v_by_alias public.reset_display_name_candidates%rowtype;
   v_by_logical public.reset_display_name_candidates%rowtype;
 begin
   if p_seed is null or jsonb_typeof(p_seed) <> 'object' then
@@ -78,13 +83,22 @@ begin
     raise exception using errcode = '22023', message = 'Candidate seed requires an official notice tweet ID';
   end if;
 
+  v_notice_tweet_ids := coalesce(
+    array(select jsonb_array_elements_text(coalesce(p_seed -> 'notice_tweet_ids', '[]'::jsonb))),
+    '{}'::text[]
+  );
+  v_source_tweet_ids := coalesce(
+    array(select jsonb_array_elements_text(coalesce(p_seed -> 'source_tweet_ids', '[]'::jsonb))),
+    '{}'::text[]
+  );
+
   v_notice_dedupe_key := coalesce(
     case when v_logical_post_id is not null then 'logical-post:' || v_logical_post_id end,
     'official-notice:' || v_official_notice_tweet_id
   );
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtext('reset-display-name-candidate:' || v_official_notice_tweet_id)
+    pg_catalog.hashtext('reset-display-name-candidate-seed')
   );
 
   select * into v_by_official
@@ -92,11 +106,38 @@ begin
    where official_notice_tweet_id = v_official_notice_tweet_id
    for update;
 
+  select count(*) into v_alias_candidate_count
+    from public.reset_display_name_candidates
+   where v_official_notice_tweet_id = any(notice_tweet_ids)
+      or notice_tweet_ids && v_notice_tweet_ids;
+
+  if v_alias_candidate_count > 1 then
+    raise exception using errcode = '21000', message = 'Candidate seed identity conflict';
+  elsif v_alias_candidate_count = 1 then
+    select * into v_by_alias
+      from public.reset_display_name_candidates
+     where v_official_notice_tweet_id = any(notice_tweet_ids)
+        or notice_tweet_ids && v_notice_tweet_ids
+     for update;
+  end if;
+
   if v_logical_post_id is not null then
     select * into v_by_logical
       from public.reset_display_name_candidates
      where logical_post_id = v_logical_post_id
      for update;
+  end if;
+
+  if v_by_official.candidate_id is not null
+     and v_by_alias.candidate_id is not null
+     and v_by_official.candidate_id <> v_by_alias.candidate_id then
+    raise exception using errcode = '21000', message = 'Candidate seed identity conflict';
+  end if;
+
+  if v_by_alias.candidate_id is not null
+     and v_by_logical.candidate_id is not null
+     and v_by_alias.candidate_id <> v_by_logical.candidate_id then
+    raise exception using errcode = '21000', message = 'Candidate seed identity conflict';
   end if;
 
   if v_by_official.candidate_id is not null
@@ -107,6 +148,8 @@ begin
 
   if v_by_official.candidate_id is not null then
     v_candidate := v_by_official;
+  elsif v_by_alias.candidate_id is not null then
+    v_candidate := v_by_alias;
   elsif v_by_logical.candidate_id is not null then
     v_candidate := v_by_logical;
   else
@@ -129,23 +172,29 @@ begin
       v_notice_dedupe_key,
       v_official_notice_tweet_id,
       v_logical_post_id,
-      coalesce(array(select jsonb_array_elements_text(coalesce(p_seed -> 'notice_tweet_ids', '[]'::jsonb))), '{}'::text[]),
-      coalesce(array(select jsonb_array_elements_text(coalesce(p_seed -> 'source_tweet_ids', '[]'::jsonb))), '{}'::text[]),
+      v_notice_tweet_ids,
+      v_source_tweet_ids,
       'unprocessed',
       'provisional'
     ) returning * into v_candidate;
   else
+    v_effective_logical_post_id := coalesce(v_candidate.logical_post_id, v_logical_post_id);
+    v_notice_dedupe_key := coalesce(
+      case when v_effective_logical_post_id is not null then 'logical-post:' || v_effective_logical_post_id end,
+      'official-notice:' || v_official_notice_tweet_id
+    );
+
     update public.reset_display_name_candidates
        set notice_dedupe_key = v_notice_dedupe_key,
            official_notice_tweet_id = v_official_notice_tweet_id,
-           logical_post_id = coalesce(v_logical_post_id, logical_post_id),
+           logical_post_id = v_effective_logical_post_id,
            notice_tweet_ids = (
              select coalesce(array_agg(distinct item order by item), '{}'::text[])
-               from unnest(v_candidate.notice_tweet_ids || coalesce(array(select jsonb_array_elements_text(coalesce(p_seed -> 'notice_tweet_ids', '[]'::jsonb))), '{}'::text[])) as values(item)
+               from unnest(v_candidate.notice_tweet_ids || v_notice_tweet_ids) as values(item)
            ),
            source_tweet_ids = (
              select coalesce(array_agg(distinct item order by item), '{}'::text[])
-               from unnest(v_candidate.source_tweet_ids || coalesce(array(select jsonb_array_elements_text(coalesce(p_seed -> 'source_tweet_ids', '[]'::jsonb))), '{}'::text[])) as values(item)
+               from unnest(v_candidate.source_tweet_ids || v_source_tweet_ids) as values(item)
            ),
            updated_at = now()
      where candidate_id = v_candidate.candidate_id

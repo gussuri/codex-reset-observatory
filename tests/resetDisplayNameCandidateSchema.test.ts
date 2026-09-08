@@ -44,7 +44,16 @@ test("candidate seed serialization uses stable official notice identity", () => 
   assert.ok(lockStatement, "candidate seed must acquire a transaction lock");
   assert.match(
     lockStatement,
-    /pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(\s*'reset-display-name-candidate:'\s*\|\|\s*v_official_notice_tweet_id\s*\)\s*\)/i,
+    /pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(\s*'reset-display-name-candidate-seed'\s*\)\s*\)/i,
   );
-  assert.doesNotMatch(lockStatement, /v_notice_dedupe_key/i);
+  assert.doesNotMatch(lockStatement, /v_official_notice_tweet_id/i);
+  assert.match(
+    sql,
+    /where\s+v_official_notice_tweet_id\s*=\s*any\s*\(notice_tweet_ids\)/i,
+  );
+  assert.match(sql, /notice_tweet_ids\s*&&\s*v_notice_tweet_ids/i);
+  assert.match(
+    sql,
+    /coalesce\(v_candidate\.logical_post_id,\s*v_logical_post_id\)/i,
+  );
 });

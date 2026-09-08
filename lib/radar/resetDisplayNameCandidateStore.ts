@@ -284,8 +284,13 @@ export async function writeResetDisplayNameCandidateGeneration(
     result: RandomResetNameGenerationResult;
     retryAfterSeconds: number | null;
     generatedAt: string;
+    claimedAt: string;
   },
 ): Promise<void> {
+  if (!nonEmpty(input.claimedAt)) {
+    throw new Error("Reset display name candidate result requires a claim token");
+  }
+
   const existing = await client
     .from("reset_display_name_candidates")
     .select("generation_attempts")
@@ -324,6 +329,10 @@ export async function writeResetDisplayNameCandidateGeneration(
     })
     .eq("candidate_id", input.candidateId)
     .eq("lifecycle_status", "provisional")
+    .eq("ai_status", "pending")
+    .eq("input_hash", input.inputHash)
+    .eq("source_snapshot_hash", input.sourceSnapshotHash)
+    .eq("updated_at", input.claimedAt)
     .select("candidate_id")
     .maybeSingle();
   if (error) throw new Error(`Reset display name candidate result write failed: ${errorMessage(error)}`);
