@@ -221,6 +221,15 @@ function nonEmpty(value: string) {
   return value.trim().length > 0;
 }
 
+type ResetDisplayNameCandidateResultAiStatus = Exclude<
+  ResetDisplayNameCandidateAiStatus,
+  "unprocessed" | "pending"
+>;
+
+function isSeedOrClaimAiStatus(value: ResetDisplayNameCandidateAiStatus) {
+  return value === "unprocessed" || value === "pending";
+}
+
 export async function claimResetDisplayNameCandidateGeneration(
   client: ResetDisplayNameCandidateStoreClient,
   input: {
@@ -279,7 +288,7 @@ export async function writeResetDisplayNameCandidateGeneration(
     candidateId: string;
     sourceSnapshotHash: string;
     inputHash: string;
-    aiStatus: ResetDisplayNameCandidateAiStatus;
+    aiStatus: ResetDisplayNameCandidateResultAiStatus;
     aiInputMode: "notice-precompute-v1";
     result: RandomResetNameGenerationResult;
     retryAfterSeconds: number | null;
@@ -289,6 +298,9 @@ export async function writeResetDisplayNameCandidateGeneration(
 ): Promise<void> {
   if (!nonEmpty(input.claimedAt)) {
     throw new Error("Reset display name candidate result requires a claim token");
+  }
+  if (isSeedOrClaimAiStatus(input.aiStatus)) {
+    throw new Error("Reset display name candidate result cannot use a seed or claim status");
   }
 
   const existing = await client

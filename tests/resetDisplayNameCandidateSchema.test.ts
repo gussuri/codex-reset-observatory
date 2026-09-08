@@ -52,6 +52,7 @@ test("candidate seed serialization uses stable official notice identity", () => 
     /where\s+v_official_notice_tweet_id\s*=\s*any\s*\(notice_tweet_ids\)/i,
   );
   assert.match(sql, /notice_tweet_ids\s*&&\s*v_notice_tweet_ids/i);
+  assert.match(sql, /official_notice_tweet_id\s*=\s*v_candidate\.official_notice_tweet_id/i);
   assert.match(
     sql,
     /coalesce\(v_candidate\.logical_post_id,\s*v_logical_post_id\)/i,

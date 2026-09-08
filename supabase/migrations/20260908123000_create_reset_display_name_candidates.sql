@@ -178,6 +178,12 @@ begin
       'provisional'
     ) returning * into v_candidate;
   else
+    if v_candidate.logical_post_id is not null
+       and v_logical_post_id is not null
+       and v_candidate.logical_post_id <> v_logical_post_id then
+      raise exception using errcode = '21000', message = 'Candidate seed identity conflict';
+    end if;
+
     v_effective_logical_post_id := coalesce(v_candidate.logical_post_id, v_logical_post_id);
     v_notice_dedupe_key := coalesce(
       case when v_effective_logical_post_id is not null then 'logical-post:' || v_effective_logical_post_id end,
@@ -186,7 +192,7 @@ begin
 
     update public.reset_display_name_candidates
        set notice_dedupe_key = v_notice_dedupe_key,
-           official_notice_tweet_id = v_official_notice_tweet_id,
+           official_notice_tweet_id = v_candidate.official_notice_tweet_id,
            logical_post_id = v_effective_logical_post_id,
            notice_tweet_ids = (
              select coalesce(array_agg(distinct item order by item), '{}'::text[])

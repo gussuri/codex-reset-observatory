@@ -194,6 +194,10 @@ function fakeCandidateClient(): FakeCandidateClient {
         return Promise.resolve({ data: null, error: new Error("Candidate seed identity conflict") });
       }
       const existing = distinctCandidates[0];
+      if (existing && existing.logical_post_id !== null && seed.logical_post_id !== null &&
+        existing.logical_post_id !== seed.logical_post_id) {
+        return Promise.resolve({ data: null, error: new Error("Candidate seed identity conflict") });
+      }
       if (!existing) {
         const id = `candidate-${rows.size + 1}`;
         const record = databaseCandidate(candidate(id, {
@@ -390,9 +394,36 @@ test("a trusted edit alias rediscovers the same candidate on an old logical-null
   });
 
   assert.equal(trustedEdit.candidateId, initial.candidateId);
+  assert.equal(trustedEdit.officialNoticeTweetId, "notice-1");
   assert.equal(oldRetry.candidateId, initial.candidateId);
+  assert.equal(oldRetry.officialNoticeTweetId, "notice-1");
   assert.equal(oldRetry.noticeDedupeKey, "logical-post:logical-1");
   assert.deepEqual(oldRetry.noticeTweetIds, ["notice-1", "notice-2"]);
+});
+
+test("a conflicting trusted logical identity fails without changing the candidate", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: "logical-1",
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["source-1"],
+  });
+  const before = client.rows.get(seeded.candidateId)!;
+  const beforeSnapshot = {
+    ...before,
+    notice_tweet_ids: [...before.notice_tweet_ids],
+    source_tweet_ids: [...before.source_tweet_ids],
+  };
+
+  await assert.rejects(() => upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: "logical-2",
+    noticeTweetIds: ["notice-1", "notice-2"],
+    sourceTweetIds: ["source-1", "source-2"],
+  }), /conflict/i);
+
+  assert.deepEqual(client.rows.get(seeded.candidateId), beforeSnapshot);
 });
 
 test("a seed identity collision is reported without merging candidates", async () => {
@@ -642,6 +673,31 @@ test("a result write without a claim token is rejected", async () => {
     generatedAt: "2026-09-08T00:00:00.000Z",
     claimedAt: "",
   }), /claim token/);
+  assert.equal(client.resultWrites.length, 0);
+});
+
+test("seed and claim statuses cannot be written as generation results", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  for (const aiStatus of ["unprocessed", "pending"] as const) {
+    await assert.rejects(() => writeResetDisplayNameCandidateGeneration(client, {
+      candidateId: seeded.candidateId,
+      sourceSnapshotHash: "source-hash",
+      inputHash: "input-hash",
+      aiStatus,
+      aiInputMode: "notice-precompute-v1",
+      result: rateLimitedResult(null),
+      retryAfterSeconds: null,
+      generatedAt: "2026-09-08T00:00:00.000Z",
+      claimedAt: "claim-token",
+    } as never), /seed or claim status/);
+  }
   assert.equal(client.resultWrites.length, 0);
 });
 
