@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+
 import { getCanonicalResetHistoryForDisplayNameReconciliation } from "../radar";
 import { fetchCurrentRadarData } from "../radarFetch";
+import { fetchResetDisplayNameCandidateNoticeSignals } from "../radarFetch";
 import {
   getCanonicalResetDisplayNameEventKey,
   isAutoNameableCanonicalEvent,
@@ -19,12 +23,54 @@ import {
 import {
   RANDOM_RESET_NAME_MODEL,
   toRandomResetNameInput,
+  assessRandomResetNameResult,
+  type RandomResetNameGenerationResult,
 } from "./randomResetNaming";
+import {
+  generateResetDisplayNameCandidate,
+  type ResetDisplayNameCandidateNamingInput,
+} from "./resetDisplayNameCandidateNaming";
+import {
+  claimResetDisplayNameCandidateGeneration,
+  listResetDisplayNameCandidates,
+  upsertResetDisplayNameCandidateSeed,
+  writeResetDisplayNameCandidateGeneration,
+  type ResetDisplayNameCandidateStoreClient,
+} from "./resetDisplayNameCandidateStore";
+import {
+  isResetDisplayNameCandidateNoticeAfterAdoption,
+} from "./resetDisplayNameCandidateActivation";
+import {
+  type ResetDisplayNameCandidateActivation,
+  type ResetDisplayNameCandidateExecutionEvidence,
+  type ResetDisplayNameCandidateRecord,
+  type ResetDisplayNameCandidateSeed,
+} from "./resetDisplayNameCandidateTypes";
+import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
+import type { ResetExecutionEstimate } from "./resetExecution";
 import type { RadarData, ResetDisplayNameRecord, WindowEventLike } from "./types";
 
 export { isAutoNameableCanonicalEvent } from "./resetDisplayNameEligibility";
 
 const DEFAULT_MAX_GEMINI_REQUESTS = 3;
+const RESET_DISPLAY_NAME_CANDIDATE_STALE_PENDING_MS = 15 * 60 * 1000;
+
+export type ResetDisplayNameCandidateNotice = {
+  officialNoticeTweetId: string;
+  logicalPostId: string | null;
+  noticeTweetIds: string[];
+  sourceTweetIds: string[];
+  tweetCreatedAt: string;
+  noticeObservedAt: string;
+  expectedStartAt: string | null;
+  expectedEndAt: string | null;
+  temporalPrecision: string | null;
+  scope: string | null;
+  noticeType: string | null;
+  sourceUrl: string | null;
+  sourceContext: string | null;
+  isExecutionBearing: boolean;
+};
 
 export type ResetDisplayNameReconciliationOutcome = {
   eventKey: string | null;
@@ -43,6 +89,9 @@ export type ResetDisplayNameReconciliationResult = {
   writes: number;
   invalidated: boolean;
   outcomes: ResetDisplayNameReconciliationOutcome[];
+  candidateSeeds?: number;
+  candidateGeminiRequests?: number;
+  candidatePromotions?: number;
 };
 
 export type ResetDisplayNameReconciliationOptions = {
@@ -59,6 +108,10 @@ export type ResetDisplayNameReconciliationOptions = {
   fetchData?: (now: Date) => Promise<RadarData>;
   ensure?: typeof ensureResetDisplayNameForEvent;
   invalidateRadarData?: () => void | Promise<void>;
+  candidateActivation?: ResetDisplayNameCandidateActivation;
+  candidateNotices?: ReadonlyArray<ResetDisplayNameCandidateNotice>;
+  candidateStore?: ResetDisplayNameCandidateStoreClient;
+  candidateGenerate?: typeof generateResetDisplayNameCandidate;
 };
 
 export const RESET_DISPLAY_NAME_TRANSIENT_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
@@ -161,6 +214,153 @@ function collectSourceRows(data: RadarData): ResetDisplayNameSourceRow[] {
   return normalizeSourceRows(Array.from(rowsByTweetId.values()));
 }
 
+function uniqueExact(values: readonly string[]) {
+  return Array.from(new Set(values.filter((value) => value.length > 0)));
+}
+
+function candidateIdentityIds(candidate: ResetDisplayNameCandidateRecord) {
+  return uniqueExact([
+    candidate.officialNoticeTweetId,
+    ...candidate.noticeTweetIds,
+    ...candidate.sourceTweetIds,
+  ]);
+}
+
+function noticeIdentityIds(notice: ResetDisplayNameCandidateNotice) {
+  return uniqueExact([
+    notice.officialNoticeTweetId,
+    ...notice.noticeTweetIds,
+    ...notice.sourceTweetIds,
+  ]);
+}
+
+function candidateMatchesNotice(
+  candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
+) {
+  const candidateIds = new Set(candidateIdentityIds(candidate));
+  if (noticeIdentityIds(notice).some((id) => candidateIds.has(id))) return true;
+  return notice.logicalPostId !== null && candidate.logicalPostId === notice.logicalPostId;
+}
+
+function candidateSeedNeedsRefresh(
+  candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
+) {
+  const candidateNoticeIds = new Set(candidate.noticeTweetIds);
+  const candidateSourceIds = new Set(candidate.sourceTweetIds);
+  return (notice.logicalPostId !== null && candidate.logicalPostId === null) ||
+    notice.noticeTweetIds.some((id) => !candidateNoticeIds.has(id)) ||
+    notice.sourceTweetIds.some((id) => !candidateSourceIds.has(id));
+}
+
+function candidateSeedFromNotice(notice: ResetDisplayNameCandidateNotice): ResetDisplayNameCandidateSeed {
+  return {
+    officialNoticeTweetId: notice.officialNoticeTweetId,
+    logicalPostId: notice.logicalPostId,
+    noticeTweetIds: [...notice.noticeTweetIds],
+    sourceTweetIds: [...notice.sourceTweetIds],
+  };
+}
+
+export function discoverMissingResetDisplayNameCandidateSeeds(
+  notices: readonly ResetDisplayNameCandidateNotice[],
+  existing: readonly ResetDisplayNameCandidateRecord[],
+  activation: ResetDisplayNameCandidateActivation,
+) {
+  if (activation.mode === "off" || !activation.adoptionAt) return [];
+
+  return notices
+    .filter((notice) => notice.isExecutionBearing)
+    .filter((notice) => isResetDisplayNameCandidateNoticeAfterAdoption(
+      notice.tweetCreatedAt,
+      activation.adoptionAt!,
+    ))
+    .filter((notice) => {
+      const match = existing.find((candidate) => candidateMatchesNotice(candidate, notice));
+      return !match || candidateSeedNeedsRefresh(match, notice);
+    })
+    .map(candidateSeedFromNotice);
+}
+
+export function collectPersistedAuthoritativeCandidateExecutionEvidence(
+  adoptionLedgers: readonly TiboFormalAdoptionRecord[],
+  estimates: readonly ResetExecutionEstimate[],
+): ResetDisplayNameCandidateExecutionEvidence[] {
+  const formalEvidence = adoptionLedgers.map((ledger) => ({
+    resetEventKey: ledger.resetEventKey,
+    kind: "formal_adoption" as const,
+  }));
+  const monitorEvidence = estimates
+    .filter((estimate) => estimate.executionTimeSource === "usage_observation")
+    .filter((estimate) => typeof estimate.recoveryObservationId === "string" && estimate.recoveryObservationId.trim())
+    .map((estimate) => ({
+      resetEventKey: estimate.resetEventKey,
+      kind: "monitor_usage_estimate" as const,
+    }));
+  const seen = new Set<string>();
+  return [...formalEvidence, ...monitorEvidence].filter((evidence) => {
+    const key = `${evidence.kind}:${evidence.resetEventKey}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getCandidateStoreClient() {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) return null;
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  }) as unknown as ResetDisplayNameCandidateStoreClient;
+}
+
+function hashCandidateValue(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function candidateNoticeForRecord(
+  candidate: ResetDisplayNameCandidateRecord,
+  notices: readonly ResetDisplayNameCandidateNotice[],
+) {
+  return notices.find((notice) => candidateMatchesNotice(candidate, notice)) ?? null;
+}
+
+function candidateSourcePostText(
+  candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
+  notices: readonly ResetDisplayNameCandidateNotice[],
+) {
+  const sourceIds = new Set(candidate.sourceTweetIds);
+  const contexts = notices
+    .filter((source) => noticeIdentityIds(source).some((id) => sourceIds.has(id)))
+    .map((source) => source.sourceContext?.trim() ?? "")
+    .filter(Boolean);
+  if (contexts.length === 0 && notice.sourceContext?.trim()) contexts.push(notice.sourceContext.trim());
+  return uniqueExact(contexts).join("\n\n") || null;
+}
+
+function buildCandidateNamingInput(
+  candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
+  sourcePostText: string,
+): ResetDisplayNameCandidateNamingInput {
+  return {
+    officialNoticeTweetId: candidate.officialNoticeTweetId,
+    logicalPostId: candidate.logicalPostId ?? notice.logicalPostId,
+    noticeObservedAt: notice.noticeObservedAt,
+    expectedStartAt: notice.expectedStartAt,
+    expectedEndAt: notice.expectedEndAt,
+    temporalPrecision: notice.temporalPrecision,
+    scope: notice.scope,
+    noticeType: notice.noticeType,
+    sourceUrl: notice.sourceUrl,
+    sourcePostText,
+    sourceContext: notice.sourceContext,
+  };
+}
+
 function getCanonicalSourceTweetIds(item: WindowEventLike) {
   return Array.from(new Set([
     ...(item.sourceTweetIds ?? []),
@@ -214,6 +414,27 @@ function isWithinTransientRetryCooldown(
   return Number.isFinite(elapsed) &&
     elapsed >= 0 &&
     elapsed < RESET_DISPLAY_NAME_TRANSIENT_RETRY_COOLDOWN_MS;
+}
+
+function isWithinCandidateRetryCooldown(
+  record: ResetDisplayNameCandidateRecord,
+  now: Date,
+) {
+  if (record.aiStatus !== "rate_limited" || !record.nextRetryAt) return false;
+  const nextRetryAt = Date.parse(record.nextRetryAt);
+  return Number.isFinite(nextRetryAt) && nextRetryAt > now.getTime();
+}
+
+function shouldReuseCandidateResult(
+  record: ResetDisplayNameCandidateRecord,
+  inputHash: string,
+  model: string,
+) {
+  return record.inputHash === inputHash &&
+    record.aiModel === model &&
+    record.aiPromptVersion === "random-reset-name-v3" &&
+    record.aiInputMode === "notice-precompute-v1" &&
+    ["accepted", "null", "review_required"].includes(record.aiStatus);
 }
 
 function isSupabaseReadUnavailable(data: RadarData) {
@@ -271,6 +492,9 @@ export async function reconcileResetDisplayNames(
     writes: 0,
     invalidated: false,
     outcomes: [],
+    candidateSeeds: 0,
+    candidateGeminiRequests: 0,
+    candidatePromotions: 0,
   };
 
   if (isSupabaseReadUnavailable(data)) {
@@ -283,6 +507,53 @@ export async function reconcileResetDisplayNames(
       displayName: null,
     });
     return results;
+  }
+
+  const candidateActivation = options.candidateActivation ?? {
+    mode: "off" as const,
+    adoptionAt: null,
+  };
+  const candidateModeEnabled = candidateActivation.mode !== "off" &&
+    candidateActivation.adoptionAt !== null;
+  let candidateStore: ResetDisplayNameCandidateStoreClient | null = null;
+  let candidateNotices: ReadonlyArray<ResetDisplayNameCandidateNotice> = [];
+  let candidateRecords: ResetDisplayNameCandidateRecord[] = [];
+
+  if (candidateModeEnabled) {
+    candidateStore = options.candidateStore ?? getCandidateStoreClient();
+    candidateNotices = options.candidateNotices ?? await fetchResetDisplayNameCandidateNoticeSignals(candidateActivation);
+    if (candidateStore) {
+      try {
+        candidateRecords = await listResetDisplayNameCandidates(candidateStore);
+      } catch {
+        candidateRecords = [];
+      }
+    }
+  }
+
+  if (candidateModeEnabled && candidateStore) {
+    const seeds = discoverMissingResetDisplayNameCandidateSeeds(
+      candidateNotices,
+      candidateRecords,
+      candidateActivation,
+    );
+    if (options.dryRun) {
+      results.candidateSeeds = seeds.length;
+    } else {
+      for (const seed of seeds) {
+        try {
+          const record = await upsertResetDisplayNameCandidateSeed(candidateStore, seed);
+          results.candidateSeeds = (results.candidateSeeds ?? 0) + 1;
+          candidateRecords = [
+            ...candidateRecords.filter((candidate) => candidate.candidateId !== record.candidateId),
+            record,
+          ];
+        } catch {
+          // Candidate self-healing is auxiliary and cannot fail the canonical
+          // completed-event reconciliation.
+        }
+      }
+    }
   }
 
   const candidates: ReconciliationCandidate[] = [];
@@ -443,6 +714,102 @@ export async function reconcileResetDisplayNames(
       true,
       generation.displayName,
     ));
+  }
+
+  if (candidateActivation.mode === "full" && candidateStore) {
+    const candidateGenerate = options.candidateGenerate ?? generateResetDisplayNameCandidate;
+    const stalePendingBefore = new Date(
+      now.getTime() - RESET_DISPLAY_NAME_CANDIDATE_STALE_PENDING_MS,
+    ).toISOString();
+
+    for (const candidate of candidateRecords) {
+      if (candidate.lifecycleStatus !== "provisional") continue;
+      const notice = candidateNoticeForRecord(candidate, candidateNotices);
+      if (!notice || !notice.isExecutionBearing) continue;
+      if (!candidateActivation.adoptionAt || !isResetDisplayNameCandidateNoticeAfterAdoption(
+        notice.tweetCreatedAt,
+        candidateActivation.adoptionAt,
+      )) continue;
+
+      const sourcePostText = candidateSourcePostText(candidate, notice, candidateNotices);
+      if (!sourcePostText) continue;
+      const namingInput = buildCandidateNamingInput(candidate, notice, sourcePostText);
+      const sourceSnapshotHash = hashCandidateValue({
+        officialNoticeTweetId: candidate.officialNoticeTweetId,
+        logicalPostId: candidate.logicalPostId,
+        noticeTweetIds: candidate.noticeTweetIds,
+        sourceTweetIds: candidate.sourceTweetIds,
+        notice,
+        sourcePostText,
+      });
+      const inputHash = hashCandidateValue(namingInput);
+
+      if (shouldReuseCandidateResult(candidate, inputHash, model)) continue;
+      if (isWithinCandidateRetryCooldown(candidate, now)) continue;
+      if (!apiKey || results.geminiRequests >= maxGeminiRequests) continue;
+      if (options.dryRun) continue;
+
+      let claimed: ResetDisplayNameCandidateRecord | null;
+      try {
+        claimed = await claimResetDisplayNameCandidateGeneration(candidateStore, {
+          candidateId: candidate.candidateId,
+          sourceSnapshotHash,
+          inputHash,
+          now: now.toISOString(),
+          stalePendingBefore,
+        });
+      } catch {
+        continue;
+      }
+      if (!claimed) continue;
+
+      results.geminiRequests += 1;
+      results.attempted += 1;
+      results.candidateGeminiRequests = (results.candidateGeminiRequests ?? 0) + 1;
+
+      let generation: RandomResetNameGenerationResult;
+      try {
+        generation = await candidateGenerate(namingInput, {
+          apiKey,
+          model,
+          timeoutMs: options.timeoutMs,
+        });
+      } catch {
+        generation = {
+          name: null,
+          nameEn: null,
+          nameZh: null,
+          confidence: null,
+          evidence: null,
+          reason: null,
+          evidenceGrounded: null,
+          flags: [],
+          status: "api_error",
+          model,
+          latencyMs: 0,
+          httpStatus: null,
+          retryAfterSeconds: null,
+        };
+      }
+
+      const acceptance = assessRandomResetNameResult(generation);
+      try {
+        await writeResetDisplayNameCandidateGeneration(candidateStore, {
+          candidateId: candidate.candidateId,
+          sourceSnapshotHash,
+          inputHash,
+          aiStatus: acceptance.status,
+          aiInputMode: "notice-precompute-v1",
+          result: generation,
+          retryAfterSeconds: generation.retryAfterSeconds,
+          generatedAt: now.toISOString(),
+          claimedAt: claimed.updatedAt,
+        });
+      } catch {
+        // A stale or unavailable candidate result is isolated from the
+        // canonical event reconciliation and public cache.
+      }
+    }
   }
 
   if (wrote && options.invalidateRadarData) {

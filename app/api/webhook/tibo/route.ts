@@ -361,8 +361,8 @@ async function seedResetDisplayNameCandidateIfEligible(
     return;
   }
 
-  const isHistoricalOnly = candidate.temporal_kind === "historical" ||
-    candidate.ai_temporal_kind === "historical";
+  const isHistoricalOnly = (candidate.temporal_kind as unknown) === "historical" ||
+    (candidate.ai_temporal_kind as unknown) === "historical";
   const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(candidate.text);
   if (!isExecutionBearingResetDisplayNameNotice({
     signalType: candidate.signal_type,

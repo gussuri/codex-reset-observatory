@@ -6,6 +6,7 @@ import {
   type ResetDisplayNameReconciliationOptions,
   type ResetDisplayNameReconciliationResult,
 } from "./resetDisplayNameReconciliation";
+import { readResetDisplayNameCandidateActivation } from "./resetDisplayNameCandidateActivation";
 
 const MAX_GEMINI_REQUESTS = 3;
 export const RESET_DISPLAY_NAME_RECONCILER_ADOPTION_AT = "2026-09-04T09:30:00.000Z";
@@ -23,6 +24,7 @@ export function getResetDisplayNameReconciliationOptions(
     dryRun: false,
     maxGeminiRequests: MAX_GEMINI_REQUESTS,
     adoptionAt: new Date(RESET_DISPLAY_NAME_RECONCILER_ADOPTION_AT),
+    candidateActivation: readResetDisplayNameCandidateActivation(process.env),
     invalidateRadarData,
   };
 }

@@ -49,6 +49,15 @@ import {
 } from "@/lib/radar/nextGenerationTraining";
 import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
+import {
+  hasFutureBankedDistributionIntent,
+  isRecurringConditionalBankedDistributionNotice,
+} from "@/lib/radar/bankedReset";
+import {
+  isExecutionBearingResetDisplayNameNotice,
+  type ResetDisplayNameCandidateActivation,
+} from "@/lib/radar/resetDisplayNameCandidateTypes";
+import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNameReconciliation";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
@@ -208,6 +217,150 @@ async function fetchRawTiboHistorySignals(
   } catch (error) {
     console.error("Failed to load Tibo reset history", error);
     return { data: [], health: { state: "degraded", detail: "request_failed" } };
+  }
+}
+
+type CandidateNoticeRow = {
+  tweet_id?: unknown;
+  text?: unknown;
+  tweet_url?: unknown;
+  tweet_created_at?: unknown;
+  detected_at?: unknown;
+  signal_type?: unknown;
+  verification_status?: unknown;
+  is_reply?: unknown;
+  logical_post_id?: unknown;
+  edit_history_tweet_ids?: unknown;
+  edit_metadata_source?: unknown;
+  ai_temporal_kind?: unknown;
+  ai_temporal_precision?: unknown;
+  temporal_kind?: unknown;
+  temporal_precision?: unknown;
+  expected_start_at?: unknown;
+  expected_end_at?: unknown;
+  ai_reset_type_ja?: unknown;
+  scope?: unknown;
+};
+
+type CandidateNoticeQueryResult = {
+  data: unknown[] | null;
+  error: unknown | null;
+};
+
+function candidateNoticeRow(value: unknown): ResetDisplayNameCandidateNotice | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as CandidateNoticeRow;
+  if (
+    typeof row.tweet_id !== "string" ||
+    typeof row.text !== "string" ||
+    typeof row.tweet_created_at !== "string" ||
+    row.signal_type !== "official_notice"
+  ) {
+    return null;
+  }
+
+  const trusted = row.edit_metadata_source === "x_api" &&
+    typeof row.logical_post_id === "string" &&
+    row.logical_post_id.trim().length > 0 &&
+    Array.isArray(row.edit_history_tweet_ids) &&
+    row.edit_history_tweet_ids.every((id) => typeof id === "string" && id.length > 0);
+  const noticeTweetIds = trusted
+    ? Array.from(new Set([row.tweet_id, ...(row.edit_history_tweet_ids as string[])]))
+    : [row.tweet_id];
+  const isHistoricalOnly = row.temporal_kind === "historical" || row.ai_temporal_kind === "historical";
+  const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(row.text);
+
+  return {
+    officialNoticeTweetId: row.tweet_id,
+    logicalPostId: trusted ? (row.logical_post_id as string) : null,
+    noticeTweetIds,
+    sourceTweetIds: [...noticeTweetIds],
+    tweetCreatedAt: row.tweet_created_at,
+    noticeObservedAt: typeof row.detected_at === "string" ? row.detected_at : row.tweet_created_at,
+    expectedStartAt: typeof row.expected_start_at === "string" ? row.expected_start_at : null,
+    expectedEndAt: typeof row.expected_end_at === "string" ? row.expected_end_at : null,
+    temporalPrecision: typeof row.temporal_precision === "string"
+      ? row.temporal_precision
+      : typeof row.ai_temporal_precision === "string" ? row.ai_temporal_precision : null,
+    scope: typeof row.scope === "string" ? row.scope : null,
+    noticeType: typeof row.ai_reset_type_ja === "string" ? row.ai_reset_type_ja : null,
+    sourceUrl: typeof row.tweet_url === "string" ? row.tweet_url : null,
+    sourceContext: row.text,
+    isExecutionBearing: isExecutionBearingResetDisplayNameNotice({
+      signalType: "official_notice",
+      verificationStatus: typeof row.verification_status === "string" ? row.verification_status : null,
+      isReply: row.is_reply === true,
+      isHistoricalOnly,
+      isPresentationOnlyOngoingBanked,
+      hasFutureBankedDistributionIntent: hasFutureBankedDistributionIntent(row.text),
+    }),
+  };
+}
+
+/**
+ * Internal candidate input only. It deliberately has no RadarData/public DTO
+ * path and is bypassed entirely when candidate activation is off.
+ */
+export async function fetchResetDisplayNameCandidateNoticeSignals(
+  activation: ResetDisplayNameCandidateActivation,
+): Promise<ResetDisplayNameCandidateNotice[]> {
+  if (activation.mode === "off" || !activation.adoptionAt) return [];
+
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) return [];
+
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const fields = [
+      "tweet_id",
+      "text",
+      "tweet_url",
+      "tweet_created_at",
+      "detected_at",
+      "signal_type",
+      "verification_status",
+      "is_reply",
+      "logical_post_id",
+      "edit_history_tweet_ids",
+      "edit_metadata_source",
+      "ai_temporal_kind",
+      "ai_temporal_precision",
+      "temporal_kind",
+      "temporal_precision",
+      "expected_start_at",
+      "expected_end_at",
+      "ai_reset_type_ja",
+    ].join(",");
+    let result = (await supabase
+      .from("tibo_signals")
+      .select(fields)
+      .eq("signal_type", "official_notice")
+      .or("verification_status.is.null,verification_status.neq.rejected")
+      .or("is_reply.is.null,is_reply.eq.false")
+      .gte("tweet_created_at", activation.adoptionAt)
+      .order("tweet_created_at", { ascending: true })
+      .limit(1000)) as CandidateNoticeQueryResult;
+
+    if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+      result = (await supabase
+        .from("tibo_signals")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,verification_status,is_reply")
+        .eq("signal_type", "official_notice")
+        .or("verification_status.is.null,verification_status.neq.rejected")
+        .or("is_reply.is.null,is_reply.eq.false")
+        .gte("tweet_created_at", activation.adoptionAt)
+        .order("tweet_created_at", { ascending: true })
+        .limit(1000)) as CandidateNoticeQueryResult;
+    }
+    if (result.error || !Array.isArray(result.data)) return [];
+    return result.data
+      .map(candidateNoticeRow)
+      .filter((notice): notice is ResetDisplayNameCandidateNotice => Boolean(notice));
+  } catch {
+    return [];
   }
 }
 
