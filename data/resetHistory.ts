@@ -9,12 +9,35 @@ export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全29件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
+ * 全30件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.cycleType distinguishes regular and random resets, while recordKind
  * remains an independent record classification and resetMethod describes how
  * the reset was delivered.
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    "id": "local-codex-rolling-notice-reset-2026-09-08",
+    "recordKind": "confirmed_global",
+    "title": "公式予告リセット（順次適用中）",
+    "kind": "reset_completed",
+    "status": "closed",
+    "opened_at": "2026-09-08T01:00:00.000Z",
+    "closed_at": "2026-09-08T01:58:00.000Z",
+    "completed_at": "2026-09-08T01:58:00.000Z",
+    "window_minutes": 58,
+    "scope": "全有料プラン（順次適用中）",
+    "summary": "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
+    "source_url": "https://x.com/thsottiaux",
+    "details": {
+      "cycleType": "ランダムリセット",
+      "reasonType": "ご祝儀リセット",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン（順次適用中）",
+      "noticeToExecution": "58分",
+      "noticeType": "公式予告あり",
+      "note": "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。"
+    }
+  },
   {
     "id": "local-codex-regular-reset-2026-08-08",
     "recordKind": "reference",

@@ -1410,6 +1410,31 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "15 Million Active Users Milestone Reset",
     zh: "活跃用户突破1500万纪念重置",
   },
+  "公式予告リセット（順次適用中）": {
+    ja: "公式予告リセット（順次適用中）",
+    en: "Official Notice Reset (Rolling Out)",
+    zh: "官方预告重置（分批应用中）",
+  },
+  "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。": {
+    ja: "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
+    en: "Usage limit resets were observed for some users around the scheduled notice time. Some accounts report no reset yet, suggesting a progressive rollout is underway.",
+    zh: "在官方预告时间前后，部分用户的使用额度已完成重置。亦有部分账号反馈尚未重置，目前可能正在分批推送中。",
+  },
+  "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。": {
+    ja: "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。",
+    en: "Usage quota recovery has been observed for some users, but unreset accounts have also been reported. A progressive rollout or investigation may be underway.",
+    zh: "部分用户已确认使用额度恢复，但仍有部分账号反馈未重置，目前可能正在分批应用或调查中。",
+  },
+  "全有料プラン（順次適用中）": {
+    ja: "全有料プラン（順次適用中）",
+    en: "All paid plans (Rolling out)",
+    zh: "所有付费方案（分批应用中）",
+  },
+  "58分": {
+    ja: "58分",
+    en: "58 minutes",
+    zh: "58 分钟",
+  },
   "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。": {
     ja: "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     en: "To celebrate Codex surpassing 15 million active users, usage limits for ChatGPT Work and Codex were forcibly reset.",
