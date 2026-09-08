@@ -39,7 +39,7 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "scope": "全有料プラン",
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
-      "note": "Tibo氏より公式予告が行われ、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了が告知されました。"
+      "note": "Tibo氏より公式予告が行われ、各アカウントへ順次リセットが行われました。"
     }
   },
   {
