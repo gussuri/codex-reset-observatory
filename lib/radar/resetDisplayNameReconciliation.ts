@@ -14,6 +14,13 @@ import {
   type ResetDisplayNameSourceRow,
 } from "./resetDisplayNameSourceContext";
 import {
+  buildTiboReadSideProjection,
+} from "./tiboLogicalProjection";
+import {
+  resolveTiboResetEventIdentity,
+  type TiboResetEventReference,
+} from "./tiboResetEventIdentity";
+import {
   ensureResetDisplayNameForEvent,
   hashResetDisplayNameInput,
   isSafeAcceptedPrecomputedResetDisplayName,
@@ -34,6 +41,7 @@ import {
 import {
   claimResetDisplayNameCandidateGeneration,
   listResetDisplayNameCandidates,
+  promoteResetDisplayNameCandidate,
   upsertResetDisplayNameCandidateSeed,
   writeResetDisplayNameCandidateGeneration,
   type ResetDisplayNameCandidateStoreClient,
@@ -44,6 +52,7 @@ import {
 import {
   type ResetDisplayNameCandidateActivation,
   type ResetDisplayNameCandidateExecutionEvidence,
+  type ResetDisplayNameCandidatePromotionResolution,
   type ResetDisplayNameCandidateRecord,
   type ResetDisplayNameCandidateSeed,
 } from "./resetDisplayNameCandidateTypes";
@@ -359,6 +368,66 @@ function buildCandidateNamingInput(
     sourceUrl: notice.sourceUrl,
     sourcePostText,
     sourceContext: notice.sourceContext,
+  };
+}
+
+function toResetEventReference(item: WindowEventLike): TiboResetEventReference | null {
+  const eventKey = typeof item.id === "string" ? item.id.trim() : "";
+  if (!eventKey) return null;
+  return {
+    eventKey,
+    sourceTweetIds: item.sourceTweetIds ?? [],
+    sourceUrl: item.source_url ?? null,
+  };
+}
+
+function findCandidateLogicalPost(
+  candidate: ResetDisplayNameCandidateRecord,
+  data: RadarData,
+) {
+  const projection = buildTiboReadSideProjection({
+    active_tibo_signals: data.active_tibo_signals,
+    recent_tibo_signals: data.recent_tibo_signals,
+    formal_tibo_resets: data.formal_tibo_resets,
+  });
+  const candidateIds = new Set(candidateIdentityIds(candidate));
+  return projection.logicalPosts.find((post) =>
+    (candidate.logicalPostId !== null && post.logicalPostId === candidate.logicalPostId) ||
+    post.sourceTweetIds.some((tweetId) => candidateIds.has(tweetId)),
+  ) ?? null;
+}
+
+function getCandidatePromotionContext(
+  candidate: ResetDisplayNameCandidateRecord,
+  data: RadarData,
+  history: readonly WindowEventLike[],
+): {
+  identityResolution: ResetDisplayNameCandidatePromotionResolution;
+  authoritativeEvidence: readonly ResetDisplayNameCandidateExecutionEvidence[];
+  canonicalSourceTweetId: string | null;
+} | null {
+  const logicalPost = findCandidateLogicalPost(candidate, data);
+  if (!logicalPost) return null;
+
+  const resolution = resolveTiboResetEventIdentity(logicalPost, {
+    adoptionLedgers: data.tibo_formal_adoptions ?? [],
+    estimates: data.reset_execution_estimates ?? [],
+    staticHistory: history
+      .map(toResetEventReference)
+      .filter((reference): reference is TiboResetEventReference => Boolean(reference)),
+    sourceTweetIds: candidateIdentityIds(candidate),
+  });
+  return {
+    identityResolution: {
+      status: resolution.status,
+      resetEventKey: resolution.resetEventKey,
+      matchedEvidenceEventKey: resolution.matchedEvidence?.resetEventKey ?? null,
+    },
+    authoritativeEvidence: collectPersistedAuthoritativeCandidateExecutionEvidence(
+      data.tibo_formal_adoptions ?? [],
+      data.reset_execution_estimates ?? [],
+    ),
+    canonicalSourceTweetId: resolution.sourceTweetIds[0] ?? candidate.officialNoticeTweetId,
   };
 }
 
@@ -818,6 +887,49 @@ export async function reconcileResetDisplayNames(
       } catch {
         // A stale or unavailable candidate result is isolated from the
         // canonical event reconciliation and public cache.
+      }
+    }
+
+    if (!options.dryRun) {
+      try {
+        candidateRecords = await listResetDisplayNameCandidates(candidateStore);
+      } catch {
+        // A stale read can only defer promotion; it must not affect canonical work.
+      }
+    }
+
+    if (!options.dryRun) {
+      for (const candidate of candidateRecords) {
+        if (candidate.lifecycleStatus !== "provisional" || candidate.aiStatus !== "accepted") continue;
+        const notice = candidateNoticeForRecord(candidate, candidateNotices);
+        if (!notice || !notice.isExecutionBearing) continue;
+        if (!candidateActivation.adoptionAt || !isResetDisplayNameCandidateNoticeAfterAdoption(
+          notice.tweetCreatedAt,
+          candidateActivation.adoptionAt,
+        )) continue;
+
+        const context = getCandidatePromotionContext(candidate, data, history);
+        if (!context) continue;
+
+        try {
+          const promotion = await promoteResetDisplayNameCandidate(candidateStore, {
+            candidateId: candidate.candidateId,
+            canonicalEventKey: context.identityResolution.resetEventKey ?? "",
+            canonicalSourceTweetId: context.canonicalSourceTweetId,
+            promotedAt: now.toISOString(),
+            identityResolution: context.identityResolution,
+            authoritativeEvidence: context.authoritativeEvidence,
+          });
+          if (promotion.status === "promoted" || promotion.status === "already_promoted") {
+            results.candidatePromotions = (results.candidatePromotions ?? 0) + 1;
+          }
+          if (promotion.canonicalWrite) {
+            results.writes += 1;
+            wrote = true;
+          }
+        } catch {
+          // Promotion is best-effort and cannot roll back authoritative execution evidence.
+        }
       }
     }
   }

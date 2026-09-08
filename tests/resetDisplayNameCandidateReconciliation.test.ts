@@ -156,10 +156,29 @@ function fakeCandidateStore(initial: ResetDisplayNameCandidateRecord[] = []) {
   const rows = new Map(initial.map((value) => [value.candidateId, toDatabase(value)]));
   let seedWrites = 0;
   let candidateResultWrites = 0;
+  let promotionWrites = 0;
   const client = {
     rpc(name: "upsert_reset_display_name_candidate_seed" | "promote_reset_display_name_candidate", args: Record<string, unknown>) {
-      if (name !== "upsert_reset_display_name_candidate_seed") {
-        return Promise.resolve({ data: null, error: new Error("unexpected RPC") });
+      if (name === "promote_reset_display_name_candidate") {
+        const candidateId = typeof args.p_candidate_id === "string" ? args.p_candidate_id : null;
+        const canonicalEventKey = typeof args.p_canonical_event_key === "string"
+          ? args.p_canonical_event_key
+          : null;
+        const row = candidateId ? rows.get(candidateId) : undefined;
+        if (!row || !canonicalEventKey) {
+          return Promise.resolve({
+            data: { status: "missing", canonicalWrite: false, canonicalEventKey: null },
+            error: null,
+          });
+        }
+        promotionWrites += 1;
+        row.lifecycle_status = "promoted";
+        row.promoted_event_key = canonicalEventKey;
+        row.promoted_at = String(args.p_promoted_at ?? "");
+        return Promise.resolve({
+          data: { status: "promoted", canonicalWrite: true, canonicalEventKey },
+          error: null,
+        });
       }
       seedWrites += 1;
       const seed = args.p_seed as ResetDisplayNameCandidateSeed & {
@@ -256,6 +275,7 @@ function fakeCandidateStore(initial: ResetDisplayNameCandidateRecord[] = []) {
     get rows() { return Array.from(rows.values()).map(fromDatabase); },
     get seedWrites() { return seedWrites; },
     get candidateResultWrites() { return candidateResultWrites; },
+    get promotionWrites() { return promotionWrites; },
   };
 }
 
@@ -460,6 +480,148 @@ test("candidate-only work never invalidates the public radar cache", async () =>
 test("a resolver-created key is not promoted without persisted authoritative evidence", async () => {
   const evidence = collectPersistedAuthoritativeCandidateExecutionEvidence([], []);
   assert.deepEqual(evidence, []);
+});
+
+test("full reconciliation promotes an accepted candidate only after persisted execution evidence", async () => {
+  const officialNoticeTweetId = "2090000000000000001";
+  const logicalPostId = "2090000000000000100";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-1", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    sourceSnapshotHash: "notice-snapshot",
+    inputHash: "notice-input",
+    aiNameJa: "Astra記念リセット",
+    aiNameEn: "Astra Celebration Reset",
+    aiNameZh: "Astra纪念重置",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const adoption: TiboFormalAdoptionRecord = {
+    id: "adoption-1",
+    logicalPostId,
+    logicalPostTweetIds: [officialNoticeTweetId],
+    resetEventKey: "canonical-event-key",
+    representativeTweetId: officialNoticeTweetId,
+    sourceTweetIds: [officialNoticeTweetId],
+    claimSource: "new_adoption",
+    adoptedAt: CANDIDATE_TIMESTAMP,
+    claimedAt: CANDIDATE_TIMESTAMP,
+    createdAt: CANDIDATE_TIMESTAMP,
+    updatedAt: CANDIDATE_TIMESTAMP,
+  };
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      tibo_formal_adoptions: [adoption],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent("canonical-event-key")],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+  });
+
+  assert.equal(result.candidatePromotions, 1);
+  assert.equal(candidateStorage.promotionWrites, 1);
+  assert.equal(result.writes, 1);
+  assert.equal(result.invalidated, false);
+});
+
+test("dry-run reconciliation never promotes an accepted candidate", async () => {
+  const officialNoticeTweetId = "2090000000000000002";
+  const logicalPostId = "2090000000000000101";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-dry-run", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    sourceSnapshotHash: "notice-snapshot",
+    inputHash: "notice-input",
+    aiNameJa: "Astra記念リセット",
+    aiNameEn: "Astra Celebration Reset",
+    aiNameZh: "Astra纪念重置",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const adoption: TiboFormalAdoptionRecord = {
+    id: "adoption-dry-run",
+    logicalPostId,
+    logicalPostTweetIds: [officialNoticeTweetId],
+    resetEventKey: "canonical-dry-run-key",
+    representativeTweetId: officialNoticeTweetId,
+    sourceTweetIds: [officialNoticeTweetId],
+    claimSource: "new_adoption",
+    adoptedAt: CANDIDATE_TIMESTAMP,
+    claimedAt: CANDIDATE_TIMESTAMP,
+    createdAt: CANDIDATE_TIMESTAMP,
+    updatedAt: CANDIDATE_TIMESTAMP,
+  };
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      tibo_formal_adoptions: [adoption],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent("canonical-dry-run-key")],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    dryRun: true,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+  });
+
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(candidateStorage.promotionWrites, 0);
+  assert.equal(candidateStorage.rows[0]?.lifecycleStatus, "provisional");
 });
 
 test("self-healing uses persisted tweetCreatedAt rather than noticeObservedAt for the cutoff", async () => {
