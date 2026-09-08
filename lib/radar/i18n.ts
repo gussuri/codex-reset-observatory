@@ -1410,6 +1410,16 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "15 Million Active Users Milestone Reset",
     zh: "活跃用户突破1500万纪念重置",
   },
+  "君を絶対に諦めないリセット": {
+    ja: "君を絶対に諦めないリセット",
+    en: "Never Gonna Give You Up Reset",
+    zh: "绝不放弃你重置",
+  },
+  "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。": {
+    ja: "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
+    en: "Following the 'Never Gonna Give You Up' teaser notice, usage limits for Codex and ChatGPT Work were forcibly reset for all users.",
+    zh: "根据“绝不放弃你”（Never Gonna Give You Up）预告，Codex 和 ChatGPT Work 的使用额度对全体用户执行了强制重置。",
+  },
   "公式予告リセット（順次適用中）": {
     ja: "公式予告リセット（順次適用中）",
     en: "Official Notice Reset (Rolling Out)",

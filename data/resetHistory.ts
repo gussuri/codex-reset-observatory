@@ -18,15 +18,15 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
   {
     "id": "local-codex-rolling-notice-reset-2026-09-08",
     "recordKind": "confirmed_global",
-    "title": "公式予告リセット（順次適用中）",
+    "title": "君を絶対に諦めないリセット",
     "kind": "reset_completed",
     "status": "closed",
     "opened_at": "2026-09-07T19:24:57.000Z",
     "closed_at": "2026-09-08T01:30:00.000Z",
     "completed_at": "2026-09-08T01:30:00.000Z",
     "window_minutes": 365,
-    "scope": "",
-    "summary": "公式予告の予定時刻前後に一部ユーザーで利用上限リセットが確認されました。アカウントにより未反映の報告もあり、現在順次ロールアウト中と見られます。",
+    "scope": "全有料プラン",
+    "summary": "Tibo氏による『Never Gonna Give You Up』（君を絶対に諦めない）予告に基づき、CodexおよびChatGPT Workの利用上限が全ユーザー強制リセットされました。",
     "source_url": "https://x.com/thsottiaux/status/2097043464538264003",
     "sourceTweetIds": [
       "2097043464538264003"
@@ -36,10 +36,10 @@ export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
       "cycleType": "ランダムリセット",
       "reasonType": "ご祝儀リセット",
       "resetMethod": "強制リセット",
-      "scope": "",
+      "scope": "全有料プラン",
       "noticeToExecution": "6時間5分",
       "noticeType": "公式予告あり",
-      "note": "一部のユーザーで利用枠の回復が確認されていますが、未反映のアカウントも報告されており、順次ロールアウト中または調査中と見られます。"
+      "note": "Tibo氏がRick Astley『Never Gonna Give You Up』の歌詞（頭文字で『RESET』の縦読み）で予告を行い、その後「All reset for everyone. Enjoy the week with Astra.」と全ユーザーへの反映完了を告知しました。"
     }
   },
   {

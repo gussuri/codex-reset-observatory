@@ -509,30 +509,29 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
   });
 
   it("P. 2026-09-08 rolling notice reset absorbs delayed monitor recoveries without duplicating history", () => {
-    const lateObservation: CodexRecoveryObservationInput = {
+    const lateObservation = {
       id: "rec-late-monitor-user",
+      sourceKey: "local-codex-app-server",
       observedAt: "2026-09-08T05:30:00.000Z",
       previousObservedAt: "2026-09-08T05:25:00.000Z",
       previousUsedPercent: 95,
       currentUsedPercent: 0,
       previousResetsAt: 1788800000,
       currentResetsAt: 1789400000,
-      cycleHint: "unexpected",
-      confidence: "strong",
-      status: "confirmed",
+      cycleHint: "unexpected" as const,
+      confidence: "strong" as const,
+      status: "confirmed" as const,
     };
 
     const lateEstimate = buildResetExecutionEstimate({
       resetEventKey: `usage-reset-${lateObservation.id}`,
-      displayExecutionAt: lateObservation.observedAt,
-      executionWindowStartAt: lateObservation.previousObservedAt,
-      executionWindowEndAt: lateObservation.observedAt,
       usageObservation: lateObservation,
       isMonitorObserved: true,
     })!;
 
     const noticeSignal = {
       tweet_id: "2097043464538264003",
+      tweet_url: "https://x.com/thsottiaux/status/2097043464538264003",
       tweet_created_at: "2026-09-07T19:24:57.000Z",
       signal_type: "official_notice" as const,
       confidence: 0.99,
@@ -552,9 +551,9 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
 
     assert.equal(combined.length, LOCAL_RESET_HISTORY.length);
     assert.equal(combined[0]?.id, "local-codex-rolling-notice-reset-2026-09-08");
-    assert.equal(combined[0]?.title, "公式予告リセット（順次適用中）");
+    assert.equal(combined[0]?.title, "君を絶対に諦めないリセット");
     assert.equal(combined[0]?.recoveryObservationId, "rec-late-monitor-user");
-    assert.equal(combined[0]?.scope, "");
-    assert.equal(combined[0]?.details?.scope, "");
+    assert.equal(combined[0]?.scope, "全有料プラン");
+    assert.equal(combined[0]?.details?.scope, "全有料プラン");
   });
 });
