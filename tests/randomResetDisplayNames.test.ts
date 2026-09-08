@@ -31,6 +31,7 @@ import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import {
   getResetDisplayNameWritePayload,
   hashResetDisplayNameInput,
+  isSafeAcceptedPrecomputedResetDisplayName,
   shouldPreserveExistingAcceptedResetDisplayName,
   shouldSkipResetDisplayNameGenerationWithoutSource,
   shouldReuseResetDisplayNameResult,
@@ -365,6 +366,26 @@ test("existing accepted v1 names are preserved and source-less events skip Gemin
   assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource(null), true);
   assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource("  "), true);
   assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource("Original Tibo post"), false);
+});
+
+test("safe accepted notice-precomputed names require explicit provenance", () => {
+  const precomputed = acceptedRecord({
+    ai_name_en: "Astra Celebration Reset",
+    ai_name_zh: "Astra纪念重置",
+    ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
+    ai_input_mode: "notice-precompute-v1",
+    ai_confidence: null,
+    ai_evidence: null,
+  });
+  assert.equal(isSafeAcceptedPrecomputedResetDisplayName(precomputed), true);
+  assert.equal(
+    isSafeAcceptedPrecomputedResetDisplayName({ ...precomputed, ai_input_mode: "metadata+source" }),
+    false,
+  );
+  assert.equal(
+    isSafeAcceptedPrecomputedResetDisplayName({ ...precomputed, ai_flags: ["unsupported_official_claim"] }),
+    false,
+  );
 });
 
 test("accepted-only backfill writes are explicit and retryable failures stay retryable", () => {

@@ -16,6 +16,7 @@ import {
 import {
   ensureResetDisplayNameForEvent,
   hashResetDisplayNameInput,
+  isSafeAcceptedPrecomputedResetDisplayName,
   shouldPreserveExistingAcceptedResetDisplayName,
   shouldReuseResetDisplayNameResult,
   type ResetDisplayNameGenerationOutcome,
@@ -645,6 +646,15 @@ export async function reconcileResetDisplayNames(
       results.outcomes.push(outcome(
         candidate,
         "preserved_legacy_accepted",
+        false,
+        candidate.existing?.ai_name_ja ?? null,
+      ));
+      continue;
+    }
+    if (isSafeAcceptedPrecomputedResetDisplayName(candidate.existing)) {
+      results.outcomes.push(outcome(
+        candidate,
+        "preserved_precomputed",
         false,
         candidate.existing?.ai_name_ja ?? null,
       ));

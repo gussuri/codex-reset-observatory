@@ -22,6 +22,7 @@ import {
 } from "./resetDisplayNameEligibility";
 import {
   getResetDisplayNameSourceTweetId,
+  isSafeStoredAiResetName,
 } from "./resetDisplayNames";
 import {
   runManualResetDisplayNameOverride,
@@ -258,6 +259,12 @@ export function shouldPreserveExistingAcceptedResetDisplayName(
   );
 }
 
+export function isSafeAcceptedPrecomputedResetDisplayName(
+  record: ResetDisplayNameRecord | null | undefined,
+) {
+  return record?.ai_input_mode === "notice-precompute-v1" && isSafeStoredAiResetName(record);
+}
+
 export function shouldSkipResetDisplayNameGenerationWithoutSource(
   sourcePostText: string | null | undefined,
 ) {
@@ -388,6 +395,15 @@ export async function ensureResetDisplayNameForEvent(
     return {
       eventKey,
       status: "preserved_legacy_accepted",
+      displayName: existingAiName,
+      inputMode,
+      skipped: true,
+    };
+  }
+  if (isSafeAcceptedPrecomputedResetDisplayName(existing) && existingAiName) {
+    return {
+      eventKey,
+      status: "preserved_precomputed",
       displayName: existingAiName,
       inputMode,
       skipped: true,

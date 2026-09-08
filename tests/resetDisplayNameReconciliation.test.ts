@@ -395,6 +395,49 @@ test("manual and legacy accepted V2 names are protected before Gemini", async ()
   assert.equal(calls, 0);
 });
 
+test("promoted notice-precomputed names survive a completed-event hash mismatch", async () => {
+  let ensureCalls = 0;
+  const precomputed: ResetDisplayNameRecord = {
+    event_key: "canonical-event-key",
+    source_tweet_id: TWEET_ID,
+    manual_name_ja: null,
+    manual_name_en: null,
+    manual_name_zh: null,
+    ai_name_ja: "Astra記念リセット",
+    ai_name_en: "Astra Celebration Reset",
+    ai_name_zh: "Astra纪念重置",
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: "notice-based accepted name",
+    ai_model: "gemini-3.5-flash-lite",
+    ai_prompt_version: "random-reset-name-v3",
+    ai_input_mode: "notice-precompute-v1",
+    ai_status: "accepted",
+    ai_flags: [],
+    ai_generated_at: "2026-09-04T09:00:00.000Z",
+    input_hash: "notice-input-hash",
+    updated_at: "2026-09-04T09:00:00.000Z",
+  };
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [sourceSignal()],
+      reset_display_names: [precomputed],
+    } as RadarData,
+    canonicalHistory: [resetEvent()],
+    now: NOW,
+    apiKey: "test-key",
+    ensure: async () => {
+      ensureCalls += 1;
+      return acceptedOutcome("canonical-event-key");
+    },
+  });
+
+  assert.equal(result.outcomes[0]?.status, "preserved_precomputed");
+  assert.equal(ensureCalls, 0);
+  assert.equal(result.writes, 0);
+  assert.equal(result.geminiRequests, 0);
+});
+
 test("display-name read failures defer reconciliation instead of treating rows as absent", async () => {
   let calls = 0;
   const result = await reconcileResetDisplayNames({
