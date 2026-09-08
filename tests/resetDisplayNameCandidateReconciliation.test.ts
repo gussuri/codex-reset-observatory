@@ -152,7 +152,10 @@ function fromDatabase(value: DatabaseCandidate): ResetDisplayNameCandidateRecord
   };
 }
 
-function fakeCandidateStore(initial: ResetDisplayNameCandidateRecord[] = []) {
+function fakeCandidateStore(
+  initial: ResetDisplayNameCandidateRecord[] = [],
+  options: { failPromotion?: boolean } = {},
+) {
   const rows = new Map(initial.map((value) => [value.candidateId, toDatabase(value)]));
   let seedWrites = 0;
   let candidateResultWrites = 0;
@@ -160,6 +163,12 @@ function fakeCandidateStore(initial: ResetDisplayNameCandidateRecord[] = []) {
   const client = {
     rpc(name: "upsert_reset_display_name_candidate_seed" | "promote_reset_display_name_candidate", args: Record<string, unknown>) {
       if (name === "promote_reset_display_name_candidate") {
+        if (options.failPromotion) {
+          return Promise.resolve({
+            data: null,
+            error: { message: "promotion failed" },
+          });
+        }
         const candidateId = typeof args.p_candidate_id === "string" ? args.p_candidate_id : null;
         const canonicalEventKey = typeof args.p_canonical_event_key === "string"
           ? args.p_canonical_event_key
@@ -321,6 +330,72 @@ function resetEvent(eventKey: string): WindowEventLike {
       noticeToExecution: "0分",
       noticeType: "公式予告あり",
     },
+  };
+}
+
+function acceptedCandidatePromotionFixture(options: { failPromotion?: boolean } = {}) {
+  const officialNoticeTweetId = "2090000000000000007";
+  const logicalPostId = "2090000000000000105";
+  const canonicalEventKey = "canonical-precomputed-order-key";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-precomputed-order", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    sourceSnapshotHash: "notice-snapshot",
+    inputHash: "notice-input",
+    aiNameJa: "予告済みリセット",
+    aiNameEn: "Precomputed Reset",
+    aiNameZh: "预计算重置",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })], options);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const adoption: TiboFormalAdoptionRecord = {
+    id: "adoption-precomputed-order",
+    logicalPostId,
+    logicalPostTweetIds: [officialNoticeTweetId],
+    resetEventKey: canonicalEventKey,
+    representativeTweetId: officialNoticeTweetId,
+    sourceTweetIds: [officialNoticeTweetId],
+    claimSource: "new_adoption",
+    adoptedAt: CANDIDATE_TIMESTAMP,
+    claimedAt: CANDIDATE_TIMESTAMP,
+    createdAt: CANDIDATE_TIMESTAMP,
+    updatedAt: CANDIDATE_TIMESTAMP,
+  };
+  const history = [{
+    ...resetEvent(canonicalEventKey),
+    sourceTweetIds: [officialNoticeTweetId],
+    source_url: `https://x.test/${officialNoticeTweetId}`,
+  }];
+
+  return {
+    candidateStorage,
+    canonicalEventKey,
+    data: {
+      formal_tibo_resets: [formalNotice],
+      tibo_formal_adoptions: [adoption],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: history,
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
   };
 }
 
@@ -551,6 +626,119 @@ test("full reconciliation promotes an accepted candidate only after persisted ex
   assert.equal(candidateStorage.promotionWrites, 1);
   assert.equal(result.writes, 1);
   assert.equal(result.invalidated, false);
+});
+
+test("promotes an accepted authoritative candidate before completed naming", async () => {
+  const fixture = acceptedCandidatePromotionFixture();
+  let completedGeminiCalls = 0;
+  let candidateGeminiCalls = 0;
+
+  const result = await reconcileResetDisplayNames({
+    data: fixture.data,
+    canonicalHistory: fixture.canonicalHistory,
+    now: NOW,
+    apiKey: "test-key",
+    maxGeminiRequests: 3,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: fixture.candidateNotices,
+    candidateStore: fixture.candidateStorage.client,
+    candidateGenerate: async () => {
+      candidateGeminiCalls += 1;
+      return successResult();
+    },
+    ensure: async () => {
+      completedGeminiCalls += 1;
+      return {
+        eventKey: fixture.canonicalEventKey,
+        status: "accepted",
+        displayName: "Completed reset",
+        inputMode: "metadata+source",
+        skipped: false,
+      };
+    },
+  });
+
+  assert.equal(result.candidatePromotions, 1);
+  assert.equal(fixture.candidateStorage.promotionWrites, 1);
+  assert.equal(result.writes, 1);
+  assert.equal(completedGeminiCalls, 0);
+  assert.equal(candidateGeminiCalls, 0);
+});
+
+test("without an accepted candidate, completed naming remains the fallback", async () => {
+  const fixture = acceptedCandidatePromotionFixture();
+  const candidateStorage = fakeCandidateStore([candidate("candidate-unprocessed-order", {
+    noticeDedupeKey: "logical-post:2090000000000000105",
+    officialNoticeTweetId: "2090000000000000007",
+    logicalPostId: "2090000000000000105",
+    noticeTweetIds: ["2090000000000000007"],
+    sourceTweetIds: ["2090000000000000007"],
+  })]);
+  let completedGeminiCalls = 0;
+
+  const result = await reconcileResetDisplayNames({
+    data: fixture.data,
+    canonicalHistory: fixture.canonicalHistory,
+    now: NOW,
+    apiKey: "test-key",
+    maxGeminiRequests: 3,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: fixture.candidateNotices,
+    candidateStore: candidateStorage.client,
+    ensure: async () => {
+      completedGeminiCalls += 1;
+      return {
+        eventKey: fixture.canonicalEventKey,
+        status: "accepted",
+        displayName: "Completed reset",
+        inputMode: "metadata+source",
+        skipped: false,
+      };
+    },
+  });
+
+  assert.equal(completedGeminiCalls, 1);
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(candidateStorage.promotionWrites, 0);
+});
+
+test("promotion failure falls back to completed naming", async () => {
+  const fixture = acceptedCandidatePromotionFixture({ failPromotion: true });
+  let completedGeminiCalls = 0;
+
+  const result = await reconcileResetDisplayNames({
+    data: fixture.data,
+    canonicalHistory: fixture.canonicalHistory,
+    now: NOW,
+    apiKey: "test-key",
+    maxGeminiRequests: 3,
+    candidateActivation: {
+      mode: "full",
+      adoptionAt: "2026-09-01T00:00:00.000Z",
+    },
+    candidateNotices: fixture.candidateNotices,
+    candidateStore: fixture.candidateStorage.client,
+    ensure: async () => {
+      completedGeminiCalls += 1;
+      return {
+        eventKey: fixture.canonicalEventKey,
+        status: "accepted",
+        displayName: "Completed reset",
+        inputMode: "metadata+source",
+        skipped: false,
+      };
+    },
+  });
+
+  assert.equal(completedGeminiCalls, 1);
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(fixture.candidateStorage.promotionWrites, 0);
 });
 
 test("official notice backed by a public-valid usage estimate can promote", async () => {
@@ -801,6 +989,8 @@ test("dry-run reconciliation never promotes an accepted candidate", async () => 
     createdAt: CANDIDATE_TIMESTAMP,
     updatedAt: CANDIDATE_TIMESTAMP,
   };
+  let completedGeminiCalls = 0;
+  let candidateGeminiCalls = 0;
 
   const result = await reconcileResetDisplayNames({
     data: {
@@ -810,8 +1000,8 @@ test("dry-run reconciliation never promotes an accepted candidate", async () => 
     } as unknown as RadarData,
     canonicalHistory: [resetEvent("canonical-dry-run-key")],
     now: NOW,
-    apiKey: null,
-    maxGeminiRequests: 0,
+    apiKey: "test-key",
+    maxGeminiRequests: 3,
     dryRun: true,
     candidateActivation: {
       mode: "full",
@@ -819,9 +1009,28 @@ test("dry-run reconciliation never promotes an accepted candidate", async () => 
     },
     candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
     candidateStore: candidateStorage.client,
+    candidateGenerate: async () => {
+      candidateGeminiCalls += 1;
+      return successResult();
+    },
+    ensure: async () => {
+      completedGeminiCalls += 1;
+      return {
+        eventKey: "canonical-dry-run-key",
+        status: "accepted",
+        displayName: "Completed reset",
+        inputMode: "metadata+source",
+        skipped: false,
+      };
+    },
   });
 
   assert.equal(result.candidatePromotions, 0);
+  assert.equal(result.geminiRequests, 0);
+  assert.equal(result.writes, 0);
+  assert.equal(completedGeminiCalls, 0);
+  assert.equal(candidateGeminiCalls, 0);
+  assert.equal(candidateStorage.seedWrites, 0);
   assert.equal(candidateStorage.promotionWrites, 0);
   assert.equal(candidateStorage.rows[0]?.lifecycleStatus, "provisional");
 });

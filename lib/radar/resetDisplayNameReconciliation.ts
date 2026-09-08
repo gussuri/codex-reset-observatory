@@ -659,6 +659,52 @@ export async function reconcileResetDisplayNames(
     }
   }
 
+  const preCompletedPromotionEventKeys = new Set<string>();
+  let wrote = false;
+
+  if (candidateActivation.mode === "full" && candidateStore && !options.dryRun) {
+    for (const candidate of candidateRecords) {
+      if (candidate.lifecycleStatus !== "provisional" || candidate.aiStatus !== "accepted") continue;
+      const notice = candidateNoticeForRecord(candidate, candidateNotices);
+      if (!notice || !notice.isExecutionBearing) continue;
+      if (!candidateActivation.adoptionAt || !isResetDisplayNameCandidateNoticeAfterAdoption(
+        notice.tweetCreatedAt,
+        candidateActivation.adoptionAt,
+      )) continue;
+
+      const context = getCandidatePromotionContext(candidate, data, history);
+      if (!context) continue;
+
+      try {
+        const promotion = await promoteResetDisplayNameCandidate(candidateStore, {
+          candidateId: candidate.candidateId,
+          canonicalEventKey: context.identityResolution.resetEventKey ?? "",
+          canonicalSourceTweetId: context.canonicalSourceTweetId,
+          promotedAt: now.toISOString(),
+          identityResolution: context.identityResolution,
+          authoritativeEvidence: context.authoritativeEvidence,
+        });
+        if (promotion.status === "promoted" || promotion.status === "already_promoted") {
+          results.candidatePromotions = (results.candidatePromotions ?? 0) + 1;
+        }
+        if (
+          promotion.status === "promoted" ||
+          promotion.status === "reused" ||
+          promotion.status === "already_promoted"
+        ) {
+          const eventKey = promotion.canonicalEventKey ?? context.identityResolution.resetEventKey;
+          if (eventKey) preCompletedPromotionEventKeys.add(eventKey);
+        }
+        if (promotion.canonicalWrite) {
+          results.writes += 1;
+          wrote = true;
+        }
+      } catch {
+        // Promotion is best-effort and cannot roll back authoritative execution evidence.
+      }
+    }
+  }
+
   const candidates: ReconciliationCandidate[] = [];
   const seenEventKeys = new Set<string>();
   for (const item of history) {
@@ -736,9 +782,12 @@ export async function reconcileResetDisplayNames(
   const apiKey = getApiKey(options);
   const maxGeminiRequests = getMaxGeminiRequests(options.maxGeminiRequests);
   const ensure = options.ensure ?? ensureResetDisplayNameForEvent;
-  let wrote = false;
 
   for (const candidate of candidates) {
+    if (preCompletedPromotionEventKeys.has(candidate.eventKey)) {
+      results.outcomes.push(outcome(candidate, "preserved_precomputed"));
+      continue;
+    }
     const existingManualName = candidate.existing?.manual_name_ja?.trim();
     if (existingManualName) {
       results.outcomes.push(outcome(candidate, "manual", false, existingManualName));
@@ -941,40 +990,6 @@ export async function reconcileResetDisplayNames(
       }
     }
 
-    if (!options.dryRun) {
-      for (const candidate of candidateRecords) {
-        if (candidate.lifecycleStatus !== "provisional" || candidate.aiStatus !== "accepted") continue;
-        const notice = candidateNoticeForRecord(candidate, candidateNotices);
-        if (!notice || !notice.isExecutionBearing) continue;
-        if (!candidateActivation.adoptionAt || !isResetDisplayNameCandidateNoticeAfterAdoption(
-          notice.tweetCreatedAt,
-          candidateActivation.adoptionAt,
-        )) continue;
-
-        const context = getCandidatePromotionContext(candidate, data, history);
-        if (!context) continue;
-
-        try {
-          const promotion = await promoteResetDisplayNameCandidate(candidateStore, {
-            candidateId: candidate.candidateId,
-            canonicalEventKey: context.identityResolution.resetEventKey ?? "",
-            canonicalSourceTweetId: context.canonicalSourceTweetId,
-            promotedAt: now.toISOString(),
-            identityResolution: context.identityResolution,
-            authoritativeEvidence: context.authoritativeEvidence,
-          });
-          if (promotion.status === "promoted" || promotion.status === "already_promoted") {
-            results.candidatePromotions = (results.candidatePromotions ?? 0) + 1;
-          }
-          if (promotion.canonicalWrite) {
-            results.writes += 1;
-            wrote = true;
-          }
-        } catch {
-          // Promotion is best-effort and cannot roll back authoritative execution evidence.
-        }
-      }
-    }
   }
 
   if (wrote && options.invalidateRadarData) {
