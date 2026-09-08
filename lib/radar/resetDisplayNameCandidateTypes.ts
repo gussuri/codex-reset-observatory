@@ -40,13 +40,6 @@ export type ResetDisplayNameCandidateSeed = {
   logicalPostId: string | null;
   noticeTweetIds: string[];
   sourceTweetIds: string[];
-  noticeObservedAt?: string;
-  expectedStartAt?: string | null;
-  expectedEndAt?: string | null;
-  temporalPrecision?: string | null;
-  scope?: string | null;
-  noticeType?: string | null;
-  sourceUrl?: string | null;
 };
 
 export type ResetDisplayNameCandidateRecord = {

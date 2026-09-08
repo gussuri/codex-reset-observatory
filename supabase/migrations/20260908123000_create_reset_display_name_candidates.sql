@@ -1,5 +1,5 @@
 create table if not exists public.reset_display_name_candidates (
-  candidate_id uuid primary key default gen_random_uuid(),
+  candidate_id uuid primary key default extensions.gen_random_uuid(),
   notice_dedupe_key text not null unique,
   official_notice_tweet_id text not null,
   logical_post_id text,

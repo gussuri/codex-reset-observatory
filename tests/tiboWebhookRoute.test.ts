@@ -16,6 +16,8 @@ const ENV_KEYS = [
   "GEMINI_API_KEY",
   "GEMINI_MODEL",
   "GEMINI_TRANSLATION_MODE",
+  "RESET_DISPLAY_NAME_CANDIDATE_MODE",
+  "RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT",
 ] as const;
 
 function restoreEnvironment(previous: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
@@ -147,6 +149,197 @@ function installSupabaseWebhookMock(requestBodies: unknown[]) {
     globalThis.fetch = originalFetch;
   };
 }
+
+function candidateSeedRecord(tweetId: string) {
+  const now = "2026-09-08T00:00:00.000Z";
+  return {
+    candidate_id: "00000000-0000-0000-0000-000000000010",
+    notice_dedupe_key: `official-notice:${tweetId}`,
+    official_notice_tweet_id: tweetId,
+    logical_post_id: null,
+    notice_tweet_ids: [tweetId],
+    source_tweet_ids: [tweetId],
+    source_snapshot_hash: null,
+    input_hash: null,
+    next_retry_at: null,
+    ai_name_ja: null,
+    ai_name_en: null,
+    ai_name_zh: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_flags: [],
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: "unprocessed",
+    lifecycle_status: "provisional",
+    generation_attempts: 0,
+    last_generated_at: null,
+    promoted_event_key: null,
+    promoted_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+function installCandidateSeedWebhookMock(
+  requestBodies: unknown[],
+  options: { seedError?: boolean } = {},
+) {
+  const originalFetch = globalThis.fetch;
+  let seedWrites = 0;
+  let geminiCalls = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("generativelanguage.googleapis.com")) geminiCalls += 1;
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+    if (url.includes("/rpc/upsert_reset_display_name_candidate_seed")) {
+      seedWrites += 1;
+      if (options.seedError) {
+        return new Response(JSON.stringify({ code: "PGRST_TEST", message: "seed unavailable" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const body = init?.body ? JSON.parse(String(init.body)) as { p_seed?: { official_notice_tweet_id?: string } } : {};
+      const tweetId = body.p_seed?.official_notice_tweet_id ?? "2084000000000000200";
+      return new Response(JSON.stringify(candidateSeedRecord(tweetId)), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (method === "GET") {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  return {
+    get seedWrites() { return seedWrites; },
+    get geminiCalls() { return geminiCalls; },
+    restore() { globalThis.fetch = originalFetch; },
+  };
+}
+
+test("official notice webhook writes an identity-only candidate seed without AI work", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "seed";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT = "2026-08-01T00:00:00.000Z";
+  const mock = installCandidateSeedWebhookMock(requestBodies);
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2084000000000000200",
+      text: "We will reset usage limits tomorrow.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000200",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(mock.seedWrites, 1);
+    assert.equal(mock.geminiCalls, 0);
+    const seedBody = requestBodies.find((body): body is { p_seed: Record<string, unknown> } =>
+      typeof body === "object" && body !== null && "p_seed" in body,
+    );
+    assert.ok(seedBody);
+    assert.deepEqual(Object.keys(seedBody.p_seed).sort(), [
+      "logical_post_id",
+      "notice_tweet_ids",
+      "official_notice_tweet_id",
+      "source_tweet_ids",
+    ]);
+    assert.equal("expected_end_at" in seedBody.p_seed, false);
+    assert.equal("scope" in seedBody.p_seed, false);
+  } finally {
+    mock.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("candidate seed failure does not fail official notice handling", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "full";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT = "2026-08-01T00:00:00.000Z";
+  const mock = installCandidateSeedWebhookMock(requestBodies, { seedError: true });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2084000000000000201",
+      text: "We will reset usage limits tomorrow.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000201",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(mock.seedWrites, 1);
+    assert.equal(requestBodies.some((body: any) => body.tweet_id === "2084000000000000201"), true);
+  } finally {
+    mock.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("candidate mode off and persisted tweet cutoff are fail-closed", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  try {
+    process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+    process.env.RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT = "2026-08-01T00:00:00.000Z";
+    const offMock = installCandidateSeedWebhookMock([]);
+    const offResponse = await POST(buildRequest({
+      text: "We will reset usage limits tomorrow.",
+    }));
+    assert.equal(offResponse.status, 200);
+    assert.equal(offMock.seedWrites, 0);
+    offMock.restore();
+
+    process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "seed";
+    process.env.RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT = "2026-09-01T00:00:00.000Z";
+    const cutoffMock = installCandidateSeedWebhookMock([]);
+    const cutoffResponse = await POST(buildRequest({
+      tweetId: "2084000000000000202",
+      text: "We will reset usage limits tomorrow.",
+      tweetUrl: "https://x.com/thsottiaux/status/2084000000000000202",
+      tweetCreatedAt: "2026-08-04T00:00:00.000Z",
+    }));
+    assert.equal(cutoffResponse.status, 200);
+    assert.equal(cutoffMock.seedWrites, 0);
+    cutoffMock.restore();
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
 
 test("Tibo state SELECT failure fails closed before upsert or formal adoption", async () => {
   const previous = Object.fromEntries(

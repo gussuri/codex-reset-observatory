@@ -8,7 +8,10 @@ test("candidate migration declares the identity and lifecycle contract", () => {
     "utf8",
   );
 
-  assert.match(sql, /candidate_id\s+uuid\s+primary key/i);
+  assert.match(
+    sql,
+    /candidate_id\s+uuid\s+primary key\s+default\s+extensions\.gen_random_uuid\(\)/i,
+  );
   assert.match(sql, /source_snapshot_hash\s+text/i);
   assert.match(sql, /input_hash\s+text/i);
   assert.match(sql, /'unprocessed'/i);

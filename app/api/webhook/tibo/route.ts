@@ -76,6 +76,23 @@ import {
   type TiboResetEventIdentityResolution,
 } from "@/lib/radar/tiboResetEventIdentity";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
+import {
+  isResetDisplayNameCandidateNoticeAfterAdoption,
+  isResetDisplayNameCandidateOperationEnabled,
+  readResetDisplayNameCandidateActivation,
+} from "@/lib/radar/resetDisplayNameCandidateActivation";
+import {
+  isExecutionBearingResetDisplayNameNotice,
+  type ResetDisplayNameCandidateSeed,
+} from "@/lib/radar/resetDisplayNameCandidateTypes";
+import {
+  upsertResetDisplayNameCandidateSeed,
+  type ResetDisplayNameCandidateStoreClient,
+} from "@/lib/radar/resetDisplayNameCandidateStore";
+import {
+  hasFutureBankedDistributionIntent,
+  isRecurringConditionalBankedDistributionNotice,
+} from "@/lib/radar/bankedReset";
 
 // Keep the webhook bounded while accepting X long-form/note text. The former
 // 2,000-character ceiling rejected fully expanded posts before classification.
@@ -317,6 +334,68 @@ async function fetchCanonicalTiboSourceRows(
       reason: "request_failed",
     });
     return [];
+  }
+}
+
+function uniqueNonEmptyTweetIds(values: readonly string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+async function seedResetDisplayNameCandidateIfEligible(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  candidate: FormalTiboResetSignal,
+  editHistoryMetadata: {
+    trusted: boolean;
+    logicalPostId: string;
+    editHistoryTweetIds: string[];
+  },
+) {
+  const activation = readResetDisplayNameCandidateActivation(process.env);
+  if (!isResetDisplayNameCandidateOperationEnabled(activation, "seed") || !activation.adoptionAt) {
+    return;
+  }
+
+  // The cutoff is anchored to the persisted signal's creation timestamp. Do
+  // not substitute webhook receipt time or any resolved notice timestamp.
+  if (!isResetDisplayNameCandidateNoticeAfterAdoption(candidate.tweet_created_at, activation.adoptionAt)) {
+    return;
+  }
+
+  const isHistoricalOnly = candidate.temporal_kind === "historical" ||
+    candidate.ai_temporal_kind === "historical";
+  const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(candidate.text);
+  if (!isExecutionBearingResetDisplayNameNotice({
+    signalType: candidate.signal_type,
+    verificationStatus: candidate.verification_status,
+    isReply: candidate.is_reply === true,
+    isHistoricalOnly,
+    isPresentationOnlyOngoingBanked,
+    hasFutureBankedDistributionIntent: hasFutureBankedDistributionIntent(candidate.text),
+  })) {
+    return;
+  }
+
+  const trustedNoticeIds = editHistoryMetadata.trusted
+    ? editHistoryMetadata.editHistoryTweetIds
+    : [candidate.tweet_id];
+  const seed: ResetDisplayNameCandidateSeed = {
+    officialNoticeTweetId: candidate.tweet_id,
+    logicalPostId: editHistoryMetadata.trusted ? editHistoryMetadata.logicalPostId : null,
+    noticeTweetIds: uniqueNonEmptyTweetIds([candidate.tweet_id, ...trustedNoticeIds]),
+    sourceTweetIds: uniqueNonEmptyTweetIds([candidate.tweet_id, ...trustedNoticeIds]),
+  };
+
+  try {
+    await upsertResetDisplayNameCandidateSeed(
+      supabase as unknown as ResetDisplayNameCandidateStoreClient,
+      seed,
+    );
+  } catch {
+    // Candidate naming is auxiliary. A seed failure must never change the
+    // webhook's persisted signal or formal adoption behavior.
+    console.warn("[Webhook Warning] Reset display name candidate seed failed", {
+      reason: "best_effort_failed",
+    });
   }
 }
 
@@ -787,6 +866,12 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
+
+    await seedResetDisplayNameCandidateIfEligible(
+      supabase,
+      formalCandidate,
+      editHistoryMetadata,
+    );
 
     const shouldResolveFormalFlow =
       isFormalTiboResetSignal(formalCandidate) ||
