@@ -1843,23 +1843,26 @@ test("renders the history scope row while retaining localized scope values", () 
 });
 
 test("keeps all-paid-plan scope in internal history data and random-reset eligibility", () => {
+  const calculationNow = new Date("2026-08-31T00:00:00.000Z");
   const stored = LOCAL_RESET_HISTORY.find(
     (item) =>
       item.details?.cycleType === "ランダムリセット" &&
       item.details.scope === "全有料プラン" &&
-      item.recordKind === "confirmed_global",
+      item.recordKind === "confirmed_global" &&
+      Date.parse(item.completed_at ?? item.closed_at ?? "") <= calculationNow.getTime(),
   );
   assert.ok(stored);
   assert.equal(stored.details?.scope, "全有料プラン");
 
-  const calculationNow = new Date("2026-08-31T00:00:00.000Z");
-  const snapshot = toPublicRadarSnapshot(
+  const viewModel = getRadarViewModel(
     getLocalRadarData({ calculationNow }),
     "ja",
-    { calculationNow },
+    false,
+    undefined,
+    calculationNow,
   );
-  const projected = snapshot.viewModel.recentHistory.find(
-    (item) => item.key === stored.id || item.title === stored.title,
+  const projected = viewModel.recentHistory.find(
+    (item) => item.key === stored.id,
   );
   assert.ok(projected);
   assert.equal(projected.scope, "全有料プラン");

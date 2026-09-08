@@ -232,8 +232,10 @@ async function hasActiveOfficialNotice(
     undefined,
     executionWindow,
     true,
-    includeTerminatedExecutionEvidence,
+    false,
   );
+  // A terminated notice may remain evidence for a BANKED grant, but it must
+  // not become the active notice that corroborates an ordinary recovery.
   const activeBankedNotice = getActiveOfficialNotice(
     {
       ...data,

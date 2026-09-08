@@ -193,8 +193,11 @@ test("display-only execution estimate changes history time but not published pro
 
   const baseSnapshot = toPublicRadarSnapshot(base, "ja", { calculationNow: now });
   const estimateSnapshot = toPublicRadarSnapshot(withEstimate, "ja", { calculationNow: now });
-  assert.equal(estimateSnapshot.viewModel.recentHistory[0]?.resetAt, "2026-08-11T00:02:00.000Z");
-  assert.equal(estimateSnapshot.viewModel.recentHistory[0]?.executionTimePrecision, "approximate");
+  const estimateHistoryItem = estimateSnapshot.viewModel.recentHistory.find(
+    (item) => item.key === "tibo-reset-tibo-1",
+  );
+  assert.equal(estimateHistoryItem?.resetAt, "2026-08-11T00:02:00.000Z");
+  assert.equal(estimateHistoryItem?.executionTimePrecision, "approximate");
   assert.equal(baseSnapshot.viewModel.probability24h, estimateSnapshot.viewModel.probability24h);
   assert.equal(baseSnapshot.viewModel.probability48h, estimateSnapshot.viewModel.probability48h);
   assert.equal(getLastGlobalResetAt(withEstimate, now)?.toISOString(), TIBO_ANNOUNCEMENT);
