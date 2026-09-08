@@ -58,8 +58,34 @@ export type PublishedProspectiveModelEvaluation = {
   metrics48h: PublishedProspectiveMetric;
 };
 
+export type PublishedPostResetDiagnosticMetric = {
+  sampleCount: number;
+  positiveCount: number;
+  activeMeanPrediction: number | null;
+  baselineMeanPrediction: number | null;
+  activeBrier: number | null;
+  baselineBrier: number | null;
+  brierDelta: number | null;
+  activeLogLoss: number | null;
+  baselineLogLoss: number | null;
+  logLossDelta: number | null;
+  meanProbabilityDelta: number | null;
+};
+
+export type PublishedPostResetDiagnostic = {
+  allEligibleOriginCount: number;
+  representativeOriginCount: number;
+  representativeOrigins: Array<{
+    resetId: string;
+    resetAt: string;
+    generatedAt: string;
+  }>;
+  metrics24h: PublishedPostResetDiagnosticMetric;
+  metrics48h: PublishedPostResetDiagnosticMetric;
+};
+
 export type PublishedProspectiveEvaluationReport = {
-  schemaVersion: "prospective-published-model-evaluation-v1";
+  schemaVersion: "prospective-published-model-evaluation-v2";
   status:
     | "insufficient_data"
     | "promising"
@@ -97,6 +123,8 @@ export type PublishedProspectiveEvaluationReport = {
     active: PublishedProspectiveModelEvaluation;
     baseline: PublishedProspectiveModelEvaluation;
   };
+  canonicalRandomResetEvents: Array<ShadowResetEvent>;
+  postResetDiagnostic: PublishedPostResetDiagnostic;
   gate: {
     autoPublish: false;
     manualReviewOnly: true;
@@ -290,6 +318,182 @@ function createModelEvaluation(
   };
 }
 
+type PostResetDiagnosticOrigin = {
+  reset: ShadowResetEvent;
+  generatedAt: string;
+  active: StoredForecast;
+  baseline: StoredForecast;
+};
+
+function getSavedPostResetMetadata(forecast: StoredForecast) {
+  const resetAt = typeof forecast.latestRandomResetAt === "string"
+    ? timestamp(forecast.latestRandomResetAt)
+    : null;
+  const elapsedHours = typeof forecast.elapsedHoursSinceRandom === "number"
+    ? forecast.elapsedHoursSinceRandom
+    : typeof forecast.randomElapsedHours === "number"
+      ? forecast.randomElapsedHours
+      : null;
+  if (
+    resetAt === null
+    || elapsedHours === null
+    || !Number.isFinite(elapsedHours)
+  ) {
+    return null;
+  }
+  return { resetAt, elapsedHours };
+}
+
+function getPostResetDiagnosticOrigins(
+  rows: Array<ProspectiveForecastRow>,
+  events: Array<ShadowResetEvent>,
+) {
+  const sortedRows = rows
+    .map((row) => ({ row, time: timestamp(row.generatedAt) }))
+    .filter((item): item is { row: ProspectiveForecastRow; time: number } => item.time !== null)
+    .sort((left, right) => {
+      const timeDifference = left.time - right.time;
+      return timeDifference || (timestamp(left.row.loggedHour) ?? 0) - (timestamp(right.row.loggedHour) ?? 0);
+    });
+  const canonicalEventsByTime = new Map<number, ShadowResetEvent>();
+  for (const event of events) {
+    const resetTime = timestamp(event.resetAt);
+    if (resetTime !== null && !canonicalEventsByTime.has(resetTime)) {
+      canonicalEventsByTime.set(resetTime, event);
+    }
+  }
+
+  const eligibleOrigins: Array<PostResetDiagnosticOrigin> = [];
+  for (const { row } of sortedRows) {
+    const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    const baseline = row.forecasts[PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION];
+    if (!isStoredForecast(active) || !isStoredForecast(baseline)) continue;
+    const activeMetadata = getSavedPostResetMetadata(active);
+    const baselineMetadata = getSavedPostResetMetadata(baseline);
+    if (
+      !activeMetadata
+      || !baselineMetadata
+      || activeMetadata.resetAt !== baselineMetadata.resetAt
+      || activeMetadata.elapsedHours <= 0
+      || activeMetadata.elapsedHours > 24
+    ) {
+      continue;
+    }
+    const reset = canonicalEventsByTime.get(activeMetadata.resetAt);
+    if (!reset) continue;
+    eligibleOrigins.push({ reset, generatedAt: row.generatedAt, active, baseline });
+  }
+
+  const representativeByReset = new Map<string, PostResetDiagnosticOrigin>();
+  for (const origin of eligibleOrigins) {
+    const key = origin.reset.id;
+    if (!representativeByReset.has(key)) representativeByReset.set(key, origin);
+  }
+  const representativeOrigins = Array.from(representativeByReset.values())
+    .sort((left, right) => timestamp(left.generatedAt)! - timestamp(right.generatedAt)!);
+
+  return {
+    allEligibleOriginCount: eligibleOrigins.length,
+    representativeOrigins,
+  };
+}
+
+function emptyPostResetDiagnosticMetric(): PublishedPostResetDiagnosticMetric {
+  return {
+    sampleCount: 0,
+    positiveCount: 0,
+    activeMeanPrediction: null,
+    baselineMeanPrediction: null,
+    activeBrier: null,
+    baselineBrier: null,
+    brierDelta: null,
+    activeLogLoss: null,
+    baselineLogLoss: null,
+    logLossDelta: null,
+    meanProbabilityDelta: null,
+  };
+}
+
+function calculatePostResetDiagnosticMetric(
+  origins: Array<PostResetDiagnosticOrigin>,
+  horizonHours: 24 | 48,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedPostResetDiagnosticMetric {
+  const asOfTime = asOf.getTime();
+  const values = origins.flatMap((origin) => {
+    const generatedTime = timestamp(origin.generatedAt);
+    if (
+      generatedTime === null
+      || !Number.isFinite(asOfTime)
+      || generatedTime + horizonHours * HOUR_MS > asOfTime
+    ) {
+      return [];
+    }
+    const activePrediction = horizonHours === 24
+      ? origin.active.probability24h
+      : origin.active.probability48h;
+    const baselinePrediction = horizonHours === 24
+      ? origin.baseline.probability24h
+      : origin.baseline.probability48h;
+    const actual = Number(getActualWithinHorizon(events, origin.generatedAt, horizonHours));
+    return [{ activePrediction, baselinePrediction, actual }];
+  });
+  if (values.length === 0) return emptyPostResetDiagnosticMetric();
+
+  const activePredictions = values.map((value) => Math.min(1, Math.max(0, value.activePrediction)));
+  const baselinePredictions = values.map((value) => Math.min(1, Math.max(0, value.baselinePrediction)));
+  const positiveCount = values.reduce((sum, value) => sum + value.actual, 0);
+  const activeBrier = activePredictions.reduce((sum, prediction, index) =>
+    sum + (prediction - values[index].actual) ** 2, 0) / values.length;
+  const baselineBrier = baselinePredictions.reduce((sum, prediction, index) =>
+    sum + (prediction - values[index].actual) ** 2, 0) / values.length;
+  const activeLogLoss = activePredictions.reduce((sum, prediction, index) => {
+    const probability = clampProbability(prediction);
+    const actual = values[index].actual;
+    return sum - (actual * Math.log(probability) + (1 - actual) * Math.log(1 - probability));
+  }, 0) / values.length;
+  const baselineLogLoss = baselinePredictions.reduce((sum, prediction, index) => {
+    const probability = clampProbability(prediction);
+    const actual = values[index].actual;
+    return sum - (actual * Math.log(probability) + (1 - actual) * Math.log(1 - probability));
+  }, 0) / values.length;
+
+  return {
+    sampleCount: values.length,
+    positiveCount,
+    activeMeanPrediction: activePredictions.reduce((sum, prediction) => sum + prediction, 0) / values.length,
+    baselineMeanPrediction: baselinePredictions.reduce((sum, prediction) => sum + prediction, 0) / values.length,
+    activeBrier,
+    baselineBrier,
+    brierDelta: activeBrier - baselineBrier,
+    activeLogLoss,
+    baselineLogLoss,
+    logLossDelta: activeLogLoss - baselineLogLoss,
+    meanProbabilityDelta: activePredictions.reduce((sum, prediction, index) =>
+      sum + prediction - baselinePredictions[index], 0) / values.length,
+  };
+}
+
+function calculatePostResetDiagnostic(
+  rows: Array<ProspectiveForecastRow>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedPostResetDiagnostic {
+  const { allEligibleOriginCount, representativeOrigins } = getPostResetDiagnosticOrigins(rows, events);
+  return {
+    allEligibleOriginCount,
+    representativeOriginCount: representativeOrigins.length,
+    representativeOrigins: representativeOrigins.map((origin) => ({
+      resetId: origin.reset.id,
+      resetAt: origin.reset.resetAt,
+      generatedAt: origin.generatedAt,
+    })),
+    metrics24h: calculatePostResetDiagnosticMetric(representativeOrigins, 24, events, asOf),
+    metrics48h: calculatePostResetDiagnosticMetric(representativeOrigins, 48, events, asOf),
+  };
+}
+
 function difference(active: number, baseline: number, sampleCount: number) {
   return sampleCount > 0 && Number.isFinite(active) && Number.isFinite(baseline)
     ? active - baseline
@@ -395,9 +599,17 @@ export function evaluatePublishedModelProspectively(
   const adoptionStatusNote = adoptionBoundaryPending
     ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion has no explicit Production adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`
     : `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model is manually governed at the explicit adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`;
+  const canonicalRandomResetEvents = adoptionBoundaryPending
+    ? []
+    : events
+      .filter((event) => {
+        const resetTime = timestamp(event.resetAt);
+        return resetTime !== null && (adoptionAt === null || resetTime >= adoptionAt!);
+      })
+      .map((event) => ({ id: event.id, resetAt: event.resetAt }));
 
   return {
-    schemaVersion: "prospective-published-model-evaluation-v1",
+    schemaVersion: "prospective-published-model-evaluation-v2",
     status,
     generatedAt: asOf.toISOString(),
     asOf: asOf.toISOString(),
@@ -427,6 +639,8 @@ export function evaluatePublishedModelProspectively(
       },
     },
     models: { active, baseline },
+    canonicalRandomResetEvents,
+    postResetDiagnostic: calculatePostResetDiagnostic(comparableRows, events, asOf),
     gate: {
       autoPublish: false,
       manualReviewOnly: true,
@@ -444,6 +658,7 @@ export function evaluatePublishedModelProspectively(
       "Rows before the first comparable forecast are not backfilled and are not relabeled.",
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
+      "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
       adoptionBoundaryNote,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,

@@ -14,7 +14,7 @@ import {
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
-  loadFormalTiboResets,
+  loadProductionCanonicalRadarData,
   loadPredictionHistoryRows,
 } from "./evaluateProspectiveProbabilityForecasts";
 
@@ -37,6 +37,23 @@ function parseAsOf(args: Array<string>) {
   return asOf;
 }
 
+function formatPostResetDiagnosticMetric(metric: PublishedProspectiveEvaluationReport["postResetDiagnostic"]["metrics24h"]) {
+  const value = (number: number | null) => number === null ? "unavailable" : number.toFixed(4);
+  return [
+    `n=${metric.sampleCount}`,
+    `positive=${metric.positiveCount}`,
+    `activeMean=${value(metric.activeMeanPrediction)}`,
+    `baselineMean=${value(metric.baselineMeanPrediction)}`,
+    `activeBrier=${value(metric.activeBrier)}`,
+    `baselineBrier=${value(metric.baselineBrier)}`,
+    `brierDelta=${value(metric.brierDelta)}`,
+    `activeLogLoss=${value(metric.activeLogLoss)}`,
+    `baselineLogLoss=${value(metric.baselineLogLoss)}`,
+    `logLossDelta=${value(metric.logLossDelta)}`,
+    `meanProbabilityDelta=${value(metric.meanProbabilityDelta)}`,
+  ].join(", ");
+}
+
 function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
   const active24h = report.models.active.metrics24h;
   const active48h = report.models.active.metrics48h;
@@ -56,7 +73,15 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Source: ${report.source}`,
     `- Target definition: ${report.targetDefinition}`,
     "",
-    "## Daily first forecast comparison",
+    "## Primary prospective evaluation",
+    "",
+    "### Canonical random reset truth",
+    `- Post-adoption canonical random reset events: ${report.canonicalRandomResetEvents.length}`,
+    ...(report.canonicalRandomResetEvents.length === 0
+      ? ["- Events: none"]
+      : report.canonicalRandomResetEvents.map((event) => `- ${event.id}: ${event.resetAt}`)),
+    "",
+    "### Daily first forecast comparison",
     "",
     `### ${report.activeModelVersion}`,
     `- 24h: ${formatPublishedProspectiveMetric(active24h)}`,
@@ -66,7 +91,7 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- 24h: ${formatPublishedProspectiveMetric(baseline24h)}`,
     `- 48h: ${formatPublishedProspectiveMetric(baseline48h)}`,
     "",
-    "## Active minus baseline",
+    "### Active minus baseline",
     "",
     `- 24h Brier: ${report.comparison.activeMinusBaseline.brier24h ?? "unavailable"}`,
     `- 48h Brier: ${report.comparison.activeMinusBaseline.brier48h ?? "unavailable"}`,
@@ -76,7 +101,7 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Positive forecasts: 24h=${report.comparison.positiveCount24h}, 48h=${report.comparison.positiveCount48h}`,
     `- Target random reset count: ${report.comparison.targetResetCount}`,
     "",
-    "## Manual review gate",
+    "### Manual review gate",
     "",
     `- Auto publish: ${report.gate.autoPublish}`,
     `- Manual review only: ${report.gate.manualReviewOnly}`,
@@ -84,6 +109,22 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Resolved daily 24h: ${report.gate.resolvedDaily24h}/${report.gate.thresholds.resolvedDaily24h}`,
     `- Resolved daily 48h: ${report.gate.resolvedDaily48h}/${report.gate.thresholds.resolvedDaily48h}`,
     `- Eligible for manual review: ${report.gate.eligibleForManualReview}`,
+    "",
+    "## Post-reset 0-24h diagnostic",
+    "",
+    "This is a separate descriptive diagnostic comparing the active post-reset-age model with the v1 baseline. It never affects the primary gate, status, manual-review eligibility, model selection, or publication.",
+    `- All eligible saved origins: ${report.postResetDiagnostic.allEligibleOriginCount}`,
+    `- Representative origins (first comparable origin per canonical reset): ${report.postResetDiagnostic.representativeOriginCount}`,
+    ...(report.postResetDiagnostic.representativeOrigins.length === 0
+      ? ["- Representative origins: none"]
+      : report.postResetDiagnostic.representativeOrigins.map((origin) =>
+        `- ${origin.resetId}: reset=${origin.resetAt}, forecast=${origin.generatedAt}`)),
+    "",
+    "### 24h",
+    `- ${formatPostResetDiagnosticMetric(report.postResetDiagnostic.metrics24h)}`,
+    "",
+    "### 48h",
+    `- ${formatPostResetDiagnosticMetric(report.postResetDiagnostic.metrics48h)}`,
     "",
     "## Notes",
     "",
@@ -113,25 +154,24 @@ async function main() {
   loadOptionalLocalEnv();
   const asOf = parseAsOf(process.argv.slice(2));
   const history = await loadPredictionHistoryRows();
-  const formalTiboResets = await loadFormalTiboResets();
-  const events: Array<ShadowResetEvent> = getShadowCompletedResetEvents(
-    { formal_tibo_resets: formalTiboResets },
-    asOf,
-    LOCAL_RESET_HISTORY,
-  );
+  const production = await loadProductionCanonicalRadarData(asOf);
+  const events: Array<ShadowResetEvent> = production.data
+    ? getShadowCompletedResetEvents(production.data, asOf, LOCAL_RESET_HISTORY, {
+        preserveDistinctCanonicalIds: true,
+      })
+    : [];
   const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf);
-  const availabilityReason = baseReport.forecastCounts.comparable === 0
-    ? history.reason?.includes("environment")
-      ? history.reason
-      : history.reason?.includes("query")
+  const availabilityNotes: string[] = [];
+  if (baseReport.forecastCounts.comparable === 0) {
+    availabilityNotes.push(
+      history.reason?.includes("environment") || history.reason?.includes("query")
         ? history.reason
-        : `No prediction_history rows contain both the published ${PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION} and ${PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION} forecasts yet.`
-    : null;
-  const report = availabilityReason
-    ? {
-        ...baseReport,
-        notes: [...baseReport.notes, `Data availability: ${availabilityReason}`],
-      }
+        : `No prediction_history rows contain both the published ${PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION} and ${PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION} forecasts yet.`,
+    );
+  }
+  if (production.reason) availabilityNotes.push(production.reason);
+  const report = availabilityNotes.length > 0
+    ? { ...baseReport, notes: [...baseReport.notes, ...availabilityNotes.map((note) => `Data availability: ${note}`)] }
     : baseReport;
   writePublishedProspectiveReports(report);
   console.log(JSON.stringify({
@@ -145,6 +185,13 @@ async function main() {
     resolved24h: report.comparison.resolved24h,
     resolved48h: report.comparison.resolved48h,
     targetResetCount: report.comparison.targetResetCount,
+    canonicalRandomResetEvents: report.canonicalRandomResetEvents,
+    postResetDiagnostic: {
+      allEligibleOriginCount: report.postResetDiagnostic.allEligibleOriginCount,
+      representativeOriginCount: report.postResetDiagnostic.representativeOriginCount,
+      metrics24hSampleCount: report.postResetDiagnostic.metrics24h.sampleCount,
+      metrics48hSampleCount: report.postResetDiagnostic.metrics48h.sampleCount,
+    },
   }, null, 2));
 }
 

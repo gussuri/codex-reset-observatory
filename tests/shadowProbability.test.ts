@@ -202,6 +202,89 @@ test("shadow event collection includes broad random distributions but excludes r
   assert.deepEqual(events.map((item) => item.id), ["random", "credit"]);
 });
 
+test("canonical evaluation collection keeps distinct BANKED event keys sharing one notice source", () => {
+  const sourceUrl = "https://x.com/thsottiaux/status/banked-notice";
+  const first = resetEvent("banked-first", "2026-08-08T00:00:00.000Z", {
+    recordKind: "banked_distribution",
+    source_url: sourceUrl,
+  });
+  const second = resetEvent("banked-second", "2026-08-08T20:00:00.000Z", {
+    recordKind: "banked_distribution",
+    source_url: sourceUrl,
+  });
+  const now = new Date("2026-08-09T00:00:00.000Z");
+
+  assert.deepEqual(
+    getShadowCompletedResetEvents(null, now, [first, second]).map((item) => item.id),
+    ["banked-first"],
+  );
+  assert.deepEqual(
+    getShadowCompletedResetEvents(null, now, [first, second], {
+      preserveDistinctCanonicalIds: true,
+    }).map((item) => item.id),
+    ["banked-first", "banked-second"],
+  );
+});
+
+test("shadow event collection includes notice-backed authoritative usage execution", () => {
+  const notice = {
+    tweet_id: "notice-backed-reset",
+    text: "We will reset the Codex usage limit for everyone today.",
+    tweet_url: "https://x.com/thsottiaux/status/notice-backed-reset",
+    tweet_created_at: "2026-08-08T00:00:00.000Z",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    verification_status: "auto_unverified" as const,
+  };
+  const recovery = {
+    id: "recovery-notice-backed",
+    sourceKey: "local-codex-app-server",
+    observedAt: "2026-08-08T04:00:00.000Z",
+    previousObservedAt: "2026-08-08T03:00:00.000Z",
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: Date.parse("2026-08-15T00:00:00.000Z") / 1000,
+    currentResetsAt: Date.parse("2026-08-15T00:00:00.000Z") / 1000,
+    cycleHint: "unexpected" as const,
+    confidence: "strong" as const,
+    status: "observed" as const,
+    matchedTiboTweetId: notice.tweet_id,
+    confirmedAt: null,
+    createdAt: "2026-08-08T04:00:00.000Z",
+    updatedAt: "2026-08-08T04:00:00.000Z",
+  };
+  const estimate = {
+    resetEventKey: "notice-backed-reset-event",
+    displayExecutionAt: "2026-08-08T04:10:00.000Z",
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: "2026-08-08T04:00:00.000Z",
+    executionWindowEndAt: "2026-08-08T04:10:00.000Z",
+    recoveryObservationId: recovery.id,
+    recoveryPreviousObservedAt: recovery.previousObservedAt,
+    recoveryObservedAt: recovery.observedAt,
+    tiboAnnouncedAt: notice.tweet_created_at,
+    tiboPrimaryTweetId: notice.tweet_id,
+    tiboSourceTweetIds: [notice.tweet_id],
+    officialNoticeTweetId: notice.tweet_id,
+    officialNoticeAt: notice.tweet_created_at,
+    estimatorVersion: "usage-execution-v1",
+  };
+
+  const events = getShadowCompletedResetEvents({
+    recent_tibo_signals: [notice],
+    active_tibo_signals: [notice],
+    codex_recovery_observations: [recovery],
+    reset_execution_estimates: [estimate],
+  }, new Date("2026-08-08T05:00:00.000Z"), []);
+
+  assert.deepEqual(events, [{
+    id: estimate.resetEventKey,
+    resetAt: estimate.displayExecutionAt,
+  }]);
+});
+
 test("hazard intervals ignore the period before the first event and use censored exposure after the last event", () => {
   const now = new Date("2026-08-10T12:00:00.000Z");
   const hazard = buildShadowHazard([

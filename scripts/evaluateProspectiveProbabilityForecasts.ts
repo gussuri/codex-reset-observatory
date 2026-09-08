@@ -12,6 +12,9 @@ import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
+import { toCodexRecoveryObservation, toResetExecutionEstimate } from "../lib/codexUsageRecoveryStore";
+import { getLocalRadarData, type RadarData } from "../lib/radar";
+import { readTiboFormalAdoptions } from "../lib/radar/tiboFormalAdoptionStore";
 import {
   evaluateProspectiveProbabilityForecasts,
   PROSPECTIVE_V2_MODEL_VERSION,
@@ -29,6 +32,11 @@ export type PredictionHistoryRow = {
 
 export type PredictionHistoryLoadResult = {
   rows: Array<ProspectiveForecastRow>;
+  reason: string | null;
+};
+
+export type ProductionCanonicalRadarDataLoadResult = {
+  data: RadarData | null;
   reason: string | null;
 };
 
@@ -186,6 +194,87 @@ export async function loadFormalTiboResets(): Promise<Array<FormalTiboResetSigna
     );
     return [];
   }
+}
+
+export async function loadProductionCanonicalRadarData(
+  asOf: Date,
+): Promise<ProductionCanonicalRadarDataLoadResult> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return {
+      data: null,
+      reason: "Supabase environment variables are not available for canonical reset-history evaluation.",
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+  const [signals, regular, observations, estimates, adoptions] = await Promise.all([
+    supabase
+      .from("tibo_signals")
+      .select("*")
+      .order("tweet_created_at", { ascending: true })
+      .limit(10_000),
+    supabase
+      .from("regular_reset_events")
+      .select("*")
+      .order("completed_at", { ascending: true })
+      .limit(1_000),
+    supabase
+      .from("codex_recovery_observations")
+      .select("*")
+      .order("observed_at", { ascending: true })
+      .limit(1_000),
+    supabase
+      .from("reset_execution_estimates")
+      .select("*")
+      .order("display_execution_at", { ascending: true })
+      .limit(1_000),
+    readTiboFormalAdoptions(supabase as never),
+  ]);
+  const errors = [signals.error, regular.error, observations.error, estimates.error, adoptions.error]
+    .filter(Boolean);
+  if (errors.length > 0) {
+    return {
+      data: null,
+      reason: "One or more Production canonical reset-history queries failed.",
+    };
+  }
+
+  const rawSignals = (signals.data ?? []) as Array<FormalTiboResetSignal>;
+  const rejectedTiboResets = rawSignals.flatMap((signal) => {
+    if (
+      signal.signal_type !== "reset_executed"
+      || signal.is_reply === true
+      || (signal.confidence ?? 0) < 0.95
+      || signal.verification_status !== "rejected"
+    ) {
+      return [];
+    }
+    return [{
+      tweet_id: signal.tweet_id,
+      tweet_url: signal.tweet_url,
+      tweet_created_at: signal.tweet_created_at,
+    }];
+  });
+  const data = getLocalRadarData({
+    calculationNow: asOf,
+    formalTiboResets: rawSignals,
+    recentTiboSignals: rawSignals as never,
+    activeTiboSignals: rawSignals as never,
+    rejectedTiboResets,
+    regularResetEvents: (regular.data ?? []) as never,
+    codexRecoveryObservations: (observations.data ?? [])
+      .map((row) => toCodexRecoveryObservation(row as never))
+      .filter((row): row is NonNullable<typeof row> => row !== null),
+    resetExecutionEstimates: (estimates.data ?? [])
+      .map((row) => toResetExecutionEstimate(row as never))
+      .filter((row): row is NonNullable<typeof row> => row !== null),
+    tiboFormalAdoptions: adoptions.ledgers,
+  });
+  return { data, reason: null };
 }
 
 export async function loadRegularResetEvents(): Promise<Array<RegularResetEventRow>> {

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+  PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS,
   evaluatePublishedModelProspectively,
   selectComparablePublishedForecasts,
   selectDailyFirstPublishedForecasts,
@@ -45,6 +46,19 @@ function forecastRow(
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
 
+function withSavedPostResetMetadata(
+  row: ProspectiveForecastRow,
+  resetAt: string,
+  elapsedHours: number,
+) {
+  for (const forecast of Object.values(row.forecasts)) {
+    forecast.latestRandomResetAt = resetAt;
+    forecast.elapsedHoursSinceRandom = elapsedHours;
+    forecast.randomElapsedHours = elapsedHours;
+  }
+  return row;
+}
+
 function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
@@ -54,6 +68,15 @@ test("published prospective evaluation uses v2 after its boundary and B v1 as th
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, "hazard-regime-random-continuous-calibrated-v1");
+});
+
+test("primary prospective gate thresholds remain unchanged", () => {
+  assert.deepEqual(PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS, {
+    targetResetCount: 5,
+    resolvedDaily24h: 20,
+    resolvedDaily48h: 15,
+    maxLogLossWorsening: 0.05,
+  });
 });
 
 test("only rows containing both published models are comparable and evaluation starts there", () => {
@@ -177,4 +200,111 @@ test("pre-adoption forecast rows are not counted as public forecasts", () => {
 
   assert.deepEqual(report.forecastCounts, { active: 1, baseline: 1, comparable: 1 });
   assert.equal(report.evaluationStartAt, adopted.generatedAt);
+});
+
+test("post-reset diagnostic uses the first saved 0-24h origin per canonical reset", () => {
+  const resetAt = "2026-09-08T12:00:00.000Z";
+  const firstOrigin = withSavedPostResetMetadata(
+    forecastRow("2026-09-08T18:00:00.000Z", 0.2, 0.3, 0.4, 0.5),
+    resetAt,
+    6,
+  );
+  const laterOrigin = withSavedPostResetMetadata(
+    forecastRow("2026-09-08T20:00:00.000Z", 0.8, 0.7, 0.6, 0.5),
+    resetAt,
+    8,
+  );
+  const report = evaluatePublishedModelProspectively(
+    [firstOrigin, laterOrigin],
+    [
+      { id: "reset-before-origin", resetAt },
+      { id: "reset-after-origin", resetAt: "2026-09-09T12:00:00.000Z" },
+    ],
+    new Date("2026-09-09T18:00:00.000Z"),
+    { adoptionAt: null },
+  );
+
+  assert.equal(report.postResetDiagnostic.allEligibleOriginCount, 2);
+  assert.equal(report.postResetDiagnostic.representativeOriginCount, 1);
+  assert.deepEqual(report.postResetDiagnostic.representativeOrigins, [{
+    resetId: "reset-before-origin",
+    resetAt,
+    generatedAt: firstOrigin.generatedAt,
+  }]);
+
+  const metrics24 = report.postResetDiagnostic.metrics24h;
+  assert.equal(metrics24.sampleCount, 1);
+  assert.equal(metrics24.positiveCount, 1);
+  assert.equal(metrics24.activeMeanPrediction, 0.2);
+  assert.equal(metrics24.baselineMeanPrediction, 0.4);
+  assert.ok(Math.abs((metrics24.activeBrier ?? 0) - 0.64) < 1e-12);
+  assert.ok(Math.abs((metrics24.baselineBrier ?? 0) - 0.36) < 1e-12);
+  assert.ok(Math.abs((metrics24.brierDelta ?? 0) - 0.28) < 1e-12);
+  assert.ok(Math.abs((metrics24.activeLogLoss ?? 0) - (-Math.log(0.2))) < 1e-12);
+  assert.ok(Math.abs((metrics24.baselineLogLoss ?? 0) - (-Math.log(0.4))) < 1e-12);
+  assert.ok(Math.abs((metrics24.logLossDelta ?? 0) - Math.log(2)) < 1e-12);
+  assert.ok(Math.abs((metrics24.meanProbabilityDelta ?? 0) + 0.2) < 1e-12);
+
+  assert.equal(report.postResetDiagnostic.metrics48h.sampleCount, 0);
+  assert.equal(report.postResetDiagnostic.metrics48h.activeBrier, null);
+  assert.equal(report.postResetDiagnostic.metrics48h.logLossDelta, null);
+});
+
+test("post-reset diagnostic requires saved metadata, positive age, and both models", () => {
+  const resetAt = "2026-09-08T00:00:00.000Z";
+  const ageZero = withSavedPostResetMetadata(
+    forecastRow("2026-09-08T00:00:00.000Z"),
+    resetAt,
+    0,
+  );
+  const ageTooOld = withSavedPostResetMetadata(
+    forecastRow("2026-09-09T01:00:00.000Z"),
+    resetAt,
+    25,
+  );
+  const missingMetadata = forecastRow("2026-09-08T06:00:00.000Z");
+  const missingBaseline = withSavedPostResetMetadata(
+    forecastRow("2026-09-08T07:00:00.000Z", 0.2, 0.3, 0.4, 0.5, true, false),
+    resetAt,
+    7,
+  );
+  const validAtBoundary = withSavedPostResetMetadata(
+    forecastRow("2026-09-09T00:00:00.000Z"),
+    resetAt,
+    24,
+  );
+  const report = evaluatePublishedModelProspectively(
+    [ageZero, ageTooOld, missingMetadata, missingBaseline, validAtBoundary],
+    [{ id: "reset", resetAt }],
+    new Date("2026-09-10T00:00:00.000Z"),
+    { adoptionAt: null },
+  );
+
+  assert.equal(report.postResetDiagnostic.allEligibleOriginCount, 1);
+  assert.equal(report.postResetDiagnostic.representativeOriginCount, 1);
+  assert.equal(report.postResetDiagnostic.representativeOrigins[0]?.generatedAt, validAtBoundary.generatedAt);
+});
+
+test("secondary post-reset diagnostics never change primary gate or status", () => {
+  const row = forecastRow("2026-08-01T00:00:00.000Z");
+  const withMetadata = withSavedPostResetMetadata(row, "2026-07-31T18:00:00.000Z", 6);
+  const withoutMetadata = forecastRow("2026-08-01T00:00:00.000Z");
+  const events = [{ id: "reset", resetAt: "2026-07-31T18:00:00.000Z" }];
+  const diagnosticReport = evaluatePublishedModelProspectively(
+    [withMetadata],
+    events,
+    new Date("2026-08-02T00:00:00.000Z"),
+    { adoptionAt: null },
+  );
+  const primaryOnlyReport = evaluatePublishedModelProspectively(
+    [withoutMetadata],
+    events,
+    new Date("2026-08-02T00:00:00.000Z"),
+    { adoptionAt: null },
+  );
+
+  assert.equal(diagnosticReport.status, primaryOnlyReport.status);
+  assert.deepEqual(diagnosticReport.comparison, primaryOnlyReport.comparison);
+  assert.deepEqual(diagnosticReport.models, primaryOnlyReport.models);
+  assert.deepEqual(diagnosticReport.gate, primaryOnlyReport.gate);
 });

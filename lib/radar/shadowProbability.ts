@@ -68,6 +68,10 @@ export type ShadowResetEvent = {
   resetAt: string;
 };
 
+export type ShadowResetEventCollectionOptions = {
+  preserveDistinctCanonicalIds?: boolean;
+};
+
 export type ShadowHazardBin = {
   startHour: number;
   endHour: number | null;
@@ -252,6 +256,7 @@ export function getShadowCompletedResetEvents(
   data: RadarData | null,
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  options: ShadowResetEventCollectionOptions = {},
 ): Array<ShadowResetEvent> {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
@@ -283,7 +288,9 @@ export function getShadowCompletedResetEvents(
       if (resetAt === null) return [];
       const sourceIdentity = getTweetId(item.source_url)
         ?? (item.source_url?.includes("/status/") ? item.source_url : null);
-      const key = sourceIdentity
+      const key = options.preserveDistinctCanonicalIds && item.recordKind === "banked_distribution" && item.id
+        ? `id:${item.id}`
+        : sourceIdentity
         ? `source:${sourceIdentity}`
         : `${item.id ?? "unknown"}:${resetAt}`;
       if (seen.has(key)) return [];

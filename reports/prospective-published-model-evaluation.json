@@ -1,48 +1,48 @@
 {
-  "schemaVersion": "prospective-published-model-evaluation-v1",
+  "schemaVersion": "prospective-published-model-evaluation-v2",
   "status": "insufficient_data",
-  "generatedAt": "2026-08-13T06:20:00.000Z",
-  "asOf": "2026-08-13T06:20:00.000Z",
+  "generatedAt": "2026-09-08T18:31:27.345Z",
+  "asOf": "2026-09-08T18:31:27.345Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
   "targetDefinition": "Completed broad-scope random reset events after reset-history deduplication; includes forced resets and Banked Reset distributions, while excluding regular resets, narrow-scope distributions, pending or opened-only records, rejected Tibo signals, future or invalid timestamps, and reference records.",
-  "activeModelVersion": "hazard-elapsed-v1",
-  "baselineModelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
-  "evaluationStartAt": null,
+  "activeModelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+  "baselineModelVersion": "hazard-regime-random-continuous-calibrated-v1",
+  "evaluationStartAt": "2026-09-01T08:00:26.043Z",
   "forecastCounts": {
-    "active": 0,
-    "baseline": 86,
-    "comparable": 0
+    "active": 30,
+    "baseline": 30,
+    "comparable": 30
   },
   "comparison": {
-    "resolved24h": 0,
-    "resolved48h": 0,
-    "positiveCount24h": 0,
-    "positiveCount48h": 0,
-    "targetResetCount": 0,
+    "resolved24h": 7,
+    "resolved48h": 7,
+    "positiveCount24h": 2,
+    "positiveCount48h": 4,
+    "targetResetCount": 3,
     "activeMinusBaseline": {
-      "brier24h": null,
-      "brier48h": null,
-      "logLoss24h": null,
-      "logLoss48h": null
+      "brier24h": 0,
+      "brier48h": 0,
+      "logLoss24h": 0,
+      "logLoss48h": 0
     }
   },
   "models": {
     "active": {
-      "modelVersion": "hazard-elapsed-v1",
+      "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
       "metrics24h": {
-        "count": 0,
-        "positiveCount": 0,
-        "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "count": 7,
+        "positiveCount": 2,
+        "actualRate": 0.2857142857142857,
+        "averagePrediction": 0.5440831891821629,
+        "brier": 0.2404975768601881,
+        "logLoss": 0.6461563176454473,
         "calibration": [
           {
             "range": "0-20%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.11116041367120556,
             "actualRate": 0
           },
           {
@@ -53,34 +53,34 @@
           },
           {
             "range": "40-60%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 4,
+            "averagePrediction": 0.5410014209100776,
+            "actualRate": 0.25
           },
           {
             "range": "60-80%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.6334162269636247,
             "actualRate": 0
           },
           {
             "range": "80-100%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 1,
+            "averagePrediction": 0.9,
+            "actualRate": 1
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
-        "targetResetCount": 0
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-06T15:42:12.464Z",
+        "targetResetCount": 2
       },
       "metrics48h": {
-        "count": 0,
-        "positiveCount": 0,
-        "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "count": 7,
+        "positiveCount": 4,
+        "actualRate": 0.5714285714285714,
+        "averagePrediction": 0.7361977831145502,
+        "brier": 0.24906663733449036,
+        "logLoss": 0.7225740563567857,
         "calibration": [
           {
             "range": "0-20%",
@@ -90,8 +90,8 @@
           },
           {
             "range": "20-40%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.3084873734552771,
             "actualRate": 0
           },
           {
@@ -102,36 +102,36 @@
           },
           {
             "range": "60-80%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 3,
+            "averagePrediction": 0.7329569023967103,
+            "actualRate": 1
           },
           {
             "range": "80-100%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 3,
+            "averagePrediction": 0.8820088003854815,
+            "actualRate": 0.3333333333333333
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
-        "targetResetCount": 0
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-06T15:42:12.464Z",
+        "targetResetCount": 3
       }
     },
     "baseline": {
-      "modelVersion": "hazard-odds-v3-recency-bayes-h30-r3",
+      "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
       "metrics24h": {
-        "count": 0,
-        "positiveCount": 0,
-        "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "count": 7,
+        "positiveCount": 2,
+        "actualRate": 0.2857142857142857,
+        "averagePrediction": 0.5440831891821629,
+        "brier": 0.2404975768601881,
+        "logLoss": 0.6461563176454473,
         "calibration": [
           {
             "range": "0-20%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.11116041367120556,
             "actualRate": 0
           },
           {
@@ -142,34 +142,34 @@
           },
           {
             "range": "40-60%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 4,
+            "averagePrediction": 0.5410014209100776,
+            "actualRate": 0.25
           },
           {
             "range": "60-80%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.6334162269636247,
             "actualRate": 0
           },
           {
             "range": "80-100%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 1,
+            "averagePrediction": 0.9,
+            "actualRate": 1
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
-        "targetResetCount": 0
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-06T15:42:12.464Z",
+        "targetResetCount": 2
       },
       "metrics48h": {
-        "count": 0,
-        "positiveCount": 0,
-        "actualRate": 0,
-        "averagePrediction": 0,
-        "brier": 0,
-        "logLoss": 0,
+        "count": 7,
+        "positiveCount": 4,
+        "actualRate": 0.5714285714285714,
+        "averagePrediction": 0.7361977831145502,
+        "brier": 0.24906663733449036,
+        "logLoss": 0.7225740563567857,
         "calibration": [
           {
             "range": "0-20%",
@@ -179,8 +179,8 @@
           },
           {
             "range": "20-40%",
-            "count": 0,
-            "averagePrediction": 0,
+            "count": 1,
+            "averagePrediction": 0.3084873734552771,
             "actualRate": 0
           },
           {
@@ -191,21 +191,77 @@
           },
           {
             "range": "60-80%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 3,
+            "averagePrediction": 0.7329569023967103,
+            "actualRate": 1
           },
           {
             "range": "80-100%",
-            "count": 0,
-            "averagePrediction": 0,
-            "actualRate": 0
+            "count": 3,
+            "averagePrediction": 0.8820088003854815,
+            "actualRate": 0.3333333333333333
           }
         ],
-        "periodStart": null,
-        "periodEnd": null,
-        "targetResetCount": 0
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-06T15:42:12.464Z",
+        "targetResetCount": 3
       }
+    }
+  },
+  "canonicalRandomResetEvents": [
+    {
+      "id": "banked-reset-2095651088502591861",
+      "resetAt": "2026-09-04T03:34:46.386Z"
+    },
+    {
+      "id": "banked-reset-2095651088502591861-observation-20260904T234601897Z",
+      "resetAt": "2026-09-04T23:46:01.897Z"
+    },
+    {
+      "id": "local-codex-rolling-notice-reset-2026-09-08",
+      "resetAt": "2026-09-08T01:30:00.000Z"
+    }
+  ],
+  "postResetDiagnostic": {
+    "allEligibleOriginCount": 4,
+    "representativeOriginCount": 2,
+    "representativeOrigins": [
+      {
+        "resetId": "banked-reset-2095651088502591861",
+        "resetAt": "2026-09-04T03:34:46.386Z",
+        "generatedAt": "2026-09-04T05:00:13.033Z"
+      },
+      {
+        "resetId": "local-codex-rolling-notice-reset-2026-09-08",
+        "resetAt": "2026-09-08T01:30:00.000Z",
+        "generatedAt": "2026-09-08T05:06:12.544Z"
+      }
+    ],
+    "metrics24h": {
+      "sampleCount": 1,
+      "positiveCount": 1,
+      "activeMeanPrediction": 0.2857098923659838,
+      "baselineMeanPrediction": 0.3987440298029952,
+      "activeBrier": 0.5102103578638145,
+      "baselineBrier": 0.36150874169754155,
+      "brierDelta": 0.14870161616627298,
+      "activeLogLoss": 1.2527783453326475,
+      "baselineLogLoss": 0.9194355972760582,
+      "logLossDelta": 0.33334274805658937,
+      "meanProbabilityDelta": -0.1130341374370114
+    },
+    "metrics48h": {
+      "sampleCount": 1,
+      "positiveCount": 1,
+      "activeMeanPrediction": 0.652395256623592,
+      "baselineMeanPrediction": 0.7037191932282488,
+      "activeBrier": 0.12082905761777847,
+      "baselineBrier": 0.08778231646131976,
+      "brierDelta": 0.03304674115645871,
+      "activeLogLoss": 0.4271046789183742,
+      "baselineLogLoss": 0.3513758756505198,
+      "logLossDelta": 0.07572880326785442,
+      "meanProbabilityDelta": -0.05132393660465684
     }
   },
   "gate": {
@@ -217,11 +273,11 @@
       "resolvedDaily48h": 15,
       "maxLogLossWorsening": 0.05
     },
-    "targetResetCount": 0,
-    "resolvedDaily24h": 0,
-    "resolvedDaily48h": 0,
-    "brier24hNotWorse": false,
-    "brier48hNotWorse": false,
+    "targetResetCount": 3,
+    "resolvedDaily24h": 7,
+    "resolvedDaily48h": 7,
+    "brier24hNotWorse": true,
+    "brier48hNotWorse": true,
     "logLossNotExtremelyWorse": true,
     "eligibleForManualReview": false
   },
@@ -230,8 +286,10 @@
     "Rows before the first comparable forecast are not backfilled and are not relabeled.",
     "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
     "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
+    "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
+    "Only forecasts generated at or after the manual adoption boundary 2026-09-01T08:00:00.000Z are evaluated as the adopted public model hazard-regime-random-continuous-calibrated-post-reset-age-v2; earlier rows remain historical data and are not relabeled.",
     "Prospective results alone never auto-publish or retune a model; manual review is required.",
-    "The frozen hazard-elapsed-v1 publication parameters and the hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",
-    "Data availability: No prediction_history rows contain both the published hazard-elapsed-v1 and h30-r3 forecasts yet."
+    "The stable hazard-elapsed-v1 fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",
+    "The hazard-regime-random-continuous-calibrated-post-reset-age-v2 public model is manually governed at the explicit adoption boundary; hazard-regime-random-continuous-calibrated-v1 remains the comparison baseline, and the prospective gate remains not_met."
   ]
 }
