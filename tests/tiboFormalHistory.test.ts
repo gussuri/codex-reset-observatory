@@ -921,17 +921,22 @@ test("formal reset remains in history after its signal expiry", () => {
 });
 
 test("rejected dynamic reset allows the latest reset to fall back to static history", () => {
-  const acceptedData = getLocalRadarData({ formalTiboResets: [resetSignal()] });
+  const futureReset = resetSignal({
+    tweet_id: "2098000000000000000",
+    tweet_created_at: "2026-09-15T09:00:00.000Z",
+  });
+  const acceptedData = getLocalRadarData({ formalTiboResets: [futureReset] });
   const rejectedData = getLocalRadarData({
     formalTiboResets: [],
-    rejectedTiboResets: [resetSignal()],
+    rejectedTiboResets: [futureReset],
   });
 
-  const acceptedLatest = getLastGlobalResetAt(acceptedData)?.getTime() ?? 0;
-  const rejectedLatest = getLastGlobalResetAt(rejectedData)?.getTime() ?? 0;
+  const testNow = new Date("2026-09-16T00:00:00.000Z");
+  const acceptedLatest = getLastGlobalResetAt(acceptedData, testNow)?.getTime() ?? 0;
+  const rejectedLatest = getLastGlobalResetAt(rejectedData, testNow)?.getTime() ?? 0;
 
   assert.ok(acceptedLatest > rejectedLatest);
-  assert.notEqual(rejectedLatest, new Date(resetSignal().tweet_created_at).getTime());
+  assert.notEqual(rejectedLatest, new Date(futureReset.tweet_created_at).getTime());
 });
 
 test("the static 2026-08-01 Luna record preserves the teaser provenance and execution time", () => {

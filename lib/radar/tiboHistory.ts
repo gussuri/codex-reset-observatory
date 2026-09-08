@@ -1070,8 +1070,48 @@ function buildCanonicalFormalHistory(
   };
 }
 
+const ROLLING_RESET_2026_09_08_ID = "local-codex-rolling-notice-reset-2026-09-08";
+const ROLLING_RESET_2026_09_08_NOTICE_ID = "2097043464538264003";
+const ROLLING_RESET_2026_09_08_START_MS = 1788721200000; // 2026-09-07T19:00:00.000Z
+const ROLLING_RESET_2026_09_08_END_MS = 1788922800000;   // 2026-09-09T03:00:00.000Z
+
+function isRollingReset20260908(item: WindowEventLike): boolean {
+  if (item.id === ROLLING_RESET_2026_09_08_ID) return true;
+  if (item.officialNoticeTweetId === ROLLING_RESET_2026_09_08_NOTICE_ID) return true;
+  if (item.sourceTweetIds?.includes(ROLLING_RESET_2026_09_08_NOTICE_ID)) return true;
+
+  if (item.details?.cycleType === "定期リセット" || item.recordKind === "regular_completed") {
+    return false;
+  }
+
+  // Corroborate delayed usage monitor recoveries for this rolling rollout
+  const isMonitorRecovery = Boolean(item.recoveryObservationId) ||
+    item.presentation === "notice_backed_recovery" ||
+    (typeof item.id === "string" && item.id.startsWith("usage-reset-"));
+
+  if (!isMonitorRecovery) return false;
+
+  const completedTime = getTimestamp(getCompletedAt(item));
+  if (
+    completedTime !== null &&
+    completedTime >= ROLLING_RESET_2026_09_08_START_MS &&
+    completedTime <= ROLLING_RESET_2026_09_08_END_MS
+  ) {
+    const method = item.details?.resetMethod;
+    if (method === "強制リセット" || !method || item.details?.cycleType === "ランダムリセット") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function isSameReset(left: WindowEventLike, right: WindowEventLike) {
   if (left.id && right.id && left.id === right.id) return true;
+
+  if (isRollingReset20260908(left) && isRollingReset20260908(right)) {
+    return true;
+  }
 
   if (
     left.tiboLogicalPostId &&
@@ -1818,6 +1858,12 @@ export function combineResetHistory(
   for (const noticeEvent of noticeBackedEvents.map((event) =>
     enrichHistoryEventSourceIds(event, canonicalFormalHistory.sourceTweetIdsByEventKey),
   )) {
+    const matchingDynamicIndex = dynamicItems.findIndex((item) => isSameReset(item, noticeEvent));
+    if (matchingDynamicIndex !== -1) {
+      dynamicItems[matchingDynamicIndex] = mergeDuplicateHistory(dynamicItems[matchingDynamicIndex], noticeEvent);
+      continue;
+    }
+
     const matchingTiboIndex = tiboItems.findIndex((tiboEvent) => isSameReset(noticeEvent, tiboEvent));
     if (matchingTiboIndex !== -1) {
       const merged = mergeDuplicateHistory(tiboItems[matchingTiboIndex], noticeEvent);
@@ -1845,20 +1891,33 @@ export function combineResetHistory(
   const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...dynamicItems];
   const matchedDynamicIndexes = new Set<number>();
+  const absorbedDynamicIndexes = new Set<number>();
 
   // Keep legacy static records intact. Only a dynamic Tibo record may merge with one static record.
   for (const item of filteredStaticHistory) {
-    const duplicateIndex = dynamicItems.findIndex(
-      (dynamicItem, index) =>
-        !matchedDynamicIndexes.has(index) && isSameReset(dynamicItem, item),
-    );
-    if (duplicateIndex === -1) {
+    const matchingIndexes: number[] = [];
+    for (let i = 0; i < dynamicItems.length; i++) {
+      if (!matchedDynamicIndexes.has(i) && isSameReset(dynamicItems[i], item)) {
+        matchingIndexes.push(i);
+        matchedDynamicIndexes.add(i);
+      }
+    }
+
+    if (matchingIndexes.length === 0) {
       combined.push(item);
     } else {
-      combined[duplicateIndex] = mergeDuplicateHistory(combined[duplicateIndex], item);
-      matchedDynamicIndexes.add(duplicateIndex);
+      const primaryIndex = matchingIndexes[0];
+      let merged = mergeDuplicateHistory(combined[primaryIndex], item);
+      for (let i = 1; i < matchingIndexes.length; i++) {
+        const extraIndex = matchingIndexes[i];
+        merged = mergeDuplicateHistory(merged, combined[extraIndex]);
+        absorbedDynamicIndexes.add(extraIndex);
+      }
+      combined[primaryIndex] = merged;
     }
   }
 
-  return combined;
+  return absorbedDynamicIndexes.size > 0
+    ? combined.filter((_, index) => !absorbedDynamicIndexes.has(index))
+    : combined;
 }

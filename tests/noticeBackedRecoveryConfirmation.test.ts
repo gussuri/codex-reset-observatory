@@ -8,8 +8,10 @@ import {
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
 import {
   resolveDisplayExecutionTime,
+  buildResetExecutionEstimate,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
 } from "@/lib/radar/resetExecution";
+import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import { getRandomResetHeatmapEventTimes } from "@/lib/radar";
 import { getRecoveryResetEvents } from "@/lib/radar/recoveryBoundary";
 import { getLastGlobalResetAt } from "@/lib/radar/probability";
@@ -239,7 +241,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
         limitHistory: false,
       });
       const history = snapshot.viewModel.recentHistory.find(
-        (item) => item.recordKind === "confirmed_global",
+        (item) => item.key === estimate.resetEventKey,
       );
       assert.equal(history?.title, expectedTitle);
       assert.equal(history?.resetType, expectedReason);
@@ -442,28 +444,32 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       limitHistory: false,
     });
 
-    assert.equal(ja.viewModel.recentHistory[0]?.title, "1500万人アクティブユーザー突破記念リセット");
-    assert.equal(en.viewModel.recentHistory[0]?.title, "15 Million Active Users Milestone Reset");
-    assert.equal(zh.viewModel.recentHistory[0]?.title, "活跃用户突破1500万纪念重置");
+    const jaItem = ja.viewModel.recentHistory.find((item) => item.key === sampleEstimate.resetEventKey);
+    const enItem = en.viewModel.recentHistory.find((item) => item.key === sampleEstimate.resetEventKey);
+    const zhItem = zh.viewModel.recentHistory.find((item) => item.key === sampleEstimate.resetEventKey);
+
+    assert.equal(jaItem?.title, "1500万人アクティブユーザー突破記念リセット");
+    assert.equal(enItem?.title, "15 Million Active Users Milestone Reset");
+    assert.equal(zhItem?.title, "活跃用户突破1500万纪念重置");
     assert.equal(
-      ja.viewModel.recentHistory[0]?.summary,
+      jaItem?.summary,
       "Codexのアクティブユーザー数1500万人突破を記念し、ChatGPT WorkとCodex全体の利用上限が強制リセットされました。",
     );
     assert.equal(
-      en.viewModel.recentHistory[0]?.summary,
+      enItem?.summary,
       "To celebrate Codex surpassing 15 million active users, usage limits for ChatGPT Work and Codex were forcibly reset.",
     );
     assert.equal(
-      zh.viewModel.recentHistory[0]?.summary,
+      zhItem?.summary,
       "为纪念 Codex 活跃用户数突破 1500 万，ChatGPT Work 和 Codex 的使用额度进行了强制重置。",
     );
-    assert.equal(ja.viewModel.recentHistory[0]?.resetAt, sampleEstimate.displayExecutionAt);
-    assert.equal(ja.viewModel.recentHistory[0]?.executionTimePrecision, "approximate");
-    assert.equal(ja.viewModel.recentHistory[0]?.resetType, "ご祝儀リセット");
-    assert.equal(ja.viewModel.recentHistory[0]?.details?.cycleType, "ランダムリセット");
-    assert.equal(ja.viewModel.recentHistory[0]?.details?.reasonType, "ご祝儀リセット");
-    assert.equal(ja.viewModel.recentHistory[0]?.details?.resetMethod, "強制リセット");
-    assert.equal(ja.viewModel.recentHistory[0]?.details?.note, ja.viewModel.recentHistory[0]?.summary);
+    assert.equal(jaItem?.resetAt, sampleEstimate.displayExecutionAt);
+    assert.equal(jaItem?.executionTimePrecision, "approximate");
+    assert.equal(jaItem?.resetType, "ご祝儀リセット");
+    assert.equal(jaItem?.details?.cycleType, "ランダムリセット");
+    assert.equal(jaItem?.details?.reasonType, "ご祝儀リセット");
+    assert.equal(jaItem?.details?.resetMethod, "強制リセット");
+    assert.equal(jaItem?.details?.note, jaItem?.summary);
   });
 
   it("O. notice expiry後・recovery公開期限後もestimate由来eventが残る", () => {
@@ -475,12 +481,15 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
         calculationNow: new Date(calculationNow),
         limitHistory: false,
       });
-      assert.equal(snapshot.viewModel.recentHistory[0]?.recordKind, "confirmed_global");
+      const targetItem = snapshot.viewModel.recentHistory.find(
+        (item) => item.key === sampleEstimate.resetEventKey,
+      );
+      assert.equal(targetItem?.recordKind, "confirmed_global");
       assert.equal(snapshot.viewModel.activeWindow.active, false);
       assert.equal(typeof snapshot.viewModel.probability24h, "number");
       assert.equal(typeof snapshot.viewModel.probability48h, "number");
       assert.equal(snapshot.recoveryObservation, null);
-      assert.equal(snapshot.viewModel.recentHistory[0]?.resetAt, sampleEstimate.displayExecutionAt);
+      assert.equal(targetItem?.resetAt, sampleEstimate.displayExecutionAt);
       assert.equal(
         getLastGlobalResetAt(data, new Date(calculationNow))?.toISOString(),
         sampleEstimate.displayExecutionAt,
@@ -497,5 +506,55 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
         1,
       );
     }
+  });
+
+  it("P. 2026-09-08 rolling notice reset absorbs delayed monitor recoveries without duplicating history", () => {
+    const lateObservation: CodexRecoveryObservationInput = {
+      id: "rec-late-monitor-user",
+      observedAt: "2026-09-08T05:30:00.000Z",
+      previousObservedAt: "2026-09-08T05:25:00.000Z",
+      previousUsedPercent: 95,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788800000,
+      currentResetsAt: 1789400000,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "confirmed",
+    };
+
+    const lateEstimate = buildResetExecutionEstimate({
+      resetEventKey: `usage-reset-${lateObservation.id}`,
+      displayExecutionAt: lateObservation.observedAt,
+      executionWindowStartAt: lateObservation.previousObservedAt,
+      executionWindowEndAt: lateObservation.observedAt,
+      usageObservation: lateObservation,
+      isMonitorObserved: true,
+    })!;
+
+    const noticeSignal = {
+      tweet_id: "2097043464538264003",
+      tweet_created_at: "2026-09-07T19:24:57.000Z",
+      signal_type: "official_notice" as const,
+      confidence: 0.99,
+      verification_status: "confirmed" as const,
+      text: "Lands around 6pm PST today.",
+    };
+
+    const combined = combineResetHistory(
+      LOCAL_RESET_HISTORY,
+      [],
+      [],
+      [],
+      [noticeSignal],
+      [lateObservation],
+      [lateEstimate],
+    );
+
+    assert.equal(combined.length, LOCAL_RESET_HISTORY.length);
+    assert.equal(combined[0]?.id, "local-codex-rolling-notice-reset-2026-09-08");
+    assert.equal(combined[0]?.title, "公式予告リセット（順次適用中）");
+    assert.equal(combined[0]?.recoveryObservationId, "rec-late-monitor-user");
+    assert.equal(combined[0]?.scope, "");
+    assert.equal(combined[0]?.details?.scope, "");
   });
 });

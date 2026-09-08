@@ -484,6 +484,7 @@ async function processCodexUsageSnapshot(
     client,
     new Date(snapshot.observedAt),
     recoveryExecutionWindow,
+    true,
   );
   if (recoveryNotice.error) {
     console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
