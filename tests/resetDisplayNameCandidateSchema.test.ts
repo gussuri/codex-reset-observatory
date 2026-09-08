@@ -61,3 +61,31 @@ test("candidate seed serialization uses stable official notice identity", () => 
     /coalesce\(v_candidate\.logical_post_id,\s*v_logical_post_id\)/i,
   );
 });
+
+test("candidate promotion RPC is service-role-only and transaction-scoped", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "utf8",
+  );
+  assert.match(sql, /create or replace function public\.promote_reset_display_name_candidate/i);
+  assert.match(sql, /security invoker/i);
+  assert.match(sql, /set search_path = pg_catalog, public, extensions/i);
+  assert.match(sql, /pg_advisory_xact_lock/i);
+  assert.match(
+    sql,
+    /revoke all on function public\.promote_reset_display_name_candidate\([^)]*\)\s+from\s+public,\s*anon,\s*authenticated/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.promote_reset_display_name_candidate\([^)]*\)\s+to\s+service_role/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /grant execute on function public\.promote_reset_display_name_candidate\([^)]*\)[\s\S]*?to\s+(?:public|anon|authenticated)/i,
+  );
+  assert.match(sql, /tibo_formal_adoptions/i);
+  assert.match(sql, /reset_execution_estimates/i);
+  assert.match(sql, /execution_time_source\s*=\s*'usage_observation'/i);
+  assert.doesNotMatch(sql, /insert\s+into\s+public\.reset_execution_estimates/i);
+  assert.doesNotMatch(sql, /insert\s+into\s+public\.tibo_formal_adoptions/i);
+});

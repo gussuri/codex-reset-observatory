@@ -1,9 +1,12 @@
 import type { RandomResetNameGenerationResult } from "./randomResetNaming";
 import type {
   ResetDisplayNameCandidateAiStatus,
+  ResetDisplayNameCandidateExecutionEvidence,
+  ResetDisplayNameCandidatePromotionResolution,
   ResetDisplayNameCandidateRecord,
   ResetDisplayNameCandidateSeed,
 } from "./resetDisplayNameCandidateTypes";
+import { isCandidatePromotionAuthorized } from "./resetDisplayNameCandidateTypes";
 
 export const RESET_DISPLAY_NAME_CANDIDATE_COLUMNS = [
   "candidate_id",
@@ -226,6 +229,28 @@ type ResetDisplayNameCandidateResultAiStatus = Exclude<
   "unprocessed" | "pending"
 >;
 
+export type PromoteResetDisplayNameCandidateInput = {
+  candidateId: string;
+  canonicalEventKey: string;
+  canonicalSourceTweetId: string | null;
+  promotedAt: string;
+  identityResolution: ResetDisplayNameCandidatePromotionResolution;
+  authoritativeEvidence: readonly ResetDisplayNameCandidateExecutionEvidence[];
+};
+
+export type PromoteResetDisplayNameCandidateResult = {
+  status:
+    | "promoted"
+    | "reused"
+    | "already_promoted"
+    | "not_accepted"
+    | "not_authoritative"
+    | "conflict"
+    | "missing";
+  canonicalWrite: boolean;
+  canonicalEventKey: string | null;
+};
+
 function isSeedOrClaimAiStatus(value: ResetDisplayNameCandidateAiStatus) {
   return value === "unprocessed" || value === "pending";
 }
@@ -349,4 +374,56 @@ export async function writeResetDisplayNameCandidateGeneration(
     .maybeSingle();
   if (error) throw new Error(`Reset display name candidate result write failed: ${errorMessage(error)}`);
   if (data === null) throw new Error("Reset display name candidate result write did not find the candidate");
+}
+
+function isPromotionResultStatus(value: unknown): value is PromoteResetDisplayNameCandidateResult["status"] {
+  return value === "promoted" ||
+    value === "reused" ||
+    value === "already_promoted" ||
+    value === "not_accepted" ||
+    value === "not_authoritative" ||
+    value === "conflict" ||
+    value === "missing";
+}
+
+function notAuthoritativePromotionResult(): PromoteResetDisplayNameCandidateResult {
+  return {
+    status: "not_authoritative",
+    canonicalWrite: false,
+    canonicalEventKey: null,
+  };
+}
+
+export async function promoteResetDisplayNameCandidate(
+  client: ResetDisplayNameCandidateStoreClient,
+  input: PromoteResetDisplayNameCandidateInput,
+): Promise<PromoteResetDisplayNameCandidateResult> {
+  if (
+    !nonEmpty(input.candidateId) ||
+    !nonEmpty(input.canonicalEventKey) ||
+    !nonEmpty(input.promotedAt) ||
+    input.identityResolution.resetEventKey !== input.canonicalEventKey ||
+    !isCandidatePromotionAuthorized(input.identityResolution, input.authoritativeEvidence)
+  ) {
+    return notAuthoritativePromotionResult();
+  }
+
+  const { data, error } = await client.rpc("promote_reset_display_name_candidate", {
+    p_candidate_id: input.candidateId,
+    p_canonical_event_key: input.canonicalEventKey,
+    p_source_tweet_id: input.canonicalSourceTweetId,
+    p_promoted_at: input.promotedAt,
+  });
+  if (error) {
+    throw new Error(`Reset display name candidate promotion failed: ${errorMessage(error)}`);
+  }
+  if (!isObject(data) || !isPromotionResultStatus(data.status)) {
+    throw new Error("Reset display name candidate promotion returned an invalid result");
+  }
+
+  return {
+    status: data.status,
+    canonicalWrite: data.canonicalWrite === true,
+    canonicalEventKey: nullableStringValue(data.canonicalEventKey) ?? null,
+  };
 }
