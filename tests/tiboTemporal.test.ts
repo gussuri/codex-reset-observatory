@@ -370,6 +370,18 @@ test("partial window coverage is not the legacy fixed 90/96 override", () => {
   assert.equal(isTemporalNoticeConsumedAtReset(notice, "2026-08-10T12:00:00.000Z"), true);
 });
 
+test("consumes exact_time and range notices when reset occurs within grace period before expectedStartAt", () => {
+  const exactNotice = {
+    status: "resolved" as const,
+    temporalPrecision: "exact_time" as const,
+    expectedStartAt: "2026-09-08T02:00:00.000Z",
+    expectedEndAt: "2026-09-08T02:00:00.000Z",
+  };
+  assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-08T01:23:00.000Z"), true);
+  assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-08T00:00:00.000Z"), true);
+  assert.equal(isTemporalNoticeConsumedAtReset(exactNotice, "2026-09-07T22:00:00.000Z"), false);
+});
+
 test("recovers an explicit 14pm PST tomorrow schedule from source text when Gemini omits temporal fields", () => {
   const source = "Reset will land around 14pm PST tomorrow.";
   const parsed = parseTiboTemporalSemantics(null, source);

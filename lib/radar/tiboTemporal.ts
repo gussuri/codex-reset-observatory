@@ -1385,9 +1385,10 @@ export function isTemporalNoticeConsumedAtReset(
 
   const expectedStart = Date.parse(resolution.expectedStartAt);
   const expectedEnd = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : expectedStart;
-  if (!Number.isFinite(expectedEnd) || resetTime < expectedStart) return false;
+  if (!Number.isFinite(expectedEnd)) return false;
   if (resolution.temporalPrecision === "exact_time") {
     return Math.abs(resetTime - expectedStart) <= TIBO_NOTICE_GRACE_MS;
   }
+  if (resetTime < expectedStart - TIBO_NOTICE_GRACE_MS) return false;
   return resetTime <= expectedEnd;
 }
