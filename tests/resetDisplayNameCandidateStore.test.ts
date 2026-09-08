@@ -485,3 +485,40 @@ test("longer provider retry timing wins and terminal results clear cooldown", as
   assert.equal(record.nextRetryAt, null);
   assert.deepEqual(record.aiFlags, ["api_error"]);
 });
+
+test("generation results cannot mutate a promoted candidate", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  const row = client.rows.get(seeded.candidateId)!;
+  row.lifecycle_status = "promoted";
+  row.ai_status = "accepted";
+  row.ai_name_ja = "Promoted name";
+
+  await assert.rejects(() => writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "new-source-hash",
+    inputHash: "new-input-hash",
+    aiStatus: "accepted",
+    aiInputMode: "notice-precompute-v1",
+    result: {
+      ...rateLimitedResult(null),
+      status: "success",
+      name: "New name",
+      nameEn: "New name Reset",
+      nameZh: "新名称重置",
+      flags: [],
+      retryAfterSeconds: null,
+    },
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T04:00:00.000Z",
+  }), /did not find the candidate/);
+
+  assert.equal(row.lifecycle_status, "promoted");
+  assert.equal(row.ai_name_ja, "Promoted name");
+  assert.equal(client.resultWrites.length, 0);
+});

@@ -323,6 +323,7 @@ export async function writeResetDisplayNameCandidateGeneration(
       updated_at: input.generatedAt,
     })
     .eq("candidate_id", input.candidateId)
+    .eq("lifecycle_status", "provisional")
     .select("candidate_id")
     .maybeSingle();
   if (error) throw new Error(`Reset display name candidate result write failed: ${errorMessage(error)}`);
