@@ -183,6 +183,11 @@ export type RandomResetNameGenerationResult = RandomResetNameEvaluationResult & 
   retryAfterSeconds: number | null;
 };
 
+export type RandomResetNameV3ValidationContext = {
+  sourcePostText: string;
+  evidenceValues: readonly (string | null)[];
+};
+
 const GENERIC_ONLY_NAMES = new Set([
   "ランダムリセット",
   "強制リセット",
@@ -468,11 +473,14 @@ const GENERIC_LOCALIZED_NAMES = new Set([
 ]);
 
 function addV3SafetyFlags(
-  input: RandomResetNameEvaluationInput,
+  validationContext: RandomResetNameV3ValidationContext,
   names: Array<string | null>,
 ) {
   const flags: string[] = [];
-  const source = input.sourcePostText?.trim() ?? "";
+  const source = validationContext.evidenceValues
+    .filter((value): value is string => Boolean(value))
+    .join("\n")
+    .trim();
   const normalizedSource = source.toLocaleLowerCase();
 
   for (const name of names) {
@@ -494,9 +502,9 @@ function addV3SafetyFlags(
   return Array.from(new Set(flags));
 }
 
-export function parseRandomResetNameV3Response(
+export function parseRandomResetNameV3ResponseWithValidationContext(
   raw: unknown,
-  input: RandomResetNameEvaluationInput,
+  validationContext: RandomResetNameV3ValidationContext,
   model: string,
   latencyMs = 0,
 ): RandomResetNameGenerationResult {
@@ -556,7 +564,7 @@ export function parseRandomResetNameV3Response(
     evidence: null,
     reason,
     evidenceGrounded: null,
-    flags: allNull ? [] : addV3SafetyFlags(input, [nameJa, nameEn, nameZh]),
+    flags: allNull ? [] : addV3SafetyFlags(validationContext, [nameJa, nameEn, nameZh]),
     status: "success",
     model,
     promptVersion: RANDOM_RESET_NAME_PROMPT_VERSION,
@@ -564,6 +572,23 @@ export function parseRandomResetNameV3Response(
     httpStatus: 200,
     retryAfterSeconds: null,
   };
+}
+
+export function parseRandomResetNameV3Response(
+  raw: unknown,
+  input: RandomResetNameEvaluationInput,
+  model: string,
+  latencyMs = 0,
+): RandomResetNameGenerationResult {
+  return parseRandomResetNameV3ResponseWithValidationContext(
+    raw,
+    {
+      sourcePostText: input.sourcePostText ?? "",
+      evidenceValues: [input.sourcePostText],
+    },
+    model,
+    latencyMs,
+  );
 }
 
 export function assessRandomResetNameResult(
@@ -671,6 +696,25 @@ export async function generateRandomResetName(
     timeoutMs?: number;
   },
 ): Promise<RandomResetNameGenerationResult> {
+  return generateRandomResetNameFromPrompt(
+    buildRandomResetNamePrompt(input),
+    {
+      sourcePostText: input.sourcePostText ?? "",
+      evidenceValues: [input.sourcePostText],
+    },
+    options,
+  );
+}
+
+export async function generateRandomResetNameFromPrompt(
+  prompt: string,
+  validationContext: RandomResetNameV3ValidationContext,
+  options: {
+    model?: string;
+    apiKey: string;
+    timeoutMs?: number;
+  },
+): Promise<RandomResetNameGenerationResult> {
   const model = options.model ?? RANDOM_RESET_NAME_MODEL;
   const timeoutMs = options.timeoutMs ?? 10_000;
   const startedAt = performance.now();
@@ -681,7 +725,7 @@ export async function generateRandomResetName(
       role: "user",
       parts: [
         { text: RANDOM_RESET_NAME_V3_SYSTEM_PROMPT },
-        { text: buildRandomResetNamePrompt(input) },
+        { text: prompt },
       ],
     }],
     generationConfig: {
@@ -721,7 +765,12 @@ export async function generateRandomResetName(
     } catch {
       return emptyResult("invalid_json", model, latencyMs, 200);
     }
-    return parseRandomResetNameV3Response(parsed, input, model, latencyMs);
+    return parseRandomResetNameV3ResponseWithValidationContext(
+      parsed,
+      validationContext,
+      model,
+      latencyMs,
+    );
   } catch (error) {
     const latencyMs = Math.round(performance.now() - startedAt);
     return emptyResult(
