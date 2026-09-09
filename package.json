@@ -24,6 +24,7 @@
     "eval:random-reset-names:round2": "tsx scripts/evaluate-random-reset-names-round2.ts",
     "eval:random-reset-names:v2": "tsx scripts/evaluate-random-reset-names-v2.ts",
     "backfill:random-reset-names": "tsx scripts/backfill-random-reset-display-names.ts",
+    "reset:reject": "tsx scripts/reject-reset-event.ts",
     "evaluate:shadow-probability": "tsx scripts/evaluate-shadow-probability.ts",
     "evaluate:probability-models": "tsx scripts/evaluateProbabilityModels.ts",
     "evaluate:regime-elapsed": "tsx scripts/evaluateRegimeElapsedProbability.ts",

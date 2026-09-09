@@ -30,6 +30,7 @@ import {
   isExcludedRecoveryObservationId,
   isExcludedResetEventKey,
 } from "@/data/resetHistory";
+import { isRejectedResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import {
   readTiboFormalAdoptions,
   type TiboFormalAdoptionRecord,
@@ -513,7 +514,8 @@ async function fetchRawResetExecutionEstimates() {
     const rows = result.rows.filter(
       (row) =>
         !isExcludedResetEventKey(row.resetEventKey) &&
-        !isExcludedRecoveryObservationId(row.recoveryObservationId),
+        !isExcludedRecoveryObservationId(row.recoveryObservationId) &&
+        !isRejectedResetExecutionEstimate(row),
     );
     const health = getDatabaseReadHealth(configuration, {
       hasData: rows.length > 0 || result.error === null,

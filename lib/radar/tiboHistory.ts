@@ -13,6 +13,7 @@ import {
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
   isPublicRandomResetExecutionEstimate,
+  isRejectedResetExecutionEstimate,
   type ResetExecutionEstimate,
 } from "./resetExecution";
 import {
@@ -1014,7 +1015,9 @@ function buildCanonicalFormalHistory(
   const staticReferences = staticHistory
     .map(toHistoryEventReference)
     .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference));
-  const estimateReferences = estimates.map(toEstimateReference);
+  const estimateReferences = estimates
+    .filter((estimate) => !isRejectedResetExecutionEstimate(estimate))
+    .map(toEstimateReference);
   const dynamicReferences = dynamicEvents
     .map(toHistoryEventReference)
     .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference));
@@ -1731,6 +1734,7 @@ export function findNoticeBackedRecoveryEvents(
     if (seen.has(estimate.resetEventKey)) return [];
     if (isExcludedResetEventKey(estimate.resetEventKey)) return [];
     if (isExcludedRecoveryObservationId(estimate.recoveryObservationId)) return [];
+    if (isRejectedResetExecutionEstimate(estimate)) return [];
     seen.add(estimate.resetEventKey);
     const event = buildNoticeBackedRecoveryEvent(
       estimate,
@@ -1839,6 +1843,7 @@ export function findBankedDistributionEvents(
 ): Array<WindowEventLike> {
   const seen = new Set<string>();
   return estimates.flatMap((estimate) => {
+    if (isRejectedResetExecutionEstimate(estimate)) return [];
     if (!isBankedDistributionEstimatorVersion(estimate.estimatorVersion)) return [];
     if (seen.has(estimate.resetEventKey)) return [];
     seen.add(estimate.resetEventKey);

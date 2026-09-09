@@ -6,7 +6,11 @@ import {
 } from "../data/resetHistory";
 import { findNoticeBackedRecoveryEvents } from "../lib/radar/tiboHistory";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
-import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
+import {
+  REJECTED_RESET_EXECUTION_ESTIMATOR_VERSION,
+  isRejectedResetExecutionEstimate,
+  type ResetExecutionEstimate,
+} from "../lib/radar/resetExecution";
 
 test("identifies manually excluded reset event keys and observation IDs", () => {
   assert.equal(
@@ -59,4 +63,27 @@ test("isEligibleRandomResetEvent rejects excluded reset event IDs", () => {
   );
 
   assert.equal(result, false);
+});
+
+test("findNoticeBackedRecoveryEvents filters out logically rejected estimates dynamically without hardcoded list", () => {
+  const dynamicRejectedEstimate: ResetExecutionEstimate = {
+    resetEventKey: "usage-reset-00000000-0000-0000-0000-000000000000",
+    recoveryObservationId: "00000000-0000-0000-0000-000000000000",
+    displayExecutionAt: "2026-09-10T05:00:00.000Z",
+    executionTimeSource: "usage_observation",
+    executionTimeConfidence: "low",
+    executionTimePrecision: "approximate",
+    estimatorVersion: REJECTED_RESET_EXECUTION_ESTIMATOR_VERSION,
+    tiboSourceTweetIds: [],
+  };
+
+  assert.equal(isRejectedResetExecutionEstimate(dynamicRejectedEstimate), true);
+
+  const events = findNoticeBackedRecoveryEvents(
+    [],
+    [],
+    [dynamicRejectedEstimate],
+  );
+
+  assert.equal(events.length, 0);
 });

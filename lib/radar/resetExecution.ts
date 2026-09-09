@@ -3,6 +3,7 @@ import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 export const RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-v1";
 export const TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-teaser-v1";
 export const MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-monitor-v1";
+export const REJECTED_RESET_EXECUTION_ESTIMATOR_VERSION = "usage-execution-rejected-v1";
 export const PUBLIC_RANDOM_RESET_EXECUTION_ESTIMATOR_VERSIONS = [
   RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -118,6 +119,21 @@ export function isPublicRandomResetExecutionEstimate(
         ? sourceTweetIds.has(officialNoticeTweetId)
         : isTeaserCorroborated && sourceTweetIds.has(teaserTweetId))),
   );
+}
+
+export function isRejectedResetExecutionEstimate(
+  estimate: Partial<ResetExecutionEstimate> | null | undefined,
+): boolean {
+  if (!estimate) return false;
+  if (typeof estimate.estimatorVersion === "string") {
+    if (
+      estimate.estimatorVersion === REJECTED_RESET_EXECUTION_ESTIMATOR_VERSION ||
+      estimate.estimatorVersion.includes("rejected")
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export type DisplayExecutionDecision = {
