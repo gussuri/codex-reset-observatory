@@ -897,7 +897,7 @@ export function RadarDashboard({
     locale,
   );
   const activeManualOutlook = resolveManualOutlook(
-    state.fetchedAt ?? initialFetchedAt,
+    state.fetchedAt ?? initialFetchedAt ?? state.data?.checkedAt,
     locale,
   );
   const timedTeaserOutlook = getTimedTeaserOutlookTemplate(

@@ -72,6 +72,7 @@ export type ActiveManualOutlook = {
  * };
  */
 export const CURRENT_MANUAL_OUTLOOK: ManualOutlookConfig | null = {
+  startsAt: "2026-09-10T02:30:00+09:00",
   expiresAt: "2026-09-10T04:40:00+09:00",
   style: "alert",
   badge: {
