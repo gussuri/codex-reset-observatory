@@ -27,6 +27,10 @@ import {
   readResetExecutionEstimates,
 } from "@/lib/codexUsageRecoveryStore";
 import {
+  isExcludedRecoveryObservationId,
+  isExcludedResetEventKey,
+} from "@/data/resetHistory";
+import {
   readTiboFormalAdoptions,
   type TiboFormalAdoptionRecord,
 } from "@/lib/radar/tiboFormalAdoptionStore";
@@ -463,14 +467,17 @@ async function fetchRawCodexRecoveryObservations(): Promise<
       auth: { persistSession: false },
     });
     const result = await readCodexRecoveryObservations(supabase);
+    const rows = result.rows.filter(
+      (row) => !isExcludedRecoveryObservationId(row.id),
+    );
     const health = getDatabaseReadHealth(configuration, {
-      hasData: result.rows.length > 0 || result.error === null,
+      hasData: rows.length > 0 || result.error === null,
       hasError: Boolean(result.error),
     });
     if (result.error) {
       console.error("Codex recovery observations query failed", { detail: "database_error" });
     }
-    return { data: result.rows, health };
+    return { data: rows, health };
   } catch {
     console.error("Failed to load codex recovery observations", { detail: "request_failed" });
     return { data: [], health: { state: "degraded", detail: "request_failed" } };
@@ -479,7 +486,7 @@ async function fetchRawCodexRecoveryObservations(): Promise<
 
 const getCachedCodexRecoveryObservations = unstable_cache(
   () => fetchRawCodexRecoveryObservations(),
-  ["codex-recovery-observations-cache-v1"],
+  ["codex-recovery-observations-cache-v2"],
   {
     revalidate: 30,
     tags: ["radar-data"],
@@ -503,14 +510,19 @@ async function fetchRawResetExecutionEstimates() {
       auth: { persistSession: false },
     });
     const result = await readResetExecutionEstimates(supabase);
+    const rows = result.rows.filter(
+      (row) =>
+        !isExcludedResetEventKey(row.resetEventKey) &&
+        !isExcludedRecoveryObservationId(row.recoveryObservationId),
+    );
     const health = getDatabaseReadHealth(configuration, {
-      hasData: result.rows.length > 0 || result.error === null,
+      hasData: rows.length > 0 || result.error === null,
       hasError: Boolean(result.error),
     });
     if (result.error) {
       console.error("Reset execution estimates query failed", { detail: "database_error" });
     }
-    return { data: result.rows, health };
+    return { data: rows, health };
   } catch {
     console.error("Failed to load reset execution estimates", { detail: "request_failed" });
     return { data: [], health: { state: "degraded" as const, detail: "request_failed" as const } };
@@ -519,7 +531,7 @@ async function fetchRawResetExecutionEstimates() {
 
 const getCachedResetExecutionEstimates = unstable_cache(
   () => fetchRawResetExecutionEstimates(),
-  ["reset-execution-estimates-cache-v1"],
+  ["reset-execution-estimates-cache-v2"],
   {
     revalidate: 30,
     tags: ["radar-data"],
@@ -1002,7 +1014,7 @@ const getCachedRadarCore = unstable_cache(
       }));
     }
   },
-  ["radar-core-cache-v2"],
+  ["radar-core-cache-v3"],
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
@@ -1043,7 +1055,7 @@ const getCachedPublicRadarSnapshotBundle = unstable_cache(
       }));
     }
   },
-  ["radar-public-snapshot-bundle-cache-v1"],
+  ["radar-public-snapshot-bundle-cache-v2"],
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
     tags: ["radar-data"],

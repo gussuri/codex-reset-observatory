@@ -20,6 +20,10 @@ import {
   type RegularResetEventRow,
 } from "./regularResetSchedule";
 import { isBroadResetScope } from "./resetEligibility";
+import {
+  isExcludedResetEventKey,
+  isExcludedRecoveryObservationId,
+} from "@/data/resetHistory";
 import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import {
   inferResetCycleType,
@@ -1725,6 +1729,8 @@ export function findNoticeBackedRecoveryEvents(
   const seen = new Set<string>();
   return estimates.flatMap((estimate) => {
     if (seen.has(estimate.resetEventKey)) return [];
+    if (isExcludedResetEventKey(estimate.resetEventKey)) return [];
+    if (isExcludedRecoveryObservationId(estimate.recoveryObservationId)) return [];
     seen.add(estimate.resetEventKey);
     const event = buildNoticeBackedRecoveryEvent(
       estimate,

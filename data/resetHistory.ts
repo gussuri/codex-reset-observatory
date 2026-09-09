@@ -8,6 +8,30 @@ export const MANUAL_NEXT_REGULAR_RESET_TIME_CONFIRMED = false;
 export const MANUAL_SCHEDULE_ANCHOR_AT = null;
 
 /**
+ * 誤検知や不具合等により無効化・除外されたリセットイベントキー（除外リスト）
+ */
+export const MANUAL_EXCLUDED_RESET_EVENT_KEYS: ReadonlyArray<string> = [
+  "usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec",
+];
+
+/**
+ * 誤検知や不具合等により無効化・除外されたリカバリー観測ID（除外リスト）
+ */
+export const MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS: ReadonlyArray<string> = [
+  "512a8b31-e43e-4f91-b5e6-7023b87e80ec",
+];
+
+export function isExcludedResetEventKey(eventKey: string | null | undefined): boolean {
+  if (!eventKey) return false;
+  return MANUAL_EXCLUDED_RESET_EVENT_KEYS.includes(eventKey);
+}
+
+export function isExcludedRecoveryObservationId(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS.includes(id);
+}
+
+/**
  * 単一の信頼できる情報源 (Single Source of Truth)
  * 全30件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.cycleType distinguishes regular and random resets, while recordKind
