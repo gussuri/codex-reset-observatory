@@ -1,8 +1,8 @@
 {
   "schemaVersion": "prospective-published-model-evaluation-v2",
   "status": "insufficient_data",
-  "generatedAt": "2026-09-09T17:24:48.520Z",
-  "asOf": "2026-09-09T17:24:48.520Z",
+  "generatedAt": "2026-09-09T17:56:30.040Z",
+  "asOf": "2026-09-09T17:56:30.040Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
@@ -20,7 +20,7 @@
     "resolved48h": 7,
     "positiveCount24h": 3,
     "positiveCount48h": 4,
-    "targetResetCount": 3,
+    "targetResetCount": 4,
     "activeMinusBaseline": {
       "brier24h": -0.003824822172768444,
       "brier48h": 0,
@@ -224,6 +224,10 @@
     {
       "id": "local-codex-rolling-notice-reset-2026-09-08",
       "resetAt": "2026-09-08T01:30:00.000Z"
+    },
+    {
+      "id": "usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec",
+      "resetAt": "2026-09-09T17:41:53.654Z"
     }
   ],
   "postResetDiagnostic": {
@@ -289,23 +293,23 @@
         "probabilities24h": {
           "v2": 0.5974381606658998,
           "uncalibrated": 0.46519382451577374,
-          "hybrid": 0.46519382451577374
+          "hybrid": 0.4549062764132743
         },
         "brierContributions24h": {
           "v2": 0.35693235581985355,
           "uncalibrated": 0.2164052943676125,
-          "hybrid": 0.2164052943676125
+          "hybrid": 0.2069397203201903
         },
         "actual48h": 0,
         "probabilities48h": {
           "v2": 0.8357482125725314,
           "uncalibrated": 0.7304865900795817,
-          "hybrid": 0.8415858599062698
+          "hybrid": 0.8357482125725314
         },
         "brierContributions48h": {
           "v2": 0.6984750748181812,
           "uncalibrated": 0.5336106582860949,
-          "hybrid": 0.7082667595941755
+          "hybrid": 0.6984750748181812
         },
         "officialNotice": false,
         "finalDisplayOverlay": false,
@@ -317,23 +321,23 @@
         "probabilities24h": {
           "v2": 0.6334162269636247,
           "uncalibrated": 0.5004209919453732,
-          "hybrid": 0.5004209919453732
+          "hybrid": 0.4928085672369434
         },
         "brierContributions24h": {
           "v2": 0.40121611658083406,
           "uncalibrated": 0.25042116917959123,
-          "hybrid": 0.25042116917959123
+          "hybrid": 0.24286028394212894
         },
         "actual48h": 0,
         "probabilities48h": {
           "v2": 0.8502781885839132,
           "uncalibrated": 0.7497383693336577,
-          "hybrid": 0.8544825390136555
+          "hybrid": 0.8502781885839132
         },
         "brierContributions48h": {
           "v2": 0.7229729979815407,
           "uncalibrated": 0.562107622451092,
-          "hybrid": 0.7301404094792232
+          "hybrid": 0.7229729979815407
         },
         "officialNotice": false,
         "finalDisplayOverlay": false,
@@ -345,23 +349,23 @@
         "probabilities24h": {
           "v2": 0.5485834692993445,
           "uncalibrated": 0.4306095451405199,
-          "hybrid": 0.4306095451405199
+          "hybrid": 0.4268000531118725
         },
         "brierContributions24h": {
           "v2": 0.3009438227885049,
           "uncalibrated": 0.18542458036612547,
-          "hybrid": 0.18542458036612547
+          "hybrid": 0.18215828533629722
         },
         "actual48h": 1,
         "probabilities48h": {
           "v2": 0.7676619646243743,
           "uncalibrated": 0.6295216537564122,
-          "hybrid": 0.7710594679011961
+          "hybrid": 0.7676619646243743
         },
         "brierContributions48h": {
           "v2": 0.053980962682205494,
           "uncalibrated": 0.13725420503538371,
-          "hybrid": 0.05241376723768348
+          "hybrid": 0.053980962682205494
         },
         "officialNotice": false,
         "finalDisplayOverlay": false,
@@ -373,23 +377,23 @@
         "probabilities24h": {
           "v2": 0.4604155088515382,
           "uncalibrated": 0.4237786423965198,
-          "hybrid": 0.4237786423965198
+          "hybrid": 0.36320744598728627
         },
         "brierContributions24h": {
           "v2": 0.2911514230879444,
           "uncalibrated": 0.33203105295839785,
-          "hybrid": 0.33203105295839785
+          "hybrid": 0.40550475684603493
         },
         "actual48h": 1,
         "probabilities48h": {
           "v2": 0.6466434438987587,
           "uncalibrated": 0.5999572637645262,
-          "hybrid": 0.7215079600480463
+          "hybrid": 0.6466434438987587
         },
         "brierContributions48h": {
           "v2": 0.12486085573972967,
           "uncalibrated": 0.1600341908147649,
-          "hybrid": 0.07755781631660058
+          "hybrid": 0.12486085573972967
         },
         "officialNotice": false,
         "finalDisplayOverlay": false,
@@ -429,23 +433,23 @@
         "probabilities24h": {
           "v2": 0.11116041367120556,
           "uncalibrated": 0.38238121228923594,
-          "hybrid": 0.38238121228923594
+          "hybrid": 0.08701735334272431
         },
         "brierContributions24h": {
           "v2": 0.012356637567553544,
           "uncalibrated": 0.14621539151178573,
-          "hybrid": 0.14621539151178573
+          "hybrid": 0.0075720197827725344
         },
         "actual48h": 0,
         "probabilities48h": {
           "v2": 0.3084873734552771,
           "uncalibrated": 0.6847966460360067,
-          "hybrid": 0.7746209393887348
+          "hybrid": 0.3084873734552771
         },
         "brierContributions48h": {
           "v2": 0.0951644595813356,
           "uncalibrated": 0.46894644642216377,
-          "hybrid": 0.6000375997394859
+          "hybrid": 0.0951644595813356
         },
         "officialNotice": false,
         "finalDisplayOverlay": true,
@@ -457,23 +461,23 @@
         "probabilities24h": {
           "v2": 0.5575685448235278,
           "uncalibrated": 0.4355087777252968,
-          "hybrid": 0.4355087777252968
+          "hybrid": 0.437581590321258
         },
         "brierContributions24h": {
           "v2": 0.31088268217662635,
           "uncalibrated": 0.18966789547578194,
-          "hybrid": 0.18966789547578194
+          "hybrid": 0.19147764818808127
         },
         "actual48h": 1,
         "probabilities48h": {
           "v2": 0.7845652986669979,
           "uncalibrated": 0.6819577524337412,
-          "hybrid": 0.7818503831988443
+          "hybrid": 0.7845652986669979
         },
         "brierContributions48h": {
           "v2": 0.046412110538439834,
           "uncalibrated": 0.10115087123699742,
-          "hybrid": 0.047589255310491095
+          "hybrid": 0.046412110538439834
         },
         "officialNotice": false,
         "finalDisplayOverlay": true,
@@ -485,12 +489,12 @@
         "probabilities24h": {
           "v2": 0.9,
           "uncalibrated": 0.8999999999999999,
-          "hybrid": 0.8999999999999999
+          "hybrid": 0.9
         },
         "brierContributions24h": {
           "v2": 0.009999999999999995,
           "uncalibrated": 0.010000000000000018,
-          "hybrid": 0.010000000000000018
+          "hybrid": 0.009999999999999995
         },
         "actual48h": null,
         "probabilities48h": {
@@ -513,18 +517,18 @@
         "probabilities24h": {
           "v2": 0.440089602075375,
           "uncalibrated": 0.3468175845784699,
-          "hybrid": 0.3468175845784699
+          "hybrid": 0.34203283162416487
         },
         "brierContributions24h": {
           "v2": 0.1936788578548619,
           "uncalibrated": 0.12028243697284412,
-          "hybrid": 0.12028243697284412
+          "hybrid": 0.11698645790884432
         },
         "actual48h": null,
         "probabilities48h": {
           "v2": 0.7587979219413001,
           "uncalibrated": 0.6404617023037201,
-          "hybrid": 0.7588879482260353
+          "hybrid": 0.7587979219413001
         },
         "brierContributions48h": {
           "v2": null,
@@ -541,7 +545,7 @@
         "probabilities24h": {
           "v2": 0.5082531547539024,
           "uncalibrated": 0.4008376649973422,
-          "hybrid": 0.4008376649973422
+          "hybrid": 0.40464681713207223
         },
         "brierContributions24h": {
           "v2": null,
@@ -552,7 +556,7 @@
         "probabilities48h": {
           "v2": 0.7712535220153638,
           "uncalibrated": 0.65043271345223,
-          "hybrid": 0.7667706678153703
+          "hybrid": 0.7712535220153638
         },
         "brierContributions48h": {
           "v2": null,
@@ -659,33 +663,33 @@
       },
       "hybrid": {
         "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
-        "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+        "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
         "metrics24h": {
           "count": 9,
           "positiveCount": 3,
           "actualRate": 0.3333333333333333,
-          "averagePrediction": 0.5316345087323543,
-          "bias": 0.19830117539902098,
-          "brier": 0.16227198009245986,
-          "logLoss": 0.4924341643177886,
+          "averagePrediction": 0.48937267978194704,
+          "bias": 0.15603934644861372,
+          "brier": 0.15261101914714997,
+          "logLoss": 0.4612038878054764,
           "calibration": [
             {
               "range": "0-20%",
-              "count": 0,
-              "averagePrediction": 0,
+              "count": 1,
+              "averagePrediction": 0.08701735334272431,
               "actualRate": 0
             },
             {
               "range": "20-40%",
               "count": 2,
-              "averagePrediction": 0.3645993984338529,
-              "actualRate": 0
+              "averagePrediction": 0.35262013880572557,
+              "actualRate": 0.5
             },
             {
               "range": "40-60%",
-              "count": 5,
-              "averagePrediction": 0.45110235634469664,
-              "actualRate": 0.2
+              "count": 4,
+              "averagePrediction": 0.45302412177083706,
+              "actualRate": 0
             },
             {
               "range": "60-80%",
@@ -696,7 +700,7 @@
             {
               "range": "80-100%",
               "count": 2,
-              "averagePrediction": 0.8999999999999999,
+              "averagePrediction": 0.9,
               "actualRate": 1
             }
           ],
@@ -708,10 +712,10 @@
           "count": 7,
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
-          "averagePrediction": 0.8150153070652495,
-          "bias": 0.2435867356366781,
-          "brier": 0.3168008010968086,
-          "logLoss": 0.8761841187723813,
+          "averagePrediction": 0.7361977831145502,
+          "bias": 0.1647692116859788,
+          "brier": 0.24906663733449036,
+          "logLoss": 0.7225740563567857,
           "calibration": [
             {
               "range": "0-20%",
@@ -721,8 +725,8 @@
             },
             {
               "range": "20-40%",
-              "count": 0,
-              "averagePrediction": 0,
+              "count": 1,
+              "averagePrediction": 0.3084873734552771,
               "actualRate": 0
             },
             {
@@ -733,14 +737,14 @@
             },
             {
               "range": "60-80%",
-              "count": 4,
-              "averagePrediction": 0.7622596876342054,
-              "actualRate": 0.75
+              "count": 3,
+              "averagePrediction": 0.7329569023967103,
+              "actualRate": 1
             },
             {
               "range": "80-100%",
               "count": 3,
-              "averagePrediction": 0.8853561329733083,
+              "averagePrediction": 0.8820088003854815,
               "actualRate": 0.3333333333333333
             }
           ],
@@ -1118,6 +1122,305 @@
         }
       }
     },
+    "hybridReplay": {
+      "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+      "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+      "metrics24h": {
+        "count": 9,
+        "positiveCount": 3,
+        "actualRate": 0.3333333333333333,
+        "averagePrediction": 0.5316345087323543,
+        "bias": 0.19830117539902098,
+        "brier": 0.16227198009245986,
+        "logLoss": 0.4924341643177886,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 2,
+            "averagePrediction": 0.3645993984338529,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 5,
+            "averagePrediction": 0.45110235634469664,
+            "actualRate": 0.2
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 2,
+            "averagePrediction": 0.8999999999999999,
+            "actualRate": 1
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-08T16:48:51.682Z",
+        "targetResetCount": 3
+      },
+      "metrics48h": {
+        "count": 7,
+        "positiveCount": 4,
+        "actualRate": 0.5714285714285714,
+        "averagePrediction": 0.8150153070652495,
+        "bias": 0.2435867356366781,
+        "brier": 0.3168008010968086,
+        "logLoss": 0.8761841187723813,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 4,
+            "averagePrediction": 0.7622596876342054,
+            "actualRate": 0.75
+          },
+          {
+            "range": "80-100%",
+            "count": 3,
+            "averagePrediction": 0.8853561329733083,
+            "actualRate": 0.3333333333333333
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-06T15:42:12.464Z",
+        "targetResetCount": 3
+      }
+    },
+    "savedArtifactHybridAudit": {
+      "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
+      "origins": [
+        {
+          "origin": "2026-09-01T08:00:26.043Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.4549062764132743,
+          "savedProbability24h": 0.5974381606658998,
+          "alpha24h": 0.5756683964353628,
+          "calibratedProbability24h": 0.5974381606658998,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.7219077116417907,
+          "savedProbability48h": 0.8357482125725314,
+          "alpha48h": 0.6729825705222675,
+          "calibratedProbability48h": 0.8357482125725314,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.4549062764132743,
+          "hybridProbability48h": 0.8357482125725314,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-01T16:51:47.016Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.4928085672369434,
+          "savedProbability24h": 0.6334162269636247,
+          "alpha24h": 0.5756683964353628,
+          "calibratedProbability24h": 0.6334162269636247,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.7434164464401498,
+          "savedProbability48h": 0.8502781885839132,
+          "alpha48h": 0.6729825705222675,
+          "calibratedProbability48h": 0.8502781885839132,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.4928085672369434,
+          "hybridProbability48h": 0.8502781885839132,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-02T16:49:13.509Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.4268000531118725,
+          "savedProbability24h": 0.5485834692993445,
+          "alpha24h": 0.4898679202836193,
+          "calibratedProbability24h": 0.5485834692993445,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.6250451250383761,
+          "savedProbability48h": 0.7676619646243743,
+          "alpha48h": 0.6841379638938238,
+          "calibratedProbability48h": 0.7676619646243743,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.4268000531118725,
+          "hybridProbability48h": 0.7676619646243743,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-03T16:38:23.571Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.36320744598728627,
+          "savedProbability24h": 0.4604155088515382,
+          "alpha24h": 0.4027997734072668,
+          "calibratedProbability24h": 0.4604155088515382,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.5144086445483952,
+          "savedProbability48h": 0.6466434438987587,
+          "alpha48h": 0.5466668900613134,
+          "calibratedProbability48h": 0.6466434438987587,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.36320744598728627,
+          "hybridProbability48h": 0.6466434438987587,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-04T16:33:39.803Z",
+          "officialNoticeOverride": true,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.19322036417121535,
+          "savedProbability24h": 0.9,
+          "alpha24h": 0.330490458103664,
+          "calibratedProbability24h": 0.24997815735778997,
+          "calibration24h": "mismatch",
+          "finalMismatchExplanation24h": "official-notice",
+          "rawProbability48h": 0.33036294403859395,
+          "savedProbability48h": 0.96,
+          "alpha48h": 0.4157876077909855,
+          "calibratedProbability48h": 0.4278187053134485,
+          "calibration48h": "mismatch",
+          "finalMismatchExplanation48h": "official-notice",
+          "hybridProbability24h": 0.9,
+          "hybridProbability48h": 0.96,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-05T15:28:58.662Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.08701735334272431,
+          "savedProbability24h": 0.11116041367120556,
+          "alpha24h": 0.2716668608568171,
+          "calibratedProbability24h": 0.11116041367120556,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.2467922145496297,
+          "savedProbability48h": 0.3084873734552771,
+          "alpha48h": 0.3085938903712517,
+          "calibratedProbability48h": 0.3084873734552771,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.08701735334272431,
+          "hybridProbability48h": 0.3084873734552771,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-06T15:42:12.464Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.437581590321258,
+          "savedProbability24h": 0.5575685448235278,
+          "alpha24h": 0.48228279076423547,
+          "calibratedProbability24h": 0.5575685448235278,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.6854156457460241,
+          "savedProbability48h": 0.7845652986669979,
+          "alpha48h": 0.5136987720148508,
+          "calibratedProbability48h": 0.7845652986669979,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.437581590321258,
+          "hybridProbability48h": 0.7845652986669979,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-07T21:44:09.200Z",
+          "officialNoticeOverride": true,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.37283231473177475,
+          "savedProbability24h": 0.9,
+          "alpha24h": 0.41344988267850147,
+          "calibratedProbability24h": 0.47336640730775964,
+          "calibration24h": "mismatch",
+          "finalMismatchExplanation24h": "official-notice",
+          "rawProbability48h": 0.5569403727505352,
+          "savedProbability48h": 0.96,
+          "alpha48h": 0.5405742461600598,
+          "calibratedProbability48h": 0.6833755238406475,
+          "calibration48h": "mismatch",
+          "finalMismatchExplanation48h": "official-notice",
+          "hybridProbability24h": 0.9,
+          "hybridProbability48h": 0.96,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-08T16:48:51.682Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.34203283162416487,
+          "savedProbability24h": 0.440089602075375,
+          "alpha24h": 0.41344988267850147,
+          "calibratedProbability24h": 0.440089602075375,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.6403484138179253,
+          "savedProbability48h": 0.7587979219413001,
+          "alpha48h": 0.5692237409675281,
+          "calibratedProbability48h": 0.7587979219413001,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.34203283162416487,
+          "hybridProbability48h": 0.7587979219413001,
+          "coherenceAdjusted": false
+        },
+        {
+          "origin": "2026-09-09T16:51:58.105Z",
+          "officialNoticeOverride": false,
+          "savedHorizonCoherenceAdjusted": false,
+          "rawProbability24h": 0.40464681713207223,
+          "savedProbability24h": 0.5082531547539024,
+          "alpha24h": 0.41915580160852206,
+          "calibratedProbability24h": 0.5082531547539024,
+          "calibration24h": "match",
+          "finalMismatchExplanation24h": "none",
+          "rawProbability48h": 0.656148914340411,
+          "savedProbability48h": 0.7712535220153638,
+          "alpha48h": 0.5692237409675281,
+          "calibratedProbability48h": 0.7712535220153638,
+          "calibration48h": "match",
+          "finalMismatchExplanation48h": "none",
+          "hybridProbability24h": 0.40464681713207223,
+          "hybridProbability48h": 0.7712535220153638,
+          "coherenceAdjusted": false
+        }
+      ],
+      "originsWithCoherenceAdjustment": [],
+      "originsWithUnexplainedSavedFinalMismatch": []
+    },
     "subsets": {
       "noOfficialNotice": {
         "originCount": 8,
@@ -1226,33 +1529,33 @@
           },
           "hybrid": {
             "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
             "metrics24h": {
               "count": 7,
               "positiveCount": 1,
               "actualRate": 0.14285714285714285,
-              "averagePrediction": 0.426387225513027,
-              "bias": 0.28353008265588414,
-              "brier": 0.20577826011887695,
-              "logLoss": 0.6030266353634921,
+              "averagePrediction": 0.3720505882910748,
+              "bias": 0.22919344543393194,
+              "brier": 0.19335702461776424,
+              "logLoss": 0.562873422704805,
               "calibration": [
                 {
                   "range": "0-20%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.08701735334272431,
                   "actualRate": 0
                 },
                 {
                   "range": "20-40%",
                   "count": 2,
-                  "averagePrediction": 0.3645993984338529,
-                  "actualRate": 0
+                  "averagePrediction": 0.35262013880572557,
+                  "actualRate": 0.5
                 },
                 {
                   "range": "40-60%",
-                  "count": 5,
-                  "averagePrediction": 0.45110235634469664,
-                  "actualRate": 0.2
+                  "count": 4,
+                  "averagePrediction": 0.45302412177083706,
+                  "actualRate": 0
                 },
                 {
                   "range": "60-80%",
@@ -1275,10 +1578,10 @@
               "count": 6,
               "positiveCount": 3,
               "actualRate": 0.5,
-              "averagePrediction": 0.7908511915761244,
-              "bias": 0.2908511915761244,
-              "brier": 0.3693342679462766,
-              "logLoss": 1.015411139481069,
+              "averagePrediction": 0.698897413633642,
+              "bias": 0.198897413633642,
+              "brier": 0.2903110768902388,
+              "logLoss": 0.8361993999962075,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1288,8 +1591,8 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.3084873734552771,
                   "actualRate": 0
                 },
                 {
@@ -1300,14 +1603,14 @@
                 },
                 {
                   "range": "60-80%",
-                  "count": 4,
-                  "averagePrediction": 0.7622596876342054,
-                  "actualRate": 0.75
+                  "count": 3,
+                  "averagePrediction": 0.7329569023967103,
+                  "actualRate": 1
                 },
                 {
                   "range": "80-100%",
                   "count": 2,
-                  "averagePrediction": 0.8480341994599626,
+                  "averagePrediction": 0.8430132005782223,
                   "actualRate": 0
                 }
               ],
@@ -1793,15 +2096,15 @@
           },
           "hybrid": {
             "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
             "metrics24h": {
               "count": 7,
               "positiveCount": 3,
               "actualRate": 0.42857142857142855,
-              "averagePrediction": 0.5666886555109508,
-              "bias": 0.13811722693952228,
-              "brier": 0.16065207626351016,
-              "logLoss": 0.4825990247958562,
+              "averagePrediction": 0.5542507391962201,
+              "bias": 0.1256793106247916,
+              "brier": 0.16777850062192798,
+              "logLoss": 0.49775533997858495,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1811,15 +2114,15 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 1,
-                  "averagePrediction": 0.3468175845784699,
-                  "actualRate": 0
+                  "count": 2,
+                  "averagePrediction": 0.35262013880572557,
+                  "actualRate": 0.5
                 },
                 {
                   "range": "40-60%",
-                  "count": 4,
-                  "averagePrediction": 0.4550007509995466,
-                  "actualRate": 0.25
+                  "count": 3,
+                  "averagePrediction": 0.45817163225403007,
+                  "actualRate": 0
                 },
                 {
                   "range": "60-80%",
@@ -1830,7 +2133,7 @@
                 {
                   "range": "80-100%",
                   "count": 2,
-                  "averagePrediction": 0.8999999999999999,
+                  "averagePrediction": 0.9,
                   "actualRate": 1
                 }
               ],
@@ -1842,10 +2145,10 @@
               "count": 5,
               "positiveCount": 3,
               "actualRate": 0.6,
-              "averagePrediction": 0.8297271653738335,
-              "bias": 0.22972716537383353,
-              "brier": 0.3139957505255365,
-              "logLoss": 0.8794450736687406,
+              "averagePrediction": 0.8120663619359154,
+              "bias": 0.21206636193591544,
+              "brier": 0.3203779782443314,
+              "logLoss": 0.8893038103715313,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1868,13 +2171,13 @@
                 {
                   "range": "60-80%",
                   "count": 2,
-                  "averagePrediction": 0.7462837139746212,
+                  "averagePrediction": 0.7071527042615665,
                   "actualRate": 1
                 },
                 {
                   "range": "80-100%",
                   "count": 3,
-                  "averagePrediction": 0.8853561329733083,
+                  "averagePrediction": 0.8820088003854815,
                   "actualRate": 0.3333333333333333
                 }
               ],
@@ -2354,15 +2657,15 @@
           },
           "hybrid": {
             "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
             "metrics24h": {
               "count": 2,
               "positiveCount": 2,
               "actualRate": 1,
-              "averagePrediction": 0.8999999999999999,
-              "bias": -0.10000000000000009,
-              "brier": 0.010000000000000005,
-              "logLoss": 0.10536051565782634,
+              "averagePrediction": 0.9,
+              "bias": -0.09999999999999998,
+              "brier": 0.009999999999999995,
+              "logLoss": 0.10536051565782628,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2391,7 +2694,7 @@
                 {
                   "range": "80-100%",
                   "count": 2,
-                  "averagePrediction": 0.8999999999999999,
+                  "averagePrediction": 0.9,
                   "actualRate": 1
                 }
               ],
@@ -2914,15 +3217,15 @@
           },
           "hybrid": {
             "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
             "metrics24h": {
               "count": 1,
               "positiveCount": 0,
               "actualRate": 0,
-              "averagePrediction": 0.3468175845784699,
-              "bias": 0.3468175845784699,
-              "brier": 0.12028243697284412,
-              "logLoss": 0.4258988389133353,
+              "averagePrediction": 0.34203283162416487,
+              "bias": 0.34203283162416487,
+              "brier": 0.11698645790884432,
+              "logLoss": 0.41860024498702786,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2933,7 +3236,7 @@
                 {
                   "range": "20-40%",
                   "count": 1,
-                  "averagePrediction": 0.3468175845784699,
+                  "averagePrediction": 0.34203283162416487,
                   "actualRate": 0
                 },
                 {
@@ -3383,6 +3686,12 @@
         "logLoss48h": 0.1449392885543742
       },
       "hybrid": {
+        "brier24h": -0.057073635950203205,
+        "brier48h": 0,
+        "logLoss24h": -0.11751091785417744,
+        "logLoss48h": 0
+      },
+      "hybridReplay": {
         "brier24h": -0.04741267500489332,
         "brier48h": 0.06773416376231822,
         "logLoss24h": -0.08628064134186525,
@@ -3418,7 +3727,7 @@
       "resolvedDaily48h": 15,
       "maxLogLossWorsening": 0.05
     },
-    "targetResetCount": 3,
+    "targetResetCount": 4,
     "resolvedDaily24h": 9,
     "resolvedDaily48h": 7,
     "brier24hNotWorse": true,
@@ -3432,8 +3741,8 @@
     "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
     "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
     "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
-    "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
-    "The hybrid and fully uncalibrated values are point-in-time retrospective replays. A hybrid 48h value can differ from the persisted current-v2 row because the original v2 input and training snapshot are not replayed verbatim; this diagnostic difference does not alter the primary gate or public model.",
+    "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, saved-artifact hybrid, v3 retrospective, current v2, raw continuous, and v1 series; retrospective candidates never affect the primary gate or status.",
+    "The saved-artifact hybrid is the primary retrospective counterfactual and reads the persisted v2 raw/final values and calibration metadata. The point-in-time hybrid replay remains a separate diagnostic because the original v2 input and training snapshot cannot be reproduced exactly.",
     "Only forecasts generated at or after the manual adoption boundary 2026-09-01T08:00:00.000Z are evaluated as the adopted public model hazard-regime-random-continuous-calibrated-post-reset-age-v2; earlier rows remain historical data and are not relabeled.",
     "Prospective results alone never auto-publish or retune a model; manual review is required.",
     "The stable hazard-elapsed-v1 fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",

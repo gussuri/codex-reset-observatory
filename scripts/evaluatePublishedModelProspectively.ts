@@ -22,6 +22,7 @@ import type { RadarData } from "../lib/radar";
 import { getActualWithinHorizon, getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
 import {
   evaluatePublishedModelProspectively,
+  buildSavedArtifactHybridForecast,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   selectDailyFirstPublishedForecasts,
@@ -257,6 +258,37 @@ function buildRetrospectiveHybridForecasts(
   );
 }
 
+function buildSavedArtifactHybridForecasts(
+  rows: Array<ProspectiveForecastRow>,
+  asOf: Date,
+) {
+  const adoptionTime = parseTimestamp(PUBLISHED_PROBABILITY_ADOPTION_AT);
+  const comparableRows = rows.filter((row) => {
+    const generatedTime = parseTimestamp(row.generatedAt);
+    return generatedTime !== null
+      && generatedTime <= asOf.getTime()
+      && (adoptionTime === null || generatedTime >= adoptionTime!);
+  });
+  const dailyRows = selectDailyFirstPublishedForecasts(comparableRows);
+  const forecasts: Record<string, ProspectiveStoredForecast> = {};
+  const audits: Record<string, ReturnType<typeof buildSavedArtifactHybridForecast>["audit"]> = {};
+  for (const row of dailyRows) {
+    const savedV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    if (
+      !savedV2
+      || savedV2.modelVersion !== PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION
+      || !isFiniteProbability(savedV2.rawProbability24h)
+      || !isFiniteProbability(savedV2.rawProbability48h)
+    ) {
+      continue;
+    }
+    const built = buildSavedArtifactHybridForecast(savedV2);
+    forecasts[row.generatedAt] = built.forecast;
+    audits[row.generatedAt] = built.audit;
+  }
+  return { forecasts, audits };
+}
+
 function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
   const active24h = report.models.active.metrics24h;
   const active48h = report.models.active.metrics48h;
@@ -304,17 +336,20 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Positive forecasts: 24h=${report.comparison.positiveCount24h}, 48h=${report.comparison.positiveCount48h}`,
     `- Target random reset count: ${report.comparison.targetResetCount}`,
     "",
-    "## Unified model comparison (retrospective v3 diagnostic)",
+    "## Unified model comparison (retrospective diagnostics)",
     "",
-    "All six series use the same daily-first saved origins, canonical truth, and resolved-horizon rules. The hybrid and fully uncalibrated candidates are retrospective point-in-time counterfactuals; they were not saved prospectively and never affect the primary gate or status.",
+    "The saved-artifact hybrid is the primary retrospective counterfactual: its 24h/48h values are reconstructed from the saved v2 artifact. The point-in-time hybrid replay is retained as a separate diagnostic because its original training/input snapshot cannot be reproduced exactly. Neither retrospective series affects the primary gate or status.",
     `- Shared origins: ${report.unifiedComparison.originCount}`,
     `- Origin timestamps: ${report.unifiedComparison.origins.length > 0 ? report.unifiedComparison.origins.join(", ") : "none"}`,
     ...formatUnifiedSeries("Final displayed", report.unifiedComparison.series.finalDisplayed),
     "",
     ...formatUnifiedSeries("v3 uncalibrated post-reset-age candidate", report.unifiedComparison.series.v3),
     "",
-    ...formatUnifiedSeries("Selective-calibration hybrid candidate", report.unifiedComparison.series.hybrid),
+    ...formatUnifiedSeries("Selective-calibration hybrid candidate (saved artifact)", report.unifiedComparison.series.hybrid),
     "",
+    ...(report.unifiedComparison.hybridReplay === null
+      ? ["### Selective-calibration hybrid candidate (point-in-time replay)", "- unavailable", ""]
+      : [...formatUnifiedSeries("Selective-calibration hybrid candidate (point-in-time replay)", report.unifiedComparison.hybridReplay), ""]),
     ...formatUnifiedSeries("Current v2 calibrated", report.unifiedComparison.series.currentV2),
     "",
     ...formatUnifiedSeries("Raw continuous", report.unifiedComparison.series.rawContinuous),
@@ -323,7 +358,8 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     "",
     "### Delta versus current v2",
     `- Final displayed: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.finalDisplayed)}`,
-    `- Hybrid: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.hybrid)}`,
+    `- Hybrid saved artifact: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.hybrid)}`,
+    `- Hybrid point-in-time replay: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.hybridReplay)}`,
     `- v3: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v3)}`,
     `- Raw continuous: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.rawContinuous)}`,
     `- v1: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v1)}`,
@@ -341,6 +377,12 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     ...formatUnifiedSubset("Official notice override active", report.unifiedComparison.subsets.noticeOverrideActive),
     "",
     ...formatUnifiedSubset("Latest random reset at 0-24h", report.unifiedComparison.subsets.latestRandomReset0To24h),
+    "",
+    "### Saved-artifact hybrid audit",
+    `- Source: ${report.unifiedComparison.savedArtifactHybridAudit.source}`,
+    `- Audited origins: ${report.unifiedComparison.savedArtifactHybridAudit.origins.length}`,
+    `- Origins with counterfactual coherence adjustment: ${report.unifiedComparison.savedArtifactHybridAudit.originsWithCoherenceAdjustment.length > 0 ? report.unifiedComparison.savedArtifactHybridAudit.originsWithCoherenceAdjustment.join(", ") : "none"}`,
+    `- Origins with unexplained saved-final mismatch: ${report.unifiedComparison.savedArtifactHybridAudit.originsWithUnexplainedSavedFinalMismatch.length > 0 ? JSON.stringify(report.unifiedComparison.savedArtifactHybridAudit.originsWithUnexplainedSavedFinalMismatch) : "none"}`,
     "",
     "### Manual review gate",
     "",
@@ -402,10 +444,13 @@ async function main() {
       })
     : [];
   const v3Forecasts = buildRetrospectiveV3Forecasts(history.rows, production.data, events, asOf);
-  const hybridForecasts = buildRetrospectiveHybridForecasts(history.rows, production.data, events, asOf);
+  const hybridReplayForecasts = buildRetrospectiveHybridForecasts(history.rows, production.data, events, asOf);
+  const savedArtifactHybrid = buildSavedArtifactHybridForecasts(history.rows, asOf);
   const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf, {
     v3Forecasts,
-    hybridForecasts,
+    hybridForecasts: savedArtifactHybrid.forecasts,
+    hybridReplayForecasts,
+    savedArtifactHybridAudits: savedArtifactHybrid.audits,
   });
   const availabilityNotes: string[] = [];
   if (baseReport.forecastCounts.comparable === 0) {
@@ -441,7 +486,8 @@ async function main() {
     unifiedComparison: {
       sharedOriginCount: report.unifiedComparison.originCount,
       v3ForecastCount: v3Forecasts ? Object.keys(v3Forecasts).length : 0,
-      hybridForecastCount: hybridForecasts ? Object.keys(hybridForecasts).length : 0,
+      hybridForecastCount: Object.keys(savedArtifactHybrid.forecasts).length,
+      hybridReplayForecastCount: hybridReplayForecasts ? Object.keys(hybridReplayForecasts).length : 0,
       v3Metrics24h: report.unifiedComparison.series.v3.metrics24h,
       v3Metrics48h: report.unifiedComparison.series.v3.metrics48h,
       hybridMetrics24h: report.unifiedComparison.series.hybrid.metrics24h,

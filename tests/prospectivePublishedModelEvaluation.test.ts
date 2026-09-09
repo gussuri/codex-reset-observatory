@@ -5,6 +5,7 @@ import {
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS,
+  buildSavedArtifactHybridForecast,
   evaluatePublishedModelProspectively,
   formatPublishedProspectiveMetric,
   selectComparablePublishedForecasts,
@@ -109,6 +110,85 @@ test("published metric formatting includes bias without breaking legacy metric c
     logLoss: 0,
     targetResetCount: 0,
   }));
+});
+
+test("saved-artifact hybrid uses raw 24h and saved calibrated 48h", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const savedV2 = {
+    modelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+    generatedAt,
+    rawProbability24h: 0.2,
+    rawProbability48h: 0.4,
+    probability24h: 0.3,
+    probability48h: 0.6,
+    alpha24h: Math.log(0.3 / 0.7) - Math.log(0.2 / 0.8),
+    alpha48h: Math.log(0.6 / 0.4) - Math.log(0.4 / 0.6),
+    officialNoticeOverride: false,
+    horizonCoherenceAdjusted: false,
+  };
+
+  const result = buildSavedArtifactHybridForecast(savedV2);
+
+  assert.equal(result.forecast.probability24h, savedV2.rawProbability24h);
+  assert.equal(result.forecast.probability48h, savedV2.probability48h);
+  assert.equal(result.audit.calibration24h, "match");
+  assert.equal(result.audit.calibration48h, "match");
+  assert.equal(result.audit.coherenceAdjusted, false);
+  assert.equal(result.forecast.savedArtifactCounterfactual, true);
+});
+
+test("saved-artifact hybrid preserves official notice final values and audits unexplained overlays", () => {
+  const notice = buildSavedArtifactHybridForecast({
+    modelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+    generatedAt: "2026-09-02T00:00:00.000Z",
+    rawProbability24h: 0.2,
+    rawProbability48h: 0.4,
+    probability24h: 0.9,
+    probability48h: 0.96,
+    alpha24h: 0,
+    alpha48h: 0,
+    officialNoticeOverride: true,
+    horizonCoherenceAdjusted: false,
+  });
+  assert.equal(notice.forecast.probability24h, 0.9);
+  assert.equal(notice.forecast.probability48h, 0.96);
+  assert.equal(notice.audit.finalMismatchExplanation24h, "official-notice");
+  assert.equal(notice.audit.finalMismatchExplanation48h, "official-notice");
+
+  const nonNoticeMismatch = buildSavedArtifactHybridForecast({
+    modelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+    generatedAt: "2026-09-03T00:00:00.000Z",
+    rawProbability24h: 0.2,
+    rawProbability48h: 0.4,
+    probability24h: 0.8,
+    probability48h: 0.6,
+    alpha24h: 0,
+    alpha48h: 0,
+    officialNoticeOverride: false,
+    horizonCoherenceAdjusted: false,
+  });
+  assert.equal(nonNoticeMismatch.forecast.probability24h, 0.2);
+  assert.equal(nonNoticeMismatch.audit.finalMismatchExplanation24h, "unexplained");
+});
+
+test("saved-artifact hybrid applies horizon coherence only when candidate 24h exceeds saved 48h", () => {
+  const result = buildSavedArtifactHybridForecast({
+    modelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+    generatedAt: "2026-09-04T00:00:00.000Z",
+    rawProbability24h: 0.8,
+    rawProbability48h: 0.4,
+    probability24h: 0.7,
+    probability48h: 0.7,
+    alpha24h: 0,
+    alpha48h: 0,
+    officialNoticeOverride: false,
+    horizonCoherenceAdjusted: false,
+  });
+
+  assert.equal(result.forecast.probability24h, 0.8);
+  assert.equal(result.forecast.probability48h, 0.8);
+  assert.equal(result.audit.coherenceAdjusted, true);
+  assert.equal(result.audit.finalMismatchExplanation48h, "unexplained");
 });
 
 test("primary prospective gate thresholds remain unchanged", () => {
@@ -390,6 +470,52 @@ test("unified model comparison uses the same daily origins and reads final displ
   assert.equal(report.unifiedComparison.series.currentV2.metrics24h.count, 1);
   assert.equal(report.unifiedComparison.series.v3.metrics48h.count, 1);
   assert.equal(report.unifiedComparison.retrospectiveV3, true);
+});
+
+test("saved-artifact hybrid is primary while point-in-time replay remains diagnostic", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const row = forecastRow(generatedAt, 0.3, 0.5, 0.4, 0.6);
+  const savedV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  assert.ok(savedV2);
+  savedV2.probability24h = 0.2;
+  savedV2.probability48h = 0.4;
+  savedV2.rawProbability24h = 0.2;
+  savedV2.rawProbability48h = 0.4;
+  savedV2.alpha24h = 0;
+  savedV2.alpha48h = 0;
+  savedV2.officialNoticeOverride = false;
+  savedV2.horizonCoherenceAdjusted = false;
+  row.finalDisplayed = {
+    modelVersion: "published-final-displayed",
+    generatedAt,
+    probability24h: 0.12,
+    probability48h: 0.24,
+  };
+  const savedArtifact = buildSavedArtifactHybridForecast(savedV2);
+  const report = evaluatePublishedModelProspectively(
+    [row],
+    [],
+    new Date("2026-09-04T00:00:00.000Z"),
+    {
+      adoptionAt: null,
+      v3Forecasts: {
+        [generatedAt]: {
+          modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.2,
+          probability48h: 0.3,
+        },
+      },
+      hybridForecasts: { [generatedAt]: savedArtifact.forecast },
+      hybridReplayForecasts: { [generatedAt]: hybridForecast(generatedAt, 0.8, 0.9) },
+      savedArtifactHybridAudits: { [generatedAt]: savedArtifact.audit },
+    },
+  );
+
+  assert.equal(report.unifiedComparison.series.hybrid.metrics24h.averagePrediction, 0.2);
+  assert.equal(report.unifiedComparison.hybridReplay?.metrics24h.averagePrediction, 0.8);
+  assert.equal(report.unifiedComparison.savedArtifactHybridAudit.origins.length, 1);
+  assert.deepEqual(report.unifiedComparison.savedArtifactHybridAudit.originsWithUnexplainedSavedFinalMismatch, []);
 });
 
 test("unified comparison reports per-origin hybrid and uncalibrated contributions", () => {

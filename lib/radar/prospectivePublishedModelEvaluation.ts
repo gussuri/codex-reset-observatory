@@ -9,7 +9,7 @@ import {
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
-import { getActualWithinHorizon } from "./prequentialCalibration";
+import { calibrateLogitProbability, getActualWithinHorizon } from "./prequentialCalibration";
 import {
   selectDailyFirstForecasts,
   type ProspectiveForecastRow,
@@ -90,6 +90,8 @@ export type PublishedUnifiedComparison = {
   origins: string[];
   perOrigin: Array<PublishedUnifiedOriginDiagnostic>;
   series: PublishedUnifiedModelSeriesSet;
+  hybridReplay: PublishedUnifiedModelSeries | null;
+  savedArtifactHybridAudit: PublishedSavedArtifactHybridAuditReport;
   subsets: {
     noOfficialNotice: PublishedUnifiedSubset;
     noFinalDisplaySpecialOverlay: PublishedUnifiedSubset;
@@ -109,6 +111,12 @@ export type PublishedUnifiedComparison = {
       logLoss24h: number | null;
       logLoss48h: number | null;
     };
+    hybridReplay: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    } | null;
     v3: {
       brier24h: number | null;
       brier48h: number | null;
@@ -129,6 +137,40 @@ export type PublishedUnifiedComparison = {
     };
   };
   retrospectiveV3: true;
+};
+
+export const SAVED_ARTIFACT_HYBRID_SOURCE =
+  "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]" as const;
+
+export type PublishedSavedArtifactHybridAudit = {
+  origin: string;
+  officialNoticeOverride: boolean;
+  savedHorizonCoherenceAdjusted: boolean;
+  rawProbability24h: number;
+  savedProbability24h: number;
+  alpha24h: number | null;
+  calibratedProbability24h: number | null;
+  calibration24h: "match" | "mismatch" | "unavailable";
+  finalMismatchExplanation24h: "none" | "official-notice" | "horizon-coherence" | "unexplained";
+  rawProbability48h: number;
+  savedProbability48h: number;
+  alpha48h: number | null;
+  calibratedProbability48h: number | null;
+  calibration48h: "match" | "mismatch" | "unavailable";
+  finalMismatchExplanation48h: "none" | "official-notice" | "horizon-coherence" | "unexplained";
+  hybridProbability24h: number;
+  hybridProbability48h: number;
+  coherenceAdjusted: boolean;
+};
+
+export type PublishedSavedArtifactHybridAuditReport = {
+  source: typeof SAVED_ARTIFACT_HYBRID_SOURCE;
+  origins: Array<PublishedSavedArtifactHybridAudit>;
+  originsWithCoherenceAdjustment: string[];
+  originsWithUnexplainedSavedFinalMismatch: Array<{
+    origin: string;
+    horizons: Array<"24h" | "48h">;
+  }>;
 };
 
 export type PublishedUnifiedOriginDiagnostic = {
@@ -247,6 +289,8 @@ export type PublishedProspectiveEvaluationOptions = {
   adoptionAt?: string | null;
   v3Forecasts?: Record<string, ProspectiveStoredForecast>;
   hybridForecasts?: Record<string, ProspectiveStoredForecast>;
+  hybridReplayForecasts?: Record<string, ProspectiveStoredForecast>;
+  savedArtifactHybridAudits?: Record<string, PublishedSavedArtifactHybridAudit>;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -305,6 +349,123 @@ function isStoredForecast(value: unknown): value is StoredForecast {
     && typeof forecast.probability48h === "number"
     && Number.isFinite(forecast.probability48h)
   );
+}
+
+function getFiniteProbabilityField(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : null;
+}
+
+function getFiniteNumberField(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function reconstructSavedCalibration(rawProbability: number, alpha: number | null) {
+  return alpha === null ? null : calibrateLogitProbability(rawProbability, alpha);
+}
+
+function classifySavedFinalMismatch(
+  reconstructedProbability: number | null,
+  savedProbability: number,
+  officialNoticeOverride: boolean,
+  savedHorizonCoherenceAdjusted: boolean,
+) {
+  if (reconstructedProbability === null) {
+    return {
+      status: "unavailable" as const,
+      explanation: "none" as const,
+    };
+  }
+  if (Math.abs(reconstructedProbability - savedProbability) <= 1e-9) {
+    return {
+      status: "match" as const,
+      explanation: "none" as const,
+    };
+  }
+  return {
+    status: "mismatch" as const,
+    explanation: officialNoticeOverride
+      ? "official-notice" as const
+      : savedHorizonCoherenceAdjusted
+        ? "horizon-coherence" as const
+        : "unexplained" as const,
+  };
+}
+
+export function buildSavedArtifactHybridForecast(
+  savedV2: ProspectiveStoredForecast,
+): {
+  forecast: ProspectiveStoredForecast;
+  audit: PublishedSavedArtifactHybridAudit;
+} {
+  if (!isStoredForecast(savedV2)) {
+    throw new TypeError("Saved v2 forecast is not a valid stored forecast");
+  }
+  const rawProbability24h = getFiniteProbabilityField(savedV2.rawProbability24h);
+  const rawProbability48h = getFiniteProbabilityField(savedV2.rawProbability48h);
+  if (rawProbability24h === null || rawProbability48h === null) {
+    throw new TypeError("Saved v2 forecast is missing finite raw probabilities");
+  }
+
+  const savedProbability24h = savedV2.probability24h;
+  const savedProbability48h = savedV2.probability48h;
+  const alpha24h = getFiniteNumberField(savedV2.alpha24h);
+  const alpha48h = getFiniteNumberField(savedV2.alpha48h);
+  const officialNoticeOverride = savedV2.officialNoticeOverride === true;
+  const savedHorizonCoherenceAdjusted = savedV2.horizonCoherenceAdjusted === true;
+  const calibratedProbability24h = reconstructSavedCalibration(rawProbability24h, alpha24h);
+  const calibratedProbability48h = reconstructSavedCalibration(rawProbability48h, alpha48h);
+  const calibration24h = classifySavedFinalMismatch(
+    calibratedProbability24h,
+    savedProbability24h,
+    officialNoticeOverride,
+    savedHorizonCoherenceAdjusted,
+  );
+  const calibration48h = classifySavedFinalMismatch(
+    calibratedProbability48h,
+    savedProbability48h,
+    officialNoticeOverride,
+    savedHorizonCoherenceAdjusted,
+  );
+
+  const hybridProbability24h = officialNoticeOverride || savedHorizonCoherenceAdjusted
+    ? savedProbability24h
+    : rawProbability24h;
+  const coherenceAdjusted = hybridProbability24h > savedProbability48h;
+  const hybridProbability48h = coherenceAdjusted ? hybridProbability24h : savedProbability48h;
+
+  return {
+    forecast: {
+      ...savedV2,
+      modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+      probability24h: hybridProbability24h,
+      probability48h: hybridProbability48h,
+      horizonCoherenceAdjusted: coherenceAdjusted,
+      savedArtifactCounterfactual: true,
+      savedArtifactSource: SAVED_ARTIFACT_HYBRID_SOURCE,
+    },
+    audit: {
+      origin: savedV2.generatedAt,
+      officialNoticeOverride,
+      savedHorizonCoherenceAdjusted,
+      rawProbability24h,
+      savedProbability24h,
+      alpha24h,
+      calibratedProbability24h,
+      calibration24h: calibration24h.status,
+      finalMismatchExplanation24h: calibration24h.explanation,
+      rawProbability48h,
+      savedProbability48h,
+      alpha48h,
+      calibratedProbability48h,
+      calibration48h: calibration48h.status,
+      finalMismatchExplanation48h: calibration48h.explanation,
+      hybridProbability24h,
+      hybridProbability48h,
+      coherenceAdjusted,
+    },
+  };
 }
 
 function hasComparableForecasts(row: ProspectiveForecastRow) {
@@ -539,7 +700,7 @@ function createUnifiedSeriesSet(
       origins,
       NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
       NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
-      "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+      SAVED_ARTIFACT_HYBRID_SOURCE,
       (origin) => origin.hybrid,
       events,
       asOf,
@@ -580,6 +741,69 @@ function createUnifiedSeriesSet(
       events,
       asOf,
     ),
+  };
+}
+
+function createHybridReplaySeries(
+  dailyRows: Array<ProspectiveForecastRow>,
+  hybridReplayForecasts: Record<string, ProspectiveStoredForecast> | undefined,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedUnifiedModelSeries | null {
+  if (!hybridReplayForecasts) return null;
+  const replayRows = dailyRows.flatMap((row) => {
+    const currentV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    const replay = hybridReplayForecasts[row.generatedAt];
+    if (
+      !isStoredForecast(currentV2)
+      || !replay
+      || !isStoredForecast(replay)
+      || !isSameOrigin(replay, currentV2)
+    ) {
+      return [];
+    }
+    return [{
+      generatedAt: row.generatedAt,
+      loggedHour: row.loggedHour,
+      forecasts: { hybridReplay: replay },
+    }];
+  });
+  return {
+    modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    source: "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+    metrics24h: calculateMetric(
+      getResolvedRows(replayRows, "hybridReplay", 24, events, asOf),
+      events,
+      24,
+    ),
+    metrics48h: calculateMetric(
+      getResolvedRows(replayRows, "hybridReplay", 48, events, asOf),
+      events,
+      48,
+    ),
+  };
+}
+
+function createSavedArtifactHybridAuditReport(
+  dailyRows: Array<ProspectiveForecastRow>,
+  audits: Record<string, PublishedSavedArtifactHybridAudit> | undefined,
+): PublishedSavedArtifactHybridAuditReport {
+  const origins = dailyRows.flatMap((row) => {
+    const audit = audits?.[row.generatedAt];
+    return audit && audit.origin === row.generatedAt ? [audit] : [];
+  });
+  return {
+    source: SAVED_ARTIFACT_HYBRID_SOURCE,
+    origins,
+    originsWithCoherenceAdjustment: origins
+      .filter((origin) => origin.coherenceAdjusted)
+      .map((origin) => origin.origin),
+    originsWithUnexplainedSavedFinalMismatch: origins.flatMap((origin) => {
+      const horizons: Array<"24h" | "48h"> = [];
+      if (origin.finalMismatchExplanation24h === "unexplained") horizons.push("24h");
+      if (origin.finalMismatchExplanation48h === "unexplained") horizons.push("48h");
+      return horizons.length > 0 ? [{ origin: origin.origin, horizons }] : [];
+    }),
   };
 }
 
@@ -676,9 +900,12 @@ function buildUnifiedComparison(
   asOf: Date,
   v3Forecasts: Record<string, ProspectiveStoredForecast> | undefined,
   hybridForecasts: Record<string, ProspectiveStoredForecast> | undefined,
+  hybridReplayForecasts: Record<string, ProspectiveStoredForecast> | undefined,
+  savedArtifactHybridAudits: Record<string, PublishedSavedArtifactHybridAudit> | undefined,
 ): PublishedUnifiedComparison {
   const origins = getUnifiedPublishedOrigins(dailyRows, v3Forecasts, hybridForecasts);
   const series = createUnifiedSeriesSet(origins, events, asOf);
+  const hybridReplay = createHybridReplaySeries(dailyRows, hybridReplayForecasts, events, asOf);
   const activeOrigins = origins.filter((origin) => origin.currentV2.officialNoticeOverride !== true);
   const noFinalDisplayOverlay = origins.filter((origin) =>
     origin.finalDisplayed.finalDisplaySpecialOverlay !== true,
@@ -693,6 +920,8 @@ function buildUnifiedComparison(
     origins: origins.map((origin) => origin.row.generatedAt),
     perOrigin: buildUnifiedOriginDiagnostics(origins, events, asOf),
     series,
+    hybridReplay,
+    savedArtifactHybridAudit: createSavedArtifactHybridAuditReport(dailyRows, savedArtifactHybridAudits),
     subsets: {
       noOfficialNotice: createUnifiedSubset(activeOrigins, events, asOf),
       noFinalDisplaySpecialOverlay: createUnifiedSubset(noFinalDisplayOverlay, events, asOf),
@@ -702,6 +931,9 @@ function buildUnifiedComparison(
     deltaVsCurrentV2: {
       finalDisplayed: compareUnifiedSeries(series.finalDisplayed, series.currentV2),
       hybrid: compareUnifiedSeries(series.hybrid, series.currentV2),
+      hybridReplay: hybridReplay === null
+        ? null
+        : compareUnifiedSeries(hybridReplay, series.currentV2),
       v3: compareUnifiedSeries(series.v3, series.currentV2),
       rawContinuous: compareUnifiedSeries(series.rawContinuous, series.currentV2),
       v1: compareUnifiedSeries(series.v1, series.currentV2),
@@ -1039,6 +1271,8 @@ export function evaluatePublishedModelProspectively(
       asOf,
       options.v3Forecasts,
       options.hybridForecasts,
+      options.hybridReplayForecasts,
+      options.savedArtifactHybridAudits,
     ),
     gate: {
       autoPublish: false,
@@ -1058,8 +1292,8 @@ export function evaluatePublishedModelProspectively(
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
       "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
-      "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
-      "The hybrid and fully uncalibrated values are point-in-time retrospective replays. A hybrid 48h value can differ from the persisted current-v2 row because the original v2 input and training snapshot are not replayed verbatim; this diagnostic difference does not alter the primary gate or public model.",
+      "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, saved-artifact hybrid, v3 retrospective, current v2, raw continuous, and v1 series; retrospective candidates never affect the primary gate or status.",
+      "The saved-artifact hybrid is the primary retrospective counterfactual and reads the persisted v2 raw/final values and calibration metadata. The point-in-time hybrid replay remains a separate diagnostic because the original v2 input and training snapshot cannot be reproduced exactly.",
       adoptionBoundaryNote,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
