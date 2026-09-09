@@ -22,7 +22,12 @@ import {
   parseCachedRadarData,
   type RadarLoadState,
 } from "@/lib/radar/clientState";
-import type { HistorySourceKind, Locale, PublicRadarSnapshot } from "@/lib/radar/types";
+import type {
+  CodexOperationalStatus,
+  HistorySourceKind,
+  Locale,
+  PublicRadarSnapshot,
+} from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 import {
   canStartRadarRefresh,
@@ -99,6 +104,7 @@ function createUnavailableRadarViewModel(locale: Locale): PublicRadarSnapshot["v
       overdueText: null,
     },
     displayReasoningSummary: null,
+    codexOperationalStatus: "unknown",
     latestWindow: {
       kind: "observed",
       title: unknown,
@@ -273,37 +279,6 @@ const HOMEPAGE_EXPLANATION_CONTENT = {
   },
 } as const;
 
-type IncidentStatus = "active" | "none" | "unknown";
-
-function getIncidentStatusFromReason(
-  reason: string | null | undefined,
-  locale: Locale,
-): IncidentStatus {
-  if (!reason) return "unknown";
-
-  const activePhrases = locale === "en"
-    ? [
-        "A Codex incident is active",
-        "A Codex-related incident is currently active",
-        "A Codex-related incident has been confirmed",
-      ]
-    : locale === "zh"
-      ? [
-          "Codex正在发生故障",
-          "当前有 Codex 相关故障正在发生",
-          "已确认有 Codex 相关故障",
-        ]
-      : [
-          "Codexで障害が起きており",
-          "現在、Codex関連の障害が発生しており",
-          "Codex関連の障害が確認されています",
-        ];
-
-  // The display summary already uses the evaluated incident state. Reuse its
-  // localized wording here instead of introducing a second incident query.
-  return activePhrases.some((phrase) => reason.includes(phrase)) ? "active" : "none";
-}
-
 function getElapsedSinceLastRandomReset(
   sourceResetAt: string | null | undefined,
   fetchedAt: string | null | undefined,
@@ -338,8 +313,9 @@ export function formatScheduledSourceDay(
   }
 }
 
-function getIncidentStatusLabel(status: IncidentStatus, locale: Locale) {
+function getIncidentStatusLabel(status: CodexOperationalStatus, locale: Locale) {
   if (status === "active") return translateUI("activeCodexIncident", locale);
+  if (status === "recovered") return translateUI("recoveredCodexIncident", locale);
   if (status === "none") return translateUI("noCodexIncident", locale);
   return translateUI("unknownProbability", locale);
 }
@@ -861,7 +837,7 @@ export function RadarDashboard({
       : translateUI("noOfficialNotice", locale);
   const incidentStatus = isDataUnavailable
     ? "unknown" as const
-    : getIncidentStatusFromReason(viewModel.displayReasoningSummary, locale);
+    : viewModel.codexOperationalStatus ?? "unknown";
   const resetTeaserStatus = isDataUnavailable
     ? "unknown" as const
     : getResetTeaserStatus(state.data?.resetTeaserStatus);

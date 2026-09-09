@@ -68,6 +68,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
 
   assert.equal(publicSnapshot.schemaVersion, "public-v1");
   assert.equal(publicSnapshot.checkedAt, "2026-08-04T00:00:00.000Z");
+  assert.equal(publicSnapshot.viewModel.codexOperationalStatus, "none");
   assert.equal("ai_reason_ja" in publicSnapshot, false);
   assert.equal("classification_reason" in publicSnapshot, false);
   assert.equal("rule_confidence" in publicSnapshot, false);

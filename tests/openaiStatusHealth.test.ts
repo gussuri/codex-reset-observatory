@@ -21,7 +21,161 @@ test("retains stored history when both status requests fail", async () => {
     state: "degraded",
     detail: "request_failed",
   });
+  assert.equal(result.data.codexOperationalStatus, "unknown");
   assert.doesNotMatch(JSON.stringify(result), /raw network failure details/);
+});
+
+function statusFixtureFetch(
+  incident: Record<string, unknown> | null,
+  components: Array<Record<string, unknown>> = [
+    { name: "Codex Web", status: "operational" },
+    { name: "Codex API", status: "operational" },
+  ],
+) {
+  return async (url: string | URL | Request) => {
+    if (String(url).includes("summary.json")) {
+      return jsonResponse({
+        page: { updated_at: new Date().toISOString() },
+        components,
+      });
+    }
+
+    return jsonResponse({
+      page: { updated_at: new Date().toISOString() },
+      incidents: incident ? [incident] : [],
+    });
+  };
+}
+
+function relativeIso(hoursAgo: number) {
+  return new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
+}
+
+function codexIncident(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "codex-status-fixture",
+    name: "Investigating an unexpected service issue",
+    status: "monitoring",
+    impact: "minor",
+    created_at: relativeIso(2),
+    updated_at: relativeIso(1),
+    resolved_at: null,
+    incident_updates: [
+      {
+        body: "Some Codex users may be experiencing unexpected usage limit resets.",
+        status: "monitoring",
+        created_at: relativeIso(1),
+        updated_at: relativeIso(1),
+      },
+    ],
+    ...overrides,
+  };
+}
+
+test("keeps an explicit unresolved Codex incident active for display when components are operational", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(codexIncident()),
+  );
+
+  assert.ok(
+    result.data.history.some((item) => item.id === "codex-status-fixture"),
+  );
+  assert.equal(result.data.suppressCodexIncidents, true);
+  assert.equal(result.data.activeCodexIncidents, 0);
+  assert.equal(result.data.codexOperationalStatus, "active");
+});
+
+test("treats a non-operational Codex component as an active display condition", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(null, [{ name: "Codex Web", status: "degraded" }]),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "active");
+});
+
+test("marks a Codex incident resolved within twelve hours as recovered", async () => {
+  const resolvedAt = relativeIso(6);
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(
+      codexIncident({
+        status: "resolved",
+        updated_at: resolvedAt,
+        resolved_at: resolvedAt,
+      }),
+    ),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "recovered");
+});
+
+test("does not keep an older resolved Codex mention active or recovered", async () => {
+  const resolvedAt = relativeIso(13);
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(
+      codexIncident({
+        status: "resolved",
+        updated_at: resolvedAt,
+        resolved_at: resolvedAt,
+      }),
+    ),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+});
+
+test("does not classify a ChatGPT-only incident as a Codex display incident", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch({
+      id: "chatgpt-status-fixture",
+      name: "ChatGPT conversation errors",
+      status: "monitoring",
+      impact: "minor",
+      created_at: relativeIso(1),
+      updated_at: relativeIso(1),
+      resolved_at: null,
+      incident_updates: [
+        { body: "Some ChatGPT users may be affected.", status: "monitoring" },
+      ],
+    }),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+  assert.equal(
+    result.data.history.some((item) => item.id === "chatgpt-status-fixture"),
+    false,
+  );
+});
+
+test("excludes a FedRAMP-only Codex incident from the general display status", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch({
+      id: "fedramp-status-fixture",
+      name: "FedRAMP workspace issue",
+      status: "monitoring",
+      impact: "minor",
+      created_at: relativeIso(1),
+      updated_at: relativeIso(1),
+      resolved_at: null,
+      incident_updates: [
+        {
+          body: "Some Codex users in FedRAMP workspaces may be affected.",
+          status: "monitoring",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+  assert.equal(
+    result.data.history.some((item) => item.id === "fedramp-status-fixture"),
+    false,
+  );
 });
 
 test("classifies two non-JSON status responses as invalid", async () => {

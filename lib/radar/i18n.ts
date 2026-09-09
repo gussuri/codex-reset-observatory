@@ -132,6 +132,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Active",
     zh: "有",
   },
+  recoveredCodexIncident: {
+    ja: "復旧直後",
+    en: "Recently recovered",
+    zh: "刚刚恢复",
+  },
   outlookOfficialNotice: {
     ja: "公式のリセット予告が確認されています。予告内容を踏まえ、リセットの見込みが高まっています。",
     en: "An official reset notice has been confirmed. Considering the notice, the outlook for a reset is higher.",

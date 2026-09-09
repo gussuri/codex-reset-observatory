@@ -36,6 +36,7 @@ function cacheableSnapshot(checkedAt: string) {
   data.viewModel = {
     status: "ok",
     expectation: "low",
+    codexOperationalStatus: "none",
     probability24h: 0.02,
     probability48h: 0.05,
     lastUpdated: checkedAt,

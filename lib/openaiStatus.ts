@@ -1,5 +1,9 @@
 import { LOCAL_OPENAI_STATUS_HISTORY } from "@/data/statusHistory";
-import type { DataFetchResult, DataSourceDetail } from "@/lib/radar/types";
+import type {
+  CodexOperationalStatus,
+  DataFetchResult,
+  DataSourceDetail,
+} from "@/lib/radar/types";
 
 const OPENAI_STATUS_SUMMARY_URL =
   "https://status.openai.com/api/v2/summary.json";
@@ -8,6 +12,7 @@ const OPENAI_STATUS_INCIDENTS_URL =
 
 const FETCH_TIMEOUT_MS = 8000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CODEX_RECOVERY_WINDOW_MS = 12 * 60 * 60 * 1000;
 const STATUS_INCIDENT_URL_BASE = "https://status.openai.com/incidents";
 
 type StatuspageComponent = {
@@ -57,6 +62,7 @@ export type OpenAIStatusSignals = {
   recentCodexIncidents: number;
   affectedCodexComponents: number;
   suppressCodexIncidents: boolean;
+  codexOperationalStatus: CodexOperationalStatus;
   latestCodexIncidentName: string | null;
   history: Array<OpenAIStatusHistoryItem>;
 };
@@ -137,6 +143,12 @@ export async function fetchOpenAIStatusSignals(
   const recentCodexIncidents = codexIncidents.filter((incident) =>
     isRecentIncident(incident),
   );
+  const codexOperationalStatus = getCodexOperationalStatus({
+    codexComponents,
+    codexIncidents,
+    incidentsAvailable: Boolean(incidents.data),
+    summaryAvailable: Boolean(summary.data),
+  });
   const incidentIds = new Set<string>();
 
   for (const incident of [...activeCodexIncidents, ...recentCodexIncidents]) {
@@ -172,6 +184,7 @@ export async function fetchOpenAIStatusSignals(
       recentCodexIncidents: recentCodexIncidents.length,
       affectedCodexComponents,
       suppressCodexIncidents: allCodexComponentsOperational,
+      codexOperationalStatus,
       latestCodexIncidentName: latestCodexIncident?.name ?? null,
       history,
     },
@@ -199,6 +212,7 @@ function getStoredStatusSignals(): OpenAIStatusSignals {
     recentCodexIncidents: 0,
     affectedCodexComponents: 0,
     suppressCodexIncidents: false,
+    codexOperationalStatus: "unknown",
     latestCodexIncidentName: latestStoredIncident?.title ?? null,
     history: LOCAL_OPENAI_STATUS_HISTORY,
   };
@@ -332,6 +346,44 @@ function isCodexIncident(incident: StatuspageIncident) {
   if (isFedRAMPOnly) return false;
 
   return true;
+}
+
+function getCodexOperationalStatus({
+  codexComponents,
+  codexIncidents,
+  incidentsAvailable,
+  summaryAvailable,
+  now = new Date(),
+}: {
+  codexComponents: Array<StatuspageComponent>;
+  codexIncidents: Array<StatuspageIncident>;
+  incidentsAvailable: boolean;
+  summaryAvailable: boolean;
+  now?: Date;
+}): CodexOperationalStatus {
+  const hasAffectedComponent = codexComponents.some(
+    (component) => component.status && component.status !== "operational",
+  );
+  if (hasAffectedComponent) {
+    return "active";
+  }
+
+  if (codexIncidents.some((incident) => !isResolvedIncident(incident))) {
+    return "active";
+  }
+
+  const hasRecentResolution = codexIncidents.some((incident) => {
+    const resolvedAt = getDateTime(incident.resolved_at);
+    if (resolvedAt === 0) return false;
+
+    const elapsed = now.getTime() - resolvedAt;
+    return elapsed >= 0 && elapsed < CODEX_RECOVERY_WINDOW_MS;
+  });
+  if (hasRecentResolution) {
+    return "recovered";
+  }
+
+  return incidentsAvailable && summaryAvailable ? "none" : "unknown";
 }
 
 function normalizeStatusIncident(

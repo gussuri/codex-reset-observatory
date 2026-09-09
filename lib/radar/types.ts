@@ -25,6 +25,8 @@ import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
 
 export type Locale = "ja" | "en" | "zh";
 
+export type CodexOperationalStatus = "active" | "recovered" | "none" | "unknown";
+
 export type LocalizedString =
   | string
   | {
@@ -383,6 +385,7 @@ export type RadarData = {
     openai_status_affected_codex_components?: number;
     openai_status_incidents_suppressed?: boolean;
     openai_status_latest_codex_incident?: string | null;
+    codex_operational_status?: CodexOperationalStatus;
     reset_card?: {
       probability_24h?: number;
       probability_48h?: number;
@@ -433,6 +436,7 @@ export type RadarViewModel = {
   };
   reasoningSummary: string | null;
   displayReasoningSummary: string | null;
+  codexOperationalStatus: CodexOperationalStatus;
   latestWindow: {
     kind: "observed" | "regular";
     recordKind?: HistoryRecordKind;
@@ -485,6 +489,7 @@ export type PublicRadarViewModel = Pick<
   | "regularResetForecast"
   | "activeWindow"
   | "displayReasoningSummary"
+  | "codexOperationalStatus"
   | "latestWindow"
   | "recentHistory"
 >;

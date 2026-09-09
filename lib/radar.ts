@@ -410,6 +410,8 @@ export function getRadarViewModel(
       probabilityCalculation,
       canonicalHistoryContext,
     ),
+    codexOperationalStatus:
+      source?.codex_environment?.codex_operational_status ?? "none",
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,

@@ -883,6 +883,8 @@ export function getLocalSignalEnvironment(
       openAIStatus?.suppressCodexIncidents ?? false,
     openai_status_latest_codex_incident:
       openAIStatus?.latestCodexIncidentName ?? null,
+    codex_operational_status:
+      openAIStatus?.codexOperationalStatus ?? "none",
     reset_card: {
       status: "prediction_only",
     },
@@ -1957,7 +1959,7 @@ export function getDisplayProbabilityReason(
       ?? translateUI("outlookStrongTeaser", locale);
   }
 
-  if (activeIncidentCount > 0) {
+  if (activeIncidentCount > 0 || environment.codex_operational_status === "active") {
     return translateUI("outlookActiveIncident", locale);
   }
 

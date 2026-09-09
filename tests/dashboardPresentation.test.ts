@@ -1306,6 +1306,7 @@ test("observation status row reflects an active Codex incident without changing 
         recentCodexIncidents: 1,
         affectedCodexComponents: 0,
         suppressCodexIncidents: false,
+        codexOperationalStatus: "active",
         latestCodexIncidentName: "Codex incident",
         history: [
           {
@@ -1331,6 +1332,34 @@ test("observation status row reflects an active Codex incident without changing 
 
   assert.match(html, /Codex incidents[\s\S]*Active/);
   assert.match(html, /A Codex-related incident has been confirmed\. We are watching for a possible reset connected with recovery work\./);
+});
+
+test("uses the explicit public Codex status instead of parsing localized reasoning", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({
+      calculationNow,
+      openAIStatus: {
+        updatedAt: "2026-08-03T23:00:00.000Z",
+        statusIncidents24h: 0,
+        activeCodexIncidents: 0,
+        recentCodexIncidents: 0,
+        affectedCodexComponents: 0,
+        suppressCodexIncidents: true,
+        codexOperationalStatus: "active",
+        latestCodexIncidentName: null,
+        history: [],
+      },
+    }),
+    "en",
+    { calculationNow },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+  );
+
+  assert.equal(snapshot.viewModel.codexOperationalStatus, "active");
+  assert.match(html, /Codex incidents[\s\S]*Active/);
 });
 
 test("observation status row reflects an active reset teaser from the latest Tibo activity", () => {

@@ -269,6 +269,7 @@ test("does not promote the generated environment pressure from Status alone", ()
     affectedCodexComponents: 1,
     latestCodexIncidentName: "Codex incident",
     suppressCodexIncidents: false,
+    codexOperationalStatus: "active",
     history: [],
   });
 
@@ -300,6 +301,27 @@ test("applies operational suppression consistently to probability", () => {
   assert.equal(
     getLocalResetProbability(withIncident, "24h", undefined, undefined, NOW),
     getLocalResetProbability(withoutIncident, "24h", undefined, undefined, NOW),
+  );
+});
+
+test("keeps display-only Codex operational status out of probability inputs", () => {
+  const baseEnvironment = getLocalSignalEnvironment();
+  const activeDisplayData: RadarData = {
+    codex_environment: {
+      ...baseEnvironment,
+      codex_operational_status: "active",
+    },
+  };
+  const noIncidentDisplayData: RadarData = {
+    codex_environment: {
+      ...baseEnvironment,
+      codex_operational_status: "none",
+    },
+  };
+
+  assert.equal(
+    getLocalResetProbability(activeDisplayData, "24h", undefined, undefined, NOW),
+    getLocalResetProbability(noIncidentDisplayData, "24h", undefined, undefined, NOW),
   );
 });
 

@@ -370,6 +370,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       overdueText: viewModel.activeWindow.overdueText ?? null,
     },
     displayReasoningSummary: viewModel.displayReasoningSummary,
+    codexOperationalStatus: viewModel.codexOperationalStatus,
     latestWindow: {
       kind: viewModel.latestWindow.kind,
       recordKind: viewModel.latestWindow.recordKind,

@@ -41,6 +41,7 @@ function snapshot(
     viewModel: {
       status: "ok",
       expectation: "低",
+      codexOperationalStatus: "none",
       probability24h: options.probability24h ?? 0.02,
       probability48h: 0.05,
       lastUpdated: checkedAt,
