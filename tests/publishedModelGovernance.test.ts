@@ -38,7 +38,7 @@ test("published model governance config records the manual selective hybrid acti
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_MODE, "manual");
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-09-10");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-09T23:00:00.000Z");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-10T01:00:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-09-01T08:00:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS, "production_boundary_set");
   assert.equal(

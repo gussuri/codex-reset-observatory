@@ -1,10 +1,10 @@
 # 公開モデルのprospective評価
 
-2026-08-20までは`hazard-elapsed-v1`、その後2026-08-23T02:04:00.000Zまでは`hazard-odds-v4-logit-calibrated-prequential-v3`が公開モデルでした。2026-08-23T02:04:00.000Zに`hazard-regime-random-continuous-calibrated-v1`（Model B v1）がmanualで採用され、`2026-09-01T08:00:00.000Z`（UTC）を境界として`hazard-regime-random-continuous-calibrated-post-reset-age-v2`へ切り替えました。さらに`2026-09-09T23:00:00.000Z`（UTC）を境界として、`hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid v3）を採用します。採用時点のprospective gateは`not_met`でした。gate未達でも、manual governanceは自動publish/rollbackを行わず、過去rowを書き換えません。
+2026-08-20までは`hazard-elapsed-v1`、その後2026-08-23T02:04:00.000Zまでは`hazard-odds-v4-logit-calibrated-prequential-v3`が公開モデルでした。2026-08-23T02:04:00.000Zに`hazard-regime-random-continuous-calibrated-v1`（Model B v1）がmanualで採用され、`2026-09-01T08:00:00.000Z`（UTC）を境界として`hazard-regime-random-continuous-calibrated-post-reset-age-v2`へ切り替えました。さらに`2026-09-10T01:00:00.000Z`（UTC）を境界として、`hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid v3）を採用します。採用時点のprospective gateは`not_met`でした。gate未達でも、manual governanceは自動publish/rollbackを行わず、過去rowを書き換えません。
 
 selective hybrid v3は、`prediction_history.debug_info.experimentalProbabilityForecasts`にB v1/v2と同じoriginで保存されるforecastを使ってprospectiveに評価します。v3のProduction boundary前のrowは評価対象にせず、v3の公開実績へ再分類しません。boundary以後はv3をactive、v2をbaselineとして扱います。v3は24hのcalibrationをdiagnostic-only、48hのcalibrationをapplyとし、既存のpost-reset age、official notice override、teaser policy、horizon coherence、B v1由来のcalibration training identityを継承します。`hazard-elapsed-v1`は安定fallback、`hazard-regime-elapsed-v1`は固定設定のfull regime shadowとして保持します。Model AとCはshadow/evaluation用です。
 
-評価期間は、現行v3については`2026-09-09T23:00:00.000Z`以後にv3とv2の予測が同じ保存rowに存在するところから始まります。v2のhistorical evaluation periodは`2026-09-01T08:00:00.000Z`から現行v3 boundaryまでです。いずれもboundary前のforecastをbackfillしたり、過去の予測を新モデルとして書き換えたりしません。
+評価期間は、現行v3については`2026-09-10T01:00:00.000Z`以後にv3とv2の予測が同じ保存rowに存在するところから始まります。v2のhistorical evaluation periodは`2026-09-01T08:00:00.000Z`から現行v3 boundaryまでです。いずれもboundary前のforecastをbackfillしたり、過去の予測を新モデルとして書き換えたりしません。
 
 正式比較はAsia/Tokyoの日付ごとに最初のforecastを1件だけ選びます。24時間または48時間の観測期間が`asOf`時点で完了していないforecastは採点対象外です。正解イベントは広域・実施済みのランダムリセットだけで、定期リセットは正例になりません。
 
@@ -15,3 +15,5 @@ selective hybrid v3は、`prediction_history.debug_info.experimentalProbabilityF
 ```text
 corepack pnpm run evaluate:prospective-published-model
 ```
+
+採用前の補正根拠は、古いhistorical reportを書き換えず、現行canonical truthと保存済みv2 artifactから別途生成した `saved-artifact retrospective counterfactual` に記録します。corrected artifactは `reports/prospective-published-hybrid-counterfactual-corrected-20260910.json` と `.md` です。誤った `usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec` はcanonical truthから除外され、v2とhybridのprimary counterfactualには入りません。これはprospective成績や既存gateへ混ぜず、backfill・prediction rowの書き換えも行いません。

@@ -1,0 +1,619 @@
+{
+  "schemaVersion": "saved-artifact-published-hybrid-counterfactual-v1",
+  "evaluationMode": "saved-artifact-retrospective-counterfactual",
+  "backfilled": false,
+  "generatedAt": "2026-09-09T23:15:09.647Z",
+  "asOf": "2026-09-09T23:15:09.647Z",
+  "adoptionAt": "2026-09-01T08:00:00.000Z",
+  "source": "prediction_history.debug_info.experimentalProbabilityForecasts[hazard-regime-random-continuous-calibrated-post-reset-age-v2]",
+  "sourceModelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+  "companionModelVersion": "hazard-regime-random-continuous-calibrated-v1",
+  "hybridModelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+  "evaluationStartAt": "2026-09-01T08:00:26.043Z",
+  "comparableRowCount": 35,
+  "dailyOriginCount": 10,
+  "dailyOrigins": [
+    "2026-09-01T08:00:26.043Z",
+    "2026-09-01T16:51:47.016Z",
+    "2026-09-02T16:49:13.509Z",
+    "2026-09-03T16:38:23.571Z",
+    "2026-09-04T16:33:39.803Z",
+    "2026-09-05T15:28:58.662Z",
+    "2026-09-06T15:42:12.464Z",
+    "2026-09-07T21:44:09.200Z",
+    "2026-09-08T16:48:51.682Z",
+    "2026-09-09T16:51:58.105Z"
+  ],
+  "targetResetCount": 3,
+  "canonicalRandomResetEvents": [
+    {
+      "id": "banked-reset-2095651088502591861",
+      "resetAt": "2026-09-04T03:34:46.386Z"
+    },
+    {
+      "id": "banked-reset-2095651088502591861-observation-20260904T234601897Z",
+      "resetAt": "2026-09-04T23:46:01.897Z"
+    },
+    {
+      "id": "local-codex-rolling-notice-reset-2026-09-08",
+      "resetAt": "2026-09-08T01:30:00.000Z"
+    }
+  ],
+  "models": {
+    "v2": {
+      "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+      "metrics24h": {
+        "count": 9,
+        "positiveCount": 3,
+        "actualRate": 0.3333333333333333,
+        "averagePrediction": 0.5720746584833907,
+        "bias": 0.23874132515005736,
+        "brier": 0.20968465509735318,
+        "logLoss": 0.5787148056596538,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 1,
+            "averagePrediction": 0.11116041367120556,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 5,
+            "averagePrediction": 0.520819057143137,
+            "actualRate": 0.2
+          },
+          {
+            "range": "60-80%",
+            "count": 1,
+            "averagePrediction": 0.6334162269636247,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 2,
+            "averagePrediction": 0.9,
+            "actualRate": 1
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-08T16:48:51.682Z",
+        "targetResetCount": 3
+      },
+      "metrics48h": {
+        "count": 8,
+        "positiveCount": 5,
+        "actualRate": 0.625,
+        "averagePrediction": 0.7641730602252315,
+        "bias": 0.13917306022523146,
+        "brier": 0.21813330766767908,
+        "logLoss": 0.6373550486272194,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 1,
+            "averagePrediction": 0.3084873734552771,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 3,
+            "averagePrediction": 0.7329569023967103,
+            "actualRate": 1
+          },
+          {
+            "range": "80-100%",
+            "count": 4,
+            "averagePrediction": 0.9015066002891111,
+            "actualRate": 0.5
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "targetResetCount": 3
+      }
+    },
+    "hybrid": {
+      "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+      "metrics24h": {
+        "count": 9,
+        "positiveCount": 3,
+        "actualRate": 0.3333333333333333,
+        "averagePrediction": 0.48937267978194704,
+        "bias": 0.15603934644861372,
+        "brier": 0.15261101914714997,
+        "logLoss": 0.4612038878054764,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 1,
+            "averagePrediction": 0.08701735334272431,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 2,
+            "averagePrediction": 0.35262013880572557,
+            "actualRate": 0.5
+          },
+          {
+            "range": "40-60%",
+            "count": 4,
+            "averagePrediction": 0.45302412177083706,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "80-100%",
+            "count": 2,
+            "averagePrediction": 0.9,
+            "actualRate": 1
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-08T16:48:51.682Z",
+        "targetResetCount": 3
+      },
+      "metrics48h": {
+        "count": 8,
+        "positiveCount": 5,
+        "actualRate": 0.625,
+        "averagePrediction": 0.7641730602252315,
+        "bias": 0.13917306022523146,
+        "brier": 0.21813330766767908,
+        "logLoss": 0.6373550486272194,
+        "calibration": [
+          {
+            "range": "0-20%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "20-40%",
+            "count": 1,
+            "averagePrediction": 0.3084873734552771,
+            "actualRate": 0
+          },
+          {
+            "range": "40-60%",
+            "count": 0,
+            "averagePrediction": 0,
+            "actualRate": 0
+          },
+          {
+            "range": "60-80%",
+            "count": 3,
+            "averagePrediction": 0.7329569023967103,
+            "actualRate": 1
+          },
+          {
+            "range": "80-100%",
+            "count": 4,
+            "averagePrediction": 0.9015066002891111,
+            "actualRate": 0.5
+          }
+        ],
+        "periodStart": "2026-09-01T08:00:26.043Z",
+        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "targetResetCount": 3
+      }
+    }
+  },
+  "comparison": {
+    "resolved24h": 9,
+    "resolved48h": 8,
+    "brierHybridMinusV2": {
+      "probability24h": -0.057073635950203205,
+      "probability48h": 0
+    },
+    "logLossHybridMinusV2": {
+      "probability24h": -0.11751091785417744,
+      "probability48h": 0
+    }
+  },
+  "savedArtifactAudit": {
+    "origins": [
+      {
+        "origin": "2026-09-01T08:00:26.043Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.4549062764132743,
+        "savedProbability24h": 0.5974381606658998,
+        "alpha24h": 0.5756683964353628,
+        "calibratedProbability24h": 0.5974381606658998,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.7219077116417907,
+        "savedProbability48h": 0.8357482125725314,
+        "alpha48h": 0.6729825705222675,
+        "calibratedProbability48h": 0.8357482125725314,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.4549062764132743,
+        "hybridProbability48h": 0.8357482125725314,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-01T16:51:47.016Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.4928085672369434,
+        "savedProbability24h": 0.6334162269636247,
+        "alpha24h": 0.5756683964353628,
+        "calibratedProbability24h": 0.6334162269636247,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.7434164464401498,
+        "savedProbability48h": 0.8502781885839132,
+        "alpha48h": 0.6729825705222675,
+        "calibratedProbability48h": 0.8502781885839132,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.4928085672369434,
+        "hybridProbability48h": 0.8502781885839132,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-02T16:49:13.509Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.4268000531118725,
+        "savedProbability24h": 0.5485834692993445,
+        "alpha24h": 0.4898679202836193,
+        "calibratedProbability24h": 0.5485834692993445,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.6250451250383761,
+        "savedProbability48h": 0.7676619646243743,
+        "alpha48h": 0.6841379638938238,
+        "calibratedProbability48h": 0.7676619646243743,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.4268000531118725,
+        "hybridProbability48h": 0.7676619646243743,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-03T16:38:23.571Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.36320744598728627,
+        "savedProbability24h": 0.4604155088515382,
+        "alpha24h": 0.4027997734072668,
+        "calibratedProbability24h": 0.4604155088515382,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.5144086445483952,
+        "savedProbability48h": 0.6466434438987587,
+        "alpha48h": 0.5466668900613134,
+        "calibratedProbability48h": 0.6466434438987587,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.36320744598728627,
+        "hybridProbability48h": 0.6466434438987587,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-04T16:33:39.803Z",
+        "officialNoticeOverride": true,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.19322036417121535,
+        "savedProbability24h": 0.9,
+        "alpha24h": 0.330490458103664,
+        "calibratedProbability24h": 0.24997815735778997,
+        "calibration24h": "mismatch",
+        "finalMismatchExplanation24h": "official-notice",
+        "rawProbability48h": 0.33036294403859395,
+        "savedProbability48h": 0.96,
+        "alpha48h": 0.4157876077909855,
+        "calibratedProbability48h": 0.4278187053134485,
+        "calibration48h": "mismatch",
+        "finalMismatchExplanation48h": "official-notice",
+        "hybridProbability24h": 0.9,
+        "hybridProbability48h": 0.96,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-05T15:28:58.662Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.08701735334272431,
+        "savedProbability24h": 0.11116041367120556,
+        "alpha24h": 0.2716668608568171,
+        "calibratedProbability24h": 0.11116041367120556,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.2467922145496297,
+        "savedProbability48h": 0.3084873734552771,
+        "alpha48h": 0.3085938903712517,
+        "calibratedProbability48h": 0.3084873734552771,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.08701735334272431,
+        "hybridProbability48h": 0.3084873734552771,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-06T15:42:12.464Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.437581590321258,
+        "savedProbability24h": 0.5575685448235278,
+        "alpha24h": 0.48228279076423547,
+        "calibratedProbability24h": 0.5575685448235278,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.6854156457460241,
+        "savedProbability48h": 0.7845652986669979,
+        "alpha48h": 0.5136987720148508,
+        "calibratedProbability48h": 0.7845652986669979,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.437581590321258,
+        "hybridProbability48h": 0.7845652986669979,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-07T21:44:09.200Z",
+        "officialNoticeOverride": true,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.37283231473177475,
+        "savedProbability24h": 0.9,
+        "alpha24h": 0.41344988267850147,
+        "calibratedProbability24h": 0.47336640730775964,
+        "calibration24h": "mismatch",
+        "finalMismatchExplanation24h": "official-notice",
+        "rawProbability48h": 0.5569403727505352,
+        "savedProbability48h": 0.96,
+        "alpha48h": 0.5405742461600598,
+        "calibratedProbability48h": 0.6833755238406475,
+        "calibration48h": "mismatch",
+        "finalMismatchExplanation48h": "official-notice",
+        "hybridProbability24h": 0.9,
+        "hybridProbability48h": 0.96,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-08T16:48:51.682Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.34203283162416487,
+        "savedProbability24h": 0.440089602075375,
+        "alpha24h": 0.41344988267850147,
+        "calibratedProbability24h": 0.440089602075375,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.6403484138179253,
+        "savedProbability48h": 0.7587979219413001,
+        "alpha48h": 0.5692237409675281,
+        "calibratedProbability48h": 0.7587979219413001,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.34203283162416487,
+        "hybridProbability48h": 0.7587979219413001,
+        "coherenceAdjusted": false
+      },
+      {
+        "origin": "2026-09-09T16:51:58.105Z",
+        "officialNoticeOverride": false,
+        "savedHorizonCoherenceAdjusted": false,
+        "rawProbability24h": 0.40464681713207223,
+        "savedProbability24h": 0.5082531547539024,
+        "alpha24h": 0.41915580160852206,
+        "calibratedProbability24h": 0.5082531547539024,
+        "calibration24h": "match",
+        "finalMismatchExplanation24h": "none",
+        "rawProbability48h": 0.656148914340411,
+        "savedProbability48h": 0.7712535220153638,
+        "alpha48h": 0.5692237409675281,
+        "calibratedProbability48h": 0.7712535220153638,
+        "calibration48h": "match",
+        "finalMismatchExplanation48h": "none",
+        "hybridProbability24h": 0.40464681713207223,
+        "hybridProbability48h": 0.7712535220153638,
+        "coherenceAdjusted": false
+      }
+    ],
+    "originsWithCoherenceAdjustment": [],
+    "originsWithUnexplainedSavedFinalMismatch": []
+  },
+  "perOrigin": [
+    {
+      "origin": "2026-09-01T08:00:26.043Z",
+      "actual24h": 0,
+      "actual48h": 0,
+      "v2Probability24h": 0.5974381606658998,
+      "hybridProbability24h": 0.4549062764132743,
+      "v2Probability48h": 0.8357482125725314,
+      "hybridProbability48h": 0.8357482125725314,
+      "v2BrierContribution24h": 0.35693235581985355,
+      "hybridBrierContribution24h": 0.2069397203201903,
+      "v2BrierContribution48h": 0.6984750748181812,
+      "hybridBrierContribution48h": 0.6984750748181812,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-01T16:51:47.016Z",
+      "actual24h": 0,
+      "actual48h": 0,
+      "v2Probability24h": 0.6334162269636247,
+      "hybridProbability24h": 0.4928085672369434,
+      "v2Probability48h": 0.8502781885839132,
+      "hybridProbability48h": 0.8502781885839132,
+      "v2BrierContribution24h": 0.40121611658083406,
+      "hybridBrierContribution24h": 0.24286028394212894,
+      "v2BrierContribution48h": 0.7229729979815407,
+      "hybridBrierContribution48h": 0.7229729979815407,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-02T16:49:13.509Z",
+      "actual24h": 0,
+      "actual48h": 1,
+      "v2Probability24h": 0.5485834692993445,
+      "hybridProbability24h": 0.4268000531118725,
+      "v2Probability48h": 0.7676619646243743,
+      "hybridProbability48h": 0.7676619646243743,
+      "v2BrierContribution24h": 0.3009438227885049,
+      "hybridBrierContribution24h": 0.18215828533629722,
+      "v2BrierContribution48h": 0.053980962682205494,
+      "hybridBrierContribution48h": 0.053980962682205494,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-03T16:38:23.571Z",
+      "actual24h": 1,
+      "actual48h": 1,
+      "v2Probability24h": 0.4604155088515382,
+      "hybridProbability24h": 0.36320744598728627,
+      "v2Probability48h": 0.6466434438987587,
+      "hybridProbability48h": 0.6466434438987587,
+      "v2BrierContribution24h": 0.2911514230879444,
+      "hybridBrierContribution24h": 0.40550475684603493,
+      "v2BrierContribution48h": 0.12486085573972967,
+      "hybridBrierContribution48h": 0.12486085573972967,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-04T16:33:39.803Z",
+      "actual24h": 1,
+      "actual48h": 1,
+      "v2Probability24h": 0.9,
+      "hybridProbability24h": 0.9,
+      "v2Probability48h": 0.96,
+      "hybridProbability48h": 0.96,
+      "v2BrierContribution24h": 0.009999999999999995,
+      "hybridBrierContribution24h": 0.009999999999999995,
+      "v2BrierContribution48h": 0.001600000000000003,
+      "hybridBrierContribution48h": 0.001600000000000003,
+      "officialNoticeOverride": true,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-05T15:28:58.662Z",
+      "actual24h": 0,
+      "actual48h": 0,
+      "v2Probability24h": 0.11116041367120556,
+      "hybridProbability24h": 0.08701735334272431,
+      "v2Probability48h": 0.3084873734552771,
+      "hybridProbability48h": 0.3084873734552771,
+      "v2BrierContribution24h": 0.012356637567553544,
+      "hybridBrierContribution24h": 0.0075720197827725344,
+      "v2BrierContribution48h": 0.0951644595813356,
+      "hybridBrierContribution48h": 0.0951644595813356,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-06T15:42:12.464Z",
+      "actual24h": 0,
+      "actual48h": 1,
+      "v2Probability24h": 0.5575685448235278,
+      "hybridProbability24h": 0.437581590321258,
+      "v2Probability48h": 0.7845652986669979,
+      "hybridProbability48h": 0.7845652986669979,
+      "v2BrierContribution24h": 0.31088268217662635,
+      "hybridBrierContribution24h": 0.19147764818808127,
+      "v2BrierContribution48h": 0.046412110538439834,
+      "hybridBrierContribution48h": 0.046412110538439834,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-07T21:44:09.200Z",
+      "actual24h": 1,
+      "actual48h": 1,
+      "v2Probability24h": 0.9,
+      "hybridProbability24h": 0.9,
+      "v2Probability48h": 0.96,
+      "hybridProbability48h": 0.96,
+      "v2BrierContribution24h": 0.009999999999999995,
+      "hybridBrierContribution24h": 0.009999999999999995,
+      "v2BrierContribution48h": 0.001600000000000003,
+      "hybridBrierContribution48h": 0.001600000000000003,
+      "officialNoticeOverride": true,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-08T16:48:51.682Z",
+      "actual24h": 0,
+      "actual48h": null,
+      "v2Probability24h": 0.440089602075375,
+      "hybridProbability24h": 0.34203283162416487,
+      "v2Probability48h": 0.7587979219413001,
+      "hybridProbability48h": 0.7587979219413001,
+      "v2BrierContribution24h": 0.1936788578548619,
+      "hybridBrierContribution24h": 0.11698645790884432,
+      "v2BrierContribution48h": null,
+      "hybridBrierContribution48h": null,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    },
+    {
+      "origin": "2026-09-09T16:51:58.105Z",
+      "actual24h": null,
+      "actual48h": null,
+      "v2Probability24h": 0.5082531547539024,
+      "hybridProbability24h": 0.40464681713207223,
+      "v2Probability48h": 0.7712535220153638,
+      "hybridProbability48h": 0.7712535220153638,
+      "v2BrierContribution24h": null,
+      "hybridBrierContribution24h": null,
+      "v2BrierContribution48h": null,
+      "hybridBrierContribution48h": null,
+      "officialNoticeOverride": false,
+      "savedHorizonCoherenceAdjusted": false,
+      "hybridCoherenceAdjusted": false
+    }
+  ],
+  "notes": [
+    "This is a saved-artifact retrospective counterfactual, not a prospective result.",
+    "The hazard-regime-random-continuous-calibrated-post-reset-age-v2 saved forecast is the source; the hazard-regime-random-continuous-calibrated-v1 forecast is required only to preserve the same daily-first comparable-origin selection.",
+    "The hybrid 24h value uses the saved v2 raw probability unless an explicitly saved policy override must be preserved; hybrid 48h starts from the saved v2 final probability.",
+    "Canonical reset truth is supplied by the existing Production canonical semantics; no reset-history rows are written or relabeled.",
+    "The prospective gate and published-model status are not computed from or changed by this counterfactual."
+  ],
+  "historyRowCount": 350,
+  "falsePositiveEventExcluded": true,
+  "pointInTimeReplay": {
+    "usedForDecision": false,
+    "status": "diagnostic-only-not-used"
+  }
+}

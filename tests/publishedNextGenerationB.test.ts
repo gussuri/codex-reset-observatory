@@ -8,6 +8,7 @@ import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
+import { calculateNextGenerationSelectiveCalibrationProbability } from "../lib/radar/nextGenerationProbability";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 
 // Public calculations are evaluated on ten-minute buckets; 02:10 is the
@@ -37,4 +38,29 @@ test("the selective hybrid promotion is configured while B v1 remains active bef
     },
     published.nextGenerationB.predictions,
   );
+});
+
+test("mixed calibration records final horizon coherence adjustment", () => {
+  const now = new Date("2026-09-09T12:00:00.000Z");
+  const trainingRows = Array.from({ length: 12 }, (_, index) => ({
+    generatedAt: new Date(now.getTime() - (index + 3) * 24 * 60 * 60 * 1000).toISOString(),
+    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+    rawProbability24h: 0.8,
+    rawProbability48h: 0.8,
+    actual24h: false,
+    actual48h: false,
+  }));
+
+  const result = calculateNextGenerationSelectiveCalibrationProbability(
+    getLocalRadarData({ calculationNow: now }),
+    {
+      now,
+      activeOfficialNotice: null,
+      trainingRows,
+      trainingReadStatus: "ok",
+    },
+  );
+
+  assert.equal(result.predictions.probability48h, result.predictions.probability24h);
+  assert.equal(result.horizonCoherenceAdjusted, true);
 });

@@ -26,7 +26,7 @@ import {
 import type { NextGenerationTrainingState } from "../lib/radar/nextGenerationTraining";
 
 const V2_ADOPTION_BOUNDARY = "2026-09-01T08:00:00.000Z";
-const HYBRID_ADOPTION_BOUNDARY = "2026-09-09T23:00:00.000Z";
+const HYBRID_ADOPTION_BOUNDARY = "2026-09-10T01:00:00.000Z";
 
 function trainingState(): NextGenerationTrainingState {
   return {
@@ -208,7 +208,7 @@ test("logging stores v2, selective hybrid, and the old B baseline at the same or
 
 test("prospective evaluation uses only post-boundary hybrid and v2 rows", () => {
   const before = "2026-09-09T22:00:00.000Z";
-  const after = "2026-09-10T00:00:00.000Z";
+  const after = "2026-09-10T02:00:00.000Z";
   const row = (generatedAt: string) => ({
     generatedAt,
     loggedHour: generatedAt,

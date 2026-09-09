@@ -1,10 +1,13 @@
 import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
+  NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
@@ -481,6 +484,27 @@ export function selectComparablePublishedForecasts(rows: Array<ProspectiveForeca
 
 export function selectDailyFirstPublishedForecasts(rows: Array<ProspectiveForecastRow>) {
   return selectDailyFirstForecasts(selectComparablePublishedForecasts(rows));
+}
+
+export function selectComparableForecastsForModelPair(
+  rows: Array<ProspectiveForecastRow>,
+  primaryModelVersion: string,
+  comparisonModelVersion: string,
+) {
+  return rows.filter((row) =>
+    isStoredForecast(row.forecasts[primaryModelVersion])
+    && isStoredForecast(row.forecasts[comparisonModelVersion]),
+  );
+}
+
+export function selectDailyFirstForecastsForModelPair(
+  rows: Array<ProspectiveForecastRow>,
+  primaryModelVersion: string,
+  comparisonModelVersion: string,
+) {
+  return selectDailyFirstForecasts(
+    selectComparableForecastsForModelPair(rows, primaryModelVersion, comparisonModelVersion),
+  );
 }
 
 function getFirstComparableForecastAt(rows: Array<ProspectiveForecastRow>) {
@@ -1139,6 +1163,206 @@ function getTargetResetCount(
       })
       .map((event) => event.id),
   ).size;
+}
+
+export type SavedArtifactHybridCounterfactualOrigin = {
+  origin: string;
+  actual24h: number | null;
+  actual48h: number | null;
+  v2Probability24h: number;
+  hybridProbability24h: number;
+  v2Probability48h: number;
+  hybridProbability48h: number;
+  v2BrierContribution24h: number | null;
+  hybridBrierContribution24h: number | null;
+  v2BrierContribution48h: number | null;
+  hybridBrierContribution48h: number | null;
+  officialNoticeOverride: boolean;
+  savedHorizonCoherenceAdjusted: boolean;
+  hybridCoherenceAdjusted: boolean;
+};
+
+export type SavedArtifactHybridCounterfactualEvaluation = {
+  schemaVersion: "saved-artifact-published-hybrid-counterfactual-v1";
+  evaluationMode: "saved-artifact-retrospective-counterfactual";
+  backfilled: false;
+  generatedAt: string;
+  asOf: string;
+  adoptionAt: string | null;
+  source: typeof SAVED_ARTIFACT_HYBRID_SOURCE;
+  sourceModelVersion: string;
+  companionModelVersion: string;
+  hybridModelVersion: typeof NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION;
+  evaluationStartAt: string | null;
+  comparableRowCount: number;
+  dailyOriginCount: number;
+  dailyOrigins: string[];
+  targetResetCount: number;
+  canonicalRandomResetEvents: Array<ShadowResetEvent>;
+  models: {
+    v2: PublishedProspectiveModelEvaluation;
+    hybrid: PublishedProspectiveModelEvaluation;
+  };
+  comparison: {
+    resolved24h: number;
+    resolved48h: number;
+    brierHybridMinusV2: {
+      probability24h: number | null;
+      probability48h: number | null;
+    };
+    logLossHybridMinusV2: {
+      probability24h: number | null;
+      probability48h: number | null;
+    };
+  };
+  savedArtifactAudit: {
+    origins: Array<PublishedSavedArtifactHybridAudit>;
+    originsWithCoherenceAdjustment: string[];
+    originsWithUnexplainedSavedFinalMismatch: Array<{
+      origin: string;
+      horizons: Array<"24h" | "48h">;
+    }>;
+  };
+  perOrigin: Array<SavedArtifactHybridCounterfactualOrigin>;
+  notes: string[];
+};
+
+export type SavedArtifactHybridCounterfactualOptions = {
+  adoptionAt?: string | null;
+  sourceModelVersion?: string;
+  companionModelVersion?: string;
+};
+
+export function evaluateSavedArtifactHybridCounterfactual(
+  rows: Array<ProspectiveForecastRow>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+  options: SavedArtifactHybridCounterfactualOptions = {},
+): SavedArtifactHybridCounterfactualEvaluation {
+  if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
+  const sourceModelVersion = options.sourceModelVersion ?? NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+  const companionModelVersion = options.companionModelVersion ?? NEXT_GENERATION_B_MODEL_VERSION;
+  const adoptionAt = options.adoptionAt === undefined
+    ? PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT
+    : options.adoptionAt;
+  const adoptionTime = timestamp(adoptionAt);
+  if (adoptionAt !== null && adoptionTime === null) {
+    throw new RangeError("adoptionAt must be a valid timestamp or null");
+  }
+  const comparableRows = selectComparableForecastsForModelPair(
+    rows,
+    sourceModelVersion,
+    companionModelVersion,
+  ).filter((row) => {
+    const generatedTime = timestamp(row.generatedAt);
+    return generatedTime !== null
+      && generatedTime <= asOf.getTime()
+      && (adoptionTime === null || generatedTime >= adoptionTime!);
+  });
+  const dailyRows = selectDailyFirstForecastsForModelPair(
+    comparableRows,
+    sourceModelVersion,
+    companionModelVersion,
+  );
+  const builtRows = dailyRows.flatMap((row) => {
+    const sourceForecast = row.forecasts[sourceModelVersion];
+    if (!sourceForecast || !isStoredForecast(sourceForecast)) return [];
+    const built = buildSavedArtifactHybridForecast(sourceForecast);
+    return [{ row, sourceForecast, hybridForecast: built.forecast, audit: built.audit }];
+  });
+  const hybridRows = builtRows.map(({ row, hybridForecast }) => ({
+    ...row,
+    forecasts: {
+      ...row.forecasts,
+      [NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION]: hybridForecast,
+    },
+  }));
+  const v2 = createModelEvaluation(dailyRows, sourceModelVersion, events, asOf);
+  const hybrid = createModelEvaluation(
+    hybridRows,
+    NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    events,
+    asOf,
+  );
+  const evaluationStartAt = getFirstComparableForecastAt(dailyRows);
+  const canonicalRandomResetEvents = events
+    .filter((event) => {
+      const resetTime = timestamp(event.resetAt);
+      return resetTime !== null && (adoptionTime === null || resetTime >= adoptionTime!);
+    })
+    .map((event) => ({ ...event }));
+  const audits = builtRows.map(({ audit }) => audit);
+  const perOrigin = builtRows.map(({ row, sourceForecast, hybridForecast, audit }) => {
+    const actual24h = getUnifiedActual(row.generatedAt, 24, events, asOf);
+    const actual48h = getUnifiedActual(row.generatedAt, 48, events, asOf);
+    return {
+      origin: row.generatedAt,
+      actual24h,
+      actual48h,
+      v2Probability24h: sourceForecast.probability24h,
+      hybridProbability24h: hybridForecast.probability24h,
+      v2Probability48h: sourceForecast.probability48h,
+      hybridProbability48h: hybridForecast.probability48h,
+      v2BrierContribution24h: getBrierContribution(sourceForecast.probability24h, actual24h),
+      hybridBrierContribution24h: getBrierContribution(hybridForecast.probability24h, actual24h),
+      v2BrierContribution48h: getBrierContribution(sourceForecast.probability48h, actual48h),
+      hybridBrierContribution48h: getBrierContribution(hybridForecast.probability48h, actual48h),
+      officialNoticeOverride: audit.officialNoticeOverride,
+      savedHorizonCoherenceAdjusted: audit.savedHorizonCoherenceAdjusted,
+      hybridCoherenceAdjusted: audit.coherenceAdjusted,
+    };
+  });
+  return {
+    schemaVersion: "saved-artifact-published-hybrid-counterfactual-v1",
+    evaluationMode: "saved-artifact-retrospective-counterfactual",
+    backfilled: false,
+    generatedAt: asOf.toISOString(),
+    asOf: asOf.toISOString(),
+    adoptionAt,
+    source: SAVED_ARTIFACT_HYBRID_SOURCE,
+    sourceModelVersion,
+    companionModelVersion,
+    hybridModelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    evaluationStartAt,
+    comparableRowCount: comparableRows.length,
+    dailyOriginCount: builtRows.length,
+    dailyOrigins: builtRows.map(({ row }) => row.generatedAt),
+    targetResetCount: getTargetResetCount(events, evaluationStartAt, asOf),
+    canonicalRandomResetEvents,
+    models: { v2, hybrid },
+    comparison: {
+      resolved24h: hybrid.metrics24h.count,
+      resolved48h: hybrid.metrics48h.count,
+      brierHybridMinusV2: {
+        probability24h: difference(hybrid.metrics24h.brier, v2.metrics24h.brier, hybrid.metrics24h.count),
+        probability48h: difference(hybrid.metrics48h.brier, v2.metrics48h.brier, hybrid.metrics48h.count),
+      },
+      logLossHybridMinusV2: {
+        probability24h: difference(hybrid.metrics24h.logLoss, v2.metrics24h.logLoss, hybrid.metrics24h.count),
+        probability48h: difference(hybrid.metrics48h.logLoss, v2.metrics48h.logLoss, hybrid.metrics48h.count),
+      },
+    },
+    savedArtifactAudit: {
+      origins: audits,
+      originsWithCoherenceAdjustment: audits
+        .filter((audit) => audit.coherenceAdjusted)
+        .map((audit) => audit.origin),
+      originsWithUnexplainedSavedFinalMismatch: audits.flatMap((audit) => {
+        const horizons: Array<"24h" | "48h"> = [];
+        if (audit.finalMismatchExplanation24h === "unexplained") horizons.push("24h");
+        if (audit.finalMismatchExplanation48h === "unexplained") horizons.push("48h");
+        return horizons.length > 0 ? [{ origin: audit.origin, horizons }] : [];
+      }),
+    },
+    perOrigin,
+    notes: [
+      "This is a saved-artifact retrospective counterfactual, not a prospective result.",
+      `The ${sourceModelVersion} saved forecast is the source; the ${companionModelVersion} forecast is required only to preserve the same daily-first comparable-origin selection.`,
+      "The hybrid 24h value uses the saved v2 raw probability unless an explicitly saved policy override must be preserved; hybrid 48h starts from the saved v2 final probability.",
+      "Canonical reset truth is supplied by the existing Production canonical semantics; no reset-history rows are written or relabeled.",
+      "The prospective gate and published-model status are not computed from or changed by this counterfactual.",
+    ],
+  };
 }
 
 export function evaluatePublishedModelProspectively(

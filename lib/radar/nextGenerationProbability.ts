@@ -389,10 +389,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
     lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
-    horizonCoherenceAdjusted: (calibrationPolicy.probability24h === "apply"
-      && calibrationPolicy.probability48h === "apply"
-      && calibrated.adjusted)
-      || (noticeHorizons ? finalPair.adjusted : false),
+    horizonCoherenceAdjusted: finalPair.adjusted,
     trainingReadStatus,
     fallbackUsed,
     fallbackReason: fallbackUsed ? "prediction_history_training_query_failed" : null,

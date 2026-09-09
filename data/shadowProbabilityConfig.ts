@@ -34,10 +34,11 @@ export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_SELECTIVE_CAL
 export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
-// This explicit UTC boundary is the point from which selective-calibration v3
-// becomes the public model. Earlier rows stay historic.
+// This future UTC boundary is the point from which selective-calibration v3
+// becomes the public model. It is intentionally after the adoption decision
+// and deployment window; earlier rows stay historic.
 export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = "2026-09-10";
-export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-09T23:00:00.000Z";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-10T01:00:00.000Z";
 // The previous public model is v2, adopted at its own historical boundary.
 export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-09-01T08:00:00.000Z";
 // B v1 remains a historical runtime period before v2. Keep this separate from

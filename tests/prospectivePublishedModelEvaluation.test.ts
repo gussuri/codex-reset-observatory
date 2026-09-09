@@ -6,6 +6,7 @@ import {
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS,
   buildSavedArtifactHybridForecast,
+  evaluateSavedArtifactHybridCounterfactual,
   evaluatePublishedModelProspectively,
   formatPublishedProspectiveMetric,
   selectComparablePublishedForecasts,
@@ -13,6 +14,7 @@ import {
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
+  NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
@@ -516,6 +518,51 @@ test("saved-artifact hybrid is primary while point-in-time replay remains diagno
   assert.equal(report.unifiedComparison.hybridReplay?.metrics24h.averagePrediction, 0.8);
   assert.equal(report.unifiedComparison.savedArtifactHybridAudit.origins.length, 1);
   assert.deepEqual(report.unifiedComparison.savedArtifactHybridAudit.originsWithUnexplainedSavedFinalMismatch, []);
+});
+
+test("saved-artifact counterfactual selects the historical v2/v1 pair explicitly", () => {
+  const generatedAt = "2026-09-01T08:00:00.000Z";
+  const savedV2 = {
+    modelVersion: NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+    generatedAt,
+    probability24h: 0.6,
+    probability48h: 0.7,
+    rawProbability24h: 0.4,
+    rawProbability48h: 0.7,
+    alpha24h: 0,
+    alpha48h: 0,
+    officialNoticeOverride: false,
+    horizonCoherenceAdjusted: false,
+  };
+  const row: ProspectiveForecastRow = {
+    generatedAt,
+    loggedHour: generatedAt,
+    forecasts: {
+      [NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION]: savedV2,
+      [NEXT_GENERATION_B_MODEL_VERSION]: {
+        modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+        generatedAt,
+        probability24h: 0.5,
+        probability48h: 0.6,
+      },
+    },
+  };
+
+  const report = evaluateSavedArtifactHybridCounterfactual(
+    [row],
+    [],
+    new Date("2026-09-04T00:00:00.000Z"),
+    { adoptionAt: "2026-09-01T08:00:00.000Z" },
+  );
+
+  assert.equal(report.dailyOriginCount, 1);
+  assert.equal(report.sourceModelVersion, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(report.companionModelVersion, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(report.models.hybrid.metrics24h.averagePrediction, 0.4);
+  assert.equal(report.models.hybrid.metrics48h.averagePrediction, 0.7);
+  assert.equal(report.models.hybrid.metrics48h.averagePrediction, report.models.v2.metrics48h.averagePrediction);
+  assert.equal(report.perOrigin[0]?.hybridProbability24h, 0.4);
+  assert.equal(report.perOrigin[0]?.hybridProbability48h, 0.7);
 });
 
 test("unified comparison reports per-origin hybrid and uncalibrated contributions", () => {

@@ -6,13 +6,13 @@
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（2026-09-09T23:00:00.000Z以後） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid） |
+| 公開モデル（2026-09-10T01:00:00.000Z以後） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid） |
 | 比較用のprevious model | `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2） |
 | v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
 | selective hybrid adoption date | `2026-09-10` |
-| selective hybrid adoption timestamp | `2026-09-09T23:00:00.000Z` |
+| selective hybrid adoption timestamp | `2026-09-10T01:00:00.000Z` |
 | previous v2 adoption timestamp | `2026-09-01T08:00:00.000Z` |
 | previous B v1 adoption timestamp | `2026-08-23T02:04:00.000Z` |
 | prospective gate status | `not_met` |
@@ -25,7 +25,7 @@ Model A（`hazard-ensemble-logit-stack-v1`）とModel C（`hazard-contextual-bur
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3を自動publishしたり、v2を自動rollbackしたりしません。
 
-selective hybrid v3のProduction adoption boundaryは`2026-09-09T23:00:00.000Z`（UTC）に設定しています。`2026-09-01T08:00:00.000Z`以後かつ現行boundary前はv2、その前はB v1を使用します。現行boundary以後はselective hybrid v3の予測が有効な場合に選択します。無効・例外の場合は従来どおりのfallback chainへ退避し、過去のforecast rowを新しいモデルとして再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）に設定しています。これは採用判断・同期・検証・Production反映予定より後ろに置いた将来境界です。`2026-09-01T08:00:00.000Z`以後かつ現行boundary前はv2、その前はB v1を使用します。現行boundary以後はselective hybrid v3の予測が有効な場合に選択します。無効・例外の場合は従来どおりのfallback chainへ退避し、過去のforecast rowを新しいモデルとして再ラベルしません。
 
 logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは採用境界ごとに対象期間を分離し、過去boundary前のrowを現行モデルとして再利用しません。
 
@@ -56,7 +56,11 @@ logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3を
 
 ## Evaluation status
 
-evaluationはprospective-onlyです。selective hybrid v3は0–24h post-reset ageの既存計算を継承し、24hはcalibrationをdiagnostic-only、48hはv2と同じcalibrationを適用します。既存のgate条件はtarget reset数、resolved daily 24h/48h数、Brier、log lossを使うmanual-review用の診断です。gateを満たしても公開モデルは自動変更されません。
+Productionの採用判定に使うruntime evaluationはprospective-onlyです。selective hybrid v3は0–24h post-reset ageの既存計算を継承し、24hはcalibrationをdiagnostic-only、48hはv2と同じcalibrationを適用します。既存のgate条件はtarget reset数、resolved daily 24h/48h数、Brier、log lossを使うmanual-review用の診断です。gateを満たしても公開モデルは自動変更されません。
+
+採用根拠の監査用に、保存済みv2 artifactから構成した別の `saved-artifact retrospective counterfactual` を追加しています。`reports/prospective-published-hybrid-counterfactual-corrected-20260910.json` と `.md` は、現行canonical reset truth（誤っていた `usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec` を含めない）に対するv2とselective hybridの比較です。このcounterfactualはprospective成績、gate、auto-publish判定ではありません。
+
+このcorrected artifactでは、24hのBrierが `0.209685` から `0.152611`、log lossが `0.578715` から `0.461204` へ低下し、48hはv2とhybridが同じ `0.218133` / `0.637355` でした。これは全面的な性能向上の主張ではなく、24h calibrationのmaterial regressionだけを除去し、48h calibrationを維持するmanual corrective adoptionの限定的根拠です。resolved daily sampleは24h 9件、48h 8件、canonical target resetは3件であり、gate=`not_met`は変更しません。
 
 過去のnext-generation evaluation reportやpublished-model reportはhistorical snapshotとして保持します。これらの過去値をselective hybrid v3やv2の実績へ混ぜたり、prediction historyを遡及して書き換えたりしません。現行hybridの性能差は、明示的なProduction boundary以後に同一originで保存されたhybrid/v2のprospective dataが十分に蓄積されてから評価します。
 

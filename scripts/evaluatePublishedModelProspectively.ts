@@ -4,7 +4,9 @@ import { basename, join } from "node:path";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -26,6 +28,7 @@ import {
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   selectDailyFirstPublishedForecasts,
+  selectDailyFirstForecastsForModelPair,
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
@@ -262,21 +265,29 @@ function buildSavedArtifactHybridForecasts(
   rows: Array<ProspectiveForecastRow>,
   asOf: Date,
 ) {
-  const adoptionTime = parseTimestamp(PUBLISHED_PROBABILITY_ADOPTION_AT);
+  const sourceModelVersion = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+  const companionModelVersion = NEXT_GENERATION_B_MODEL_VERSION;
+  const adoptionTime = parseTimestamp(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT);
   const comparableRows = rows.filter((row) => {
     const generatedTime = parseTimestamp(row.generatedAt);
     return generatedTime !== null
       && generatedTime <= asOf.getTime()
+      && row.forecasts[sourceModelVersion]
+      && row.forecasts[companionModelVersion]
       && (adoptionTime === null || generatedTime >= adoptionTime!);
   });
-  const dailyRows = selectDailyFirstPublishedForecasts(comparableRows);
+  const dailyRows = selectDailyFirstForecastsForModelPair(
+    comparableRows,
+    sourceModelVersion,
+    companionModelVersion,
+  );
   const forecasts: Record<string, ProspectiveStoredForecast> = {};
   const audits: Record<string, ReturnType<typeof buildSavedArtifactHybridForecast>["audit"]> = {};
   for (const row of dailyRows) {
-    const savedV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    const savedV2 = row.forecasts[sourceModelVersion];
     if (
       !savedV2
-      || savedV2.modelVersion !== PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION
+      || savedV2.modelVersion !== sourceModelVersion
       || !isFiniteProbability(savedV2.rawProbability24h)
       || !isFiniteProbability(savedV2.rawProbability48h)
     ) {
