@@ -1464,8 +1464,8 @@ function RecommendationRow({
 
     return (
       <div className={`rounded-lg border p-3.5 sm:p-4 ${containerStyle}`}>
-        <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[7.5rem_1fr] sm:items-start sm:gap-6">
-          <dt className="flex items-center gap-2 whitespace-nowrap text-base font-semibold">
+        <div className="flex flex-col gap-2.5">
+          <dt className="flex items-center gap-2 text-base font-semibold">
             <span
               className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${badgeStyle}`}
             >
