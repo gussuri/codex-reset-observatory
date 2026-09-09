@@ -21,6 +21,8 @@ export const NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION =
   "hazard-regime-random-continuous-calibrated-post-reset-age-v2";
 export const NEXT_GENERATION_V3_MODEL_VERSION =
   "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3";
+export const NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION =
+  "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3";
 export const NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION =
   "post-reset-regime-attenuation-0-24h-v1";
 export const NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS = 24;

@@ -1,8 +1,8 @@
 {
   "schemaVersion": "prospective-published-model-evaluation-v2",
   "status": "insufficient_data",
-  "generatedAt": "2026-09-09T16:40:07.783Z",
-  "asOf": "2026-09-09T16:40:07.783Z",
+  "generatedAt": "2026-09-09T17:24:48.520Z",
+  "asOf": "2026-09-09T17:24:48.520Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
@@ -11,20 +11,20 @@
   "baselineModelVersion": "hazard-regime-random-continuous-calibrated-v1",
   "evaluationStartAt": "2026-09-01T08:00:26.043Z",
   "forecastCounts": {
-    "active": 33,
-    "baseline": 33,
-    "comparable": 33
+    "active": 34,
+    "baseline": 34,
+    "comparable": 34
   },
   "comparison": {
-    "resolved24h": 8,
+    "resolved24h": 9,
     "resolved48h": 7,
     "positiveCount24h": 3,
     "positiveCount48h": 4,
     "targetResetCount": 3,
     "activeMinusBaseline": {
-      "brier24h": 0,
+      "brier24h": -0.003824822172768444,
       "brier48h": 0,
-      "logLoss24h": 0,
+      "logLoss24h": -0.007704909564350659,
       "logLoss48h": 0
     }
   },
@@ -32,12 +32,13 @@
     "active": {
       "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
       "metrics24h": {
-        "count": 8,
+        "count": 9,
         "positiveCount": 3,
-        "actualRate": 0.375,
-        "averagePrediction": 0.5885727905343926,
-        "brier": 0.2116853797526646,
-        "logLoss": 0.5785568423969947,
+        "actualRate": 0.3333333333333333,
+        "averagePrediction": 0.5720746584833907,
+        "bias": 0.23874132515005736,
+        "brier": 0.20968465509735318,
+        "logLoss": 0.5787148056596538,
         "calibration": [
           {
             "range": "0-20%",
@@ -53,9 +54,9 @@
           },
           {
             "range": "40-60%",
-            "count": 4,
-            "averagePrediction": 0.5410014209100776,
-            "actualRate": 0.25
+            "count": 5,
+            "averagePrediction": 0.520819057143137,
+            "actualRate": 0.2
           },
           {
             "range": "60-80%",
@@ -71,7 +72,7 @@
           }
         ],
         "periodStart": "2026-09-01T08:00:26.043Z",
-        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "periodEnd": "2026-09-08T16:48:51.682Z",
         "targetResetCount": 3
       },
       "metrics48h": {
@@ -79,6 +80,7 @@
         "positiveCount": 4,
         "actualRate": 0.5714285714285714,
         "averagePrediction": 0.7361977831145502,
+        "bias": 0.1647692116859788,
         "brier": 0.24906663733449036,
         "logLoss": 0.7225740563567857,
         "calibration": [
@@ -121,12 +123,13 @@
     "baseline": {
       "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
       "metrics24h": {
-        "count": 8,
+        "count": 9,
         "positiveCount": 3,
-        "actualRate": 0.375,
-        "averagePrediction": 0.5885727905343926,
-        "brier": 0.2116853797526646,
-        "logLoss": 0.5785568423969947,
+        "actualRate": 0.3333333333333333,
+        "averagePrediction": 0.5762425383348596,
+        "bias": 0.2429092050015263,
+        "brier": 0.21350947727012162,
+        "logLoss": 0.5864197152240045,
         "calibration": [
           {
             "range": "0-20%",
@@ -142,9 +145,9 @@
           },
           {
             "range": "40-60%",
-            "count": 4,
-            "averagePrediction": 0.5410014209100776,
-            "actualRate": 0.25
+            "count": 5,
+            "averagePrediction": 0.5283212408757813,
+            "actualRate": 0.2
           },
           {
             "range": "60-80%",
@@ -160,7 +163,7 @@
           }
         ],
         "periodStart": "2026-09-01T08:00:26.043Z",
-        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "periodEnd": "2026-09-08T16:48:51.682Z",
         "targetResetCount": 3
       },
       "metrics48h": {
@@ -168,6 +171,7 @@
         "positiveCount": 4,
         "actualRate": 0.5714285714285714,
         "averagePrediction": 0.7361977831145502,
+        "bias": 0.1647692116859788,
         "brier": 0.24906663733449036,
         "logLoss": 0.7225740563567857,
         "calibration": [
@@ -265,7 +269,7 @@
     }
   },
   "unifiedComparison": {
-    "originCount": 9,
+    "originCount": 10,
     "origins": [
       "2026-09-01T08:00:26.043Z",
       "2026-09-01T16:51:47.016Z",
@@ -275,19 +279,303 @@
       "2026-09-05T15:28:58.662Z",
       "2026-09-06T15:42:12.464Z",
       "2026-09-07T21:44:09.200Z",
-      "2026-09-08T16:48:51.682Z"
+      "2026-09-08T16:48:51.682Z",
+      "2026-09-09T16:51:58.105Z"
+    ],
+    "perOrigin": [
+      {
+        "origin": "2026-09-01T08:00:26.043Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.5974381606658998,
+          "uncalibrated": 0.46519382451577374,
+          "hybrid": 0.46519382451577374
+        },
+        "brierContributions24h": {
+          "v2": 0.35693235581985355,
+          "uncalibrated": 0.2164052943676125,
+          "hybrid": 0.2164052943676125
+        },
+        "actual48h": 0,
+        "probabilities48h": {
+          "v2": 0.8357482125725314,
+          "uncalibrated": 0.7304865900795817,
+          "hybrid": 0.8415858599062698
+        },
+        "brierContributions48h": {
+          "v2": 0.6984750748181812,
+          "uncalibrated": 0.5336106582860949,
+          "hybrid": 0.7082667595941755
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-01T16:51:47.016Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.6334162269636247,
+          "uncalibrated": 0.5004209919453732,
+          "hybrid": 0.5004209919453732
+        },
+        "brierContributions24h": {
+          "v2": 0.40121611658083406,
+          "uncalibrated": 0.25042116917959123,
+          "hybrid": 0.25042116917959123
+        },
+        "actual48h": 0,
+        "probabilities48h": {
+          "v2": 0.8502781885839132,
+          "uncalibrated": 0.7497383693336577,
+          "hybrid": 0.8544825390136555
+        },
+        "brierContributions48h": {
+          "v2": 0.7229729979815407,
+          "uncalibrated": 0.562107622451092,
+          "hybrid": 0.7301404094792232
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-02T16:49:13.509Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.5485834692993445,
+          "uncalibrated": 0.4306095451405199,
+          "hybrid": 0.4306095451405199
+        },
+        "brierContributions24h": {
+          "v2": 0.3009438227885049,
+          "uncalibrated": 0.18542458036612547,
+          "hybrid": 0.18542458036612547
+        },
+        "actual48h": 1,
+        "probabilities48h": {
+          "v2": 0.7676619646243743,
+          "uncalibrated": 0.6295216537564122,
+          "hybrid": 0.7710594679011961
+        },
+        "brierContributions48h": {
+          "v2": 0.053980962682205494,
+          "uncalibrated": 0.13725420503538371,
+          "hybrid": 0.05241376723768348
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-03T16:38:23.571Z",
+        "actual24h": 1,
+        "probabilities24h": {
+          "v2": 0.4604155088515382,
+          "uncalibrated": 0.4237786423965198,
+          "hybrid": 0.4237786423965198
+        },
+        "brierContributions24h": {
+          "v2": 0.2911514230879444,
+          "uncalibrated": 0.33203105295839785,
+          "hybrid": 0.33203105295839785
+        },
+        "actual48h": 1,
+        "probabilities48h": {
+          "v2": 0.6466434438987587,
+          "uncalibrated": 0.5999572637645262,
+          "hybrid": 0.7215079600480463
+        },
+        "brierContributions48h": {
+          "v2": 0.12486085573972967,
+          "uncalibrated": 0.1600341908147649,
+          "hybrid": 0.07755781631660058
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-04T16:33:39.803Z",
+        "actual24h": 1,
+        "probabilities24h": {
+          "v2": 0.9,
+          "uncalibrated": 0.9,
+          "hybrid": 0.9
+        },
+        "brierContributions24h": {
+          "v2": 0.009999999999999995,
+          "uncalibrated": 0.009999999999999995,
+          "hybrid": 0.009999999999999995
+        },
+        "actual48h": 1,
+        "probabilities48h": {
+          "v2": 0.96,
+          "uncalibrated": 0.96,
+          "hybrid": 0.96
+        },
+        "brierContributions48h": {
+          "v2": 0.001600000000000003,
+          "uncalibrated": 0.001600000000000003,
+          "hybrid": 0.001600000000000003
+        },
+        "officialNotice": true,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-05T15:28:58.662Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.11116041367120556,
+          "uncalibrated": 0.38238121228923594,
+          "hybrid": 0.38238121228923594
+        },
+        "brierContributions24h": {
+          "v2": 0.012356637567553544,
+          "uncalibrated": 0.14621539151178573,
+          "hybrid": 0.14621539151178573
+        },
+        "actual48h": 0,
+        "probabilities48h": {
+          "v2": 0.3084873734552771,
+          "uncalibrated": 0.6847966460360067,
+          "hybrid": 0.7746209393887348
+        },
+        "brierContributions48h": {
+          "v2": 0.0951644595813356,
+          "uncalibrated": 0.46894644642216377,
+          "hybrid": 0.6000375997394859
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": true,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-06T15:42:12.464Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.5575685448235278,
+          "uncalibrated": 0.4355087777252968,
+          "hybrid": 0.4355087777252968
+        },
+        "brierContributions24h": {
+          "v2": 0.31088268217662635,
+          "uncalibrated": 0.18966789547578194,
+          "hybrid": 0.18966789547578194
+        },
+        "actual48h": 1,
+        "probabilities48h": {
+          "v2": 0.7845652986669979,
+          "uncalibrated": 0.6819577524337412,
+          "hybrid": 0.7818503831988443
+        },
+        "brierContributions48h": {
+          "v2": 0.046412110538439834,
+          "uncalibrated": 0.10115087123699742,
+          "hybrid": 0.047589255310491095
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": true,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-07T21:44:09.200Z",
+        "actual24h": 1,
+        "probabilities24h": {
+          "v2": 0.9,
+          "uncalibrated": 0.8999999999999999,
+          "hybrid": 0.8999999999999999
+        },
+        "brierContributions24h": {
+          "v2": 0.009999999999999995,
+          "uncalibrated": 0.010000000000000018,
+          "hybrid": 0.010000000000000018
+        },
+        "actual48h": null,
+        "probabilities48h": {
+          "v2": 0.96,
+          "uncalibrated": 0.96,
+          "hybrid": 0.96
+        },
+        "brierContributions48h": {
+          "v2": null,
+          "uncalibrated": null,
+          "hybrid": null
+        },
+        "officialNotice": true,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      },
+      {
+        "origin": "2026-09-08T16:48:51.682Z",
+        "actual24h": 0,
+        "probabilities24h": {
+          "v2": 0.440089602075375,
+          "uncalibrated": 0.3468175845784699,
+          "hybrid": 0.3468175845784699
+        },
+        "brierContributions24h": {
+          "v2": 0.1936788578548619,
+          "uncalibrated": 0.12028243697284412,
+          "hybrid": 0.12028243697284412
+        },
+        "actual48h": null,
+        "probabilities48h": {
+          "v2": 0.7587979219413001,
+          "uncalibrated": 0.6404617023037201,
+          "hybrid": 0.7588879482260353
+        },
+        "brierContributions48h": {
+          "v2": null,
+          "uncalibrated": null,
+          "hybrid": null
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": true
+      },
+      {
+        "origin": "2026-09-09T16:51:58.105Z",
+        "actual24h": null,
+        "probabilities24h": {
+          "v2": 0.5082531547539024,
+          "uncalibrated": 0.4008376649973422,
+          "hybrid": 0.4008376649973422
+        },
+        "brierContributions24h": {
+          "v2": null,
+          "uncalibrated": null,
+          "hybrid": null
+        },
+        "actual48h": null,
+        "probabilities48h": {
+          "v2": 0.7712535220153638,
+          "uncalibrated": 0.65043271345223,
+          "hybrid": 0.7667706678153703
+        },
+        "brierContributions48h": {
+          "v2": null,
+          "uncalibrated": null,
+          "hybrid": null
+        },
+        "officialNotice": false,
+        "finalDisplayOverlay": false,
+        "postReset0To24h": false
+      }
     ],
     "series": {
       "finalDisplayed": {
         "modelVersion": "published-final-displayed",
         "source": "prediction_history.probability_24h/probability_48h",
         "metrics24h": {
-          "count": 8,
+          "count": 9,
           "positiveCount": 3,
-          "actualRate": 0.375,
-          "averagePrediction": 0.639908875,
-          "brier": 0.24389030014287497,
-          "logLoss": 0.6554727756310617,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.6175758888888889,
+          "bias": 0.2842425555555556,
+          "brier": 0.23819623832077774,
+          "logLoss": 0.6468510808960566,
           "calibration": [
             {
               "range": "0-20%",
@@ -303,9 +591,9 @@
             },
             {
               "range": "40-60%",
-              "count": 5,
-              "averagePrediction": 0.5371657999999999,
-              "actualRate": 0.2
+              "count": 6,
+              "averagePrediction": 0.5207901666666667,
+              "actualRate": 0.16666666666666666
             },
             {
               "range": "60-80%",
@@ -321,7 +609,7 @@
             }
           ],
           "periodStart": "2026-09-01T08:00:26.043Z",
-          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
           "targetResetCount": 3
         },
         "metrics48h": {
@@ -329,6 +617,7 @@
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
           "averagePrediction": 0.7996005714285715,
+          "bias": 0.22817200000000015,
           "brier": 0.31564889752428577,
           "logLoss": 0.86751334491116,
           "calibration": [
@@ -368,16 +657,17 @@
           "targetResetCount": 3
         }
       },
-      "v3": {
-        "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
-        "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+      "hybrid": {
+        "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+        "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
         "metrics24h": {
-          "count": 8,
+          "count": 9,
           "positiveCount": 3,
-          "actualRate": 0.375,
-          "averagePrediction": 0.5547366242515899,
-          "brier": 0.16752067298241183,
-          "logLoss": 0.5007510799933452,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.5316345087323543,
+          "bias": 0.19830117539902098,
+          "brier": 0.16227198009245986,
+          "logLoss": 0.4924341643177886,
           "calibration": [
             {
               "range": "0-20%",
@@ -387,8 +677,8 @@
             },
             {
               "range": "20-40%",
-              "count": 1,
-              "averagePrediction": 0.38238121228923594,
+              "count": 2,
+              "averagePrediction": 0.3645993984338529,
               "actualRate": 0
             },
             {
@@ -411,7 +701,99 @@
             }
           ],
           "periodStart": "2026-09-01T08:00:26.043Z",
-          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.8150153070652495,
+          "bias": 0.2435867356366781,
+          "brier": 0.3168008010968086,
+          "logLoss": 0.8761841187723813,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "count": 4,
+              "averagePrediction": 0.7622596876342054,
+              "actualRate": 0.75
+            },
+            {
+              "range": "80-100%",
+              "count": 3,
+              "averagePrediction": 0.8853561329733083,
+              "actualRate": 0.3333333333333333
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      },
+      "v3": {
+        "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+        "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+        "metrics24h": {
+          "count": 9,
+          "positiveCount": 3,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.5316345087323543,
+          "bias": 0.19830117539902098,
+          "brier": 0.16227198009245986,
+          "logLoss": 0.4924341643177886,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 2,
+              "averagePrediction": 0.3645993984338529,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 5,
+              "averagePrediction": 0.45110235634469664,
+              "actualRate": 0.2
+            },
+            {
+              "range": "60-80%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 2,
+              "averagePrediction": 0.8999999999999999,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
           "targetResetCount": 3
         },
         "metrics48h": {
@@ -419,6 +801,7 @@
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
           "averagePrediction": 0.7194940393434178,
+          "bias": 0.14806546791484643,
           "brier": 0.280671999178071,
           "logLoss": 0.7497463203717751,
           "calibration": [
@@ -462,12 +845,13 @@
         "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
         "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
         "metrics24h": {
-          "count": 8,
+          "count": 9,
           "positiveCount": 3,
-          "actualRate": 0.375,
-          "averagePrediction": 0.5885727905343926,
-          "brier": 0.2116853797526646,
-          "logLoss": 0.5785568423969947,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.5720746584833907,
+          "bias": 0.23874132515005736,
+          "brier": 0.20968465509735318,
+          "logLoss": 0.5787148056596538,
           "calibration": [
             {
               "range": "0-20%",
@@ -483,9 +867,9 @@
             },
             {
               "range": "40-60%",
-              "count": 4,
-              "averagePrediction": 0.5410014209100776,
-              "actualRate": 0.25
+              "count": 5,
+              "averagePrediction": 0.520819057143137,
+              "actualRate": 0.2
             },
             {
               "range": "60-80%",
@@ -501,7 +885,7 @@
             }
           ],
           "periodStart": "2026-09-01T08:00:26.043Z",
-          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
           "targetResetCount": 3
         },
         "metrics48h": {
@@ -509,6 +893,7 @@
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
           "averagePrediction": 0.7361977831145502,
+          "bias": 0.1647692116859788,
           "brier": 0.24906663733449036,
           "logLoss": 0.7225740563567857,
           "calibration": [
@@ -552,12 +937,13 @@
         "modelVersion": "hazard-regime-random-continuous-v1",
         "source": "saved v2 rawProbability24h/rawProbability48h",
         "metrics24h": {
-          "count": 8,
+          "count": 9,
           "positiveCount": 3,
-          "actualRate": 0.375,
-          "averagePrediction": 0.3535467456645436,
-          "brier": 0.28509317508102944,
-          "logLoss": 0.7690080238589896,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.3522674218822793,
+          "bias": 0.01893408854894596,
+          "brier": 0.26641465095078665,
+          "logLoss": 0.7300738262065494,
           "calibration": [
             {
               "range": "0-20%",
@@ -567,9 +953,9 @@
             },
             {
               "range": "20-40%",
-              "count": 2,
-              "averagePrediction": 0.3680198803595305,
-              "actualRate": 1
+              "count": 3,
+              "averagePrediction": 0.35935753078107524,
+              "actualRate": 0.6666666666666666
             },
             {
               "range": "40-60%",
@@ -591,7 +977,7 @@
             }
           ],
           "periodStart": "2026-09-01T08:00:26.043Z",
-          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
           "targetResetCount": 3
         },
         "metrics48h": {
@@ -599,6 +985,7 @@
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
           "averagePrediction": 0.5524783902861371,
+          "bias": -0.018950181142434297,
           "brier": 0.29407033993325166,
           "logLoss": 0.7919256128781057,
           "calibration": [
@@ -642,12 +1029,13 @@
         "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
         "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
         "metrics24h": {
-          "count": 8,
+          "count": 9,
           "positiveCount": 3,
-          "actualRate": 0.375,
-          "averagePrediction": 0.5885727905343926,
-          "brier": 0.2116853797526646,
-          "logLoss": 0.5785568423969947,
+          "actualRate": 0.3333333333333333,
+          "averagePrediction": 0.5762425383348596,
+          "bias": 0.2429092050015263,
+          "brier": 0.21350947727012162,
+          "logLoss": 0.5864197152240045,
           "calibration": [
             {
               "range": "0-20%",
@@ -663,9 +1051,9 @@
             },
             {
               "range": "40-60%",
-              "count": 4,
-              "averagePrediction": 0.5410014209100776,
-              "actualRate": 0.25
+              "count": 5,
+              "averagePrediction": 0.5283212408757813,
+              "actualRate": 0.2
             },
             {
               "range": "60-80%",
@@ -681,7 +1069,7 @@
             }
           ],
           "periodStart": "2026-09-01T08:00:26.043Z",
-          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "periodEnd": "2026-09-08T16:48:51.682Z",
           "targetResetCount": 3
         },
         "metrics48h": {
@@ -689,6 +1077,7 @@
           "positiveCount": 4,
           "actualRate": 0.5714285714285714,
           "averagePrediction": 0.7361977831145502,
+          "bias": 0.1647692116859788,
           "brier": 0.24906663733449036,
           "logLoss": 0.7225740563567857,
           "calibration": [
@@ -731,7 +1120,7 @@
     },
     "subsets": {
       "noOfficialNotice": {
-        "originCount": 7,
+        "originCount": 8,
         "origins": [
           "2026-09-01T08:00:26.043Z",
           "2026-09-01T16:51:47.016Z",
@@ -739,19 +1128,21 @@
           "2026-09-03T16:38:23.571Z",
           "2026-09-05T15:28:58.662Z",
           "2026-09-06T15:42:12.464Z",
-          "2026-09-08T16:48:51.682Z"
+          "2026-09-08T16:48:51.682Z",
+          "2026-09-09T16:51:58.105Z"
         ],
         "series": {
           "finalDisplayed": {
             "modelVersion": "published-final-displayed",
             "source": "prediction_history.probability_24h/probability_48h",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 1,
-              "actualRate": 0.16666666666666666,
-              "averagePrediction": 0.5532118333333333,
-              "brier": 0.32185373352383334,
-              "logLoss": 0.8388435289554734,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.5368832857142858,
+              "bias": 0.39402614285714294,
+              "brier": 0.30339516355528573,
+              "logLoss": 0.8015626709641224,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -767,9 +1158,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 5,
-                  "averagePrediction": 0.5371657999999999,
-                  "actualRate": 0.2
+                  "count": 6,
+                  "averagePrediction": 0.5207901666666667,
+                  "actualRate": 0.16666666666666666
                 },
                 {
                   "range": "60-80%",
@@ -785,7 +1176,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 1
             },
             "metrics48h": {
@@ -793,6 +1184,7 @@
               "positiveCount": 3,
               "actualRate": 0.5,
               "averagePrediction": 0.7728673333333335,
+              "bias": 0.27286733333333346,
               "brier": 0.367990380445,
               "logLoss": 1.0052952366429775,
               "calibration": [
@@ -832,16 +1224,17 @@
               "targetResetCount": 3
             }
           },
-          "v3": {
-            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+          "hybrid": {
+            "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 1,
-              "actualRate": 0.16666666666666666,
-              "averagePrediction": 0.4396488323354532,
-              "brier": 0.2200275639765491,
-              "logLoss": 0.6325479347718516,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.426387225513027,
+              "bias": 0.28353008265588414,
+              "brier": 0.20577826011887695,
+              "logLoss": 0.6030266353634921,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -851,8 +1244,8 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 1,
-                  "averagePrediction": 0.38238121228923594,
+                  "count": 2,
+                  "averagePrediction": 0.3645993984338529,
                   "actualRate": 0
                 },
                 {
@@ -875,7 +1268,99 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.7908511915761244,
+              "bias": 0.2908511915761244,
+              "brier": 0.3693342679462766,
+              "logLoss": 1.015411139481069,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 4,
+                  "averagePrediction": 0.7622596876342054,
+                  "actualRate": 0.75
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8480341994599626,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
               "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 7,
+              "positiveCount": 1,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.426387225513027,
+              "bias": 0.28353008265588414,
+              "brier": 0.20577826011887695,
+              "logLoss": 0.6030266353634921,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 2,
+                  "averagePrediction": 0.3645993984338529,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 5,
+                  "averagePrediction": 0.45110235634469664,
+                  "actualRate": 0.2
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 1
             },
             "metrics48h": {
@@ -883,6 +1368,7 @@
               "positiveCount": 3,
               "actualRate": 0.5,
               "averagePrediction": 0.679409712567321,
+              "bias": 0.17940971256732097,
               "brier": 0.3271839990410828,
               "logLoss": 0.8679003746803616,
               "calibration": [
@@ -926,12 +1412,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 1,
-              "actualRate": 0.16666666666666666,
-              "averagePrediction": 0.48476372071252344,
-              "brier": 0.2789138396702195,
-              "logLoss": 0.7362889513100509,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.47838170376435935,
+              "bias": 0.3355245609072165,
+              "brier": 0.2667374136965969,
+              "logLoss": 0.713958888517319,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -947,9 +1434,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 4,
-                  "averagePrediction": 0.5410014209100776,
-                  "actualRate": 0.25
+                  "count": 5,
+                  "averagePrediction": 0.520819057143137,
+                  "actualRate": 0.2
                 },
                 {
                   "range": "60-80%",
@@ -965,7 +1452,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 1
             },
             "metrics48h": {
@@ -973,6 +1460,7 @@
               "positiveCount": 3,
               "actualRate": 0.5,
               "averagePrediction": 0.698897413633642,
+              "bias": 0.198897413633642,
               "brier": 0.2903110768902388,
               "logLoss": 0.8361993999962075,
               "calibration": [
@@ -1016,12 +1504,13 @@
             "modelVersion": "hazard-regime-random-continuous-v1",
             "source": "saved v2 rawProbability24h/rawProbability48h",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 1,
-              "actualRate": 0.16666666666666666,
-              "averagePrediction": 0.3770535477355598,
-              "brier": 0.20608545240258422,
-              "logLoss": 0.5869189523244346,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.3720505882910748,
+              "bias": 0.22919344543393194,
+              "brier": 0.19335702461776424,
+              "logLoss": 0.562873422704805,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1031,9 +1520,9 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 1,
-                  "averagePrediction": 0.36320744598728627,
-                  "actualRate": 1
+                  "count": 2,
+                  "averagePrediction": 0.35262013880572557,
+                  "actualRate": 0.5
                 },
                 {
                   "range": "40-60%",
@@ -1055,7 +1544,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 1
             },
             "metrics48h": {
@@ -1063,6 +1552,7 @@
               "positiveCount": 3,
               "actualRate": 0.5,
               "averagePrediction": 0.5894976313273942,
+              "bias": 0.08949763132739419,
               "brier": 0.268346432136017,
               "logLoss": 0.7393193152791216,
               "calibration": [
@@ -1106,12 +1596,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 1,
-              "actualRate": 0.16666666666666666,
-              "averagePrediction": 0.48476372071252344,
-              "brier": 0.2789138396702195,
-              "logLoss": 0.7362889513100509,
+              "actualRate": 0.14285714285714285,
+              "averagePrediction": 0.48374040643053373,
+              "bias": 0.3408832635733909,
+              "brier": 0.2716550422044421,
+              "logLoss": 0.7238652008143412,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1127,9 +1618,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 4,
-                  "averagePrediction": 0.5410014209100776,
-                  "actualRate": 0.25
+                  "count": 5,
+                  "averagePrediction": 0.5283212408757813,
+                  "actualRate": 0.2
                 },
                 {
                   "range": "60-80%",
@@ -1145,7 +1636,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 1
             },
             "metrics48h": {
@@ -1153,6 +1644,7 @@
               "positiveCount": 3,
               "actualRate": 0.5,
               "averagePrediction": 0.698897413633642,
+              "bias": 0.198897413633642,
               "brier": 0.2903110768902388,
               "logLoss": 0.8361993999962075,
               "calibration": [
@@ -1195,7 +1687,7 @@
         }
       },
       "noFinalDisplaySpecialOverlay": {
-        "originCount": 7,
+        "originCount": 8,
         "origins": [
           "2026-09-01T08:00:26.043Z",
           "2026-09-01T16:51:47.016Z",
@@ -1203,19 +1695,21 @@
           "2026-09-03T16:38:23.571Z",
           "2026-09-04T16:33:39.803Z",
           "2026-09-07T21:44:09.200Z",
-          "2026-09-08T16:48:51.682Z"
+          "2026-09-08T16:48:51.682Z",
+          "2026-09-09T16:51:58.105Z"
         ],
         "series": {
           "finalDisplayed": {
             "modelVersion": "published-final-displayed",
             "source": "prediction_history.probability_24h/probability_48h",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 3,
-              "actualRate": 0.5,
-              "averagePrediction": 0.6736133333333334,
-              "brier": 0.22830244631033333,
-              "logLoss": 0.6157154240946373,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.6400845714285716,
+              "bias": 0.211513142857143,
+              "brier": 0.22320834594371428,
+              "logLoss": 0.6103100096548343,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1231,9 +1725,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 3,
-                  "averagePrediction": 0.5360793333333332,
-                  "actualRate": 0.3333333333333333
+                  "count": 4,
+                  "averagePrediction": 0.5117875,
+                  "actualRate": 0.25
                 },
                 {
                   "range": "60-80%",
@@ -1249,7 +1743,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 3
             },
             "metrics48h": {
@@ -1257,6 +1751,7 @@
               "positiveCount": 3,
               "actualRate": 0.6,
               "averagePrediction": 0.8125150000000001,
+              "bias": 0.21251500000000012,
               "brier": 0.3201315230058,
               "logLoss": 0.8887509537755067,
               "calibration": [
@@ -1296,16 +1791,17 @@
               "targetResetCount": 2
             }
           },
-          "v3": {
-            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
-            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+          "hybrid": {
+            "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 3,
-              "actualRate": 0.5,
-              "averagePrediction": 0.6033338339996978,
-              "brier": 0.16738034947862115,
-              "logLoss": 0.4920490557762764,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.5666886555109508,
+              "bias": 0.13811722693952228,
+              "brier": 0.16065207626351016,
+              "logLoss": 0.4825990247958562,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1315,8 +1811,8 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.3468175845784699,
                   "actualRate": 0
                 },
                 {
@@ -1339,7 +1835,99 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.8297271653738335,
+              "bias": 0.22972716537383353,
+              "brier": 0.3139957505255365,
+              "logLoss": 0.8794450736687406,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 2,
+                  "averagePrediction": 0.7462837139746212,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 3,
+                  "averagePrediction": 0.8853561329733083,
+                  "actualRate": 0.3333333333333333
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 7,
+              "positiveCount": 3,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.5666886555109508,
+              "bias": 0.13811722693952228,
+              "brier": 0.16065207626351016,
+              "logLoss": 0.4825990247958562,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.3468175845784699,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 4,
+                  "averagePrediction": 0.4550007509995466,
+                  "actualRate": 0.25
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8999999999999999,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 3
             },
             "metrics48h": {
@@ -1347,6 +1935,7 @@
               "positiveCount": 3,
               "actualRate": 0.6,
               "averagePrediction": 0.7339407753868354,
+              "bias": 0.13394077538683546,
               "brier": 0.27892133531746716,
               "logLoss": 0.7421798785321149,
               "calibration": [
@@ -1390,12 +1979,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 3,
-              "actualRate": 0.5,
-              "averagePrediction": 0.6733088942967345,
-              "brier": 0.2283739530461895,
-              "logLoss": 0.6158577510853774,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.6399918525508259,
+              "bias": 0.21142042397939736,
+              "brier": 0.22341751087599984,
+              "logLoss": 0.6107321454675988,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1411,9 +2001,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 3,
-                  "averagePrediction": 0.5354790462722608,
-                  "actualRate": 0.3333333333333333
+                  "count": 4,
+                  "averagePrediction": 0.5116316852230394,
+                  "actualRate": 0.25
                 },
                 {
                   "range": "60-80%",
@@ -1429,7 +2019,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 3
             },
             "metrics48h": {
@@ -1437,6 +2027,7 @@
               "positiveCount": 3,
               "actualRate": 0.6,
               "averagePrediction": 0.8120663619359154,
+              "bias": 0.21206636193591544,
               "brier": 0.3203779782443314,
               "logLoss": 0.8893038103715313,
               "calibration": [
@@ -1480,12 +2071,13 @@
             "modelVersion": "hazard-regime-random-continuous-v1",
             "source": "saved v2 rawProbability24h/rawProbability48h",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 3,
-              "actualRate": 0.5,
-              "averagePrediction": 0.38396250360872775,
-              "brier": 0.3469492887795636,
-              "logLoss": 0.9142527634121206,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.3779725504680759,
+              "bias": -0.050598878103352674,
+              "brier": 0.31409745579803233,
+              "logLoss": 0.8434452607799645,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1495,9 +2087,9 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 2,
-                  "averagePrediction": 0.3680198803595305,
-                  "actualRate": 1
+                  "count": 3,
+                  "averagePrediction": 0.35935753078107524,
+                  "actualRate": 0.6666666666666666
                 },
                 {
                   "range": "40-60%",
@@ -1519,7 +2111,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 3
             },
             "metrics48h": {
@@ -1527,6 +2119,7 @@
               "positiveCount": 3,
               "actualRate": 0.6,
               "averagePrediction": 0.5870281743414612,
+              "bias": -0.012971825658538827,
               "brier": 0.37972453328581196,
               "logLoss": 0.9764670603531048,
               "calibration": [
@@ -1570,12 +2163,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 6,
+              "count": 7,
               "positiveCount": 3,
-              "actualRate": 0.5,
-              "averagePrediction": 0.6733088942967345,
-              "brier": 0.2283739530461895,
-              "logLoss": 0.6158577510853774,
+              "actualRate": 0.42857142857142855,
+              "averagePrediction": 0.6453505552170004,
+              "bias": 0.2167791266455718,
+              "brier": 0.228335139383845,
+              "logLoss": 0.6206384577646211,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -1591,9 +2185,9 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 3,
-                  "averagePrediction": 0.5354790462722608,
-                  "actualRate": 0.3333333333333333
+                  "count": 4,
+                  "averagePrediction": 0.5210094148888446,
+                  "actualRate": 0.25
                 },
                 {
                   "range": "60-80%",
@@ -1609,7 +2203,7 @@
                 }
               ],
               "periodStart": "2026-09-01T08:00:26.043Z",
-              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 3
             },
             "metrics48h": {
@@ -1617,6 +2211,7 @@
               "positiveCount": 3,
               "actualRate": 0.6,
               "averagePrediction": 0.8120663619359154,
+              "bias": 0.21206636193591544,
               "brier": 0.3203779782443314,
               "logLoss": 0.8893038103715313,
               "calibration": [
@@ -1673,6 +2268,7 @@
               "positiveCount": 2,
               "actualRate": 1,
               "averagePrediction": 0.9,
+              "bias": -0.09999999999999998,
               "brier": 0.009999999999999995,
               "logLoss": 0.10536051565782628,
               "calibration": [
@@ -1716,6 +2312,99 @@
               "positiveCount": 1,
               "actualRate": 1,
               "averagePrediction": 0.96,
+              "bias": -0.040000000000000036,
+              "brier": 0.001600000000000003,
+              "logLoss": 0.040821994520255166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          },
+          "hybrid": {
+            "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.8999999999999999,
+              "bias": -0.10000000000000009,
+              "brier": 0.010000000000000005,
+              "logLoss": 0.10536051565782634,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8999999999999999,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.96,
+              "bias": -0.040000000000000036,
               "brier": 0.001600000000000003,
               "logLoss": 0.040821994520255166,
               "calibration": [
@@ -1763,6 +2452,7 @@
               "positiveCount": 2,
               "actualRate": 1,
               "averagePrediction": 0.8999999999999999,
+              "bias": -0.10000000000000009,
               "brier": 0.010000000000000005,
               "logLoss": 0.10536051565782634,
               "calibration": [
@@ -1806,6 +2496,7 @@
               "positiveCount": 1,
               "actualRate": 1,
               "averagePrediction": 0.96,
+              "bias": -0.040000000000000036,
               "brier": 0.001600000000000003,
               "logLoss": 0.040821994520255166,
               "calibration": [
@@ -1853,6 +2544,7 @@
               "positiveCount": 2,
               "actualRate": 1,
               "averagePrediction": 0.9,
+              "bias": -0.09999999999999998,
               "brier": 0.009999999999999995,
               "logLoss": 0.10536051565782628,
               "calibration": [
@@ -1896,6 +2588,7 @@
               "positiveCount": 1,
               "actualRate": 1,
               "averagePrediction": 0.96,
+              "bias": -0.040000000000000036,
               "brier": 0.001600000000000003,
               "logLoss": 0.040821994520255166,
               "calibration": [
@@ -1943,6 +2636,7 @@
               "positiveCount": 2,
               "actualRate": 1,
               "averagePrediction": 0.283026339451495,
+              "bias": -0.716973660548505,
               "brier": 0.522116343116365,
               "logLoss": 1.3152752384626547,
               "calibration": [
@@ -1986,6 +2680,7 @@
               "positiveCount": 1,
               "actualRate": 1,
               "averagePrediction": 0.33036294403859395,
+              "bias": -0.669637055961406,
               "brier": 0.44841378671665916,
               "logLoss": 1.10756339847201,
               "calibration": [
@@ -2033,6 +2728,7 @@
               "positiveCount": 2,
               "actualRate": 1,
               "averagePrediction": 0.9,
+              "bias": -0.09999999999999998,
               "brier": 0.009999999999999995,
               "logLoss": 0.10536051565782628,
               "calibration": [
@@ -2076,6 +2772,7 @@
               "positiveCount": 1,
               "actualRate": 1,
               "averagePrediction": 0.96,
+              "bias": -0.040000000000000036,
               "brier": 0.001600000000000003,
               "logLoss": 0.040821994520255166,
               "calibration": [
@@ -2127,10 +2824,55 @@
             "modelVersion": "published-final-displayed",
             "source": "prediction_history.probability_24h/probability_48h",
             "metrics24h": {
+              "count": 1,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0.438912,
+              "bias": 0.438912,
+              "brier": 0.19264374374400003,
+              "logLoss": 0.5778775230160166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 1,
+                  "averagePrediction": 0.438912,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
+              "targetResetCount": 0
+            },
+            "metrics48h": {
               "count": 0,
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2168,12 +2910,61 @@
               "periodStart": null,
               "periodEnd": null,
               "targetResetCount": 0
+            }
+          },
+          "hybrid": {
+            "modelVersion": "hazard-regime-random-continuous-selective-calibration-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+            "metrics24h": {
+              "count": 1,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0.3468175845784699,
+              "bias": 0.3468175845784699,
+              "brier": 0.12028243697284412,
+              "logLoss": 0.4258988389133353,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.3468175845784699,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
+              "targetResetCount": 0
             },
             "metrics48h": {
               "count": 0,
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2217,12 +3008,13 @@
             "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
             "source": "retrospective point-in-time calculateNextGenerationV3Probability",
             "metrics24h": {
-              "count": 0,
+              "count": 1,
               "positiveCount": 0,
               "actualRate": 0,
-              "averagePrediction": 0,
-              "brier": 0,
-              "logLoss": 0,
+              "averagePrediction": 0.3468175845784699,
+              "bias": 0.3468175845784699,
+              "brier": 0.12028243697284412,
+              "logLoss": 0.4258988389133353,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2232,8 +3024,8 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.3468175845784699,
                   "actualRate": 0
                 },
                 {
@@ -2255,8 +3047,8 @@
                   "actualRate": 0
                 }
               ],
-              "periodStart": null,
-              "periodEnd": null,
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 0
             },
             "metrics48h": {
@@ -2264,6 +3056,7 @@
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2307,12 +3100,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 0,
+              "count": 1,
               "positiveCount": 0,
               "actualRate": 0,
-              "averagePrediction": 0,
-              "brier": 0,
-              "logLoss": 0,
+              "averagePrediction": 0.440089602075375,
+              "bias": 0.440089602075375,
+              "brier": 0.1936788578548619,
+              "logLoss": 0.5799785117609276,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2328,8 +3122,8 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.440089602075375,
                   "actualRate": 0
                 },
                 {
@@ -2345,8 +3139,8 @@
                   "actualRate": 0
                 }
               ],
-              "periodStart": null,
-              "periodEnd": null,
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 0
             },
             "metrics48h": {
@@ -2354,6 +3148,7 @@
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2397,12 +3192,13 @@
             "modelVersion": "hazard-regime-random-continuous-v1",
             "source": "saved v2 rawProbability24h/rawProbability48h",
             "metrics24h": {
-              "count": 0,
+              "count": 1,
               "positiveCount": 0,
               "actualRate": 0,
-              "averagePrediction": 0,
-              "brier": 0,
-              "logLoss": 0,
+              "averagePrediction": 0.34203283162416487,
+              "bias": 0.34203283162416487,
+              "brier": 0.11698645790884432,
+              "logLoss": 0.41860024498702786,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2412,8 +3208,8 @@
                 },
                 {
                   "range": "20-40%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.34203283162416487,
                   "actualRate": 0
                 },
                 {
@@ -2435,8 +3231,8 @@
                   "actualRate": 0
                 }
               ],
-              "periodStart": null,
-              "periodEnd": null,
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 0
             },
             "metrics48h": {
@@ -2444,6 +3240,7 @@
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2487,12 +3284,13 @@
             "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
             "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
             "metrics24h": {
-              "count": 0,
+              "count": 1,
               "positiveCount": 0,
               "actualRate": 0,
-              "averagePrediction": 0,
-              "brier": 0,
-              "logLoss": 0,
+              "averagePrediction": 0.47760052073859577,
+              "bias": 0.47760052073859577,
+              "brier": 0.22810225740977785,
+              "logLoss": 0.649322697840083,
               "calibration": [
                 {
                   "range": "0-20%",
@@ -2508,8 +3306,8 @@
                 },
                 {
                   "range": "40-60%",
-                  "count": 0,
-                  "averagePrediction": 0,
+                  "count": 1,
+                  "averagePrediction": 0.47760052073859577,
                   "actualRate": 0
                 },
                 {
@@ -2525,8 +3323,8 @@
                   "actualRate": 0
                 }
               ],
-              "periodStart": null,
-              "periodEnd": null,
+              "periodStart": "2026-09-08T16:48:51.682Z",
+              "periodEnd": "2026-09-08T16:48:51.682Z",
               "targetResetCount": 0
             },
             "metrics48h": {
@@ -2534,6 +3332,7 @@
               "positiveCount": 0,
               "actualRate": 0,
               "averagePrediction": 0,
+              "bias": 0,
               "brier": 0,
               "logLoss": 0,
               "calibration": [
@@ -2578,27 +3377,33 @@
     },
     "deltaVsCurrentV2": {
       "finalDisplayed": {
-        "brier24h": 0.03220492039021036,
+        "brier24h": 0.028511583223424564,
         "brier48h": 0.0665822601897954,
-        "logLoss24h": 0.07691593323406698,
+        "logLoss24h": 0.06813627523640275,
         "logLoss48h": 0.1449392885543742
       },
+      "hybrid": {
+        "brier24h": -0.04741267500489332,
+        "brier48h": 0.06773416376231822,
+        "logLoss24h": -0.08628064134186525,
+        "logLoss48h": 0.1536100624155956
+      },
       "v3": {
-        "brier24h": -0.044164706770252776,
+        "brier24h": -0.04741267500489332,
         "brier48h": 0.03160536184358065,
-        "logLoss24h": -0.07780576240364945,
+        "logLoss24h": -0.08628064134186525,
         "logLoss48h": 0.0271722640149894
       },
       "rawContinuous": {
-        "brier24h": 0.07340779532836483,
+        "brier24h": 0.05672999585343347,
         "brier48h": 0.0450037025987613,
-        "logLoss24h": 0.1904511814619949,
+        "logLoss24h": 0.15135902054689554,
         "logLoss48h": 0.06935155652131997
       },
       "v1": {
-        "brier24h": 0,
+        "brier24h": 0.003824822172768444,
         "brier48h": 0,
-        "logLoss24h": 0,
+        "logLoss24h": 0.007704909564350659,
         "logLoss48h": 0
       }
     },
@@ -2614,7 +3419,7 @@
       "maxLogLossWorsening": 0.05
     },
     "targetResetCount": 3,
-    "resolvedDaily24h": 8,
+    "resolvedDaily24h": 9,
     "resolvedDaily48h": 7,
     "brier24hNotWorse": true,
     "brier48hNotWorse": true,
@@ -2628,6 +3433,7 @@
     "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
     "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
     "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
+    "The hybrid and fully uncalibrated values are point-in-time retrospective replays. A hybrid 48h value can differ from the persisted current-v2 row because the original v2 input and training snapshot are not replayed verbatim; this diagnostic difference does not alter the primary gate or public model.",
     "Only forecasts generated at or after the manual adoption boundary 2026-09-01T08:00:00.000Z are evaluated as the adopted public model hazard-regime-random-continuous-calibrated-post-reset-age-v2; earlier rows remain historical data and are not relabeled.",
     "Prospective results alone never auto-publish or retune a model; manual review is required.",
     "The stable hazard-elapsed-v1 fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",

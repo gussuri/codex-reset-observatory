@@ -9,6 +9,7 @@ import {
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type { RadarData } from "./types";
@@ -42,6 +43,7 @@ export {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
@@ -60,10 +62,20 @@ export type NextGenerationTrainingReadStatus = "ok" | "error";
 
 export type NextGenerationPublicCalibrationPolicy = "apply" | "diagnostic-only";
 
+export type NextGenerationCalibrationPolicy = {
+  probability24h: NextGenerationPublicCalibrationPolicy;
+  probability48h: NextGenerationPublicCalibrationPolicy;
+};
+
+type NextGenerationPublicCalibrationPolicySummary =
+  | NextGenerationPublicCalibrationPolicy
+  | "mixed";
+
 export type NextGenerationBResult = {
   modelVersion:
     | typeof NEXT_GENERATION_B_MODEL_VERSION
     | typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION
+    | typeof NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION
     | typeof NEXT_GENERATION_V3_MODEL_VERSION;
   rawModelVersion: typeof NEXT_GENERATION_B_RAW_MODEL_VERSION;
   calculatedAt: string;
@@ -98,7 +110,8 @@ export type NextGenerationBResult = {
   randomContinuousResult: RandomContinuousProbabilityResult;
   freezeAt: typeof NEXT_GENERATION_FREEZE_AT;
   freezePolicy: typeof NEXT_GENERATION_FREEZE_POLICY;
-  publicCalibrationPolicy: NextGenerationPublicCalibrationPolicy;
+  publicCalibrationPolicy: NextGenerationPublicCalibrationPolicySummary;
+  calibrationPolicy: NextGenerationCalibrationPolicy;
 };
 
 export type NextGenerationBPostResetAgeCandidateResult = Omit<
@@ -112,6 +125,19 @@ export type NextGenerationBPostResetAgeCandidateResult = Omit<
 export type NextGenerationV3Result = Omit<NextGenerationBResult, "modelVersion"> & {
   modelVersion: typeof NEXT_GENERATION_V3_MODEL_VERSION;
   publicCalibrationPolicy: "diagnostic-only";
+  calibrationPolicy: {
+    probability24h: "diagnostic-only";
+    probability48h: "diagnostic-only";
+  };
+};
+
+export type NextGenerationSelectiveCalibrationV3Result = Omit<NextGenerationBResult, "modelVersion"> & {
+  modelVersion: typeof NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION;
+  publicCalibrationPolicy: "mixed";
+  calibrationPolicy: {
+    probability24h: "diagnostic-only";
+    probability48h: "apply";
+  };
 };
 
 function timestamp(value: string | null | undefined) {
@@ -227,6 +253,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     regimeMultiplierPolicy?: RandomContinuousRegimeMultiplierPolicy;
     regimeMultiplierPolicyVersion?: string;
     publicCalibrationPolicy?: NextGenerationPublicCalibrationPolicy;
+    calibrationPolicy?: NextGenerationCalibrationPolicy;
   },
 ): Omit<NextGenerationBResult, "modelVersion"> & {
   modelVersion: TModelVersion;
@@ -294,10 +321,25 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     probability48h: calibrated.probability48h,
     probability72h: derive72hFrom48hProbability(calibrated.probability48h),
   };
-  const publicCalibrationPolicy = variant.publicCalibrationPolicy ?? "apply";
-  const publicBaseHorizons = publicCalibrationPolicy === "diagnostic-only"
-    ? rawHorizons
-    : calibratedHorizons;
+  const calibrationPolicy = variant.calibrationPolicy ?? {
+    probability24h: variant.publicCalibrationPolicy ?? "apply",
+    probability48h: variant.publicCalibrationPolicy ?? "apply",
+  };
+  const publicCalibrationPolicy = calibrationPolicy.probability24h === calibrationPolicy.probability48h
+    ? calibrationPolicy.probability24h
+    : "mixed";
+  const publicProbability24h = calibrationPolicy.probability24h === "diagnostic-only"
+    ? rawHorizons.probability24h
+    : calibratedHorizons.probability24h;
+  const publicProbability48h = calibrationPolicy.probability48h === "diagnostic-only"
+    ? rawHorizons.probability48h
+    : calibratedHorizons.probability48h;
+  const publicBaseHorizons: ShadowProbabilityHorizons = {
+    probability12h: derive12hFrom24hProbability(publicProbability24h),
+    probability24h: publicProbability24h,
+    probability48h: publicProbability48h,
+    probability72h: derive72hFrom48hProbability(publicProbability48h),
+  };
   const noticeHorizons = applyOfficialNoticeTimingPolicy(publicBaseHorizons, notice, now);
   const strongTimedTeaserFloor = noticeHorizons
     ? null
@@ -347,7 +389,9 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
     lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
-    horizonCoherenceAdjusted: (publicCalibrationPolicy === "apply" && calibrated.adjusted)
+    horizonCoherenceAdjusted: (calibrationPolicy.probability24h === "apply"
+      && calibrationPolicy.probability48h === "apply"
+      && calibrated.adjusted)
       || (noticeHorizons ? finalPair.adjusted : false),
     trainingReadStatus,
     fallbackUsed,
@@ -366,6 +410,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     freezeAt: NEXT_GENERATION_FREEZE_AT,
     freezePolicy: NEXT_GENERATION_FREEZE_POLICY,
     publicCalibrationPolicy,
+    calibrationPolicy,
   };
   if (variant.regimeMultiplierPolicyVersion) {
     result.regimeMultiplierPolicyVersion = variant.regimeMultiplierPolicyVersion;
@@ -401,6 +446,24 @@ export function calculateNextGenerationV3Probability(
     modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
     regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
     regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
-    publicCalibrationPolicy: "diagnostic-only",
+    calibrationPolicy: {
+      probability24h: "diagnostic-only",
+      probability48h: "diagnostic-only",
+    },
   }) as NextGenerationV3Result;
+}
+
+export function calculateNextGenerationSelectiveCalibrationProbability(
+  data: RadarData | null,
+  options: NextGenerationBCalculationOptions = {},
+): NextGenerationSelectiveCalibrationV3Result {
+  return calculateNextGenerationBProbabilityVariant(data, options, {
+    modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    calibrationPolicy: {
+      probability24h: "diagnostic-only",
+      probability48h: "apply",
+    },
+  }) as NextGenerationSelectiveCalibrationV3Result;
 }

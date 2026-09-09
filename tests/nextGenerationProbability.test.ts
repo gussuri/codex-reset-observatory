@@ -4,10 +4,13 @@ import test from "node:test";
 import {
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
   calculateNextGenerationBProbability,
+  calculateNextGenerationBPostResetAgeCandidate,
+  calculateNextGenerationSelectiveCalibrationProbability,
   calculateNextGenerationV3Probability,
   enforceNextGenerationHorizonCoherence,
   selectNextGenerationCalibrationRows,
@@ -225,6 +228,44 @@ test("v3 preserves the training-read error contract while exposing raw fallback 
   assert.equal(result.calibrationSampleCount48h, 0);
   assert.equal(result.predictions.probability24h, result.rawProbability24h);
   assert.equal(result.predictions.probability48h, result.rawProbability48h);
+});
+
+test("selective calibration uses the raw 24h base and calibrated 48h base", () => {
+  const now = new Date("2026-09-01T12:00:00.000Z");
+  const trainingRows = Array.from({ length: 10 }, (_, index) => ({
+    generatedAt: new Date(Date.parse("2026-08-21T04:00:00.000Z") + index * 24 * 60 * 60 * 1000).toISOString(),
+    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+    rawProbability24h: 0.2,
+    rawProbability48h: 0.3,
+    actual24h: index === 0,
+    actual48h: index === 0,
+  }));
+  const options = {
+    now,
+    staticHistory: [],
+    activeOfficialNotice: null,
+    trainingRows,
+    trainingReadStatus: "ok" as const,
+  };
+  const hybrid = calculateNextGenerationSelectiveCalibrationProbability(
+    getLocalRadarData({ calculationNow: now }),
+    options,
+  );
+  const v2 = calculateNextGenerationBPostResetAgeCandidate(
+    getLocalRadarData({ calculationNow: now }),
+    options,
+  );
+
+  assert.equal(hybrid.modelVersion, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.deepEqual(hybrid.calibrationPolicy, {
+    probability24h: "diagnostic-only",
+    probability48h: "apply",
+  });
+  assert.equal(hybrid.publicCalibrationPolicy, "mixed");
+  assert.ok(hybrid.calibrationSampleCount24h > 0);
+  assert.ok(hybrid.calibrationSampleCount48h > 0);
+  assert.equal(hybrid.predictions.probability24h, hybrid.rawProbability24h);
+  assert.equal(hybrid.predictions.probability48h, v2.predictions.probability48h);
 });
 
 test("B calibration selection keeps 24h and 48h horizon cutoffs strict", () => {

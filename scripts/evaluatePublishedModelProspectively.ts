@@ -12,15 +12,18 @@ import {
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
 import {
+  calculateNextGenerationSelectiveCalibrationProbability,
   calculateNextGenerationV3Probability,
+  type NextGenerationBCalculationOptions,
+  type NextGenerationBResult,
   type NextGenerationCalibrationRow,
 } from "../lib/radar/nextGenerationProbability";
+import type { RadarData } from "../lib/radar";
 import { getActualWithinHorizon, getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
 import {
   evaluatePublishedModelProspectively,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
-  PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
   selectDailyFirstPublishedForecasts,
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
@@ -86,8 +89,23 @@ function formatUnifiedSubset(
   return [
     `### ${name}`,
     `- Origins: ${subset.originCount}`,
-    `- 24h v3: ${formatPublishedProspectiveMetric(subset.series.v3.metrics24h)}`,
-    `- 48h v3: ${formatPublishedProspectiveMetric(subset.series.v3.metrics48h)}`,
+    `- 24h v2: ${formatPublishedProspectiveMetric(subset.series.currentV2.metrics24h)}`,
+    `- 24h fully uncalibrated: ${formatPublishedProspectiveMetric(subset.series.v3.metrics24h)}`,
+    `- 24h hybrid: ${formatPublishedProspectiveMetric(subset.series.hybrid.metrics24h)}`,
+    `- 48h v2: ${formatPublishedProspectiveMetric(subset.series.currentV2.metrics48h)}`,
+    `- 48h fully uncalibrated: ${formatPublishedProspectiveMetric(subset.series.v3.metrics48h)}`,
+    `- 48h hybrid: ${formatPublishedProspectiveMetric(subset.series.hybrid.metrics48h)}`,
+  ];
+}
+
+function formatUnifiedOriginDiagnostic(
+  origin: PublishedProspectiveEvaluationReport["unifiedComparison"]["perOrigin"][number],
+) {
+  return [
+    `#### ${origin.origin}`,
+    `- 24h actual=${origin.actual24h ?? "unresolved"}, predictions=${JSON.stringify(origin.probabilities24h)}, Brier=${JSON.stringify(origin.brierContributions24h)}`,
+    `- 48h actual=${origin.actual48h ?? "unresolved"}, predictions=${JSON.stringify(origin.probabilities48h)}, Brier=${JSON.stringify(origin.brierContributions48h)}`,
+    `- officialNotice=${origin.officialNotice}, finalDisplayOverlay=${origin.finalDisplayOverlay}, postReset0To24h=${origin.postReset0To24h}`,
   ];
 }
 
@@ -138,11 +156,11 @@ function buildV3TrainingRows(
   });
 }
 
-function toV3StoredForecast(
-  result: ReturnType<typeof calculateNextGenerationV3Probability>,
+function toRetrospectiveStoredForecast(
+  result: NextGenerationBResult,
 ): ProspectiveStoredForecast {
   return {
-    modelVersion: PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
+    modelVersion: result.modelVersion,
     generatedAt: result.calculatedAt,
     probability24h: result.predictions.probability24h,
     probability48h: result.predictions.probability48h,
@@ -157,6 +175,7 @@ function toV3StoredForecast(
     lastResolvedOrigin24h: result.lastResolvedOrigin24h,
     lastResolvedOrigin48h: result.lastResolvedOrigin48h,
     publicCalibrationPolicy: result.publicCalibrationPolicy,
+    calibrationPolicy: result.calibrationPolicy,
     officialNoticeOverride: result.officialNoticeOverride.active,
     latestRandomResetAt: result.randomContinuous.latestRandomResetAt,
     elapsedHoursSinceRandom: result.randomContinuous.randomElapsedHours,
@@ -169,11 +188,17 @@ function toV3StoredForecast(
   };
 }
 
-function buildRetrospectiveV3Forecasts(
+type RetrospectiveCandidateCalculator = (
+  data: RadarData,
+  options: NextGenerationBCalculationOptions,
+) => NextGenerationBResult;
+
+function buildRetrospectiveCandidateForecasts(
   rows: Array<ProspectiveForecastRow>,
-  data: Awaited<ReturnType<typeof loadProductionCanonicalRadarData>>["data"],
+  data: RadarData | null,
   events: Array<ShadowResetEvent>,
   asOf: Date,
+  calculate: RetrospectiveCandidateCalculator,
 ): Record<string, ProspectiveStoredForecast> {
   if (!data) return {};
   const adoptionTime = parseTimestamp(PUBLISHED_PROBABILITY_ADOPTION_AT);
@@ -191,14 +216,44 @@ function buildRetrospectiveV3Forecasts(
       if (generatedTime === null) return [];
       const pointInTimeData = getPointInTimeRadarData(data, new Date(generatedTime));
       if (!pointInTimeData) return [];
-      const result = calculateNextGenerationV3Probability(pointInTimeData, {
+      const result = calculate(pointInTimeData, {
         now: new Date(generatedTime),
         staticHistory: LOCAL_RESET_HISTORY,
         trainingRows,
         trainingReadStatus: "ok",
       });
-      return [[row.generatedAt, toV3StoredForecast(result)] as const];
+      return [[row.generatedAt, toRetrospectiveStoredForecast(result)] as const];
     }),
+  );
+}
+
+function buildRetrospectiveV3Forecasts(
+  rows: Array<ProspectiveForecastRow>,
+  data: RadarData | null,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+) {
+  return buildRetrospectiveCandidateForecasts(
+    rows,
+    data,
+    events,
+    asOf,
+    calculateNextGenerationV3Probability,
+  );
+}
+
+function buildRetrospectiveHybridForecasts(
+  rows: Array<ProspectiveForecastRow>,
+  data: RadarData | null,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+) {
+  return buildRetrospectiveCandidateForecasts(
+    rows,
+    data,
+    events,
+    asOf,
+    calculateNextGenerationSelectiveCalibrationProbability,
   );
 }
 
@@ -251,12 +306,14 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     "",
     "## Unified model comparison (retrospective v3 diagnostic)",
     "",
-    "All five series use the same daily-first saved origins, canonical truth, and resolved-horizon rules. v3 is a retrospective point-in-time counterfactual; it was not saved prospectively and never affects the primary gate or status.",
+    "All six series use the same daily-first saved origins, canonical truth, and resolved-horizon rules. The hybrid and fully uncalibrated candidates are retrospective point-in-time counterfactuals; they were not saved prospectively and never affect the primary gate or status.",
     `- Shared origins: ${report.unifiedComparison.originCount}`,
     `- Origin timestamps: ${report.unifiedComparison.origins.length > 0 ? report.unifiedComparison.origins.join(", ") : "none"}`,
     ...formatUnifiedSeries("Final displayed", report.unifiedComparison.series.finalDisplayed),
     "",
     ...formatUnifiedSeries("v3 uncalibrated post-reset-age candidate", report.unifiedComparison.series.v3),
+    "",
+    ...formatUnifiedSeries("Selective-calibration hybrid candidate", report.unifiedComparison.series.hybrid),
     "",
     ...formatUnifiedSeries("Current v2 calibrated", report.unifiedComparison.series.currentV2),
     "",
@@ -266,10 +323,16 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     "",
     "### Delta versus current v2",
     `- Final displayed: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.finalDisplayed)}`,
+    `- Hybrid: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.hybrid)}`,
     `- v3: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v3)}`,
     `- Raw continuous: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.rawContinuous)}`,
     `- v1: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v1)}`,
     "",
+    "### Per-origin diagnostics",
+    "",
+    ...(report.unifiedComparison.perOrigin.length === 0
+      ? ["- Origins: none"]
+      : report.unifiedComparison.perOrigin.flatMap((origin) => [...formatUnifiedOriginDiagnostic(origin), ""])),
     "### Unified diagnostic subsets",
     ...formatUnifiedSubset("No official notice", report.unifiedComparison.subsets.noOfficialNotice),
     "",
@@ -339,7 +402,11 @@ async function main() {
       })
     : [];
   const v3Forecasts = buildRetrospectiveV3Forecasts(history.rows, production.data, events, asOf);
-  const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf, { v3Forecasts });
+  const hybridForecasts = buildRetrospectiveHybridForecasts(history.rows, production.data, events, asOf);
+  const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf, {
+    v3Forecasts,
+    hybridForecasts,
+  });
   const availabilityNotes: string[] = [];
   if (baseReport.forecastCounts.comparable === 0) {
     availabilityNotes.push(
@@ -374,8 +441,11 @@ async function main() {
     unifiedComparison: {
       sharedOriginCount: report.unifiedComparison.originCount,
       v3ForecastCount: v3Forecasts ? Object.keys(v3Forecasts).length : 0,
+      hybridForecastCount: hybridForecasts ? Object.keys(hybridForecasts).length : 0,
       v3Metrics24h: report.unifiedComparison.series.v3.metrics24h,
       v3Metrics48h: report.unifiedComparison.series.v3.metrics48h,
+      hybridMetrics24h: report.unifiedComparison.series.hybrid.metrics24h,
+      hybridMetrics48h: report.unifiedComparison.series.hybrid.metrics48h,
     },
   }, null, 2));
 }

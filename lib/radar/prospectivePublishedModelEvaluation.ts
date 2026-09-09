@@ -6,6 +6,7 @@ import {
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
@@ -45,6 +46,7 @@ export type PublishedProspectiveMetric = {
   positiveCount: number;
   actualRate: number;
   averagePrediction: number;
+  bias: number;
   brier: number;
   logLoss: number;
   calibration: Array<{
@@ -70,6 +72,7 @@ export type PublishedUnifiedModelSeries = PublishedProspectiveModelEvaluation & 
 
 export type PublishedUnifiedModelSeriesSet = {
   finalDisplayed: PublishedUnifiedModelSeries;
+  hybrid: PublishedUnifiedModelSeries;
   v3: PublishedUnifiedModelSeries;
   currentV2: PublishedUnifiedModelSeries;
   rawContinuous: PublishedUnifiedModelSeries;
@@ -85,6 +88,7 @@ export type PublishedUnifiedSubset = {
 export type PublishedUnifiedComparison = {
   originCount: number;
   origins: string[];
+  perOrigin: Array<PublishedUnifiedOriginDiagnostic>;
   series: PublishedUnifiedModelSeriesSet;
   subsets: {
     noOfficialNotice: PublishedUnifiedSubset;
@@ -94,6 +98,12 @@ export type PublishedUnifiedComparison = {
   };
   deltaVsCurrentV2: {
     finalDisplayed: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    };
+    hybrid: {
       brier24h: number | null;
       brier48h: number | null;
       logLoss24h: number | null;
@@ -119,6 +129,35 @@ export type PublishedUnifiedComparison = {
     };
   };
   retrospectiveV3: true;
+};
+
+export type PublishedUnifiedOriginDiagnostic = {
+  origin: string;
+  actual24h: number | null;
+  probabilities24h: {
+    v2: number;
+    uncalibrated: number;
+    hybrid: number;
+  };
+  brierContributions24h: {
+    v2: number | null;
+    uncalibrated: number | null;
+    hybrid: number | null;
+  };
+  actual48h: number | null;
+  probabilities48h: {
+    v2: number;
+    uncalibrated: number;
+    hybrid: number;
+  };
+  brierContributions48h: {
+    v2: number | null;
+    uncalibrated: number | null;
+    hybrid: number | null;
+  };
+  officialNotice: boolean;
+  finalDisplayOverlay: boolean;
+  postReset0To24h: boolean;
 };
 
 export type PublishedPostResetDiagnosticMetric = {
@@ -207,6 +246,7 @@ export type PublishedProspectiveEvaluationReport = {
 export type PublishedProspectiveEvaluationOptions = {
   adoptionAt?: string | null;
   v3Forecasts?: Record<string, ProspectiveStoredForecast>;
+  hybridForecasts?: Record<string, ProspectiveStoredForecast>;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -345,6 +385,7 @@ function calculateMetric(
       positiveCount: 0,
       actualRate: 0,
       averagePrediction: 0,
+      bias: 0,
       brier: 0,
       logLoss: 0,
       calibration: getCalibrationBuckets([]),
@@ -358,6 +399,8 @@ function calculateMetric(
     positiveCount: values.reduce((sum, value) => sum + value.actual, 0),
     actualRate: values.reduce((sum, value) => sum + value.actual, 0) / values.length,
     averagePrediction: values.reduce((sum, value) => sum + value.prediction, 0) / values.length,
+    bias: values.reduce((sum, value) => sum + value.prediction, 0) / values.length
+      - values.reduce((sum, value) => sum + value.actual, 0) / values.length,
     brier: values.reduce((sum, value) => sum + (value.prediction - value.actual) ** 2, 0) / values.length,
     logLoss: values.reduce((sum, value) => {
       const prediction = clampProbability(value.prediction);
@@ -386,6 +429,7 @@ function createModelEvaluation(
 type UnifiedPublishedOrigin = {
   row: ProspectiveForecastRow;
   finalDisplayed: ProspectiveStoredForecast;
+  hybrid: ProspectiveStoredForecast;
   v3: ProspectiveStoredForecast;
   currentV2: StoredForecast;
   rawContinuous: StoredForecast;
@@ -401,20 +445,25 @@ function isSameOrigin(left: StoredForecast, right: StoredForecast) {
 function getUnifiedPublishedOrigins(
   rows: Array<ProspectiveForecastRow>,
   v3Forecasts: Record<string, ProspectiveStoredForecast> | undefined,
+  hybridForecasts: Record<string, ProspectiveStoredForecast> | undefined,
 ) {
   return rows.flatMap((row): Array<UnifiedPublishedOrigin> => {
     const finalDisplayed = row.finalDisplayed;
+    const hybrid = hybridForecasts?.[row.generatedAt];
     const currentV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
     const v1 = row.forecasts[PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION];
     const v3 = v3Forecasts?.[row.generatedAt];
     if (
       !finalDisplayed
       || !isStoredForecast(finalDisplayed)
+      || !hybrid
+      || !isStoredForecast(hybrid)
       || !isStoredForecast(currentV2)
       || !isStoredForecast(v1)
       || !v3
       || !isStoredForecast(v3)
       || !isSameOrigin(finalDisplayed, currentV2)
+      || !isSameOrigin(hybrid, currentV2)
       || !isSameOrigin(v3, currentV2)
       || !isSameOrigin(v1, currentV2)
       || typeof currentV2.rawProbability24h !== "number"
@@ -427,6 +476,7 @@ function getUnifiedPublishedOrigins(
     return [{
       row,
       finalDisplayed,
+      hybrid,
       v3,
       currentV2,
       rawContinuous: {
@@ -485,6 +535,15 @@ function createUnifiedSeriesSet(
       events,
       asOf,
     ),
+    hybrid: createUnifiedSeries(
+      origins,
+      NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+      NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+      "retrospective point-in-time calculateNextGenerationSelectiveCalibrationProbability",
+      (origin) => origin.hybrid,
+      events,
+      asOf,
+    ),
     v3: createUnifiedSeries(
       origins,
       PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
@@ -536,6 +595,69 @@ function createUnifiedSubset(
   };
 }
 
+function getUnifiedActual(
+  generatedAt: string,
+  horizonHours: 24 | 48,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+) {
+  const generatedTime = timestamp(generatedAt);
+  if (
+    generatedTime === null
+    || !Number.isFinite(asOf.getTime())
+    || generatedTime + horizonHours * HOUR_MS > asOf.getTime()
+  ) {
+    return null;
+  }
+  return Number(getActualWithinHorizon(events, generatedAt, horizonHours));
+}
+
+function getBrierContribution(prediction: number, actual: number | null) {
+  return actual === null ? null : (prediction - actual) ** 2;
+}
+
+function buildUnifiedOriginDiagnostics(
+  origins: Array<UnifiedPublishedOrigin>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): Array<PublishedUnifiedOriginDiagnostic> {
+  return origins.map((origin) => {
+    const actual24h = getUnifiedActual(origin.row.generatedAt, 24, events, asOf);
+    const actual48h = getUnifiedActual(origin.row.generatedAt, 48, events, asOf);
+    const postResetMetadata = getSavedPostResetMetadata(origin.currentV2);
+    return {
+      origin: origin.row.generatedAt,
+      actual24h,
+      probabilities24h: {
+        v2: origin.currentV2.probability24h,
+        uncalibrated: origin.v3.probability24h,
+        hybrid: origin.hybrid.probability24h,
+      },
+      brierContributions24h: {
+        v2: getBrierContribution(origin.currentV2.probability24h, actual24h),
+        uncalibrated: getBrierContribution(origin.v3.probability24h, actual24h),
+        hybrid: getBrierContribution(origin.hybrid.probability24h, actual24h),
+      },
+      actual48h,
+      probabilities48h: {
+        v2: origin.currentV2.probability48h,
+        uncalibrated: origin.v3.probability48h,
+        hybrid: origin.hybrid.probability48h,
+      },
+      brierContributions48h: {
+        v2: getBrierContribution(origin.currentV2.probability48h, actual48h),
+        uncalibrated: getBrierContribution(origin.v3.probability48h, actual48h),
+        hybrid: getBrierContribution(origin.hybrid.probability48h, actual48h),
+      },
+      officialNotice: origin.currentV2.officialNoticeOverride === true,
+      finalDisplayOverlay: origin.finalDisplayed.finalDisplaySpecialOverlay === true,
+      postReset0To24h: postResetMetadata !== null
+        && postResetMetadata.elapsedHours > 0
+        && postResetMetadata.elapsedHours <= 24,
+    };
+  });
+}
+
 function compareUnifiedSeries(
   candidate: PublishedUnifiedModelSeries,
   current: PublishedUnifiedModelSeries,
@@ -553,8 +675,9 @@ function buildUnifiedComparison(
   events: Array<ShadowResetEvent>,
   asOf: Date,
   v3Forecasts: Record<string, ProspectiveStoredForecast> | undefined,
+  hybridForecasts: Record<string, ProspectiveStoredForecast> | undefined,
 ): PublishedUnifiedComparison {
-  const origins = getUnifiedPublishedOrigins(dailyRows, v3Forecasts);
+  const origins = getUnifiedPublishedOrigins(dailyRows, v3Forecasts, hybridForecasts);
   const series = createUnifiedSeriesSet(origins, events, asOf);
   const activeOrigins = origins.filter((origin) => origin.currentV2.officialNoticeOverride !== true);
   const noFinalDisplayOverlay = origins.filter((origin) =>
@@ -568,6 +691,7 @@ function buildUnifiedComparison(
   return {
     originCount: origins.length,
     origins: origins.map((origin) => origin.row.generatedAt),
+    perOrigin: buildUnifiedOriginDiagnostics(origins, events, asOf),
     series,
     subsets: {
       noOfficialNotice: createUnifiedSubset(activeOrigins, events, asOf),
@@ -577,6 +701,7 @@ function buildUnifiedComparison(
     },
     deltaVsCurrentV2: {
       finalDisplayed: compareUnifiedSeries(series.finalDisplayed, series.currentV2),
+      hybrid: compareUnifiedSeries(series.hybrid, series.currentV2),
       v3: compareUnifiedSeries(series.v3, series.currentV2),
       rawContinuous: compareUnifiedSeries(series.rawContinuous, series.currentV2),
       v1: compareUnifiedSeries(series.v1, series.currentV2),
@@ -913,6 +1038,7 @@ export function evaluatePublishedModelProspectively(
       events,
       asOf,
       options.v3Forecasts,
+      options.hybridForecasts,
     ),
     gate: {
       autoPublish: false,
@@ -933,6 +1059,7 @@ export function evaluatePublishedModelProspectively(
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
       "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
       "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
+      "The hybrid and fully uncalibrated values are point-in-time retrospective replays. A hybrid 48h value can differ from the persisted current-v2 row because the original v2 input and training snapshot are not replayed verbatim; this diagnostic difference does not alter the primary gate or public model.",
       adoptionBoundaryNote,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
@@ -941,8 +1068,12 @@ export function evaluatePublishedModelProspectively(
   };
 }
 
-export function formatPublishedProspectiveMetric(metric: PublishedProspectiveMetric) {
-  return `n=${metric.count}, positive=${metric.positiveCount}, actual=${(metric.actualRate * 100).toFixed(2)}%, mean=${(metric.averagePrediction * 100).toFixed(2)}%, Brier=${metric.brier.toFixed(4)}, logLoss=${metric.logLoss.toFixed(4)}, targetResets=${metric.targetResetCount}`;
+export function formatPublishedProspectiveMetric(
+  metric: Pick<PublishedProspectiveMetric, "count" | "positiveCount" | "actualRate" | "averagePrediction" | "brier" | "logLoss" | "targetResetCount">
+    & { bias?: number },
+) {
+  const bias = typeof metric.bias === "number" ? `, bias=${metric.bias.toFixed(4)}` : "";
+  return `n=${metric.count}, positive=${metric.positiveCount}, actual=${(metric.actualRate * 100).toFixed(2)}%, mean=${(metric.averagePrediction * 100).toFixed(2)}%${bias}, Brier=${metric.brier.toFixed(4)}, logLoss=${metric.logLoss.toFixed(4)}, targetResets=${metric.targetResetCount}`;
 }
 
 export function getJstDayKeyForProspective(value: string) {

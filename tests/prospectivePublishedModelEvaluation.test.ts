@@ -6,12 +6,14 @@ import {
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS,
   evaluatePublishedModelProspectively,
+  formatPublishedProspectiveMetric,
   selectComparablePublishedForecasts,
   selectDailyFirstPublishedForecasts,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
@@ -53,6 +55,15 @@ function forecastRow(
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
 
+function hybridForecast(generatedAt: string, probability24h = 0.3, probability48h = 0.55) {
+  return {
+    modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    generatedAt,
+    probability24h,
+    probability48h,
+  };
+}
+
 function withSavedPostResetMetadata(
   row: ProspectiveForecastRow,
   resetAt: string,
@@ -75,6 +86,29 @@ test("published prospective evaluation uses v2 after its boundary and B v1 as th
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, "hazard-regime-random-continuous-calibrated-v1");
+});
+
+test("published metric formatting includes bias without breaking legacy metric callers", () => {
+  const formatted = formatPublishedProspectiveMetric({
+    count: 2,
+    positiveCount: 1,
+    actualRate: 0.5,
+    averagePrediction: 0.6,
+    bias: 0.1,
+    brier: 0.04,
+    logLoss: 0.2,
+    targetResetCount: 1,
+  });
+  assert.match(formatted, /bias=0\.1000/);
+  assert.doesNotThrow(() => formatPublishedProspectiveMetric({
+    count: 0,
+    positiveCount: 0,
+    actualRate: 0,
+    averagePrediction: 0,
+    brier: 0,
+    logLoss: 0,
+    targetResetCount: 0,
+  }));
 });
 
 test("primary prospective gate thresholds remain unchanged", () => {
@@ -339,6 +373,9 @@ test("unified model comparison uses the same daily origins and reads final displ
           probability48h: 0.3,
         },
       },
+      hybridForecasts: {
+        [generatedAt]: hybridForecast(generatedAt),
+      },
     },
   );
 
@@ -346,12 +383,67 @@ test("unified model comparison uses the same daily origins and reads final displ
   assert.deepEqual(report.unifiedComparison.origins, [generatedAt]);
   assert.equal(report.unifiedComparison.series.finalDisplayed.metrics24h.averagePrediction, 0.12);
   assert.equal(report.unifiedComparison.series.v3.metrics24h.averagePrediction, 0.2);
+  assert.equal(report.unifiedComparison.series.hybrid.metrics24h.averagePrediction, 0.3);
   assert.equal(report.unifiedComparison.series.currentV2.metrics24h.averagePrediction, 0.6);
   assert.equal(report.unifiedComparison.series.rawContinuous.metrics24h.averagePrediction, 0.6);
   assert.equal(report.unifiedComparison.series.v1.metrics24h.averagePrediction, 0.4);
   assert.equal(report.unifiedComparison.series.currentV2.metrics24h.count, 1);
   assert.equal(report.unifiedComparison.series.v3.metrics48h.count, 1);
   assert.equal(report.unifiedComparison.retrospectiveV3, true);
+});
+
+test("unified comparison reports per-origin hybrid and uncalibrated contributions", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const row = forecastRow(generatedAt, 0.6, 0.7, 0.4, 0.5);
+  const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  assert.ok(active);
+  active.officialNoticeOverride = true;
+  active.latestRandomResetAt = "2026-08-31T12:00:00.000Z";
+  active.elapsedHoursSinceRandom = 12;
+  row.finalDisplayed = {
+    modelVersion: "published-final-displayed",
+    generatedAt,
+    probability24h: 0.12,
+    probability48h: 0.24,
+    finalDisplaySpecialOverlay: false,
+  };
+  const report = evaluatePublishedModelProspectively(
+    [row],
+    [{ id: "reset", resetAt: "2026-09-01T12:00:00.000Z" }],
+    new Date("2026-09-04T00:00:00.000Z"),
+    {
+      adoptionAt: null,
+      v3Forecasts: {
+        [generatedAt]: {
+          modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.2,
+          probability48h: 0.3,
+        },
+      },
+      hybridForecasts: {
+        [generatedAt]: hybridForecast(generatedAt, 0.3, 0.55),
+      },
+    },
+  );
+
+  assert.equal(report.unifiedComparison.perOrigin.length, 1);
+  const origin = report.unifiedComparison.perOrigin[0];
+  assert.ok(origin);
+  assert.equal(origin.origin, generatedAt);
+  assert.deepEqual(origin.probabilities24h, { v2: 0.6, uncalibrated: 0.2, hybrid: 0.3 });
+  assert.deepEqual(origin.probabilities48h, { v2: 0.7, uncalibrated: 0.3, hybrid: 0.55 });
+  assert.equal(origin.actual24h, 1);
+  assert.equal(origin.actual48h, 1);
+  assert.equal(origin.brierContributions24h.v2, (0.6 - 1) ** 2);
+  assert.equal(origin.brierContributions24h.uncalibrated, (0.2 - 1) ** 2);
+  assert.equal(origin.brierContributions24h.hybrid, (0.3 - 1) ** 2);
+  assert.equal(origin.brierContributions48h.v2, (0.7 - 1) ** 2);
+  assert.equal(origin.brierContributions48h.uncalibrated, (0.3 - 1) ** 2);
+  assert.equal(origin.brierContributions48h.hybrid, (0.55 - 1) ** 2);
+  assert.equal(origin.officialNotice, true);
+  assert.equal(origin.finalDisplayOverlay, false);
+  assert.equal(origin.postReset0To24h, true);
 });
 
 test("unified comparison excludes unresolved horizons for every series", () => {
@@ -376,6 +468,9 @@ test("unified comparison excludes unresolved horizons for every series", () => {
           probability24h: 0.2,
           probability48h: 0.3,
         },
+      },
+      hybridForecasts: {
+        [generatedAt]: hybridForecast(generatedAt),
       },
     },
   );
@@ -411,6 +506,9 @@ test("unified comparison rejects a v1 forecast from a different saved origin", (
           probability24h: 0.2,
           probability48h: 0.3,
         },
+      },
+      hybridForecasts: {
+        [generatedAt]: hybridForecast(generatedAt),
       },
     },
   );
