@@ -268,6 +268,63 @@ test("selective calibration uses the raw 24h base and calibrated 48h base", () =
   assert.equal(hybrid.predictions.probability48h, v2.predictions.probability48h);
 });
 
+test("apply/apply records a calibration-stage horizon coherence adjustment", () => {
+  const now = new Date("2026-09-10T12:00:00.000Z");
+  const trainingRows = Array.from({ length: 12 }, (_, index) => ({
+    generatedAt: new Date(now.getTime() - (index + 3) * 24 * 60 * 60 * 1000).toISOString(),
+    modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+    rawProbability24h: 0.8,
+    rawProbability48h: 0.8,
+    actual24h: true,
+    actual48h: false,
+  }));
+  const data = getLocalRadarData({ calculationNow: now });
+  const options = {
+    now,
+    staticHistory: [],
+    activeOfficialNotice: null,
+    trainingRows,
+    trainingReadStatus: "ok" as const,
+  };
+  const results = [
+    calculateNextGenerationBProbability(data, options),
+    calculateNextGenerationBPostResetAgeCandidate(data, options),
+  ];
+
+  for (const result of results) {
+    assert.equal(result.predictions.probability48h, result.predictions.probability24h);
+    assert.equal(result.horizonCoherenceAdjusted, true);
+  }
+});
+
+test("coherence metadata stays false and public values stay stable without adjustment", () => {
+  const now = new Date("2026-09-01T12:00:00.000Z");
+  const options = {
+    now,
+    staticHistory: [],
+    activeOfficialNotice: null,
+    trainingRows: [],
+    trainingReadStatus: "ok" as const,
+  };
+  const data = getLocalRadarData({ calculationNow: now });
+  const expected = {
+    probability12h: 0.048770575499286095,
+    probability24h: 0.0951625819640407,
+    probability48h: 0.18126924692201907,
+    probability72h: 0.25918177931828335,
+  };
+  const results = [
+    calculateNextGenerationBProbability(data, options),
+    calculateNextGenerationBPostResetAgeCandidate(data, options),
+    calculateNextGenerationSelectiveCalibrationProbability(data, options),
+  ];
+
+  for (const result of results) {
+    assert.deepEqual(result.predictions, expected);
+    assert.equal(result.horizonCoherenceAdjusted, false);
+  }
+});
+
 test("B calibration selection keeps 24h and 48h horizon cutoffs strict", () => {
   const row = {
     generatedAt: "2026-08-21T04:00:00.000Z",

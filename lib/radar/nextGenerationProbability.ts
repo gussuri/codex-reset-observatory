@@ -325,6 +325,9 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     probability24h: variant.publicCalibrationPolicy ?? "apply",
     probability48h: variant.publicCalibrationPolicy ?? "apply",
   };
+  const calibrationCoherenceAdjusted = calibrationPolicy.probability24h === "apply"
+    && calibrationPolicy.probability48h === "apply"
+    && calibrated.adjusted;
   const publicCalibrationPolicy = calibrationPolicy.probability24h === calibrationPolicy.probability48h
     ? calibrationPolicy.probability24h
     : "mixed";
@@ -389,7 +392,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
     lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
-    horizonCoherenceAdjusted: finalPair.adjusted,
+    horizonCoherenceAdjusted: calibrationCoherenceAdjusted || finalPair.adjusted,
     trainingReadStatus,
     fallbackUsed,
     fallbackReason: fallbackUsed ? "prediction_history_training_query_failed" : null,
