@@ -1050,6 +1050,21 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "All paid plans",
     zh: "所有付费套餐",
   },
+  "一部ユーザー": {
+    ja: "一部ユーザー",
+    en: "Some users",
+    zh: "部分用户",
+  },
+  "Some users": {
+    ja: "一部ユーザー",
+    en: "Some users",
+    zh: "部分用户",
+  },
+  "部分用户": {
+    ja: "一部ユーザー",
+    en: "Some users",
+    zh: "部分用户",
+  },
   "任意リセット未使用アカウント": {
     ja: "任意リセット未使用アカウント",
     en: "Accounts without a Banked Reset",
@@ -1625,6 +1640,11 @@ export const DYNAMIC_TRANSLATIONS = {
     ja: "Web/モバイルからの任意リセット機能リリース時に、ボタンを押しても適用されなかった一部ユーザー（約50万人）に対して任意リセット（マニュアルリセット）1回分が補償配布されました。",
     en: "One Banked Reset was granted as compensation to approximately 500,000 affected users whose reset did not apply after they pressed the button during the web/mobile feature rollout.",
     zh: "由于网页/移动端手动重置功能发布时，部分用户（约 50 万人）点击重置按钮后未生效，已向所有受影响的付费用户补发 1 次手动重置机会。",
+  },
+  "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。": {
+    ja: "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。",
+    en: "Banked Resets were redistributed as compensation to users who used a Banked Reset during the affected time window.",
+    zh: "作为补偿，已向在受影响时段内使用过手动重置的用户重新发放了手动重置。",
   },
   "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",

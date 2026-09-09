@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { ResetHistoryDetails } from "../components/ResetHistoryDetails";
 import {
   isBankedDistributionNotice,
   isBroadBankedDistributionNotice,
@@ -57,12 +62,92 @@ test("keeps affected-user BANKED compensation in history but out of the broad ra
   assert.equal(event.recordKind, "banked_distribution");
   assert.equal(event.id, estimate.resetEventKey);
   assert.equal(event.randomResetTargetScope, "conditional");
+  assert.equal(event.scope, "一部ユーザー");
+  assert.equal(event.details?.scope, "一部ユーザー");
+  assert.equal(
+    event.details?.note,
+    "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。",
+  );
 
   const completedAt = Date.parse(event.completed_at ?? event.closed_at ?? event.date ?? "");
   assert.equal(
     isEligibleRandomResetEvent(event, completedAt, Date.parse("2026-09-10T00:00:00.000Z")),
     false,
   );
+});
+
+test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt, and localizes across JA/EN/ZH", () => {
+  const calculationNow = new Date("2026-09-10T00:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [notice],
+    resetExecutionEstimates: [estimate],
+  });
+
+  const expectedLocalized = {
+    ja: {
+      scope: "一部ユーザー",
+      note: "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。",
+      scopeLabel: "対象",
+    },
+    en: {
+      scope: "Some users",
+      note: "Banked Resets were redistributed as compensation to users who used a Banked Reset during the affected time window.",
+      scopeLabel: "Eligibility",
+    },
+    zh: {
+      scope: "部分用户",
+      note: "作为补偿，已向在受影响时段内使用过手动重置的用户重新发放了手动重置。",
+      scopeLabel: "适用对象",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow,
+      limitHistory: false,
+    });
+
+    // lastRandomResetAt remains the 9/8 global reset, NOT the conditional BANKED compensation event
+    assert.equal(snapshot.lastRandomResetAt, "2026-09-08T01:30:00.000Z");
+
+    const historyItem = snapshot.viewModel.recentHistory.find(
+      (item) => item.key === estimate.resetEventKey,
+    );
+    assert.ok(historyItem, `${locale} history item should exist`);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(historyItem, "randomResetTargetScope"),
+      false,
+    );
+    assert.equal(historyItem.scope, expectedLocalized[locale].scope);
+    assert.equal(historyItem.details?.scope, expectedLocalized[locale].scope);
+    assert.equal(historyItem.details?.note, expectedLocalized[locale].note);
+
+    // UI rendering test for this event: displays "対象: 一部ユーザー" (or localized)
+    const html = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, {
+        item: historyItem,
+        locale,
+      }),
+    );
+    assert.match(html, new RegExp(expectedLocalized[locale].scopeLabel));
+    assert.match(html, new RegExp(expectedLocalized[locale].scope));
+    assert.match(html, new RegExp(expectedLocalized[locale].note.slice(0, 10)));
+
+    // UI rendering test for existing "全有料プラン" items: does NOT display "対象" row
+    const allPaidItem = snapshot.viewModel.recentHistory.find(
+      (item) => item.key === "local-codex-rolling-notice-reset-2026-09-08",
+    );
+    if (allPaidItem) {
+      const allPaidHtml = renderToStaticMarkup(
+        React.createElement(ResetHistoryDetails, {
+          item: allPaidItem,
+          locale,
+        }),
+      );
+      assert.doesNotMatch(allPaidHtml, new RegExp(expectedLocalized[locale].scopeLabel));
+    }
+  }
 });
 
 test("does not treat a vague personal replacement as a BANKED distribution", () => {

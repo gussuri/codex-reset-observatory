@@ -1,3 +1,4 @@
+import React from "react";
 import type { Locale, RadarViewModel } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
 
@@ -42,6 +43,10 @@ export function ResetHistoryDetails({
     note: item.summary,
   };
 
+  const rawScope = details.scope?.trim() || item.scope?.trim() || "";
+  const isAllPaid = isAllPaidPlanScope(rawScope);
+  const shouldShowScope = Boolean(rawScope && !isAllPaid && isMeaningfulValue(rawScope));
+
   const recordKind = item.recordKind ?? "confirmed_global";
   const candidateRows: Array<{ id: string; label: string; value: string }> = [
     {
@@ -57,13 +62,13 @@ export function ResetHistoryDetails({
       label: translateUI("historyResetMethod", locale),
       value: details.resetMethod,
     },
-    ...(isAllPaidPlanScope(details.scope)
-      ? []
-      : [{
+    ...(shouldShowScope
+      ? [{
           id: "scope",
           label: translateUI("historyScope", locale),
-          value: details.scope,
-        }]),
+          value: rawScope,
+        }]
+      : []),
     ...(details.noticeType
       ? [{ id: "noticeType", label: translateUI("historyNoticeType", locale), value: details.noticeType }]
       : []),

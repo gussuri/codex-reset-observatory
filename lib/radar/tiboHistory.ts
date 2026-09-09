@@ -1786,11 +1786,18 @@ function buildBankedDistributionEvent(
   const openedAt = new Date(firstAnnouncementTime).toISOString();
   const completedAt = new Date(displayTime).toISOString();
   const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
-  const summary = "任意リセット権の配布が確認されました。";
-  const randomResetTargetScope = !isManualBroadBankedScopeCorrection(estimate.resetEventKey) &&
-    isConditionalBankedDistributionNotice(notice.text)
+  const isConditionalNotice = !isManualBroadBankedScopeCorrection(estimate.resetEventKey) &&
+    isConditionalBankedDistributionNotice(notice.text);
+  const randomResetTargetScope = isConditionalNotice
     ? "conditional" as const
     : undefined;
+  const isTargetCompensation =
+    notice.tweet_id === "2097752790177370535" || isConditionalNotice;
+  const scope = isTargetCompensation ? "一部ユーザー" : "全有料プラン";
+  const note = isTargetCompensation
+    ? "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。"
+    : "任意リセット権の配布が確認されました。";
+  const summary = note;
 
   return {
     id: estimate.resetEventKey,
@@ -1802,7 +1809,7 @@ function buildBankedDistributionEvent(
     closed_at: completedAt,
     completed_at: completedAt,
     window_minutes: noticeMinutes,
-    scope: "全有料プラン",
+    scope,
     summary,
     source_url: notice.tweet_url,
     sourceKind: "direct_post",
@@ -1816,10 +1823,10 @@ function buildBankedDistributionEvent(
       cycleType: "ランダムリセット",
       reasonType: "ご祝儀リセット",
       resetMethod: "任意リセット権配布",
-      scope: "全有料プラン",
+      scope,
       noticeToExecution: formatNoticeToExecution(noticeMinutes),
       noticeType: "公式予告あり",
-      note: summary,
+      note,
     },
   };
 }
