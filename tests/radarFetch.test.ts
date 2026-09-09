@@ -14,7 +14,8 @@ import {
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
   RADAR_PAGE_CACHE_TTL_SECONDS,
-  PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
+  PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
+  PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
@@ -50,15 +51,24 @@ test("shared Radar core uses a fifteen-minute normal cache TTL", () => {
   assert.equal(RADAR_CORE_CACHE_TTL_SECONDS, 15 * 60);
 });
 
-test("page projections use a one-hour cache while API snapshots keep ten minutes", () => {
+test("page projections use a one-hour cache while API snapshots keep a ten-minute bucket and one-hour retention", () => {
   assert.equal(RADAR_PAGE_CACHE_TTL_SECONDS, 60 * 60);
-  assert.equal(PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS, 10 * 60);
+  assert.equal(PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS, 10 * 60);
+  assert.equal(PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS, 60 * 60);
+  assert.ok(PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS > PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS);
 
   const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
   const pageFetchSource = source.slice(source.indexOf("export async function fetchRadarPageData"));
+  const heatmapCacheSource = source.slice(
+    source.indexOf("const getCachedRandomResetHeatmapEventTimes = unstable_cache("),
+    source.indexOf("const getCachedRadarPageData = unstable_cache("),
+  );
 
   assert.match(source, /getCachedRadarPageData = unstable_cache/);
   assert.match(source, /revalidate: RADAR_PAGE_CACHE_TTL_SECONDS/);
+  assert.match(source, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
+  assert.doesNotMatch(source, /PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS/);
+  assert.match(heatmapCacheSource, /revalidate: PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS/);
   assert.match(source, /tags: \["radar-data"\]/);
   assert.match(pageFetchSource, /getCachedRadarPageData/);
   assert.doesNotMatch(pageFetchSource, /fetchPublicRadarSnapshot|fetchRandomResetHeatmapEventTimes/);
@@ -89,8 +99,8 @@ test("page cache dimensions use a one-hour bucket and preserve home/history vari
 
 test("public snapshot bundle cache keys use ten-minute bucket and history limit", () => {
   const start = Date.parse("2026-09-01T00:00:00.000Z");
-  const beforeBoundary = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000 - 1;
-  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+  const beforeBoundary = start + PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS * 1000 - 1;
+  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS * 1000;
 
   assert.equal(
     getPublicRadarSnapshotCalculationBucket(start),
@@ -137,7 +147,7 @@ test("one public snapshot bundle matches the previous locale-by-locale DTOs", ()
 test("homepage snapshot and heatmap share the calculation bucket contract", () => {
   const start = Date.parse("2026-09-01T00:00:00.000Z");
   const sameBucket = start + 5 * 60 * 1000;
-  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+  const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS * 1000;
 
   assert.deepEqual(
     getRandomResetHeatmapCacheDimensions(start),

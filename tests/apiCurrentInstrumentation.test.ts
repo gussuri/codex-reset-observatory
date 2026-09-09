@@ -65,7 +65,8 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(snapshotBlock, /durationMs/);
   assert.equal((snapshotBlock.match(/fetchSharedRadarCore\(\)/g) ?? []).length, 1);
   assert.match(snapshotBlock, /\["radar-public-snapshot-bundle-cache-v1"\]/);
-  assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS/);
+  assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
+  assert.doesNotMatch(snapshotBlock, /\blocale\b/);
   assert.match(snapshotBlock, /tags: \["radar-data"\]/);
 
   assert.equal((bundleBuilderBlock.match(/createRadarCalculationContext\(/g) ?? []).length, 1);

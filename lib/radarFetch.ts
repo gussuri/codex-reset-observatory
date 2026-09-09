@@ -62,9 +62,10 @@ import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNa
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
-export const PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS = 10 * 60;
+export const PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS = 10 * 60;
+export const PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS = 60 * 60;
 export const RADAR_PAGE_CACHE_TTL_SECONDS = 60 * 60;
-const PUBLIC_RADAR_SNAPSHOT_BUCKET_MS = PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
+const PUBLIC_RADAR_SNAPSHOT_BUCKET_MS = PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS * 1000;
 const RADAR_PAGE_CACHE_BUCKET_MS = RADAR_PAGE_CACHE_TTL_SECONDS * 1000;
 
 export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
@@ -1044,7 +1045,7 @@ const getCachedPublicRadarSnapshotBundle = unstable_cache(
   },
   ["radar-public-snapshot-bundle-cache-v1"],
   {
-    revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
+    revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
     tags: ["radar-data"],
   },
 );
@@ -1062,7 +1063,7 @@ const getCachedRandomResetHeatmapEventTimes = unstable_cache(
   },
   ["radar-random-reset-heatmap-cache-v1"],
   {
-    revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
+    revalidate: PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
     tags: ["radar-data"],
   },
 );
