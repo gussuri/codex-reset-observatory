@@ -9,6 +9,7 @@ import {
   NEXT_GENERATION_B_RAW_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
+  NEXT_GENERATION_V3_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type { RadarData } from "./types";
 import {
@@ -41,6 +42,7 @@ export {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  NEXT_GENERATION_V3_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
 } from "@/data/shadowProbabilityConfig";
@@ -56,10 +58,13 @@ export type NextGenerationCalibrationRow = {
 
 export type NextGenerationTrainingReadStatus = "ok" | "error";
 
+export type NextGenerationPublicCalibrationPolicy = "apply" | "diagnostic-only";
+
 export type NextGenerationBResult = {
   modelVersion:
     | typeof NEXT_GENERATION_B_MODEL_VERSION
-    | typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+    | typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION
+    | typeof NEXT_GENERATION_V3_MODEL_VERSION;
   rawModelVersion: typeof NEXT_GENERATION_B_RAW_MODEL_VERSION;
   calculatedAt: string;
   targetDefinition: string;
@@ -93,6 +98,7 @@ export type NextGenerationBResult = {
   randomContinuousResult: RandomContinuousProbabilityResult;
   freezeAt: typeof NEXT_GENERATION_FREEZE_AT;
   freezePolicy: typeof NEXT_GENERATION_FREEZE_POLICY;
+  publicCalibrationPolicy: NextGenerationPublicCalibrationPolicy;
 };
 
 export type NextGenerationBPostResetAgeCandidateResult = Omit<
@@ -101,6 +107,11 @@ export type NextGenerationBPostResetAgeCandidateResult = Omit<
 > & {
   modelVersion: typeof NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
   regimeMultiplierPolicyVersion: typeof NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION;
+};
+
+export type NextGenerationV3Result = Omit<NextGenerationBResult, "modelVersion"> & {
+  modelVersion: typeof NEXT_GENERATION_V3_MODEL_VERSION;
+  publicCalibrationPolicy: "diagnostic-only";
 };
 
 function timestamp(value: string | null | undefined) {
@@ -215,6 +226,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     modelVersion: TModelVersion;
     regimeMultiplierPolicy?: RandomContinuousRegimeMultiplierPolicy;
     regimeMultiplierPolicyVersion?: string;
+    publicCalibrationPolicy?: NextGenerationPublicCalibrationPolicy;
   },
 ): Omit<NextGenerationBResult, "modelVersion"> & {
   modelVersion: TModelVersion;
@@ -282,7 +294,11 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     probability48h: calibrated.probability48h,
     probability72h: derive72hFrom48hProbability(calibrated.probability48h),
   };
-  const noticeHorizons = applyOfficialNoticeTimingPolicy(calibratedHorizons, notice, now);
+  const publicCalibrationPolicy = variant.publicCalibrationPolicy ?? "apply";
+  const publicBaseHorizons = publicCalibrationPolicy === "diagnostic-only"
+    ? rawHorizons
+    : calibratedHorizons;
+  const noticeHorizons = applyOfficialNoticeTimingPolicy(publicBaseHorizons, notice, now);
   const strongTimedTeaserFloor = noticeHorizons
     ? null
     : getStrongTimedTeaserProbabilityFloor(
@@ -293,7 +309,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       options.canonicalHistoryContext,
     );
   const policyHorizons = applyStrongTimedTeaserProbabilityFloor(
-    noticeHorizons ?? calibratedHorizons,
+    noticeHorizons ?? publicBaseHorizons,
     strongTimedTeaserFloor,
   );
   const finalPair = enforceNextGenerationHorizonCoherence(
@@ -331,7 +347,8 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
       NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     lastResolvedOrigin24h: fallbackUsed ? null : calibration24h.lastResolvedOrigin24h,
     lastResolvedOrigin48h: fallbackUsed ? null : calibration48h.lastResolvedOrigin48h,
-    horizonCoherenceAdjusted: calibrated.adjusted || (noticeHorizons ? finalPair.adjusted : false),
+    horizonCoherenceAdjusted: (publicCalibrationPolicy === "apply" && calibrated.adjusted)
+      || (noticeHorizons ? finalPair.adjusted : false),
     trainingReadStatus,
     fallbackUsed,
     fallbackReason: fallbackUsed ? "prediction_history_training_query_failed" : null,
@@ -348,6 +365,7 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
     randomContinuousResult,
     freezeAt: NEXT_GENERATION_FREEZE_AT,
     freezePolicy: NEXT_GENERATION_FREEZE_POLICY,
+    publicCalibrationPolicy,
   };
   if (variant.regimeMultiplierPolicyVersion) {
     result.regimeMultiplierPolicyVersion = variant.regimeMultiplierPolicyVersion;
@@ -373,4 +391,16 @@ export function calculateNextGenerationBPostResetAgeCandidate(
     regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
     regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   }) as NextGenerationBPostResetAgeCandidateResult;
+}
+
+export function calculateNextGenerationV3Probability(
+  data: RadarData | null,
+  options: NextGenerationBCalculationOptions = {},
+): NextGenerationV3Result {
+  return calculateNextGenerationBProbabilityVariant(data, options, {
+    modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+    regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    publicCalibrationPolicy: "diagnostic-only",
+  }) as NextGenerationV3Result;
 }

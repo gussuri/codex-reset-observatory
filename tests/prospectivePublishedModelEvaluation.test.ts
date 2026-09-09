@@ -12,10 +12,12 @@ import {
 } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
+import { parsePredictionHistoryRows } from "../scripts/evaluateProspectiveProbabilityForecasts";
 
 function forecastRow(
   generatedAt: string,
@@ -42,6 +44,11 @@ function forecastRow(
       probability24h: baselineProbability24h,
       probability48h: baselineProbability48h,
     };
+  }
+  const active = forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  if (active) {
+    active.rawProbability24h = activeProbability24h;
+    active.rawProbability48h = activeProbability48h;
   }
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
@@ -307,4 +314,143 @@ test("secondary post-reset diagnostics never change primary gate or status", () 
   assert.deepEqual(diagnosticReport.comparison, primaryOnlyReport.comparison);
   assert.deepEqual(diagnosticReport.models, primaryOnlyReport.models);
   assert.deepEqual(diagnosticReport.gate, primaryOnlyReport.gate);
+});
+
+test("unified model comparison uses the same daily origins and reads final displayed probabilities from the saved row", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const row = forecastRow(generatedAt, 0.6, 0.7, 0.4, 0.5);
+  row.finalDisplayed = {
+    modelVersion: "published-final-displayed",
+    generatedAt,
+    probability24h: 0.12,
+    probability48h: 0.24,
+  };
+  const report = evaluatePublishedModelProspectively(
+    [row],
+    [],
+    new Date("2026-09-04T00:00:00.000Z"),
+    {
+      adoptionAt: null,
+      v3Forecasts: {
+        [generatedAt]: {
+          modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.2,
+          probability48h: 0.3,
+        },
+      },
+    },
+  );
+
+  assert.equal(report.unifiedComparison.originCount, 1);
+  assert.deepEqual(report.unifiedComparison.origins, [generatedAt]);
+  assert.equal(report.unifiedComparison.series.finalDisplayed.metrics24h.averagePrediction, 0.12);
+  assert.equal(report.unifiedComparison.series.v3.metrics24h.averagePrediction, 0.2);
+  assert.equal(report.unifiedComparison.series.currentV2.metrics24h.averagePrediction, 0.6);
+  assert.equal(report.unifiedComparison.series.rawContinuous.metrics24h.averagePrediction, 0.6);
+  assert.equal(report.unifiedComparison.series.v1.metrics24h.averagePrediction, 0.4);
+  assert.equal(report.unifiedComparison.series.currentV2.metrics24h.count, 1);
+  assert.equal(report.unifiedComparison.series.v3.metrics48h.count, 1);
+  assert.equal(report.unifiedComparison.retrospectiveV3, true);
+});
+
+test("unified comparison excludes unresolved horizons for every series", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const row = forecastRow(generatedAt);
+  row.finalDisplayed = {
+    modelVersion: "published-final-displayed",
+    generatedAt,
+    probability24h: 0.12,
+    probability48h: 0.24,
+  };
+  const report = evaluatePublishedModelProspectively(
+    [row],
+    [],
+    new Date("2026-09-02T00:00:00.000Z"),
+    {
+      adoptionAt: null,
+      v3Forecasts: {
+        [generatedAt]: {
+          modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.2,
+          probability48h: 0.3,
+        },
+      },
+    },
+  );
+
+  const series = Object.values(report.unifiedComparison.series);
+  assert.ok(series.every((item) => item.metrics24h.count === 1));
+  assert.ok(series.every((item) => item.metrics48h.count === 0));
+});
+
+test("unified comparison rejects a v1 forecast from a different saved origin", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const row = forecastRow(generatedAt);
+  const baseline = row.forecasts[PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION];
+  assert.ok(baseline);
+  baseline.generatedAt = "2026-09-02T00:00:00.000Z";
+  row.finalDisplayed = {
+    modelVersion: "published-final-displayed",
+    generatedAt,
+    probability24h: 0.12,
+    probability48h: 0.24,
+  };
+
+  const report = evaluatePublishedModelProspectively(
+    [row],
+    [],
+    new Date("2026-09-04T00:00:00.000Z"),
+    {
+      adoptionAt: null,
+      v3Forecasts: {
+        [generatedAt]: {
+          modelVersion: NEXT_GENERATION_V3_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.2,
+          probability48h: 0.3,
+        },
+      },
+    },
+  );
+
+  assert.equal(report.unifiedComparison.originCount, 0);
+});
+
+test("prediction history evaluation reads final displayed probabilities from top-level saved values", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const parsed = parsePredictionHistoryRows([{
+    logged_hour: generatedAt,
+    probability_24h: 0.12,
+    probability_48h: 0.24,
+    debug_info: {
+      calculated_at: generatedAt,
+      publishedProbabilityModel: {
+        majorModelReleaseAdjustment: { active: true },
+      },
+      experimentalProbabilityForecasts: {
+        [PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION]: {
+          modelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.6,
+          probability48h: 0.7,
+          rawProbability24h: 0.5,
+          rawProbability48h: 0.6,
+        },
+        [PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION]: {
+          modelVersion: PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+          generatedAt,
+          probability24h: 0.4,
+          probability48h: 0.5,
+        },
+      },
+    },
+  }]);
+
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].finalDisplayed?.probability24h, 0.12);
+  assert.equal(parsed[0].finalDisplayed?.probability48h, 0.24);
+  assert.equal(parsed[0].finalDisplayed?.finalDisplaySpecialOverlay, true);
+  assert.equal(parsed[0].forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION]?.probability24h, 0.6);
 });

@@ -28,6 +28,8 @@ import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 export type PredictionHistoryRow = {
   logged_hour?: string | null;
   debug_info?: unknown;
+  probability_24h?: number | null;
+  probability_48h?: number | null;
 };
 
 export type PredictionHistoryLoadResult = {
@@ -113,10 +115,26 @@ function toForecastRow(row: PredictionHistoryRow): ProspectiveForecastRow | null
       : row.logged_hour ?? null;
   if (!generatedAt || parseTimestamp(generatedAt) === null) return null;
 
+  const finalDisplayed = typeof row.probability_24h === "number"
+    && Number.isFinite(row.probability_24h)
+    && typeof row.probability_48h === "number"
+    && Number.isFinite(row.probability_48h)
+    ? {
+        modelVersion: "published-final-displayed",
+        generatedAt,
+        probability24h: row.probability_24h,
+        probability48h: row.probability_48h,
+        officialNoticeOverride: forecasts[PUBLISHED_PROBABILITY_MODEL_VERSION]?.officialNoticeOverride === true,
+        finalDisplaySpecialOverlay:
+          asRecord(asRecord(debugRecord?.publishedProbabilityModel)?.majorModelReleaseAdjustment)?.active === true,
+      }
+    : undefined;
+
   return {
     loggedHour: row.logged_hour ?? null,
     generatedAt,
     forecasts,
+    ...(finalDisplayed ? { finalDisplayed } : {}),
   };
 }
 
@@ -142,7 +160,7 @@ export async function loadPredictionHistoryRows(): Promise<PredictionHistoryLoad
   });
   const { data, error } = await supabase
     .from("prediction_history")
-    .select("logged_hour,debug_info")
+    .select("logged_hour,debug_info,probability_24h,probability_48h")
     .order("logged_hour", { ascending: true })
     .limit(10_000);
   if (error) {

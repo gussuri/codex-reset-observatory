@@ -3,16 +3,29 @@ import { basename, join } from "node:path";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
+  NEXT_GENERATION_B_MODEL_VERSION,
+  NEXT_GENERATION_FREEZE_AT,
+  PUBLISHED_PROBABILITY_ADOPTION_AT,
+} from "../data/shadowProbabilityConfig";
+import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
 import {
+  calculateNextGenerationV3Probability,
+  type NextGenerationCalibrationRow,
+} from "../lib/radar/nextGenerationProbability";
+import { getActualWithinHorizon, getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
+import {
   evaluatePublishedModelProspectively,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+  PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
+  selectDailyFirstPublishedForecasts,
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
+import type { ProspectiveForecastRow, ProspectiveStoredForecast } from "../lib/radar/prospectiveProbabilityEvaluation";
 import {
   loadProductionCanonicalRadarData,
   loadPredictionHistoryRows,
@@ -52,6 +65,141 @@ function formatPostResetDiagnosticMetric(metric: PublishedProspectiveEvaluationR
     `logLossDelta=${value(metric.logLossDelta)}`,
     `meanProbabilityDelta=${value(metric.meanProbabilityDelta)}`,
   ].join(", ");
+}
+
+function formatUnifiedSeries(
+  name: string,
+  series: PublishedProspectiveEvaluationReport["unifiedComparison"]["series"][keyof PublishedProspectiveEvaluationReport["unifiedComparison"]["series"]],
+) {
+  return [
+    `### ${name}`,
+    `- Source: ${series.source}`,
+    `- 24h: ${formatPublishedProspectiveMetric(series.metrics24h)}`,
+    `- 48h: ${formatPublishedProspectiveMetric(series.metrics48h)}`,
+  ];
+}
+
+function formatUnifiedSubset(
+  name: string,
+  subset: PublishedProspectiveEvaluationReport["unifiedComparison"]["subsets"][keyof PublishedProspectiveEvaluationReport["unifiedComparison"]["subsets"]],
+) {
+  return [
+    `### ${name}`,
+    `- Origins: ${subset.originCount}`,
+    `- 24h v3: ${formatPublishedProspectiveMetric(subset.series.v3.metrics24h)}`,
+    `- 48h v3: ${formatPublishedProspectiveMetric(subset.series.v3.metrics48h)}`,
+  ];
+}
+
+function parseTimestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isFiniteProbability(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function buildV3TrainingRows(
+  rows: Array<ProspectiveForecastRow>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): Array<NextGenerationCalibrationRow> {
+  const asOfTime = asOf.getTime();
+  return rows.flatMap((row) => {
+    const forecast = row.forecasts[NEXT_GENERATION_B_MODEL_VERSION];
+    const generatedAt = forecast?.generatedAt;
+    const generatedTime = parseTimestamp(generatedAt);
+    if (
+      !forecast
+      || forecast.modelVersion !== NEXT_GENERATION_B_MODEL_VERSION
+      || generatedAt === undefined
+      || generatedTime === null
+      || generatedTime < parseTimestamp(NEXT_GENERATION_FREEZE_AT)!
+      || generatedTime >= asOfTime
+      || !isFiniteProbability(forecast.rawProbability24h)
+      || !isFiniteProbability(forecast.rawProbability48h)
+    ) {
+      return [];
+    }
+    return [{
+      generatedAt,
+      modelVersion: NEXT_GENERATION_B_MODEL_VERSION,
+      rawProbability24h: forecast.rawProbability24h,
+      rawProbability48h: forecast.rawProbability48h,
+      actual24h: generatedTime + 24 * 60 * 60 * 1000 <= asOfTime
+        ? getActualWithinHorizon(events, generatedAt, 24)
+        : undefined,
+      actual48h: generatedTime + 48 * 60 * 60 * 1000 <= asOfTime
+        ? getActualWithinHorizon(events, generatedAt, 48)
+        : undefined,
+    }];
+  });
+}
+
+function toV3StoredForecast(
+  result: ReturnType<typeof calculateNextGenerationV3Probability>,
+): ProspectiveStoredForecast {
+  return {
+    modelVersion: PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
+    generatedAt: result.calculatedAt,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    rawProbability24h: result.rawProbability24h,
+    rawProbability48h: result.rawProbability48h,
+    alpha24h: result.alpha24h,
+    alpha48h: result.alpha48h,
+    calibrationSampleCount24h: result.calibrationSampleCount24h,
+    calibrationSampleCount48h: result.calibrationSampleCount48h,
+    positiveCalibrationCount24h: result.positiveCalibrationCount24h,
+    positiveCalibrationCount48h: result.positiveCalibrationCount48h,
+    lastResolvedOrigin24h: result.lastResolvedOrigin24h,
+    lastResolvedOrigin48h: result.lastResolvedOrigin48h,
+    publicCalibrationPolicy: result.publicCalibrationPolicy,
+    officialNoticeOverride: result.officialNoticeOverride.active,
+    latestRandomResetAt: result.randomContinuous.latestRandomResetAt,
+    elapsedHoursSinceRandom: result.randomContinuous.randomElapsedHours,
+    randomElapsedHours: result.randomContinuous.randomElapsedHours,
+    latestRecoveryResetAt: result.randomContinuous.latestRecoveryResetAt,
+    fallbackUsed: result.fallbackUsed,
+    fallbackReason: result.fallbackReason,
+    trainingReadStatus: result.trainingReadStatus,
+    pointInTimeProjectionVersion: "getPointInTimeRadarData",
+  };
+}
+
+function buildRetrospectiveV3Forecasts(
+  rows: Array<ProspectiveForecastRow>,
+  data: Awaited<ReturnType<typeof loadProductionCanonicalRadarData>>["data"],
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): Record<string, ProspectiveStoredForecast> {
+  if (!data) return {};
+  const adoptionTime = parseTimestamp(PUBLISHED_PROBABILITY_ADOPTION_AT);
+  const comparableDailyRows = rows.filter((row) => {
+    const generatedTime = parseTimestamp(row.generatedAt);
+    return generatedTime !== null
+      && generatedTime <= asOf.getTime()
+      && (adoptionTime === null || generatedTime >= adoptionTime!);
+  });
+  const trainingRows = buildV3TrainingRows(rows, events, asOf);
+  const dailyRows = selectDailyFirstPublishedForecasts(comparableDailyRows);
+  return Object.fromEntries(
+    dailyRows.flatMap((row) => {
+      const generatedTime = parseTimestamp(row.generatedAt);
+      if (generatedTime === null) return [];
+      const pointInTimeData = getPointInTimeRadarData(data, new Date(generatedTime));
+      if (!pointInTimeData) return [];
+      const result = calculateNextGenerationV3Probability(pointInTimeData, {
+        now: new Date(generatedTime),
+        staticHistory: LOCAL_RESET_HISTORY,
+        trainingRows,
+        trainingReadStatus: "ok",
+      });
+      return [[row.generatedAt, toV3StoredForecast(result)] as const];
+    }),
+  );
 }
 
 function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
@@ -100,6 +248,36 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Resolved forecasts: 24h=${report.comparison.resolved24h}, 48h=${report.comparison.resolved48h}`,
     `- Positive forecasts: 24h=${report.comparison.positiveCount24h}, 48h=${report.comparison.positiveCount48h}`,
     `- Target random reset count: ${report.comparison.targetResetCount}`,
+    "",
+    "## Unified model comparison (retrospective v3 diagnostic)",
+    "",
+    "All five series use the same daily-first saved origins, canonical truth, and resolved-horizon rules. v3 is a retrospective point-in-time counterfactual; it was not saved prospectively and never affects the primary gate or status.",
+    `- Shared origins: ${report.unifiedComparison.originCount}`,
+    `- Origin timestamps: ${report.unifiedComparison.origins.length > 0 ? report.unifiedComparison.origins.join(", ") : "none"}`,
+    ...formatUnifiedSeries("Final displayed", report.unifiedComparison.series.finalDisplayed),
+    "",
+    ...formatUnifiedSeries("v3 uncalibrated post-reset-age candidate", report.unifiedComparison.series.v3),
+    "",
+    ...formatUnifiedSeries("Current v2 calibrated", report.unifiedComparison.series.currentV2),
+    "",
+    ...formatUnifiedSeries("Raw continuous", report.unifiedComparison.series.rawContinuous),
+    "",
+    ...formatUnifiedSeries("v1 calibrated", report.unifiedComparison.series.v1),
+    "",
+    "### Delta versus current v2",
+    `- Final displayed: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.finalDisplayed)}`,
+    `- v3: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v3)}`,
+    `- Raw continuous: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.rawContinuous)}`,
+    `- v1: ${JSON.stringify(report.unifiedComparison.deltaVsCurrentV2.v1)}`,
+    "",
+    "### Unified diagnostic subsets",
+    ...formatUnifiedSubset("No official notice", report.unifiedComparison.subsets.noOfficialNotice),
+    "",
+    ...formatUnifiedSubset("No final-display special overlay", report.unifiedComparison.subsets.noFinalDisplaySpecialOverlay),
+    "",
+    ...formatUnifiedSubset("Official notice override active", report.unifiedComparison.subsets.noticeOverrideActive),
+    "",
+    ...formatUnifiedSubset("Latest random reset at 0-24h", report.unifiedComparison.subsets.latestRandomReset0To24h),
     "",
     "### Manual review gate",
     "",
@@ -160,7 +338,8 @@ async function main() {
         preserveDistinctCanonicalIds: true,
       })
     : [];
-  const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf);
+  const v3Forecasts = buildRetrospectiveV3Forecasts(history.rows, production.data, events, asOf);
+  const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf, { v3Forecasts });
   const availabilityNotes: string[] = [];
   if (baseReport.forecastCounts.comparable === 0) {
     availabilityNotes.push(
@@ -191,6 +370,12 @@ async function main() {
       representativeOriginCount: report.postResetDiagnostic.representativeOriginCount,
       metrics24hSampleCount: report.postResetDiagnostic.metrics24h.sampleCount,
       metrics48hSampleCount: report.postResetDiagnostic.metrics48h.sampleCount,
+    },
+    unifiedComparison: {
+      sharedOriginCount: report.unifiedComparison.originCount,
+      v3ForecastCount: v3Forecasts ? Object.keys(v3Forecasts).length : 0,
+      v3Metrics24h: report.unifiedComparison.series.v3.metrics24h,
+      v3Metrics48h: report.unifiedComparison.series.v3.metrics48h,
     },
   }, null, 2));
 }

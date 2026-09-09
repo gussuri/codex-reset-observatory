@@ -1,8 +1,8 @@
 {
   "schemaVersion": "prospective-published-model-evaluation-v2",
   "status": "insufficient_data",
-  "generatedAt": "2026-09-08T18:31:27.345Z",
-  "asOf": "2026-09-08T18:31:27.345Z",
+  "generatedAt": "2026-09-09T16:40:07.783Z",
+  "asOf": "2026-09-09T16:40:07.783Z",
   "evaluationMode": "prospective",
   "backfilled": false,
   "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
@@ -11,14 +11,14 @@
   "baselineModelVersion": "hazard-regime-random-continuous-calibrated-v1",
   "evaluationStartAt": "2026-09-01T08:00:26.043Z",
   "forecastCounts": {
-    "active": 30,
-    "baseline": 30,
-    "comparable": 30
+    "active": 33,
+    "baseline": 33,
+    "comparable": 33
   },
   "comparison": {
-    "resolved24h": 7,
+    "resolved24h": 8,
     "resolved48h": 7,
-    "positiveCount24h": 2,
+    "positiveCount24h": 3,
     "positiveCount48h": 4,
     "targetResetCount": 3,
     "activeMinusBaseline": {
@@ -32,12 +32,12 @@
     "active": {
       "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
       "metrics24h": {
-        "count": 7,
-        "positiveCount": 2,
-        "actualRate": 0.2857142857142857,
-        "averagePrediction": 0.5440831891821629,
-        "brier": 0.2404975768601881,
-        "logLoss": 0.6461563176454473,
+        "count": 8,
+        "positiveCount": 3,
+        "actualRate": 0.375,
+        "averagePrediction": 0.5885727905343926,
+        "brier": 0.2116853797526646,
+        "logLoss": 0.5785568423969947,
         "calibration": [
           {
             "range": "0-20%",
@@ -65,14 +65,14 @@
           },
           {
             "range": "80-100%",
-            "count": 1,
+            "count": 2,
             "averagePrediction": 0.9,
             "actualRate": 1
           }
         ],
         "periodStart": "2026-09-01T08:00:26.043Z",
-        "periodEnd": "2026-09-06T15:42:12.464Z",
-        "targetResetCount": 2
+        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "targetResetCount": 3
       },
       "metrics48h": {
         "count": 7,
@@ -121,12 +121,12 @@
     "baseline": {
       "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
       "metrics24h": {
-        "count": 7,
-        "positiveCount": 2,
-        "actualRate": 0.2857142857142857,
-        "averagePrediction": 0.5440831891821629,
-        "brier": 0.2404975768601881,
-        "logLoss": 0.6461563176454473,
+        "count": 8,
+        "positiveCount": 3,
+        "actualRate": 0.375,
+        "averagePrediction": 0.5885727905343926,
+        "brier": 0.2116853797526646,
+        "logLoss": 0.5785568423969947,
         "calibration": [
           {
             "range": "0-20%",
@@ -154,14 +154,14 @@
           },
           {
             "range": "80-100%",
-            "count": 1,
+            "count": 2,
             "averagePrediction": 0.9,
             "actualRate": 1
           }
         ],
         "periodStart": "2026-09-01T08:00:26.043Z",
-        "periodEnd": "2026-09-06T15:42:12.464Z",
-        "targetResetCount": 2
+        "periodEnd": "2026-09-07T21:44:09.200Z",
+        "targetResetCount": 3
       },
       "metrics48h": {
         "count": 7,
@@ -223,7 +223,7 @@
     }
   ],
   "postResetDiagnostic": {
-    "allEligibleOriginCount": 4,
+    "allEligibleOriginCount": 5,
     "representativeOriginCount": 2,
     "representativeOrigins": [
       {
@@ -238,17 +238,17 @@
       }
     ],
     "metrics24h": {
-      "sampleCount": 1,
+      "sampleCount": 2,
       "positiveCount": 1,
-      "activeMeanPrediction": 0.2857098923659838,
-      "baselineMeanPrediction": 0.3987440298029952,
-      "activeBrier": 0.5102103578638145,
-      "baselineBrier": 0.36150874169754155,
-      "brierDelta": 0.14870161616627298,
-      "activeLogLoss": 1.2527783453326475,
-      "baselineLogLoss": 0.9194355972760582,
-      "logLossDelta": 0.33334274805658937,
-      "meanProbabilityDelta": -0.1130341374370114
+      "activeMeanPrediction": 0.3106274170692104,
+      "baselineMeanPrediction": 0.4235271173631707,
+      "activeBrier": 0.3114003829064413,
+      "baselineBrier": 0.28124539076797717,
+      "brierDelta": 0.03015499213846412,
+      "activeLogLoss": 0.8307831904564134,
+      "baselineLogLoss": 0.7571024766918526,
+      "logLossDelta": 0.07368071376456076,
+      "meanProbabilityDelta": -0.11289970029396038
     },
     "metrics48h": {
       "sampleCount": 1,
@@ -264,6 +264,2346 @@
       "meanProbabilityDelta": -0.05132393660465684
     }
   },
+  "unifiedComparison": {
+    "originCount": 9,
+    "origins": [
+      "2026-09-01T08:00:26.043Z",
+      "2026-09-01T16:51:47.016Z",
+      "2026-09-02T16:49:13.509Z",
+      "2026-09-03T16:38:23.571Z",
+      "2026-09-04T16:33:39.803Z",
+      "2026-09-05T15:28:58.662Z",
+      "2026-09-06T15:42:12.464Z",
+      "2026-09-07T21:44:09.200Z",
+      "2026-09-08T16:48:51.682Z"
+    ],
+    "series": {
+      "finalDisplayed": {
+        "modelVersion": "published-final-displayed",
+        "source": "prediction_history.probability_24h/probability_48h",
+        "metrics24h": {
+          "count": 8,
+          "positiveCount": 3,
+          "actualRate": 0.375,
+          "averagePrediction": 0.639908875,
+          "brier": 0.24389030014287497,
+          "logLoss": 0.6554727756310617,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 5,
+              "averagePrediction": 0.5371657999999999,
+              "actualRate": 0.2
+            },
+            {
+              "range": "60-80%",
+              "count": 1,
+              "averagePrediction": 0.633442,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 2,
+              "averagePrediction": 0.9,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.7996005714285715,
+          "brier": 0.31564889752428577,
+          "logLoss": 0.86751334491116,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "count": 4,
+              "averagePrediction": 0.73777925,
+              "actualRate": 0.75
+            },
+            {
+              "range": "80-100%",
+              "count": 3,
+              "averagePrediction": 0.8820290000000001,
+              "actualRate": 0.3333333333333333
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      },
+      "v3": {
+        "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+        "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+        "metrics24h": {
+          "count": 8,
+          "positiveCount": 3,
+          "actualRate": 0.375,
+          "averagePrediction": 0.5547366242515899,
+          "brier": 0.16752067298241183,
+          "logLoss": 0.5007510799933452,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 1,
+              "averagePrediction": 0.38238121228923594,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 5,
+              "averagePrediction": 0.45110235634469664,
+              "actualRate": 0.2
+            },
+            {
+              "range": "60-80%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 2,
+              "averagePrediction": 0.8999999999999999,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.7194940393434178,
+          "brier": 0.280671999178071,
+          "logLoss": 0.7497463203717751,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 1,
+              "averagePrediction": 0.5999572637645262,
+              "actualRate": 1
+            },
+            {
+              "range": "60-80%",
+              "count": 5,
+              "averagePrediction": 0.6953002023278798,
+              "actualRate": 0.4
+            },
+            {
+              "range": "80-100%",
+              "count": 1,
+              "averagePrediction": 0.96,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      },
+      "currentV2": {
+        "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+        "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+        "metrics24h": {
+          "count": 8,
+          "positiveCount": 3,
+          "actualRate": 0.375,
+          "averagePrediction": 0.5885727905343926,
+          "brier": 0.2116853797526646,
+          "logLoss": 0.5785568423969947,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 1,
+              "averagePrediction": 0.11116041367120556,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 4,
+              "averagePrediction": 0.5410014209100776,
+              "actualRate": 0.25
+            },
+            {
+              "range": "60-80%",
+              "count": 1,
+              "averagePrediction": 0.6334162269636247,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 2,
+              "averagePrediction": 0.9,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.7361977831145502,
+          "brier": 0.24906663733449036,
+          "logLoss": 0.7225740563567857,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 1,
+              "averagePrediction": 0.3084873734552771,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "count": 3,
+              "averagePrediction": 0.7329569023967103,
+              "actualRate": 1
+            },
+            {
+              "range": "80-100%",
+              "count": 3,
+              "averagePrediction": 0.8820088003854815,
+              "actualRate": 0.3333333333333333
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      },
+      "rawContinuous": {
+        "modelVersion": "hazard-regime-random-continuous-v1",
+        "source": "saved v2 rawProbability24h/rawProbability48h",
+        "metrics24h": {
+          "count": 8,
+          "positiveCount": 3,
+          "actualRate": 0.375,
+          "averagePrediction": 0.3535467456645436,
+          "brier": 0.28509317508102944,
+          "logLoss": 0.7690080238589896,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 2,
+              "averagePrediction": 0.14011885875696983,
+              "actualRate": 0.5
+            },
+            {
+              "range": "20-40%",
+              "count": 2,
+              "averagePrediction": 0.3680198803595305,
+              "actualRate": 1
+            },
+            {
+              "range": "40-60%",
+              "count": 4,
+              "averagePrediction": 0.45302412177083706,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.5524783902861371,
+          "brier": 0.29407033993325166,
+          "logLoss": 0.7919256128781057,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 2,
+              "averagePrediction": 0.2885775792941118,
+              "actualRate": 0.5
+            },
+            {
+              "range": "40-60%",
+              "count": 1,
+              "averagePrediction": 0.5144086445483952,
+              "actualRate": 1
+            },
+            {
+              "range": "60-80%",
+              "count": 4,
+              "averagePrediction": 0.6939462322165851,
+              "actualRate": 0.5
+            },
+            {
+              "range": "80-100%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      },
+      "v1": {
+        "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+        "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+        "metrics24h": {
+          "count": 8,
+          "positiveCount": 3,
+          "actualRate": 0.375,
+          "averagePrediction": 0.5885727905343926,
+          "brier": 0.2116853797526646,
+          "logLoss": 0.5785568423969947,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 1,
+              "averagePrediction": 0.11116041367120556,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 4,
+              "averagePrediction": 0.5410014209100776,
+              "actualRate": 0.25
+            },
+            {
+              "range": "60-80%",
+              "count": 1,
+              "averagePrediction": 0.6334162269636247,
+              "actualRate": 0
+            },
+            {
+              "range": "80-100%",
+              "count": 2,
+              "averagePrediction": 0.9,
+              "actualRate": 1
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-07T21:44:09.200Z",
+          "targetResetCount": 3
+        },
+        "metrics48h": {
+          "count": 7,
+          "positiveCount": 4,
+          "actualRate": 0.5714285714285714,
+          "averagePrediction": 0.7361977831145502,
+          "brier": 0.24906663733449036,
+          "logLoss": 0.7225740563567857,
+          "calibration": [
+            {
+              "range": "0-20%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "20-40%",
+              "count": 1,
+              "averagePrediction": 0.3084873734552771,
+              "actualRate": 0
+            },
+            {
+              "range": "40-60%",
+              "count": 0,
+              "averagePrediction": 0,
+              "actualRate": 0
+            },
+            {
+              "range": "60-80%",
+              "count": 3,
+              "averagePrediction": 0.7329569023967103,
+              "actualRate": 1
+            },
+            {
+              "range": "80-100%",
+              "count": 3,
+              "averagePrediction": 0.8820088003854815,
+              "actualRate": 0.3333333333333333
+            }
+          ],
+          "periodStart": "2026-09-01T08:00:26.043Z",
+          "periodEnd": "2026-09-06T15:42:12.464Z",
+          "targetResetCount": 3
+        }
+      }
+    },
+    "subsets": {
+      "noOfficialNotice": {
+        "originCount": 7,
+        "origins": [
+          "2026-09-01T08:00:26.043Z",
+          "2026-09-01T16:51:47.016Z",
+          "2026-09-02T16:49:13.509Z",
+          "2026-09-03T16:38:23.571Z",
+          "2026-09-05T15:28:58.662Z",
+          "2026-09-06T15:42:12.464Z",
+          "2026-09-08T16:48:51.682Z"
+        ],
+        "series": {
+          "finalDisplayed": {
+            "modelVersion": "published-final-displayed",
+            "source": "prediction_history.probability_24h/probability_48h",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 1,
+              "actualRate": 0.16666666666666666,
+              "averagePrediction": 0.5532118333333333,
+              "brier": 0.32185373352383334,
+              "logLoss": 0.8388435289554734,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 5,
+                  "averagePrediction": 0.5371657999999999,
+                  "actualRate": 0.2
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.633442,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.7728673333333335,
+              "brier": 0.367990380445,
+              "logLoss": 1.0052952366429775,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 4,
+                  "averagePrediction": 0.73777925,
+                  "actualRate": 0.75
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8430435000000001,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 1,
+              "actualRate": 0.16666666666666666,
+              "averagePrediction": 0.4396488323354532,
+              "brier": 0.2200275639765491,
+              "logLoss": 0.6325479347718516,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.38238121228923594,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 5,
+                  "averagePrediction": 0.45110235634469664,
+                  "actualRate": 0.2
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.679409712567321,
+              "brier": 0.3271839990410828,
+              "logLoss": 0.8679003746803616,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 1,
+                  "averagePrediction": 0.5999572637645262,
+                  "actualRate": 1
+                },
+                {
+                  "range": "60-80%",
+                  "count": 5,
+                  "averagePrediction": 0.6953002023278798,
+                  "actualRate": 0.4
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          },
+          "currentV2": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 1,
+              "actualRate": 0.16666666666666666,
+              "averagePrediction": 0.48476372071252344,
+              "brier": 0.2789138396702195,
+              "logLoss": 0.7362889513100509,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 1,
+                  "averagePrediction": 0.11116041367120556,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 4,
+                  "averagePrediction": 0.5410014209100776,
+                  "actualRate": 0.25
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.6334162269636247,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.698897413633642,
+              "brier": 0.2903110768902388,
+              "logLoss": 0.8361993999962075,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.3084873734552771,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 3,
+                  "averagePrediction": 0.7329569023967103,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8430132005782223,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          },
+          "rawContinuous": {
+            "modelVersion": "hazard-regime-random-continuous-v1",
+            "source": "saved v2 rawProbability24h/rawProbability48h",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 1,
+              "actualRate": 0.16666666666666666,
+              "averagePrediction": 0.3770535477355598,
+              "brier": 0.20608545240258422,
+              "logLoss": 0.5869189523244346,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 1,
+                  "averagePrediction": 0.08701735334272431,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.36320744598728627,
+                  "actualRate": 1
+                },
+                {
+                  "range": "40-60%",
+                  "count": 4,
+                  "averagePrediction": 0.45302412177083706,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.5894976313273942,
+              "brier": 0.268346432136017,
+              "logLoss": 0.7393193152791216,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.2467922145496297,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 1,
+                  "averagePrediction": 0.5144086445483952,
+                  "actualRate": 1
+                },
+                {
+                  "range": "60-80%",
+                  "count": 4,
+                  "averagePrediction": 0.6939462322165851,
+                  "actualRate": 0.5
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          },
+          "v1": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 1,
+              "actualRate": 0.16666666666666666,
+              "averagePrediction": 0.48476372071252344,
+              "brier": 0.2789138396702195,
+              "logLoss": 0.7362889513100509,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 1,
+                  "averagePrediction": 0.11116041367120556,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 4,
+                  "averagePrediction": 0.5410014209100776,
+                  "actualRate": 0.25
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.6334162269636247,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 1
+            },
+            "metrics48h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.698897413633642,
+              "brier": 0.2903110768902388,
+              "logLoss": 0.8361993999962075,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.3084873734552771,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 3,
+                  "averagePrediction": 0.7329569023967103,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8430132005782223,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-06T15:42:12.464Z",
+              "targetResetCount": 3
+            }
+          }
+        }
+      },
+      "noFinalDisplaySpecialOverlay": {
+        "originCount": 7,
+        "origins": [
+          "2026-09-01T08:00:26.043Z",
+          "2026-09-01T16:51:47.016Z",
+          "2026-09-02T16:49:13.509Z",
+          "2026-09-03T16:38:23.571Z",
+          "2026-09-04T16:33:39.803Z",
+          "2026-09-07T21:44:09.200Z",
+          "2026-09-08T16:48:51.682Z"
+        ],
+        "series": {
+          "finalDisplayed": {
+            "modelVersion": "published-final-displayed",
+            "source": "prediction_history.probability_24h/probability_48h",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.6736133333333334,
+              "brier": 0.22830244631033333,
+              "logLoss": 0.6157154240946373,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 3,
+                  "averagePrediction": 0.5360793333333332,
+                  "actualRate": 0.3333333333333333
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.633442,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.8125150000000001,
+              "brier": 0.3201315230058,
+              "logLoss": 0.8887509537755067,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 2,
+                  "averagePrediction": 0.708244,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 3,
+                  "averagePrediction": 0.8820290000000001,
+                  "actualRate": 0.3333333333333333
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.6033338339996978,
+              "brier": 0.16738034947862115,
+              "logLoss": 0.4920490557762764,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 4,
+                  "averagePrediction": 0.4550007509995466,
+                  "actualRate": 0.25
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8999999999999999,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.7339407753868354,
+              "brier": 0.27892133531746716,
+              "logLoss": 0.7421798785321149,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 1,
+                  "averagePrediction": 0.5999572637645262,
+                  "actualRate": 1
+                },
+                {
+                  "range": "60-80%",
+                  "count": 3,
+                  "averagePrediction": 0.7032488710565504,
+                  "actualRate": 0.3333333333333333
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          },
+          "currentV2": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.6733088942967345,
+              "brier": 0.2283739530461895,
+              "logLoss": 0.6158577510853774,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 3,
+                  "averagePrediction": 0.5354790462722608,
+                  "actualRate": 0.3333333333333333
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.6334162269636247,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.8120663619359154,
+              "brier": 0.3203779782443314,
+              "logLoss": 0.8893038103715313,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 2,
+                  "averagePrediction": 0.7071527042615665,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 3,
+                  "averagePrediction": 0.8820088003854815,
+                  "actualRate": 0.3333333333333333
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          },
+          "rawContinuous": {
+            "modelVersion": "hazard-regime-random-continuous-v1",
+            "source": "saved v2 rawProbability24h/rawProbability48h",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.38396250360872775,
+              "brier": 0.3469492887795636,
+              "logLoss": 0.9142527634121206,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 1,
+                  "averagePrediction": 0.19322036417121535,
+                  "actualRate": 1
+                },
+                {
+                  "range": "20-40%",
+                  "count": 2,
+                  "averagePrediction": 0.3680198803595305,
+                  "actualRate": 1
+                },
+                {
+                  "range": "40-60%",
+                  "count": 3,
+                  "averagePrediction": 0.45817163225403007,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.5870281743414612,
+              "brier": 0.37972453328581196,
+              "logLoss": 0.9764670603531048,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.33036294403859395,
+                  "actualRate": 1
+                },
+                {
+                  "range": "40-60%",
+                  "count": 1,
+                  "averagePrediction": 0.5144086445483952,
+                  "actualRate": 1
+                },
+                {
+                  "range": "60-80%",
+                  "count": 3,
+                  "averagePrediction": 0.6967897610401055,
+                  "actualRate": 0.3333333333333333
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          },
+          "v1": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 6,
+              "positiveCount": 3,
+              "actualRate": 0.5,
+              "averagePrediction": 0.6733088942967345,
+              "brier": 0.2283739530461895,
+              "logLoss": 0.6158577510853774,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 3,
+                  "averagePrediction": 0.5354790462722608,
+                  "actualRate": 0.3333333333333333
+                },
+                {
+                  "range": "60-80%",
+                  "count": 1,
+                  "averagePrediction": 0.6334162269636247,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 3
+            },
+            "metrics48h": {
+              "count": 5,
+              "positiveCount": 3,
+              "actualRate": 0.6,
+              "averagePrediction": 0.8120663619359154,
+              "brier": 0.3203779782443314,
+              "logLoss": 0.8893038103715313,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 2,
+                  "averagePrediction": 0.7071527042615665,
+                  "actualRate": 1
+                },
+                {
+                  "range": "80-100%",
+                  "count": 3,
+                  "averagePrediction": 0.8820088003854815,
+                  "actualRate": 0.3333333333333333
+                }
+              ],
+              "periodStart": "2026-09-01T08:00:26.043Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 2
+            }
+          }
+        }
+      },
+      "noticeOverrideActive": {
+        "originCount": 2,
+        "origins": [
+          "2026-09-04T16:33:39.803Z",
+          "2026-09-07T21:44:09.200Z"
+        ],
+        "series": {
+          "finalDisplayed": {
+            "modelVersion": "published-final-displayed",
+            "source": "prediction_history.probability_24h/probability_48h",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.9,
+              "brier": 0.009999999999999995,
+              "logLoss": 0.10536051565782628,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.96,
+              "brier": 0.001600000000000003,
+              "logLoss": 0.040821994520255166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.8999999999999999,
+              "brier": 0.010000000000000005,
+              "logLoss": 0.10536051565782634,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.8999999999999999,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.96,
+              "brier": 0.001600000000000003,
+              "logLoss": 0.040821994520255166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          },
+          "currentV2": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.9,
+              "brier": 0.009999999999999995,
+              "logLoss": 0.10536051565782628,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.96,
+              "brier": 0.001600000000000003,
+              "logLoss": 0.040821994520255166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          },
+          "rawContinuous": {
+            "modelVersion": "hazard-regime-random-continuous-v1",
+            "source": "saved v2 rawProbability24h/rawProbability48h",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.283026339451495,
+              "brier": 0.522116343116365,
+              "logLoss": 1.3152752384626547,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 1,
+                  "averagePrediction": 0.19322036417121535,
+                  "actualRate": 1
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.37283231473177475,
+                  "actualRate": 1
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.33036294403859395,
+              "brier": 0.44841378671665916,
+              "logLoss": 1.10756339847201,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 1,
+                  "averagePrediction": 0.33036294403859395,
+                  "actualRate": 1
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          },
+          "v1": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 2,
+              "positiveCount": 2,
+              "actualRate": 1,
+              "averagePrediction": 0.9,
+              "brier": 0.009999999999999995,
+              "logLoss": 0.10536051565782628,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 2,
+                  "averagePrediction": 0.9,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-07T21:44:09.200Z",
+              "targetResetCount": 2
+            },
+            "metrics48h": {
+              "count": 1,
+              "positiveCount": 1,
+              "actualRate": 1,
+              "averagePrediction": 0.96,
+              "brier": 0.001600000000000003,
+              "logLoss": 0.040821994520255166,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 1,
+                  "averagePrediction": 0.96,
+                  "actualRate": 1
+                }
+              ],
+              "periodStart": "2026-09-04T16:33:39.803Z",
+              "periodEnd": "2026-09-04T16:33:39.803Z",
+              "targetResetCount": 1
+            }
+          }
+        }
+      },
+      "latestRandomReset0To24h": {
+        "originCount": 1,
+        "origins": [
+          "2026-09-08T16:48:51.682Z"
+        ],
+        "series": {
+          "finalDisplayed": {
+            "modelVersion": "published-final-displayed",
+            "source": "prediction_history.probability_24h/probability_48h",
+            "metrics24h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            },
+            "metrics48h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            }
+          },
+          "v3": {
+            "modelVersion": "hazard-regime-random-continuous-uncalibrated-post-reset-age-v3",
+            "source": "retrospective point-in-time calculateNextGenerationV3Probability",
+            "metrics24h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            },
+            "metrics48h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            }
+          },
+          "currentV2": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-post-reset-age-v2",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            },
+            "metrics48h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            }
+          },
+          "rawContinuous": {
+            "modelVersion": "hazard-regime-random-continuous-v1",
+            "source": "saved v2 rawProbability24h/rawProbability48h",
+            "metrics24h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            },
+            "metrics48h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            }
+          },
+          "v1": {
+            "modelVersion": "hazard-regime-random-continuous-calibrated-v1",
+            "source": "prediction_history.debug_info.experimentalProbabilityForecasts",
+            "metrics24h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            },
+            "metrics48h": {
+              "count": 0,
+              "positiveCount": 0,
+              "actualRate": 0,
+              "averagePrediction": 0,
+              "brier": 0,
+              "logLoss": 0,
+              "calibration": [
+                {
+                  "range": "0-20%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "20-40%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "40-60%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "60-80%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                },
+                {
+                  "range": "80-100%",
+                  "count": 0,
+                  "averagePrediction": 0,
+                  "actualRate": 0
+                }
+              ],
+              "periodStart": null,
+              "periodEnd": null,
+              "targetResetCount": 0
+            }
+          }
+        }
+      }
+    },
+    "deltaVsCurrentV2": {
+      "finalDisplayed": {
+        "brier24h": 0.03220492039021036,
+        "brier48h": 0.0665822601897954,
+        "logLoss24h": 0.07691593323406698,
+        "logLoss48h": 0.1449392885543742
+      },
+      "v3": {
+        "brier24h": -0.044164706770252776,
+        "brier48h": 0.03160536184358065,
+        "logLoss24h": -0.07780576240364945,
+        "logLoss48h": 0.0271722640149894
+      },
+      "rawContinuous": {
+        "brier24h": 0.07340779532836483,
+        "brier48h": 0.0450037025987613,
+        "logLoss24h": 0.1904511814619949,
+        "logLoss48h": 0.06935155652131997
+      },
+      "v1": {
+        "brier24h": 0,
+        "brier48h": 0,
+        "logLoss24h": 0,
+        "logLoss48h": 0
+      }
+    },
+    "retrospectiveV3": true
+  },
   "gate": {
     "autoPublish": false,
     "manualReviewOnly": true,
@@ -274,7 +2614,7 @@
       "maxLogLossWorsening": 0.05
     },
     "targetResetCount": 3,
-    "resolvedDaily24h": 7,
+    "resolvedDaily24h": 8,
     "resolvedDaily48h": 7,
     "brier24hNotWorse": true,
     "brier48hNotWorse": true,
@@ -287,6 +2627,7 @@
     "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
     "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
     "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
+    "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
     "Only forecasts generated at or after the manual adoption boundary 2026-09-01T08:00:00.000Z are evaluated as the adopted public model hazard-regime-random-continuous-calibrated-post-reset-age-v2; earlier rows remain historical data and are not relabeled.",
     "Prospective results alone never auto-publish or retune a model; manual review is required.",
     "The stable hazard-elapsed-v1 fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.",

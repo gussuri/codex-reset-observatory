@@ -5,11 +5,14 @@ import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
+  NEXT_GENERATION_B_RAW_MODEL_VERSION,
+  NEXT_GENERATION_V3_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
 import {
   selectDailyFirstForecasts,
   type ProspectiveForecastRow,
+  type ProspectiveStoredForecast,
 } from "./prospectiveProbabilityEvaluation";
 import type { ShadowResetEvent } from "./shadowProbability";
 
@@ -18,6 +21,9 @@ const LOG_LOSS_EPSILON = 1e-12;
 
 export const PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION = PUBLISHED_PROBABILITY_MODEL_VERSION;
 export const PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION = PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION;
+export const PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION = NEXT_GENERATION_V3_MODEL_VERSION;
+export const PROSPECTIVE_PUBLISHED_FINAL_DISPLAY_MODEL_VERSION = "published-final-displayed";
+export const PROSPECTIVE_PUBLISHED_RAW_CONTINUOUS_MODEL_VERSION = NEXT_GENERATION_B_RAW_MODEL_VERSION;
 
 export const PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS = {
   targetResetCount: 5,
@@ -56,6 +62,63 @@ export type PublishedProspectiveModelEvaluation = {
   modelVersion: string;
   metrics24h: PublishedProspectiveMetric;
   metrics48h: PublishedProspectiveMetric;
+};
+
+export type PublishedUnifiedModelSeries = PublishedProspectiveModelEvaluation & {
+  source: string;
+};
+
+export type PublishedUnifiedModelSeriesSet = {
+  finalDisplayed: PublishedUnifiedModelSeries;
+  v3: PublishedUnifiedModelSeries;
+  currentV2: PublishedUnifiedModelSeries;
+  rawContinuous: PublishedUnifiedModelSeries;
+  v1: PublishedUnifiedModelSeries;
+};
+
+export type PublishedUnifiedSubset = {
+  originCount: number;
+  origins: string[];
+  series: PublishedUnifiedModelSeriesSet;
+};
+
+export type PublishedUnifiedComparison = {
+  originCount: number;
+  origins: string[];
+  series: PublishedUnifiedModelSeriesSet;
+  subsets: {
+    noOfficialNotice: PublishedUnifiedSubset;
+    noFinalDisplaySpecialOverlay: PublishedUnifiedSubset;
+    noticeOverrideActive: PublishedUnifiedSubset;
+    latestRandomReset0To24h: PublishedUnifiedSubset;
+  };
+  deltaVsCurrentV2: {
+    finalDisplayed: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    };
+    v3: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    };
+    rawContinuous: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    };
+    v1: {
+      brier24h: number | null;
+      brier48h: number | null;
+      logLoss24h: number | null;
+      logLoss48h: number | null;
+    };
+  };
+  retrospectiveV3: true;
 };
 
 export type PublishedPostResetDiagnosticMetric = {
@@ -125,6 +188,7 @@ export type PublishedProspectiveEvaluationReport = {
   };
   canonicalRandomResetEvents: Array<ShadowResetEvent>;
   postResetDiagnostic: PublishedPostResetDiagnostic;
+  unifiedComparison: PublishedUnifiedComparison;
   gate: {
     autoPublish: false;
     manualReviewOnly: true;
@@ -142,6 +206,7 @@ export type PublishedProspectiveEvaluationReport = {
 
 export type PublishedProspectiveEvaluationOptions = {
   adoptionAt?: string | null;
+  v3Forecasts?: Record<string, ProspectiveStoredForecast>;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -315,6 +380,208 @@ function createModelEvaluation(
     modelVersion,
     metrics24h: calculateMetric(getResolvedRows(rows, modelVersion, 24, events, asOf), events, 24),
     metrics48h: calculateMetric(getResolvedRows(rows, modelVersion, 48, events, asOf), events, 48),
+  };
+}
+
+type UnifiedPublishedOrigin = {
+  row: ProspectiveForecastRow;
+  finalDisplayed: ProspectiveStoredForecast;
+  v3: ProspectiveStoredForecast;
+  currentV2: StoredForecast;
+  rawContinuous: StoredForecast;
+  v1: StoredForecast;
+};
+
+function isSameOrigin(left: StoredForecast, right: StoredForecast) {
+  const leftTime = timestamp(left.generatedAt);
+  const rightTime = timestamp(right.generatedAt);
+  return leftTime !== null && leftTime === rightTime;
+}
+
+function getUnifiedPublishedOrigins(
+  rows: Array<ProspectiveForecastRow>,
+  v3Forecasts: Record<string, ProspectiveStoredForecast> | undefined,
+) {
+  return rows.flatMap((row): Array<UnifiedPublishedOrigin> => {
+    const finalDisplayed = row.finalDisplayed;
+    const currentV2 = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    const v1 = row.forecasts[PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION];
+    const v3 = v3Forecasts?.[row.generatedAt];
+    if (
+      !finalDisplayed
+      || !isStoredForecast(finalDisplayed)
+      || !isStoredForecast(currentV2)
+      || !isStoredForecast(v1)
+      || !v3
+      || !isStoredForecast(v3)
+      || !isSameOrigin(finalDisplayed, currentV2)
+      || !isSameOrigin(v3, currentV2)
+      || !isSameOrigin(v1, currentV2)
+      || typeof currentV2.rawProbability24h !== "number"
+      || !Number.isFinite(currentV2.rawProbability24h)
+      || typeof currentV2.rawProbability48h !== "number"
+      || !Number.isFinite(currentV2.rawProbability48h)
+    ) {
+      return [];
+    }
+    return [{
+      row,
+      finalDisplayed,
+      v3,
+      currentV2,
+      rawContinuous: {
+        modelVersion: PROSPECTIVE_PUBLISHED_RAW_CONTINUOUS_MODEL_VERSION,
+        generatedAt: currentV2.generatedAt,
+        probability24h: currentV2.rawProbability24h,
+        probability48h: currentV2.rawProbability48h,
+      },
+      v1,
+    }];
+  });
+}
+
+function toSeriesRows(
+  origins: Array<UnifiedPublishedOrigin>,
+  modelKey: string,
+  getForecast: (origin: UnifiedPublishedOrigin) => StoredForecast | ProspectiveStoredForecast,
+) {
+  return origins.map((origin) => ({
+    generatedAt: origin.row.generatedAt,
+    loggedHour: origin.row.loggedHour,
+    forecasts: { [modelKey]: getForecast(origin) },
+  }));
+}
+
+function createUnifiedSeries(
+  origins: Array<UnifiedPublishedOrigin>,
+  modelKey: string,
+  modelVersion: string,
+  source: string,
+  getForecast: (origin: UnifiedPublishedOrigin) => StoredForecast | ProspectiveStoredForecast,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedUnifiedModelSeries {
+  const rows = toSeriesRows(origins, modelKey, getForecast);
+  return {
+    modelVersion,
+    source,
+    metrics24h: calculateMetric(getResolvedRows(rows, modelKey, 24, events, asOf), events, 24),
+    metrics48h: calculateMetric(getResolvedRows(rows, modelKey, 48, events, asOf), events, 48),
+  };
+}
+
+function createUnifiedSeriesSet(
+  origins: Array<UnifiedPublishedOrigin>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedUnifiedModelSeriesSet {
+  return {
+    finalDisplayed: createUnifiedSeries(
+      origins,
+      PROSPECTIVE_PUBLISHED_FINAL_DISPLAY_MODEL_VERSION,
+      PROSPECTIVE_PUBLISHED_FINAL_DISPLAY_MODEL_VERSION,
+      "prediction_history.probability_24h/probability_48h",
+      (origin) => origin.finalDisplayed,
+      events,
+      asOf,
+    ),
+    v3: createUnifiedSeries(
+      origins,
+      PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
+      PROSPECTIVE_PUBLISHED_V3_MODEL_VERSION,
+      "retrospective point-in-time calculateNextGenerationV3Probability",
+      (origin) => origin.v3,
+      events,
+      asOf,
+    ),
+    currentV2: createUnifiedSeries(
+      origins,
+      PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+      PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+      "prediction_history.debug_info.experimentalProbabilityForecasts",
+      (origin) => origin.currentV2,
+      events,
+      asOf,
+    ),
+    rawContinuous: createUnifiedSeries(
+      origins,
+      PROSPECTIVE_PUBLISHED_RAW_CONTINUOUS_MODEL_VERSION,
+      PROSPECTIVE_PUBLISHED_RAW_CONTINUOUS_MODEL_VERSION,
+      "saved v2 rawProbability24h/rawProbability48h",
+      (origin) => origin.rawContinuous,
+      events,
+      asOf,
+    ),
+    v1: createUnifiedSeries(
+      origins,
+      PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+      PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+      "prediction_history.debug_info.experimentalProbabilityForecasts",
+      (origin) => origin.v1,
+      events,
+      asOf,
+    ),
+  };
+}
+
+function createUnifiedSubset(
+  origins: Array<UnifiedPublishedOrigin>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+): PublishedUnifiedSubset {
+  return {
+    originCount: origins.length,
+    origins: origins.map((origin) => origin.row.generatedAt),
+    series: createUnifiedSeriesSet(origins, events, asOf),
+  };
+}
+
+function compareUnifiedSeries(
+  candidate: PublishedUnifiedModelSeries,
+  current: PublishedUnifiedModelSeries,
+) {
+  return {
+    brier24h: difference(candidate.metrics24h.brier, current.metrics24h.brier, candidate.metrics24h.count),
+    brier48h: difference(candidate.metrics48h.brier, current.metrics48h.brier, candidate.metrics48h.count),
+    logLoss24h: difference(candidate.metrics24h.logLoss, current.metrics24h.logLoss, candidate.metrics24h.count),
+    logLoss48h: difference(candidate.metrics48h.logLoss, current.metrics48h.logLoss, candidate.metrics48h.count),
+  };
+}
+
+function buildUnifiedComparison(
+  dailyRows: Array<ProspectiveForecastRow>,
+  events: Array<ShadowResetEvent>,
+  asOf: Date,
+  v3Forecasts: Record<string, ProspectiveStoredForecast> | undefined,
+): PublishedUnifiedComparison {
+  const origins = getUnifiedPublishedOrigins(dailyRows, v3Forecasts);
+  const series = createUnifiedSeriesSet(origins, events, asOf);
+  const activeOrigins = origins.filter((origin) => origin.currentV2.officialNoticeOverride !== true);
+  const noFinalDisplayOverlay = origins.filter((origin) =>
+    origin.finalDisplayed.finalDisplaySpecialOverlay !== true,
+  );
+  const noticeOverrideOrigins = origins.filter((origin) => origin.currentV2.officialNoticeOverride === true);
+  const postResetOrigins = origins.filter((origin) => {
+    const metadata = getSavedPostResetMetadata(origin.currentV2);
+    return metadata !== null && metadata.elapsedHours > 0 && metadata.elapsedHours <= 24;
+  });
+  return {
+    originCount: origins.length,
+    origins: origins.map((origin) => origin.row.generatedAt),
+    series,
+    subsets: {
+      noOfficialNotice: createUnifiedSubset(activeOrigins, events, asOf),
+      noFinalDisplaySpecialOverlay: createUnifiedSubset(noFinalDisplayOverlay, events, asOf),
+      noticeOverrideActive: createUnifiedSubset(noticeOverrideOrigins, events, asOf),
+      latestRandomReset0To24h: createUnifiedSubset(postResetOrigins, events, asOf),
+    },
+    deltaVsCurrentV2: {
+      finalDisplayed: compareUnifiedSeries(series.finalDisplayed, series.currentV2),
+      v3: compareUnifiedSeries(series.v3, series.currentV2),
+      rawContinuous: compareUnifiedSeries(series.rawContinuous, series.currentV2),
+      v1: compareUnifiedSeries(series.v1, series.currentV2),
+    },
+    retrospectiveV3: true,
   };
 }
 
@@ -641,6 +908,12 @@ export function evaluatePublishedModelProspectively(
     models: { active, baseline },
     canonicalRandomResetEvents,
     postResetDiagnostic: calculatePostResetDiagnostic(comparableRows, events, asOf),
+    unifiedComparison: buildUnifiedComparison(
+      dailyRows,
+      events,
+      asOf,
+      options.v3Forecasts,
+    ),
     gate: {
       autoPublish: false,
       manualReviewOnly: true,
@@ -659,6 +932,7 @@ export function evaluatePublishedModelProspectively(
       "The daily representative is the first saved forecast in each Asia/Tokyo calendar day; unresolved 24h/48h horizons are excluded.",
       "Target positives are completed broad-scope random reset events only; regular reset boundaries are not random target positives.",
       "The post-reset 0-24h section is a separate descriptive diagnostic using the first saved comparable origin per canonical random reset; it never affects the primary gate or manual-review status.",
+      "The unified model comparison uses the same daily-first origins and canonical truth for final displayed, v3 retrospective, current v2, raw continuous, and v1 series; v3 is point-in-time retrospective only and never affects the primary gate or status.",
       adoptionBoundaryNote,
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,

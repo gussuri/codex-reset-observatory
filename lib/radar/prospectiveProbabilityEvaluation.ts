@@ -21,7 +21,7 @@ export const PROSPECTIVE_GATE_THRESHOLDS = {
   maxLogLossWorsening: 0.05,
 } as const;
 
-type StoredExperimentalForecast = {
+export type ProspectiveStoredForecast = {
   modelVersion: string;
   generatedAt: string;
   probability24h: number;
@@ -32,7 +32,9 @@ type StoredExperimentalForecast = {
 export type ProspectiveForecastRow = {
   loggedHour?: string | null;
   generatedAt: string;
-  forecasts: Record<string, StoredExperimentalForecast>;
+  forecasts: Record<string, ProspectiveStoredForecast>;
+  /** Top-level prediction_history values used by the public response. */
+  finalDisplayed?: ProspectiveStoredForecast;
 };
 
 export type ProspectiveCalibrationBucket = {
