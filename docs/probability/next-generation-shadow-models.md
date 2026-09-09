@@ -1,9 +1,10 @@
 # 次世代確率モデルの運用と公開状態
 
-公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）のmanual adoption boundary前は `hazard-regime-random-continuous-calibrated-v1`（Model B）、boundary以後は `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/Cはshadowとして観測します。
+公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-09T23:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、それ以後は `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid v3）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/Cはshadowとして観測します。
 
-- B v1: `hazard-regime-random-continuous-calibrated-v1`（boundary前のruntime/public baseline、v2のprevious model）
-- B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（boundary以後のruntime/public model）
+- B v1: `hazard-regime-random-continuous-calibrated-v1`（2026-08-23T02:04:00.000Z以後のhistorical public model）
+- B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（2026-09-01T08:00:00.000Z以後、v3 boundary前のpublic model）
+- selective hybrid v3: `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（2026-09-09T23:00:00.000Z以後のruntime/public model、24h diagnostic-only / 48h apply）
 - A: `hazard-ensemble-logit-stack-v1`（shadow）
 - C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
@@ -13,15 +14,16 @@
 - adoption mode: manual
 - gate status: not_met
 - auto publish: false（gateはmanual review only）
-- v2 adoption boundary: `2026-09-01T08:00:00.000Z`（`production_boundary_set`）
+- v2 adoption boundary: `2026-09-01T08:00:00.000Z`（historical `production_boundary_set`）
+- selective hybrid v3 adoption boundary: `2026-09-09T23:00:00.000Z`（`production_boundary_set`）
 - v2 calibration training source: B v1
 - backfill: false
 
 ## 保存経路
 
-B v1の公開forecastは公開確率pathで計算されます。logging cycleでは同一originについてB v1とB v2を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存し、v2のProduction boundary前後を分離して比較できるようにします。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
+B v1の公開forecastは公開確率pathで計算されます。logging cycleでは同一originについてB v1、B v2、selective hybrid v3を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存し、それぞれのProduction boundaryを分離して比較できるようにします。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
 
-B v2の差分は0–24h post-reset ageに対するregime multiplier attenuationだけです。prequential calibration rows、alpha、sample count、signal policy、official notice/teaser policyはB v1から継承し、過去training rowやprediction rowを再ラベルしません。prospective evaluatorは明示的なv2 boundary以後に生成された同一originのB v2/B v1だけを比較します。
+B v2の差分は0–24h post-reset ageに対するregime multiplier attenuationだけです。selective hybrid v3はこの計算を継承し、24hのcalibrationをdiagnostic-only、48hのcalibrationをapplyします。prequential calibration rows、alpha、sample count、signal policy、official notice/teaser policyはB v1から継承し、過去training rowやprediction rowを再ラベルしません。prospective evaluatorは各明示boundary以後に生成された同一originの対象モデルだけを比較します。
 
 prediction historyはlogging cycleで1回だけreadし、Bのraw forecast calibration、Aのensemble training、Cのfuture-only calibrationで共有する。Cのcontext係数自体はprediction historyから学習するのではなく、各origin時点までに利用可能なeligible random-reset履歴からpoint-in-timeで推定する。
 
@@ -41,7 +43,7 @@ corepack pnpm run evaluate:prospective-next-generation
 
 ## B: Explainable Random Continuous
 
-B v1はrandom-reset-only Gaussian continuous hazardを主軸とする現在のruntime/public baselineです。B v2はこのB v1を継承した公開切替候補で、boundary設定後だけpublic pathへ昇格します。
+B v1はrandom-reset-only Gaussian continuous hazardを主軸とするhistorical public modelです。B v2はこのB v1を継承した、selective hybrid v3より前のpublic modelです。selective hybrid v3は同じ計算を使い、24hだけcalibrationをdiagnostic-onlyにします。
 
 - Gaussian bandwidth: 24h
 - exposure grid: 1h

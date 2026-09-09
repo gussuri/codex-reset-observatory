@@ -30,15 +30,19 @@ export const NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS = 24;
 // audit identity, not a new calibration fit or a backfill instruction.
 export const NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION =
   NEXT_GENERATION_B_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
-// This explicit UTC boundary is after the promotion-ready deployment and is
-// the point from which v2 becomes the public model. Earlier rows stay historic.
-export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = "2026-09-01";
-export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-01T08:00:00.000Z";
-export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
+// This explicit UTC boundary is the point from which selective-calibration v3
+// becomes the public model. Earlier rows stay historic.
+export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = "2026-09-10";
+export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-09T23:00:00.000Z";
+// The previous public model is v2, adopted at its own historical boundary.
+export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-09-01T08:00:00.000Z";
+// B v1 remains a historical runtime period before v2. Keep this separate from
+// the public previous-model metadata so the selector preserves all boundaries.
+export const PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS =
   "production_boundary_set" as const;
 export const PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION =
@@ -79,7 +83,8 @@ export const RANDOM_CONTINUOUS_SHADOW_PROBE_AGES_HOURS = [
 
 // Next-generation model identities are independently preregistered. Keep their
 // identity and freeze boundary separate from the existing model aliases;
-// B is public after its manual adoption boundary while A/C remain shadows.
+// the selected B-family variant is public after its manual adoption boundary
+// while A/C remain shadows.
 export const NEXT_GENERATION_A_MODEL_VERSION = "hazard-ensemble-logit-stack-v1";
 export const NEXT_GENERATION_B_RAW_MODEL_VERSION = RANDOM_CONTINUOUS_SHADOW_MODEL_VERSION;
 export const NEXT_GENERATION_FREEZE_AT = "2026-08-21T03:27:00.000Z";

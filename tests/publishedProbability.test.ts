@@ -19,6 +19,7 @@ import {
   LEGACY_SHADOW_PROBABILITY_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
@@ -42,11 +43,11 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
-test("the calibrated public model remains the previous baseline after B adoption", () => {
+test("the selective hybrid public model keeps v2 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
 test("Shadow values stay aligned across DTO, UI, and history fields", () => {
@@ -87,7 +88,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -144,7 +145,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.equal(publishedDebug.source, "calibrated");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionMode: string }).adoptionMode, "manual");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionGateStatus: string }).adoptionGateStatus, "not_met");
-  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string | null }).adoptionDate, "2026-09-01");
+  assert.equal((debugInfo.publishedProbabilityModel as { adoptionDate: string | null }).adoptionDate, "2026-09-10");
   assert.equal((debugInfo.publishedProbabilityModel as { adoptionAt: string | null }).adoptionAt, PUBLISHED_PROBABILITY_ADOPTION_AT);
   assert.equal((debugInfo.publishedProbabilityModel as { previousAdoptionAt: string }).previousAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT);
   assert.equal(publishedDebug.probability12h, snapshot.viewModel.probability12h);

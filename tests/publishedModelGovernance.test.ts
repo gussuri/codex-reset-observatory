@@ -13,6 +13,7 @@ import {
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_EVALUATION_MODE,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
@@ -31,14 +32,14 @@ const GOVERNANCE_DOC = resolve("docs/probability/published-model-governance.md")
 const PUBLISHED_EVALUATION_DOC = resolve("docs/prospective-published-model-evaluation.md");
 const NEXT_GENERATION_DOC = resolve("docs/probability/next-generation-shadow-models.md");
 
-test("published model governance config records the manual v2 activation boundary", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_MODEL_VERSION);
+test("published model governance config records the manual selective hybrid activation boundary", () => {
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_MODE, "manual");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-09-01");
-  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-01T08:00:00.000Z");
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-08-23T02:04:00.000Z");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-09-10");
+  assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, "2026-09-09T23:00:00.000Z");
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT, "2026-09-01T08:00:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS, "production_boundary_set");
   assert.equal(
     NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
@@ -52,7 +53,7 @@ test("published model governance config records the manual v2 activation boundar
   assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
 });
 
-test("the previous B remains effective before the explicit v2 boundary", () => {
+test("the previous B v1 remains effective before the explicit v2 boundary", () => {
   const now = new Date("2026-08-23T02:10:00.000Z");
   const published = calculatePublishedProbability(
     getLocalRadarData({ calculationNow: now }),
@@ -69,7 +70,7 @@ test("the previous B remains effective before the explicit v2 boundary", () => {
   assert.equal(published.fallbackReason, null);
 });
 
-test("prospective evaluation notes name the v2 boundary and B v1 as its baseline", () => {
+test("prospective evaluation notes name the selective hybrid boundary and v2 as its baseline", () => {
   const report = evaluatePublishedModelProspectively(
     [],
     [],

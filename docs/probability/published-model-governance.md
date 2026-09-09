@@ -1,32 +1,45 @@
 # 公開確率モデルのgovernance記録
 
-この文書は、2026-09-01時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
+この文書は、2026-09-10時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
 
 ## Current status
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（boundary以後） | `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（post-reset-age model） |
-| boundary前のruntime/public baseline | `hazard-regime-random-continuous-calibrated-v1`（Model B） |
-| 比較用のprevious model | `hazard-regime-random-continuous-calibrated-v1`（Model B） |
+| 公開モデル（2026-09-09T23:00:00.000Z以後） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（selective hybrid） |
+| 比較用のprevious model | `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2） |
+| v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
-| v2 adoption date | `2026-09-01` |
-| v2 adoption timestamp | `2026-09-01T08:00:00.000Z` |
-| previous B adoption timestamp | `2026-08-23T02:04:00.000Z` |
+| selective hybrid adoption date | `2026-09-10` |
+| selective hybrid adoption timestamp | `2026-09-09T23:00:00.000Z` |
+| previous v2 adoption timestamp | `2026-09-01T08:00:00.000Z` |
+| previous B v1 adoption timestamp | `2026-08-23T02:04:00.000Z` |
 | prospective gate status | `not_met` |
-| v2 boundary status | `production_boundary_set` |
+| current boundary status | `production_boundary_set` |
 | v2 calibration training source | `hazard-regime-random-continuous-calibrated-v1` |
 
-Model A（`hazard-ensemble-logit-stack-v1`）とModel C（`hazard-contextual-burst-circadian-v1`）はshadow/evaluation用です。v2候補はB v1のcalibration training rowsを継承し、post-reset ageのregime attenuationだけを追加します。signal policy、calibration、過去rowのラベルは変更しません。
+Model A（`hazard-ensemble-logit-stack-v1`）とModel C（`hazard-contextual-burst-circadian-v1`）はshadow/evaluation用です。selective hybrid v3は既存のpost-reset age計算を使い、24hのcalibrationをdiagnostic-only、48hのcalibrationを適用します。official notice override、teaser policy、horizon coherence、B v1由来のcalibration training identityは変更しません。
 
 ## Gate and manual adoption
 
-`not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでv2を自動publishしたり、旧Bを自動rollbackしたりしません。
+`not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3を自動publishしたり、v2を自動rollbackしたりしません。
 
-v2のProduction adoption boundaryは`2026-09-01T08:00:00.000Z`（UTC）に設定しています。boundary前はruntimeが旧B v1を使用し、boundary以後はv2の予測が有効な場合にv2を選択します。無効・例外の場合は従来どおりのfallback chainへ退避し、過去のforecast rowをv2として再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-09T23:00:00.000Z`（UTC）に設定しています。`2026-09-01T08:00:00.000Z`以後かつ現行boundary前はv2、その前はB v1を使用します。現行boundary以後はselective hybrid v3の予測が有効な場合に選択します。無効・例外の場合は従来どおりのfallback chainへ退避し、過去のforecast rowを新しいモデルとして再ラベルしません。
 
-logging cycleでは、同じoriginについてv2と旧B v1を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは`2026-09-01T08:00:00.000Z`以後に生成されたforecastだけをv2と旧Bの比較対象にし、boundary前のrowは保持するだけです。
+logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは採用境界ごとに対象期間を分離し、過去boundary前のrowを現行モデルとして再利用しません。
+
+## 2026-09-01 previous v2 adoption record
+
+- adoption timestamp: `2026-09-01T08:00:00.000Z`
+- adopted model: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`
+- previous model: `hazard-regime-random-continuous-calibrated-v1`
+- adoption mode: `manual`
+- gate status at adoption: `not_met`
+- backfill: 実施しない
+- auto-publish: 実施しない
+
+この記録はselective hybrid v3より前の公開期間を表します。過去のv2 reportやprediction rowを現行hybridの実績へ混ぜません。
 
 ## 2026-08-23 previous B adoption record
 
@@ -43,17 +56,17 @@ logging cycleでは、同じoriginについてv2と旧B v1を`prediction_history
 
 ## Evaluation status
 
-evaluationはprospective-onlyです。v2のraw model差分は0–24h post-reset ageのregime attenuationだけで、calibrationは旧B v1から継承します。既存のgate条件はtarget reset数、resolved daily 24h/48h数、Brier、log lossを使うmanual-review用の診断です。gateを満たしても公開モデルは自動変更されません。
+evaluationはprospective-onlyです。selective hybrid v3は0–24h post-reset ageの既存計算を継承し、24hはcalibrationをdiagnostic-only、48hはv2と同じcalibrationを適用します。既存のgate条件はtarget reset数、resolved daily 24h/48h数、Brier、log lossを使うmanual-review用の診断です。gateを満たしても公開モデルは自動変更されません。
 
-過去のnext-generation evaluation reportやpublished-model reportはhistorical snapshotとして保持します。これらの過去値をv2の実績へ混ぜたり、prediction historyを遡及して書き換えたりしません。v2の性能差は、明示的なProduction boundary以後に同一originで保存されたv2/旧Bのprospective dataが十分に蓄積されてから評価します。
+過去のnext-generation evaluation reportやpublished-model reportはhistorical snapshotとして保持します。これらの過去値をselective hybrid v3やv2の実績へ混ぜたり、prediction historyを遡及して書き換えたりしません。現行hybridの性能差は、明示的なProduction boundary以後に同一originで保存されたhybrid/v2のprospective dataが十分に蓄積されてから評価します。
 
 ## Rollback criteria
 
-rollbackは自動化せず、既存のprospective evaluationとmanual reviewで判断します。少なくとも次のいずれかを確認した場合は、v2と旧Bの比較を再確認します。
+rollbackは自動化せず、既存のprospective evaluationとmanual reviewで判断します。少なくとも次のいずれかを確認した場合は、selective hybrid v3とv2の比較を再確認します。
 
 - material calibration regression
 - runtime or model failure
-- 旧Bに対して明らかに悪いprospective performance
+- v2に対して明らかに悪いprospective performance
 
 これは運用上の判断条件であり、未承認の新しい数値thresholdを追加するものではありません。十分なresolved sampleが得られた後は、既存gateと比較指標、runtimeの安定性、point-in-time境界をまとめてレビューします。rollbackを行う場合も、過去のevaluation reportやprediction historyを遡って書き換えません。
 

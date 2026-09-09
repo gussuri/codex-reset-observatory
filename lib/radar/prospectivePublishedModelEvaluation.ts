@@ -1156,7 +1156,8 @@ export function evaluatePublishedModelProspectively(
   const adoptionAt = timestamp(configuredAdoptionValue);
   // An explicit null remains a useful test/audit override meaning "evaluate
   // without a boundary". The committed production default is different:
-  // null means v2 has not been cut over and must not score any rows yet.
+  // null means the configured public model has not been cut over and must not
+  // score any rows yet.
   const adoptionBoundaryPending = usesConfiguredBoundary && adoptionAt === null;
   const isAfterAdoption = (generatedAt: string) => {
     const generatedTime = timestamp(generatedAt);
@@ -1218,7 +1219,7 @@ export function evaluatePublishedModelProspectively(
           : "promising";
 
   const adoptionBoundaryNote = adoptionBoundaryPending
-    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} production adoption boundary is not configured; no forecast rows are evaluated as v2 and no history is relabeled.`
+    ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} production adoption boundary is not configured; no forecast rows are evaluated as the adopted public model and no history is relabeled.`
     : `Only forecasts generated at or after the manual adoption boundary ${new Date(adoptionAt!).toISOString()} are evaluated as the adopted public model ${PUBLISHED_PROBABILITY_MODEL_VERSION}; earlier rows remain historical data and are not relabeled.`;
   const adoptionStatusNote = adoptionBoundaryPending
     ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion has no explicit Production adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`

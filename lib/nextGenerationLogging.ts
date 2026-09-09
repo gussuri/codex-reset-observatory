@@ -5,6 +5,7 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
@@ -32,6 +33,7 @@ import {
 import {
   calculateNextGenerationBPostResetAgeCandidate,
   calculateNextGenerationBProbability,
+  calculateNextGenerationSelectiveCalibrationProbability,
   type NextGenerationBResult,
 } from "./radar/nextGenerationProbability";
 import {
@@ -361,8 +363,19 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
         [NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION]: toCommonForecast(postResetAgeResult),
       }
     : withB;
+  const selectiveCalibrationResult = calculateNextGenerationSelectiveCalibrationProbability(
+    options.data,
+    bCalculationOptions,
+  );
+  const selectiveCalibrationValid = isValidBResult(selectiveCalibrationResult);
+  const withAllBVariants: ExperimentalProbabilityForecasts = selectiveCalibrationValid
+    ? {
+        ...withBVariants,
+        [NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION]: toCommonForecast(selectiveCalibrationResult),
+      }
+    : withBVariants;
 
-  let withA = withBVariants;
+  let withA = withAllBVariants;
   if (bValid) {
     const components = Object.fromEntries(
       NEXT_GENERATION_A_COMPONENT_VERSIONS.map((modelVersion) => {

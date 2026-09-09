@@ -5,6 +5,7 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
@@ -261,7 +262,7 @@ test("the age-attenuated B candidate has a distinct version and is the configure
     candidate.regimeMultiplierPolicyVersion,
     NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 
 test("the candidate preserves the existing signal multiplier policy", () => {

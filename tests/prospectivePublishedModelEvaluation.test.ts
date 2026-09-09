@@ -82,11 +82,11 @@ function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
-test("published prospective evaluation uses v2 after its boundary and B v1 as the baseline", () => {
+test("published prospective evaluation uses selective hybrid v3 after its boundary and v2 as the baseline", () => {
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, PUBLISHED_PROBABILITY_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, "hazard-regime-random-continuous-calibrated-v1");
+  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
 test("published metric formatting includes bias without breaking legacy metric callers", () => {

@@ -2,6 +2,8 @@ import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
@@ -31,6 +33,7 @@ import {
 import {
   calculateNextGenerationBPostResetAgeCandidate,
   calculateNextGenerationBProbability,
+  calculateNextGenerationSelectiveCalibrationProbability,
   type NextGenerationBResult,
   type NextGenerationCalibrationRow,
   type NextGenerationTrainingReadStatus,
@@ -67,8 +70,12 @@ function parseAdoptionTime(value: string | null | undefined) {
 const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME = parseAdoptionTime(
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
 );
+const PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_TIME = parseAdoptionTime(
+  PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
+);
 
 export type PublishedNextGenerationBModel =
+  | "selective-calibration-candidate"
   | "post-reset-age-candidate"
   | "previous-b"
   | null;
@@ -81,11 +88,17 @@ export function getPublishedNextGenerationBModel(
   if (!Number.isFinite(nowTime)) return null;
   const candidateAdoptionTime = parseAdoptionTime(adoptionAt);
   if (candidateAdoptionTime !== null && nowTime >= candidateAdoptionTime) {
-    return "post-reset-age-candidate";
+    return "selective-calibration-candidate";
   }
   if (
     PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME !== null
     && nowTime >= PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_TIME
+  ) {
+    return "post-reset-age-candidate";
+  }
+  if (
+    PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_TIME !== null
+    && nowTime >= PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_TIME
   ) {
     return "previous-b";
   }
@@ -145,7 +158,8 @@ export function isValidNextGenerationBPrediction(
   const { predictions } = result;
   return (
     (result.modelVersion === NEXT_GENERATION_B_MODEL_VERSION
-      || result.modelVersion === NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION) &&
+      || result.modelVersion === NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION
+      || result.modelVersion === NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION) &&
     Number.isFinite(predictions.probability12h) &&
     Number.isFinite(predictions.probability24h) &&
     Number.isFinite(predictions.probability48h) &&
@@ -435,9 +449,11 @@ export function calculatePublishedProbability(
 
   if (nextGenerationBModel !== null) {
     try {
-      const calculateB = nextGenerationBModel === "post-reset-age-candidate"
-        ? calculateNextGenerationBPostResetAgeCandidate
-        : calculateNextGenerationBProbability;
+      const calculateB = nextGenerationBModel === "selective-calibration-candidate"
+        ? calculateNextGenerationSelectiveCalibrationProbability
+        : nextGenerationBModel === "post-reset-age-candidate"
+          ? calculateNextGenerationBPostResetAgeCandidate
+          : calculateNextGenerationBProbability;
       nextGenerationB = calculateB(data, {
         ...publicModelOptions,
         trainingRows: resolvedTrainingRows,
