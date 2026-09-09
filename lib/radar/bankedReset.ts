@@ -70,7 +70,7 @@ export type BankedNoticeTiming = {
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
 const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
 const COMPENSATION_DISTRIBUTION_PATTERN =
-  /\b(?:get|gets|getting|receive|receives|receiving|be\s+(?:given|sent|issued|delivered))\b[\s\S]{0,60}\b(?:another|additional|replacement|one|reset|credit)\b/i;
+  /\b(?:get|gets|getting|receive|receives|receiving|be\s+(?:given|sent|issued|delivered))\b[\s\S]{0,60}\b(?:another\s+(?:one|banked\s+resets?|reset(?:\s+credits?)?|credits?)|(?:an?\s+)?(?:additional|replacement)\s+(?:banked\s+)?(?:resets?|credits?))\b/i;
 const NOTICE_CLAUSE_SEPARATOR = /[.!?。！？]+|\bPS\s*:\s*/i;
 
 function hasResetCreditTerm(text: string) {
@@ -80,8 +80,12 @@ function hasResetCreditTerm(text: string) {
 function hasDistributionTerm(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => {
     const resetIndex = clause.search(BANKED_RESET_TERM_PATTERN);
-    const distributionIndex = clause.search(DISTRIBUTION_TERM_PATTERN);
-    return resetIndex >= 0 && distributionIndex >= 0 && Math.abs(resetIndex - distributionIndex) <= 120;
+    const distributionMatch = clause.match(DISTRIBUTION_TERM_PATTERN);
+    if (resetIndex < 0 || !distributionMatch || distributionMatch.index === undefined) return false;
+
+    const isNounIssue = /^issues?$/i.test(distributionMatch[0]) &&
+      /\b(?:an?|the)\s+issues?\b/i.test(clause);
+    return !isNounIssue && Math.abs(resetIndex - distributionMatch.index) <= 120;
   });
 }
 

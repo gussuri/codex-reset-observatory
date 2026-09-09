@@ -73,3 +73,36 @@ test("does not treat a vague personal replacement as a BANKED distribution", () 
     false,
   );
 });
+
+test("ties cross-sentence compensation to a reset or credit target", () => {
+  assert.equal(
+    isBankedDistributionNotice(
+      "Banked resets had an issue. Everyone who used one in the affected time window is getting another one.",
+    ),
+    true,
+  );
+  assert.equal(
+    isBankedDistributionNotice(
+      "Banked resets had an issue. Everyone who was affected will receive an additional reset credit.",
+    ),
+    true,
+  );
+  assert.equal(
+    isBankedDistributionNotice(
+      "Banked resets had an issue. Everyone who was affected will be given a replacement banked reset.",
+    ),
+    true,
+  );
+  assert.equal(
+    isBankedDistributionNotice(
+      "Banked resets had an issue. Everyone who used one is getting another email.",
+    ),
+    false,
+  );
+  assert.equal(
+    isBankedDistributionNotice(
+      "Banked resets had an issue. Everyone who used one is getting an email.",
+    ),
+    false,
+  );
+});
