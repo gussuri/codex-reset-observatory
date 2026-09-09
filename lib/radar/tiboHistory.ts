@@ -1794,8 +1794,9 @@ function buildBankedDistributionEvent(
   const isTargetCompensation =
     notice.tweet_id === "2097752790177370535" || isConditionalNotice;
   const scope = isTargetCompensation ? "一部ユーザー" : "全有料プラン";
+  const reasonType = isTargetCompensation ? "詫びリセット" : "ご祝儀リセット";
   const note = isTargetCompensation
-    ? "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。"
+    ? "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。"
     : "任意リセット権の配布が確認されました。";
   const summary = note;
 
@@ -1821,7 +1822,7 @@ function buildBankedDistributionEvent(
     officialNoticeTweetId: notice.tweet_id,
     details: {
       cycleType: "ランダムリセット",
-      reasonType: "ご祝儀リセット",
+      reasonType,
       resetMethod: "任意リセット権配布",
       scope,
       noticeToExecution: formatNoticeToExecution(noticeMinutes),

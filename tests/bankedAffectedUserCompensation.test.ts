@@ -64,9 +64,10 @@ test("keeps affected-user BANKED compensation in history but out of the broad ra
   assert.equal(event.randomResetTargetScope, "conditional");
   assert.equal(event.scope, "一部ユーザー");
   assert.equal(event.details?.scope, "一部ユーザー");
+  assert.equal(event.details?.reasonType, "詫びリセット");
   assert.equal(
     event.details?.note,
-    "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。",
+    "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。",
   );
 
   const completedAt = Date.parse(event.completed_at ?? event.closed_at ?? event.date ?? "");
@@ -87,17 +88,20 @@ test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt,
   const expectedLocalized = {
     ja: {
       scope: "一部ユーザー",
-      note: "影響時間帯に任意リセット権を使用したユーザーへ、補償として任意リセット権が再配布されました。",
+      reasonType: "詫びリセット",
+      note: "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。",
       scopeLabel: "対象",
     },
     en: {
       scope: "Some users",
-      note: "Banked Resets were redistributed as compensation to users who used a Banked Reset during the affected time window.",
+      reasonType: "Compensation reset",
+      note: "An issue occurred this morning where some Banked Resets did not fully apply when used in ChatGPT Work and Codex. All users who used one during the affected time window are receiving an apology email along with a replacement Banked Reset.",
       scopeLabel: "Eligibility",
     },
     zh: {
       scope: "部分用户",
-      note: "作为补偿，已向在受影响时段内使用过手动重置的用户重新发放了手动重置。",
+      reasonType: "故障补偿重置",
+      note: "今早 ChatGPT Work 和 Codex 出现部分手动重置（banked reset）使用后未完全生效的问题。所有在受影响时段内使用过手动重置的用户都将收到一封致歉邮件以及补发的手动重置机会。",
       scopeLabel: "适用对象",
     },
   } as const;
@@ -121,6 +125,7 @@ test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt,
     );
     assert.equal(historyItem.scope, expectedLocalized[locale].scope);
     assert.equal(historyItem.details?.scope, expectedLocalized[locale].scope);
+    assert.equal(historyItem.details?.reasonType, expectedLocalized[locale].reasonType);
     assert.equal(historyItem.details?.note, expectedLocalized[locale].note);
 
     // UI rendering test for this event: displays "対象: 一部ユーザー" (or localized)
@@ -132,6 +137,7 @@ test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt,
     );
     assert.match(html, new RegExp(expectedLocalized[locale].scopeLabel));
     assert.match(html, new RegExp(expectedLocalized[locale].scope));
+    assert.match(html, new RegExp(expectedLocalized[locale].reasonType));
     assert.match(html, new RegExp(expectedLocalized[locale].note.slice(0, 10)));
 
     // UI rendering test for existing "全有料プラン" items: does NOT display "対象" row

@@ -712,6 +712,7 @@ function getMonitorOnlyExecutionEstimate(
 
 const CANONICAL_HISTORY_REASON_BY_EVENT_KEY: Partial<Record<string, ResetReasonType>> = {
   "usage-reset-41c8ec4e-f752-4e5b-b685-4af67a1e6925": "詫びリセット",
+  "banked-reset-2097752790177370535": "詫びリセット",
 };
 
 function getCanonicalHistoryReasonType(item: WindowLike & { kind?: string }) {

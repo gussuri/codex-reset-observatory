@@ -1646,6 +1646,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "Banked Resets were redistributed as compensation to users who used a Banked Reset during the affected time window.",
     zh: "作为补偿，已向在受影响时段内使用过手动重置的用户重新发放了手动重置。",
   },
+  "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。": {
+    ja: "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。",
+    en: "An issue occurred this morning where some Banked Resets did not fully apply when used in ChatGPT Work and Codex. All users who used one during the affected time window are receiving an apology email along with a replacement Banked Reset.",
+    zh: "今早 ChatGPT Work 和 Codex 出现部分手动重置（banked reset）使用后未完全生效的问题。所有在受影响时段内使用过手动重置的用户都将收到一封致歉邮件以及补发的手动重置机会。",
+  },
   "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。": {
     ja: "Tibo氏（OpenAI Codex開発者）が、明日アクティブユーザー数700万人突破を記念して全有料ユーザーに任意リセット枠（banked reset）1回分を付与すると発表しました。",
     en: "Tibo (OpenAI Codex developer) announced that a Banked Reset would be granted to all paid users tomorrow to celebrate reaching 7 million active users.",
