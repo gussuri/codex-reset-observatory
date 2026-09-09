@@ -69,6 +69,8 @@ export type BankedNoticeTiming = {
 
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
 const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
+const COMPENSATION_DISTRIBUTION_PATTERN =
+  /\b(?:get|gets|getting|receive|receives|receiving|be\s+(?:given|sent|issued|delivered))\b[\s\S]{0,60}\b(?:another|additional|replacement|one|reset|credit)\b/i;
 const NOTICE_CLAUSE_SEPARATOR = /[.!?。！？]+|\bPS\s*:\s*/i;
 
 function hasResetCreditTerm(text: string) {
@@ -80,6 +82,19 @@ function hasDistributionTerm(text: string) {
     const resetIndex = clause.search(BANKED_RESET_TERM_PATTERN);
     const distributionIndex = clause.search(DISTRIBUTION_TERM_PATTERN);
     return resetIndex >= 0 && distributionIndex >= 0 && Math.abs(resetIndex - distributionIndex) <= 120;
+  });
+}
+
+function hasAdjacentConditionalCompensationDistribution(text: string) {
+  const clauses = text.split(NOTICE_CLAUSE_SEPARATOR);
+  return clauses.some((_, index) => {
+    const windowStart = Math.max(0, index - 1);
+    const windowEnd = Math.min(clauses.length, index + 2);
+    const adjacentText = clauses.slice(windowStart, windowEnd).join(" ");
+    return hasResetCreditTerm(adjacentText) &&
+      hasBroadScopeTerm(adjacentText) &&
+      hasLocallyAttachedConditionalAudience(adjacentText) &&
+      COMPENSATION_DISTRIBUTION_PATTERN.test(adjacentText);
   });
 }
 
@@ -172,10 +187,12 @@ function hasLocallyAttachedConditionalAudience(text: string) {
 export function isBankedDistributionNotice(text: string | null | undefined) {
   if (typeof text !== "string") return false;
   const normalized = text.trim();
-  return normalized.length > 0 && normalized.split(NOTICE_CLAUSE_SEPARATOR).some((clause) =>
-    hasResetCreditTerm(clause) &&
-    (!hasPersonalBankedOperation(clause) || hasBroadBankedDistributionClause(clause)) &&
-    (hasDistributionTerm(clause) || hasFutureBankedExecutionCue(clause))
+  return normalized.length > 0 && (
+    normalized.split(NOTICE_CLAUSE_SEPARATOR).some((clause) =>
+      hasResetCreditTerm(clause) &&
+      (!hasPersonalBankedOperation(clause) || hasBroadBankedDistributionClause(clause)) &&
+      (hasDistributionTerm(clause) || hasFutureBankedExecutionCue(clause))
+    ) || hasAdjacentConditionalCompensationDistribution(normalized)
   );
 }
 

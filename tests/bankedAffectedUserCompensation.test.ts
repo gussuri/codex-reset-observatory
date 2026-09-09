@@ -37,6 +37,11 @@ const estimate = {
   officialNoticeTweetId: notice.tweet_id,
   officialNoticeAt: notice.tweet_created_at,
   estimatorVersion: "banked-distribution-observation-v2",
+  manualOverrideAt: "2026-09-09T18:24:00.000Z",
+  manualOverrideBy: "operator",
+  manualOverrideReason: "Production manual correction for the affected-user compensation notice.",
+  manualExecutionAt: "2026-09-09T18:23:34.000Z",
+  manualExecutionPrecision: "approximate" as const,
 };
 
 test("recognizes affected-user BANKED compensation across adjacent sentences", () => {
