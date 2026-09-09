@@ -59,6 +59,7 @@ import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
 import { TiboActivityCard } from "@/components/TiboActivityCard";
 import { formatElapsedResetDuration, isSafeHttpUrl } from "@/lib/radar/helpers";
+import { resolveManualOutlook, type ActiveManualOutlook } from "@/data/manualOutlook";
 
 function createUnavailableRadarViewModel(locale: Locale): PublicRadarSnapshot["viewModel"] {
   const unknown = translateUI("unknownProbability", locale);
@@ -895,6 +896,10 @@ export function RadarDashboard({
       : viewModel.displayReasoningSummary,
     locale,
   );
+  const activeManualOutlook = resolveManualOutlook(
+    state.fetchedAt ?? initialFetchedAt,
+    locale,
+  );
   const timedTeaserOutlook = getTimedTeaserOutlookTemplate(
     selectedTiboActivity,
     resetTeaserStatus,
@@ -1133,19 +1138,40 @@ export function RadarDashboard({
             </div>
 
             <dl className="mt-4 space-y-3">
-              {compactOutlookReason ? (
+              {activeManualOutlook || compactOutlookReason ? (
                 <RecommendationRow
                   reason={
-                    timedTeaserOutlook ? (
+                    activeManualOutlook ? (
+                      activeManualOutlook.message
+                    ) : timedTeaserOutlook ? (
                       <TimedTeaserOutlook
                         template={timedTeaserOutlook.template}
                         startAt={timedTeaserOutlook.startAt}
                         endAt={timedTeaserOutlook.endAt}
                         locale={locale}
                       />
-                    ) : compactOutlookReason
+                    ) : (
+                      compactOutlookReason
+                    )
                   }
                   locale={locale}
+                  manualOutlook={
+                    activeManualOutlook
+                      ? {
+                          ...activeManualOutlook,
+                          systemReason: activeManualOutlook.showSystemReasonBelow
+                            ? timedTeaserOutlook ? (
+                                <TimedTeaserOutlook
+                                  template={timedTeaserOutlook.template}
+                                  startAt={timedTeaserOutlook.startAt}
+                                  endAt={timedTeaserOutlook.endAt}
+                                  locale={locale}
+                                />
+                              ) : compactOutlookReason
+                            : undefined,
+                        }
+                      : null
+                  }
                 />
               ) : null}
             </dl>
@@ -1402,10 +1428,72 @@ export function RadarDashboard({
 function RecommendationRow({
   reason,
   locale = "ja",
+  manualOutlook,
 }: {
   reason: React.ReactNode;
   locale?: Locale;
+  manualOutlook?: (ActiveManualOutlook & { systemReason?: React.ReactNode }) | null;
 }) {
+  if (manualOutlook) {
+    const isAlert = manualOutlook.style === "alert";
+    const isWarning = manualOutlook.style === "warning";
+
+    const containerStyle = isAlert
+      ? "border-red-300 bg-red-50/80 shadow-xs"
+      : isWarning
+        ? "border-amber-300 bg-amber-50/80 shadow-xs"
+        : "border-sky-300 bg-sky-50/80 shadow-xs";
+
+    const badgeStyle = isAlert
+      ? "bg-red-600 text-white"
+      : isWarning
+        ? "bg-amber-600 text-white"
+        : "bg-sky-600 text-white";
+
+    const titleColor = isAlert
+      ? "text-red-900"
+      : isWarning
+        ? "text-amber-900"
+        : "text-sky-900";
+
+    const textColor = isAlert
+      ? "text-red-950"
+      : isWarning
+        ? "text-amber-950"
+        : "text-sky-950";
+
+    return (
+      <div className={`rounded-lg border p-3.5 sm:p-4 ${containerStyle}`}>
+        <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[7.5rem_1fr] sm:items-start sm:gap-6">
+          <dt className="flex items-center gap-2 whitespace-nowrap text-base font-semibold">
+            <span
+              className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${badgeStyle}`}
+            >
+              {manualOutlook.badge}
+            </span>
+            <span className={titleColor}>
+              {translateUI("forecastOutlook", locale)}
+            </span>
+          </dt>
+          <dd className="min-w-0">
+            <p className={`text-base font-medium leading-relaxed ${textColor}`}>
+              {reason}
+            </p>
+            {manualOutlook.systemReason ? (
+              <div className="mt-3 border-t border-red-200/60 pt-2 text-xs font-normal text-slate-600 sm:text-sm">
+                <span className="font-semibold text-slate-700">
+                  {translateUI("manualOutlookStandardForecast", locale)}
+                  {locale === "en" ? ": " : "："}
+                </span>
+                <span>{manualOutlook.systemReason}</span>
+              </div>
+            ) : null}
+          </dd>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:grid sm:grid-cols-[7rem_1fr] sm:items-start sm:gap-6">
       <dt className="whitespace-nowrap text-base font-medium text-slate-500">
@@ -1414,6 +1502,6 @@ function RecommendationRow({
       <dd className="text-base leading-6 text-slate-700">
         {reason}
       </dd>
-  </div>
+    </div>
   );
 }

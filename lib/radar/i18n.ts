@@ -472,6 +472,26 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Current outlook",
     zh: "当前判断",
   },
+  manualOutlookFlashBadge: {
+    ja: "速報",
+    en: "Flash",
+    zh: "快讯",
+  },
+  manualOutlookNoticeBadge: {
+    ja: "注意",
+    en: "Notice",
+    zh: "注意",
+  },
+  manualOutlookInfoBadge: {
+    ja: "お知らせ",
+    en: "Info",
+    zh: "通知",
+  },
+  manualOutlookStandardForecast: {
+    ja: "通常の算出見込み",
+    en: "Standard forecast",
+    zh: "通常预测",
+  },
   viewAllHistoryLink: {
     ja: "さらにリセット履歴を見る →",
     en: "View all reset history →",
