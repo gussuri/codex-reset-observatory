@@ -40,10 +40,13 @@ internal sealed class MainForm : Form
 
         Text = "Codex Usage Monitor";
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(430, 350);
+        ClientSize = new Size(430, 400);
+        MinimumSize = new Size(430, 400);
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowOnly;
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.White;
 
@@ -57,7 +60,9 @@ internal sealed class MainForm : Form
 
         var table = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 2,
             RowCount = 9,
             Padding = new Padding(24, 22, 24, 20),

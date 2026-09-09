@@ -13,6 +13,8 @@ start-server*.log
 apps/codex-usage-monitor/bin/
 apps/codex-usage-monitor/obj/
 apps/codex-usage-monitor/dist/
+apps/codex-usage-monitor.tests/bin/
+apps/codex-usage-monitor.tests/obj/
 
 # Playwright failure artifacts
 test-results/
