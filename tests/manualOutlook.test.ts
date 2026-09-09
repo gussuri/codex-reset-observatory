@@ -134,7 +134,8 @@ test("RadarDashboard renders alert container, badge, and manual message when ove
     { calculationNow },
   );
 
-  // By default CURRENT_MANUAL_OUTLOOK is null -> normal rendering
+  // Explicitly test null override -> normal rendering
+  setManualOutlookOverrideForTesting(null);
   const defaultHtml = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
       initialData: snapshot,

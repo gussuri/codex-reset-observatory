@@ -71,7 +71,21 @@ export type ActiveManualOutlook = {
  *   showSystemReasonBelow: false,
  * };
  */
-export const CURRENT_MANUAL_OUTLOOK: ManualOutlookConfig | null = null;
+export const CURRENT_MANUAL_OUTLOOK: ManualOutlookConfig | null = {
+  expiresAt: "2026-09-10T04:40:00+09:00",
+  style: "alert",
+  badge: {
+    ja: "速報",
+    en: "Flash",
+    zh: "快讯",
+  },
+  message: {
+    ja: "Codex/Workの使用枠が不自然に増加（リセット）、または減少したとの報告があります。現在詳細を確認中です。当サイトには現状リセット履歴として登録していません。",
+    en: "There are reports that Codex and ChatGPT Work usage limits have unnaturally increased (reset) or decreased. We are currently investigating; this is not yet recorded as a reset event on this site.",
+    zh: "有报告指出 Codex 和 ChatGPT Work 的使用额度出现异常增加（重置）或减少的情况。目前正在核实中，本站暂未将其计入重置历史记录。",
+  },
+  showSystemReasonBelow: false,
+};
 
 let runtimeManualOutlookOverride: ManualOutlookConfig | null | undefined = undefined;
 
