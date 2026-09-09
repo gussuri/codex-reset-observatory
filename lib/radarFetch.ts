@@ -873,12 +873,10 @@ export function getPublicRadarSnapshotCalculationBucket(
 }
 
 export function getPublicRadarSnapshotCacheDimensions(
-  locale: Locale,
   calculationNow: Date | number,
   limitHistory = true,
 ) {
   return {
-    locale,
     calculationBucket: getPublicRadarSnapshotCalculationBucket(calculationNow),
     limitHistory,
   };
@@ -935,6 +933,45 @@ export function getEffectiveRadarCalculationNow(
   );
 }
 
+export type PublicRadarSnapshotBundle = Record<Locale, PublicRadarSnapshot>;
+
+type SharedRadarSnapshotInput = SharedRadarCore & {
+  stale: boolean;
+};
+
+export function buildPublicRadarSnapshotBundle(
+  core: SharedRadarSnapshotInput,
+  calculationBucket: number,
+  limitHistory: boolean,
+): PublicRadarSnapshotBundle {
+  const calculationNow = getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt);
+  const calculationContext = createRadarCalculationContext(core.data, calculationNow);
+
+  return {
+    ja: toPublicRadarSnapshot(core.data, "ja", {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      limitHistory,
+      calculationNow,
+      calculationContext,
+    }),
+    en: toPublicRadarSnapshot(core.data, "en", {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      limitHistory,
+      calculationNow,
+      calculationContext,
+    }),
+    zh: toPublicRadarSnapshot(core.data, "zh", {
+      stale: core.stale,
+      generatedAt: core.generatedAt,
+      limitHistory,
+      calculationNow,
+      calculationContext,
+    }),
+  };
+}
+
 /**
  * One locale-independent Data Cache entry feeds the pages and the API. Next's
  * persistent Data Cache keeps the last successful value available during a
@@ -987,32 +1024,25 @@ const getCachedTiboRecentSignals = unstable_cache(
  * The bucket remains the cache identity, while a refreshed core timestamp
  * lets an invalidated entry observe a mid-bucket reset immediately.
  */
-const getCachedPublicRadarSnapshot = unstable_cache(
+const getCachedPublicRadarSnapshotBundle = unstable_cache(
   async (
-    locale: Locale,
     calculationBucket: number,
     limitHistory: boolean,
-  ): Promise<PublicRadarSnapshot> => {
+  ): Promise<PublicRadarSnapshotBundle> => {
     const computeStartedAt = performance.now();
     try {
       const core = await fetchSharedRadarCore();
-      return toPublicRadarSnapshot(core.data, locale, {
-        stale: core.stale,
-        generatedAt: core.generatedAt,
-        limitHistory,
-        calculationNow: getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
-      });
+      return buildPublicRadarSnapshotBundle(core, calculationBucket, limitHistory);
     } finally {
       console.info(JSON.stringify({
-        event: "public_snapshot_compute",
-        locale,
+        event: "public_snapshot_bundle_compute",
         calculationBucket,
         limitHistory,
         durationMs: performance.now() - computeStartedAt,
       }));
     }
   },
-  ["radar-public-snapshot-cache-v1"],
+  ["radar-public-snapshot-bundle-cache-v1"],
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
@@ -1138,15 +1168,14 @@ export async function fetchPublicRadarSnapshot(
   options: { limitHistory?: boolean; calculationNow?: Date | number } = {},
 ): Promise<PublicRadarSnapshot> {
   const dimensions = getPublicRadarSnapshotCacheDimensions(
-    locale,
     options.calculationNow ?? new Date(),
     options.limitHistory ?? true,
   );
-  return getCachedPublicRadarSnapshot(
-    dimensions.locale,
+  const bundle = await getCachedPublicRadarSnapshotBundle(
     dimensions.calculationBucket,
     dimensions.limitHistory,
   );
+  return bundle[locale];
 }
 
 export async function fetchRandomResetHeatmapEventTimes(

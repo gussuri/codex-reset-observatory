@@ -43,8 +43,13 @@ test("radar cache callbacks log compute timing without changing cache identity o
   );
   const snapshotBlock = sourceBetween(
     radarFetchSource,
-    "const getCachedPublicRadarSnapshot = unstable_cache(",
+    "const getCachedPublicRadarSnapshotBundle = unstable_cache(",
     "const getCachedRandomResetHeatmapEventTimes = unstable_cache(",
+  );
+  const bundleBuilderBlock = sourceBetween(
+    radarFetchSource,
+    "export function buildPublicRadarSnapshotBundle(",
+    "const getCachedPublicRadarSnapshotBundle = unstable_cache(",
   );
 
   assert.match(coreBlock, /event: "radar_core_compute"/);
@@ -54,12 +59,15 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(coreBlock, /revalidate: RADAR_CORE_CACHE_TTL_SECONDS/);
   assert.match(coreBlock, /tags: \["radar-data"\]/);
 
-  assert.match(snapshotBlock, /event: "public_snapshot_compute"/);
-  assert.match(snapshotBlock, /locale/);
+  assert.match(snapshotBlock, /event: "public_snapshot_bundle_compute"/);
   assert.match(snapshotBlock, /calculationBucket/);
   assert.match(snapshotBlock, /limitHistory/);
   assert.match(snapshotBlock, /durationMs/);
-  assert.match(snapshotBlock, /\["radar-public-snapshot-cache-v1"\]/);
+  assert.equal((snapshotBlock.match(/fetchSharedRadarCore\(\)/g) ?? []).length, 1);
+  assert.match(snapshotBlock, /\["radar-public-snapshot-bundle-cache-v1"\]/);
   assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS/);
   assert.match(snapshotBlock, /tags: \["radar-data"\]/);
+
+  assert.equal((bundleBuilderBlock.match(/createRadarCalculationContext\(/g) ?? []).length, 1);
+  assert.equal((bundleBuilderBlock.match(/toPublicRadarSnapshot\(/g) ?? []).length, 3);
 });

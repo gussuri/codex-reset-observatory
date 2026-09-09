@@ -7,6 +7,7 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
+  buildPublicRadarSnapshotBundle,
   getEffectiveRadarCalculationNow,
   getRadarPageCacheDimensions,
   getRandomResetHeatmapCacheDimensions,
@@ -16,6 +17,8 @@ import {
   PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
+import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { FormalTiboResetSignal, TiboNoticeSignal } from "../lib/radar/tiboHistory";
 
 function resetSignal(tweetId: string, createdAt: string): FormalTiboResetSignal {
@@ -84,7 +87,7 @@ test("page cache dimensions use a one-hour bucket and preserve home/history vari
   );
 });
 
-test("public snapshot cache keys use locale, ten-minute bucket, and history limit", () => {
+test("public snapshot bundle cache keys use ten-minute bucket and history limit", () => {
   const start = Date.parse("2026-09-01T00:00:00.000Z");
   const beforeBoundary = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000 - 1;
   const nextBucket = start + PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS * 1000;
@@ -97,16 +100,38 @@ test("public snapshot cache keys use locale, ten-minute bucket, and history limi
     getPublicRadarSnapshotCalculationBucket(start),
     getPublicRadarSnapshotCalculationBucket(nextBucket),
   );
-  assert.deepEqual(getPublicRadarSnapshotCacheDimensions("ja", start), {
-    locale: "ja",
+  assert.deepEqual(getPublicRadarSnapshotCacheDimensions(start), {
     calculationBucket: getPublicRadarSnapshotCalculationBucket(start),
     limitHistory: true,
   });
-  assert.deepEqual(getPublicRadarSnapshotCacheDimensions("en", start, false), {
-    locale: "en",
+  assert.deepEqual(getPublicRadarSnapshotCacheDimensions(start, false), {
     calculationBucket: getPublicRadarSnapshotCalculationBucket(start),
     limitHistory: false,
   });
+});
+
+test("one public snapshot bundle matches the previous locale-by-locale DTOs", () => {
+  const calculationNow = new Date("2026-09-09T01:23:45.000Z");
+  const generatedAt = "2026-09-09T01:20:00.000Z";
+  const data = getLocalRadarData({ checkedAt: generatedAt, calculationNow });
+  const core = { data, generatedAt, stale: false };
+  const calculationBucket = getPublicRadarSnapshotCalculationBucket(calculationNow);
+
+  for (const limitHistory of [true, false]) {
+    const bundle = buildPublicRadarSnapshotBundle(core, calculationBucket, limitHistory);
+    const effectiveCalculationNow = getEffectiveRadarCalculationNow(calculationBucket, generatedAt);
+
+    assert.deepEqual(Object.keys(bundle), ["ja", "en", "zh"]);
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const expected = toPublicRadarSnapshot(data, locale, {
+        stale: false,
+        generatedAt,
+        limitHistory,
+        calculationNow: effectiveCalculationNow,
+      });
+      assert.equal(JSON.stringify(bundle[locale]), JSON.stringify(expected));
+    }
+  }
 });
 
 test("homepage snapshot and heatmap share the calculation bucket contract", () => {
@@ -123,12 +148,12 @@ test("homepage snapshot and heatmap share the calculation bucket contract", () =
     getRandomResetHeatmapCacheDimensions(nextBucket),
   );
   assert.equal(
-    getPublicRadarSnapshotCacheDimensions("ja", start).calculationBucket,
+    getPublicRadarSnapshotCacheDimensions(start).calculationBucket,
     getRandomResetHeatmapCacheDimensions(start).calculationBucket,
   );
   for (const locale of ["en", "zh"] as const) {
     assert.equal(
-      getPublicRadarSnapshotCacheDimensions(locale, start).calculationBucket,
+      getPublicRadarSnapshotCacheDimensions(start).calculationBucket,
       getRandomResetHeatmapCacheDimensions(start).calculationBucket,
     );
   }
@@ -151,8 +176,8 @@ test("cached projections use refreshed core time within the bucket without chang
     "2026-09-01T00:00:00.000Z",
   );
   assert.equal(
-    getPublicRadarSnapshotCacheDimensions("ja", bucketStart).calculationBucket,
-    getPublicRadarSnapshotCacheDimensions("ja", bucketStart + 9 * 60 * 1000).calculationBucket,
+    getPublicRadarSnapshotCacheDimensions(bucketStart).calculationBucket,
+    getPublicRadarSnapshotCacheDimensions(bucketStart + 9 * 60 * 1000).calculationBucket,
   );
 });
 
