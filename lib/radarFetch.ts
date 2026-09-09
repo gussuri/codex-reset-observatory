@@ -942,16 +942,27 @@ export function getEffectiveRadarCalculationNow(
  */
 const getCachedRadarCore = unstable_cache(
   async (): Promise<SharedRadarCore> => {
-    const data = await fetchCurrentRadarData({ cache: "no-store" });
-    if (data.data_health?.overall === "degraded") {
-      // Do not replace a healthy Data Cache entry with a partial live result.
-      // Next can continue serving the previous value while this revalidates.
-      throw new Error("required_source_degraded");
+    const computeStartedAt = performance.now();
+    let dataHealth: "ok" | "degraded" | null = null;
+    try {
+      const data = await fetchCurrentRadarData({ cache: "no-store" });
+      dataHealth = data.data_health?.overall ?? null;
+      if (dataHealth === "degraded") {
+        // Do not replace a healthy Data Cache entry with a partial live result.
+        // Next can continue serving the previous value while this revalidates.
+        throw new Error("required_source_degraded");
+      }
+      return {
+        data,
+        generatedAt: data.checked_at ?? new Date().toISOString(),
+      };
+    } finally {
+      console.info(JSON.stringify({
+        event: "radar_core_compute",
+        durationMs: performance.now() - computeStartedAt,
+        dataHealth,
+      }));
     }
-    return {
-      data,
-      generatedAt: data.checked_at ?? new Date().toISOString(),
-    };
   },
   ["radar-core-cache-v2"],
   {
@@ -982,13 +993,24 @@ const getCachedPublicRadarSnapshot = unstable_cache(
     calculationBucket: number,
     limitHistory: boolean,
   ): Promise<PublicRadarSnapshot> => {
-    const core = await fetchSharedRadarCore();
-    return toPublicRadarSnapshot(core.data, locale, {
-      stale: core.stale,
-      generatedAt: core.generatedAt,
-      limitHistory,
-      calculationNow: getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
-    });
+    const computeStartedAt = performance.now();
+    try {
+      const core = await fetchSharedRadarCore();
+      return toPublicRadarSnapshot(core.data, locale, {
+        stale: core.stale,
+        generatedAt: core.generatedAt,
+        limitHistory,
+        calculationNow: getEffectiveRadarCalculationNow(calculationBucket, core.generatedAt),
+      });
+    } finally {
+      console.info(JSON.stringify({
+        event: "public_snapshot_compute",
+        locale,
+        calculationBucket,
+        limitHistory,
+        durationMs: performance.now() - computeStartedAt,
+      }));
+    }
   },
   ["radar-public-snapshot-cache-v1"],
   {
