@@ -1014,7 +1014,7 @@ const getCachedRadarCore = unstable_cache(
       }));
     }
   },
-  ["radar-core-cache-v5"],
+  ["radar-core-cache-v6"],
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
@@ -1055,7 +1055,7 @@ const getCachedPublicRadarSnapshotBundle = unstable_cache(
       }));
     }
   },
-  ["radar-public-snapshot-bundle-cache-v4"],
+  ["radar-public-snapshot-bundle-cache-v5"],
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
     tags: ["radar-data"],

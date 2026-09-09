@@ -1788,22 +1788,23 @@ function buildBankedDistributionEvent(
   const noticeMinutes = Math.max(0, Math.round((displayTime - firstAnnouncementTime) / 60000));
   const isConditionalNotice = !isManualBroadBankedScopeCorrection(estimate.resetEventKey) &&
     isConditionalBankedDistributionNotice(notice.text);
-  const randomResetTargetScope = isConditionalNotice
+  const isSpecificCompensation = notice.tweet_id === "2097752790177370535";
+  const isConditionalScope = isSpecificCompensation || isConditionalNotice;
+  const randomResetTargetScope = isConditionalScope
     ? "conditional" as const
     : undefined;
-  const isTargetCompensation =
-    notice.tweet_id === "2097752790177370535" || isConditionalNotice;
-  const scope = isTargetCompensation ? "一部ユーザー" : "全有料プラン";
-  const reasonType = isTargetCompensation ? "詫びリセット" : "ご祝儀リセット";
-  const note = isTargetCompensation
-    ? "今朝、ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したすべてのユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。"
+  const scope = isConditionalScope ? "一部ユーザー" : "全有料プラン";
+  const reasonType = isSpecificCompensation ? "詫びリセット" : "ご祝儀リセット";
+  const title = isSpecificCompensation ? "任意リセット不具合補償リセット" : "ランダムリセット";
+  const note = isSpecificCompensation
+    ? "ChatGPT WorkおよびCodexにおいて、任意リセット権（banked reset）を使用した際に正常に適用されない問題が発生しました。影響を受けた時間帯に任意リセット権を使用したユーザーに対して、お詫びメールの送付とともに、補償として任意リセット権が1回分再配布されました。"
     : "任意リセット権の配布が確認されました。";
   const summary = note;
 
   return {
     id: estimate.resetEventKey,
     recordKind: "banked_distribution",
-    title: "ランダムリセット",
+    title,
     kind: "reset_completed",
     status: "closed",
     opened_at: openedAt,
