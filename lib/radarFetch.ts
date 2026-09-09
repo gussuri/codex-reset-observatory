@@ -1075,31 +1075,61 @@ const getCachedRadarPageData = unstable_cache(
     limitHistory: boolean,
     includeHeatmap: boolean,
   ) => {
-    const core = await fetchSharedRadarCore();
-    const calculationNow = getEffectiveRadarCalculationNowForBucket(
-      calculationBucket,
-      core.generatedAt,
-      RADAR_PAGE_CACHE_BUCKET_MS,
-    );
-    const calculationContext = createRadarCalculationContext(core.data, calculationNow);
-    const initialData = toPublicRadarSnapshot(core.data, locale, {
-      stale: core.stale,
-      generatedAt: core.generatedAt,
-      limitHistory,
-      calculationNow,
-      calculationContext,
-    });
+    const totalStartedAt = performance.now();
+    let fetchSharedRadarCoreMs: number | null = null;
+    let createRadarCalculationContextMs: number | null = null;
+    let toPublicRadarSnapshotMs: number | null = null;
+    let heatmapMs: number | null = null;
 
-    return {
-      initialData,
-      randomResetHeatmapEventTimes: includeHeatmap
+    try {
+      const coreStartedAt = performance.now();
+      const core = await fetchSharedRadarCore();
+      fetchSharedRadarCoreMs = performance.now() - coreStartedAt;
+      const calculationNow = getEffectiveRadarCalculationNowForBucket(
+        calculationBucket,
+        core.generatedAt,
+        RADAR_PAGE_CACHE_BUCKET_MS,
+      );
+
+      const contextStartedAt = performance.now();
+      const calculationContext = createRadarCalculationContext(core.data, calculationNow);
+      createRadarCalculationContextMs = performance.now() - contextStartedAt;
+
+      const snapshotStartedAt = performance.now();
+      const initialData = toPublicRadarSnapshot(core.data, locale, {
+        stale: core.stale,
+        generatedAt: core.generatedAt,
+        limitHistory,
+        calculationNow,
+        calculationContext,
+      });
+      toPublicRadarSnapshotMs = performance.now() - snapshotStartedAt;
+
+      const heatmapStartedAt = performance.now();
+      const randomResetHeatmapEventTimes = includeHeatmap
         ? getRandomResetHeatmapEventTimes(
             core.data,
             calculationNow,
             calculationContext.canonicalHistoryContext,
           )
-        : [],
-    };
+        : [];
+      heatmapMs = performance.now() - heatmapStartedAt;
+
+      return { initialData, randomResetHeatmapEventTimes };
+    } finally {
+      console.info(JSON.stringify({
+        event: "radar_page_compute",
+        locale,
+        calculationBucket,
+        limitHistory,
+        includeHeatmap,
+        fetchSharedRadarCoreMs,
+        createRadarCalculationContextMs,
+        toPublicRadarSnapshotMs,
+        heatmapMs,
+        totalMs: performance.now() - totalStartedAt,
+      }));
+    }
   },
   ["radar-page-cache-v1"],
   {

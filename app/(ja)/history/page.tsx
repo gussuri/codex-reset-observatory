@@ -43,10 +43,18 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 export default async function HistoryPage() {
+  const pageDataStartedAt = performance.now();
   const pageData = await fetchRadarPageData("ja", {
     limitHistory: false,
     includeHeatmap: false,
   });
+  console.info(JSON.stringify({
+    event: "radar_page_route_fetch",
+    route: "/history",
+    locale: "ja",
+    pageType: "history",
+    durationMs: performance.now() - pageDataStartedAt,
+  }));
 
   return <HistoryView data={pageData.initialData} locale="ja" />;
 }

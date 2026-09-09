@@ -42,7 +42,15 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
+  const pageDataStartedAt = performance.now();
   const pageData = await fetchRadarPageData("ja");
+  console.info(JSON.stringify({
+    event: "radar_page_route_fetch",
+    route: "/",
+    locale: "ja",
+    pageType: "home",
+    durationMs: performance.now() - pageDataStartedAt,
+  }));
 
   return (
     <RadarDashboard

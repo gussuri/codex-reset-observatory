@@ -50,7 +50,15 @@ export const metadata: Metadata = {
 };
 
 export default async function ChineseHome() {
+  const pageDataStartedAt = performance.now();
   const pageData = await fetchRadarPageData("zh");
+  console.info(JSON.stringify({
+    event: "radar_page_route_fetch",
+    route: "/zh",
+    locale: "zh",
+    pageType: "home",
+    durationMs: performance.now() - pageDataStartedAt,
+  }));
 
   return (
     <RadarDashboard

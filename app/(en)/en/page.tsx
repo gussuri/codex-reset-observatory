@@ -50,7 +50,15 @@ export const metadata: Metadata = {
 };
 
 export default async function EnglishHome() {
+  const pageDataStartedAt = performance.now();
   const pageData = await fetchRadarPageData("en");
+  console.info(JSON.stringify({
+    event: "radar_page_route_fetch",
+    route: "/en",
+    locale: "en",
+    pageType: "home",
+    durationMs: performance.now() - pageDataStartedAt,
+  }));
 
   return (
     <RadarDashboard

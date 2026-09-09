@@ -53,10 +53,18 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 export default async function ChineseHistoryPage() {
+  const pageDataStartedAt = performance.now();
   const pageData = await fetchRadarPageData("zh", {
     limitHistory: false,
     includeHeatmap: false,
   });
+  console.info(JSON.stringify({
+    event: "radar_page_route_fetch",
+    route: "/zh/history",
+    locale: "zh",
+    pageType: "history",
+    durationMs: performance.now() - pageDataStartedAt,
+  }));
 
   return <HistoryView data={pageData.initialData} locale="zh" />;
 }
