@@ -224,6 +224,7 @@ test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt,
     assert.equal(historyItem.details?.scope, expectedLocalized[locale].scope);
     assert.equal(historyItem.details?.reasonType, expectedLocalized[locale].reasonType);
     assert.equal(historyItem.details?.note, expectedLocalized[locale].note);
+    assert.equal(historyItem.details?.noticeToExecution, "");
 
     // UI rendering test for this event: displays "対象: 一部ユーザー" (or localized)
     const html = renderToStaticMarkup(
@@ -236,6 +237,8 @@ test("public DTO isolates randomResetTargetScope, retains 9/8 lastRandomResetAt,
     assert.match(html, new RegExp(expectedLocalized[locale].scope));
     assert.match(html, new RegExp(expectedLocalized[locale].reasonType));
     assert.match(html, new RegExp(expectedLocalized[locale].note.slice(0, 10)));
+    assert.doesNotMatch(html, /告知から実施まで|Time from notice to reset|从预告到执行/);
+    assert.doesNotMatch(html, /0分|0 min|0 分/);
 
     // UI rendering test for existing "全有料プラン" items: does NOT display "対象" row
     const allPaidItem = snapshot.viewModel.recentHistory.find(

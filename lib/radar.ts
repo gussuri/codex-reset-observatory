@@ -931,7 +931,9 @@ function getHistoryDetails(
         : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
       scope: translateDynamic(item.details.scope, locale),
-      noticeToExecution: noticePresentation === "none" || !storedNoticeToExecution
+      noticeToExecution: noticePresentation === "none" ||
+        !storedNoticeToExecution ||
+        isZeroNoticeToExecution(storedNoticeToExecution)
         ? ""
         : translateDynamic(storedNoticeToExecution, locale),
       noticeType: noticePresentation === "announcement"
@@ -1240,6 +1242,12 @@ function getValue(
   }
 
   return undefined;
+}
+
+function isZeroNoticeToExecution(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const withoutQualifier = normalized.replace(/[（(][^）)]*[）)]$/, "");
+  return /^(?:0\s*(?:分|分钟|m|min(?:ute)?s?))$/.test(withoutQualifier);
 }
 
 function getRecentHistory(
