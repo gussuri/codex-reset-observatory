@@ -63,6 +63,14 @@ export type PublishedV3ScoreboardSegment = {
   metrics48h: ProspectiveScoreboardMetric;
 };
 
+export type PublishedV3RegressionComparison = {
+  sampleStatus: ProspectiveScoreboardSampleStatus;
+  comparableOriginCount: number;
+  publishedV3: ProspectiveScoreboardMetric;
+  rawSignalAdjusted: ProspectiveScoreboardMetric;
+  v2StyleCalibrated: ProspectiveScoreboardMetric;
+};
+
 export type PublishedV3ProspectiveScoreboard = {
   schemaVersion: "published-v3-prospective-scoreboard-v1";
   evaluationMode: "prospective";
@@ -96,6 +104,7 @@ export type PublishedV3ProspectiveScoreboard = {
       exactlyMatchesPublished: boolean | null;
       maxAbsoluteDifference: number | null;
     };
+    regressionDiagnosis24h: PublishedV3RegressionComparison;
   };
   gate: {
     status: "not_enough_prospective_data" | "sufficient_prospective_data";
@@ -351,6 +360,15 @@ function getResolvedValues(
   });
 }
 
+function isResolvedWithinHorizon(
+  row: ProspectiveForecastRow,
+  horizonHours: 24 | 48,
+  asOfTime: number,
+) {
+  const generatedTime = timestamp(row.generatedAt);
+  return generatedTime !== null && generatedTime + horizonHours * HOUR_MS <= asOfTime;
+}
+
 function createSegment(
   rows: Array<ProspectiveForecastRow>,
   getActiveForecast: (row: ProspectiveForecastRow) => ProspectiveStoredForecast,
@@ -508,6 +526,41 @@ export function buildPublishedV3ProspectiveScoreboard(
     events,
     48,
   );
+  const regressionRows = dailyRows.filter((row) => {
+    const active = getActiveForecast(row);
+    const previous = row.forecasts[previousModelVersion];
+    return getFiniteProbability(active.rawProbability24h) !== null
+      && isSameOrigin(row, active)
+      && isStoredForecast(previous)
+      && isSameOrigin(row, previous)
+      && getFiniteProbability(active.probability24h) !== null
+      && getFiniteProbability(previous.probability24h) !== null
+      && isResolvedWithinHorizon(row, 24, asOfTime);
+  });
+  const regressionPublishedMetric = calculateMetric(
+    getResolvedValues(regressionRows, (row) => getActiveForecast(row).probability24h, 24, events, asOfTime),
+    events,
+    24,
+  );
+  const regressionRawMetric = calculateMetric(
+    getResolvedValues(regressionRows, (row) => getFiniteProbability(getActiveForecast(row).rawProbability24h), 24, events, asOfTime),
+    events,
+    24,
+  );
+  const regressionV2Metric = calculateMetric(
+    getResolvedValues(regressionRows, (row) => getFiniteProbability(row.forecasts[previousModelVersion]?.probability24h), 24, events, asOfTime),
+    events,
+    24,
+  );
+  const regressionComparison: PublishedV3RegressionComparison = {
+    sampleStatus: regressionRows.length >= PROSPECTIVE_V3_SCOREBOARD_SEGMENT_MIN_SAMPLE_COUNT
+      ? "sufficient"
+      : "insufficient_sample",
+    comparableOriginCount: regressionRows.length,
+    publishedV3: regressionPublishedMetric,
+    rawSignalAdjusted: regressionRawMetric,
+    v2StyleCalibrated: regressionV2Metric,
+  };
   const v2Differences = v2Rows.map((row) => {
     const active = getActiveForecast(row);
     const previous = row.forecasts[previousModelVersion];
@@ -583,7 +636,8 @@ export function buildPublishedV3ProspectiveScoreboard(
   const resolved48hMet = resolved48h >= 15;
   const targetResetsMet = targetResetCount >= 5;
   const allMet = resolved24hMet && resolved48hMet && targetResetsMet;
-  const regression = hasPublishedRegression(publishedMetrics24h, rawMetric, v2StyleMetric);
+  const regression = regressionRows.length >= PROSPECTIVE_V3_SCOREBOARD_SEGMENT_MIN_SAMPLE_COUNT
+    && hasPublishedRegression(regressionPublishedMetric, regressionRawMetric, regressionV2Metric);
   const recommendation = !allMet
     ? "keep_v3" as const
     : regression
@@ -595,6 +649,9 @@ export function buildPublishedV3ProspectiveScoreboard(
   if (!targetResetsMet) warnings.push(`Target reset sample is below the minimum 5 (actual: ${targetResetCount}).`);
   if (!features) warnings.push("PIT segment features were not supplied; feature-dependent segments are reported as unknown.");
   if (v2Rows.length === 0) warnings.push("No saved same-origin v2 values were available for the requested comparison.");
+  if (regressionRows.length < PROSPECTIVE_V3_SCOREBOARD_SEGMENT_MIN_SAMPLE_COUNT) {
+    warnings.push("Insufficient same-origin 24h comparison sample for regression diagnosis.");
+  }
   if (!allMet) warnings.push("The scoreboard is not eligible to recommend v4 research until all prospective sample gates are met.");
   if (regression) warnings.push("Published v3 is worse than both saved raw and saved v2 24h comparisons on the available same-origin sample; investigate without changing the gate.");
 
@@ -631,6 +688,7 @@ export function buildPublishedV3ProspectiveScoreboard(
         exactlyMatchesPublished,
         maxAbsoluteDifference,
       },
+      regressionDiagnosis24h: regressionComparison,
     },
     gate: {
       status: allMet ? "sufficient_prospective_data" : "not_enough_prospective_data",

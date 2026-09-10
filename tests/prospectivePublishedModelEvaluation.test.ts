@@ -816,3 +816,94 @@ test("v3 scoreboard excludes rows before the adoption boundary without backfilli
   assert.deepEqual(scoreboard.dailyFirstOrigins, [adopted.generatedAt]);
   assert.equal(scoreboard.backfilled, false);
 });
+
+function gatedScoreboardRows(
+  commonOriginCount: number,
+  getProbabilities: (index: number) => {
+    published24h: number;
+    raw24h: number;
+    baseline24h: number;
+  },
+) {
+  return Array.from({ length: 20 }, (_, index) => {
+    const probabilities = getProbabilities(index);
+    const row = forecastRow(
+      `2026-01-${String(index + 1).padStart(2, "0")}T00:30:00.000Z`,
+      probabilities.published24h,
+      0.4,
+      probabilities.baseline24h,
+      0.4,
+    );
+    if (index >= commonOriginCount) {
+      delete row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION]?.rawProbability24h;
+    } else {
+      const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+      assert.ok(active);
+      active.rawProbability24h = probabilities.raw24h;
+    }
+    return row;
+  });
+}
+
+function fiveTargetEvents() {
+  return Array.from({ length: 5 }, (_, index) => ({
+    id: `target-${index}`,
+    resetAt: `2026-01-${String(index + 21).padStart(2, "0")}T06:00:00.000Z`,
+  }));
+}
+
+test("v3 regression diagnosis uses one common resolved origin set", () => {
+  const rows = gatedScoreboardRows(5, (index) => ({
+    published24h: index < 5 ? 0.2 : 0.99,
+    raw24h: 0.2,
+    baseline24h: 0.2,
+  }));
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    rows,
+    fiveTargetEvents(),
+    new Date("2026-02-01T00:00:00.000Z"),
+    { adoptionAt: "2026-01-01T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.comparableOriginCount, 5);
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.sampleStatus, "sufficient");
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.publishedV3.brier,
+    scoreboard.comparisons.regressionDiagnosis24h.rawSignalAdjusted.brier);
+  assert.equal(scoreboard.recommendation, "eligible_for_v4_research");
+});
+
+test("small common regression samples never produce an investigate recommendation", () => {
+  const rows = gatedScoreboardRows(4, (index) => ({
+    published24h: index < 4 ? 0.9 : 0.1,
+    raw24h: 0.1,
+    baseline24h: 0.1,
+  }));
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    rows,
+    fiveTargetEvents(),
+    new Date("2026-02-01T00:00:00.000Z"),
+    { adoptionAt: "2026-01-01T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.comparableOriginCount, 4);
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.sampleStatus, "insufficient_sample");
+  assert.notEqual(scoreboard.recommendation, "investigate");
+  assert.ok(scoreboard.warnings.includes("Insufficient same-origin 24h comparison sample for regression diagnosis."));
+});
+
+test("sufficient common origins report regression only when published is worse on that same set", () => {
+  const rows = gatedScoreboardRows(5, (index) => ({
+    published24h: index < 5 ? 0.9 : 0.1,
+    raw24h: 0.1,
+    baseline24h: 0.1,
+  }));
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    rows,
+    fiveTargetEvents(),
+    new Date("2026-02-01T00:00:00.000Z"),
+    { adoptionAt: "2026-01-01T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.comparisons.regressionDiagnosis24h.comparableOriginCount, 5);
+  assert.equal(scoreboard.recommendation, "investigate");
+});
