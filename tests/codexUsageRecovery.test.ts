@@ -298,6 +298,52 @@ test("accepts an explicit BANKED reset count change marker", () => {
   assert.equal(parsed?.bankedResetCountChange, true);
 });
 
+test("accepts protocol v2 payload with valid postReason", () => {
+  for (const reason of [
+    "initial",
+    "recovery_candidate",
+    "banked_reset_count_change",
+    "structure_change",
+    "heartbeat",
+  ] as const) {
+    const parsed = parseCodexUsageWebhookPayload({
+      ...snapshot(),
+      monitorProtocolVersion: 2,
+      postReason: reason,
+    }, NOW);
+    assert.equal(parsed?.monitorProtocolVersion, 2);
+    assert.equal(parsed?.postReason, reason);
+  }
+});
+
+test("protocol v2 strict validation: rejects missing or invalid postReason", () => {
+  // Missing postReason when monitorProtocolVersion === 2
+  assert.equal(parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    monitorProtocolVersion: 2,
+  }, NOW), null);
+
+  // Invalid postReason string
+  assert.equal(parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    monitorProtocolVersion: 2,
+    postReason: "unauthorized_drop",
+  }, NOW), null);
+
+  // Invalid protocol version
+  assert.equal(parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    monitorProtocolVersion: 3,
+    postReason: "recovery_candidate",
+  }, NOW), null);
+
+  assert.equal(parseCodexUsageWebhookPayload({
+    ...snapshot(),
+    monitorProtocolVersion: 0,
+    postReason: "recovery_candidate",
+  }, NOW), null);
+});
+
 test("rejects generic credits in the webhook payload", () => {
   assert.equal(parseCodexUsageWebhookPayload({
     ...snapshot(),

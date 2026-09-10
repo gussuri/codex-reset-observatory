@@ -441,7 +441,13 @@ async function processCodexUsageSnapshot(
   });
   if (initialDecision.kind === "stale") return recoveryResponse("ignored_stale");
 
+  const isAuthorizedRecovery =
+    snapshot.monitorProtocolVersion === 2
+      ? snapshot.postReason === "recovery_candidate"
+      : true;
+
   if (
+    !isAuthorizedRecovery ||
     initialDecision.kind === "baseline" ||
     initialDecision.kind === "rebase" ||
     initialDecision.kind === "invalid" ||
@@ -465,7 +471,7 @@ async function processCodexUsageSnapshot(
     if (atomicResponse) return atomicResponse;
     console.info("[Codex usage] snapshot accepted", {
       source: CODEX_USAGE_SOURCE_KEY,
-      recovery: initialDecision.kind,
+      recovery: isAuthorizedRecovery ? initialDecision.kind : `unauthorized_${snapshot.postReason}`,
       bankedDistributionObserved: bankedResult.observed,
     });
     if (bankedResult.observed) {
@@ -475,7 +481,12 @@ async function processCodexUsageSnapshot(
         console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
       }
     }
-    return recoveryResponse(bankedResult.observed ? "banked_distribution_observed" : initialDecision.kind);
+    const nonRecoveryStatus = bankedResult.observed
+      ? "banked_distribution_observed"
+      : initialDecision.kind === "recovery"
+        ? (snapshot.postReason ?? "no_recovery")
+        : (snapshot.postReason === "structure_change" ? "structure_change" : initialDecision.kind);
+    return recoveryResponse(nonRecoveryStatus);
   }
 
   const recoveryExecutionWindow: ResetExecutionWindow = {

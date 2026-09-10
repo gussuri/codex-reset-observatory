@@ -58,6 +58,8 @@ private ChatGPT API. The app-server owns authentication.
 
 Only these fields leave the machine:
 
+- `monitorProtocolVersion` (protocol version integer, currently `2`)
+- `postReason` (post intent: `initial`, `recovery_candidate`, `banked_reset_count_change`, `structure_change`, or `heartbeat`)
 - `limitId`
 - `planType`
 - `usedPercent`
@@ -90,10 +92,14 @@ by a fresh `account/rateLimits/read`. A notification by itself is never treated
 as a reset.
 
 The local monitor reads every two minutes but sends a webhook only for the initial
-snapshot, a recovery candidate, a positive BANKED reset-count change, a
+snapshot, a confirmed recovery candidate, a positive BANKED reset-count change, a
 monitoring-structure change, or an eight-minute heartbeat after the last
 successful send. Ordinary unchanged usage snapshots stay local, so the server
 still receives a heartbeat before its ten-minute comparison gap.
+
+A positive BANKED reset-count change is sent immediately as an explicit count
+change. Weekly quota recoveries, by contrast, follow a two-step confirmation state
+machine to prevent false positives from transient app-server glitches.
 
 A BANKED history event is created only when that explicit local reset-count
 change matches an active broad Tibo BANKED notice within the existing
@@ -109,16 +115,96 @@ with `Authorization: Bearer $env:CODEX_USAGE_MONITOR_SECRET`. The webhook reject
 unknown fields and stores the latest state in Supabase. It is fail-closed when
 the secret or storage is unavailable.
 
-## Recovery interpretation
+## Recovery interpretation & Two-Step Confirmation State Machine
 
-The server compares the previous and current weekly snapshots. A recovery needs
-both a decrease of at least one percentage point in `usedPercent` and a
-`resetsAt` advance of at least one hour. The app-server timestamp may jitter by
-a few seconds, so smaller changes are ignored. Raw `resetsAt` values are kept
-unchanged for monitoring and later analysis. The first observation is a
-baseline. An observation after a gap greater than 10 minutes or after a plan/limit
-structure change is a rebase and does not create an event.
+To prevent false alarms caused by temporary fluctuations in `usedPercent` or
+`resetsAt` (such as the false-positive reset event `usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec`
+on 2026-09-09), the local monitor does not post a recovery upon the first
+anomalous observation. Instead, it employs a local confirmation state machine.
 
+> **Incident Data Notice**:
+> The raw app-server snapshot sequence for the 2026-09-09 incident (`512a8b31...`)
+> was not recovered and remains unavailable:
+> - **actual 9/9 sequence**: unavailable
+> - **current regression**: synthetic analogue
+>
+> The synthetic regression represents the class of transient recovery-like observations
+> that could produce a false reset. The exact 2026-09-09 snapshot sequence was not recovered.
+
+### Refresh Trigger Distinction
+
+Observations arrive via three distinct triggers:
+- `poll`: Periodic client-side poll timer tick (default 120s, minimum 60s). Represents an independent, unprompted client observation.
+- `notification`: Triggered by `account/rateLimits/updated` push notifications from the Codex app-server. Notifications may burst or arrive repeatedly during server glitches, internal syncs, or cluster failovers.
+- `initial`: The initial handshake observation on session start.
+
+### State Transitions
+
+1. **Candidate Start (`recovery_candidate_started`)**:
+   When an observation shows both a decrease of at least 1 percentage point
+   (`baseline.usedPercent - snapshot.usedPercent >= 1`) and a schedule advance of
+   at least 1 hour (`snapshot.resetsAt - baseline.resetsAt >= 3600s`), the monitor
+   enters the candidate phase.
+   - Candidates can be started by any trigger (`poll` or `notification`). This captures the earliest possible detection timestamp.
+   - The pre-recovery baseline snapshot is **frozen** (`preRecoveryBaseline`).
+   - The initial detection snapshot is recorded as `firstEvidenceSnapshot`.
+   - The candidate start time is recorded.
+   - **No webhook is sent yet** (`postReason: null`).
+   - Audit log `recovery_candidate_started` is emitted.
+
+2. **Temporal Independence & Trigger Guard (`MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60s`)**:
+   - Notifications arriving while a candidate is pending can update candidate progress or cancel it immediately upon reversion, but **cannot confirm** the candidate (`trigger === "notification"` always yields `postReason: null`).
+   - Observations arriving within 60 seconds (`elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60_000ms`) cannot confirm the candidate prematurely.
+   - This prevents false confirmations during multi-stage transient anomalies (e.g. drop at 0s, second notification at 50s or 90s, reversion at 90s or 110s).
+
+3. **Confirmation (`recovery_candidate_confirmed`)**:
+   A recovery candidate is confirmed **only** when an observation satisfies all of:
+   - **Scheduled poll trigger**: `trigger === "poll"`, ensuring client-side independent verification rather than a server-pushed notification burst.
+   - **Hold duration**: At least one minimum poll interval has elapsed (`elapsedMs >= MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60s`, typically the scheduled poll at 120s).
+   - **Usage drop maintained**: Usage remains recovered relative to the frozen `preRecoveryBaseline` (`preRecoveryBaseline.usedPercent - snapshot.usedPercent >= 1%`).
+   - **Schedule forward maintained**: `resetsAt` remains forward relative to `preRecoveryBaseline.resetsAt` and consistent with `firstEvidenceSnapshot.resetsAt` (within 30-second clock jitter tolerance `RESET_AT_JITTER_TOLERANCE_SEC = 30s`).
+   - **First Evidence Timestamp Preservation**: Upon confirmation, the snapshot enqueued and posted to the webhook is `firstEvidenceSnapshot`. This ensures that the public observatory reflects the exact original time of recovery (t=0s) rather than the confirmation-delay time (t=120s), keeping regular proximity and probability windows accurate.
+   - Audit log `recovery_candidate_confirmed` is emitted.
+   - The candidate is cleared and the baseline advances to the current snapshot.
+
+| Scenario | Candidate Start | Intermediate Events | Confirmation Check | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| **Transient Glitch (45s)** | Notification @ 0s | None | Reverts @ 45s (< 60s) | Cancelled (`usage_reverted`), 0 webhooks |
+| **Notification Glitch (50s)** | Notification @ 0s | Notification @ 50s | Reverts @ 90s | Cancelled (`usage_reverted`), 0 webhooks |
+| **Extended Glitch (90s)** | Notification @ 0s | Notification @ 90s | Reverts @ 110s | Cancelled (`usage_reverted`), 0 webhooks |
+| **Genuine Recovery** | Notification or Poll @ 0s | Normal user activity | Poll @ 120s (>= 60s) | Confirmed, 1 webhook with t=0s snapshot |
+
+4. **Cancellation (`recovery_candidate_cancelled`)**:
+   A pending candidate is cancelled and cleared if:
+   - **Usage reverted (`usage_reverted`)**: The current usage bounces back towards the
+     baseline (`preRecoveryBaseline.usedPercent - snapshot.usedPercent < 1%`).
+   - **Reset time reverted (`reset_at_reverted`)**: `resetsAt` reverts to the old
+     schedule or deviates unexpectedly from `firstEvidenceSnapshot`.
+   - **Structure change (`structure_change`)**: `planType`, `limitId`, or
+     `windowDurationMins` changes. Candidate is cancelled and `structure_change` is posted.
+   - **Comparison gap (`comparison_gap`)**: More than 10 minutes pass without observation.
+   - **Stale observation (`stale_observation`)**: An out-of-order snapshot arrives.
+   - When cancelled, `recovery_candidate_cancelled` is logged with the specific reason,
+     the candidate is cleared, and baseline rebases to the latest snapshot. Zero webhooks
+     are sent for the false alarm.
+
+### Post-Recovery Usage Protection
+
+If a user immediately begins heavy work following a reset (e.g. `80% -> 5% -> 8%`),
+the confirmation check compares against the frozen `preRecoveryBaseline` (80%),
+yielding `80% - 8% = 72% >= 1%`. The post-recovery consumption is correctly recognized
+as valid quota usage rather than a cancellation.
+
+### Noise Absorption & Regular Schedule Updates
+
+- **Sub-1% fluctuations**: Tiny usage changes (< 1%) update the baseline smoothly without
+  accumulating across polls into a false reset candidate.
+- **Schedule-only updates**: When `resetsAt` advances without quota recovery (e.g. standard
+  rolling weekly window updates), the baseline advances its schedule without triggering a candidate.
+
+### Observatory Server Processing
+
+The server compares incoming weekly snapshots against the DB baseline.
 The previous scheduled reset is used only as context. An observation within 5
 minutes of that schedule is marked `regular`. When a measured recovery is near
 the regular schedule, the webhook stores a canonical `regular_completed`
@@ -135,6 +221,20 @@ Subsequent Tibo posts (official notices, teasers, or completion confirmations)
 serve as retrospective corroboration and enrichment (providing reasons, titles,
 scopes, and source links) that merge into the canonical monitor event without
 shifting execution time or creating duplicates.
+
+### Webhook Protocol Version 2 & Server Authorization Guard
+
+To eliminate server-side confirmation bypass (e.g. if the monitor restarts during a transient anomaly, posting an `initial` snapshot of 40% usage against a DB baseline of 60%, or if an unconfirmed heartbeat is sent), the webhook enforces Protocol Version 2:
+
+- **Protocol Versioning**: Safe webhook payloads specify `monitorProtocolVersion: 2` and a validated `postReason`.
+- **Authorized Reasons**:
+  - `initial`: Handshake or process restart snapshot. Updates baseline in DB state; **strictly prohibited** from creating recovery execution estimates.
+  - `recovery_candidate`: Only emitted after local two-step confirmation (independent scheduled poll verification after `MIN_RECOVERY_CONFIRMATION_DELAY_MS`). **Authorized** to generate random reset execution estimates.
+  - `banked_reset_count_change`: Explicit increase in banked reset credits. Processed for BANKED distributions against active notices.
+  - `structure_change`: Monitoring structure change. Rebases baseline; **prohibited** from creating recovery estimates.
+  - `heartbeat`: Routine heartbeat. Updates heartbeat timestamp; **prohibited** from creating recovery estimates.
+- **Server Confirmation Invariant**: Under Protocol v2, the server evaluates `evaluateCodexUsageRecovery()`, but will **only** promote an unexpected recovery to a public random reset if `postReason === "recovery_candidate"`. Any arithmetic drop received under `initial`, `heartbeat`, or `structure_change` updates the baseline safely without creating an execution estimate or provisional recovery observation.
+- **Backward Compatibility**: Payloads lacking `monitorProtocolVersion` are treated as legacy Protocol v1 for rolling deployment compatibility, falling back to server-side arithmetic evaluation without failing.
 
 ### Personal Banked Reset vs Random Reset
 If a weekly recovery occurs concurrently with an explicit decrease in banked

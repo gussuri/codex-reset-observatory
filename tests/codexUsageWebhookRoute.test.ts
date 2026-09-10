@@ -2045,3 +2045,477 @@ test("an unknown server BANKED count does not create a distribution from a posit
     }
   }
 });
+
+test("bypass reproduction: without protocol v2 postReason, restarted monitor initial snapshot (40/B) with DB previous (60/A) falsely creates recovery estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "bypass-observation-id");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-09-10T00:00:00.000Z",
+        received_at: "2026-09-10T00:00:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 60,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-09-09T22:00:00.000Z",
+        banked_reset_available_count: 1,
+        last_banked_grant_at: null,
+        updated_at: "2026-09-10T00:00:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  try {
+    // Legacy monitor behavior on restart: sends initial snapshot (40/B) without postReason or version
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 40,
+      resetsAt: currentResetsAt,
+    }));
+    assert.equal(response.status, 200);
+    const plan = getAtomicPlanFromRequests(requests);
+    // Demonstrates legacy vulnerability: without postReason, unconfirmed initial snapshot is promoted to random reset
+    assert.ok(plan.execution_estimate, "Bypass confirmed: server falsely creates reset estimate for unconfirmed snapshot");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+function createMockSupabaseFetch(options?: {
+  previousState?: Record<string, unknown>;
+  tiboSignals?: unknown[];
+  regularEvents?: unknown[];
+}) {
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const defaultState = {
+    source_key: "local-codex-app-server",
+    observed_at: "2026-09-10T00:00:00.000Z",
+    received_at: "2026-09-10T00:00:01.000Z",
+    limit_id: "codex",
+    plan_type: "plus",
+    used_percent: 60,
+    window_duration_mins: 10080,
+    resets_at: previousResetsAt,
+    coverage_started_at: "2026-09-09T22:00:00.000Z",
+    banked_reset_available_count: 1,
+    last_banked_grant_at: null,
+    updated_at: "2026-09-10T00:00:01.000Z",
+  };
+
+  const fetchHandler = async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "mock-observation-id");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify(options?.previousState ?? defaultState), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify(options?.tiboSignals ?? []), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify(options?.regularEvents ?? []), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
+  };
+
+  return { requests, fetchHandler };
+}
+
+test("protocol v2 strict validation: rejects missing postReason with status 400", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 40,
+      resetsAt: 1787617527,
+      monitorProtocolVersion: 2,
+    }));
+    assert.equal(response.status, 400);
+  } finally {
+    restore();
+  }
+});
+
+test("protocol v2 strict validation: rejects invalid postReason with status 400", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 40,
+      resetsAt: 1787617527,
+      monitorProtocolVersion: 2,
+      postReason: "unauthorized_drop",
+    }));
+    assert.equal(response.status, 400);
+  } finally {
+    restore();
+  }
+});
+
+test("protocol v2 strict validation: rejects invalid monitorProtocolVersion with status 400", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  try {
+    for (const invalidVersion of [0, 3, -1, 99]) {
+      const response = await POST(buildRequest({
+        observedAt: "2026-09-10T00:02:00.000Z",
+        usedPercent: 40,
+        resetsAt: 1787617527,
+        monitorProtocolVersion: invalidVersion,
+        postReason: "recovery_candidate",
+      }));
+      assert.equal(response.status, 400);
+    }
+  } finally {
+    restore();
+  }
+});
+
+test("Test A: protocol v2 confirmed recovery (recovery_candidate) creates execution estimate and updates state", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 5,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const executionEstimate = getAtomicPlanPart(requests, "execution_estimate");
+    const observation = getAtomicPlanPart(requests, "observation");
+    const state = getAtomicPlanPart(requests, "state");
+    assert.ok(executionEstimate, "Confirmed recovery candidate must create an execution estimate");
+    assert.equal(executionEstimate?.display_execution_at, "2026-09-10T00:02:00.000Z");
+    assert.equal(executionEstimate?.is_monitor_observed, true);
+    assert.equal(observation?.cycle_hint, "unexpected");
+    assert.equal(state?.used_percent, 5);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test B: protocol v2 restart bypass regression (initial) updates baseline without creating execution estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 40,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "initial",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "initial" });
+    const plan = getAtomicPlanFromRequests(requests);
+    const state = getAtomicPlanPart(requests, "state");
+    assert.equal(plan.execution_estimate, undefined, "Initial snapshot must NOT create execution estimate (bypass prevented)");
+    assert.equal(plan.observation, undefined, "Initial snapshot must NOT create recovery observation row");
+    assert.equal(state?.used_percent, 40, "Initial snapshot must update baseline in monitor state");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test C: protocol v2 heartbeat bypass regression (heartbeat) updates state without creating execution estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 40,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "heartbeat",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "heartbeat" });
+    const plan = getAtomicPlanFromRequests(requests);
+    const state = getAtomicPlanPart(requests, "state");
+    assert.equal(plan.execution_estimate, undefined, "Heartbeat snapshot must NOT create execution estimate (bypass prevented)");
+    assert.equal(state?.used_percent, 40, "Heartbeat snapshot must update monitor state");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test E: protocol v2 BANKED count change (banked_reset_count_change) creates banked distribution estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-09-10T00:00:00.000Z",
+      received_at: "2026-09-10T00:00:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-09-09T22:00:00.000Z",
+      banked_reset_available_count: 0,
+      last_banked_grant_at: null,
+      updated_at: "2026-09-10T00:00:01.000Z",
+    },
+    tiboSignals: [{
+      tweet_id: "tibo-banked-v2-notice",
+      text: "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+      tweet_url: "https://x.com/thsottiaux/status/tibo-banked-v2-notice",
+      tweet_created_at: "2026-09-09T23:00:00.000Z",
+      expires_at: "2026-09-11T00:00:00.000Z",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      verification_status: "auto_unverified",
+      is_reply: false,
+      expected_start_at: "2026-09-10T00:00:00.000Z",
+      expected_end_at: "2026-09-10T23:59:59.000Z",
+      temporal_resolution_status: "resolved",
+    }],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 60,
+      resetsAt: previousResetsAt,
+      bankedResetAvailableCount: 1,
+      bankedResetCountChange: true,
+      monitorProtocolVersion: 2,
+      postReason: "banked_reset_count_change",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "banked_distribution_observed" });
+    const plan = getAtomicPlanFromRequests(requests);
+    const bankedEstimate = getAtomicPlanPart(requests, "banked_distribution_estimate");
+    const state = getAtomicPlanPart(requests, "state");
+    assert.ok(bankedEstimate, "Banked count change must create banked distribution estimate");
+    assert.equal(plan.execution_estimate, undefined, "Banked count change must not create weekly recovery estimate");
+    assert.equal(state?.banked_reset_available_count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test F: protocol v2 structure change (structure_change) updates state without creating recovery estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      planType: "pro",
+      usedPercent: 40,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "structure_change",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "structure_change" });
+    const plan = getAtomicPlanFromRequests(requests);
+    const state = getAtomicPlanPart(requests, "state");
+    assert.equal(plan.execution_estimate, undefined, "Structure change must not create execution estimate");
+    assert.equal(state?.plan_type, "pro");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test G: protocol v2 stale snapshot with recovery_candidate returns ignored_stale", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    // DB has observed_at: "2026-09-10T00:00:00.000Z"
+    // Stale snapshot has earlier observedAt: "2026-09-09T23:59:00.000Z"
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-09T23:59:00.000Z",
+      usedPercent: 5,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "ignored_stale" });
+    assert.equal(requests.some((r) => r.method === "POST" && r.url.includes(ATOMIC_RPC_PATH)), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test H: protocol v2 firstEvidence chronology is preserved in reset execution estimate", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    // Candidate started at t=0s ("2026-09-10T00:00:30.000Z" with 5% usage).
+    // Confirmed at t=120s by local monitor.
+    // Local monitor posts the firstEvidence snapshot:
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:00:30.000Z",
+      usedPercent: 5,
+      resetsAt: currentResetsAt,
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+    assert.equal(response.status, 200);
+    const executionEstimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.ok(executionEstimate);
+    // Display execution time strictly preserves the initial detection moment (t=0s), not confirmation time
+    assert.equal(executionEstimate?.display_execution_at, "2026-09-10T00:00:30.000Z");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Test I: legacy protocol v1 compatibility allows fallback evaluation without version or postReason", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-09-11T03:55:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-09-18T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch();
+  globalThis.fetch = fetchHandler;
+
+  try {
+    // Legacy client payload: no monitorProtocolVersion, no postReason
+    // Arithmetic drop: 60% -> 5%, resetsAt +7d
+    const response = await POST(buildRequest({
+      observedAt: "2026-09-10T00:02:00.000Z",
+      usedPercent: 5,
+      resetsAt: currentResetsAt,
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.ok(plan.execution_estimate, "Legacy client arithmetic recovery accepted for zero-downtime deploy");
+
+    // Legacy client payload with no recovery: 60% -> 60%, resetsAt unchanged
+    requests.length = 0;
+    const noRecoveryResponse = await POST(buildRequest({
+      observedAt: "2026-09-10T00:04:00.000Z",
+      usedPercent: 60,
+      resetsAt: previousResetsAt,
+    }));
+    assert.equal(noRecoveryResponse.status, 200);
+    assert.deepEqual(await noRecoveryResponse.json(), { accepted: true, recovery: "no_recovery" });
+    const noRecoveryPlan = getAtomicPlanFromRequests(requests);
+    assert.equal(noRecoveryPlan.execution_estimate, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
