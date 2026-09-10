@@ -116,10 +116,25 @@ the secret or storage is unavailable.
 ## Recovery interpretation & Two-Step Confirmation State Machine
 
 To prevent false alarms caused by temporary fluctuations in `usedPercent` or
-`resetsAt` (such as the 2026-09-09 incident `512a8b31...` where an OpenAI incident
-fix caused a momentary drop and bounce), the local monitor does not post a
-recovery upon the first anomalous observation. Instead, it employs a local
-confirmation state machine.
+`resetsAt` (such as the false-positive reset event `usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec`
+on 2026-09-09), the local monitor does not post a recovery upon the first
+anomalous observation. Instead, it employs a local confirmation state machine.
+
+> **Incident Data Notice**:
+> The raw app-server snapshot sequence for the 2026-09-09 incident (`512a8b31...`)
+> was not recovered and remains unavailable:
+> - **actual 9/9 sequence**: unavailable
+> - **current regression**: synthetic analogue
+>
+> The synthetic regression represents the class of transient recovery-like observations
+> that could produce a false reset. The exact 2026-09-09 snapshot sequence was not recovered.
+
+### Refresh Trigger Distinction
+
+Observations arrive via three distinct triggers:
+- `poll`: Periodic client-side poll timer tick (default 120s, minimum 60s). Represents an independent, unprompted client observation.
+- `notification`: Triggered by `account/rateLimits/updated` push notifications from the Codex app-server. Notifications may burst or arrive repeatedly during server glitches, internal syncs, or cluster failovers.
+- `initial`: The initial handshake observation on session start.
 
 ### State Transitions
 
@@ -128,33 +143,34 @@ confirmation state machine.
    (`baseline.usedPercent - snapshot.usedPercent >= 1`) and a schedule advance of
    at least 1 hour (`snapshot.resetsAt - baseline.resetsAt >= 3600s`), the monitor
    enters the candidate phase.
+   - Candidates can be started by any trigger (`poll` or `notification`). This captures the earliest possible detection timestamp.
    - The pre-recovery baseline snapshot is **frozen** (`preRecoveryBaseline`).
    - The initial detection snapshot is recorded as `firstEvidenceSnapshot`.
    - The candidate start time is recorded.
    - **No webhook is sent yet** (`postReason: null`).
    - Audit log `recovery_candidate_started` is emitted.
 
-2. **Temporal Independence & Burst Guard (`MIN_RECOVERY_CONFIRMATION_DELAY_MS = 45s`)**:
-   Observations arriving within 45 seconds of candidate detection (e.g., rapid bursts
-   of `account/rateLimits/updated` notifications) are treated as non-independent burst
-   observations. They update the candidate's last observation count but **cannot**
-   confirm the recovery prematurely.
+2. **Temporal Independence & Trigger Guard (`MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60s`)**:
+   - Notifications arriving while a candidate is pending can update candidate progress or cancel it immediately upon reversion, but **cannot confirm** the candidate (`trigger === "notification"` always yields `postReason: null`).
+   - Observations arriving within 60 seconds (`elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60_000ms`) cannot confirm the candidate prematurely.
+   - This prevents false confirmations during multi-stage transient anomalies (e.g. drop at 0s, second notification at 50s or 90s, reversion at 90s or 110s).
 
 3. **Confirmation (`recovery_candidate_confirmed`)**:
-   When an observation arrives after at least 45 seconds (typically the next poll at
-   60s or 120s), the recovery is confirmed if:
-   - Usage remains recovered relative to the frozen `preRecoveryBaseline`
-     (`preRecoveryBaseline.usedPercent - snapshot.usedPercent >= 1%`).
-   - `resetsAt` remains forward relative to `preRecoveryBaseline.resetsAt` and
-     consistent with `firstEvidenceSnapshot.resetsAt` (within 30-second clock jitter
-     tolerance `RESET_AT_JITTER_TOLERANCE_SEC = 30s`).
-   - **First Evidence Timestamp Preservation**: Upon confirmation, the snapshot
-     enqueued and posted to the webhook is `firstEvidenceSnapshot`. This ensures
-     that the public observatory reflects the exact original time of recovery rather
-     than the confirmation-delay time, keeping regular proximity and probability
-     windows accurate.
+   A recovery candidate is confirmed **only** when an observation satisfies all of:
+   - **Scheduled poll trigger**: `trigger === "poll"`, ensuring client-side independent verification rather than a server-pushed notification burst.
+   - **Hold duration**: At least one minimum poll interval has elapsed (`elapsedMs >= MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60s`, typically the scheduled poll at 120s).
+   - **Usage drop maintained**: Usage remains recovered relative to the frozen `preRecoveryBaseline` (`preRecoveryBaseline.usedPercent - snapshot.usedPercent >= 1%`).
+   - **Schedule forward maintained**: `resetsAt` remains forward relative to `preRecoveryBaseline.resetsAt` and consistent with `firstEvidenceSnapshot.resetsAt` (within 30-second clock jitter tolerance `RESET_AT_JITTER_TOLERANCE_SEC = 30s`).
+   - **First Evidence Timestamp Preservation**: Upon confirmation, the snapshot enqueued and posted to the webhook is `firstEvidenceSnapshot`. This ensures that the public observatory reflects the exact original time of recovery (t=0s) rather than the confirmation-delay time (t=120s), keeping regular proximity and probability windows accurate.
    - Audit log `recovery_candidate_confirmed` is emitted.
    - The candidate is cleared and the baseline advances to the current snapshot.
+
+| Scenario | Candidate Start | Intermediate Events | Confirmation Check | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| **Transient Glitch (45s)** | Notification @ 0s | None | Reverts @ 45s (< 60s) | Cancelled (`usage_reverted`), 0 webhooks |
+| **Notification Glitch (50s)** | Notification @ 0s | Notification @ 50s | Reverts @ 90s | Cancelled (`usage_reverted`), 0 webhooks |
+| **Extended Glitch (90s)** | Notification @ 0s | Notification @ 90s | Reverts @ 110s | Cancelled (`usage_reverted`), 0 webhooks |
+| **Genuine Recovery** | Notification or Poll @ 0s | Normal user activity | Poll @ 120s (>= 60s) | Confirmed, 1 webhook with t=0s snapshot |
 
 4. **Cancellation (`recovery_candidate_cancelled`)**:
    A pending candidate is cancelled and cleared if:

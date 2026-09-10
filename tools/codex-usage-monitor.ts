@@ -20,7 +20,7 @@ export const APP_SERVER_REQUEST_TIMEOUT_MS = 15_000;
 export const APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD = 3;
 export const MONITOR_WEBHOOK_TIMEOUT_MS = 15_000;
 export const MAX_JSON_LINE_LENGTH = 1_000_000;
-export const MIN_RECOVERY_CONFIRMATION_DELAY_MS = 45_000;
+export const MIN_RECOVERY_CONFIRMATION_DELAY_MS = MIN_MONITOR_POLL_INTERVAL_MS;
 export const RESET_AT_JITTER_TOLERANCE_SEC = 30;
 
 const RESTART_BACKOFF_MS = [5_000, 30_000, 120_000] as const;
@@ -181,10 +181,13 @@ export type MonitorSnapshotState = {
   pendingPosts?: PendingMonitorPost[];
 };
 
+export type MonitorRefreshTrigger = "poll" | "notification" | "initial";
+
 export type MonitorRecoveryCandidateStatus =
   | "none"
   | "started"
   | "confirmed"
+  | "pending_unconfirmed"
   | "pending_burst"
   | "cancelled";
 
@@ -289,6 +292,7 @@ export function evaluateMonitorRecoveryCandidate(
   snapshot: CodexUsageSnapshot,
   state: MonitorSnapshotState,
   nowMs = Date.now(),
+  trigger: MonitorRefreshTrigger = "poll",
 ): MonitorRecoveryEvaluation {
   if (state.lastSuccessfulPostAt === null) {
     return {
@@ -401,14 +405,16 @@ export function evaluateMonitorRecoveryCandidate(
       };
     }
 
-    // Check confirmation delay for temporal independence
+    // Check confirmation requirements:
+    // 1. Must be a scheduled poll (notifications can start, update, or cancel candidates, but cannot confirm)
+    // 2. Must have elapsed at least MIN_RECOVERY_CONFIRMATION_DELAY_MS (>= 60s)
     const elapsedMs = Number.isFinite(nowMs) && Number.isFinite(candidate.candidateStartedAtMs)
       ? nowMs - candidate.candidateStartedAtMs
       : 0;
 
-    if (elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS) {
+    if (trigger !== "poll" || elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS) {
       return {
-        status: "pending_burst",
+        status: "pending_unconfirmed",
         postReason: null,
         postSnapshot: snapshot,
         nextPendingRecoveryCandidate: {
@@ -535,8 +541,9 @@ export function getMonitorSnapshotPostReason(
   snapshot: CodexUsageSnapshot,
   state: MonitorSnapshotState,
   nowMs = Date.now(),
+  trigger: MonitorRefreshTrigger = "poll",
 ): MonitorSnapshotPostReason | null {
-  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs).postReason;
+  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs, trigger).postReason;
 }
 
 export function getMonitorPostSnapshot(
@@ -544,11 +551,12 @@ export function getMonitorPostSnapshot(
   state: MonitorSnapshotState,
   postReason?: MonitorSnapshotPostReason | null,
   nowMs = Date.now(),
+  trigger: MonitorRefreshTrigger = "poll",
 ): CodexUsageSnapshot {
   if (postReason === "recovery_candidate" && state.pendingRecoveryCandidate) {
     return state.pendingRecoveryCandidate.firstEvidenceSnapshot;
   }
-  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs).postSnapshot;
+  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs, trigger).postSnapshot;
 }
 
 export function updateMonitorSnapshotState(
@@ -559,10 +567,16 @@ export function updateMonitorSnapshotState(
   options: {
     nowMs?: number;
     logger?: MonitorLogger;
+    trigger?: MonitorRefreshTrigger;
   } = {},
 ): MonitorSnapshotState {
   const evaluationTime = options.nowMs ?? postCompletedAtMs ?? Date.now();
-  const evaluation = evaluateMonitorRecoveryCandidate(snapshot, state, evaluationTime);
+  const evaluation = evaluateMonitorRecoveryCandidate(
+    snapshot,
+    state,
+    evaluationTime,
+    options.trigger ?? "poll",
+  );
 
   if (options.logger) {
     if (evaluation.status === "started") {
@@ -953,7 +967,7 @@ async function runAppServerSession(
       });
     };
 
-    const refresh = async (retryPending = true) => {
+    const refresh = async (retryPending = true, trigger: MonitorRefreshTrigger = "poll") => {
       if (settled || !initialized || refreshInFlight) return;
       refreshInFlight = true;
       let rpcFailed = false;
@@ -1004,19 +1018,21 @@ async function runAppServerSession(
           snapshot,
           monitorSnapshotState,
           nowMs,
+          trigger,
         );
         const postSnapshot = getMonitorPostSnapshot(
           snapshot,
           monitorSnapshotState,
           postReason,
           nowMs,
+          trigger,
         );
         monitorSnapshotState = updateMonitorSnapshotState(
           monitorSnapshotState,
           snapshot,
           false,
           nowMs,
-          { nowMs, logger },
+          { nowMs, logger, trigger },
         );
 
         if (pendingRetryFailed) {
@@ -1071,7 +1087,7 @@ async function runAppServerSession(
     };
 
     const notificationDebouncer = createNotificationDebouncer(() => {
-      void refresh(false);
+      void refresh(false, "notification");
     }, NOTIFICATION_DEBOUNCE_MS);
 
     const parser = createJsonLineParser(
@@ -1129,9 +1145,9 @@ async function runAppServerSession(
         if (settled) return;
         sendNotification("initialized");
         initialized = true;
-        await refresh();
+        await refresh(true, "initial");
         if (settled) return;
-        pollTimer = setInterval(() => { void refresh(); }, config.pollIntervalMs);
+        pollTimer = setInterval(() => { void refresh(true, "poll"); }, config.pollIntervalMs);
       } catch (error) {
         const reason = getSafeMonitorErrorCode(error);
         finish(new Error(reason === "unknown" ? "app_server_initialize_failed" : reason));

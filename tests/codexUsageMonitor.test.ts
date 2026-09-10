@@ -501,7 +501,7 @@ test("a notification burst does not confirm a recovery candidate until confirmat
   assert.equal(getMonitorSnapshotPostReason(firstEvidence, initialState, 2_000), null);
   const stateWithCandidate = updateMonitorSnapshotState(initialState, firstEvidence, false, 2_000, { nowMs: 2_000 });
 
-  // Burst observation 2s later (at 4s, total elapsed 2s < 45s): still not confirmed!
+  // Burst observation 2s later (at 4s, total elapsed 2s < 60s): still not confirmed!
   const burstSnapshot = snapshot({
     observedAt: "2026-08-21T00:00:04.000Z",
     usedPercent: 19,
@@ -509,13 +509,13 @@ test("a notification burst does not confirm a recovery candidate until confirmat
   });
   assert.equal(getMonitorSnapshotPostReason(burstSnapshot, stateWithCandidate, 4_000), null);
 
-  // Once 45s+ has elapsed (at 60s): independent confirmation!
+  // Once 60s+ has elapsed (at 65s, elapsed 63s >= 60s): independent confirmation on scheduled poll!
   const confirmedSnapshot = snapshot({
-    observedAt: "2026-08-21T00:01:00.000Z",
+    observedAt: "2026-08-21T00:01:05.000Z",
     usedPercent: 19,
     resetsAt: 1_787_016_327,
   });
-  assert.equal(getMonitorSnapshotPostReason(confirmedSnapshot, stateWithCandidate, 60_000), "recovery_candidate");
+  assert.equal(getMonitorSnapshotPostReason(confirmedSnapshot, stateWithCandidate, 65_000), "recovery_candidate");
 });
 
 test("a confirmed recovery wins over heartbeat, while a structure change cancels candidate", () => {
@@ -814,7 +814,11 @@ test("GUI-safe error codes preserve only known machine-readable reasons", () => 
   assert.equal(getSafeMonitorErrorCode(new Error("private error details")), "Error");
 });
 
-test("synthetic regression: 2026-09-09 false recovery anomaly (512a8b31...) starts candidate but cancels on reversion without posting", () => {
+test("synthetic analogue: transient recovery-like anomaly starts candidate but cancels on reversion without posting (actual 2026-09-09 sequence unavailable)", () => {
+  // The synthetic regression represents the class of transient recovery-like observations
+  // that could produce a false reset. The exact 2026-09-09 snapshot sequence was not recovered.
+  // actual 9/9 sequence: unavailable
+  // current regression: synthetic analogue
   const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
   const testLogger = (event: string, details?: Record<string, unknown>) => {
     auditLogs.push({ event, details });
@@ -833,7 +837,7 @@ test("synthetic regression: 2026-09-09 false recovery anomaly (512a8b31...) star
     0,
   );
 
-  // Poll 1 (t=120s): Anomalous snapshot (incident fix usage bounce) drops to 40% with +7d resetsAt
+  // Poll 1 (t=120s): Anomalous snapshot drops to 40% with +7d resetsAt
   const anomalous = snapshot({
     observedAt: "2026-09-09T03:02:00.000Z",
     usedPercent: 40,
@@ -878,6 +882,218 @@ test("synthetic regression: 2026-09-09 false recovery anomaly (512a8b31...) star
   assert.equal(auditLogs[1]?.event, "recovery_candidate_cancelled");
   assert.equal(auditLogs[1]?.details?.reason, "usage_reverted");
   assert.equal(state.pendingPosts?.length ?? 0, 0, "Zero posts queued for webhook");
+});
+
+test("adversarial sequence A: transient drop with intermediate notification (60/A -> 40/B @0s -> 40/B @50s -> 60/A @90s)", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  const scheduleA = 1_787_012_727;
+  const scheduleB = 1_787_012_727 + 7 * 86400;
+
+  // t=0s: baseline established (60% / A)
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // t=0s: anomaly arrived via notification (40% / B) -> starts candidate
+  const anomaly0 = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const reason0 = getMonitorSnapshotPostReason(anomaly0, state, 0, "notification");
+  assert.equal(reason0, null, "Candidate start must not post immediately");
+  state = updateMonitorSnapshotState(state, anomaly0, false, 0, {
+    nowMs: 0,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate, "Candidate should be started");
+  assert.equal(state.pendingRecoveryCandidate.observationCount, 1);
+
+  // t=50s: notification arrives again (40% / B) -> still transient, notification cannot confirm
+  const anomaly50 = snapshot({
+    observedAt: "2026-09-10T00:00:50.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const reason50 = getMonitorSnapshotPostReason(anomaly50, state, 50_000, "notification");
+  assert.equal(reason50, null, "Intermediate notification must NOT confirm candidate");
+  state = updateMonitorSnapshotState(state, anomaly50, false, 50_000, {
+    nowMs: 50_000,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate, "Candidate remains pending unconfirmed");
+  assert.equal(state.pendingRecoveryCandidate.observationCount, 2);
+
+  // t=90s: reversion arrives (60% / A) -> usage reverted!
+  const reverted90 = snapshot({
+    observedAt: "2026-09-10T00:01:30.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  const reason90 = getMonitorSnapshotPostReason(reverted90, state, 90_000, "notification");
+  assert.equal(reason90, null, "Reverted observation must NOT trigger a post");
+  state = updateMonitorSnapshotState(state, reverted90, false, 90_000, {
+    nowMs: 90_000,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.equal(state.pendingRecoveryCandidate, null, "Candidate must be cancelled on reversion");
+  assert.equal(state.baselineSnapshot?.usedPercent, 60);
+
+  // Verify audit logs: started -> cancelled (usage_reverted)
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_started"), true);
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_cancelled" && l.details?.reason === "usage_reverted"), true);
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_confirmed"), false);
+  assert.equal(state.pendingPosts?.length ?? 0, 0, "Webhook send count must be 0");
+});
+
+test("adversarial sequence B: slightly longer transient glitch (>60s) with notification @90s (60/A -> 40/B @0s -> 40/B @90s -> 60/A @110s)", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  const scheduleA = 1_787_012_727;
+  const scheduleB = 1_787_012_727 + 7 * 86400;
+
+  // t=0s: baseline (60% / A)
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // t=0s: candidate started (40% / B) via notification
+  const anomaly0 = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  assert.equal(getMonitorSnapshotPostReason(anomaly0, state, 0, "notification"), null);
+  state = updateMonitorSnapshotState(state, anomaly0, false, 0, {
+    nowMs: 0,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  // t=90s: notification arrives with 40% / B. Even though elapsed 90s > 60s, trigger is "notification" so it MUST NOT confirm!
+  const anomaly90 = snapshot({
+    observedAt: "2026-09-10T00:01:30.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const reason90 = getMonitorSnapshotPostReason(anomaly90, state, 90_000, "notification");
+  assert.equal(reason90, null, "Notification at 90s must NOT confirm candidate because confirmation requires scheduled poll");
+  state = updateMonitorSnapshotState(state, anomaly90, false, 90_000, {
+    nowMs: 90_000,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate, "Candidate must remain pending_unconfirmed");
+
+  // t=110s: reversion occurs before scheduled poll! (60% / A)
+  const reverted110 = snapshot({
+    observedAt: "2026-09-10T00:01:50.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  const reason110 = getMonitorSnapshotPostReason(reverted110, state, 110_000, "poll");
+  assert.equal(reason110, null, "Reversion at 110s must cancel without posting");
+  state = updateMonitorSnapshotState(state, reverted110, false, 110_000, {
+    nowMs: 110_000,
+    logger: testLogger,
+    trigger: "poll",
+  });
+  assert.equal(state.pendingRecoveryCandidate, null, "Candidate cancelled on reversion");
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_confirmed"), false);
+  assert.equal(state.pendingPosts?.length ?? 0, 0, "Webhook send count must be 0");
+});
+
+test("adversarial sequence C: genuine recovery with slow usage after reset (60/A -> 5/B @0s -> 8/B @next poll 120s)", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  const scheduleA = 1_787_012_727;
+  const scheduleB = 1_787_012_727 + 7 * 86400;
+
+  // t=0s: baseline (60% / A)
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // t=0s: genuine reset arrives (5% / B) via notification
+  const reset0 = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 5,
+    resetsAt: scheduleB,
+  });
+  assert.equal(getMonitorSnapshotPostReason(reset0, state, 0, "notification"), null);
+  state = updateMonitorSnapshotState(state, reset0, false, 0, {
+    nowMs: 0,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate);
+  assert.equal(state.pendingRecoveryCandidate.firstEvidenceSnapshot.usedPercent, 5);
+
+  // t=120s: next scheduled poll arrives ("poll", elapsed 120s >= 60s). User started coding, usage is 8% / B.
+  const pollObs = snapshot({
+    observedAt: "2026-09-10T00:02:00.000Z",
+    usedPercent: 8,
+    resetsAt: scheduleB,
+  });
+  // Compared against preRecoveryBaseline (60%): 60 - 8 = 52% >= 1%, schedule forward -> confirmed!
+  const reason = getMonitorSnapshotPostReason(pollObs, state, 120_000, "poll");
+  assert.equal(reason, "recovery_candidate", "Must confirm on scheduled poll");
+
+  const postSnapshot = getMonitorPostSnapshot(pollObs, state, reason, 120_000, "poll");
+  // Crucial: Snapshot posted to webhook is the t=0s 5% first evidence snapshot!
+  assert.equal(postSnapshot.observedAt, "2026-09-10T00:00:00.000Z");
+  assert.equal(postSnapshot.usedPercent, 5);
+
+  state = enqueueMonitorSnapshotPost(state, reason!, postSnapshot);
+  state = updateMonitorSnapshotState(state, pollObs, true, 120_000, {
+    nowMs: 120_000,
+    logger: testLogger,
+    trigger: "poll",
+  });
+
+  assert.equal(state.pendingRecoveryCandidate, null, "Candidate cleared after confirmation");
+  assert.equal(state.baselineSnapshot?.usedPercent, 8, "Baseline advances to latest observation");
+  assert.equal(state.pendingPosts?.length, 1, "Exactly 1 post queued");
+  assert.equal(state.pendingPosts?.[0]?.snapshot.usedPercent, 5, "Queued post has 5% initial snapshot");
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_confirmed"), true);
 });
 
 test("genuine recovery: persists across independent polls and posts firstEvidenceSnapshot timestamp", () => {
