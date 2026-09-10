@@ -218,6 +218,29 @@ const TIBO_HISTORY_FALLBACK_SELECT_FIELDS = [
   "is_reply",
 ].join(",");
 
+export const TIBO_HISTORY_MAX_ROWS = 1000;
+
+type TiboHistoryQueryResult = {
+  data: Array<FormalTiboResetSignal> | null;
+  error: unknown | null;
+};
+
+type TiboHistoryQueryRunner = (
+  fields: string,
+  includeReplies: boolean,
+) => Promise<TiboHistoryQueryResult>;
+
+type TiboHistoryQueryBuilder = {
+  or(filters: string): TiboHistoryQueryBuilder;
+  order(column: string, options: { ascending: boolean }): TiboHistoryQueryBuilder;
+  limit(count: number): Promise<TiboHistoryQueryResult>;
+};
+
+export type TiboHistoryReadResult = {
+  withReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
+  withoutReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
+};
+
 type ActiveTiboQueryBuilder = {
   not(column: string, operator: string, value: null): ActiveTiboQueryBuilder;
   gt(column: string, value: string): ActiveTiboQueryBuilder;
@@ -307,56 +330,6 @@ const getCachedTiboSignals = unstable_cache(
   }
 );
 
-async function fetchRawTiboHistorySignals(): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const configuration = getRequiredConfigurationHealth([
-    supabaseUrl,
-    supabaseServiceRoleKey,
-  ]);
-
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return { data: [], health: configuration };
-  }
-
-  try {
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false },
-    });
-    const queryTiboHistory = (fields: string) => supabase
-      .from("tibo_signals")
-      .select(fields)
-      .order("tweet_created_at", { ascending: false })
-      .limit(1000);
-    type TiboHistoryQueryResult = {
-      data: Array<FormalTiboResetSignal> | null;
-      error: unknown | null;
-    };
-    let result = (await queryTiboHistory(TIBO_HISTORY_SELECT_FIELDS)) as TiboHistoryQueryResult;
-
-    if (result.error && isMissingTiboOptionalColumnError(result.error)) {
-      result = (await queryTiboHistory(TIBO_HISTORY_FALLBACK_SELECT_FIELDS)) as TiboHistoryQueryResult;
-    }
-
-    const { data, error } = result;
-
-    const health = getDatabaseReadHealth(configuration, {
-      hasData: data !== null,
-      hasError: Boolean(error),
-    });
-    if (error) {
-      console.error("Tibo reset history query failed", error);
-    }
-    return {
-      data: data ?? [],
-      health,
-    };
-  } catch (error) {
-    console.error("Failed to load Tibo reset history", error);
-    return { data: [], health: { state: "degraded", detail: "request_failed" } };
-  }
-}
-
 export function splitTiboHistorySignals(
   signals: readonly FormalTiboResetSignal[],
 ) {
@@ -367,6 +340,110 @@ export function splitTiboHistorySignals(
     // predicate without transferring the same wide rows twice.
     withoutReplies: signals.filter((signal) => signal.is_reply !== true),
   };
+}
+
+function toTiboHistoryFetchResult(
+  configuration: DataSourceHealth,
+  result: TiboHistoryQueryResult,
+): DataFetchResult<Array<FormalTiboResetSignal>> {
+  const health = getDatabaseReadHealth(configuration, {
+    hasData: result.data !== null,
+    hasError: Boolean(result.error),
+  });
+  return {
+    data: result.data ?? [],
+    health,
+  };
+}
+
+async function executeTiboHistoryQuery(
+  queryTiboHistory: TiboHistoryQueryRunner,
+  fields: string,
+  includeReplies: boolean,
+): Promise<TiboHistoryQueryResult> {
+  let result = await queryTiboHistory(fields, includeReplies);
+  if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+    result = await queryTiboHistory(TIBO_HISTORY_FALLBACK_SELECT_FIELDS, includeReplies);
+  }
+  return result;
+}
+
+export async function readTiboHistorySignals(
+  queryTiboHistory: TiboHistoryQueryRunner,
+  configuration: DataSourceHealth,
+): Promise<TiboHistoryReadResult> {
+  const unifiedResult = await executeTiboHistoryQuery(
+    queryTiboHistory,
+    TIBO_HISTORY_SELECT_FIELDS,
+    true,
+  );
+  const withReplies = toTiboHistoryFetchResult(configuration, unifiedResult);
+
+  if (unifiedResult.error) {
+    console.error("Tibo reset history query failed", unifiedResult.error);
+  }
+
+  if (unifiedResult.error || withReplies.data.length === TIBO_HISTORY_MAX_ROWS) {
+    const formalResult = await executeTiboHistoryQuery(
+      queryTiboHistory,
+      TIBO_HISTORY_SELECT_FIELDS,
+      false,
+    );
+    const withoutReplies = toTiboHistoryFetchResult(configuration, formalResult);
+    if (formalResult.error) {
+      console.error("Tibo formal history query failed", formalResult.error);
+    }
+    return { withReplies, withoutReplies };
+  }
+
+  return {
+    withReplies,
+    withoutReplies: {
+      data: splitTiboHistorySignals(withReplies.data).withoutReplies,
+      health: withReplies.health,
+    },
+  };
+}
+
+async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const configuration = getRequiredConfigurationHealth([
+    supabaseUrl,
+    supabaseServiceRoleKey,
+  ]);
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return {
+      withReplies: { data: [], health: configuration },
+      withoutReplies: { data: [], health: configuration },
+    };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const queryTiboHistory: TiboHistoryQueryRunner = async (fields, includeReplies) => {
+      const query = supabase
+        .from("tibo_signals")
+        .select(fields) as unknown as TiboHistoryQueryBuilder;
+      const filteredQuery = includeReplies
+        ? query
+        : query.or("is_reply.is.null,is_reply.eq.false");
+      return await filteredQuery
+        .order("tweet_created_at", { ascending: false })
+        .limit(TIBO_HISTORY_MAX_ROWS);
+    };
+    return await readTiboHistorySignals(queryTiboHistory, configuration);
+  } catch (error) {
+    console.error("Failed to load Tibo reset history", error);
+    const health = { state: "degraded", detail: "request_failed" } as const;
+    return {
+      withReplies: { data: [], health },
+      withoutReplies: { data: [], health },
+    };
+  }
 }
 
 type CandidateNoticeRow = {
@@ -830,8 +907,8 @@ async function getTiboSignalBundle(
     const expiresTime = new Date(signal.expires_at).getTime();
     return !isNaN(expiresTime) && expiresTime > now.getTime();
   });
-  const { withoutReplies: signals, withReplies: recentSignalsSource } =
-    splitTiboHistorySignals(historyResult.data);
+  const signals = historyResult.withoutReplies.data;
+  const recentSignalsSource = historyResult.withReplies.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
   const notices = expandTiboSignalVariants(signals)
     .map(toNoticeSignal)
@@ -896,7 +973,8 @@ async function getTiboSignalBundle(
     rejectedResets,
     health: combineDataSourceHealth(
       activeResult.health,
-      historyResult.health,
+      historyResult.withReplies.health,
+      historyResult.withoutReplies.health,
     ),
   };
 }

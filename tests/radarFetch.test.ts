@@ -18,7 +18,9 @@ import {
   PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
+  readTiboHistorySignals,
   splitTiboHistorySignals,
+  TIBO_HISTORY_MAX_ROWS,
   TIBO_HISTORY_SELECT_FIELDS,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
@@ -252,6 +254,105 @@ test("one reply-inclusive history result derives the formal view without changin
   assert.deepEqual(split.withReplies, rows);
 });
 
+test("history read uses one unified query below the truncation boundary", async () => {
+  const rows: FormalTiboResetSignal[] = [
+    { ...resetSignal("reply", "2026-08-03T10:00:00.000Z"), is_reply: true },
+    { ...resetSignal("post", "2026-08-02T10:00:00.000Z"), is_reply: false },
+    { ...resetSignal("legacy", "2026-08-01T10:00:00.000Z"), is_reply: null },
+  ];
+  const calls: Array<{ fields: string; includeReplies: boolean }> = [];
+
+  const result = await readTiboHistorySignals(
+    async (fields, includeReplies) => {
+      calls.push({ fields, includeReplies });
+      return { data: rows, error: null };
+    },
+    { state: "ok" },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { fields: TIBO_HISTORY_SELECT_FIELDS, includeReplies: true });
+  assert.deepEqual(result.withReplies.data, rows);
+  assert.deepEqual(result.withoutReplies.data, [rows[1], rows[2]]);
+  assert.equal(result.withReplies.health.state, "ok");
+  assert.equal(result.withoutReplies.health.state, "ok");
+});
+
+test("exactly the history row limit triggers a filtered formal-history fallback", async () => {
+  const unifiedRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, (_, index) => ({
+    ...resetSignal(`unified-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: index % 2 === 0,
+  }));
+  const formalRows = [resetSignal("older-formal", "2020-01-01T00:00:00.000Z")];
+  const calls: Array<{ fields: string; includeReplies: boolean }> = [];
+
+  const result = await readTiboHistorySignals(
+    async (fields, includeReplies) => {
+      calls.push({ fields, includeReplies });
+      return { data: includeReplies ? unifiedRows : formalRows, error: null };
+    },
+    { state: "ok" },
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].includeReplies, true);
+  assert.equal(calls[1].includeReplies, false);
+  assert.deepEqual(result.withReplies.data, unifiedRows);
+  assert.deepEqual(result.withoutReplies.data, formalRows);
+  assert.equal(result.withoutReplies.health.state, "ok");
+});
+
+test("a reply-heavy newest history page does not hide older formal rows", async () => {
+  const unifiedRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, (_, index) => ({
+    ...resetSignal(`recent-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: index < 900,
+  }));
+  const formalRows = [
+    resetSignal("older-formal", "2020-01-01T00:00:00.000Z"),
+    resetSignal("formal-2", "2020-01-02T00:00:00.000Z"),
+  ];
+
+  const result = await readTiboHistorySignals(
+    async (_fields, includeReplies) => ({
+      data: includeReplies ? unifiedRows : formalRows,
+      error: null,
+    }),
+    { state: "ok" },
+  );
+
+  assert.deepEqual(result.withReplies.data, unifiedRows);
+  assert.deepEqual(result.withoutReplies.data, formalRows);
+  assert.equal(result.withoutReplies.data[0].tweet_id, "older-formal");
+});
+
+test("history schema fallback preserves data health and local reply derivation", async () => {
+  const rows: FormalTiboResetSignal[] = [
+    { ...resetSignal("reply", "2026-08-03T10:00:00.000Z"), is_reply: true },
+    { ...resetSignal("post", "2026-08-02T10:00:00.000Z"), is_reply: false },
+  ];
+  let calls = 0;
+
+  const result = await readTiboHistorySignals(
+    async (_fields, includeReplies) => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          data: null,
+          error: { code: "PGRST204", message: "column logical_post_id does not exist" },
+        };
+      }
+      return { data: includeReplies ? rows : [], error: null };
+    },
+    { state: "ok" },
+  );
+
+  assert.equal(calls, 2);
+  assert.deepEqual(result.withReplies.data, rows);
+  assert.deepEqual(result.withoutReplies.data, [rows[1]]);
+  assert.equal(result.withReplies.health.state, "ok");
+  assert.equal(result.withoutReplies.health.state, "ok");
+});
+
 test("Tibo radar queries use explicit field lists instead of wildcard reads", () => {
   assert.notEqual(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, "*");
   assert.notEqual(TIBO_HISTORY_SELECT_FIELDS, "*");
@@ -269,6 +370,7 @@ test("Tibo history uses one reply-inclusive cache entry and derives the formal v
   assert.match(source, /TIBO_HISTORY_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /isMissingTiboOptionalColumnError\(result\.error\)/);
+  assert.match(source, /TIBO_HISTORY_MAX_ROWS/);
   assert.doesNotMatch(source, /getCachedTiboRecentSignals/);
 
   const bundleSource = source.slice(
@@ -276,7 +378,8 @@ test("Tibo history uses one reply-inclusive cache entry and derives the formal v
     source.indexOf("export async function fetchFormalTiboResetSignals"),
   );
   assert.equal((bundleSource.match(/fetchRawTiboHistorySignals\(\)/g) ?? []).length, 1);
-  assert.match(bundleSource, /splitTiboHistorySignals\(historyResult\.data\)/);
+  assert.match(bundleSource, /historyResult\.withReplies\.data/);
+  assert.match(bundleSource, /historyResult\.withoutReplies\.data/);
   assert.doesNotMatch(bundleSource, /fetchRawTiboHistorySignals\(false\)|fetchRawTiboHistorySignals\(true\)/);
 });
 
