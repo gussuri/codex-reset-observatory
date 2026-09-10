@@ -19,6 +19,13 @@ import {
   type ProspectiveStoredForecast,
 } from "./prospectiveProbabilityEvaluation";
 import type { ShadowResetEvent } from "./shadowProbability";
+import {
+  buildPublishedV3ProspectiveScoreboard,
+  type PublishedV3ProspectiveScoreboard,
+  type PublishedV3ScoreboardFeature,
+} from "./prospectiveV3Scoreboard";
+
+export { buildPublishedV3ProspectiveScoreboard } from "./prospectiveV3Scoreboard";
 
 const HOUR_MS = 60 * 60 * 1000;
 const LOG_LOSS_EPSILON = 1e-12;
@@ -232,7 +239,7 @@ export type PublishedPostResetDiagnostic = {
 };
 
 export type PublishedProspectiveEvaluationReport = {
-  schemaVersion: "prospective-published-model-evaluation-v2";
+  schemaVersion: "prospective-published-model-evaluation-v3";
   status:
     | "insufficient_data"
     | "promising"
@@ -272,6 +279,7 @@ export type PublishedProspectiveEvaluationReport = {
   };
   canonicalRandomResetEvents: Array<ShadowResetEvent>;
   postResetDiagnostic: PublishedPostResetDiagnostic;
+  scoreboard: PublishedV3ProspectiveScoreboard;
   unifiedComparison: PublishedUnifiedComparison;
   gate: {
     autoPublish: false;
@@ -294,6 +302,7 @@ export type PublishedProspectiveEvaluationOptions = {
   hybridForecasts?: Record<string, ProspectiveStoredForecast>;
   hybridReplayForecasts?: Record<string, ProspectiveStoredForecast>;
   savedArtifactHybridAudits?: Record<string, PublishedSavedArtifactHybridAudit>;
+  scoreboardFeatures?: Record<string, PublishedV3ScoreboardFeature>;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -1456,9 +1465,16 @@ export function evaluatePublishedModelProspectively(
         return resetTime !== null && (adoptionAt === null || resetTime >= adoptionAt!);
       })
       .map((event) => ({ id: event.id, resetAt: event.resetAt }));
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(rows, events, asOf, {
+    activeModelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
+    previousModelVersion: PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+    adoptionAt: configuredAdoptionValue,
+    adoptionBoundaryPending,
+    features: options.scoreboardFeatures,
+  });
 
   return {
-    schemaVersion: "prospective-published-model-evaluation-v2",
+    schemaVersion: "prospective-published-model-evaluation-v3",
     status,
     generatedAt: asOf.toISOString(),
     asOf: asOf.toISOString(),
@@ -1490,6 +1506,7 @@ export function evaluatePublishedModelProspectively(
     models: { active, baseline },
     canonicalRandomResetEvents,
     postResetDiagnostic: calculatePostResetDiagnostic(comparableRows, events, asOf),
+    scoreboard,
     unifiedComparison: buildUnifiedComparison(
       dailyRows,
       events,

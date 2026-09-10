@@ -23,6 +23,11 @@ import {
 import type { RadarData } from "../lib/radar";
 import { getActualWithinHorizon, getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
 import {
+  buildCanonicalResetHistoryContext,
+  getCanonicalResetHistoryForStaticHistory,
+} from "../lib/radar/tiboHistory";
+import type { WindowLike } from "../lib/radar/types";
+import {
   evaluatePublishedModelProspectively,
   buildSavedArtifactHybridForecast,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
@@ -32,6 +37,7 @@ import {
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
+import type { PublishedV3ScoreboardFeature } from "../lib/radar/prospectiveV3Scoreboard";
 import type { ProspectiveForecastRow, ProspectiveStoredForecast } from "../lib/radar/prospectiveProbabilityEvaluation";
 import {
   loadProductionCanonicalRadarData,
@@ -113,6 +119,45 @@ function formatUnifiedOriginDiagnostic(
   ];
 }
 
+type ScoreboardMetric = PublishedProspectiveEvaluationReport["scoreboard"]["metrics"]["publishedV3"]["metrics24h"];
+type ScoreboardSegment = PublishedProspectiveEvaluationReport["scoreboard"]["segments"]["officialNoticeOverride"]["yes"];
+
+function formatScoreboardMetric(metric: ScoreboardMetric) {
+  const number = (value: number | null) => value === null ? "unavailable" : value.toFixed(4);
+  const interval = metric.positiveRateWilson95 === null
+    ? "unavailable"
+    : `${metric.positiveRateWilson95.lower.toFixed(4)}-${metric.positiveRateWilson95.upper.toFixed(4)}`;
+  const reliability = metric.reliabilityBins
+    .map((bin) => `${bin.range}:${bin.count}/${bin.averagePrediction.toFixed(4)}/${bin.actualRate.toFixed(4)}`)
+    .join(";");
+  return [
+    `n=${metric.count}`,
+    `status=${metric.sampleStatus}`,
+    `positive=${metric.positiveCount}`,
+    `actualRate=${number(metric.actualPositiveRate)}`,
+    `mean=${number(metric.meanPredictedProbability)}`,
+    `bias=${number(metric.bias)}`,
+    `brier=${number(metric.brier)}`,
+    `logLoss=${number(metric.logLoss)}`,
+    `falseHigh=${metric.falseHigh}`,
+    `falseLow=${metric.falseLow}`,
+    `falseHighRate=${number(metric.falseHighRate)}`,
+    `falseLowRate=${number(metric.falseLowRate)}`,
+    `sharpness=${number(metric.sharpness)}`,
+    `wilson95=${interval}`,
+    `reliability=${reliability}`,
+  ].join(", ");
+}
+
+function formatScoreboardSegment(name: string, segment: ScoreboardSegment) {
+  return [
+    `### ${name}`,
+    `- Origins: ${segment.originCount}`,
+    `- 24h: ${formatScoreboardMetric(segment.metrics24h)}`,
+    `- 48h: ${formatScoreboardMetric(segment.metrics48h)}`,
+  ];
+}
+
 function parseTimestamp(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value).getTime();
@@ -121,6 +166,56 @@ function parseTimestamp(value: string | null | undefined) {
 
 function isFiniteProbability(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function getHistoryEventTime(item: WindowLike) {
+  return item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
+}
+
+function buildProspectiveScoreboardFeatures(
+  rows: Array<ProspectiveForecastRow>,
+  data: RadarData | null,
+): Record<string, PublishedV3ScoreboardFeature> {
+  if (!data) return {};
+
+  return Object.fromEntries(rows.flatMap((row) => {
+    const originTime = parseTimestamp(row.generatedAt);
+    if (originTime === null) return [];
+
+    const pointInTimeData = getPointInTimeRadarData(data, new Date(originTime));
+    if (!pointInTimeData) return [];
+
+    const canonicalContext = buildCanonicalResetHistoryContext(pointInTimeData, {
+      defaultStaticHistory: LOCAL_RESET_HISTORY,
+    });
+    const canonicalHistory = getCanonicalResetHistoryForStaticHistory(
+      canonicalContext,
+      LOCAL_RESET_HISTORY,
+    ) ?? canonicalContext.defaultHistory;
+    const bankedEventWithin48h = canonicalHistory.some((item) => {
+      if (item.recordKind !== "banked_distribution") return false;
+      const completedTime = parseTimestamp(getHistoryEventTime(item));
+      return completedTime !== null
+        && completedTime > originTime - 48 * 60 * 60 * 1000
+        && completedTime <= originTime;
+    });
+    const usableTiboSignal = [
+      ...(pointInTimeData.active_tibo_signals ?? []),
+      ...(pointInTimeData.recent_tibo_signals ?? []),
+      ...(pointInTimeData.formal_tibo_resets ?? []),
+    ].some((signal) =>
+      signal.is_reply !== true
+      && signal.verification_status !== "rejected"
+      && signal.signal_type !== "irrelevant",
+    );
+    const statusIncident = (pointInTimeData.openai_status_history ?? []).length > 0;
+
+    return [[row.generatedAt, {
+      bankedEventWithin48h,
+      usableTiboSignal,
+      statusIncident,
+    }] satisfies [string, PublishedV3ScoreboardFeature]];
+  }));
 }
 
 function buildV3TrainingRows(
@@ -347,6 +442,51 @@ function writeMarkdown(report: PublishedProspectiveEvaluationReport) {
     `- Positive forecasts: 24h=${report.comparison.positiveCount24h}, 48h=${report.comparison.positiveCount48h}`,
     `- Target random reset count: ${report.comparison.targetResetCount}`,
     "",
+    "## V3 prospective scoreboard",
+    "",
+    "This scoreboard is prospective-only and uses daily-first saved v3 origins at or after the adoption boundary. It does not rewrite historical rows, backfill missing forecasts, or change probability calculations.",
+    `- Scoreboard status: ${report.scoreboard.gate.status}`,
+    `- Diagnostic recommendation: ${report.scoreboard.recommendation}`,
+    `- Daily-first origins: ${report.scoreboard.dailyFirstOriginCount}`,
+    `- Gate progress: 24h=${report.scoreboard.gate.resolved24h}/${report.scoreboard.gate.thresholds.resolved24h}, 48h=${report.scoreboard.gate.resolved48h}/${report.scoreboard.gate.thresholds.resolved48h}, target resets=${report.scoreboard.gate.targetResetCount}/${report.scoreboard.gate.thresholds.targetResets}`,
+    `- Gate met: ${report.scoreboard.gate.allMet}`,
+    `- v4 research eligible: ${report.scoreboard.gate.v4ResearchEligible}`,
+    "- Segments below the minimum sample size are marked `insufficient_sample` and do not affect the gate or recommendation.",
+    "- A gate status of `not_enough_prospective_data` does not recommend v4 research.",
+    "",
+    "### Published v3 metrics",
+    `- 24h: ${formatScoreboardMetric(report.scoreboard.metrics.publishedV3.metrics24h)}`,
+    `- 48h: ${formatScoreboardMetric(report.scoreboard.metrics.publishedV3.metrics48h)}`,
+    "",
+    "### Same-origin comparisons",
+    `- Raw signal-adjusted 24h (${report.scoreboard.comparisons.rawSignalAdjusted24h.source}): ${formatScoreboardMetric(report.scoreboard.comparisons.rawSignalAdjusted24h.metric)}`,
+    `- v2-style calibrated 24h (${report.scoreboard.comparisons.v2StyleCalibrated24h.source}): ${formatScoreboardMetric(report.scoreboard.comparisons.v2StyleCalibrated24h.metric)}`,
+    `- v2-policy 48h (${report.scoreboard.comparisons.v2Policy48h.source}): ${formatScoreboardMetric(report.scoreboard.comparisons.v2Policy48h.metric)}`,
+    `- v2-policy 48h exactly matches published v3: ${report.scoreboard.comparisons.v2Policy48h.exactlyMatchesPublished ?? "unavailable"}`,
+    `- v2-policy 48h maximum absolute difference: ${report.scoreboard.comparisons.v2Policy48h.maxAbsoluteDifference ?? "unavailable"}`,
+    "",
+    "### Segment diagnostics",
+    ...formatScoreboardSegment("Official notice override: yes", report.scoreboard.segments.officialNoticeOverride.yes),
+    ...formatScoreboardSegment("Official notice override: no", report.scoreboard.segments.officialNoticeOverride.no),
+    ...formatScoreboardSegment("Reset age: 0-24h", report.scoreboard.segments.resetAge["0-24h"]),
+    ...formatScoreboardSegment("Reset age: 24-48h", report.scoreboard.segments.resetAge["24-48h"]),
+    ...formatScoreboardSegment("Reset age: 48-72h", report.scoreboard.segments.resetAge["48-72h"]),
+    ...formatScoreboardSegment("Reset age: >72h", report.scoreboard.segments.resetAge[">72h"]),
+    ...formatScoreboardSegment("Reset age: unknown", report.scoreboard.segments.resetAge.unknown),
+    ...formatScoreboardSegment("BANKED event within 48h: yes", report.scoreboard.segments.bankedEventWithin48h.yes),
+    ...formatScoreboardSegment("BANKED event within 48h: no", report.scoreboard.segments.bankedEventWithin48h.no),
+    ...formatScoreboardSegment("BANKED event within 48h: unknown", report.scoreboard.segments.bankedEventWithin48h.unknown),
+    ...formatScoreboardSegment("Usable Tibo signal: yes", report.scoreboard.segments.usableTiboSignal.yes),
+    ...formatScoreboardSegment("Usable Tibo signal: no", report.scoreboard.segments.usableTiboSignal.no),
+    ...formatScoreboardSegment("Usable Tibo signal: unknown", report.scoreboard.segments.usableTiboSignal.unknown),
+    ...formatScoreboardSegment("Status incident: yes", report.scoreboard.segments.statusIncident.yes),
+    ...formatScoreboardSegment("Status incident: no", report.scoreboard.segments.statusIncident.no),
+    ...formatScoreboardSegment("Status incident: unknown", report.scoreboard.segments.statusIncident.unknown),
+    "",
+    "### Scoreboard notes",
+    ...report.scoreboard.warnings.map((warning) => `- Warning: ${warning}`),
+    ...report.scoreboard.notes.map((note) => `- ${note}`),
+    "",
     "## Unified model comparison (retrospective diagnostics)",
     "",
     "The saved-artifact hybrid is the primary retrospective counterfactual: its 24h/48h values are reconstructed from the saved v2 artifact. The point-in-time hybrid replay is retained as a separate diagnostic because its original training/input snapshot cannot be reproduced exactly. Neither retrospective series affects the primary gate or status.",
@@ -457,11 +597,13 @@ async function main() {
   const v3Forecasts = buildRetrospectiveV3Forecasts(history.rows, production.data, events, asOf);
   const hybridReplayForecasts = buildRetrospectiveHybridForecasts(history.rows, production.data, events, asOf);
   const savedArtifactHybrid = buildSavedArtifactHybridForecasts(history.rows, asOf);
+  const scoreboardFeatures = buildProspectiveScoreboardFeatures(history.rows, production.data);
   const baseReport = evaluatePublishedModelProspectively(history.rows, events, asOf, {
     v3Forecasts,
     hybridForecasts: savedArtifactHybrid.forecasts,
     hybridReplayForecasts,
     savedArtifactHybridAudits: savedArtifactHybrid.audits,
+    scoreboardFeatures,
   });
   const availabilityNotes: string[] = [];
   if (baseReport.forecastCounts.comparable === 0) {
@@ -487,6 +629,14 @@ async function main() {
     resolved24h: report.comparison.resolved24h,
     resolved48h: report.comparison.resolved48h,
     targetResetCount: report.comparison.targetResetCount,
+    scoreboard: {
+      status: report.scoreboard.gate.status,
+      recommendation: report.scoreboard.recommendation,
+      dailyFirstOriginCount: report.scoreboard.dailyFirstOriginCount,
+      gate: report.scoreboard.gate,
+      metrics24h: report.scoreboard.metrics.publishedV3.metrics24h,
+      metrics48h: report.scoreboard.metrics.publishedV3.metrics48h,
+    },
     canonicalRandomResetEvents: report.canonicalRandomResetEvents,
     postResetDiagnostic: {
       allEligibleOriginCount: report.postResetDiagnostic.allEligibleOriginCount,

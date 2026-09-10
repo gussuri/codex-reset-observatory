@@ -6,6 +6,7 @@ import {
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_GATE_THRESHOLDS,
   buildSavedArtifactHybridForecast,
+  buildPublishedV3ProspectiveScoreboard,
   evaluateSavedArtifactHybridCounterfactual,
   evaluatePublishedModelProspectively,
   formatPublishedProspectiveMetric,
@@ -724,4 +725,94 @@ test("prediction history evaluation reads final displayed probabilities from top
   assert.equal(parsed[0].finalDisplayed?.probability48h, 0.24);
   assert.equal(parsed[0].finalDisplayed?.finalDisplaySpecialOverlay, true);
   assert.equal(parsed[0].forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION]?.probability24h, 0.6);
+});
+
+test("v3 scoreboard uses daily-first origins, reports metrics, and keeps the gate conservative", () => {
+  const first = forecastRow("2026-09-10T00:30:00.000Z", 0.8, 0.6, 0.7, 0.6);
+  const laterSameDay = forecastRow("2026-09-10T01:30:00.000Z", 0.1, 0.2, 0.2, 0.3);
+  const nextDay = forecastRow("2026-09-11T00:30:00.000Z", 0.2, 0.4, 0.3, 0.4);
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [laterSameDay, nextDay, first],
+  [{ id: "reset-1", resetAt: "2026-09-11T06:00:00.000Z" }],
+    new Date("2026-09-13T00:00:00.000Z"),
+    { adoptionAt: "2026-09-10T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.dailyFirstOriginCount, 2);
+  assert.deepEqual(scoreboard.dailyFirstOrigins, [
+    "2026-09-10T00:30:00.000Z",
+    "2026-09-11T00:30:00.000Z",
+  ]);
+  assert.equal(scoreboard.metrics.publishedV3.metrics24h.count, 2);
+  assert.equal(scoreboard.metrics.publishedV3.metrics24h.positiveCount, 1);
+  assert.equal(scoreboard.metrics.publishedV3.metrics24h.falseHigh, 1);
+  assert.equal(scoreboard.metrics.publishedV3.metrics24h.falseLow, 1);
+  assert.ok(Math.abs((scoreboard.metrics.publishedV3.metrics24h.sharpness ?? 0) - 0.3) < 1e-12);
+  assert.equal(scoreboard.gate.status, "not_enough_prospective_data");
+  assert.equal(scoreboard.recommendation, "keep_v3");
+  assert.equal(scoreboard.gate.v4ResearchEligible, false);
+});
+
+test("v3 scoreboard compares saved raw and v2 24h values on the same origins and preserves equal 48h policy", () => {
+  const generatedAt = "2026-09-10T00:30:00.000Z";
+  const row = forecastRow(generatedAt, 0.8, 0.55, 0.6, 0.55);
+  const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  assert.ok(active);
+  active.rawProbability24h = 0.3;
+  active.rawProbability48h = 0.55;
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [row],
+    [],
+    new Date("2026-09-13T00:00:00.000Z"),
+    { adoptionAt: "2026-09-10T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.comparisons.rawSignalAdjusted24h.comparableOriginCount, 1);
+  assert.equal(scoreboard.comparisons.rawSignalAdjusted24h.metric.meanPredictedProbability, 0.3);
+  assert.equal(scoreboard.comparisons.v2StyleCalibrated24h.comparableOriginCount, 1);
+  assert.equal(scoreboard.comparisons.v2StyleCalibrated24h.metric.meanPredictedProbability, 0.6);
+  assert.equal(scoreboard.comparisons.v2Policy48h.comparableOriginCount, 1);
+  assert.equal(scoreboard.comparisons.v2Policy48h.exactlyMatchesPublished, true);
+  assert.equal(scoreboard.comparisons.v2Policy48h.maxAbsoluteDifference, 0);
+});
+
+test("v3 scoreboard marks small segments insufficient and never invents missing PIT features", () => {
+  const generatedAt = "2026-09-10T00:30:00.000Z";
+  const row = forecastRow(generatedAt);
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [row],
+    [],
+    new Date("2026-09-13T00:00:00.000Z"),
+    {
+      adoptionAt: "2026-09-10T00:00:00.000Z",
+      features: {
+        [generatedAt]: {
+          bankedEventWithin48h: true,
+          usableTiboSignal: false,
+          statusIncident: null,
+        },
+      },
+    },
+  );
+
+  assert.equal(scoreboard.segments.bankedEventWithin48h.yes.sampleStatus, "insufficient_sample");
+  assert.equal(scoreboard.segments.bankedEventWithin48h.yes.originCount, 1);
+  assert.equal(scoreboard.segments.usableTiboSignal.no.originCount, 1);
+  assert.equal(scoreboard.segments.statusIncident.unknown.originCount, 1);
+  assert.equal(scoreboard.segments.statusIncident.unknown.sampleStatus, "insufficient_sample");
+});
+
+test("v3 scoreboard excludes rows before the adoption boundary without backfilling them", () => {
+  const preAdoption = forecastRow("2026-09-09T23:59:59.000Z");
+  const adopted = forecastRow("2026-09-10T00:00:00.000Z");
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [preAdoption, adopted],
+    [],
+    new Date("2026-09-13T00:00:00.000Z"),
+    { adoptionAt: "2026-09-10T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.dailyFirstOriginCount, 1);
+  assert.deepEqual(scoreboard.dailyFirstOrigins, [adopted.generatedAt]);
+  assert.equal(scoreboard.backfilled, false);
 });
