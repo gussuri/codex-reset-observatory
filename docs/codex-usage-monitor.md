@@ -58,6 +58,8 @@ private ChatGPT API. The app-server owns authentication.
 
 Only these fields leave the machine:
 
+- `monitorProtocolVersion` (protocol version integer, currently `2`)
+- `postReason` (post intent: `initial`, `recovery_candidate`, `banked_reset_count_change`, `structure_change`, or `heartbeat`)
 - `limitId`
 - `planType`
 - `usedPercent`
@@ -219,6 +221,20 @@ Subsequent Tibo posts (official notices, teasers, or completion confirmations)
 serve as retrospective corroboration and enrichment (providing reasons, titles,
 scopes, and source links) that merge into the canonical monitor event without
 shifting execution time or creating duplicates.
+
+### Webhook Protocol Version 2 & Server Authorization Guard
+
+To eliminate server-side confirmation bypass (e.g. if the monitor restarts during a transient anomaly, posting an `initial` snapshot of 40% usage against a DB baseline of 60%, or if an unconfirmed heartbeat is sent), the webhook enforces Protocol Version 2:
+
+- **Protocol Versioning**: Safe webhook payloads specify `monitorProtocolVersion: 2` and a validated `postReason`.
+- **Authorized Reasons**:
+  - `initial`: Handshake or process restart snapshot. Updates baseline in DB state; **strictly prohibited** from creating recovery execution estimates.
+  - `recovery_candidate`: Only emitted after local two-step confirmation (independent scheduled poll verification after `MIN_RECOVERY_CONFIRMATION_DELAY_MS`). **Authorized** to generate random reset execution estimates.
+  - `banked_reset_count_change`: Explicit increase in banked reset credits. Processed for BANKED distributions against active notices.
+  - `structure_change`: Monitoring structure change. Rebases baseline; **prohibited** from creating recovery estimates.
+  - `heartbeat`: Routine heartbeat. Updates heartbeat timestamp; **prohibited** from creating recovery estimates.
+- **Server Confirmation Invariant**: Under Protocol v2, the server evaluates `evaluateCodexUsageRecovery()`, but will **only** promote an unexpected recovery to a public random reset if `postReason === "recovery_candidate"`. Any arithmetic drop received under `initial`, `heartbeat`, or `structure_change` updates the baseline safely without creating an execution estimate or provisional recovery observation.
+- **Backward Compatibility**: Payloads lacking `monitorProtocolVersion` are treated as legacy Protocol v1 for rolling deployment compatibility, falling back to server-side arithmetic evaluation without failing.
 
 ### Personal Banked Reset vs Random Reset
 If a weekly recovery occurs concurrently with an explicit decrease in banked

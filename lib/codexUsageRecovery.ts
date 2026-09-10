@@ -26,6 +26,18 @@ export function shouldCreateNoticeBackedEstimate<T extends { id: string }>(
   );
 }
 
+export const MONITOR_PROTOCOL_VERSION = 2;
+
+export const CODEX_USAGE_POST_REASONS = [
+  "initial",
+  "recovery_candidate",
+  "banked_reset_count_change",
+  "structure_change",
+  "heartbeat",
+] as const;
+
+export type CodexUsagePostReason = (typeof CODEX_USAGE_POST_REASONS)[number];
+
 export type CodexUsageSnapshot = {
   observedAt: string;
   limitId: "codex";
@@ -38,6 +50,8 @@ export type CodexUsageSnapshot = {
   bankedResetCountSource?: BankedResetCountSource;
   bankedResetCountChange?: boolean;
   lastBankedGrantAt?: string | null;
+  monitorProtocolVersion?: number;
+  postReason?: CodexUsagePostReason;
 };
 
 export type CodexRecoveryCycleHint = "regular" | "unexpected" | "unknown";
@@ -313,6 +327,8 @@ export function parseCodexUsageWebhookPayload(
 ): CodexUsageSnapshot | null {
   if (!isRecord(value)) return null;
   const allowed = new Set([
+    "monitorProtocolVersion",
+    "postReason",
     "observedAt",
     "limitId",
     "planType",
@@ -323,6 +339,40 @@ export function parseCodexUsageWebhookPayload(
     "bankedResetCountChange",
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) return null;
+
+  let monitorProtocolVersion: number | undefined;
+  if (value.monitorProtocolVersion !== undefined) {
+    if (
+      typeof value.monitorProtocolVersion !== "number" ||
+      !Number.isInteger(value.monitorProtocolVersion) ||
+      value.monitorProtocolVersion < 1 ||
+      value.monitorProtocolVersion > MONITOR_PROTOCOL_VERSION
+    ) {
+      return null;
+    }
+    monitorProtocolVersion = value.monitorProtocolVersion;
+  }
+
+  let postReason: CodexUsagePostReason | undefined;
+  if (value.postReason !== undefined) {
+    if (
+      typeof value.postReason !== "string" ||
+      !CODEX_USAGE_POST_REASONS.includes(value.postReason as CodexUsagePostReason)
+    ) {
+      return null;
+    }
+    postReason = value.postReason as CodexUsagePostReason;
+  }
+
+  // Strict validation for protocol v2: if monitorProtocolVersion is 2, postReason is strictly required
+  if (monitorProtocolVersion === 2 && !postReason) {
+    return null;
+  }
+
+  // If postReason is supplied without monitorProtocolVersion, associate with current protocol version
+  if (postReason && monitorProtocolVersion === undefined) {
+    monitorProtocolVersion = MONITOR_PROTOCOL_VERSION;
+  }
 
   const observedAt = typeof value.observedAt === "string" ? new Date(value.observedAt) : null;
   const nowTime = now.getTime();
@@ -361,6 +411,8 @@ export function parseCodexUsageWebhookPayload(
     usedPercent: value.usedPercent,
     windowDurationMins: CODEX_WEEKLY_WINDOW_MINUTES,
     resetsAt,
+    ...(monitorProtocolVersion !== undefined ? { monitorProtocolVersion } : {}),
+    ...(postReason !== undefined ? { postReason } : {}),
     ...(value.bankedResetAvailableCount !== undefined ? { bankedResetAvailableCount } : {}),
     ...(value.bankedResetCountChange === true ? { bankedResetCountChange: true } : {}),
   };

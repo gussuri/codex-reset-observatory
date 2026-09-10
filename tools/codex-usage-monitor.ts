@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import {
   MAX_BANKED_RESET_AVAILABLE_COUNT,
   MAX_USAGE_COMPARISON_GAP_MS,
+  MONITOR_PROTOCOL_VERSION,
   RESET_AT_MEANINGFUL_FORWARD_SEC,
   isBankedResetAvailableCountGrant,
   parseCodexRateLimitsResponse,
@@ -626,6 +627,12 @@ export function toSafeMonitorPayload(
   postReason?: MonitorSnapshotPostReason,
 ) {
   return {
+    ...(postReason
+      ? {
+          monitorProtocolVersion: MONITOR_PROTOCOL_VERSION,
+          postReason,
+        }
+      : {}),
     observedAt: snapshot.observedAt,
     limitId: snapshot.limitId,
     planType: snapshot.planType,

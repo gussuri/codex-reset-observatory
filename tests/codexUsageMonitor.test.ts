@@ -325,6 +325,8 @@ test("an explicit BANKED reset count change is sent without generic credits", ()
 
   const payload = toSafeMonitorPayload(snapshot({ bankedResetAvailableCount: 1 }), "banked_reset_count_change");
   assert.deepEqual(payload, {
+    monitorProtocolVersion: 2,
+    postReason: "banked_reset_count_change",
     observedAt: "2026-08-21T00:00:00.000Z",
     limitId: "codex",
     planType: "plus",
@@ -608,6 +610,8 @@ test("monitor payload includes only the explicit BANKED reset count for a count 
       bankedResetAvailableCount: 1,
     }, "banked_reset_count_change"),
     {
+      monitorProtocolVersion: 2,
+      postReason: "banked_reset_count_change",
       observedAt: "2026-08-21T00:02:00.000Z",
       limitId: "codex",
       planType: "plus",
@@ -618,6 +622,101 @@ test("monitor payload includes only the explicit BANKED reset count for a count 
       bankedResetCountChange: true,
     },
   );
+});
+
+test("toSafeMonitorPayload attaches protocol v2 metadata when postReason is provided", () => {
+  for (const reason of [
+    "initial",
+    "recovery_candidate",
+    "banked_reset_count_change",
+    "structure_change",
+    "heartbeat",
+  ] as const) {
+    const payload = toSafeMonitorPayload(snapshot(), reason);
+    assert.equal(payload.monitorProtocolVersion, 2);
+    assert.equal(payload.postReason, reason);
+  }
+  // When postReason is omitted, payload is unversioned legacy
+  const legacyPayload = toSafeMonitorPayload(snapshot());
+  assert.equal("monitorProtocolVersion" in legacyPayload, false);
+  assert.equal("postReason" in legacyPayload, false);
+});
+
+test("Test D: local notification non-post invariant: notifications never post, candidate confirmed only by scheduled poll", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+  const scheduleA = 1_787_012_727;
+  const scheduleB = 1_787_012_727 + 7 * 86400;
+
+  // t=0s: Initial snapshot establishes baseline
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: scheduleA,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // t=0s: Anomaly arrives via notification (drop: 60 -> 40, schedule: +7d)
+  const anomalyNotice0 = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const noticeReason0 = getMonitorSnapshotPostReason(anomalyNotice0, state, 0, "notification");
+  assert.equal(noticeReason0, null, "Notification must never produce a postReason");
+  state = updateMonitorSnapshotState(state, anomalyNotice0, false, 0, {
+    nowMs: 0,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.equal(getPendingMonitorPosts(state).length, 0, "Notification must NOT enqueue any webhook post");
+  assert.ok(state.pendingRecoveryCandidate, "Candidate must be started in-memory");
+
+  // t=60s: Another notification arrives with anomaly maintained
+  const anomalyNotice60 = snapshot({
+    observedAt: "2026-09-10T00:01:00.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const noticeReason60 = getMonitorSnapshotPostReason(anomalyNotice60, state, 60_000, "notification");
+  assert.equal(noticeReason60, null, "Notification must never confirm a candidate even after 60s");
+  state = updateMonitorSnapshotState(state, anomalyNotice60, false, 60_000, {
+    nowMs: 60_000,
+    logger: testLogger,
+    trigger: "notification",
+  });
+  assert.equal(getPendingMonitorPosts(state).length, 0, "Notification still must NOT enqueue any webhook post");
+
+  // t=120s: Scheduled poll arrives (trigger: "poll", elapsed 120s >= 60s)
+  const pollObs120 = snapshot({
+    observedAt: "2026-09-10T00:02:00.000Z",
+    usedPercent: 40,
+    resetsAt: scheduleB,
+  });
+  const pollReason = getMonitorSnapshotPostReason(pollObs120, state, 120_000, "poll");
+  assert.equal(pollReason, "recovery_candidate", "Scheduled poll confirms the candidate");
+
+  const postSnapshot = getMonitorPostSnapshot(pollObs120, state, pollReason, 120_000, "poll");
+  state = enqueueMonitorSnapshotPost(state, pollReason!, postSnapshot);
+  state = updateMonitorSnapshotState(state, pollObs120, true, 120_000, {
+    nowMs: 120_000,
+    logger: testLogger,
+    trigger: "poll",
+  });
+
+  const pendingPosts = getPendingMonitorPosts(state);
+  assert.equal(pendingPosts.length, 1, "Exactly 1 post enqueued upon poll confirmation");
+  const payload = toSafeMonitorPayload(pendingPosts[0].snapshot, pendingPosts[0].reason);
+  assert.equal(payload.monitorProtocolVersion, 2);
+  assert.equal(payload.postReason, "recovery_candidate");
+  assert.equal(payload.observedAt, "2026-09-10T00:00:00.000Z", "Posted snapshot is firstEvidenceSnapshot");
 });
 
 test("GUI event output exposes safe snapshot state without credentials", () => {
