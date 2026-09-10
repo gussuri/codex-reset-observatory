@@ -59,6 +59,24 @@ export const RESET_DISPLAY_NAME_COLUMNS = [
   "updated_at",
 ].join(",");
 
+export type ResetDisplayNameReadMode = "public" | "full";
+
+export const RESET_DISPLAY_NAME_PUBLIC_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "manual_name_en",
+  "manual_name_zh",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_prompt_version",
+  "ai_status",
+  "ai_flags",
+].join(",");
+
 const RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS = [
   "event_key",
   "source_tweet_id",
@@ -97,6 +115,32 @@ const RESET_DISPLAY_NAME_LEGACY_COLUMNS = [
   "input_hash",
   "created_at",
   "updated_at",
+].join(",");
+
+const RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_prompt_version",
+  "ai_status",
+  "ai_flags",
+].join(",");
+
+const RESET_DISPLAY_NAME_PUBLIC_LEGACY_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "ai_name_ja",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_prompt_version",
+  "ai_status",
+  "ai_flags",
 ].join(",");
 
 export type ResetDisplayNameGenerationOutcome = {
@@ -139,17 +183,27 @@ function isMissingLocalizedColumnsError(error: unknown) {
 async function selectResetDisplayNames(
   supabase: SupabaseClient,
   eventKey?: string,
+  readMode: ResetDisplayNameReadMode = "full",
 ) {
+  const primaryColumns = readMode === "public"
+    ? RESET_DISPLAY_NAME_PUBLIC_COLUMNS
+    : RESET_DISPLAY_NAME_COLUMNS;
+  const aiLocalizedColumns = readMode === "public"
+    ? RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_COLUMNS
+    : RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS;
+  const legacyColumns = readMode === "public"
+    ? RESET_DISPLAY_NAME_PUBLIC_LEGACY_COLUMNS
+    : RESET_DISPLAY_NAME_LEGACY_COLUMNS;
   const query = supabase
     .from("reset_display_names")
-    .select(RESET_DISPLAY_NAME_COLUMNS);
+    .select(primaryColumns);
   const scopedQuery = eventKey ? query.eq("event_key", eventKey).maybeSingle() : query.limit(2000);
   const result = await scopedQuery;
   if (!isMissingLocalizedColumnsError(result.error)) return result;
 
   const aiLocalizedQuery = supabase
     .from("reset_display_names")
-    .select(RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS);
+    .select(aiLocalizedColumns);
   const aiLocalizedResult = eventKey
     ? await aiLocalizedQuery.eq("event_key", eventKey).maybeSingle()
     : await aiLocalizedQuery.limit(2000);
@@ -157,13 +211,15 @@ async function selectResetDisplayNames(
 
   const legacyQuery = supabase
     .from("reset_display_names")
-    .select(RESET_DISPLAY_NAME_LEGACY_COLUMNS);
+    .select(legacyColumns);
   return eventKey
     ? legacyQuery.eq("event_key", eventKey).maybeSingle()
     : legacyQuery.limit(2000);
 }
 
-export async function fetchResetDisplayNamesResult(): Promise<
+export async function fetchResetDisplayNamesResult(
+  readMode: ResetDisplayNameReadMode = "full",
+): Promise<
   DataFetchResult<ResetDisplayNameRecord[]>
 > {
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -176,7 +232,7 @@ export async function fetchResetDisplayNamesResult(): Promise<
   if (!supabase) return { data: [], health: configuration };
 
   try {
-    const { data, error } = await selectResetDisplayNames(supabase);
+    const { data, error } = await selectResetDisplayNames(supabase, undefined, readMode);
     if (error) {
       console.warn("[Reset display names] read skipped", {
         detail: isMissingTableError(error) ? "table_unavailable" : "database_error",
@@ -213,7 +269,7 @@ async function fetchResetDisplayNameByKey(
   supabase: SupabaseClient,
   eventKey: string,
 ) {
-  const { data, error } = await selectResetDisplayNames(supabase, eventKey);
+  const { data, error } = await selectResetDisplayNames(supabase, eventKey, "full");
   if (error) {
     if (isMissingTableError(error)) return null;
     throw new Error("Reset display name lookup failed");

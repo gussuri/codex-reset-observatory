@@ -17,7 +17,10 @@ import type {
   RadarData,
 } from "@/lib/radar/types";
 import { toPublicRadarSnapshot } from "@/lib/radar/publicDto";
-import { fetchResetDisplayNamesResult } from "@/lib/radar/resetDisplayNameStore";
+import {
+  fetchResetDisplayNamesResult,
+  type ResetDisplayNameReadMode,
+} from "@/lib/radar/resetDisplayNameStore";
 import {
   getPublicRecoveryObservation,
   type CodexRecoveryObservation,
@@ -795,7 +798,7 @@ const getCachedTiboFormalAdoptions = unstable_cache(
 );
 
 const getCachedResetDisplayNames = unstable_cache(
-  () => fetchResetDisplayNamesResult(),
+  () => fetchResetDisplayNamesResult("public"),
   ["reset-display-names-cache-v2"],
   {
     revalidate: 60,
@@ -1027,15 +1030,23 @@ export async function fetchCurrentRadarData(
     calculationNow?: Date;
     /** Bypass Next's Data Cache while preserving the Production normalizer. */
     bypassCache?: boolean;
+    /** Selects the reset-name row projection for this internal read. */
+    resetDisplayNameReadMode?: ResetDisplayNameReadMode;
   } = {},
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
+  const resetDisplayNameReadMode = options.resetDisplayNameReadMode ?? "public";
+  const resetDisplayNamesPromise = options.bypassCache
+    ? fetchResetDisplayNamesResult(resetDisplayNameReadMode)
+    : resetDisplayNameReadMode === "full"
+      ? fetchResetDisplayNamesResult("full")
+      : getCachedResetDisplayNames();
   const [openAIStatus, tiboSignals, regularResetEvents, resetDisplayNames, codexRecovery, resetExecutionEstimates, tiboFormalAdoptions] = await Promise.all([
     fetchOpenAIStatusSignals(options),
     getTiboSignalBundle(calculationNow, options.bypassCache === true),
     options.bypassCache ? fetchRawRegularResetEvents() : getCachedRegularResetEvents(),
-    options.bypassCache ? fetchResetDisplayNamesResult() : getCachedResetDisplayNames(),
+    resetDisplayNamesPromise,
     options.bypassCache ? fetchRawCodexRecoveryObservations() : getCachedCodexRecoveryObservations(),
     options.bypassCache ? fetchRawResetExecutionEstimates() : getCachedResetExecutionEstimates(),
     options.bypassCache ? fetchRawTiboFormalAdoptions() : getCachedTiboFormalAdoptions(),

@@ -575,6 +575,7 @@ export async function reconcileResetDisplayNames(
     options.fetchData ?? ((calculationNow: Date) => fetchCurrentRadarData({
       bypassCache: true,
       calculationNow,
+      resetDisplayNameReadMode: "full",
     }))
   )(now);
   const history = options.canonicalHistory ?? getCanonicalResetHistoryForDisplayNameReconciliation(data);
