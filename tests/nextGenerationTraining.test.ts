@@ -10,6 +10,8 @@ import {
 } from "../data/shadowProbabilityConfig";
 import {
   loadNextGenerationTrainingState,
+  NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+  parseNextGenerationTrainingProjectionRows,
   parseNextGenerationTrainingRows,
 } from "../lib/radar/nextGenerationTraining";
 
@@ -61,6 +63,48 @@ function contextualOnlyRow(generatedAt: string) {
     },
   };
 }
+
+function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
+  const row: Record<string, unknown> = {
+    logged_hour: generatedAt,
+    b_model_version: NEXT_GENERATION_B_MODEL_VERSION,
+    b_generated_at: generatedAt,
+    b_raw_probability_24h: 0.22,
+    b_raw_probability_48h: 0.44,
+    b_probability_24h: 0.25,
+    b_probability_48h: 0.45,
+    c_model_version: null,
+    c_generated_at: null,
+    c_raw_probability_24h: null,
+    c_raw_probability_48h: null,
+  };
+  for (
+    let index = 0;
+    index < NEXT_GENERATION_A_COMPONENT_VERSIONS.length;
+    index += 1
+  ) {
+    const modelVersion = NEXT_GENERATION_A_COMPONENT_VERSIONS[index];
+    if (modelVersion === NEXT_GENERATION_B_MODEL_VERSION) continue;
+    row[`a_${index}_model_version`] = modelVersion;
+    row[`a_${index}_generated_at`] = generatedAt;
+    row[`a_${index}_probability_24h`] = 0.1 + index * 0.02;
+    row[`a_${index}_probability_48h`] = 0.2 + index * 0.02;
+  }
+  return row;
+}
+
+test("compact training select projects only the required forecast fields", () => {
+  const fields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
+  assert.equal(fields[0], "logged_hour");
+  assert.equal(fields.length, 27);
+  assert.ok(fields.slice(1).every((field) => field.includes("debug_info->experimentalProbabilityForecasts")));
+  assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /(^|,)debug_info(,|$)/);
+  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_raw_probability_24h:/);
+  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_probability_24h:/);
+  for (const modelVersion of [...NEXT_GENERATION_A_COMPONENT_VERSIONS, NEXT_GENERATION_C_MODEL_VERSION]) {
+    assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, new RegExp(`->${modelVersion}->`));
+  }
+});
 
 test("training parser excludes pre-freeze rows and labels only random boundaries", () => {
   const rows = parseNextGenerationTrainingRows(
@@ -119,8 +163,61 @@ test("C rows are parsed independently of B and A availability", () => {
   assert.equal(parsed.aRows.length, 0);
 });
 
+test("compact training projection is semantically equivalent to full debug_info", () => {
+  const options = {
+    asOf: new Date("2026-08-24T00:00:00.000Z"),
+    randomEvents: [{ id: "random-1", resetAt: "2026-08-23T12:00:00.000Z" }],
+  };
+  const full = parseNextGenerationTrainingRows([historyRow()], options);
+  const compact = parseNextGenerationTrainingProjectionRows([projectedHistoryRow()], options);
+
+  assert.deepEqual(compact, full);
+});
+
+test("compact projection keeps missing and invalid forecast semantics", () => {
+  const options = {
+    asOf: new Date("2026-08-24T00:00:00.000Z"),
+    randomEvents: [],
+  };
+  const missingB = projectedHistoryRow();
+  delete missingB.b_model_version;
+  delete missingB.b_generated_at;
+  delete missingB.b_raw_probability_24h;
+  delete missingB.b_raw_probability_48h;
+  delete missingB.b_probability_24h;
+  delete missingB.b_probability_48h;
+
+  const invalidB = projectedHistoryRow();
+  invalidB.b_model_version = "wrong-model";
+  invalidB.b_raw_probability_24h = 2;
+
+  const fullMissing = parseNextGenerationTrainingRows([{
+    logged_hour: missingB.logged_hour as string,
+    debug_info: { experimentalProbabilityForecasts: {} },
+  }], options);
+  const compactMissing = parseNextGenerationTrainingProjectionRows([missingB], options);
+  assert.deepEqual(compactMissing, fullMissing);
+
+  const fullInvalid = parseNextGenerationTrainingRows([{
+    logged_hour: invalidB.logged_hour as string,
+    debug_info: {
+      experimentalProbabilityForecasts: {
+        [NEXT_GENERATION_B_MODEL_VERSION]: {
+          modelVersion: "wrong-model",
+          generatedAt: invalidB.b_generated_at,
+          rawProbability24h: 2,
+          rawProbability48h: invalidB.b_raw_probability_48h,
+        },
+      },
+    },
+  }], options);
+  const compactInvalid = parseNextGenerationTrainingProjectionRows([invalidB], options);
+  assert.deepEqual(compactInvalid, fullInvalid);
+});
+
 test("training query distinguishes successful empty reads from query failures", async () => {
   const calls: string[] = [];
+  let limitCount: number | undefined;
   const emptyClient = {
     from(table: string) {
       calls.push(`from:${table}`);
@@ -137,7 +234,8 @@ test("training query distinguishes successful empty reads from query failures", 
                     order(orderColumn: string) {
                       calls.push(`order:${orderColumn}`);
                       return {
-                        limit() {
+                        limit(count: number) {
+                          limitCount = count;
                           return Promise.resolve({ data: [], error: null });
                         },
                       };
@@ -162,9 +260,10 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.equal(empty.backfill, false);
   assert.deepEqual(calls.slice(0, 3), [
     "from:prediction_history",
-    "select:logged_hour,debug_info",
+    `select:${NEXT_GENERATION_TRAINING_SELECT_FIELDS}`,
     "gte:logged_hour:2026-08-21T03:00:00.000Z",
   ]);
+  assert.equal(limitCount, 10_000);
 
   const failed = await loadNextGenerationTrainingState({
     from() {
