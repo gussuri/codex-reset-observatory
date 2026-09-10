@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 
 import {
   MAX_BANKED_RESET_AVAILABLE_COUNT,
+  MAX_USAGE_COMPARISON_GAP_MS,
+  RESET_AT_MEANINGFUL_FORWARD_SEC,
   isBankedResetAvailableCountGrant,
   parseCodexRateLimitsResponse,
   type CodexUsageSnapshot,
@@ -18,6 +20,8 @@ export const APP_SERVER_REQUEST_TIMEOUT_MS = 15_000;
 export const APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD = 3;
 export const MONITOR_WEBHOOK_TIMEOUT_MS = 15_000;
 export const MAX_JSON_LINE_LENGTH = 1_000_000;
+export const MIN_RECOVERY_CONFIRMATION_DELAY_MS = 45_000;
+export const RESET_AT_JITTER_TOLERANCE_SEC = 30;
 
 const RESTART_BACKOFF_MS = [5_000, 30_000, 120_000] as const;
 const DEFAULT_WEBHOOK_URL = "https://codex.gussuriworks.com/api/webhook/codex-usage";
@@ -153,11 +157,44 @@ export function getMonitorResetEventKey(snapshot: Pick<CodexUsageSnapshot, "rese
   return `usage-reset:${snapshot.resetsAt}`;
 }
 
+export type RecoveryCandidateCancellationReason =
+  | "usage_reverted"
+  | "reset_at_reverted"
+  | "structure_change"
+  | "comparison_gap"
+  | "stale_observation";
+
+export type PendingRecoveryCandidate = {
+  preRecoveryBaseline: CodexUsageSnapshot;
+  firstEvidenceSnapshot: CodexUsageSnapshot;
+  candidateStartedAtMs: number;
+  lastObservation: CodexUsageSnapshot;
+  observationCount: number;
+};
+
 export type MonitorSnapshotState = {
+  baselineSnapshot?: CodexUsageSnapshot | null;
   previousLocalSnapshot: CodexUsageSnapshot | null;
   lastSuccessfulPostAt: number | null;
   lastKnownBankedResetAvailableCount?: number | null;
+  pendingRecoveryCandidate?: PendingRecoveryCandidate | null;
   pendingPosts?: PendingMonitorPost[];
+};
+
+export type MonitorRecoveryCandidateStatus =
+  | "none"
+  | "started"
+  | "confirmed"
+  | "pending_burst"
+  | "cancelled";
+
+export type MonitorRecoveryEvaluation = {
+  status: MonitorRecoveryCandidateStatus;
+  cancellationReason?: RecoveryCandidateCancellationReason;
+  postReason: MonitorSnapshotPostReason | null;
+  postSnapshot: CodexUsageSnapshot;
+  nextPendingRecoveryCandidate: PendingRecoveryCandidate | null;
+  nextBaselineSnapshot: CodexUsageSnapshot;
 };
 
 export type MonitorBankedResetCountSource =
@@ -248,46 +285,270 @@ export function markMonitorSnapshotPostSucceeded(
   };
 }
 
-export function getMonitorSnapshotPostReason(
+export function evaluateMonitorRecoveryCandidate(
   snapshot: CodexUsageSnapshot,
   state: MonitorSnapshotState,
   nowMs = Date.now(),
-): MonitorSnapshotPostReason | null {
-  if (state.lastSuccessfulPostAt === null) return "initial";
+): MonitorRecoveryEvaluation {
+  if (state.lastSuccessfulPostAt === null) {
+    return {
+      status: "none",
+      postReason: "initial",
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
+  }
 
-  const previous = state.previousLocalSnapshot;
   if (isBankedResetAvailableCountGrant(
     getLastKnownBankedResetAvailableCount(state),
     snapshot.bankedResetAvailableCount,
   )) {
-    return "banked_reset_count_change";
+    return {
+      status: "none",
+      postReason: "banked_reset_count_change",
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
   }
 
-  if (previous) {
-    const usageDecrease = previous.usedPercent - snapshot.usedPercent;
-    const resetsAtAdvance = snapshot.resetsAt - previous.resetsAt;
-    if (usageDecrease >= 1 && resetsAtAdvance >= 60 * 60) {
-      return "recovery_candidate";
-    }
+  if (state.pendingRecoveryCandidate) {
+    const candidate = state.pendingRecoveryCandidate;
+    const baseline = candidate.preRecoveryBaseline;
+    const firstEvidence = candidate.firstEvidenceSnapshot;
 
+    // 1. Structure change
     if (
-      previous.limitId !== snapshot.limitId ||
-      previous.planType !== snapshot.planType ||
-      previous.windowDurationMins !== snapshot.windowDurationMins
+      snapshot.limitId !== baseline.limitId ||
+      snapshot.planType !== baseline.planType ||
+      snapshot.windowDurationMins !== baseline.windowDurationMins
     ) {
-      return "structure_change";
+      return {
+        status: "cancelled",
+        cancellationReason: "structure_change",
+        postReason: "structure_change",
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: null,
+        nextBaselineSnapshot: snapshot,
+      };
     }
+
+    // 2. Stale observation
+    const lastObservedTime = Date.parse(candidate.lastObservation.observedAt);
+    const currentObservedTime = Date.parse(snapshot.observedAt);
+    if (
+      Number.isFinite(lastObservedTime) &&
+      Number.isFinite(currentObservedTime) &&
+      currentObservedTime < lastObservedTime
+    ) {
+      return {
+        status: "cancelled",
+        cancellationReason: "stale_observation",
+        postReason: null,
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: null,
+        nextBaselineSnapshot: candidate.lastObservation,
+      };
+    }
+
+    // 3. Comparison gap (> 10m)
+    if (
+      (Number.isFinite(lastObservedTime) &&
+        Number.isFinite(currentObservedTime) &&
+        currentObservedTime - lastObservedTime > MAX_USAGE_COMPARISON_GAP_MS) ||
+      (Number.isFinite(candidate.candidateStartedAtMs) &&
+        Number.isFinite(nowMs) &&
+        nowMs - candidate.candidateStartedAtMs > MAX_USAGE_COMPARISON_GAP_MS)
+    ) {
+      return {
+        status: "cancelled",
+        cancellationReason: "comparison_gap",
+        postReason: null,
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: null,
+        nextBaselineSnapshot: snapshot,
+      };
+    }
+
+    // 4. Usage reverted (comparing current snapshot against frozen pre-recovery baseline)
+    const usageDecreaseFromBaseline = baseline.usedPercent - snapshot.usedPercent;
+    if (usageDecreaseFromBaseline < 1) {
+      return {
+        status: "cancelled",
+        cancellationReason: "usage_reverted",
+        postReason: null,
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: null,
+        nextBaselineSnapshot: snapshot,
+      };
+    }
+
+    // 5. resetsAt reverted or jitter deviation
+    const resetsAtAdvanceFromBaseline = snapshot.resetsAt - baseline.resetsAt;
+    const resetsAtDiffFromFirstEvidence = Math.abs(snapshot.resetsAt - firstEvidence.resetsAt);
+    if (
+      resetsAtAdvanceFromBaseline < RESET_AT_MEANINGFUL_FORWARD_SEC - RESET_AT_JITTER_TOLERANCE_SEC ||
+      resetsAtDiffFromFirstEvidence > RESET_AT_JITTER_TOLERANCE_SEC
+    ) {
+      return {
+        status: "cancelled",
+        cancellationReason: "reset_at_reverted",
+        postReason: null,
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: null,
+        nextBaselineSnapshot: snapshot,
+      };
+    }
+
+    // Check confirmation delay for temporal independence
+    const elapsedMs = Number.isFinite(nowMs) && Number.isFinite(candidate.candidateStartedAtMs)
+      ? nowMs - candidate.candidateStartedAtMs
+      : 0;
+
+    if (elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS) {
+      return {
+        status: "pending_burst",
+        postReason: null,
+        postSnapshot: snapshot,
+        nextPendingRecoveryCandidate: {
+          ...candidate,
+          lastObservation: snapshot,
+          observationCount: candidate.observationCount + 1,
+        },
+        nextBaselineSnapshot: baseline,
+      };
+    }
+
+    // Confirmed genuine recovery across independent observations!
+    return {
+      status: "confirmed",
+      postReason: "recovery_candidate",
+      postSnapshot: firstEvidence,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
   }
 
+  const baseline = state.baselineSnapshot ?? state.previousLocalSnapshot;
+  if (!baseline) {
+    return {
+      status: "none",
+      postReason: null,
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
+  }
+
+  // Structure change
+  if (
+    snapshot.limitId !== baseline.limitId ||
+    snapshot.planType !== baseline.planType ||
+    snapshot.windowDurationMins !== baseline.windowDurationMins
+  ) {
+    return {
+      status: "none",
+      postReason: "structure_change",
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
+  }
+
+  // Stale observation
+  const baselineObservedTime = Date.parse(baseline.observedAt);
+  const currentObservedTime = Date.parse(snapshot.observedAt);
+  if (
+    Number.isFinite(baselineObservedTime) &&
+    Number.isFinite(currentObservedTime) &&
+    currentObservedTime < baselineObservedTime
+  ) {
+    return {
+      status: "none",
+      postReason: null,
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: baseline,
+    };
+  }
+
+  // Comparison gap (> 10m) -> rebase
+  if (
+    Number.isFinite(baselineObservedTime) &&
+    Number.isFinite(currentObservedTime) &&
+    currentObservedTime - baselineObservedTime > MAX_USAGE_COMPARISON_GAP_MS
+  ) {
+    return {
+      status: "none",
+      postReason: null,
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
+  }
+
+  // Check recovery criteria against baseline
+  const usageDecrease = baseline.usedPercent - snapshot.usedPercent;
+  const resetsAtAdvance = snapshot.resetsAt - baseline.resetsAt;
+  if (usageDecrease >= 1 && resetsAtAdvance >= RESET_AT_MEANINGFUL_FORWARD_SEC) {
+    return {
+      status: "started",
+      postReason: null,
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: {
+        preRecoveryBaseline: baseline,
+        firstEvidenceSnapshot: snapshot,
+        candidateStartedAtMs: nowMs,
+        lastObservation: snapshot,
+        observationCount: 1,
+      },
+      nextBaselineSnapshot: baseline,
+    };
+  }
+
+  // Heartbeat check
   if (
     Number.isFinite(nowMs) &&
     Number.isFinite(state.lastSuccessfulPostAt) &&
     nowMs - state.lastSuccessfulPostAt >= MONITOR_HEARTBEAT_INTERVAL_MS
   ) {
-    return "heartbeat";
+    return {
+      status: "none",
+      postReason: "heartbeat",
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
   }
 
-  return null;
+  return {
+    status: "none",
+    postReason: null,
+    postSnapshot: snapshot,
+    nextPendingRecoveryCandidate: null,
+    nextBaselineSnapshot: snapshot,
+  };
+}
+
+export function getMonitorSnapshotPostReason(
+  snapshot: CodexUsageSnapshot,
+  state: MonitorSnapshotState,
+  nowMs = Date.now(),
+): MonitorSnapshotPostReason | null {
+  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs).postReason;
+}
+
+export function getMonitorPostSnapshot(
+  snapshot: CodexUsageSnapshot,
+  state: MonitorSnapshotState,
+  postReason?: MonitorSnapshotPostReason | null,
+  nowMs = Date.now(),
+): CodexUsageSnapshot {
+  if (postReason === "recovery_candidate" && state.pendingRecoveryCandidate) {
+    return state.pendingRecoveryCandidate.firstEvidenceSnapshot;
+  }
+  return evaluateMonitorRecoveryCandidate(snapshot, state, nowMs).postSnapshot;
 }
 
 export function updateMonitorSnapshotState(
@@ -295,8 +556,45 @@ export function updateMonitorSnapshotState(
   snapshot: CodexUsageSnapshot,
   postSucceeded: boolean,
   postCompletedAtMs = Date.now(),
+  options: {
+    nowMs?: number;
+    logger?: MonitorLogger;
+  } = {},
 ): MonitorSnapshotState {
+  const evaluationTime = options.nowMs ?? postCompletedAtMs ?? Date.now();
+  const evaluation = evaluateMonitorRecoveryCandidate(snapshot, state, evaluationTime);
+
+  if (options.logger) {
+    if (evaluation.status === "started") {
+      options.logger("recovery_candidate_started", {
+        observedAt: snapshot.observedAt,
+        usedPercent: snapshot.usedPercent,
+        resetsAt: snapshot.resetsAt,
+        planType: snapshot.planType,
+        windowDurationMins: snapshot.windowDurationMins,
+        ...getMonitorBankedResetDisplayState(snapshot, state.lastKnownBankedResetAvailableCount),
+      });
+    } else if (evaluation.status === "confirmed") {
+      const candidate = state.pendingRecoveryCandidate;
+      options.logger("recovery_candidate_confirmed", {
+        observedAt: snapshot.observedAt,
+        usedPercent: snapshot.usedPercent,
+        resetsAt: snapshot.resetsAt,
+        firstObservedAt: candidate?.firstEvidenceSnapshot.observedAt ?? snapshot.observedAt,
+        delayMs: Math.max(0, evaluationTime - (candidate?.candidateStartedAtMs ?? 0)),
+      });
+    } else if (evaluation.status === "cancelled") {
+      options.logger("recovery_candidate_cancelled", {
+        reason: evaluation.cancellationReason ?? "cancelled",
+        observedAt: snapshot.observedAt,
+        usedPercent: snapshot.usedPercent,
+        resetsAt: snapshot.resetsAt,
+      });
+    }
+  }
+
   return {
+    baselineSnapshot: evaluation.nextBaselineSnapshot,
     previousLocalSnapshot: snapshot,
     lastKnownBankedResetAvailableCount: isValidBankedResetCount(snapshot.bankedResetAvailableCount)
       ? snapshot.bankedResetAvailableCount
@@ -304,6 +602,7 @@ export function updateMonitorSnapshotState(
     lastSuccessfulPostAt: postSucceeded && Number.isFinite(postCompletedAtMs)
       ? postCompletedAtMs
       : state.lastSuccessfulPostAt,
+    pendingRecoveryCandidate: evaluation.nextPendingRecoveryCandidate,
     pendingPosts: getPendingMonitorPosts(state),
   };
 }
@@ -423,6 +722,12 @@ export function createJsonMonitorLogger(
         ? ["reason", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetCountChange", "bankedResetDisplayCount", "bankedResetCountSource"]
         : event === "reset_confirmed"
           ? ["resetEventKey", "observedAt", "resetsAt"]
+      : event === "recovery_candidate_started"
+        ? ["observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount", "bankedResetCountSource"]
+      : event === "recovery_candidate_confirmed"
+        ? ["observedAt", "usedPercent", "resetsAt", "firstObservedAt", "delayMs"]
+      : event === "recovery_candidate_cancelled"
+        ? ["reason", "observedAt", "usedPercent", "resetsAt"]
       : event === "snapshot_failed"
         ? ["reason"]
         : event === "session_restart"
@@ -694,14 +999,24 @@ async function runAppServerSession(
           }
         }
 
+        const nowMs = Date.now();
         const postReason = getMonitorSnapshotPostReason(
           snapshot,
-          { ...monitorSnapshotState, previousLocalSnapshot },
+          monitorSnapshotState,
+          nowMs,
+        );
+        const postSnapshot = getMonitorPostSnapshot(
+          snapshot,
+          monitorSnapshotState,
+          postReason,
+          nowMs,
         );
         monitorSnapshotState = updateMonitorSnapshotState(
           monitorSnapshotState,
           snapshot,
           false,
+          nowMs,
+          { nowMs, logger },
         );
 
         if (pendingRetryFailed) {
@@ -709,7 +1024,7 @@ async function runAppServerSession(
             monitorSnapshotState = enqueueMonitorSnapshotPost(
               monitorSnapshotState,
               postReason,
-              snapshot,
+              postSnapshot,
             );
           }
           return;
@@ -718,11 +1033,11 @@ async function runAppServerSession(
 
         if (postReason === "heartbeat") {
           if (getPendingMonitorPosts(monitorSnapshotState).length > 0) return;
-          const webhookResponse = await postSnapshotSafely(snapshot, postReason);
+          const webhookResponse = await postSnapshotSafely(postSnapshot, postReason);
           if (webhookResponse) {
-            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
-            logSnapshotSent(postReason, snapshot);
-            emitResetConfirmationIfNeeded(snapshot, postReason, webhookResponse);
+            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
+            logSnapshotSent(postReason, postSnapshot);
+            emitResetConfirmationIfNeeded(postSnapshot, postReason, webhookResponse);
           }
           return;
         }
@@ -730,7 +1045,7 @@ async function runAppServerSession(
         monitorSnapshotState = enqueueMonitorSnapshotPost(
           monitorSnapshotState,
           postReason,
-          snapshot,
+          postSnapshot,
         );
         const pendingPosts = getPendingMonitorPosts(monitorSnapshotState);
         if (pendingPosts.length !== 1 || !pendingPosts[0]) return;
@@ -738,7 +1053,7 @@ async function runAppServerSession(
         const pendingPost = pendingPosts[0];
         const webhookResponse = await postSnapshotSafely(pendingPost.snapshot, pendingPost.reason);
         if (webhookResponse) {
-          monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
+          monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
           logSnapshotSent(pendingPost.reason, pendingPost.snapshot);
           emitResetConfirmationIfNeeded(pendingPost.snapshot, pendingPost.reason, webhookResponse);
         }

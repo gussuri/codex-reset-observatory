@@ -7,16 +7,20 @@ import {
   createJsonLineParser,
   createNotificationDebouncer,
   enqueueMonitorSnapshotPost,
+  evaluateMonitorRecoveryCandidate,
   getMonitorBankedResetDisplayState,
-  getPendingMonitorPosts,
-  getSafeMonitorErrorCode,
   getMonitorPollIntervalMs,
+  getMonitorPostSnapshot,
   getMonitorResetEventKey,
   getMonitorSnapshotPostReason,
+  getPendingMonitorPosts,
   getRestartBackoffMs,
+  getSafeMonitorErrorCode,
   isMonitorResetExecutionConfirmed,
   markMonitorSnapshotPostSucceeded,
+  MIN_RECOVERY_CONFIRMATION_DELAY_MS,
   MONITOR_HEARTBEAT_INTERVAL_MS,
+  RESET_AT_JITTER_TOLERANCE_SEC,
   shouldRestartAppServerAfterRpcFailure,
   toSafeMonitorPayload,
   updateMonitorSnapshotState,
@@ -136,13 +140,44 @@ test("a reset-at advance without a used-percent decrease is suppressed", () => {
   );
 });
 
-test("a meaningful recovery is posted immediately as a recovery candidate", () => {
+test("a meaningful recovery starts a candidate on first observation and is confirmed on independent observation", () => {
+  const initialState = {
+    previousLocalSnapshot: snapshot(),
+    lastSuccessfulPostAt: 0,
+  };
+  const firstEvidence = snapshot({
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 19,
+    resetsAt: 1_787_016_327,
+  });
+
+  // First observation: candidate starts, but is not posted immediately
+  assert.equal(getMonitorSnapshotPostReason(firstEvidence, initialState, 120_000), null);
+
+  const stateWithCandidate = updateMonitorSnapshotState(
+    initialState,
+    firstEvidence,
+    false,
+    120_000,
+    { nowMs: 120_000 },
+  );
+  assert.ok(stateWithCandidate.pendingRecoveryCandidate);
+  assert.equal(stateWithCandidate.pendingRecoveryCandidate.preRecoveryBaseline.usedPercent, 20);
+  assert.equal(stateWithCandidate.pendingRecoveryCandidate.firstEvidenceSnapshot.usedPercent, 19);
+
+  // Independent second observation (>= 45s later): confirmed!
+  const confirmedSnapshot = snapshot({
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 19,
+    resetsAt: 1_787_016_327,
+  });
   assert.equal(
-    getMonitorSnapshotPostReason(snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }), {
-      previousLocalSnapshot: snapshot(),
-      lastSuccessfulPostAt: 0,
-    }, 120_000),
+    getMonitorSnapshotPostReason(confirmedSnapshot, stateWithCandidate, 240_000),
     "recovery_candidate",
+  );
+  assert.equal(
+    getMonitorPostSnapshot(confirmedSnapshot, stateWithCandidate, "recovery_candidate", 240_000).observedAt,
+    "2026-08-21T00:02:00.000Z",
   );
 });
 
@@ -451,23 +486,69 @@ test("a failed initial post remains eligible for retry on the next poll", () => 
   assert.equal(getMonitorSnapshotPostReason(snapshot({ observedAt: "2026-08-21T00:02:00.000Z" }), state, 120_000), "initial");
 });
 
-test("a notification-triggered recovery uses the same post policy as polling", () => {
-  assert.equal(
-    getMonitorSnapshotPostReason(snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }), {
-      previousLocalSnapshot: snapshot(),
-      lastSuccessfulPostAt: 0,
-    }, 2_000),
-    "recovery_candidate",
-  );
+test("a notification burst does not confirm a recovery candidate until confirmation delay has passed", () => {
+  const initialState = {
+    previousLocalSnapshot: snapshot(),
+    lastSuccessfulPostAt: 0,
+  };
+  const firstEvidence = snapshot({
+    observedAt: "2026-08-21T00:00:02.000Z",
+    usedPercent: 19,
+    resetsAt: 1_787_016_327,
+  });
+
+  // 1st observation (at 2s): starts candidate, not posted immediately
+  assert.equal(getMonitorSnapshotPostReason(firstEvidence, initialState, 2_000), null);
+  const stateWithCandidate = updateMonitorSnapshotState(initialState, firstEvidence, false, 2_000, { nowMs: 2_000 });
+
+  // Burst observation 2s later (at 4s, total elapsed 2s < 45s): still not confirmed!
+  const burstSnapshot = snapshot({
+    observedAt: "2026-08-21T00:00:04.000Z",
+    usedPercent: 19,
+    resetsAt: 1_787_016_327,
+  });
+  assert.equal(getMonitorSnapshotPostReason(burstSnapshot, stateWithCandidate, 4_000), null);
+
+  // Once 45s+ has elapsed (at 60s): independent confirmation!
+  const confirmedSnapshot = snapshot({
+    observedAt: "2026-08-21T00:01:00.000Z",
+    usedPercent: 19,
+    resetsAt: 1_787_016_327,
+  });
+  assert.equal(getMonitorSnapshotPostReason(confirmedSnapshot, stateWithCandidate, 60_000), "recovery_candidate");
 });
 
-test("the strongest reason wins when recovery, structure, and heartbeat coincide", () => {
+test("a confirmed recovery wins over heartbeat, while a structure change cancels candidate", () => {
+  const candidateState = {
+    previousLocalSnapshot: snapshot(),
+    lastSuccessfulPostAt: 0,
+    pendingRecoveryCandidate: {
+      preRecoveryBaseline: snapshot(),
+      firstEvidenceSnapshot: snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }),
+      candidateStartedAtMs: 0,
+      lastObservation: snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }),
+      observationCount: 1,
+    },
+  };
+
+  // When confirmed at heartbeat interval, recovery_candidate wins over heartbeat
   assert.equal(
-    getMonitorSnapshotPostReason(snapshot({ planType: "team", usedPercent: 19, resetsAt: 1_787_016_327 }), {
-      previousLocalSnapshot: snapshot(),
-      lastSuccessfulPostAt: 0,
-    }, MONITOR_HEARTBEAT_INTERVAL_MS),
+    getMonitorSnapshotPostReason(
+      snapshot({ usedPercent: 19, resetsAt: 1_787_016_327 }),
+      candidateState,
+      MONITOR_HEARTBEAT_INTERVAL_MS,
+    ),
     "recovery_candidate",
+  );
+
+  // When structure changes, candidate is cancelled and structure_change is posted
+  assert.equal(
+    getMonitorSnapshotPostReason(
+      snapshot({ planType: "team", usedPercent: 19, resetsAt: 1_787_016_327 }),
+      candidateState,
+      MONITOR_HEARTBEAT_INTERVAL_MS,
+    ),
+    "structure_change",
   );
 });
 
@@ -731,4 +812,433 @@ test("reset confirmation GUI events expose only safe stable fields", () => {
 test("GUI-safe error codes preserve only known machine-readable reasons", () => {
   assert.equal(getSafeMonitorErrorCode(new Error("monitor_secret_missing")), "monitor_secret_missing");
   assert.equal(getSafeMonitorErrorCode(new Error("private error details")), "Error");
+});
+
+test("synthetic regression: 2026-09-09 false recovery anomaly (512a8b31...) starts candidate but cancels on reversion without posting", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  // Baseline before anomaly: 60% used, normal schedule
+  const baseline = snapshot({
+    observedAt: "2026-09-09T03:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: 1_787_012_727,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // Poll 1 (t=120s): Anomalous snapshot (incident fix usage bounce) drops to 40% with +7d resetsAt
+  const anomalous = snapshot({
+    observedAt: "2026-09-09T03:02:00.000Z",
+    usedPercent: 40,
+    resetsAt: 1_787_012_727 + 7 * 86400,
+  });
+
+  const reason1 = getMonitorSnapshotPostReason(anomalous, state, 120_000);
+  assert.equal(reason1, null, "First anomalous observation must NOT return recovery_candidate immediately");
+
+  state = updateMonitorSnapshotState(state, anomalous, false, 120_000, {
+    nowMs: 120_000,
+    logger: testLogger,
+  });
+  assert.ok(state.pendingRecoveryCandidate, "Candidate should be held in pending state");
+  assert.equal(state.pendingRecoveryCandidate.preRecoveryBaseline.usedPercent, 60);
+  assert.equal(state.pendingRecoveryCandidate.firstEvidenceSnapshot.usedPercent, 40);
+
+  // Verify audit log for candidate start
+  assert.equal(auditLogs.length, 1);
+  assert.equal(auditLogs[0]?.event, "recovery_candidate_started");
+  assert.equal(auditLogs[0]?.details?.usedPercent, 40);
+
+  // Poll 2 (t=240s): Reversion! Usage bounces back to 60% and resetsAt reverts to original schedule
+  const reverted = snapshot({
+    observedAt: "2026-09-09T03:04:00.000Z",
+    usedPercent: 60,
+    resetsAt: 1_787_012_727,
+  });
+
+  const reason2 = getMonitorSnapshotPostReason(reverted, state, 240_000);
+  assert.equal(reason2, null, "Reverted observation must NOT trigger a post");
+
+  state = updateMonitorSnapshotState(state, reverted, false, 240_000, {
+    nowMs: 240_000,
+    logger: testLogger,
+  });
+  assert.equal(state.pendingRecoveryCandidate, null, "Candidate must be cancelled on reversion");
+  assert.equal(state.baselineSnapshot?.usedPercent, 60, "Baseline should rebase to reverted snapshot");
+
+  // Verify audit log for cancellation
+  assert.equal(auditLogs.length, 2);
+  assert.equal(auditLogs[1]?.event, "recovery_candidate_cancelled");
+  assert.equal(auditLogs[1]?.details?.reason, "usage_reverted");
+  assert.equal(state.pendingPosts?.length ?? 0, 0, "Zero posts queued for webhook");
+});
+
+test("genuine recovery: persists across independent polls and posts firstEvidenceSnapshot timestamp", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 70,
+    resetsAt: 1_787_012_727,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // Poll 1 (t=120s): First evidence of genuine reset
+  const firstEvidence = snapshot({
+    observedAt: "2026-09-10T00:02:00.000Z",
+    usedPercent: 0,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(firstEvidence, state, 120_000), null);
+  state = updateMonitorSnapshotState(state, firstEvidence, false, 120_000, {
+    nowMs: 120_000,
+    logger: testLogger,
+  });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  // Poll 2 (t=240s, 120s later >= 45s): Persisting recovery confirmed
+  const confirmedObs = snapshot({
+    observedAt: "2026-09-10T00:04:00.000Z",
+    usedPercent: 0,
+    resetsAt: 1_787_617_527,
+  });
+  const reason = getMonitorSnapshotPostReason(confirmedObs, state, 240_000);
+  assert.equal(reason, "recovery_candidate");
+
+  const postSnapshot = getMonitorPostSnapshot(confirmedObs, state, reason, 240_000);
+  // Crucial: postSnapshot preserves the firstEvidence timestamp!
+  assert.equal(postSnapshot.observedAt, "2026-09-10T00:02:00.000Z");
+
+  state = updateMonitorSnapshotState(state, confirmedObs, false, 240_000, {
+    nowMs: 240_000,
+    logger: testLogger,
+  });
+  assert.equal(state.pendingRecoveryCandidate, null);
+  assert.equal(state.baselineSnapshot?.usedPercent, 0);
+
+  // Audit logs confirm started then confirmed
+  assert.equal(auditLogs.length, 2);
+  assert.equal(auditLogs[0]?.event, "recovery_candidate_started");
+  assert.equal(auditLogs[1]?.event, "recovery_candidate_confirmed");
+  assert.equal(auditLogs[1]?.details?.firstObservedAt, "2026-09-10T00:02:00.000Z");
+  assert.equal(auditLogs[1]?.details?.delayMs, 120_000);
+
+  // Poll 3 (t=360s): No duplicate recovery candidate
+  const nextObs = snapshot({
+    observedAt: "2026-09-10T00:06:00.000Z",
+    usedPercent: 0,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(nextObs, state, 360_000), null);
+});
+
+test("post-recovery usage: 80% -> 5% -> 8% confirmed against frozen pre-recovery baseline", () => {
+  const baseline = snapshot({
+    observedAt: "2026-09-10T00:00:00.000Z",
+    usedPercent: 80,
+    resetsAt: 1_787_012_727,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  // Poll 1: 5% usage observed
+  const firstEvidence = snapshot({
+    observedAt: "2026-09-10T00:02:00.000Z",
+    usedPercent: 5,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(firstEvidence, state, 120_000), null);
+  state = updateMonitorSnapshotState(state, firstEvidence, false, 120_000, { nowMs: 120_000 });
+
+  // Poll 2: User started working, usage increased from 5% to 8%
+  const postUsageObs = snapshot({
+    observedAt: "2026-09-10T00:04:00.000Z",
+    usedPercent: 8,
+    resetsAt: 1_787_617_527,
+  });
+  // Against pre-recovery baseline (80%): 80 - 8 = 72% >= 1%, resetsAt maintained -> CONFIRMED!
+  const reason = getMonitorSnapshotPostReason(postUsageObs, state, 240_000);
+  assert.equal(reason, "recovery_candidate");
+
+  const postSnapshot = getMonitorPostSnapshot(postUsageObs, state, reason, 240_000);
+  assert.equal(postSnapshot.observedAt, "2026-09-10T00:02:00.000Z");
+  assert.equal(postSnapshot.usedPercent, 5);
+});
+
+test("repeated flapping / oscillation does not post false recoveries", () => {
+  const baseTime = Date.parse("2026-08-21T00:00:00.000Z");
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    snapshot({ observedAt: new Date(baseTime).toISOString(), usedPercent: 50, resetsAt: 1_787_012_727 }),
+    true,
+    0,
+  );
+
+  let nowMs = 120_000;
+  for (let cycle = 0; cycle < 3; cycle++) {
+    // Drop
+    const drop = snapshot({
+      observedAt: new Date(baseTime + nowMs).toISOString(),
+      usedPercent: 30,
+      resetsAt: 1_787_617_527,
+    });
+    assert.equal(getMonitorSnapshotPostReason(drop, state, nowMs), null);
+    state = updateMonitorSnapshotState(state, drop, false, nowMs, { nowMs });
+    assert.ok(state.pendingRecoveryCandidate);
+
+    nowMs += 120_000;
+    // Bounce back
+    const bounce = snapshot({
+      observedAt: new Date(baseTime + nowMs).toISOString(),
+      usedPercent: 50,
+      resetsAt: 1_787_012_727,
+    });
+    assert.equal(getMonitorSnapshotPostReason(bounce, state, nowMs), null);
+    state = updateMonitorSnapshotState(state, bounce, false, nowMs, { nowMs });
+    assert.equal(state.pendingRecoveryCandidate, null);
+
+    nowMs += 120_000;
+  }
+  assert.equal(state.pendingPosts?.length ?? 0, 0);
+});
+
+test("sub-1% usage corrections do not accumulate into fake resets", () => {
+  const baseTime = Date.parse("2026-08-21T00:00:00.000Z");
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    snapshot({ observedAt: new Date(baseTime).toISOString(), usedPercent: 20.0, resetsAt: 1_787_012_727 }),
+    true,
+    0,
+  );
+
+  const steps = [19.6, 19.3, 18.9, 18.6];
+  let time = 60_000;
+  for (const usedPercent of steps) {
+    const s = snapshot({
+      observedAt: new Date(baseTime + time).toISOString(),
+      usedPercent,
+      resetsAt: 1_787_617_527, // even if resetsAt advanced
+    });
+    // Each step decrease < 1%, so no recovery candidate is started
+    const reason = getMonitorSnapshotPostReason(s, state, time);
+    assert.notEqual(reason, "recovery_candidate");
+    assert.equal(reason, null);
+    state = updateMonitorSnapshotState(state, s, false, time, { nowMs: time });
+    assert.equal(state.pendingRecoveryCandidate, null);
+    time += 60_000;
+  }
+});
+
+test("resetsAt schedule advance without usage drop does not start candidate", () => {
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    snapshot({ usedPercent: 20, resetsAt: 1_787_012_727 }),
+    true,
+    0,
+  );
+
+  const advancedSchedule = snapshot({
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 20,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(advancedSchedule, state, 120_000), null);
+  state = updateMonitorSnapshotState(state, advancedSchedule, false, 120_000, { nowMs: 120_000 });
+  assert.equal(state.pendingRecoveryCandidate, null);
+  assert.equal(state.baselineSnapshot?.resetsAt, 1_787_617_527);
+});
+
+test("comparison gap > 10m cancels pending candidate and rebases", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    snapshot({ usedPercent: 50, resetsAt: 1_787_012_727 }),
+    true,
+    0,
+  );
+
+  const candidateObs = snapshot({
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 20,
+    resetsAt: 1_787_617_527,
+  });
+  state = updateMonitorSnapshotState(state, candidateObs, false, 120_000, { nowMs: 120_000 });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  // 15 minutes later (> 10m MAX_USAGE_COMPARISON_GAP_MS)
+  const delayedObs = snapshot({
+    observedAt: "2026-08-21T00:17:00.000Z",
+    usedPercent: 20,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(delayedObs, state, 120_000 + 15 * 60 * 1000), null);
+  state = updateMonitorSnapshotState(state, delayedObs, false, 120_000 + 15 * 60 * 1000, {
+    nowMs: 120_000 + 15 * 60 * 1000,
+    logger: testLogger,
+  });
+  assert.equal(state.pendingRecoveryCandidate, null);
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_cancelled" && l.details?.reason === "comparison_gap"), true);
+});
+
+test("stale out-of-order observation cancels pending candidate", () => {
+  const auditLogs: Array<{ event: string; details?: Record<string, unknown> }> = [];
+  const testLogger = (event: string, details?: Record<string, unknown>) => {
+    auditLogs.push({ event, details });
+  };
+
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    snapshot({ usedPercent: 50, resetsAt: 1_787_012_727 }),
+    true,
+    0,
+  );
+
+  const candidateObs = snapshot({
+    observedAt: "2026-08-21T00:05:00.000Z",
+    usedPercent: 20,
+    resetsAt: 1_787_617_527,
+  });
+  state = updateMonitorSnapshotState(state, candidateObs, false, 300_000, { nowMs: 300_000 });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  // Stale observation with older timestamp
+  const staleObs = snapshot({
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 20,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(staleObs, state, 360_000), null);
+  state = updateMonitorSnapshotState(state, staleObs, false, 360_000, {
+    nowMs: 360_000,
+    logger: testLogger,
+  });
+  assert.equal(state.pendingRecoveryCandidate, null);
+  assert.equal(auditLogs.some((l) => l.event === "recovery_candidate_cancelled" && l.details?.reason === "stale_observation"), true);
+});
+
+test("failed webhook post retains firstEvidenceSnapshot in pending queue without duplicate candidate creation", () => {
+  const baseline = snapshot({
+    observedAt: "2026-08-21T00:00:00.000Z",
+    usedPercent: 60,
+    resetsAt: 1_787_012_727,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    0,
+  );
+
+  const firstEvidence = snapshot({
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 10,
+    resetsAt: 1_787_617_527,
+  });
+  state = updateMonitorSnapshotState(state, firstEvidence, false, 120_000, { nowMs: 120_000 });
+
+  const confirmedObs = snapshot({
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 10,
+    resetsAt: 1_787_617_527,
+  });
+  const postReason = getMonitorSnapshotPostReason(confirmedObs, state, 240_000);
+  assert.equal(postReason, "recovery_candidate");
+  const postSnapshot = getMonitorPostSnapshot(confirmedObs, state, postReason, 240_000);
+
+  // Enqueue confirmed post
+  state = enqueueMonitorSnapshotPost(state, postReason!, postSnapshot);
+  // State updated (candidate cleared, baseline updated to 10%)
+  state = updateMonitorSnapshotState(state, confirmedObs, false, 240_000, { nowMs: 240_000 });
+
+  // Webhook failed -> post remains pending with firstEvidence
+  const pending = getPendingMonitorPosts(state);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0]?.snapshot.observedAt, "2026-08-21T00:02:00.000Z");
+  assert.equal(pending[0]?.snapshot.usedPercent, 10);
+
+  // Next poll (t=360s): No duplicate candidate starts because baseline is already 10%
+  const nextObs = snapshot({
+    observedAt: "2026-08-21T00:06:00.000Z",
+    usedPercent: 10,
+    resetsAt: 1_787_617_527,
+  });
+  assert.equal(getMonitorSnapshotPostReason(nextObs, state, 360_000), null);
+  // Pending post still contains original first evidence
+  assert.equal(getPendingMonitorPosts(state)[0]?.snapshot.observedAt, "2026-08-21T00:02:00.000Z");
+});
+
+test("recovery candidate GUI audit logs expose only safe fields without credentials", () => {
+  const lines: string[] = [];
+  const logger = createJsonMonitorLogger((line) => lines.push(line));
+
+  logger("recovery_candidate_started", {
+    observedAt: "2026-08-21T00:02:00.000Z",
+    usedPercent: 10,
+    resetsAt: 1_787_617_527,
+    planType: "plus",
+    windowDurationMins: 10080,
+    bankedResetDisplayCount: 2,
+    secret: "must-not-leak",
+    token: "private-token",
+  });
+
+  logger("recovery_candidate_confirmed", {
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 10,
+    resetsAt: 1_787_617_527,
+    firstObservedAt: "2026-08-21T00:02:00.000Z",
+    delayMs: 120_000,
+    apiKey: "must-not-leak",
+  });
+
+  logger("recovery_candidate_cancelled", {
+    reason: "usage_reverted",
+    observedAt: "2026-08-21T00:04:00.000Z",
+    usedPercent: 60,
+    resetsAt: 1_787_012_727,
+    secret: "must-not-leak",
+  });
+
+  assert.equal(lines.length, 3);
+  for (const line of lines) {
+    assert.equal(line.includes("must-not-leak"), false);
+    assert.equal(line.includes("private-token"), false);
+  }
+
+  const started = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.equal(started.event, "recovery_candidate_started");
+  assert.equal(started.usedPercent, 10);
+  assert.equal(started.bankedResetDisplayCount, 2);
+
+  const confirmed = JSON.parse(lines[1]) as Record<string, unknown>;
+  assert.equal(confirmed.event, "recovery_candidate_confirmed");
+  assert.equal(confirmed.firstObservedAt, "2026-08-21T00:02:00.000Z");
+  assert.equal(confirmed.delayMs, 120_000);
+
+  const cancelled = JSON.parse(lines[2]) as Record<string, unknown>;
+  assert.equal(cancelled.event, "recovery_candidate_cancelled");
+  assert.equal(cancelled.reason, "usage_reverted");
 });
