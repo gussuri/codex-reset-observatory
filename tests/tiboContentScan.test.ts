@@ -9,6 +9,16 @@ type ParsedTweet = {
   timestamp: number;
 };
 
+function normalizeContentScriptSource(source: string) {
+  return source.replace(/\r\n?/g, "\n");
+}
+
+function readContentScriptSource() {
+  return normalizeContentScriptSource(
+    readFileSync("extension/tibo-monitor/content.js", "utf8"),
+  );
+}
+
 function getNewestSelector() {
   const context: Record<string, unknown> = {};
   createContext(context);
@@ -83,6 +93,13 @@ function makeTweetTextArticle(options: {
 
   return { article, expandControl };
 }
+
+test("normalizes CRLF and lone CR before source inspection", () => {
+  assert.equal(
+    normalizeContentScriptSource("first\r\nsecond\rthird\nfourth"),
+    "first\nsecond\nthird\nfourth",
+  );
+});
 
 function newestInOrder(
   selector: ReturnType<typeof getNewestSelector>,
@@ -219,7 +236,7 @@ test("ignores an ambiguous localized More control outside the tweet text", () =>
 });
 
 test("content.js selects after a valid parse and before deduplication", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
   const selectionIndex = source.indexOf("TiboMonitorScan.selectNewestParsedTweet");
   const processedCheckIndex = source.indexOf("processedTweetIds.has(tweetId)");
 
@@ -230,7 +247,7 @@ test("content.js selects after a valid parse and before deduplication", () => {
 });
 
 test("content.js resolves reply metadata before deduplication and skips pending thread captures", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
   const metadataIndex = source.indexOf("TiboMonitorScan.extractReplyMetadata(article");
   const processedCheckIndex = source.indexOf("processedTweetIds.has(tweetId)");
   const inFlightIndex = source.indexOf("inFlightTweetIds.add(tweetId)");
@@ -243,7 +260,7 @@ test("content.js resolves reply metadata before deduplication and skips pending 
 });
 
 test("content.js reads non-empty tweet text before marking a parse successful", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
   const textReadIndex = source.indexOf("const hasNonEmptyTweetText");
   const emptyGuardIndex = source.indexOf("if (!hasNonEmptyTweetText) continue;");
   const parseSuccessIndex = source.indexOf("record.isParseSuccess = true");
@@ -257,7 +274,7 @@ test("content.js reads non-empty tweet text before marking a parse successful", 
 });
 
 test("content.js expands and rescans incomplete tweet text before parse success or webhook send", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
   const stateIndex = source.indexOf("TiboMonitorScan.getTweetTextState(article)");
   const expansionGuardIndex = source.indexOf("if (tweetTextState.needsExpansion)");
   const parseSuccessIndex = source.indexOf("record.isParseSuccess = true");
@@ -273,7 +290,7 @@ test("content.js expands and rescans incomplete tweet text before parse success 
 });
 
 test("content.js quarantines terminal webhook failures and cools down retryable failures", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
 
   assert.match(source, /quarantinedTweetIds/);
   assert.match(source, /authBlockedTweetIds/);
@@ -285,7 +302,7 @@ test("content.js quarantines terminal webhook failures and cools down retryable 
 });
 
 test("content.js supports an explicit single-tweet retry without broad queue clearing", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
 
   assert.match(source, /request\?\.action === "RETRY_TWEET"/);
   assert.match(source, /processedTweetIds\.delete\(tweetId\)/);
@@ -295,7 +312,7 @@ test("content.js supports an explicit single-tweet retry without broad queue cle
 });
 
 test("content.js does not create timers after the extension context is invalidated", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
 
   const schedulerIndex = source.indexOf("function scheduleExtensionInterval");
   const invalidationGuardIndex = source.indexOf(
@@ -308,7 +325,7 @@ test("content.js does not create timers after the extension context is invalidat
 });
 
 test("content.js does not access storage.local directly after trusted-context hardening", () => {
-  const source = readFileSync("extension/tibo-monitor/content.js", "utf8");
+  const source = readContentScriptSource();
 
   assert.doesNotMatch(source, /chrome\.storage\.local/);
   assert.match(source, /GET_CONTENT_MONITOR_STATE/);
