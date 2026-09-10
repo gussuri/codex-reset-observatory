@@ -150,6 +150,10 @@ const ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = [
   "is_quote",
 ].join(",");
 
+// History consumers need the semantic, temporal, reply, and edit-identity
+// columns below. Write-time AI audit mirrors and quote-source metadata are not
+// read from this path; nested secondary_signal keeps the data needed for its
+// expansion, while the compatibility fallback remains unchanged.
 export const TIBO_HISTORY_SELECT_FIELDS = [
   "tweet_id",
   "text",
@@ -163,15 +167,9 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "classification_source",
   "rule_signal_type",
   "ai_signal_type",
-  "ai_classification_status",
-  "ai_reset_type_ja",
-  "ai_notice_to_execution",
   "teaser_strength",
   "secondary_signal",
   "ai_teaser_strength",
-  "ai_teaser_strength_confidence",
-  "ai_teaser_strength_evidence_quote",
-  "ai_teaser_strength_reason_ja",
   "ai_temporal_expression",
   "ai_temporal_kind",
   "ai_temporal_precision",
@@ -190,13 +188,8 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "translated_text_ja",
   "translated_text_zh",
   "is_reply",
-  "is_quote",
   "reply_to_handles",
   "reply_context_text",
-  "source_timeline",
-  "quote_context_text",
-  "quote_tweet_url",
-  "quote_author_handle",
   "verification_status",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
