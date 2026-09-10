@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   ACTIVE_TIBO_SIGNAL_TYPES,
+  ACTIVE_TIBO_SIGNAL_SELECT_FIELDS,
   applyActiveTiboQueryFilters,
   associateTiboNotices,
   buildPublicRadarSnapshotBundle,
@@ -17,6 +18,8 @@ import {
   PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
   RADAR_CORE_CACHE_TTL_SECONDS,
+  splitTiboHistorySignals,
+  TIBO_HISTORY_SELECT_FIELDS,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -233,6 +236,48 @@ test("active Tibo filters are applied before ordering and limit", () => {
     "order",
     "limit",
   ]);
+});
+
+test("one reply-inclusive history result derives the formal view without changing the recent view", () => {
+  const rows: FormalTiboResetSignal[] = [
+    { ...resetSignal("reply", "2026-08-03T10:00:00.000Z"), is_reply: true },
+    { ...resetSignal("post", "2026-08-02T10:00:00.000Z"), is_reply: false },
+    { ...resetSignal("legacy", "2026-08-01T10:00:00.000Z"), is_reply: null },
+  ];
+
+  const split = splitTiboHistorySignals(rows);
+
+  assert.strictEqual(split.withReplies, rows);
+  assert.deepEqual(split.withoutReplies, [rows[1], rows[2]]);
+  assert.deepEqual(split.withReplies, rows);
+});
+
+test("Tibo radar queries use explicit field lists instead of wildcard reads", () => {
+  assert.notEqual(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, "*");
+  assert.notEqual(TIBO_HISTORY_SELECT_FIELDS, "*");
+  assert.ok(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(",").length > 1);
+  assert.ok(TIBO_HISTORY_SELECT_FIELDS.split(",").length > 1);
+  assert.doesNotMatch(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)id(,|$)/);
+  assert.match(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)tweet_id(,|$)/);
+  assert.match(TIBO_HISTORY_SELECT_FIELDS, /(^|,)is_reply(,|$)/);
+});
+
+test("Tibo history uses one reply-inclusive cache entry and derives the formal view locally", () => {
+  const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
+  assert.match(source, /\["tibo-history-signals-cache-v3"\]/);
+  assert.match(source, /TIBO_HISTORY_SELECT_FIELDS/);
+  assert.match(source, /TIBO_HISTORY_FALLBACK_SELECT_FIELDS/);
+  assert.match(source, /ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS/);
+  assert.match(source, /isMissingTiboOptionalColumnError\(result\.error\)/);
+  assert.doesNotMatch(source, /getCachedTiboRecentSignals/);
+
+  const bundleSource = source.slice(
+    source.indexOf("async function getTiboSignalBundle"),
+    source.indexOf("export async function fetchFormalTiboResetSignals"),
+  );
+  assert.equal((bundleSource.match(/fetchRawTiboHistorySignals\(\)/g) ?? []).length, 1);
+  assert.match(bundleSource, /splitTiboHistorySignals\(historyResult\.data\)/);
+  assert.doesNotMatch(bundleSource, /fetchRawTiboHistorySignals\(false\)|fetchRawTiboHistorySignals\(true\)/);
 });
 
 test("Tibo reset notice association scans resets chronologically and preserves display order", () => {
