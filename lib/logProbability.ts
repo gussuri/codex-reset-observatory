@@ -16,6 +16,7 @@ import {
 import type { RadarViewModel } from "@/lib/radar/types";
 import type { ProbabilityCalculationAudit } from "@/lib/radar/probability";
 import type { PublishedProbabilityCalculation } from "@/lib/radar/publishedProbability";
+import type { PublishedV3FeatureSnapshot } from "@/lib/radar/publishedV3FeatureSnapshot";
 import {
   calculateAllRecencyWeightedShadowProbabilities,
 } from "@/lib/radar/recencyWeightedProbability";
@@ -87,6 +88,7 @@ export type ExperimentalProbabilityForecast = {
   calibrationApplied?: boolean;
   integrationStepHours?: number;
   experimentRole?: "control" | "challenger";
+  featureSnapshot?: PublishedV3FeatureSnapshot;
   regimeMultiplierPolicyVersion?: string;
   priorStdDev?: number;
   minimumSamples?: number;

@@ -23,11 +23,6 @@ import {
 import type { RadarData } from "../lib/radar";
 import { getActualWithinHorizon, getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
 import {
-  buildCanonicalResetHistoryContext,
-  getCanonicalResetHistoryForStaticHistory,
-} from "../lib/radar/tiboHistory";
-import type { WindowLike } from "../lib/radar/types";
-import {
   evaluatePublishedModelProspectively,
   buildSavedArtifactHybridForecast,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
@@ -37,6 +32,10 @@ import {
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
 } from "../lib/radar/prospectivePublishedModelEvaluation";
+import {
+  readPublishedV3FeatureSnapshot,
+  type PublishedV3FeatureSnapshot,
+} from "../lib/radar/publishedV3FeatureSnapshot";
 import type { PublishedV3ScoreboardFeature } from "../lib/radar/prospectiveV3Scoreboard";
 import type { ProspectiveForecastRow, ProspectiveStoredForecast } from "../lib/radar/prospectiveProbabilityEvaluation";
 import {
@@ -168,53 +167,16 @@ function isFiniteProbability(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
-function getHistoryEventTime(item: WindowLike) {
-  return item.closed_at ?? item.completed_at ?? item.opened_at ?? item.date ?? null;
-}
-
-function buildProspectiveScoreboardFeatures(
+export function buildProspectiveScoreboardFeatures(
   rows: Array<ProspectiveForecastRow>,
-  data: RadarData | null,
+  _data?: RadarData | null,
 ): Record<string, PublishedV3ScoreboardFeature> {
-  if (!data) return {};
-
   return Object.fromEntries(rows.flatMap((row) => {
-    const originTime = parseTimestamp(row.generatedAt);
-    if (originTime === null) return [];
-
-    const pointInTimeData = getPointInTimeRadarData(data, new Date(originTime));
-    if (!pointInTimeData) return [];
-
-    const canonicalContext = buildCanonicalResetHistoryContext(pointInTimeData, {
-      defaultStaticHistory: LOCAL_RESET_HISTORY,
-    });
-    const canonicalHistory = getCanonicalResetHistoryForStaticHistory(
-      canonicalContext,
-      LOCAL_RESET_HISTORY,
-    ) ?? canonicalContext.defaultHistory;
-    const bankedEventWithin48h = canonicalHistory.some((item) => {
-      if (item.recordKind !== "banked_distribution") return false;
-      const completedTime = parseTimestamp(getHistoryEventTime(item));
-      return completedTime !== null
-        && completedTime > originTime - 48 * 60 * 60 * 1000
-        && completedTime <= originTime;
-    });
-    const usableTiboSignal = [
-      ...(pointInTimeData.active_tibo_signals ?? []),
-      ...(pointInTimeData.recent_tibo_signals ?? []),
-      ...(pointInTimeData.formal_tibo_resets ?? []),
-    ].some((signal) =>
-      signal.is_reply !== true
-      && signal.verification_status !== "rejected"
-      && signal.signal_type !== "irrelevant",
-    );
-    const statusIncident = (pointInTimeData.openai_status_history ?? []).length > 0;
-
-    return [[row.generatedAt, {
-      bankedEventWithin48h,
-      usableTiboSignal,
-      statusIncident,
-    }] satisfies [string, PublishedV3ScoreboardFeature]];
+    const forecast = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+    const snapshot = readPublishedV3FeatureSnapshot(forecast?.featureSnapshot);
+    return snapshot
+      ? [[row.generatedAt, snapshot satisfies PublishedV3FeatureSnapshot]]
+      : [];
   }));
 }
 

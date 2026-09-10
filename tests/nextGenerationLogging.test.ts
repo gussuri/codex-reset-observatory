@@ -147,6 +147,9 @@ test("production-like post-boundary logging preserves selective hybrid v3, v2, v
   assert.equal(v3.modelVersion, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   // 6. generatedAt is logging origin
   assert.equal(v3.generatedAt, generatedAt.toISOString());
+  assert.equal(v3.featureSnapshot?.featureSnapshotVersion, "v1");
+  assert.equal(v1.featureSnapshot, undefined);
+  assert.equal(v2.featureSnapshot, undefined);
 
   // 7. probability24h/48h finite and in [0, 1]
   assert.ok(Number.isFinite(v3.probability24h) && v3.probability24h >= 0 && v3.probability24h <= 1);

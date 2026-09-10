@@ -24,6 +24,8 @@ import {
 } from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
 import { parsePredictionHistoryRows } from "../scripts/evaluateProspectiveProbabilityForecasts";
+import { buildProspectiveScoreboardFeatures } from "../scripts/evaluatePublishedModelProspectively";
+import { getLocalRadarData } from "../lib/radar";
 
 function forecastRow(
   generatedAt: string,
@@ -800,6 +802,103 @@ test("v3 scoreboard marks small segments insufficient and never invents missing 
   assert.equal(scoreboard.segments.usableTiboSignal.no.originCount, 1);
   assert.equal(scoreboard.segments.statusIncident.unknown.originCount, 1);
   assert.equal(scoreboard.segments.statusIncident.unknown.sampleStatus, "insufficient_sample");
+});
+
+test("v3 scoreboard prefers the saved feature snapshot over a conflicting feature map", () => {
+  const generatedAt = "2026-09-10T00:30:00.000Z";
+  const row = forecastRow(generatedAt);
+  const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  assert.ok(active);
+  active.featureSnapshot = {
+    featureSnapshotVersion: "v1",
+    bankedEventWithin48h: false,
+    usableTiboSignal: true,
+    statusIncident: false,
+    tiboSignalAgeHours: 2,
+    tiboSignalType: "teaser",
+    tiboSignalConfidence: 0.8,
+    tiboTeaserStrength: "weak",
+  };
+
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [row],
+    [],
+    new Date("2026-09-13T00:00:00.000Z"),
+    {
+      adoptionAt: "2026-09-10T00:00:00.000Z",
+      features: {
+        [generatedAt]: {
+          bankedEventWithin48h: true,
+          usableTiboSignal: false,
+          statusIncident: true,
+        },
+      },
+    },
+  );
+
+  assert.equal(scoreboard.segments.bankedEventWithin48h.no.originCount, 1);
+  assert.equal(scoreboard.segments.usableTiboSignal.yes.originCount, 1);
+  assert.equal(scoreboard.segments.statusIncident.no.originCount, 1);
+});
+
+test("scoreboard feature extraction never backfills a missing snapshot from current RadarData", () => {
+  const generatedAt = "2026-09-10T00:30:00.000Z";
+  const row = forecastRow(generatedAt);
+  const currentData = getLocalRadarData({
+    calculationNow: new Date(generatedAt),
+    recentTiboSignals: [
+      {
+        tweet_id: "future-read-side-signal",
+        text: "A future signal",
+        tweet_url: "https://x.com/thsottiaux/status/future-read-side-signal",
+        tweet_created_at: "2026-09-10T01:00:00.000Z",
+        detected_at: "2026-09-10T01:00:00.000Z",
+        signal_type: "teaser",
+        confidence: 0.9,
+        verification_status: "confirmed",
+        teaser_strength: "strong",
+        is_reply: false,
+      },
+    ],
+  });
+
+  assert.deepEqual(buildProspectiveScoreboardFeatures([row], currentData), {});
+});
+
+test("scoreboard reports missing saved feature snapshots as unknown", () => {
+  const row = forecastRow("2026-09-10T00:30:00.000Z");
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
+    [row],
+    [],
+    new Date("2026-09-13T00:00:00.000Z"),
+    { adoptionAt: "2026-09-10T00:00:00.000Z" },
+  );
+
+  assert.equal(scoreboard.segments.bankedEventWithin48h.unknown.originCount, 1);
+  assert.equal(scoreboard.segments.usableTiboSignal.unknown.originCount, 1);
+  assert.equal(scoreboard.segments.statusIncident.unknown.originCount, 1);
+});
+
+test("a stored snapshot is the scoreboard's source of PIT feature truth", () => {
+  const generatedAt = "2026-09-10T00:30:00.000Z";
+  const row = forecastRow(generatedAt);
+  const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  assert.ok(active);
+  active.featureSnapshot = {
+    featureSnapshotVersion: "v1",
+    bankedEventWithin48h: true,
+    usableTiboSignal: false,
+    statusIncident: null,
+    tiboSignalAgeHours: null,
+    tiboSignalType: null,
+    tiboSignalConfidence: null,
+    tiboTeaserStrength: null,
+  };
+
+  const features = buildProspectiveScoreboardFeatures([row], getLocalRadarData({
+    calculationNow: new Date(generatedAt),
+  }));
+  assert.deepEqual(features[generatedAt], active.featureSnapshot);
 });
 
 test("v3 scoreboard excludes rows before the adoption boundary without backfilling them", () => {

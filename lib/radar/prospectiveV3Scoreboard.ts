@@ -10,6 +10,10 @@ import {
   type ProspectiveStoredForecast,
 } from "./prospectiveProbabilityEvaluation";
 import type { ShadowResetEvent } from "./shadowProbability";
+import {
+  readPublishedV3FeatureSnapshot,
+  type PublishedV3FeatureSnapshot,
+} from "./publishedV3FeatureSnapshot";
 
 const HOUR_MS = 60 * 60 * 1000;
 const LOG_LOSS_EPSILON = 1e-12;
@@ -47,14 +51,7 @@ export type ProspectiveScoreboardMetric = {
   targetResetCount: number;
 };
 
-export type PublishedV3ScoreboardFeature = {
-  /** Must be derived from data projected to the forecast origin. */
-  bankedEventWithin48h?: boolean | null;
-  /** Must be derived from data projected to the forecast origin. */
-  usableTiboSignal?: boolean | null;
-  /** Must be derived from data projected to the forecast origin. */
-  statusIncident?: boolean | null;
-};
+export type PublishedV3ScoreboardFeature = Partial<PublishedV3FeatureSnapshot>;
 
 export type PublishedV3ScoreboardSegment = {
   sampleStatus: ProspectiveScoreboardSampleStatus;
@@ -573,10 +570,17 @@ export function buildPublishedV3ProspectiveScoreboard(
   const maxAbsoluteDifference = v2Differences.length === 0 ? null : Math.max(...v2Differences);
 
   const features = options.features;
+  const getSavedFeatureSnapshot = (row: ProspectiveForecastRow) =>
+    readPublishedV3FeatureSnapshot(getActiveForecast(row).featureSnapshot);
   const getBooleanFeature = (
     key: keyof PublishedV3ScoreboardFeature,
     row: ProspectiveForecastRow,
   ): boolean | null => {
+    const savedSnapshot = getSavedFeatureSnapshot(row);
+    if (savedSnapshot) {
+      const savedValue = savedSnapshot[key as keyof PublishedV3FeatureSnapshot];
+      return typeof savedValue === "boolean" ? savedValue : null;
+    }
     const value = features?.[row.generatedAt]?.[key];
     return typeof value === "boolean" ? value : null;
   };
@@ -647,7 +651,10 @@ export function buildPublishedV3ProspectiveScoreboard(
   if (!resolved24hMet) warnings.push(`24h resolved sample is below the minimum 20 (actual: ${resolved24h}).`);
   if (!resolved48hMet) warnings.push(`48h resolved sample is below the minimum 15 (actual: ${resolved48h}).`);
   if (!targetResetsMet) warnings.push(`Target reset sample is below the minimum 5 (actual: ${targetResetCount}).`);
-  if (!features) warnings.push("PIT segment features were not supplied; feature-dependent segments are reported as unknown.");
+  const savedFeatureSnapshotCount = dailyRows.filter((row) => getSavedFeatureSnapshot(row) !== null).length;
+  if (!features && savedFeatureSnapshotCount === 0) {
+    warnings.push("PIT segment features were not supplied; feature-dependent segments are reported as unknown.");
+  }
   if (v2Rows.length === 0) warnings.push("No saved same-origin v2 values were available for the requested comparison.");
   if (regressionRows.length < PROSPECTIVE_V3_SCOREBOARD_SEGMENT_MIN_SAMPLE_COUNT) {
     warnings.push("Insufficient same-origin 24h comparison sample for regression diagnosis.");

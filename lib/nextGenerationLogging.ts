@@ -42,6 +42,7 @@ import {
 } from "./radar/contextualBurstProbability";
 import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining";
 import type { RadarData } from "./radar/types";
+import { buildPublishedV3FeatureSnapshot } from "./radar/publishedV3FeatureSnapshot";
 import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
 import {
   calculateRandomContinuousBandwidthShadowPair,
@@ -371,7 +372,13 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
   const withAllBVariants: ExperimentalProbabilityForecasts = selectiveCalibrationValid
     ? {
         ...withBVariants,
-        [NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION]: toCommonForecast(selectiveCalibrationResult),
+        [NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION]: {
+          ...toCommonForecast(selectiveCalibrationResult),
+          featureSnapshot: buildPublishedV3FeatureSnapshot(
+            options.data,
+            new Date(selectiveCalibrationResult.calculatedAt),
+          ),
+        },
       }
     : withBVariants;
 
