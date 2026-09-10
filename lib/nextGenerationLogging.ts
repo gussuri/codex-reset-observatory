@@ -396,7 +396,7 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
       );
       if (aResult) {
         withA = {
-          ...withBVariants,
+          ...withAllBVariants,
           [NEXT_GENERATION_A_MODEL_VERSION]: toEnsembleForecast(aResult, bResult),
         };
       }
