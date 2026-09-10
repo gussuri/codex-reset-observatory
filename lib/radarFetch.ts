@@ -79,6 +79,168 @@ export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
 ];
 const TIBO_CACHE_BUCKET_MS = 60 * 1000;
 
+// Keep the active query explicit. These are the persisted columns consumed by
+// the read-side projection and public/probability paths; database-only audit
+// columns are intentionally not transferred on every radar fetch.
+export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
+  "tweet_id",
+  "signal_type",
+  "text",
+  "tweet_url",
+  "tweet_created_at",
+  "detected_at",
+  "expires_at",
+  "verification_status",
+  "confidence",
+  "classification_reason",
+  "is_reply",
+  "is_quote",
+  "rule_signal_type",
+  "ai_signal_type",
+  "ai_temporal_direction",
+  "ai_reason_ja",
+  "ai_reset_type_ja",
+  "ai_notice_to_execution",
+  "ai_classification_status",
+  "classification_source",
+  "reply_to_handles",
+  "reply_context_text",
+  "source_timeline",
+  "translated_text_ja",
+  "translated_text_zh",
+  "ai_teaser_strength",
+  "ai_teaser_strength_confidence",
+  "ai_teaser_strength_evidence_quote",
+  "ai_teaser_strength_reason_ja",
+  "ai_temporal_expression",
+  "ai_temporal_kind",
+  "ai_temporal_precision",
+  "ai_temporal_timezone",
+  "ai_temporal_confidence",
+  "expected_start_at",
+  "expected_end_at",
+  "temporal_resolution_status",
+  "temporal_resolution_version",
+  "quote_context_text",
+  "quote_tweet_url",
+  "quote_author_handle",
+  "teaser_strength",
+  "temporal_expression",
+  "temporal_kind",
+  "temporal_precision",
+  "temporal_timezone",
+  "temporal_confidence",
+  "temporal_resolution_source",
+  "secondary_signal",
+  ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
+].join(",");
+
+const ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = [
+  "tweet_id",
+  "signal_type",
+  "text",
+  "tweet_url",
+  "tweet_created_at",
+  "detected_at",
+  "expires_at",
+  "verification_status",
+  "confidence",
+  "classification_reason",
+  "is_reply",
+  "is_quote",
+].join(",");
+
+export const TIBO_HISTORY_SELECT_FIELDS = [
+  "tweet_id",
+  "text",
+  "tweet_url",
+  "tweet_created_at",
+  "detected_at",
+  "expires_at",
+  "signal_type",
+  "confidence",
+  "classification_reason",
+  "classification_source",
+  "rule_signal_type",
+  "ai_signal_type",
+  "ai_classification_status",
+  "ai_reset_type_ja",
+  "ai_notice_to_execution",
+  "teaser_strength",
+  "secondary_signal",
+  "ai_teaser_strength",
+  "ai_teaser_strength_confidence",
+  "ai_teaser_strength_evidence_quote",
+  "ai_teaser_strength_reason_ja",
+  "ai_temporal_expression",
+  "ai_temporal_kind",
+  "ai_temporal_precision",
+  "ai_temporal_timezone",
+  "ai_temporal_confidence",
+  "temporal_expression",
+  "temporal_kind",
+  "temporal_precision",
+  "temporal_timezone",
+  "temporal_confidence",
+  "temporal_resolution_source",
+  "expected_start_at",
+  "expected_end_at",
+  "temporal_resolution_status",
+  "temporal_resolution_version",
+  "translated_text_ja",
+  "translated_text_zh",
+  "is_reply",
+  "is_quote",
+  "reply_to_handles",
+  "reply_context_text",
+  "source_timeline",
+  "quote_context_text",
+  "quote_tweet_url",
+  "quote_author_handle",
+  "verification_status",
+  ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
+].join(",");
+
+const TIBO_HISTORY_FALLBACK_SELECT_FIELDS = [
+  "tweet_id",
+  "text",
+  "tweet_url",
+  "tweet_created_at",
+  "detected_at",
+  "expires_at",
+  "signal_type",
+  "confidence",
+  "verification_status",
+  "classification_source",
+  "ai_classification_status",
+  "ai_reset_type_ja",
+  "ai_notice_to_execution",
+  "is_reply",
+].join(",");
+
+export const TIBO_HISTORY_MAX_ROWS = 1000;
+
+type TiboHistoryQueryResult = {
+  data: Array<FormalTiboResetSignal> | null;
+  error: unknown | null;
+};
+
+type TiboHistoryQueryRunner = (
+  fields: string,
+  includeReplies: boolean,
+) => Promise<TiboHistoryQueryResult>;
+
+type TiboHistoryQueryBuilder = {
+  or(filters: string): TiboHistoryQueryBuilder;
+  order(column: string, options: { ascending: boolean }): TiboHistoryQueryBuilder;
+  limit(count: number): Promise<TiboHistoryQueryResult>;
+};
+
+export type TiboHistoryReadResult = {
+  withReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
+  withoutReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
+};
+
 type ActiveTiboQueryBuilder = {
   not(column: string, operator: string, value: null): ActiveTiboQueryBuilder;
   gt(column: string, value: string): ActiveTiboQueryBuilder;
@@ -126,12 +288,17 @@ async function fetchRawTiboSignals(expiryBoundaryIso: string): Promise<DataFetch
       auth: { persistSession: false },
     });
 
-    const { data, error } = await applyActiveTiboQueryFilters(
-      supabase.from("tibo_signals").select("*") as unknown as ActiveTiboQueryBuilder,
+    const queryTiboSignals = (fields: string) => applyActiveTiboQueryFilters(
+      supabase.from("tibo_signals").select(fields) as unknown as ActiveTiboQueryBuilder,
       expiryBoundaryIso,
     )
       .order("tweet_created_at", { ascending: false })
       .limit(20);
+    let result = await queryTiboSignals(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS);
+    if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+      result = await queryTiboSignals(ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS);
+    }
+    const { data, error } = result;
 
     const health = getDatabaseReadHealth(configuration, {
       hasData: data !== null,
@@ -163,9 +330,82 @@ const getCachedTiboSignals = unstable_cache(
   }
 );
 
-async function fetchRawTiboHistorySignals(
-  includeReplies = false,
-): Promise<DataFetchResult<Array<FormalTiboResetSignal>>> {
+export function splitTiboHistorySignals(
+  signals: readonly FormalTiboResetSignal[],
+) {
+  return {
+    // Keep the database ordering and complete row values for recent/UI use.
+    withReplies: signals,
+    // This matches the former PostgREST `is_reply IS NULL OR is_reply = false`
+    // predicate without transferring the same wide rows twice.
+    withoutReplies: signals.filter((signal) => signal.is_reply !== true),
+  };
+}
+
+function toTiboHistoryFetchResult(
+  configuration: DataSourceHealth,
+  result: TiboHistoryQueryResult,
+): DataFetchResult<Array<FormalTiboResetSignal>> {
+  const health = getDatabaseReadHealth(configuration, {
+    hasData: result.data !== null,
+    hasError: Boolean(result.error),
+  });
+  return {
+    data: result.data ?? [],
+    health,
+  };
+}
+
+async function executeTiboHistoryQuery(
+  queryTiboHistory: TiboHistoryQueryRunner,
+  fields: string,
+  includeReplies: boolean,
+): Promise<TiboHistoryQueryResult> {
+  let result = await queryTiboHistory(fields, includeReplies);
+  if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+    result = await queryTiboHistory(TIBO_HISTORY_FALLBACK_SELECT_FIELDS, includeReplies);
+  }
+  return result;
+}
+
+export async function readTiboHistorySignals(
+  queryTiboHistory: TiboHistoryQueryRunner,
+  configuration: DataSourceHealth,
+): Promise<TiboHistoryReadResult> {
+  const unifiedResult = await executeTiboHistoryQuery(
+    queryTiboHistory,
+    TIBO_HISTORY_SELECT_FIELDS,
+    true,
+  );
+  const withReplies = toTiboHistoryFetchResult(configuration, unifiedResult);
+
+  if (unifiedResult.error) {
+    console.error("Tibo reset history query failed", unifiedResult.error);
+  }
+
+  if (unifiedResult.error || withReplies.data.length === TIBO_HISTORY_MAX_ROWS) {
+    const formalResult = await executeTiboHistoryQuery(
+      queryTiboHistory,
+      TIBO_HISTORY_SELECT_FIELDS,
+      false,
+    );
+    const withoutReplies = toTiboHistoryFetchResult(configuration, formalResult);
+    if (formalResult.error) {
+      console.error("Tibo formal history query failed", formalResult.error);
+    }
+    return { withReplies, withoutReplies };
+  }
+
+  return {
+    withReplies,
+    withoutReplies: {
+      data: splitTiboHistorySignals(withReplies.data).withoutReplies,
+      health: withReplies.health,
+    },
+  };
+}
+
+async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const configuration = getRequiredConfigurationHealth([
@@ -174,54 +414,35 @@ async function fetchRawTiboHistorySignals(
   ]);
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return { data: [], health: configuration };
+    return {
+      withReplies: { data: [], health: configuration },
+      withoutReplies: { data: [], health: configuration },
+    };
   }
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const queryTiboHistory = (fields: string) => {
+    const queryTiboHistory: TiboHistoryQueryRunner = async (fields, includeReplies) => {
       const query = supabase
         .from("tibo_signals")
-        .select(fields);
+        .select(fields) as unknown as TiboHistoryQueryBuilder;
       const filteredQuery = includeReplies
         ? query
         : query.or("is_reply.is.null,is_reply.eq.false");
-      return filteredQuery
+      return await filteredQuery
         .order("tweet_created_at", { ascending: false })
-        .limit(1000);
+        .limit(TIBO_HISTORY_MAX_ROWS);
     };
-    type TiboHistoryQueryResult = {
-      data: Array<FormalTiboResetSignal> | null;
-      error: unknown | null;
-    };
-    let result = (await queryTiboHistory(
-      `tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,teaser_strength,secondary_signal,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,translated_text_ja,translated_text_zh,is_reply,is_quote,reply_to_handles,reply_context_text,source_timeline,quote_context_text,quote_tweet_url,quote_author_handle,verification_status,${TIBO_EDIT_IDENTITY_COLUMNS}`,
-    )) as TiboHistoryQueryResult;
-
-    if (result.error && isMissingTiboOptionalColumnError(result.error)) {
-      result = (await queryTiboHistory(
-        "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,is_reply",
-      )) as TiboHistoryQueryResult;
-    }
-
-    const { data, error } = result;
-
-    const health = getDatabaseReadHealth(configuration, {
-      hasData: data !== null,
-      hasError: Boolean(error),
-    });
-    if (error) {
-      console.error("Tibo reset history query failed", error);
-    }
-    return {
-      data: data ?? [],
-      health,
-    };
+    return await readTiboHistorySignals(queryTiboHistory, configuration);
   } catch (error) {
     console.error("Failed to load Tibo reset history", error);
-    return { data: [], health: { state: "degraded", detail: "request_failed" } };
+    const health = { state: "degraded", detail: "request_failed" } as const;
+    return {
+      withReplies: { data: [], health },
+      withoutReplies: { data: [], health },
+    };
   }
 }
 
@@ -370,8 +591,8 @@ export async function fetchResetDisplayNameCandidateNoticeSignals(
 }
 
 const getCachedTiboHistorySignals = unstable_cache(
-  () => fetchRawTiboHistorySignals(false),
-  ["tibo-history-signals-cache-v2"],
+  () => fetchRawTiboHistorySignals(),
+  ["tibo-history-signals-cache-v3"],
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -672,16 +893,13 @@ async function getTiboSignalBundle(
   bypassCache = false,
 ): Promise<TiboSignalBundle> {
   const tiboCacheBoundary = getTiboCacheBoundary(now);
-  const [activeResult, historyResult, recentResult] = await Promise.all([
+  const [activeResult, historyResult] = await Promise.all([
     bypassCache
       ? fetchRawTiboSignals(tiboCacheBoundary)
       : getCachedTiboSignals(tiboCacheBoundary),
     bypassCache
-      ? fetchRawTiboHistorySignals(false)
+      ? fetchRawTiboHistorySignals()
       : getCachedTiboHistorySignals(),
-    bypassCache
-      ? fetchRawTiboHistorySignals(true)
-      : getCachedTiboRecentSignals(),
   ]);
   const activeSignals = activeResult.data.filter((signal) => {
     if (signal.verification_status === "rejected") return false;
@@ -689,8 +907,8 @@ async function getTiboSignalBundle(
     const expiresTime = new Date(signal.expires_at).getTime();
     return !isNaN(expiresTime) && expiresTime > now.getTime();
   });
-  const signals = historyResult.data;
-  const recentSignalsSource = recentResult.data;
+  const signals = historyResult.withoutReplies.data;
+  const recentSignalsSource = historyResult.withReplies.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
   const notices = expandTiboSignalVariants(signals)
     .map(toNoticeSignal)
@@ -755,8 +973,8 @@ async function getTiboSignalBundle(
     rejectedResets,
     health: combineDataSourceHealth(
       activeResult.health,
-      historyResult.health,
-      recentResult.health,
+      historyResult.withReplies.health,
+      historyResult.withoutReplies.health,
     ),
   };
 }
@@ -1017,17 +1235,6 @@ const getCachedRadarCore = unstable_cache(
   ["radar-core-cache-v6"],
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
-    tags: ["radar-data"],
-  },
-);
-
-const getCachedTiboRecentSignals = unstable_cache(
-  // The UI-only teaser aggregation may use replies; formal history uses the
-  // separate reply-excluding cache above.
-  () => fetchRawTiboHistorySignals(true),
-  ["tibo-recent-signals-cache-v1"],
-  {
-    revalidate: 60,
     tags: ["radar-data"],
   },
 );

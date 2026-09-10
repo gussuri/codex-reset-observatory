@@ -39,7 +39,7 @@ test("radar cache callbacks log compute timing without changing cache identity o
   const coreBlock = sourceBetween(
     radarFetchSource,
     "const getCachedRadarCore = unstable_cache(",
-    "const getCachedTiboRecentSignals = unstable_cache(",
+    "const getCachedPublicRadarSnapshotBundle = unstable_cache(",
   );
   const snapshotBlock = sourceBetween(
     radarFetchSource,
@@ -55,7 +55,7 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(coreBlock, /event: "radar_core_compute"/);
   assert.match(coreBlock, /durationMs/);
   assert.match(coreBlock, /dataHealth/);
-  assert.match(coreBlock, /\["radar-core-cache-v2"\]/);
+  assert.match(coreBlock, /\["radar-core-cache-v6"\]/);
   assert.match(coreBlock, /revalidate: RADAR_CORE_CACHE_TTL_SECONDS/);
   assert.match(coreBlock, /tags: \["radar-data"\]/);
 
@@ -64,7 +64,7 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(snapshotBlock, /limitHistory/);
   assert.match(snapshotBlock, /durationMs/);
   assert.equal((snapshotBlock.match(/fetchSharedRadarCore\(\)/g) ?? []).length, 1);
-  assert.match(snapshotBlock, /\["radar-public-snapshot-bundle-cache-v1"\]/);
+  assert.match(snapshotBlock, /\["radar-public-snapshot-bundle-cache-v5"\]/);
   assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
   assert.doesNotMatch(snapshotBlock, /\blocale\b/);
   assert.match(snapshotBlock, /tags: \["radar-data"\]/);
