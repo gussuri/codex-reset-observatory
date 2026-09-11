@@ -728,6 +728,69 @@ test("an upcoming Codex update remains irrelevant without a context-safety promo
   }
 });
 
+test("an independent irrelevant weak Gemini strength survives the webhook path", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2093000000000000002";
+  const text = "Who says it won't reset in a while 👀";
+  const parentText = "Fable, in most instances. Also, my usage has expired and won't reset for a while.";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "irrelevant",
+    confidence: 0.91,
+    temporalDirection: "unclear",
+    evidenceQuote: null,
+    reasonJa: "正式な予告ではありません。",
+    teaserStrength: "weak",
+    teaserStrengthConfidence: 0.88,
+    teaserStrengthEvidenceQuote: "Who says it won't reset in a while",
+    teaserStrengthReasonJa: "reset文脈へ意味的に応答する弱い示唆です。",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-08-27T00:00:00.000Z",
+      isReply: true,
+      replyToHandles: ["@fable"],
+      replyContextText: parentText,
+      sourceTimeline: "with_replies",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.equal(upsertBody.signal_type, "irrelevant");
+    assert.equal(upsertBody.teaser_strength, null);
+    assert.equal(upsertBody.ai_signal_type, "irrelevant");
+    assert.equal(upsertBody.ai_teaser_strength, "weak");
+    assert.equal(upsertBody.reply_context_text, parentText);
+
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "irrelevant");
+    assert.equal(responseBody.teaserStrength, "weak");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("composite completion is saved as reset_executed with independent weak teaser metadata", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

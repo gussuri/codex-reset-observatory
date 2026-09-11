@@ -14,7 +14,9 @@ import {
   selectTiboClassification,
   shouldRunGeminiClassification,
 } from "../lib/radar/tiboClassificationMode";
+import { getTiboContextSafetyDecision } from "../lib/radar/tiboContextSafety";
 import { parseTeaserStrengthAssessment } from "../lib/radar/teaserStrength";
+import { getEffectiveTeaserStrength } from "../lib/radar/teaserStrength";
 
 test("1. GEMINI_CLASSIFICATION_MODE=off skips Gemini API call", async () => {
   const result = await classifyWithGemini(
@@ -59,6 +61,94 @@ test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
   assert.match(prompt, /Quoted author: @blueemi99/);
   assert.match(prompt, /never treat it as Tibo's own assertion/);
   assert.ok(prompt.indexOf("AUTHOR TEXT:") < prompt.indexOf("QUOTED CONTEXT"));
+});
+
+test("Gemini prompt requires an independent teaser-strength second pass", () => {
+  assert.match(
+    TIBO_GEMINI_SYSTEM_PROMPT,
+    /formal signalType classification first[\s\S]*separate, mandatory second pass for[\s\S]*teaserStrength/i,
+  );
+  assert.match(
+    TIBO_GEMINI_SYSTEM_PROMPT,
+    /24-48 hour condition applies only to formal signalType="teaser"[\s\S]*not required for teaserStrength="weak"/i,
+  );
+  assert.match(
+    TIBO_GEMINI_SYSTEM_PROMPT,
+    /re-?evaluate the author text[\s\S]*visible reply and quote context/i,
+  );
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /standing willingness/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /general\s+policy/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /discretion/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /possibility/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /parent context\s+alone is insufficient/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /author text[\s\S]*meaningfully\s+responds/i);
+});
+
+test("an independent irrelevant weak strength survives parser, selection, guard, and read-side projection", () => {
+  const cases = [
+    {
+      authorText: "Who says it won't reset in a while 👀",
+      parentText: "Fable, in most instances. Also, my usage has expired and won't reset for a while.",
+      evidenceQuote: "Who says it won't reset in a while",
+    },
+    {
+      authorText: "When I say excellent service for existing users, that includes the occasional reset",
+      parentText: "I don't think Tibo is giving us anymore resets this week. It's almost the weekend and we haven't had a reset in a while.",
+      evidenceQuote: "occasional reset",
+    },
+  ];
+
+  for (const { authorText, parentText, evidenceQuote } of cases) {
+    const parsed = parseTeaserStrengthAssessment(
+      {
+        teaserStrength: "weak",
+        teaserStrengthConfidence: 0.88,
+        teaserStrengthEvidenceQuote: evidenceQuote,
+        teaserStrengthReasonJa: "reset文脈へ意味的に応答する弱い示唆です。",
+      },
+      authorText,
+    );
+    const aiResult: GeminiClassificationOutput = {
+      signalType: "irrelevant",
+      confidence: 0.91,
+      temporalDirection: "unclear",
+      evidenceQuote: null,
+      reasonJa: "正式な予告ではありません。",
+      resetTypeJa: null,
+      noticeToExecution: null,
+      ...parsed,
+      model: "gemini-3.5-flash-lite",
+      status: "success",
+      classifiedAt: new Date().toISOString(),
+    };
+    const guarded = applyTiboClassificationSafetyGuard(authorText, aiResult);
+    const contextDecision = getTiboContextSafetyDecision({
+      authorText,
+      replyContextText: parentText,
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: guarded.teaserStrength,
+    });
+    const ruleResult = classifyTiboTweet(authorText, "https://x.com/thsottiaux/status/2099000000000000001", {
+      isReply: true,
+    });
+    const selected = selectTiboClassification("primary", ruleResult, guarded);
+    const response = buildTiboClassificationResponse("primary", ruleResult, guarded);
+
+    assert.equal(parsed.teaserStrength, "weak");
+    assert.equal(guarded.signalType, "irrelevant");
+    assert.equal(guarded.teaserStrength, "weak");
+    assert.equal(contextDecision, null);
+    assert.equal(selected.signalType, "irrelevant");
+    assert.equal(response.aiSignalType, "irrelevant");
+    assert.equal(response.teaserStrength, "weak");
+    assert.equal(
+      getEffectiveTeaserStrength({
+        teaser_strength: null,
+        ai_teaser_strength: response.teaserStrength,
+      }),
+      "weak",
+    );
+  }
 });
 
 test("Gemini reset reason candidates exclude cycle labels", () => {
