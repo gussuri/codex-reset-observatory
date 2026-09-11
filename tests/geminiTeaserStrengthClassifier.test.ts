@@ -7,6 +7,7 @@ import {
   buildTeaserStrengthGeminiPrompt,
   classifyTeaserStrengthWithGemini,
   shouldRunTeaserStrengthClassification,
+  TIBO_TEASER_STRENGTH_SYSTEM_PROMPT,
   type GeminiTeaserStrengthInput,
 } from "../lib/radar/geminiClassification";
 
@@ -98,6 +99,9 @@ test("strength prompt separates author, reply, and quote context and forbids for
   assert.ok(prompt.indexOf("AUTHOR TEXT:") < prompt.indexOf("VISIBLE REPLY/PARENT CONTEXT"));
   assert.ok(prompt.indexOf("VISIBLE REPLY/PARENT CONTEXT") < prompt.indexOf("QUOTED CONTEXT"));
   assert.doesNotMatch(prompt, /24[-–]48\s*hours.*required.*weak/i);
+  assert.doesNotMatch(prompt, /\bstrong\b/i);
+  assert.match(TIBO_TEASER_STRENGTH_SYSTEM_PROMPT, /"teaserStrength": "weak" \| "none"/);
+  assert.doesNotMatch(TIBO_TEASER_STRENGTH_SYSTEM_PROMPT, /\bstrong\b/i);
 });
 
 test("strength-only API output has no formal signalType and preserves weak result", async () => {
@@ -143,18 +147,66 @@ test("strength classifier skips non-candidates without an API call", async () =>
   }, requestBodies);
 
   try {
-    const result = await classifyTeaserStrengthWithGemini({
-      text: "GPT-6 Astra rollout starts today.",
-      formalSignalType: "irrelevant",
-    }, {
+    const skipInputs: GeminiTeaserStrengthInput[] = [
+      { text: "Next week we'll be retiring GPT-5.3-Codex-Spark.", formalSignalType: "irrelevant" },
+      { text: "The latest Codex update is rolling out today.", formalSignalType: "irrelevant" },
+      { text: "Something was felt across the internet today.", formalSignalType: "irrelevant" },
+      { text: "GPT-6 Astra rollout starts today.", formalSignalType: "irrelevant" },
+    ];
+
+    for (const input of skipInputs) {
+      for (let run = 0; run < 3; run += 1) {
+        const result = await classifyTeaserStrengthWithGemini(input, {
+          mode: "primary",
+          apiKey: "test-key",
+          model: "test-model",
+        });
+
+        assert.equal(result.status, "skipped");
+        assert.equal(result.teaserStrength, null);
+      }
+    }
+
+    assert.equal(requestBodies.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test("candidate-gated negative contexts remain eligible for the strength-only pass", () => {
+  const candidates: GeminiTeaserStrengthInput[] = [
+    { text: "I feel Theo is in need of a reset.", formalSignalType: "irrelevant" },
+    { text: "No reset tonight.", formalSignalType: "irrelevant" },
+    { text: "One day we created the reset button and the rest is history.", formalSignalType: "irrelevant" },
+    { text: "I reset my laptop because it froze.", formalSignalType: "irrelevant" },
+    { text: "Thanks", replyContextText: "Are we getting a usage reset?", isReply: true, formalSignalType: "irrelevant" },
+    { text: "Nice", replyContextText: "Maybe Tibo will reset Codex limits.", isReply: true, formalSignalType: "irrelevant" },
+  ];
+
+  for (const input of candidates) {
+    assert.equal(shouldRunTeaserStrengthClassification(input), true, input.text);
+  }
+});
+
+test("strength-only schema rejects strong instead of coercing it to weak", async () => {
+  const requestBodies: unknown[] = [];
+  const restore = installGeminiResponse({
+    teaserStrength: "strong",
+    confidence: 0.99,
+    evidenceQuote: "occasional reset",
+    reasonJa: "強い示唆",
+  }, requestBodies);
+
+  try {
+    const result = await classifyTeaserStrengthWithGemini(occasionalResetInput, {
       mode: "primary",
       apiKey: "test-key",
       model: "test-model",
     });
 
-    assert.equal(result.status, "skipped");
+    assert.equal(result.status, "invalid_schema");
     assert.equal(result.teaserStrength, null);
-    assert.equal(requestBodies.length, 0);
+    assert.equal(requestBodies.length, 1);
   } finally {
     restore();
   }

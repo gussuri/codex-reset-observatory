@@ -7,7 +7,6 @@ import {
 } from "./classification";
 import {
   parseTeaserStrengthAssessment,
-  isTeaserStrength,
   type TeaserStrength,
 } from "./teaserStrength";
 import type { TiboSecondarySignalType } from "./tiboSecondarySignal";
@@ -147,8 +146,10 @@ export type GeminiTeaserStrengthInput = Pick<
   formalSignalType: GeminiClassificationOutput["signalType"];
 };
 
+export type GeminiTeaserStrengthValue = "weak" | "none";
+
 export type GeminiTeaserStrengthOutput = {
-  teaserStrength: TeaserStrength | null;
+  teaserStrength: GeminiTeaserStrengthValue | null;
   confidence: number | null;
   evidenceQuote: string | null;
   reasonJa: string | null;
@@ -163,7 +164,6 @@ This is a second pass after a separate formal signalType classifier. The formal 
 Do not output, change, or reinterpret signalType in this task.
 
 Evaluate only the independent UI hint called teaserStrength:
-- "strong" requires a concrete near-future indication that Tibo may perform a Codex or ChatGPT Work usage-limit reset.
 - "weak" is allowed without a concrete time or a 24-48 hour window when Tibo's author text currently and intentionally
   suggests willingness, discretion, a general policy, or a possibility of a usage-limit reset. A parent or quoted post
   may clarify the meaning, but parent or quote context alone is never sufficient: the AUTHOR TEXT itself must semantically
@@ -178,7 +178,7 @@ and similar acknowledgements remain none when their meaning does not depend on t
 
 Return ONLY this JSON object. Do not include a signalType field:
 {
-  "teaserStrength": "strong" | "weak" | "none",
+  "teaserStrength": "weak" | "none",
   "confidence": number (between 0.0 and 1.0),
   "evidenceQuote": string | null (an exact contiguous substring of AUTHOR TEXT, or null),
   "reasonJa": string (Japanese explanation, max 500 characters)
@@ -219,7 +219,7 @@ export function buildTeaserStrengthGeminiPrompt(input: GeminiTeaserStrengthInput
     `Quoted author: ${quoteAuthor}`,
     `Quoted post URL: ${quoteUrl}`,
     `QUOTED CONTEXT (not Tibo's own text): ${quoteContext}`,
-    "Use reply and quote context only to interpret the author's words; context alone must not create weak or strong.",
+    "Use reply and quote context only to interpret the author's words; context alone must not create weak.",
   ].join("\n");
 }
 
@@ -1097,9 +1097,11 @@ function parseTeaserStrengthOnlyResult(
     return { status: "invalid_schema" as const };
   }
 
-  if (!isTeaserStrength(parsed.teaserStrength)) {
+  const parsedTeaserStrength = parsed.teaserStrength;
+  if (parsedTeaserStrength !== "weak" && parsedTeaserStrength !== "none") {
     return { status: "invalid_schema" as const };
   }
+  const teaserStrength: GeminiTeaserStrengthValue = parsedTeaserStrength === "weak" ? "weak" : "none";
 
   const confidence = parsed.confidence;
   if (
@@ -1130,7 +1132,7 @@ function parseTeaserStrengthOnlyResult(
 
   return {
     status: "success" as const,
-    teaserStrength: parsed.teaserStrength,
+    teaserStrength,
     confidence,
     evidenceQuote,
     reasonJa,
