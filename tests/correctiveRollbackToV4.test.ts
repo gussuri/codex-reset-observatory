@@ -8,6 +8,7 @@ import {
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
@@ -73,6 +74,7 @@ function comparableV3Row(generatedAt: string) {
 
 test("corrective rollback support is opt-in and does not change the v3 identity", () => {
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, null);
+  assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 
@@ -185,6 +187,20 @@ test("rollback hides a B/v3 shadow failure when valid calibrated V4 is selected"
   assert.equal(rollbackSelected.source, "calibrated");
   assert.equal(rollbackSelected.fallbackReason, null);
 
+  const rollbackInvalidShadowSelected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    "next_generation_b_invalid_prediction",
+    null,
+    current.rawShadow,
+    null,
+    { allowNextGenerationB: false },
+  );
+  assert.equal(rollbackInvalidShadowSelected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(rollbackInvalidShadowSelected.source, "calibrated");
+  assert.equal(rollbackInvalidShadowSelected.fallbackReason, null);
+
   const preRollbackSelected = selectPublishedProbability(
     primary,
     current.calibrated,
@@ -196,6 +212,60 @@ test("rollback hides a B/v3 shadow failure when valid calibrated V4 is selected"
   );
   assert.equal(preRollbackSelected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(preRollbackSelected.fallbackReason, "next_generation_b_exception");
+});
+
+test("rollback uses the calibrated V4 failure reason when shadow B/v3 also fails", () => {
+  const now = new Date(ROLLBACK_AT);
+  const data = getLocalRadarData({ calculationNow: now });
+  const current = calculatePublishedProbability(
+    data,
+    { now, publishedV4RollbackAt: ROLLBACK_AT },
+    { logFallback: false },
+  );
+  const primary = getLocalProbabilityCalculation(data, { now });
+
+  assert.ok(current.calibrated);
+  assert.ok(current.stableShadow);
+
+  const invalidV4Selected = selectPublishedProbability(
+    primary,
+    { ...current.calibrated, probability24h: Number.NaN },
+    current.stableShadow,
+    "next_generation_b_invalid_prediction",
+    null,
+    current.rawShadow,
+    null,
+    { allowNextGenerationB: false },
+  );
+  assert.equal(invalidV4Selected.source, "stable-shadow-fallback");
+  assert.equal(invalidV4Selected.fallbackReason, "calibrated_invalid_prediction");
+  assert.notEqual(invalidV4Selected.fallbackReason, "next_generation_b_invalid_prediction");
+
+  const fallbackV4Selected = selectPublishedProbability(
+    primary,
+    { ...current.calibrated, fallbackUsed: true },
+    current.stableShadow,
+    "next_generation_b_exception",
+    null,
+    current.rawShadow,
+    null,
+    { allowNextGenerationB: false },
+  );
+  assert.equal(fallbackV4Selected.source, "stable-shadow-fallback");
+  assert.equal(fallbackV4Selected.fallbackReason, "calibrated_fallback");
+
+  const exceptionV4Selected = selectPublishedProbability(
+    primary,
+    null,
+    current.stableShadow,
+    "next_generation_b_exception",
+    null,
+    current.rawShadow,
+    null,
+    { allowNextGenerationB: false },
+  );
+  assert.equal(exceptionV4Selected.source, "stable-shadow-fallback");
+  assert.equal(exceptionV4Selected.fallbackReason, "calibrated_exception");
 });
 
 test("rollback does not select next-generation B when calibrated V4 is invalid", () => {

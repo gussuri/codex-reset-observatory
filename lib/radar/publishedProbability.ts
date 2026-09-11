@@ -61,6 +61,11 @@ export type PublishedProbabilityFallbackReason =
   | "shadow_exception"
   | "shadow_invalid_prediction";
 
+type NextGenerationBFallbackReason = Extract<
+  PublishedProbabilityFallbackReason,
+  "next_generation_b_exception" | "next_generation_b_invalid_prediction"
+>;
+
 const PUBLIC_CALCULATION_INTERVAL_MS = 10 * 60 * 1000;
 
 function parseAdoptionTime(value: string | null | undefined) {
@@ -311,6 +316,13 @@ export function isValidShadowPrediction(
   );
 }
 
+function isNextGenerationBFallbackReason(
+  reason: PublishedProbabilityFallbackReason | null,
+): reason is NextGenerationBFallbackReason {
+  return reason === "next_generation_b_exception"
+    || reason === "next_generation_b_invalid_prediction";
+}
+
 function isValidModelPrediction(
   shadow: Pick<ShadowProbabilityResult, "modelVersion" | "predictions">,
   modelVersion: string,
@@ -350,6 +362,18 @@ export function selectPublishedProbability(
   nextGenerationB: NextGenerationBResult | null = null,
   selectionOptions: { allowNextGenerationB?: boolean } = {},
 ): PublishedProbabilityCalculation {
+  const publicFallbackReason = selectionOptions.allowNextGenerationB === false
+    ? calibrated && isValidCalibratedPrediction(calibrated)
+      ? null
+      : calibrated?.fallbackUsed
+        ? "calibrated_fallback"
+        : calibrated
+          ? "calibrated_invalid_prediction"
+          : isNextGenerationBFallbackReason(fallbackReason)
+            ? "calibrated_exception"
+            : fallbackReason
+    : fallbackReason;
+
   if (
     selectionOptions.allowNextGenerationB !== false
     && nextGenerationB
@@ -374,12 +398,6 @@ export function selectPublishedProbability(
   }
 
   if (calibrated && isValidCalibratedPrediction(calibrated)) {
-    const calibratedFallbackReason =
-      selectionOptions.allowNextGenerationB === false
-      && (fallbackReason === "next_generation_b_exception"
-        || fallbackReason === "next_generation_b_invalid_prediction")
-      ? null
-      : fallbackReason;
     return {
       probability12h: derive12hFrom24hProbability(calibrated.probability24h),
       probability24h: calibrated.probability24h,
@@ -387,7 +405,7 @@ export function selectPublishedProbability(
       probability72h: derive72hFrom48hProbability(calibrated.probability48h),
       adoptedModel: calibrated.modelVersion,
       source: "calibrated",
-      fallbackReason: calibratedFallbackReason,
+      fallbackReason: publicFallbackReason,
       primary,
       nextGenerationB,
       calibrated,
@@ -406,7 +424,7 @@ export function selectPublishedProbability(
       probability72h: stableShadow.predictions.probability72h,
       adoptedModel: stableShadow.modelVersion,
       source: "stable-shadow-fallback",
-      fallbackReason: fallbackReason ?? "calibrated_invalid_prediction",
+      fallbackReason: publicFallbackReason ?? "calibrated_invalid_prediction",
       primary,
       nextGenerationB,
       calibrated,
@@ -425,7 +443,7 @@ export function selectPublishedProbability(
       probability72h: legacyShadow.predictions.probability72h,
       adoptedModel: legacyShadow.modelVersion,
       source: "legacy-shadow-fallback",
-      fallbackReason: fallbackReason ?? "stable_shadow_invalid_prediction",
+      fallbackReason: publicFallbackReason ?? "stable_shadow_invalid_prediction",
       primary,
       nextGenerationB,
       calibrated,
@@ -436,7 +454,7 @@ export function selectPublishedProbability(
     };
   }
 
-  const resolvedFallbackReason = fallbackReason ?? "stable_shadow_invalid_prediction";
+  const resolvedFallbackReason = publicFallbackReason ?? "stable_shadow_invalid_prediction";
 
   return {
     probability12h: derive12hFrom24hProbability(primary.probability24h),
@@ -539,6 +557,11 @@ export function calculatePublishedProbability(
   const resolvedPublishedV4RollbackAt = publishedV4RollbackAt === undefined
     ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
     : publishedV4RollbackAt;
+  const rollbackActive = isPublishedV4RollbackActive(
+    publicModelOptions.now,
+    resolvedPublishedV4RollbackAt,
+    resolvedPublishedModelAdoptionAt,
+  );
   const nextGenerationBModel = getPublishedNextGenerationBModel(
     publicModelOptions.now,
     resolvedPublishedModelAdoptionAt,
@@ -548,6 +571,7 @@ export function calculatePublishedProbability(
   let rawShadow: ShadowProbabilityResult | null = null;
   let calibrated: CalibratedShadowProbabilityResult | null = null;
   let stableShadow: ShadowProbabilityResult | null = null;
+  let nextGenerationBFallbackReason: NextGenerationBFallbackReason | null = null;
   let fallbackReason: PublishedProbabilityFallbackReason | null = null;
 
   if (nextGenerationBModel !== null) {
@@ -563,10 +587,12 @@ export function calculatePublishedProbability(
         trainingReadStatus: resolvedTrainingReadStatus,
       });
       if (!isValidNextGenerationBPrediction(nextGenerationB)) {
-        fallbackReason = "next_generation_b_invalid_prediction";
+        nextGenerationBFallbackReason = "next_generation_b_invalid_prediction";
+        if (!rollbackActive) fallbackReason = nextGenerationBFallbackReason;
       }
     } catch {
-      fallbackReason = "next_generation_b_exception";
+      nextGenerationBFallbackReason = "next_generation_b_exception";
+      if (!rollbackActive) fallbackReason = nextGenerationBFallbackReason;
     }
   }
 
@@ -576,13 +602,13 @@ export function calculatePublishedProbability(
       ...publicModelOptions,
       shadowProbability: rawShadow,
     });
-    if (!isValidCalibratedPrediction(calibrated) && !fallbackReason) {
+    if (!isValidCalibratedPrediction(calibrated) && (rollbackActive || !fallbackReason)) {
       fallbackReason = calibrated.fallbackUsed
         ? "calibrated_fallback"
         : "calibrated_invalid_prediction";
     }
   } catch {
-    if (!fallbackReason) fallbackReason = "calibrated_exception";
+    if (rollbackActive || !fallbackReason) fallbackReason = "calibrated_exception";
   }
 
   try {
@@ -622,11 +648,7 @@ export function calculatePublishedProbability(
     rawShadow,
     nextGenerationB,
     {
-      allowNextGenerationB: !isPublishedV4RollbackActive(
-        publicModelOptions.now,
-        resolvedPublishedV4RollbackAt,
-        resolvedPublishedModelAdoptionAt,
-      ),
+      allowNextGenerationB: !rollbackActive,
     },
   );
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
