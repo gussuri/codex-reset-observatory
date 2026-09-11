@@ -6,6 +6,8 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -64,6 +66,25 @@ function contextualOnlyRow(generatedAt: string) {
   };
 }
 
+function contextualV2OnlyRow(generatedAt: string) {
+  return {
+    logged_hour: generatedAt,
+    debug_info: {
+      calculated_at: generatedAt,
+      experimentalProbabilityForecasts: {
+        [NEXT_GENERATION_C_V2_MODEL_VERSION]: {
+          modelVersion: NEXT_GENERATION_C_V2_MODEL_VERSION,
+          generatedAt,
+          rawProbability24h: 0.41,
+          rawProbability48h: 0.62,
+          probability24h: 0.42,
+          probability48h: 0.63,
+        },
+      },
+    },
+  };
+}
+
 function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
   const row: Record<string, unknown> = {
     logged_hour: generatedAt,
@@ -96,12 +117,16 @@ function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
 test("compact training select projects only the required forecast fields", () => {
   const fields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
   assert.equal(fields[0], "logged_hour");
-  assert.equal(fields.length, 27);
+  assert.equal(fields.length, 31);
   assert.ok(fields.slice(1).every((field) => field.includes("debug_info->experimentalProbabilityForecasts")));
   assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /(^|,)debug_info(,|$)/);
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_raw_probability_24h:/);
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_probability_24h:/);
-  for (const modelVersion of [...NEXT_GENERATION_A_COMPONENT_VERSIONS, NEXT_GENERATION_C_MODEL_VERSION]) {
+  for (const modelVersion of [
+    ...NEXT_GENERATION_A_COMPONENT_VERSIONS,
+    NEXT_GENERATION_C_MODEL_VERSION,
+    NEXT_GENERATION_C_V2_MODEL_VERSION,
+  ]) {
     assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, new RegExp(`->${modelVersion}->`));
   }
 });
@@ -161,6 +186,24 @@ test("C rows are parsed independently of B and A availability", () => {
   assert.equal(parsed.cRows[0].actual48h, undefined);
   assert.equal(parsed.bRows.length, 0);
   assert.equal(parsed.aRows.length, 0);
+});
+
+test("C v2 training rows use only C v2 forecasts after the C v2 freeze", () => {
+  const afterFreeze = new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 60_000).toISOString();
+  const beforeFreeze = new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) - 1).toISOString();
+  const parsed = parseNextGenerationTrainingRows([
+    contextualV2OnlyRow(beforeFreeze),
+    contextualV2OnlyRow(afterFreeze),
+    contextualOnlyRow(afterFreeze),
+  ], {
+    asOf: new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 48 * 60 * 60 * 1000),
+    randomEvents: [],
+  });
+
+  assert.equal(parsed.cV2Rows.length, 1);
+  assert.equal(parsed.cV2Rows[0].modelVersion, NEXT_GENERATION_C_V2_MODEL_VERSION);
+  assert.equal(parsed.cRows.length, 1);
+  assert.equal(parsed.cRows[0].modelVersion, NEXT_GENERATION_C_MODEL_VERSION);
 });
 
 test("compact training projection is semantically equivalent to full debug_info", () => {

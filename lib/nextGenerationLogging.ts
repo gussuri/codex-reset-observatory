@@ -8,6 +8,8 @@ import {
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   NEXT_GENERATION_FREEZE_POLICY,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
@@ -38,6 +40,7 @@ import {
 } from "./radar/nextGenerationProbability";
 import {
   calculateContextualBurstProbability,
+  calculateNormalizedContextualBurstProbability,
   type ContextualBurstProbabilityResult,
 } from "./radar/contextualBurstProbability";
 import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining";
@@ -172,7 +175,10 @@ function isValidCResult(result: ContextualBurstProbabilityResult) {
     && result.probability48h >= result.probability24h;
 }
 
-function toContextualBurstForecast(result: ContextualBurstProbabilityResult) {
+function toContextualBurstForecast(
+  result: ContextualBurstProbabilityResult,
+  role: "candidate-c" | "candidate-c-v2" = "candidate-c",
+) {
   const fit = result.contextFit;
   const forecast = {
     modelVersion: result.modelVersion,
@@ -222,7 +228,7 @@ function toContextualBurstForecast(result: ContextualBurstProbabilityResult) {
     instantaneousHazardPerHour: result.baseInstantaneousHazardPerHour,
     freezeAt: result.freezeAt,
     freezePolicy: result.freezePolicy,
-    nextGenerationRole: "candidate-c",
+    nextGenerationRole: role,
     randomResetCount72h: result.originFeatures.randomResetCount72h,
     previousRandomIntervalHours: result.originFeatures.previousRandomIntervalHours,
     hourSin: result.originFeatures.hourSin,
@@ -237,9 +243,17 @@ function toContextualBurstForecast(result: ContextualBurstProbabilityResult) {
     effectiveContextMultiplier24h: result.effectiveContextMultiplier24h,
     effectiveContextMultiplier48h: result.effectiveContextMultiplier48h,
     ablations: result.ablations,
+    ...(result.normalizedAblations
+      ? {
+          normalizedAblations: result.normalizedAblations,
+          circadianNormalizationConstant: result.circadianNormalizationConstant,
+          circadianCycleMeanBeforeNormalization: result.circadianCycleMeanBeforeNormalization,
+          circadianCycleMeanAfterNormalization: result.circadianCycleMeanAfterNormalization,
+          circadianNormalizationFallbackReason: result.circadianNormalizationFallbackReason,
+        }
+      : {}),
   };
-  // ExperimentalProbabilityForecast predates candidate C. Keep C audit fields
-  // runtime-visible without widening the public/debug type in this integration step.
+  // Keep candidate-C audit fields optional so legacy stored forecasts remain valid.
   return forecast as unknown as ExperimentalProbabilityForecast;
 }
 
@@ -432,14 +446,29 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
   if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
     return withBandwidthExperiment;
   }
+  let withC = withBandwidthExperiment;
   const cResult = calculateContextualBurstProbability(options.data, {
     ...options.calculationOptions,
     trainingRows: options.trainingState.cRows,
     trainingReadStatus: options.trainingState.status,
   });
-  if (!isValidCResult(cResult)) return withBandwidthExperiment;
+  if (isValidCResult(cResult)) {
+    withC = {
+      ...withBandwidthExperiment,
+      [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
+    };
+  }
+  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_V2_FREEZE_AT).getTime()) {
+    return withC;
+  }
+  const cV2Result = calculateNormalizedContextualBurstProbability(options.data, {
+    ...options.calculationOptions,
+    trainingRows: options.trainingState.cV2Rows,
+    trainingReadStatus: options.trainingState.status,
+  });
+  if (!isValidCResult(cV2Result)) return withC;
   return {
-    ...withBandwidthExperiment,
-    [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
+    ...withC,
+    [NEXT_GENERATION_C_V2_MODEL_VERSION]: toContextualBurstForecast(cV2Result, "candidate-c-v2"),
   };
 }

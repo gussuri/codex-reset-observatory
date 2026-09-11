@@ -239,6 +239,7 @@ test("next-generation logging stores both raw forecasts at one origin without ca
       bRows: [],
       aRows: [],
       cRows: [],
+      cV2Rows: [],
       totalRows: 0,
       skipReasons: {
         pre_freeze: 0,
@@ -284,6 +285,7 @@ test("adding the bandwidth experiment does not change the existing B forecasts",
     bRows: [],
     aRows: [],
     cRows: [],
+    cV2Rows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,
@@ -323,6 +325,7 @@ test("experiment freeze excludes pre-freeze rows and does not backfill", () => {
       bRows: [],
       aRows: [],
       cRows: [],
+      cV2Rows: [],
       totalRows: 0,
       skipReasons: {
         pre_freeze: 0,

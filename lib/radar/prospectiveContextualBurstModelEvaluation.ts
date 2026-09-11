@@ -4,6 +4,8 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
@@ -37,6 +39,7 @@ type StoredForecast = {
 
 type TargetEvent = ShadowResetEvent & { isRandom?: boolean };
 type AblationName = "baseOnly" | "noBurst" | "noCircadian" | "fullContext" | "fullRaw";
+type NormalizedAblationName = "baseOnly" | "burstOnly" | "circadianNormalizedOnly" | "fullNormalizedContext";
 type HorizonPair = { probability24h: number; probability48h: number };
 
 export type ContextualBurstContributionDelta = {
@@ -47,7 +50,7 @@ export type ContextualBurstContributionDelta = {
 };
 
 export type ContextualBurstModelEvaluationReport = {
-  schemaVersion: "prospective-contextual-burst-model-evaluation-v1";
+  schemaVersion: "prospective-contextual-burst-model-evaluation-v2";
   status: "insufficient_data" | "promising" | "worse" | "eligible_for_manual_review";
   generatedAt: string;
   asOf: string;
@@ -56,18 +59,21 @@ export type ContextualBurstModelEvaluationReport = {
   source: "prediction_history.debug_info.experimentalProbabilityForecasts";
   targetDefinition: typeof RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION;
   freezeAt: typeof NEXT_GENERATION_C_FREEZE_AT;
+  freezeAtV2: typeof NEXT_GENERATION_C_V2_FREEZE_AT;
   evaluationStartAt: string | null;
   forecastCounts: {
     public: number;
     a: number;
     b: number;
     c: number;
+    cV2: number;
     comparable: number;
   };
   availability: {
     aRate: number;
     bRate: number;
     cRate: number;
+    cV2Rate: number;
     comparableRate: number;
     ablationRows: number;
     ablationRate: number;
@@ -87,6 +93,7 @@ export type ContextualBurstModelEvaluationReport = {
     a: ProspectiveModelEvaluation;
     b: ProspectiveModelEvaluation;
     c: ProspectiveModelEvaluation;
+    cV2: ProspectiveModelEvaluation;
   };
   ablations: {
     models: Record<AblationName, ProspectiveModelEvaluation>;
@@ -95,6 +102,9 @@ export type ContextualBurstModelEvaluationReport = {
       noCircadianMinusFullContext: ContextualBurstContributionDelta;
       fullContextMinusFullRaw: ContextualBurstContributionDelta;
     };
+  };
+  normalizedAblations: {
+    models: Record<NormalizedAblationName, ProspectiveModelEvaluation>;
   };
   gate: {
     autoPublish: false;
@@ -143,11 +153,19 @@ function isStoredForecast(value: unknown, modelVersion: string): value is Stored
     && isProbability(forecast.probability48h);
 }
 
-function getAblationPair(forecast: StoredForecast, name: AblationName): HorizonPair | null {
-  const ablations = asRecord(forecast.ablations);
+function getNamedAblationPair(
+  forecast: StoredForecast,
+  field: "ablations" | "normalizedAblations",
+  name: string,
+): HorizonPair | null {
+  const ablations = asRecord(forecast[field]);
   const pair = asRecord(ablations?.[name]);
   if (!pair || !isProbability(pair.probability24h) || !isProbability(pair.probability48h)) return null;
   return { probability24h: pair.probability24h, probability48h: pair.probability48h };
+}
+
+function getAblationPair(forecast: StoredForecast, name: AblationName): HorizonPair | null {
+  return getNamedAblationPair(forecast, "ablations", name);
 }
 
 export function selectComparableContextualBurstForecasts(rows: ProspectiveForecastRow[]) {
@@ -160,6 +178,19 @@ export function selectComparableContextualBurstForecasts(rows: ProspectiveForeca
       && isStoredForecast(row.forecasts[NEXT_GENERATION_A_MODEL_VERSION], NEXT_GENERATION_A_MODEL_VERSION)
       && isStoredForecast(row.forecasts[NEXT_GENERATION_B_MODEL_VERSION], NEXT_GENERATION_B_MODEL_VERSION)
       && isStoredForecast(row.forecasts[NEXT_GENERATION_C_MODEL_VERSION], NEXT_GENERATION_C_MODEL_VERSION);
+  });
+}
+
+export function selectNormalizedContextualBurstForecasts(rows: ProspectiveForecastRow[]) {
+  const freezeTime = timestamp(NEXT_GENERATION_C_V2_FREEZE_AT)!;
+  return rows.filter((row) => {
+    const generated = timestamp(row.generatedAt);
+    return generated !== null
+      && generated >= freezeTime
+      && isStoredForecast(
+        row.forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION],
+        NEXT_GENERATION_C_V2_MODEL_VERSION,
+      );
   });
 }
 
@@ -272,17 +303,19 @@ function evaluateModel(
 
 function resolvedAblationRows(
   rows: ProspectiveForecastRow[],
-  name: AblationName,
+  name: string,
   horizonHours: 24 | 48,
   events: TargetEvent[],
   asOf: Date,
+  modelVersion = NEXT_GENERATION_C_MODEL_VERSION,
+  field: "ablations" | "normalizedAblations" = "ablations",
 ) {
   const asOfTime = asOf.getTime();
   return rows.flatMap((row) => {
-    const forecast = row.forecasts[NEXT_GENERATION_C_MODEL_VERSION];
+    const forecast = row.forecasts[modelVersion];
     const origin = timestamp(row.generatedAt);
-    if (!isStoredForecast(forecast, NEXT_GENERATION_C_MODEL_VERSION) || origin === null) return [];
-    const pair = getAblationPair(forecast, name);
+    if (!isStoredForecast(forecast, modelVersion) || origin === null) return [];
+    const pair = getNamedAblationPair(forecast, field, name);
     if (!pair || origin + horizonHours * HOUR_MS > asOfTime) return [];
     return [{
       generatedAt: row.generatedAt,
@@ -302,6 +335,43 @@ function evaluateAblation(
     modelVersion: `c-ablation:${name}`,
     metrics24h: metric(resolvedAblationRows(rows, name, 24, events, asOf), events, 24),
     metrics48h: metric(resolvedAblationRows(rows, name, 48, events, asOf), events, 48),
+  };
+}
+
+function evaluateNormalizedAblation(
+  rows: ProspectiveForecastRow[],
+  name: NormalizedAblationName,
+  events: TargetEvent[],
+  asOf: Date,
+): ProspectiveModelEvaluation {
+  return {
+    modelVersion: `c-v2-ablation:${name}`,
+    metrics24h: metric(
+      resolvedAblationRows(
+        rows,
+        name,
+        24,
+        events,
+        asOf,
+        NEXT_GENERATION_C_V2_MODEL_VERSION,
+        "normalizedAblations",
+      ),
+      events,
+      24,
+    ),
+    metrics48h: metric(
+      resolvedAblationRows(
+        rows,
+        name,
+        48,
+        events,
+        asOf,
+        NEXT_GENERATION_C_V2_MODEL_VERSION,
+        "normalizedAblations",
+      ),
+      events,
+      48,
+    ),
   };
 }
 
@@ -344,6 +414,8 @@ export function evaluateContextualBurstModelProspectively(
   });
   const comparableRows = selectComparableContextualBurstForecasts(eligibleRows);
   const dailyComparable = selectDailyFirstForecasts(comparableRows);
+  const cV2Rows = selectNormalizedContextualBurstForecasts(eligibleRows);
+  const dailyCV2 = selectDailyFirstForecasts(cV2Rows);
   const cRows = eligibleRows.filter((row) =>
     isStoredForecast(row.forecasts[NEXT_GENERATION_C_MODEL_VERSION], NEXT_GENERATION_C_MODEL_VERSION),
   );
@@ -353,15 +425,29 @@ export function evaluateContextualBurstModelProspectively(
       .every((name) => getAblationPair(forecast, name) !== null);
   });
   const dailyAblationRows = selectDailyFirstForecasts(ablationRows);
+  const normalizedAblationRows = cV2Rows.filter((row) => {
+    const forecast = row.forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION] as StoredForecast;
+    return (["baseOnly", "burstOnly", "circadianNormalizedOnly", "fullNormalizedContext"] as NormalizedAblationName[])
+      .every((name) => getNamedAblationPair(forecast, "normalizedAblations", name) !== null);
+  });
+  const dailyNormalizedAblationRows = selectDailyFirstForecasts(normalizedAblationRows);
 
   const publicEvaluation = evaluateModel(dailyComparable, CALIBRATED_SHADOW_MODEL_VERSION, targetEvents, asOf);
   const aEvaluation = evaluateModel(dailyComparable, NEXT_GENERATION_A_MODEL_VERSION, targetEvents, asOf);
   const bEvaluation = evaluateModel(dailyComparable, NEXT_GENERATION_B_MODEL_VERSION, targetEvents, asOf);
   const cEvaluation = evaluateModel(dailyComparable, NEXT_GENERATION_C_MODEL_VERSION, targetEvents, asOf);
+  const cV2Evaluation = evaluateModel(dailyCV2, NEXT_GENERATION_C_V2_MODEL_VERSION, targetEvents, asOf);
   const ablationModels = Object.fromEntries(
     (["baseOnly", "noBurst", "noCircadian", "fullContext", "fullRaw"] as AblationName[])
       .map((name) => [name, evaluateAblation(dailyAblationRows, name, targetEvents, asOf)]),
   ) as Record<AblationName, ProspectiveModelEvaluation>;
+  const normalizedAblationModels = Object.fromEntries(
+    (["baseOnly", "burstOnly", "circadianNormalizedOnly", "fullNormalizedContext"] as NormalizedAblationName[])
+      .map((name) => [
+        name,
+        evaluateNormalizedAblation(dailyNormalizedAblationRows, name, targetEvents, asOf),
+      ]),
+  ) as Record<NormalizedAblationName, ProspectiveModelEvaluation>;
 
   const evaluationStartAt = dailyComparable[0]?.generatedAt ?? null;
   const evaluationStartTime = timestamp(evaluationStartAt);
@@ -401,10 +487,11 @@ export function evaluateContextualBurstModelProspectively(
     if (!isStoredForecast(row.forecasts[NEXT_GENERATION_A_MODEL_VERSION], NEXT_GENERATION_A_MODEL_VERSION)) skipReasons.missing_a = (skipReasons.missing_a ?? 0) + 1;
     if (!isStoredForecast(row.forecasts[NEXT_GENERATION_B_MODEL_VERSION], NEXT_GENERATION_B_MODEL_VERSION)) skipReasons.missing_b = (skipReasons.missing_b ?? 0) + 1;
     if (!isStoredForecast(row.forecasts[NEXT_GENERATION_C_MODEL_VERSION], NEXT_GENERATION_C_MODEL_VERSION)) skipReasons.missing_c = (skipReasons.missing_c ?? 0) + 1;
+    if (!isStoredForecast(row.forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION], NEXT_GENERATION_C_V2_MODEL_VERSION)) skipReasons.missing_c_v2 = (skipReasons.missing_c_v2 ?? 0) + 1;
   }
 
   return {
-    schemaVersion: "prospective-contextual-burst-model-evaluation-v1",
+    schemaVersion: "prospective-contextual-burst-model-evaluation-v2",
     status,
     generatedAt: asOf.toISOString(),
     asOf: asOf.toISOString(),
@@ -413,18 +500,21 @@ export function evaluateContextualBurstModelProspectively(
     source: "prediction_history.debug_info.experimentalProbabilityForecasts",
     targetDefinition: RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
     freezeAt: NEXT_GENERATION_C_FREEZE_AT,
+    freezeAtV2: NEXT_GENERATION_C_V2_FREEZE_AT,
     evaluationStartAt,
     forecastCounts: {
       public: countVersion(CALIBRATED_SHADOW_MODEL_VERSION),
       a: countVersion(NEXT_GENERATION_A_MODEL_VERSION),
       b: countVersion(NEXT_GENERATION_B_MODEL_VERSION),
       c: countVersion(NEXT_GENERATION_C_MODEL_VERSION),
+      cV2: cV2Rows.length,
       comparable: comparableRows.length,
     },
     availability: {
       aRate: total === 0 ? 0 : countVersion(NEXT_GENERATION_A_MODEL_VERSION) / total,
       bRate: total === 0 ? 0 : countVersion(NEXT_GENERATION_B_MODEL_VERSION) / total,
       cRate: total === 0 ? 0 : countVersion(NEXT_GENERATION_C_MODEL_VERSION) / total,
+      cV2Rate: total === 0 ? 0 : cV2Rows.length / total,
       comparableRate: total === 0 ? 0 : comparableRows.length / total,
       ablationRows: ablationRows.length,
       ablationRate: cRows.length === 0 ? 0 : ablationRows.length / cRows.length,
@@ -444,6 +534,7 @@ export function evaluateContextualBurstModelProspectively(
       a: aEvaluation,
       b: bEvaluation,
       c: cEvaluation,
+      cV2: cV2Evaluation,
     },
     ablations: {
       models: ablationModels,
@@ -452,6 +543,9 @@ export function evaluateContextualBurstModelProspectively(
         noCircadianMinusFullContext: difference(ablationModels.noCircadian, ablationModels.fullContext),
         fullContextMinusFullRaw: difference(ablationModels.fullContext, ablationModels.fullRaw),
       },
+    },
+    normalizedAblations: {
+      models: normalizedAblationModels,
     },
     gate: {
       autoPublish: false,

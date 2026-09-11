@@ -8,9 +8,14 @@ import {
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
 import {
+  calculateNormalizedContextualBurstProbability,
   calculateContextualBurstProbability,
   selectContextualBurstCalibrationRows,
 } from "../lib/radar/contextualBurstProbability";
+import {
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
+} from "../data/shadowProbabilityConfig";
 import {
   buildRandomContinuousHazard,
   integrateRandomContinuousHazard,
@@ -237,4 +242,27 @@ test("training read failure keeps C available with zero calibration alpha", () =
   assert.equal(result.alpha24h, 0);
   assert.equal(result.alpha48h, 0);
   assert.ok(result.probability48h >= result.probability24h);
+});
+
+test("normalized C v2 uses its own freeze-bound calibration and audit metadata", () => {
+  const synthetic = clusteredHistory();
+  const now = new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 60 * 60 * 1000);
+  const result = calculateNormalizedContextualBurstProbability(
+    getLocalRadarData({ calculationNow: now }),
+    {
+      now,
+      staticHistory: synthetic.history,
+      activeOfficialNotice: null,
+      trainingRows: [],
+    },
+  );
+
+  assert.equal(result.modelVersion, NEXT_GENERATION_C_V2_MODEL_VERSION);
+  assert.equal(result.freezeAt, NEXT_GENERATION_C_V2_FREEZE_AT);
+  assert.equal(typeof result.circadianNormalizationConstant, "number");
+  assert.equal(typeof result.circadianCycleMeanBeforeNormalization, "number");
+  assert.equal(typeof result.circadianCycleMeanAfterNormalization, "number");
+  assert.ok(Math.abs((result.circadianCycleMeanAfterNormalization ?? 0) - 1) < 1e-8);
+  assert.ok(result.probability48h >= result.probability24h);
+  assert.ok(result.probability72h >= result.probability48h);
 });

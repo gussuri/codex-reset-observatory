@@ -63,6 +63,7 @@ function state(status: "ok" | "error"): NextGenerationTrainingState {
     bRows: [],
     aRows: [],
     cRows: [],
+    cV2Rows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,

@@ -174,6 +174,16 @@ export const NEXT_GENERATION_C_MODEL_VERSION = "hazard-contextual-burst-circadia
 export const NEXT_GENERATION_C_FREEZE_AT = "2026-08-22T06:15:00.000Z";
 export const NEXT_GENERATION_C_FREEZE_POLICY =
   "A single reset, miss, or new observation must not trigger retuning.";
+// C v2 is a separate prospective candidate. Its freeze is tied to the
+// implementation timestamp so existing C v1 rows are never relabeled or
+// reused as C v2 calibration data.
+export const NEXT_GENERATION_C_V2_MODEL_VERSION =
+  "hazard-contextual-burst-circadian-normalized-v2";
+export const NEXT_GENERATION_C_V2_FREEZE_AT = "2026-09-11T19:28:28.589Z";
+export const NEXT_GENERATION_C_V2_FREEZE_POLICY = NEXT_GENERATION_C_FREEZE_POLICY;
+export const NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_INTERVAL_MINUTES = 10;
+export const NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_MAX_ITERATIONS = 80;
+export const NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_TOLERANCE = 1e-10;
 export const NEXT_GENERATION_C_CONTEXT_PRIOR_STD_DEV = 0.5;
 export const NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS = 15;
 export const NEXT_GENERATION_C_MINIMUM_EXPOSURE_CELLS = 720;

@@ -7,6 +7,8 @@ import {
   NEXT_GENERATION_C_CONTEXT_PRIOR_STD_DEV,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_FREEZE_POLICY,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_FREEZE_POLICY,
   NEXT_GENERATION_C_FROZEN_CONTINUOUS_CONFIG,
   NEXT_GENERATION_C_FROZEN_SIGNAL_CONFIG,
   NEXT_GENERATION_C_MAX_MULTIPLIER,
@@ -14,6 +16,7 @@ import {
   NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS,
   NEXT_GENERATION_C_MIN_MULTIPLIER,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_C_SOLVER_BACKTRACKING_FACTOR,
   NEXT_GENERATION_C_SOLVER_INITIAL_STEP,
   NEXT_GENERATION_C_SOLVER_MAX_BACKTRACKING_STEPS,
@@ -21,6 +24,7 @@ import {
   NEXT_GENERATION_C_SOLVER_TOLERANCE,
 } from "../data/shadowProbabilityConfig";
 import {
+  calculateCircadianNormalization,
   fitContextualBurstContext,
   getContextualBurstMultiplier,
   getContextualBurstRawFeatures,
@@ -148,4 +152,65 @@ test("sparse context history falls back to neutral coefficients and multiplier",
   assert.equal(fit.fallbackReason, "insufficient_context_history");
   assert.deepEqual(fit.coefficients, { count72: 0, previousInterval: 0, hourSin: 0, hourCos: 0 });
   assert.equal(getContextualBurstMultiplier(raw, fit), 1);
+});
+
+test("C v2 normalizes the clamped circadian cycle to unit mean", () => {
+  const zero = calculateCircadianNormalization({
+    hourSin: 0,
+    hourCos: 0,
+  });
+  assert.equal(zero.constant, 1);
+  assert.equal(zero.cycleMeanBeforeNormalization, 1);
+  assert.equal(zero.cycleMeanAfterNormalization, 1);
+  assert.equal(zero.fallbackReason, null);
+
+  const normalized = calculateCircadianNormalization({
+    hourSin: -0.7015,
+    hourCos: -0.3591,
+  });
+  assert.ok(normalized.constant !== null && normalized.constant > 1);
+  assert.ok(
+    normalized.cycleMeanBeforeNormalization !== null
+      && normalized.cycleMeanBeforeNormalization > 1,
+  );
+  assert.ok(Math.abs((normalized.cycleMeanAfterNormalization ?? 0) - 1) < 1e-9);
+  assert.equal(normalized.fallbackReason, null);
+});
+
+test("C v2 keeps burst contribution unchanged while normalizing only circadian terms", () => {
+  const raw = {
+    randomResetCount72h: 1,
+    previousRandomIntervalHours: 2,
+    hourSin: 0.5,
+    hourCos: 0.5,
+  };
+  const fit = {
+    coefficients: { count72: 0.3, previousInterval: 0.2, hourSin: 0.4, hourCos: 0.1 },
+    burstStats: {
+      count72Mean: 0,
+      count72StdDev: 1,
+      previousIntervalMean: 0,
+      previousIntervalStdDev: 1,
+    },
+    trainingEventCount: 20,
+    exposureCellCount: 800,
+    fallbackUsed: false,
+    fallbackReason: null,
+    solver: { converged: true, iterations: 1, objective: 0, reason: null },
+  };
+  const normalization = calculateCircadianNormalization(fit.coefficients);
+  assert.equal(
+    getContextualBurstMultiplier(raw, fit, "noCircadian", normalization),
+    getContextualBurstMultiplier(raw, fit, "noCircadian"),
+  );
+});
+
+test("C v2 has an independent model identity and freeze policy", () => {
+  assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
+  assert.equal(NEXT_GENERATION_C_V2_MODEL_VERSION, "hazard-contextual-burst-circadian-normalized-v2");
+  assert.notEqual(NEXT_GENERATION_C_V2_FREEZE_AT, NEXT_GENERATION_C_FREEZE_AT);
+  assert.equal(
+    NEXT_GENERATION_C_V2_FREEZE_POLICY,
+    "A single reset, miss, or new observation must not trigger retuning.",
+  );
 });

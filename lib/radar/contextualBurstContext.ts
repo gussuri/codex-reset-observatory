@@ -4,6 +4,9 @@ import {
   NEXT_GENERATION_C_MINIMUM_EXPOSURE_CELLS,
   NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS,
   NEXT_GENERATION_C_MIN_MULTIPLIER,
+  NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_INTERVAL_MINUTES,
+  NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_MAX_ITERATIONS,
+  NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_TOLERANCE,
   NEXT_GENERATION_C_SOLVER_BACKTRACKING_FACTOR,
   NEXT_GENERATION_C_SOLVER_INITIAL_STEP,
   NEXT_GENERATION_C_SOLVER_MAX_BACKTRACKING_STEPS,
@@ -53,6 +56,13 @@ export type ContextualBurstFit = {
     objective: number | null;
     reason: string | null;
   };
+};
+
+export type CircadianNormalization = {
+  constant: number | null;
+  cycleMeanBeforeNormalization: number | null;
+  cycleMeanAfterNormalization: number | null;
+  fallbackReason: string | null;
 };
 
 type TrainingCell = {
@@ -120,6 +130,123 @@ function stdDev(values: number[], average: number) {
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return 1;
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizationFailure(
+  reason: string,
+  cycleMeanBeforeNormalization: number | null = null,
+): CircadianNormalization {
+  return {
+    constant: null,
+    cycleMeanBeforeNormalization,
+    cycleMeanAfterNormalization: null,
+    fallbackReason: reason,
+  };
+}
+
+function clampedExponential(term: number, logConstant: number) {
+  const exponent = term - logConstant;
+  if (!Number.isFinite(exponent)) return null;
+  if (exponent <= Math.log(NEXT_GENERATION_C_MIN_MULTIPLIER)) {
+    return NEXT_GENERATION_C_MIN_MULTIPLIER;
+  }
+  if (exponent >= Math.log(NEXT_GENERATION_C_MAX_MULTIPLIER)) {
+    return NEXT_GENERATION_C_MAX_MULTIPLIER;
+  }
+  const value = Math.exp(exponent);
+  return Number.isFinite(value) ? value : null;
+}
+
+function cycleMean(terms: number[], logConstant: number) {
+  const values = terms.map((term) => clampedExponential(term, logConstant));
+  if (values.some((value) => value === null)) return null;
+  return mean(values as number[]);
+}
+
+/**
+ * Solve the clamped 24-hour circadian mean rather than using an unclamped
+ * closed form. The phase is sampled over one idealized Pacific-time cycle;
+ * no calendar date or DST transition is involved.
+ */
+export function calculateCircadianNormalization(
+  coefficients: Pick<ContextualBurstCoefficients, "hourSin" | "hourCos">,
+): CircadianNormalization {
+  if (!Number.isFinite(coefficients.hourSin) || !Number.isFinite(coefficients.hourCos)) {
+    return normalizationFailure("non_finite_circadian_coefficients");
+  }
+
+  const sampleCount = Math.round(
+    24 * 60 / NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_INTERVAL_MINUTES,
+  );
+  if (!(sampleCount > 0)) return normalizationFailure("invalid_circadian_cycle_sampling");
+
+  const terms = Array.from({ length: sampleCount }, (_, index) => {
+    const hour = index * 24 / sampleCount;
+    const angle = 2 * Math.PI * hour / 24;
+    return coefficients.hourSin * Math.sin(angle) + coefficients.hourCos * Math.cos(angle);
+  });
+  if (terms.some((term) => !Number.isFinite(term))) {
+    return normalizationFailure("non_finite_circadian_terms");
+  }
+
+  const cycleMeanBeforeNormalization = cycleMean(terms, 0);
+  if (cycleMeanBeforeNormalization === null) {
+    return normalizationFailure("non_finite_circadian_cycle_mean");
+  }
+  if (coefficients.hourSin === 0 && coefficients.hourCos === 0) {
+    return {
+      constant: 1,
+      cycleMeanBeforeNormalization,
+      cycleMeanAfterNormalization: cycleMeanBeforeNormalization,
+      fallbackReason: null,
+    };
+  }
+
+  const amplitude = Math.hypot(coefficients.hourSin, coefficients.hourCos);
+  if (!Number.isFinite(amplitude)) {
+    return normalizationFailure("non_finite_circadian_amplitude", cycleMeanBeforeNormalization);
+  }
+  const bracket = Math.max(32, amplitude + 8);
+  let lower = -bracket;
+  let upper = bracket;
+  const lowerMean = cycleMean(terms, lower);
+  const upperMean = cycleMean(terms, upper);
+  if (
+    lowerMean === null
+    || upperMean === null
+    || lowerMean < 1
+    || upperMean > 1
+  ) {
+    return normalizationFailure("circadian_normalization_bracket_failed", cycleMeanBeforeNormalization);
+  }
+
+  for (let iteration = 0; iteration < NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_MAX_ITERATIONS; iteration += 1) {
+    const middle = (lower + upper) / 2;
+    const middleMean = cycleMean(terms, middle);
+    if (middleMean === null) {
+      return normalizationFailure("non_finite_circadian_bisection_mean", cycleMeanBeforeNormalization);
+    }
+    if (middleMean > 1) lower = middle;
+    else upper = middle;
+  }
+
+  const logConstant = (lower + upper) / 2;
+  const constant = Math.exp(logConstant);
+  const cycleMeanAfterNormalization = cycleMean(terms, logConstant);
+  if (
+    !Number.isFinite(constant)
+    || constant <= 0
+    || cycleMeanAfterNormalization === null
+    || Math.abs(cycleMeanAfterNormalization - 1) > NEXT_GENERATION_C_V2_CIRCADIAN_NORMALIZATION_TOLERANCE
+  ) {
+    return normalizationFailure("circadian_normalization_solution_failed", cycleMeanBeforeNormalization);
+  }
+  return {
+    constant,
+    cycleMeanBeforeNormalization,
+    cycleMeanAfterNormalization,
+    fallbackReason: null,
+  };
 }
 
 export function getPacificHourFeatures(at: Date) {
@@ -394,6 +521,7 @@ export function getContextualBurstMultiplier(
   raw: ContextualBurstRawFeatures,
   fit: ContextualBurstFit,
   ablation: "full" | "noBurst" | "noCircadian" = "full",
+  normalization?: CircadianNormalization,
 ) {
   if (fit.fallbackUsed) return 1;
   const burst = standardizedBurst(raw, fit);
@@ -401,10 +529,13 @@ export function getContextualBurstMultiplier(
     ? 0
     : fit.coefficients.count72 * burst.count72
       + fit.coefficients.previousInterval * burst.previousInterval;
-  const circadianTerm = ablation === "noCircadian"
+  let circadianTerm = ablation === "noCircadian"
     ? 0
     : fit.coefficients.hourSin * raw.hourSin
       + fit.coefficients.hourCos * raw.hourCos;
+  if (ablation !== "noCircadian" && normalization?.constant !== null && normalization?.constant !== undefined) {
+    circadianTerm -= Math.log(normalization.constant);
+  }
   return clamp(
     Math.exp(burstTerm + circadianTerm),
     NEXT_GENERATION_C_MIN_MULTIPLIER,

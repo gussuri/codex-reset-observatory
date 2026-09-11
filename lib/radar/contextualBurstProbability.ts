@@ -5,6 +5,9 @@ import {
   NEXT_GENERATION_C_FROZEN_CONTINUOUS_CONFIG,
   NEXT_GENERATION_C_FROZEN_SIGNAL_CONFIG,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_FREEZE_POLICY,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
 } from "@/data/shadowProbabilityConfig";
 import type { RadarData } from "./types";
@@ -39,8 +42,10 @@ import {
 import { getActiveOfficialNotice } from "./probability";
 import {
   fitContextualBurstContext,
+  calculateCircadianNormalization,
   getContextualBurstMultiplier,
   getContextualBurstRawFeatures,
+  type CircadianNormalization,
   type ContextualBurstFit,
   type ContextualBurstRawFeatures,
 } from "./contextualBurstContext";
@@ -65,8 +70,15 @@ export type ContextualBurstAblations = {
   fullRaw: { probability24h: number; probability48h: number };
 };
 
+export type ContextualBurstNormalizedAblations = {
+  baseOnly: { probability24h: number; probability48h: number };
+  burstOnly: { probability24h: number; probability48h: number };
+  circadianNormalizedOnly: { probability24h: number; probability48h: number };
+  fullNormalizedContext: { probability24h: number; probability48h: number };
+};
+
 export type ContextualBurstProbabilityResult = {
-  modelVersion: typeof NEXT_GENERATION_C_MODEL_VERSION;
+  modelVersion: typeof NEXT_GENERATION_C_MODEL_VERSION | typeof NEXT_GENERATION_C_V2_MODEL_VERSION;
   calculatedAt: string;
   targetDefinition: typeof RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION;
   probability12h: number;
@@ -107,8 +119,13 @@ export type ContextualBurstProbabilityResult = {
   };
   officialNoticeTimingPolicyVersion: "official-notice-window-v3";
   ablations: ContextualBurstAblations;
-  freezeAt: typeof NEXT_GENERATION_C_FREEZE_AT;
-  freezePolicy: typeof NEXT_GENERATION_C_FREEZE_POLICY;
+  normalizedAblations?: ContextualBurstNormalizedAblations;
+  circadianNormalizationConstant?: number | null;
+  circadianCycleMeanBeforeNormalization?: number | null;
+  circadianCycleMeanAfterNormalization?: number | null;
+  circadianNormalizationFallbackReason?: string | null;
+  freezeAt: typeof NEXT_GENERATION_C_FREEZE_AT | typeof NEXT_GENERATION_C_V2_FREEZE_AT;
+  freezePolicy: typeof NEXT_GENERATION_C_FREEZE_POLICY | typeof NEXT_GENERATION_C_V2_FREEZE_POLICY;
 };
 
 type Variant = "baseOnly" | "full" | "noBurst" | "noCircadian";
@@ -118,6 +135,13 @@ type IntegrationResult = {
   cumulativeHazard: number;
   baseCumulativeHazard: number;
   effectiveContextMultiplier: number;
+};
+
+type ContextualBurstCalculationConfig = {
+  modelVersion: typeof NEXT_GENERATION_C_MODEL_VERSION | typeof NEXT_GENERATION_C_V2_MODEL_VERSION;
+  freezeAt: typeof NEXT_GENERATION_C_FREEZE_AT | typeof NEXT_GENERATION_C_V2_FREEZE_AT;
+  freezePolicy: typeof NEXT_GENERATION_C_FREEZE_POLICY | typeof NEXT_GENERATION_C_V2_FREEZE_POLICY;
+  normalizeCircadian: boolean;
 };
 
 function timestamp(value: string | null | undefined) {
@@ -144,6 +168,7 @@ function integrateContextualHazard(
   randomElapsedHours: number,
   horizonHours: number,
   variant: Variant,
+  normalization?: CircadianNormalization,
 ): IntegrationResult {
   const startAgeHours = Math.max(0, randomElapsedHours);
   const endAgeHours = startAgeHours + Math.max(0, horizonHours);
@@ -162,7 +187,7 @@ function integrateContextualHazard(
       : variant === "noCircadian"
         ? "noCircadian"
         : "full";
-    const multiplier = getContextualBurstMultiplier(raw, fit, ablation);
+    const multiplier = getContextualBurstMultiplier(raw, fit, ablation, normalization);
     return { baseLambda, adjustedLambda: baseLambda * multiplier };
   };
 
@@ -200,11 +225,12 @@ function horizonsForVariant(
   now: Date,
   randomElapsedHours: number,
   variant: Variant,
+  normalization?: CircadianNormalization,
 ) {
-  const p12 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 12, variant);
-  const p24 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 24, variant);
-  const p48 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 48, variant);
-  const p72 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 72, variant);
+  const p12 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 12, variant, normalization);
+  const p24 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 24, variant, normalization);
+  const p48 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 48, variant, normalization);
+  const p72 = integrateContextualHazard(hazard, fit, randomResetTimes, now, randomElapsedHours, 72, variant, normalization);
   return {
     horizons: {
       probability12h: p12.probability,
@@ -254,18 +280,20 @@ function getJstDayKey(value: string) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-export function selectContextualBurstCalibrationRows(
+function selectContextualBurstCalibrationRowsForModel(
   rows: ContextualBurstCalibrationRow[],
   asOf: Date,
   horizonHours: 24 | 48,
+  modelVersion: ContextualBurstCalculationConfig["modelVersion"],
+  freezeAt: ContextualBurstCalculationConfig["freezeAt"],
 ) {
   const asOfTime = asOf.getTime();
-  const freezeTime = timestamp(NEXT_GENERATION_C_FREEZE_AT)!;
+  const freezeTime = timestamp(freezeAt)!;
   const sorted = rows
     .filter((row) => {
       const generated = timestamp(row.generatedAt);
       const actual = horizonHours === 24 ? row.actual24h : row.actual48h;
-      return row.modelVersion === NEXT_GENERATION_C_MODEL_VERSION
+      return row.modelVersion === modelVersion
         && generated !== null
         && generated >= freezeTime
         && generated < asOfTime
@@ -282,6 +310,34 @@ export function selectContextualBurstCalibrationRows(
     if (key && !selected.has(key)) selected.set(key, row);
   }
   return Array.from(selected.values());
+}
+
+export function selectContextualBurstCalibrationRows(
+  rows: ContextualBurstCalibrationRow[],
+  asOf: Date,
+  horizonHours: 24 | 48,
+) {
+  return selectContextualBurstCalibrationRowsForModel(
+    rows,
+    asOf,
+    horizonHours,
+    NEXT_GENERATION_C_MODEL_VERSION,
+    NEXT_GENERATION_C_FREEZE_AT,
+  );
+}
+
+export function selectNormalizedContextualBurstCalibrationRows(
+  rows: ContextualBurstCalibrationRow[],
+  asOf: Date,
+  horizonHours: 24 | 48,
+) {
+  return selectContextualBurstCalibrationRowsForModel(
+    rows,
+    asOf,
+    horizonHours,
+    NEXT_GENERATION_C_V2_MODEL_VERSION,
+    NEXT_GENERATION_C_V2_FREEZE_AT,
+  );
 }
 
 function toCalibrationRows(
@@ -301,8 +357,9 @@ function toCalibrationRows(
   });
 }
 
-export function calculateContextualBurstProbability(
+function calculateContextualBurstProbabilityForModel(
   data: RadarData | null,
+  config: ContextualBurstCalculationConfig,
   options: ShadowProbabilityOptions & {
     trainingRows?: ContextualBurstCalibrationRow[];
     trainingReadStatus?: "ok" | "error";
@@ -326,23 +383,61 @@ export function calculateContextualBurstProbability(
   const randomResetTimes = randomBoundaries.map((boundary) => new Date(boundary.resetAt));
   const fit = fitContextualBurstContext(randomBoundaries, now, hazard);
   const originFeatures = getContextualBurstRawFeatures(randomResetTimes, now);
+  const normalization = config.normalizeCircadian
+    ? calculateCircadianNormalization(fit.coefficients)
+    : undefined;
   const base = horizonsForVariant(hazard, fit, randomResetTimes, now, randomElapsedHours, "baseOnly");
-  const noBurst = horizonsForVariant(hazard, fit, randomResetTimes, now, randomElapsedHours, "noBurst");
-  const noCircadian = horizonsForVariant(hazard, fit, randomResetTimes, now, randomElapsedHours, "noCircadian");
-  const fullContext = horizonsForVariant(hazard, fit, randomResetTimes, now, randomElapsedHours, "full");
+  const noBurst = horizonsForVariant(
+    hazard,
+    fit,
+    randomResetTimes,
+    now,
+    randomElapsedHours,
+    "noBurst",
+    normalization,
+  );
+  const noCircadian = horizonsForVariant(
+    hazard,
+    fit,
+    randomResetTimes,
+    now,
+    randomElapsedHours,
+    "noCircadian",
+  );
+  const fullContext = horizonsForVariant(
+    hazard,
+    fit,
+    randomResetTimes,
+    now,
+    randomElapsedHours,
+    "full",
+    normalization,
+  );
 
   // Reuse B's version-frozen ordinary semantic signal policy, but explicitly
   // force elapsed-only mode so C never consumes B's 3-day regime multiplier.
   const signalResult = calculateRegimeElapsedProbability(data, options, {
     ...NEXT_GENERATION_B_FROZEN_REGIME_CONFIG,
-    modelVersion: `${NEXT_GENERATION_C_MODEL_VERSION}-signal-input`,
+    modelVersion: `${config.modelVersion}-signal-input`,
     mode: "elapsed-only",
     signalMultiplierConfig: NEXT_GENERATION_C_FROZEN_SIGNAL_CONFIG,
   });
   const rawHorizons = applySemanticSignals(fullContext.horizons, signalResult.multipliers);
 
-  const selectedRows24h = selectContextualBurstCalibrationRows(options.trainingRows ?? [], now, 24);
-  const selectedRows48h = selectContextualBurstCalibrationRows(options.trainingRows ?? [], now, 48);
+  const selectedRows24h = selectContextualBurstCalibrationRowsForModel(
+    options.trainingRows ?? [],
+    now,
+    24,
+    config.modelVersion,
+    config.freezeAt,
+  );
+  const selectedRows48h = selectContextualBurstCalibrationRowsForModel(
+    options.trainingRows ?? [],
+    now,
+    48,
+    config.modelVersion,
+    config.freezeAt,
+  );
   const currentCalibrationRow: PrequentialCalibrationRow = {
     recordedAt: now.toISOString(),
     probability24h: rawHorizons.probability24h,
@@ -401,7 +496,7 @@ export function calculateContextualBurstProbability(
   };
 
   return {
-    modelVersion: NEXT_GENERATION_C_MODEL_VERSION,
+    modelVersion: config.modelVersion,
     calculatedAt: now.toISOString(),
     targetDefinition: RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION,
     probability12h: finalHorizons.probability12h,
@@ -463,7 +558,71 @@ export function calculateContextualBurstProbability(
         probability48h: rawHorizons.probability48h,
       },
     },
-    freezeAt: NEXT_GENERATION_C_FREEZE_AT,
-    freezePolicy: NEXT_GENERATION_C_FREEZE_POLICY,
+    ...(normalization
+      ? {
+          normalizedAblations: {
+            baseOnly: {
+              probability24h: base.horizons.probability24h,
+              probability48h: base.horizons.probability48h,
+            },
+            burstOnly: {
+              probability24h: noCircadian.horizons.probability24h,
+              probability48h: noCircadian.horizons.probability48h,
+            },
+            circadianNormalizedOnly: {
+              probability24h: noBurst.horizons.probability24h,
+              probability48h: noBurst.horizons.probability48h,
+            },
+            fullNormalizedContext: {
+              probability24h: fullContext.horizons.probability24h,
+              probability48h: fullContext.horizons.probability48h,
+            },
+          },
+          circadianNormalizationConstant: normalization.constant,
+          circadianCycleMeanBeforeNormalization: normalization.cycleMeanBeforeNormalization,
+          circadianCycleMeanAfterNormalization: normalization.cycleMeanAfterNormalization,
+          circadianNormalizationFallbackReason: normalization.fallbackReason,
+        }
+      : {}),
+    freezeAt: config.freezeAt,
+    freezePolicy: config.freezePolicy,
   };
+}
+
+export function calculateContextualBurstProbability(
+  data: RadarData | null,
+  options: ShadowProbabilityOptions & {
+    trainingRows?: ContextualBurstCalibrationRow[];
+    trainingReadStatus?: "ok" | "error";
+  } = {},
+): ContextualBurstProbabilityResult {
+  return calculateContextualBurstProbabilityForModel(
+    data,
+    {
+      modelVersion: NEXT_GENERATION_C_MODEL_VERSION,
+      freezeAt: NEXT_GENERATION_C_FREEZE_AT,
+      freezePolicy: NEXT_GENERATION_C_FREEZE_POLICY,
+      normalizeCircadian: false,
+    },
+    options,
+  );
+}
+
+export function calculateNormalizedContextualBurstProbability(
+  data: RadarData | null,
+  options: ShadowProbabilityOptions & {
+    trainingRows?: ContextualBurstCalibrationRow[];
+    trainingReadStatus?: "ok" | "error";
+  } = {},
+): ContextualBurstProbabilityResult {
+  return calculateContextualBurstProbabilityForModel(
+    data,
+    {
+      modelVersion: NEXT_GENERATION_C_V2_MODEL_VERSION,
+      freezeAt: NEXT_GENERATION_C_V2_FREEZE_AT,
+      freezePolicy: NEXT_GENERATION_C_V2_FREEZE_POLICY,
+      normalizeCircadian: true,
+    },
+    options,
+  );
 }

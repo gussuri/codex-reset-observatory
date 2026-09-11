@@ -144,7 +144,7 @@ export type ExperimentalProbabilityForecast = {
   }>;
   freezeAt?: string;
   freezePolicy?: string;
-  nextGenerationRole?: "candidate-a" | "candidate-b";
+  nextGenerationRole?: "candidate-a" | "candidate-b" | "candidate-c" | "candidate-c-v2";
   trainingReadStatus?: "ok" | "error";
   fallbackReason?: string | null;
   officialNoticeTimingPolicyVersion?: string;
@@ -180,6 +180,46 @@ export type ExperimentalProbabilityForecast = {
     objective: number | null;
     reason: string | null;
   };
+  randomResetCount72h?: number;
+  previousRandomIntervalHours?: number | null;
+  hourSin?: number;
+  hourCos?: number;
+  contextCoefficients?: {
+    count72: number;
+    previousInterval: number;
+    hourSin: number;
+    hourCos: number;
+  };
+  burstStats?: {
+    count72Mean: number;
+    count72StdDev: number;
+    previousIntervalMean: number;
+    previousIntervalStdDev: number;
+  };
+  contextTrainingEventCount?: number;
+  contextExposureCellCount?: number;
+  contextFallbackUsed?: boolean;
+  contextFallbackReason?: string | null;
+  contextSolver?: {
+    converged: boolean;
+    iterations: number;
+    objective: number | null;
+    reason: string | null;
+  };
+  effectiveContextMultiplier24h?: number;
+  effectiveContextMultiplier48h?: number;
+  ablations?: Record<string, {
+    probability24h: number;
+    probability48h: number;
+  }>;
+  normalizedAblations?: Record<string, {
+    probability24h: number;
+    probability48h: number;
+  }>;
+  circadianNormalizationConstant?: number | null;
+  circadianCycleMeanBeforeNormalization?: number | null;
+  circadianCycleMeanAfterNormalization?: number | null;
+  circadianNormalizationFallbackReason?: string | null;
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;

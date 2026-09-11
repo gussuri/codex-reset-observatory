@@ -6,6 +6,8 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
@@ -94,6 +96,15 @@ function buildTrainingProjectionSelectFields() {
       ),
     );
   }
+  for (const field of C_TRAINING_PROJECTION_FIELDS) {
+    fields.push(
+      trainingProjectionField(
+        trainingProjectionAlias("c_v2", field),
+        NEXT_GENERATION_C_V2_MODEL_VERSION,
+        field,
+      ),
+    );
+  }
   return fields.join(",");
 }
 
@@ -126,6 +137,7 @@ export type NextGenerationTrainingRows = {
   bRows: Array<NextGenerationCalibrationRow>;
   aRows: Array<NextGenerationEnsembleTrainingRow>;
   cRows: Array<ContextualBurstCalibrationRow>;
+  cV2Rows: Array<ContextualBurstCalibrationRow>;
   totalRows: number;
   skipReasons: NextGenerationTrainingSkipReasons;
   backfill: false;
@@ -202,15 +214,17 @@ function maybePushContextualBurstRow(
   options: NextGenerationTrainingQueryOptions,
   asOfTime: number,
   output: Array<ContextualBurstCalibrationRow>,
+  modelVersion: string,
+  freezeAt: string,
 ) {
-  const cForecast = asRecord(forecasts?.[NEXT_GENERATION_C_MODEL_VERSION]);
-  if (!cForecast || cForecast.modelVersion !== NEXT_GENERATION_C_MODEL_VERSION) return;
+  const cForecast = asRecord(forecasts?.[modelVersion]);
+  if (!cForecast || cForecast.modelVersion !== modelVersion) return;
   const generatedAt = typeof cForecast.generatedAt === "string" ? cForecast.generatedAt : null;
   const generatedTime = timestamp(generatedAt);
   if (
     generatedAt === null
     || generatedTime === null
-    || generatedTime < timestamp(NEXT_GENERATION_C_FREEZE_AT)!
+    || generatedTime < timestamp(freezeAt)!
     || generatedTime >= asOfTime
     || !isProbability(cForecast.rawProbability24h)
     || !isProbability(cForecast.rawProbability48h)
@@ -218,7 +232,7 @@ function maybePushContextualBurstRow(
 
   output.push({
     generatedAt,
-    modelVersion: NEXT_GENERATION_C_MODEL_VERSION,
+    modelVersion,
     rawProbability24h: cForecast.rawProbability24h,
     rawProbability48h: cForecast.rawProbability48h,
     actual24h: getActualLabel(options.randomEvents, generatedAt, asOfTime, 24),
@@ -235,6 +249,7 @@ export function parseNextGenerationTrainingRows(
   const bRows: Array<NextGenerationCalibrationRow> = [];
   const aRows: Array<NextGenerationEnsembleTrainingRow> = [];
   const cRows: Array<ContextualBurstCalibrationRow> = [];
+  const cV2Rows: Array<ContextualBurstCalibrationRow> = [];
   const skipReasons = createSkipReasons();
 
   for (const row of rows) {
@@ -243,7 +258,22 @@ export function parseNextGenerationTrainingRows(
 
     // C has its own freeze/version contract and must not depend on B/A presence.
     if (Number.isFinite(asOfTime)) {
-      maybePushContextualBurstRow(forecasts, options, asOfTime, cRows);
+      maybePushContextualBurstRow(
+        forecasts,
+        options,
+        asOfTime,
+        cRows,
+        NEXT_GENERATION_C_MODEL_VERSION,
+        NEXT_GENERATION_C_FREEZE_AT,
+      );
+      maybePushContextualBurstRow(
+        forecasts,
+        options,
+        asOfTime,
+        cV2Rows,
+        NEXT_GENERATION_C_V2_MODEL_VERSION,
+        NEXT_GENERATION_C_V2_FREEZE_AT,
+      );
     }
 
     const bForecast = asRecord(forecasts?.[NEXT_GENERATION_B_MODEL_VERSION]);
@@ -319,6 +349,7 @@ export function parseNextGenerationTrainingRows(
     bRows,
     aRows,
     cRows,
+    cV2Rows,
     totalRows: rows.length,
     skipReasons,
     backfill: false,
@@ -361,6 +392,8 @@ function toTrainingHistoryRow(
 
   const cForecast = getProjectedForecast(row, "c", C_TRAINING_PROJECTION_FIELDS);
   if (cForecast) forecasts[NEXT_GENERATION_C_MODEL_VERSION] = cForecast;
+  const cV2Forecast = getProjectedForecast(row, "c_v2", C_TRAINING_PROJECTION_FIELDS);
+  if (cV2Forecast) forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION] = cV2Forecast;
 
   return {
     logged_hour: row.logged_hour,
@@ -393,6 +426,7 @@ export async function loadNextGenerationTrainingState(
     bRows: [],
     aRows: [],
     cRows: [],
+    cV2Rows: [],
     totalRows: 0,
     skipReasons: createSkipReasons(),
     backfill: false,

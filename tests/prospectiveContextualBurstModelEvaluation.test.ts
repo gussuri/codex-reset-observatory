@@ -6,10 +6,13 @@ import {
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
   evaluateContextualBurstModelProspectively,
   selectComparableContextualBurstForecasts,
+  selectNormalizedContextualBurstForecasts,
 } from "../lib/radar/prospectiveContextualBurstModelEvaluation";
 
 function forecast(modelVersion: string, generatedAt: string, p24: number, p48: number) {
@@ -64,6 +67,20 @@ function row(
     };
   }
   return { generatedAt, forecasts };
+}
+
+function normalizedRow(generatedAt: string) {
+  const result = row(generatedAt);
+  result.forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION] = {
+    ...forecast(NEXT_GENERATION_C_V2_MODEL_VERSION, generatedAt, 0.7, 0.75),
+    normalizedAblations: {
+      baseOnly: { probability24h: 0.4, probability48h: 0.5 },
+      burstOnly: { probability24h: 0.5, probability48h: 0.6 },
+      circadianNormalizedOnly: { probability24h: 0.6, probability48h: 0.7 },
+      fullNormalizedContext: { probability24h: 0.7, probability48h: 0.75 },
+    },
+  };
+  return result;
 }
 
 test("formal C evaluation uses only same-origin Current/A/B/C rows", () => {
@@ -139,4 +156,22 @@ test("missing C ablations reduce ablation availability without invalidating the 
   assert.equal(report.availability.ablationRows, 1);
   assert.equal(report.availability.ablationRate, 0.5);
   assert.equal(report.ablations.models.fullContext.metrics24h.count, 1);
+});
+
+test("C v2 evaluation is freeze-bound and keeps normalized ablations separate", () => {
+  const before = normalizedRow(new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) - 1).toISOString());
+  const after = normalizedRow(new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 60 * 60 * 1000).toISOString());
+  assert.deepEqual(selectNormalizedContextualBurstForecasts([before, after]).map((item) => item.generatedAt), [after.generatedAt]);
+
+  const report = evaluateContextualBurstModelProspectively(
+    [before, after],
+    [],
+    new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 49 * 60 * 60 * 1000),
+  );
+
+  assert.equal(report.schemaVersion, "prospective-contextual-burst-model-evaluation-v2");
+  assert.equal(report.forecastCounts.cV2, 1);
+  assert.equal(report.models.cV2.metrics24h.count, 1);
+  assert.equal(report.normalizedAblations.models.baseOnly.metrics24h.count, 1);
+  assert.equal(report.normalizedAblations.models.fullNormalizedContext.metrics48h.count, 1);
 });

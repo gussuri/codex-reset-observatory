@@ -8,6 +8,8 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
   NEXT_GENERATION_C_MODEL_VERSION,
+  NEXT_GENERATION_C_V2_FREEZE_AT,
+  NEXT_GENERATION_C_V2_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
@@ -49,6 +51,7 @@ function state(status: "ok" | "error"): NextGenerationTrainingState {
     bRows: [],
     aRows: [],
     cRows: [],
+    cV2Rows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,
@@ -135,4 +138,28 @@ test("training DB failure keeps C with zero calibration while existing A rule st
   assert.equal(c.trainingReadStatus, "error");
   assert.equal(c.alpha24h, 0);
   assert.equal(c.alpha48h, 0);
+});
+
+test("logging adds C v2 only after its own freeze and preserves C v1", () => {
+  const now = new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 60_000);
+  const forecasts = buildNextGenerationExperimentalProbabilityForecasts({
+    data: null,
+    calculationOptions: { now, staticHistory: [], activeOfficialNotice: null },
+    existingForecasts: existingForecasts(now.toISOString()),
+    trainingState: state("ok"),
+  });
+
+  const cV1 = forecasts[NEXT_GENERATION_C_MODEL_VERSION] as Record<string, unknown>;
+  const cV2 = forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION] as Record<string, unknown>;
+  assert.ok(cV1);
+  assert.ok(cV2);
+  assert.equal(cV1.nextGenerationRole, "candidate-c");
+  assert.equal(cV2.nextGenerationRole, "candidate-c-v2");
+  assert.equal(cV2.modelVersion, NEXT_GENERATION_C_V2_MODEL_VERSION);
+  assert.equal(typeof cV2.circadianNormalizationConstant, "number");
+  assert.equal(typeof cV2.circadianCycleMeanBeforeNormalization, "number");
+  assert.equal(typeof cV2.circadianCycleMeanAfterNormalization, "number");
+  assert.equal(typeof cV2.contextCoefficients, "object");
+  assert.equal(typeof cV2.ablations, "object");
+  assert.equal(typeof cV2.normalizedAblations, "object");
 });
