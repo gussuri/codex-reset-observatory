@@ -7,6 +7,7 @@ import {
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
@@ -103,6 +104,81 @@ export function getPublishedNextGenerationBModel(
     return "previous-b";
   }
   return null;
+}
+
+export type PublishedProbabilityPeriod =
+  | "historical-v4"
+  | "b-v1"
+  | "b-v2"
+  | "selective-v3"
+  | "corrective-rollback-v4";
+
+export type PublishedProbabilityPeriodOptions = {
+  bModelAdoptionAt?: string | null;
+  previousModelAdoptionAt?: string | null;
+  selectiveModelAdoptionAt?: string | null;
+  rollbackAt?: string | null;
+};
+
+function resolveBoundary<T>(value: T | undefined, fallback: T) {
+  return value === undefined ? fallback : value;
+}
+
+/**
+ * Classifies a saved public forecast into a boundary-defined period. The
+ * period name is deliberately not derived from modelVersion alone because V4
+ * is public both before B v1 and after a future corrective rollback.
+ */
+export function getPublishedProbabilityPeriodAt(
+  value: Date | string,
+  options: PublishedProbabilityPeriodOptions = {},
+): PublishedProbabilityPeriod | null {
+  const valueTime = typeof value === "string"
+    ? parseAdoptionTime(value)
+    : value.getTime();
+  if (valueTime === null || !Number.isFinite(valueTime)) return null;
+
+  const bModelAdoptionTime = parseAdoptionTime(
+    resolveBoundary(options.bModelAdoptionAt, PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT),
+  );
+  const previousModelAdoptionTime = parseAdoptionTime(
+    resolveBoundary(options.previousModelAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT),
+  );
+  const selectiveModelAdoptionTime = parseAdoptionTime(
+    resolveBoundary(options.selectiveModelAdoptionAt, PUBLISHED_PROBABILITY_ADOPTION_AT),
+  );
+  const rollbackTime = parseAdoptionTime(
+    resolveBoundary(options.rollbackAt, PUBLISHED_PROBABILITY_V4_ROLLBACK_AT),
+  );
+
+  if (bModelAdoptionTime !== null && valueTime < bModelAdoptionTime) {
+    return "historical-v4";
+  }
+  if (previousModelAdoptionTime !== null && valueTime < previousModelAdoptionTime) {
+    return "b-v1";
+  }
+  if (selectiveModelAdoptionTime === null || valueTime < selectiveModelAdoptionTime) {
+    return "b-v2";
+  }
+  if (rollbackTime !== null && valueTime >= rollbackTime) {
+    return "corrective-rollback-v4";
+  }
+  return "selective-v3";
+}
+
+export function isPublishedV4RollbackActive(
+  now: Date,
+  rollbackAt: string | null | undefined = PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
+  publishedModelAdoptionAt: string | null | undefined = PUBLISHED_PROBABILITY_ADOPTION_AT,
+) {
+  const nowTime = now.getTime();
+  const rollbackTime = parseAdoptionTime(rollbackAt);
+  const adoptionTime = parseAdoptionTime(publishedModelAdoptionAt);
+  return Number.isFinite(nowTime)
+    && rollbackTime !== null
+    && adoptionTime !== null
+    && rollbackTime >= adoptionTime
+    && nowTime >= rollbackTime;
 }
 
 export function roundPublicProbabilityTime(now: Date) {
@@ -263,8 +339,13 @@ export function selectPublishedProbability(
   legacyShadow: ShadowProbabilityResult | null = null,
   rawShadow: ShadowProbabilityResult | null = null,
   nextGenerationB: NextGenerationBResult | null = null,
+  selectionOptions: { allowNextGenerationB?: boolean } = {},
 ): PublishedProbabilityCalculation {
-  if (nextGenerationB && isValidNextGenerationBPrediction(nextGenerationB)) {
+  if (
+    selectionOptions.allowNextGenerationB !== false
+    && nextGenerationB
+    && isValidNextGenerationBPrediction(nextGenerationB)
+  ) {
     return {
       probability12h: nextGenerationB.predictions.probability12h,
       probability24h: nextGenerationB.predictions.probability24h,
@@ -406,6 +487,8 @@ export type PublishedProbabilityOptions = {
   nextGenerationBTrainingReadStatus?: NextGenerationTrainingReadStatus;
   /** Explicit Production switch boundary; omitted uses the committed boundary. */
   publishedModelAdoptionAt?: string | null;
+  /** Future corrective rollback boundary; null keeps the current v3 selector active. */
+  publishedV4RollbackAt?: string | null;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
@@ -419,6 +502,7 @@ export function calculatePublishedProbability(
     nextGenerationBTrainingRows,
     nextGenerationBTrainingReadStatus,
     publishedModelAdoptionAt,
+    publishedV4RollbackAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -434,11 +518,15 @@ export function calculatePublishedProbability(
     ...calculationOptionsWithNow,
     now: roundPublicProbabilityTime(calculationNow),
   };
+  const resolvedPublishedModelAdoptionAt = publishedModelAdoptionAt === undefined
+    ? PUBLISHED_PROBABILITY_ADOPTION_AT
+    : publishedModelAdoptionAt;
+  const resolvedPublishedV4RollbackAt = publishedV4RollbackAt === undefined
+    ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
+    : publishedV4RollbackAt;
   const nextGenerationBModel = getPublishedNextGenerationBModel(
     publicModelOptions.now,
-    publishedModelAdoptionAt === undefined
-      ? PUBLISHED_PROBABILITY_ADOPTION_AT
-      : publishedModelAdoptionAt,
+    resolvedPublishedModelAdoptionAt,
   );
 
   let nextGenerationB: NextGenerationBResult | null = null;
@@ -518,6 +606,13 @@ export function calculatePublishedProbability(
     legacyShadow,
     rawShadow,
     nextGenerationB,
+    {
+      allowNextGenerationB: !isPublishedV4RollbackActive(
+        publicModelOptions.now,
+        resolvedPublishedV4RollbackAt,
+        resolvedPublishedModelAdoptionAt,
+      ),
+    },
   );
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
   return selected;

@@ -22,6 +22,7 @@ import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { evaluatePublishedModelProspectively } from "../lib/radar/prospectivePublishedModelEvaluation";
@@ -46,11 +47,27 @@ test("published model governance config records the manual selective hybrid acti
     NEXT_GENERATION_B_MODEL_VERSION,
   );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS, "not_met");
+  assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, null);
   assert.equal(NEXT_GENERATION_EVALUATION_MODE, "prospective");
   assert.equal(NEXT_GENERATION_BACKFILL, false);
   assert.equal(NEXT_GENERATION_AUTO_PUBLISH, false);
   assert.equal(NEXT_GENERATION_A_MODEL_VERSION, "hazard-ensemble-logit-stack-v1");
   assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
+});
+
+test("governance records corrective rollback as an unactivated, limited recommendation", () => {
+  const governance = readFileSync(GOVERNANCE_DOC, "utf8");
+
+  assert.match(governance, /corrective rollback to old V4/);
+  assert.match(governance, /confidence: medium-low/);
+  assert.match(governance, /resolved 24h=10, 48h=9/);
+  assert.match(governance, /24h Brier.*0\.2337/);
+  assert.match(governance, /48h Brier.*0\.3601/);
+  assert.match(governance, /leave-one-origin-out/);
+  assert.match(governance, /episode leave-out.*not fully stable/);
+  assert.match(governance, /not a universal superiority claim/);
+  assert.match(governance, /rollback boundary.*null.*not activated/i);
+  assert.match(governance, /V4-24.*C-48.*not implemented/);
 });
 
 test("the previous B v1 remains effective before the explicit v2 boundary", () => {

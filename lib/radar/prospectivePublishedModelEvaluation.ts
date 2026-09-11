@@ -4,6 +4,7 @@ import {
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -24,6 +25,11 @@ import {
   type PublishedV3ProspectiveScoreboard,
   type PublishedV3ScoreboardFeature,
 } from "./prospectiveV3Scoreboard";
+import {
+  getPublishedProbabilityPeriodAt,
+  type PublishedProbabilityPeriod,
+  type PublishedProbabilityPeriodOptions,
+} from "./publishedProbability";
 
 export { buildPublishedV3ProspectiveScoreboard } from "./prospectiveV3Scoreboard";
 
@@ -298,6 +304,7 @@ export type PublishedProspectiveEvaluationReport = {
 
 export type PublishedProspectiveEvaluationOptions = {
   adoptionAt?: string | null;
+  rollbackAt?: string | null;
   v3Forecasts?: Record<string, ProspectiveStoredForecast>;
   hybridForecasts?: Record<string, ProspectiveStoredForecast>;
   hybridReplayForecasts?: Record<string, ProspectiveStoredForecast>;
@@ -493,6 +500,16 @@ export function selectComparablePublishedForecasts(rows: Array<ProspectiveForeca
 
 export function selectDailyFirstPublishedForecasts(rows: Array<ProspectiveForecastRow>) {
   return selectDailyFirstForecasts(selectComparablePublishedForecasts(rows));
+}
+
+export function selectDailyFirstPublishedForecastsForPeriod(
+  rows: Array<ProspectiveForecastRow>,
+  period: PublishedProbabilityPeriod,
+  options: PublishedProbabilityPeriodOptions = {},
+) {
+  return selectDailyFirstForecasts(
+    rows.filter((row) => getPublishedProbabilityPeriodAt(row.generatedAt, options) === period),
+  );
 }
 
 export function selectComparableForecastsForModelPair(
@@ -1387,6 +1404,16 @@ export function evaluatePublishedModelProspectively(
     ? PUBLISHED_PROBABILITY_ADOPTION_AT
     : options.adoptionAt;
   const adoptionAt = timestamp(configuredAdoptionValue);
+  const configuredRollbackValue = options.rollbackAt === undefined
+    ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
+    : options.rollbackAt;
+  const rollbackAt = timestamp(configuredRollbackValue);
+  if (configuredRollbackValue !== null && rollbackAt === null) {
+    throw new RangeError("rollbackAt must be a valid timestamp or null");
+  }
+  if (adoptionAt !== null && rollbackAt !== null && rollbackAt < adoptionAt) {
+    throw new RangeError("rollbackAt must not precede the published model adoption boundary");
+  }
   // An explicit null remains a useful test/audit override meaning "evaluate
   // without a boundary". The committed production default is different:
   // null means the configured public model has not been cut over and must not
@@ -1396,7 +1423,8 @@ export function evaluatePublishedModelProspectively(
     const generatedTime = timestamp(generatedAt);
     return generatedTime !== null
       && !adoptionBoundaryPending
-      && (adoptionAt === null || generatedTime >= adoptionAt);
+      && (adoptionAt === null || generatedTime >= adoptionAt)
+      && (rollbackAt === null || generatedTime < rollbackAt);
   };
 
   const comparableRows = selectComparablePublishedForecasts(rows).filter((row) => {
@@ -1457,12 +1485,17 @@ export function evaluatePublishedModelProspectively(
   const adoptionStatusNote = adoptionBoundaryPending
     ? `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} promotion has no explicit Production adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline and current runtime, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`
     : `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} public model is manually governed at the explicit adoption boundary; ${PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION} remains the comparison baseline, and the prospective gate remains ${PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS}.`;
+  const rollbackBoundaryNote = rollbackAt === null
+    ? `No corrective rollback boundary is configured; ${PUBLISHED_PROBABILITY_MODEL_VERSION} remains the current published-period evaluation model.`
+    : `The ${PUBLISHED_PROBABILITY_MODEL_VERSION} published evaluation period ends immediately before the rollback boundary ${new Date(rollbackAt).toISOString()}; the corrective-rollback-v4 period is kept separate by boundary and is never combined by modelVersion alone. The v3 scoreboard remains shadow-only and continues to evaluate saved v3 rows after that boundary.`;
   const canonicalRandomResetEvents = adoptionBoundaryPending
     ? []
     : events
       .filter((event) => {
         const resetTime = timestamp(event.resetAt);
-        return resetTime !== null && (adoptionAt === null || resetTime >= adoptionAt!);
+        return resetTime !== null
+          && (adoptionAt === null || resetTime >= adoptionAt!)
+          && (rollbackAt === null || resetTime < rollbackAt);
       })
       .map((event) => ({ id: event.id, resetAt: event.resetAt }));
   const scoreboard = buildPublishedV3ProspectiveScoreboard(rows, events, asOf, {
@@ -1540,6 +1573,7 @@ export function evaluatePublishedModelProspectively(
       "Prospective results alone never auto-publish or retune a model; manual review is required.",
       `The stable ${PUBLISHED_STABLE_FALLBACK_MODEL_VERSION} fallback and hazard-regime-elapsed-v1 shadow parameters remain fixed throughout the evaluation period.`,
       adoptionStatusNote,
+      rollbackBoundaryNote,
     ],
   };
 }

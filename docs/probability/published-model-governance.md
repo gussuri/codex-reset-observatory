@@ -74,6 +74,20 @@ rollbackは自動化せず、既存のprospective evaluationとmanual reviewで�
 
 これは運用上の判断条件であり、未承認の新しい数値thresholdを追加するものではありません。十分なresolved sampleが得られた後は、既存gateと比較指標、runtimeの安定性、point-in-time境界をまとめてレビューします。rollbackを行う場合も、過去のevaluation reportやprediction historyを遡って書き換えません。
 
+## Corrective rollback support (not activated)
+
+The read-only audit recommends a **corrective rollback to old V4** with **confidence: medium-low**. This is a manual corrective action; it is **not a universal superiority claim** and not a new model fit.
+
+- rollback boundary: `null` (support exists but is not activated)
+- rollout setting: `PUBLISHED_PROBABILITY_V4_ROLLBACK_AT`
+- 2026-09-01 onward same-origin daily-first: resolved 24h=10, 48h=9
+- current selective v3: 24h Brier `0.2337`, 48h Brier `0.3601`
+- old V4: 24h Brier `0.2133`, 48h Brier `0.3186`
+- leave-one-origin-out: V4's advantage direction is retained
+- episode leave-out: the 48h advantage is not fully stable
+
+If a future rollout sets a boundary, the periods remain separate: historical V4 before B v1 and corrective-rollback V4 after the boundary are never combined by `modelVersion` alone. The v3 experimental forecasts, `featureSnapshot`, and prospective scoreboard continue during a V4 rollback. `V4-24/C-48` is not implemented, Model C is not added to the public selector, and the official-notice 0.90/0.96 policy is unchanged. The prospective gate remains `not_met`; no historical row, report snapshot, or canonical history is rewritten.
+
 ## Source of truth
 
 model version、adoption timestamp、boundary status、mode、gate status、calibration training sourceの機械可読なsource of truthは`data/shadowProbabilityConfig.ts`です。runtimeの選択とfallbackは`lib/radar/publishedProbability.ts`、同一origin loggingは`lib/nextGenerationLogging.ts`、prospective reportの生成は`lib/radar/prospectivePublishedModelEvaluation.ts`が担います。この文書はそれらの意味と監査履歴を補足するもので、新しいDB schemaや公開DTOを追加しません。
