@@ -6,6 +6,7 @@ import {
   PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
+  PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
@@ -107,6 +108,7 @@ export function getPublishedNextGenerationBModel(
 }
 
 export type PublishedProbabilityPeriod =
+  | "historical-elapsed-v1"
   | "historical-v4"
   | "b-v1"
   | "b-v2"
@@ -114,6 +116,7 @@ export type PublishedProbabilityPeriod =
   | "corrective-rollback-v4";
 
 export type PublishedProbabilityPeriodOptions = {
+  historicalV4AdoptionAt?: string | null;
   bModelAdoptionAt?: string | null;
   previousModelAdoptionAt?: string | null;
   selectiveModelAdoptionAt?: string | null;
@@ -141,6 +144,9 @@ export function getPublishedProbabilityPeriodAt(
   const bModelAdoptionTime = parseAdoptionTime(
     resolveBoundary(options.bModelAdoptionAt, PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT),
   );
+  const historicalV4AdoptionTime = parseAdoptionTime(
+    resolveBoundary(options.historicalV4AdoptionAt, PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT),
+  );
   const previousModelAdoptionTime = parseAdoptionTime(
     resolveBoundary(options.previousModelAdoptionAt, PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT),
   );
@@ -151,6 +157,9 @@ export function getPublishedProbabilityPeriodAt(
     resolveBoundary(options.rollbackAt, PUBLISHED_PROBABILITY_V4_ROLLBACK_AT),
   );
 
+  if (historicalV4AdoptionTime !== null && valueTime < historicalV4AdoptionTime) {
+    return "historical-elapsed-v1";
+  }
   if (bModelAdoptionTime !== null && valueTime < bModelAdoptionTime) {
     return "historical-v4";
   }
@@ -365,6 +374,12 @@ export function selectPublishedProbability(
   }
 
   if (calibrated && isValidCalibratedPrediction(calibrated)) {
+    const calibratedFallbackReason =
+      selectionOptions.allowNextGenerationB === false
+      && (fallbackReason === "next_generation_b_exception"
+        || fallbackReason === "next_generation_b_invalid_prediction")
+      ? null
+      : fallbackReason;
     return {
       probability12h: derive12hFrom24hProbability(calibrated.probability24h),
       probability24h: calibrated.probability24h,
@@ -372,7 +387,7 @@ export function selectPublishedProbability(
       probability72h: derive72hFrom48hProbability(calibrated.probability48h),
       adoptedModel: calibrated.modelVersion,
       source: "calibrated",
-      fallbackReason,
+      fallbackReason: calibratedFallbackReason,
       primary,
       nextGenerationB,
       calibrated,

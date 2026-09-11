@@ -48,6 +48,9 @@ export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-09-01T08:00:00.0
 // B v1 remains a historical runtime period before v2. Keep this separate from
 // the public previous-model metadata so the selector preserves all boundaries.
 export const PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT = "2026-08-23T02:04:00.000Z";
+// The earlier public V4 adoption is a separate historical boundary. Rows before
+// this instant belong to the preceding elapsed-only public period.
+export const PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT = "2026-08-20T11:21:37.105Z";
 export const PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS =
   "production_boundary_set" as const;
 export const PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION =

@@ -78,6 +78,14 @@ test("corrective rollback support is opt-in and does not change the v3 identity"
 
 test("published model periods keep historical V4 and corrective V4 separate", () => {
   assert.equal(
+    getPublishedProbabilityPeriodAt("2026-08-20T11:21:37.104Z", { rollbackAt: ROLLBACK_AT }),
+    "historical-elapsed-v1",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-08-20T11:21:37.105Z", { rollbackAt: ROLLBACK_AT }),
+    "historical-v4",
+  );
+  assert.equal(
     getPublishedProbabilityPeriodAt("2026-08-23T02:03:59.999Z", { rollbackAt: ROLLBACK_AT }),
     "historical-v4",
   );
@@ -148,6 +156,46 @@ test("rollback boundary selects valid V4 at the exact instant while still comput
   assert.ok(exactResult.calibrated);
   assert.equal(exactResult.probability24h, exactResult.calibrated.probability24h);
   assert.equal(exactResult.probability48h, exactResult.calibrated.probability48h);
+});
+
+test("rollback hides a B/v3 shadow failure when valid calibrated V4 is selected", () => {
+  const now = new Date(ROLLBACK_AT);
+  const data = getLocalRadarData({ calculationNow: now });
+  const current = calculatePublishedProbability(
+    data,
+    { now, publishedV4RollbackAt: ROLLBACK_AT },
+    { logFallback: false },
+  );
+  const primary = getLocalProbabilityCalculation(data, { now });
+
+  assert.ok(current.calibrated);
+  assert.ok(current.stableShadow);
+
+  const rollbackSelected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    "next_generation_b_exception",
+    null,
+    current.rawShadow,
+    null,
+    { allowNextGenerationB: false },
+  );
+  assert.equal(rollbackSelected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(rollbackSelected.source, "calibrated");
+  assert.equal(rollbackSelected.fallbackReason, null);
+
+  const preRollbackSelected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    "next_generation_b_exception",
+    null,
+    current.rawShadow,
+    null,
+  );
+  assert.equal(preRollbackSelected.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(preRollbackSelected.fallbackReason, "next_generation_b_exception");
 });
 
 test("rollback does not select next-generation B when calibrated V4 is invalid", () => {
