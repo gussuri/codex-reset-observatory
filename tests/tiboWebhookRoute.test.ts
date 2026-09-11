@@ -669,7 +669,7 @@ test("ambiguous future surprise keeps teaser classification and persists its hin
   }
 });
 
-test("an upcoming Codex update is persisted as a weak auxiliary teaser", async () => {
+test("an upcoming Codex update remains irrelevant without a context-safety promotion", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -712,7 +712,7 @@ test("an upcoming Codex update is persisted as a weak auxiliary teaser", async (
     ) as Record<string, unknown> | undefined;
     assert.ok(upsertBody);
     assert.equal(upsertBody.signal_type, "irrelevant");
-    assert.equal(upsertBody.teaser_strength, "weak");
+    assert.equal(upsertBody.teaser_strength, null);
     assert.equal(upsertBody.ai_signal_type, "irrelevant");
     assert.equal(upsertBody.ai_teaser_strength, "none");
     assert.equal(upsertBody.expected_start_at, null);
@@ -720,7 +720,7 @@ test("an upcoming Codex update is persisted as a weak auxiliary teaser", async (
 
     const responseBody = await response.json();
     assert.equal(responseBody.signalType, "irrelevant");
-    assert.equal(responseBody.teaserStrength, "weak");
+    assert.equal(responseBody.teaserStrength, "none");
   } finally {
     restoreGemini();
     restoreFetch();

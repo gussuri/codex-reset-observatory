@@ -143,37 +143,37 @@ test("explicit future reset notices remain official", () => {
   }
 });
 
-test("an upcoming Codex update is retained as a weak auxiliary teaser", () => {
-  const decision = getTiboContextSafetyDecision({
-    authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
-    selectedSignalType: "irrelevant",
-    aiTeaserStrength: "none",
-  });
-
-  assert.equal(decision?.signalType, "irrelevant");
-  assert.equal(decision?.teaserStrength, "weak");
+test("an upcoming Codex update does not promote an irrelevant none result", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: "none",
+    }),
+    null,
+  );
 });
 
-test("an update-only post is not promoted to an official notice", () => {
-  const decision = getTiboContextSafetyDecision({
-    authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
-    selectedSignalType: "official_notice",
-    aiTeaserStrength: "strong",
-  });
-
-  assert.equal(decision?.signalType, "irrelevant");
-  assert.equal(decision?.teaserStrength, "weak");
+test("an update-only post does not create a context-safety decision", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+      selectedSignalType: "official_notice",
+      aiTeaserStrength: "strong",
+    }),
+    null,
+  );
 });
 
-test("an update-only post is bounded to weak even if the candidate is strong", () => {
-  const decision = getTiboContextSafetyDecision({
-    authorText: "Codex will ship an update tomorrow.",
-    selectedSignalType: "teaser",
-    aiTeaserStrength: "strong",
-  });
-
-  assert.equal(decision?.signalType, "irrelevant");
-  assert.equal(decision?.teaserStrength, "weak");
+test("a future Codex product update does not promote an irrelevant none result", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "Next week we'll be retiring GPT-5.3-Codex-Spark from ChatGPT Work.",
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: "none",
+    }),
+    null,
+  );
 });
 
 test("a generic documentation update remains outside the teaser signal", () => {
@@ -238,21 +238,15 @@ test("isolated showcase phrases do not trigger the physical-item guard", () => {
 });
 
 
-test("future reuse of a historically framed reset button rescues an AI false negative", () => {
-  const decision = getTiboContextSafetyDecision({
-    authorText: "A good thing about having aged is that I feel that it’s been 20 years since I’ve pressed the reset button. Intrigued to see if I can find it tomorrow and dust it up",
-    selectedSignalType: "irrelevant",
-    aiTeaserStrength: "none",
-    ruleSignalType: "teaser",
-    ruleConfidence: 0.85,
-    isReply: false,
-  });
-
-  assert.deepEqual(decision, {
-    signalType: "teaser",
-    teaserStrength: "weak",
-    reasonJa: "Context safety guard: 過去のreset buttonへの言及に加えて、その同じbuttonを近い将来に再び使う意図があるため、弱い匂わせとして扱います。",
-  });
+test("future reuse of a historically framed reset button does not promote an irrelevant none result", () => {
+  assert.equal(
+    getTiboContextSafetyDecision({
+      authorText: "A good thing about having aged is that I feel that it’s been 20 years since I’ve pressed the reset button. Intrigued to see if I can find it tomorrow and dust it up",
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: "none",
+    }),
+    null,
+  );
 });
 
 test("historical reset-button text plus an unrelated tomorrow does not get rescued", () => {
@@ -261,40 +255,41 @@ test("historical reset-button text plus an unrelated tomorrow does not get rescu
       authorText: "It has been 20 years since I pressed the reset button. Tomorrow I am going hiking.",
       selectedSignalType: "irrelevant",
       aiTeaserStrength: "none",
-      ruleSignalType: "teaser",
-      ruleConfidence: 0.85,
-      isReply: false,
     }),
     null,
   );
 });
 
-test("reply and obvious non-usage reset-button contexts do not get rescued", () => {
-  for (const input of [
-    {
-      authorText: "It has been years since I pressed the reset button. I might find it tomorrow and dust it up.",
-      isReply: true,
-    },
-    {
-      authorText: "My laptop reset button is ancient. I might find it tomorrow and dust it up.",
-      isReply: false,
-    },
-    {
-      authorText: "It has been years since I pressed the reset button. I cannot find it tomorrow.",
-      isReply: false,
-    },
+test("historical and obvious non-usage reset-button contexts remain unpromoted", () => {
+  for (const authorText of [
+    "It has been years since I pressed the reset button. I might find it tomorrow and dust it up.",
+    "My laptop reset button is ancient. I might find it tomorrow and dust it up.",
+    "It has been years since I pressed the reset button. I cannot find it tomorrow.",
   ]) {
     assert.equal(
       getTiboContextSafetyDecision({
-        authorText: input.authorText,
+        authorText,
         selectedSignalType: "irrelevant",
         aiTeaserStrength: "none",
-        ruleSignalType: "teaser",
-        ruleConfidence: 0.85,
-        isReply: input.isReply,
       }),
       null,
-      input.authorText,
+      authorText,
     );
+  }
+});
+
+test("an irrelevant none result is never promoted by context safety alone", () => {
+  for (const authorText of [
+    "Next week we'll be retiring GPT-5.3-Codex-Spark from ChatGPT Work.",
+    "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+    "It has been 20 years since I pressed the reset button. I might find it tomorrow and dust it up.",
+  ]) {
+    const decision = getTiboContextSafetyDecision({
+      authorText,
+      selectedSignalType: "irrelevant",
+      aiTeaserStrength: "none",
+    });
+
+    assert.equal(decision, null, authorText);
   }
 });
