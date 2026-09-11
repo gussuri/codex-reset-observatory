@@ -33,7 +33,7 @@ const GOVERNANCE_DOC = resolve("docs/probability/published-model-governance.md")
 const PUBLISHED_EVALUATION_DOC = resolve("docs/prospective-published-model-evaluation.md");
 const NEXT_GENERATION_DOC = resolve("docs/probability/next-generation-shadow-models.md");
 
-test("published model governance config records the manual selective hybrid activation boundary", () => {
+test("published model governance config records the manual selective hybrid and rollback boundaries", () => {
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
@@ -47,7 +47,7 @@ test("published model governance config records the manual selective hybrid acti
     NEXT_GENERATION_B_MODEL_VERSION,
   );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS, "not_met");
-  assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, null);
+  assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(NEXT_GENERATION_EVALUATION_MODE, "prospective");
   assert.equal(NEXT_GENERATION_BACKFILL, false);
   assert.equal(NEXT_GENERATION_AUTO_PUBLISH, false);
@@ -55,7 +55,7 @@ test("published model governance config records the manual selective hybrid acti
   assert.equal(NEXT_GENERATION_C_MODEL_VERSION, "hazard-contextual-burst-circadian-v1");
 });
 
-test("governance records corrective rollback as an unactivated, limited recommendation", () => {
+test("governance records the scheduled corrective rollback as a limited recommendation", () => {
   const governance = readFileSync(GOVERNANCE_DOC, "utf8");
 
   assert.match(governance, /corrective rollback to old V4/);
@@ -66,7 +66,8 @@ test("governance records corrective rollback as an unactivated, limited recommen
   assert.match(governance, /leave-one-origin-out/);
   assert.match(governance, /episode leave-out.*not fully stable/);
   assert.match(governance, /not a universal superiority claim/);
-  assert.match(governance, /rollback boundary.*null.*not activated/i);
+  assert.match(governance, /support status.*installed.*manual corrective rollback scheduled/i);
+  assert.match(governance, /rollback boundary.*2026-09-11T02:20:00\.000Z/);
   assert.match(governance, /V4-24.*C-48.*not implemented/);
 });
 

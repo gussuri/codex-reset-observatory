@@ -72,8 +72,8 @@ function comparableV3Row(generatedAt: string) {
   };
 }
 
-test("corrective rollback support is opt-in and does not change the v3 identity", () => {
-  assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, null);
+test("corrective rollback rollout records a future boundary without changing the v3 identity", () => {
+  assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });

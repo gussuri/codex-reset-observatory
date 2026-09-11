@@ -39,10 +39,10 @@ export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
 // and deployment window; earlier rows stay historic.
 export const PUBLISHED_PROBABILITY_ADOPTION_DATE: string | null = "2026-09-10";
 export const PUBLISHED_PROBABILITY_ADOPTION_AT: string | null = "2026-09-10T01:00:00.000Z";
-// Rollback support is intentionally inert until a separate rollout commit sets
-// a future boundary. The public model alias remains the selective v3 identity
-// so historical and shadow evaluation identities do not change.
-export const PUBLISHED_PROBABILITY_V4_ROLLBACK_AT: string | null = null;
+// Manual corrective rollback is scheduled at this future UTC boundary. The
+// public model alias remains the selective v3 identity so historical and
+// shadow evaluation identities do not change.
+export const PUBLISHED_PROBABILITY_V4_ROLLBACK_AT: string | null = "2026-09-11T02:20:00.000Z";
 // The previous public model is v2, adopted at its own historical boundary.
 export const PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT = "2026-09-01T08:00:00.000Z";
 // B v1 remains a historical runtime period before v2. Keep this separate from
