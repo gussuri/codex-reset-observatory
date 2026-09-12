@@ -55,6 +55,7 @@ import {
   getTemporalExecutionWindowRelation,
   getTemporalNoticeCoverage,
   getTemporalTeaserCoverage,
+  isOverdueNoticePending,
   type ResetExecutionWindow,
 } from "./tiboTemporal";
 
@@ -1166,7 +1167,19 @@ function applyOfficialNoticeTimingPolicy(
     confidence: notice.temporalConfidence ?? null,
     expectedStartAt: notice.expectedAt,
     expectedEndAt: notice.expectedEndAt,
+    isDeadline: notice.isDeadline,
+    temporalExpression: notice.text,
   };
+
+  if (isOverdueNoticePending(temporalResolution, null, now)) {
+    return {
+      probability12h: derive12hFrom24hProbability(0.9),
+      probability24h: 0.9,
+      probability48h: 0.96,
+      probability72h: derive72hFrom48hProbability(0.96),
+    } satisfies ShadowProbabilityHorizons;
+  }
+
   const coverage24 = getTemporalNoticeCoverage(temporalResolution, now, 24);
   const coverage48 = getTemporalNoticeCoverage(temporalResolution, now, 48);
   if (coverage24 === null || coverage48 === null) {

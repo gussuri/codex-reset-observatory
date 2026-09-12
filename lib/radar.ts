@@ -1366,6 +1366,8 @@ function getActiveWindow(
     temporalPrecision: officialNotice.temporalPrecision ?? "unknown",
     expectedStartAt: officialNotice.expectedAt,
     expectedEndAt: officialNotice.expectedEndAt,
+    isDeadline: officialNotice.isDeadline,
+    temporalExpression: officialNotice.text,
   } : null;
 
   const isOverduePending = isOverdueNoticePending(noticeResolution, latestResetAt, now);

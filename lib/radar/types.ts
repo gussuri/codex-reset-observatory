@@ -215,6 +215,7 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
   temporal_resolution_version?: string | null;
+  is_deadline?: boolean | null;
   is_reply?: boolean;
   is_quote?: boolean;
   quote_context_text?: string | null;

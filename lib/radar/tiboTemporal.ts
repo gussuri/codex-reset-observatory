@@ -70,6 +70,7 @@ export type TiboTemporalSemantics = {
   explicitTimezone: string | null;
   temporalConfidence: number;
   resolutionSource?: TemporalResolutionSource;
+  isDeadline?: boolean;
 };
 
 export type TiboTemporalResolution = {
@@ -83,6 +84,7 @@ export type TiboTemporalResolution = {
   expectedStartAt: string | null;
   expectedEndAt: string | null;
   resolutionSource: TemporalResolutionSource;
+  isDeadline?: boolean;
 };
 
 export type ResetExecutionWindow = {
@@ -406,12 +408,15 @@ function buildSourceClockCandidate(
       ? "weekday"
       : "absolute";
 
+  const temporalExpression = getSourceTemporalExpression(sourceText, clock, day, timezone, segment);
+  const isDeadline = isDeadlineTimeExpression(temporalExpression);
+
   return {
     clock,
     day,
     timezone,
     semantics: {
-      temporalExpression: getSourceTemporalExpression(sourceText, clock, day, timezone, segment),
+      temporalExpression,
       temporalKind,
       temporalPrecision: "exact_time",
       weekday,
@@ -425,6 +430,7 @@ function buildSourceClockCandidate(
       explicitTimezone: timezone?.value ?? null,
       temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
       resolutionSource: "deterministic",
+      ...(isDeadline ? { isDeadline: true } : {}),
     },
   };
 }
@@ -603,8 +609,30 @@ function hasClockExpression(value: string) {
   return /\b(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b|\b(?:noon|midnight)\b/i.test(value);
 }
 
-function isDeadlineTimeExpression(value: string) {
+export function isDeadlineTimeExpression(value: string) {
   return /\bby\s+(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?|noon|midnight)\b/i.test(value);
+}
+
+export function hasDeadlineSemantics(
+  resolution: {
+    isDeadline?: boolean;
+    temporalPrecision?: string | null;
+    temporalExpression?: string | null;
+    expectedStartAt?: string | null;
+    expectedEndAt?: string | null;
+  } | null | undefined,
+  sourceText?: string | null,
+): boolean {
+  if (!resolution && !sourceText) return false;
+  if (resolution?.isDeadline === true) return true;
+  if (resolution?.isDeadline === false) return false;
+  if (resolution?.temporalExpression && isDeadlineTimeExpression(resolution.temporalExpression)) {
+    return true;
+  }
+  if (sourceText && isDeadlineTimeExpression(sourceText)) {
+    return true;
+  }
+  return false;
 }
 
 function isValidRelativeDuration(
@@ -759,6 +787,11 @@ export function parseGeminiTemporalSemantics(value: unknown, sourceText: string)
     return null;
   }
 
+  const isDeadline = Boolean(
+    (parsed as any).isDeadline ||
+    isDeadlineTimeExpression(expression ?? "")
+  );
+
   return {
     temporalExpression: expression,
     temporalKind: kind,
@@ -774,6 +807,7 @@ export function parseGeminiTemporalSemantics(value: unknown, sourceText: string)
     explicitTimezone,
     temporalConfidence: confidence,
     resolutionSource: "gemini",
+    ...(isDeadline ? { isDeadline: true } : {}),
   };
 }
 
@@ -1131,6 +1165,7 @@ export function resolveTiboTemporalSchedule(
   let expectedEnd: Date | null = null;
   let precision = semantics.temporalPrecision;
   let unresolvedInterpretation = false;
+  let resolvedIsDeadline = false;
 
   if (semantics.temporalKind === "relative_duration" && semantics.relativeAmount && semantics.relativeUnit) {
     if (semantics.relativeUnit === "days") {
@@ -1153,13 +1188,14 @@ export function resolveTiboTemporalSchedule(
     }
     if (semantics.explicitTimeParts) {
       const candidate = localDateTimeToInstant({ ...date, ...semantics.explicitTimeParts }, timeZone);
-      if (isDeadlineTimeExpression(semantics.temporalExpression ?? "")) {
+      if (isDeadlineTimeExpression(semantics.temporalExpression ?? "") || semantics.isDeadline) {
         if (!candidate || candidate.getTime() <= created.getTime()) {
           unresolvedInterpretation = true;
         } else {
           expectedStart = created;
           expectedEnd = candidate;
           precision = "range";
+          resolvedIsDeadline = true;
         }
       } else {
         expectedStart = candidate;
@@ -1183,10 +1219,11 @@ export function resolveTiboTemporalSchedule(
     );
     if (!candidate || candidate.getTime() <= created.getTime()) {
       unresolvedInterpretation = true;
-    } else if (isDeadlineTimeExpression(semantics.temporalExpression ?? "")) {
+    } else if (isDeadlineTimeExpression(semantics.temporalExpression ?? "") || semantics.isDeadline) {
       expectedStart = created;
       expectedEnd = candidate;
       precision = "range";
+      resolvedIsDeadline = true;
     } else {
       expectedStart = candidate;
       expectedEnd = candidate;
@@ -1228,9 +1265,21 @@ export function resolveTiboTemporalSchedule(
       precision = "daypart";
     } else if (day && semantics.temporalKind === "weekday") {
       if (semantics.explicitTimeParts) {
-        expectedStart = localDateTimeToInstant({ ...day, ...semantics.explicitTimeParts }, timeZone);
-        expectedEnd = expectedStart;
-        precision = "exact_time";
+        const candidate = localDateTimeToInstant({ ...day, ...semantics.explicitTimeParts }, timeZone);
+        if (isDeadlineTimeExpression(semantics.temporalExpression ?? "") || semantics.isDeadline) {
+          if (!candidate || candidate.getTime() <= created.getTime()) {
+            unresolvedInterpretation = true;
+          } else {
+            expectedStart = created;
+            expectedEnd = candidate;
+            precision = "range";
+            resolvedIsDeadline = true;
+          }
+        } else {
+          expectedStart = candidate;
+          expectedEnd = expectedStart;
+          precision = "exact_time";
+        }
       } else {
         const window = buildWindow(atLocalTime(day, 0), atLocalTime(addLocalDays(day, 1), 0), timeZone);
         expectedStart = window?.expectedStart ?? null;
@@ -1239,9 +1288,21 @@ export function resolveTiboTemporalSchedule(
       }
     } else if (day && semantics.temporalKind === "relative_day") {
       if (semantics.explicitTimeParts) {
-        expectedStart = localDateTimeToInstant({ ...day, ...semantics.explicitTimeParts }, timeZone);
-        expectedEnd = expectedStart;
-        precision = "exact_time";
+        const candidate = localDateTimeToInstant({ ...day, ...semantics.explicitTimeParts }, timeZone);
+        if (isDeadlineTimeExpression(semantics.temporalExpression ?? "") || semantics.isDeadline) {
+          if (!candidate || candidate.getTime() <= created.getTime()) {
+            unresolvedInterpretation = true;
+          } else {
+            expectedStart = created;
+            expectedEnd = candidate;
+            precision = "range";
+            resolvedIsDeadline = true;
+          }
+        } else {
+          expectedStart = candidate;
+          expectedEnd = expectedStart;
+          precision = "exact_time";
+        }
       } else {
         const window = buildWindow(atLocalTime(day, 0), atLocalTime(addLocalDays(day, 1), 0), timeZone);
         expectedStart = window?.expectedStart ?? null;
@@ -1267,6 +1328,7 @@ export function resolveTiboTemporalSchedule(
     expectedStartAt: expectedStart.toISOString(),
     expectedEndAt: expectedEnd.toISOString(),
     resolutionSource: semantics.resolutionSource ?? "gemini",
+    ...(resolvedIsDeadline ? { isDeadline: true } : {}),
   };
 }
 
@@ -1288,26 +1350,63 @@ export function getTemporalNoticeExpiry(resolution: TiboTemporalResolution, fall
 }
 
 export function getTemporalNoticeCoverage(
-  resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "confidence" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
+  resolution: (Pick<
+    TiboTemporalResolution,
+    "status" | "temporalPrecision" | "confidence" | "expectedStartAt" | "expectedEndAt"
+  > & {
+    isDeadline?: boolean;
+    temporalExpression?: string | null;
+  }) | null | undefined,
   now: Date,
   horizonHours: number,
+  options?: {
+    latestResetAt?: string | Date | null;
+  },
 ) {
   if (!resolution || resolution.status !== "resolved" || !Number.isFinite(horizonHours) || horizonHours <= 0) return null;
   const nowTime = now.getTime();
   const start = resolution.expectedStartAt ? Date.parse(resolution.expectedStartAt) : Number.NaN;
   const end = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : start;
   if (!Number.isFinite(nowTime) || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
-  if (resolution.temporalPrecision === "exact_time") {
+
+  const isDeadline = hasDeadlineSemantics(resolution);
+
+  if (resolution.temporalPrecision === "exact_time" && !isDeadline) {
     const distance = start - nowTime;
     if (distance >= 0) {
       return distance <= horizonHours * HOUR_MS ? 1 : 0;
     }
     const overdueMs = nowTime - start;
     if (overdueMs <= TIBO_NOTICE_GRACE_MS) {
+      if (options?.latestResetAt && isTemporalNoticeConsumedAtReset(resolution, options.latestResetAt)) {
+        return 0;
+      }
       return Math.max(0, Math.min(1, 1 - overdueMs / TIBO_NOTICE_GRACE_MS));
     }
     return 0;
   }
+
+  if (isDeadline) {
+    if (nowTime < end) {
+      const remainingStart = Math.max(nowTime, start);
+      const remainingDuration = end - remainingStart;
+      if (remainingDuration <= 0) return 1;
+      const intersection = Math.max(0, Math.min(nowTime + horizonHours * HOUR_MS, end) - remainingStart);
+      const confidence = typeof resolution.confidence === "number" && Number.isFinite(resolution.confidence)
+        ? Math.min(1, Math.max(0, resolution.confidence))
+        : 1;
+      return Math.min(1, Math.max(0, (intersection / remainingDuration) * confidence));
+    }
+    const overdueMs = nowTime - end;
+    if (overdueMs <= TIBO_NOTICE_GRACE_MS) {
+      if (options?.latestResetAt && isTemporalNoticeConsumedAtReset(resolution, options.latestResetAt)) {
+        return 0;
+      }
+      return 1;
+    }
+    return 0;
+  }
+
   const remainingStart = Math.max(nowTime, start);
   const remainingDuration = end - remainingStart;
   if (remainingDuration <= 0) return 0;
@@ -1350,17 +1449,40 @@ export function getTemporalTeaserCoverage(
 }
 
 export function isOverdueNoticePending(
-  resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
+  resolution: (Pick<
+    TiboTemporalResolution,
+    "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"
+  > & {
+    isDeadline?: boolean;
+    temporalExpression?: string | null;
+  }) | null | undefined,
   latestResetAt: string | Date | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  if (!resolution || resolution.status !== "resolved" || resolution.temporalPrecision !== "exact_time") {
+  if (!resolution || resolution.status !== "resolved") {
+    return false;
+  }
+  const isDeadline = hasDeadlineSemantics(resolution);
+  if (resolution.temporalPrecision !== "exact_time" && !isDeadline) {
     return false;
   }
   if (!resolution.expectedStartAt) return false;
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime)) return false;
+
+  if (isDeadline) {
+    const deadline = resolution.expectedEndAt
+      ? Date.parse(resolution.expectedEndAt)
+      : Date.parse(resolution.expectedStartAt);
+    if (!Number.isFinite(deadline)) return false;
+    if (nowTime <= deadline || nowTime > deadline + TIBO_NOTICE_GRACE_MS) {
+      return false;
+    }
+    return !isTemporalNoticeConsumedAtReset(resolution, latestResetAt);
+  }
+
   const start = Date.parse(resolution.expectedStartAt);
   if (!Number.isFinite(start)) return false;
-  const nowTime = now.getTime();
   if (nowTime <= start || nowTime > start + TIBO_NOTICE_GRACE_MS) {
     return false;
   }
@@ -1368,7 +1490,13 @@ export function isOverdueNoticePending(
 }
 
 export function isTemporalNoticeConsumedAtReset(
-  resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
+  resolution: (Pick<
+    TiboTemporalResolution,
+    "status" | "temporalPrecision" | "expectedStartAt" | "expectedEndAt"
+  > & {
+    isDeadline?: boolean;
+    temporalExpression?: string | null;
+  }) | null | undefined,
   resetAt: string | Date | null | undefined,
 ) {
   if (!resetAt) return false;
@@ -1386,8 +1514,15 @@ export function isTemporalNoticeConsumedAtReset(
   const expectedStart = Date.parse(resolution.expectedStartAt);
   const expectedEnd = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : expectedStart;
   if (!Number.isFinite(expectedEnd)) return false;
+
+  const isDeadline = hasDeadlineSemantics(resolution);
+
   if (resolution.temporalPrecision === "exact_time") {
     return Math.abs(resetTime - expectedStart) <= TIBO_NOTICE_GRACE_MS;
+  }
+  if (isDeadline) {
+    if (resetTime < expectedStart - TIBO_NOTICE_GRACE_MS) return false;
+    return resetTime <= expectedEnd + TIBO_NOTICE_GRACE_MS;
   }
   if (resetTime < expectedStart - TIBO_NOTICE_GRACE_MS) return false;
   return resetTime <= expectedEnd;
