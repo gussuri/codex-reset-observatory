@@ -132,6 +132,89 @@ test("resolves a same-day absolute deadline from the tweet instant without infer
   assert.equal(pastDeadline.expectedEndAt, null);
 });
 
+test("resolves named noon and midnight clocks with deadline semantics", () => {
+  const cases = [
+    {
+      text: "A reset is also landing by midnight today.",
+      createdAt: "2026-09-12T03:20:36.000Z",
+      expectedStartAt: "2026-09-12T03:20:36.000Z",
+      expectedEndAt: "2026-09-12T07:00:00.000Z",
+      precision: "range",
+      explicitTimeParts: { hour: 0, minute: 0 },
+    },
+    {
+      text: "A reset lands by midnight tomorrow.",
+      createdAt: "2026-09-12T03:20:36.000Z",
+      expectedStartAt: "2026-09-12T03:20:36.000Z",
+      expectedEndAt: "2026-09-13T07:00:00.000Z",
+      precision: "range",
+      explicitTimeParts: { hour: 0, minute: 0 },
+    },
+    {
+      text: "A reset lands by noon today.",
+      createdAt: "2026-09-12T17:20:36.000Z",
+      expectedStartAt: "2026-09-12T17:20:36.000Z",
+      expectedEndAt: "2026-09-12T19:00:00.000Z",
+      precision: "range",
+      explicitTimeParts: { hour: 12, minute: 0 },
+    },
+    {
+      text: "A reset lands at midnight tomorrow.",
+      createdAt: "2026-09-12T03:20:36.000Z",
+      expectedStartAt: "2026-09-12T07:00:00.000Z",
+      expectedEndAt: "2026-09-12T07:00:00.000Z",
+      precision: "exact_time",
+      explicitTimeParts: { hour: 0, minute: 0 },
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    const parsed = parseTiboTemporalSemantics(null, fixture.text);
+    assert.ok(parsed, fixture.text);
+    assert.deepEqual(parsed.explicitTimeParts, fixture.explicitTimeParts);
+
+    const resolution = resolveTiboTemporalSchedule(parsed, fixture.createdAt);
+    assert.equal(resolution.status, "resolved", fixture.text);
+    assert.equal(resolution.expectedStartAt, fixture.expectedStartAt);
+    assert.equal(resolution.expectedEndAt, fixture.expectedEndAt);
+    assert.equal(resolution.temporalPrecision, fixture.precision);
+    assert.equal(resolution.timezone, TIBO_SOURCE_TIME_ZONE);
+  }
+});
+
+test("resolves a named midnight weekday deadline at the end of that local day", () => {
+  const parsed = parseTiboTemporalSemantics(null, "A reset lands by midnight Friday.");
+  assert.ok(parsed);
+
+  const resolution = resolveTiboTemporalSchedule(
+    parsed,
+    "2026-09-11T20:00:00.000Z",
+  );
+
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.expectedStartAt, "2026-09-11T20:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-09-12T07:00:00.000Z");
+  assert.equal(resolution.temporalPrecision, "range");
+});
+
+test("rejects past named deadlines, unrelated clock text, and ambiguous schedules", () => {
+  const past = parseTiboTemporalSemantics(null, "A reset lands by noon today.");
+  assert.ok(past);
+  assert.equal(
+    resolveTiboTemporalSchedule(past, "2026-09-12T20:00:00.000Z").status,
+    "unresolved",
+  );
+
+  assert.equal(parseTiboTemporalSemantics(null, "Meeting by midnight today."), null);
+  assert.equal(
+    parseTiboTemporalSemantics(
+      null,
+      "A reset lands by midnight today and by noon tomorrow.",
+    ),
+    null,
+  );
+});
+
 test("keeps an absolute at-time as a point instant", () => {
   const result = resolveTiboTemporalSchedule(
     semantics({
@@ -149,6 +232,24 @@ test("keeps an absolute at-time as a point instant", () => {
   assert.equal(result.expectedStartAt, "2026-08-22T04:00:00.000Z");
   assert.equal(result.expectedEndAt, result.expectedStartAt);
   assert.equal(result.temporalPrecision, "exact_time");
+});
+
+test("keeps a past date-less at-time unresolved", () => {
+  const result = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "at 8pm PST",
+      temporalKind: "absolute",
+      temporalPrecision: "exact_time",
+      weekday: null,
+      explicitTimeParts: { hour: 20, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-08-22T05:00:00.000Z",
+  );
+
+  assert.equal(result.status, "unresolved");
+  assert.equal(result.expectedStartAt, null);
+  assert.equal(result.expectedEndAt, null);
 });
 
 test("resolves today, tomorrow, and next-week calendar windows", () => {
