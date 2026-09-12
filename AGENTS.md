@@ -14,6 +14,7 @@
 - 実装変更には関連テストを追加し、指定された lint・typecheck・build を実行する。
 - APIキー、Webhook secret、環境変数の値を表示・保存・commitしない。
 - ユーザーが明示的に指定したブランチやcommit・push方針を優先する。
+- When modifying reset history classification, normalization, Tibo reset adoption, display names, or history presentation, read docs/reset-history-normalization.md first.
 
 ## 速報対応
 
