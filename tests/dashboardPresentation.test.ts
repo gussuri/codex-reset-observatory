@@ -601,6 +601,43 @@ test("shows an unresolved notice without inventing a planned datetime", () => {
   }
 });
 
+test("hides stale schedule timestamps when an official notice resolution is unresolved", () => {
+  const calculationNow = new Date("2026-08-02T00:00:00.000Z");
+  const openedAt = "2026-08-01T23:45:00.000Z";
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [{
+      tweet_id: "presentation-stale-unresolved-notice",
+      signal_type: "official_notice",
+      text: "A reset notice without a trusted schedule",
+      tweet_url: "https://x.com/thsottiaux/status/presentation-stale-unresolved-notice",
+      tweet_created_at: openedAt,
+      expires_at: "2026-08-02T12:00:00.000Z",
+      confidence: 0.96,
+      verification_status: "auto_unverified",
+      expected_start_at: "2026-08-02T01:00:00.000Z",
+      expected_end_at: "2026-08-02T02:00:00.000Z",
+      temporal_resolution_status: "unresolved",
+      temporal_precision: "exact_time",
+      temporal_timezone: "America/Los_Angeles",
+    }],
+  });
+
+  const unknownScheduleLabels = /時刻未定|time not specified|时间未定/;
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(data, locale, { calculationNow }),
+        initialFetchedAt: openedAt,
+        locale,
+      }),
+    );
+
+    assert.doesNotMatch(html, /リセット予定|Planned reset|重置安排/);
+    assert.doesNotMatch(html, unknownScheduleLabels);
+  }
+});
+
 test("shows a resolved notice window with only the viewer-local schedule and source", () => {
   const openedAt = "2026-08-08T20:34:50.000Z";
   const expectedStartAt = "2026-08-10T07:00:00.000Z";

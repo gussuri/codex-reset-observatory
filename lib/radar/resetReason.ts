@@ -80,6 +80,7 @@ export function hasExplicitResetReasonEvidence(input: ResetReasonContext) {
   return Boolean(
     hasCompensationEvidence(input) ||
       hasUsageFixCompensationEvidence(input) ||
+      REGULAR_RESET_PATTERN.test(getContextText(input)) ||
       EXPLICIT_CELEBRATION_EVIDENCE_PATTERN.test(getContextText(input)),
   );
 }

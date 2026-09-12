@@ -44,6 +44,13 @@ function getResolvedNoticeDate(notice: OfficialNoticePresentationInput) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+/** Only a trusted, successfully resolved schedule may cross into the view model. */
+export function hasResolvedOfficialNoticeSchedule(notice: OfficialNoticePresentationInput) {
+  if (!getResolvedNoticeDate(notice)) return false;
+  if (notice.expectedEndAt && !Number.isFinite(Date.parse(notice.expectedEndAt))) return false;
+  return true;
+}
+
 function formatJapaneseParentheses(value: string) {
   return value.replace(/\(([^)]+)\)/, "（$1）");
 }

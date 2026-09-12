@@ -321,6 +321,89 @@ test("normalizes a related notice with standalone quality-issue evidence as an a
   assert.equal(event.scope, "全有料プラン");
 });
 
+test("gates completion reason evidence before using related notice reason", () => {
+  const notice = noticeSignal({
+    tweet_id: "completion-reason-notice",
+    text: "We are fixing quality issues before issuing a reset to all paid users.",
+  });
+  const completion = resetSignal({
+    tweet_id: "completion-reason-completion",
+    text: "Usage limits have been reset for all paid users.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.equal(event.details?.reasonType, "詫びリセット");
+});
+
+test("does not infer a completion reason from audience wording alone", () => {
+  const completion = resetSignal({
+    tweet_id: "audience-only-completion",
+    text: "Usage limits have been reset for all paid users.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(completion);
+
+  assert.equal(event.details?.reasonType, undefined);
+});
+
+test("keeps explicit celebration evidence on the completion signal", () => {
+  const completion = resetSignal({
+    tweet_id: "celebration-completion",
+    text: "Happy Monday, everyone. Reset all propagated.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(completion);
+
+  assert.equal(event.details?.reasonType, "ご祝儀リセット");
+});
+
+test("uses reset applicability rather than an all-paid audience greeting for scope", () => {
+  const notice = noticeSignal({
+    tweet_id: "narrow-applicability-notice",
+    text: "Hi all paid users. We are investigating an issue. A reset will be issued only to affected users.",
+  });
+  const completion = resetSignal({
+    tweet_id: "narrow-applicability-completion",
+    text: "Reset all propagated.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.notEqual(event.scope, "全有料プラン");
+  assert.equal(event.scope, "一部ユーザー");
+});
+
+test("keeps an all-paid scope when reset applicability is explicit", () => {
+  const notice = noticeSignal({
+    tweet_id: "broad-applicability-notice",
+    text: "A reset will be issued to all paid users.",
+  });
+  const completion = resetSignal({
+    tweet_id: "broad-applicability-completion",
+    text: "Reset all propagated.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.equal(event.scope, "全有料プラン");
+});
+
 test("a narrower explicit range can outrank a broader deadline without changing the first announcement", () => {
   const deadline = noticeSignal({
     tweet_id: "notice-deadline",

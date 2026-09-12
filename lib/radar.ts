@@ -99,7 +99,10 @@ import {
   type LocalSignalEvaluation,
 } from "./radar/probability";
 import { calculatePublishedProbability } from "./radar/publishedProbability";
-import { formatOfficialNoticeSummary } from "./radar/officialNoticePresentation";
+import {
+  formatOfficialNoticeSummary,
+  hasResolvedOfficialNoticeSchedule,
+} from "./radar/officialNoticePresentation";
 import {
   getHistoricalResetPresentationCorrection,
 } from "./radar/historicalResetCorrections";
@@ -1362,6 +1365,17 @@ function getActiveWindow(
   const expectedAt = officialNotice?.expectedAt ?? null;
   const expectedEndAt = officialNotice?.expectedEndAt ?? null;
   const source = officialNotice?.source ?? null;
+  const hasTrustedSchedule = officialNotice
+    ? hasResolvedOfficialNoticeSchedule(officialNotice)
+    : false;
+  const displayExpectedAt = hasTrustedSchedule ? expectedAt : null;
+  const displayExpectedEndAt = hasTrustedSchedule ? expectedEndAt : null;
+  const displayExpectedPrecision = hasTrustedSchedule
+    ? officialNotice?.temporalPrecision ?? null
+    : null;
+  const displayExpectedTimeZone = hasTrustedSchedule
+    ? officialNotice?.temporalTimezone ?? null
+    : null;
 
   const noticeResolution = officialNotice ? {
     status: officialNotice.temporalResolutionStatus ?? "unresolved",
@@ -1388,10 +1402,10 @@ function getActiveWindow(
         isBankedDistribution: officialNotice?.isBankedDistribution,
       }, locale),
       openedAt,
-      expectedAt,
-      expectedEndAt,
-      expectedPrecision: officialNotice?.temporalPrecision ?? null,
-      expectedTimeZone: officialNotice?.temporalTimezone ?? null,
+      expectedAt: displayExpectedAt,
+      expectedEndAt: displayExpectedEndAt,
+      expectedPrecision: displayExpectedPrecision,
+      expectedTimeZone: displayExpectedTimeZone,
       source,
       sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
       isOverduePending,

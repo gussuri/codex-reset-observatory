@@ -320,10 +320,28 @@ function isExplicitNarrowScope(text: string) {
   return /\b(?:some|certain|selected|affected|limited|specific|subset|individual)\s+(?:paid\s+)?(?:users|accounts|customers|plans)\b|一部(?:の)?(?:ユーザー|アカウント)|対象ユーザー|対象アカウント/i.test(text);
 }
 
+const RESET_APPLICABILITY_PATTERN =
+  /\b(?:reset|resets|resetting|credit|credits|credited|grant|granted|distribution|distribute|issued|receive|received|quota|allowance)\b|リセット|配布|付与|支給|適用|利用上限/i;
+
+function getScopeClauses(text: string) {
+  return text
+    .split(/[.!?;:\n]+/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+}
+
+function getApplicableScopeClauses(texts: ReadonlyArray<string>) {
+  return texts.flatMap(getScopeClauses).filter((clause) => RESET_APPLICABILITY_PATTERN.test(clause));
+}
+
 function getScope(texts: ReadonlyArray<string>) {
-  const normalizedTexts = texts.filter(Boolean);
-  if (normalizedTexts.some((text) => isAllPaidScope(text))) return "全有料プラン";
-  if (normalizedTexts.some((text) => isExplicitNarrowScope(text))) return "一部ユーザー";
+  const applicableClauses = getApplicableScopeClauses(texts);
+  const hasBroadApplicability = applicableClauses.some((clause) => isAllPaidScope(clause));
+  const hasNarrowApplicability = applicableClauses.some((clause) => isExplicitNarrowScope(clause));
+
+  if (hasBroadApplicability && hasNarrowApplicability) return "Codex / ChatGPT Work";
+  if (hasNarrowApplicability) return "一部ユーザー";
+  if (hasBroadApplicability) return "全有料プラン";
   return "Codex / ChatGPT Work";
 }
 
@@ -331,7 +349,9 @@ function getReasonType(
   signal: FormalTiboResetSignal,
   relatedNotices: ReadonlyArray<TiboNoticeSignal>,
 ) {
-  const completionReason = normalizeResetReasonType({ text: signal.text });
+  const completionReason = hasExplicitResetReasonEvidence({ text: signal.text })
+    ? normalizeResetReasonType({ text: signal.text })
+    : undefined;
   if (completionReason) return completionReason;
 
   const relatedReasons = relatedNotices
