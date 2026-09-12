@@ -384,6 +384,27 @@ test("uses reset applicability rather than an all-paid audience greeting for sco
   assert.equal(event.scope, "一部ユーザー");
 });
 
+test("does not treat an all-paid audience greeting as reset applicability", () => {
+  const notice = noticeSignal({
+    tweet_id: "audience-only-broad-scope-notice",
+    text: "Hi all paid users, a reset is coming soon.",
+  });
+  const completion = resetSignal({
+    tweet_id: "audience-only-broad-scope-completion",
+    text: "Reset all propagated.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.notEqual(event.scope, "全有料プラン");
+  assert.equal(event.scope, "Codex / ChatGPT Work");
+});
+
 test("keeps an all-paid scope when reset applicability is explicit", () => {
   const notice = noticeSignal({
     tweet_id: "broad-applicability-notice",

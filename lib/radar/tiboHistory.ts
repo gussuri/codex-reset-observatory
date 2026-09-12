@@ -312,8 +312,11 @@ function getTweetId(url: string | null | undefined) {
   return url?.match(/\/status\/(\d+)/i)?.[1] ?? null;
 }
 
+const BROAD_AUDIENCE_PATTERN_SOURCE = String.raw`(?:all\s+(?:paid\s+)?(?:users|accounts|plans)|all\s+paid\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\s+users|all\s+chatgpt\s+work\s+and\s+codex\s+users|全有料(?:プラン|ユーザー)|全ユーザー|全プラン)`;
+const BROAD_AUDIENCE_PATTERN = new RegExp(BROAD_AUDIENCE_PATTERN_SOURCE, "i");
+
 function isAllPaidScope(text: string) {
-  return /all\s+(?:paid\s+)?(?:users|accounts|plans)|all\s+paid\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\s+users|all\s+chatgpt\s+work\s+and\s+codex\s+users|全有料(?:プラン|ユーザー)|全ユーザー|全プラン/i.test(text);
+  return BROAD_AUDIENCE_PATTERN.test(text);
 }
 
 function isExplicitNarrowScope(text: string) {
@@ -323,6 +326,29 @@ function isExplicitNarrowScope(text: string) {
 const RESET_APPLICABILITY_PATTERN =
   /\b(?:reset|resets|resetting|credit|credits|credited|grant|granted|distribution|distribute|issued|receive|received|quota|allowance)\b|リセット|配布|付与|支給|適用|利用上限/i;
 
+const RESET_TO_BROAD_AUDIENCE_PATTERN = new RegExp(
+  `\\b(?:reset|resets|resetting)\\b[^.!?;:\\n]{0,100}\\b(?:to|for|across|among|applies\\s+to|available\\s+to)\\s+${BROAD_AUDIENCE_PATTERN_SOURCE}`,
+  "i",
+);
+const DIRECT_BROAD_RESET_PATTERN = new RegExp(
+  `\\b(?:reset|resets|resetting)\\s+(?:usage\\s+)?(?:limits?\\s+)?(?:for\\s+)?${BROAD_AUDIENCE_PATTERN_SOURCE}`,
+  "i",
+);
+const BROAD_AUDIENCE_TO_RESET_PATTERN = new RegExp(
+  `${BROAD_AUDIENCE_PATTERN_SOURCE}[^.!?;:\\n]{0,80}\\b(?:will|shall|can|should|must|have|has|had|received|receive|get|gets?)\\b[^.!?;:\\n]{0,50}\\b(?:reset|resets|resetting)\\b`,
+  "i",
+);
+
+function hasExplicitBroadResetApplicability(text: string) {
+  if (!isAllPaidScope(text)) return false;
+
+  return (
+    DIRECT_BROAD_RESET_PATTERN.test(text) ||
+    RESET_TO_BROAD_AUDIENCE_PATTERN.test(text) ||
+    BROAD_AUDIENCE_TO_RESET_PATTERN.test(text)
+  );
+}
+
 function getScopeClauses(text: string) {
   return text
     .split(/[.!?;:\n]+/)
@@ -330,13 +356,28 @@ function getScopeClauses(text: string) {
     .filter(Boolean);
 }
 
+function getScopeEvidenceClauses(text: string) {
+  const clauses = getScopeClauses(text);
+  return clauses.flatMap((clause, index) => {
+    const previous = clauses[index - 1];
+    const next = clauses[index + 1];
+    return [
+      clause,
+      ...(previous ? [`${previous} ${clause}`] : []),
+      ...(next ? [`${clause} ${next}`] : []),
+    ];
+  });
+}
+
 function getApplicableScopeClauses(texts: ReadonlyArray<string>) {
-  return texts.flatMap(getScopeClauses).filter((clause) => RESET_APPLICABILITY_PATTERN.test(clause));
+  return texts
+    .flatMap(getScopeEvidenceClauses)
+    .filter((clause) => RESET_APPLICABILITY_PATTERN.test(clause));
 }
 
 function getScope(texts: ReadonlyArray<string>) {
   const applicableClauses = getApplicableScopeClauses(texts);
-  const hasBroadApplicability = applicableClauses.some((clause) => isAllPaidScope(clause));
+  const hasBroadApplicability = applicableClauses.some((clause) => hasExplicitBroadResetApplicability(clause));
   const hasNarrowApplicability = applicableClauses.some((clause) => isExplicitNarrowScope(clause));
 
   if (hasBroadApplicability && hasNarrowApplicability) return "Codex / ChatGPT Work";

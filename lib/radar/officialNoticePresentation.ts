@@ -46,6 +46,7 @@ function getResolvedNoticeDate(notice: OfficialNoticePresentationInput) {
 
 /** Only a trusted, successfully resolved schedule may cross into the view model. */
 export function hasResolvedOfficialNoticeSchedule(notice: OfficialNoticePresentationInput) {
+  if (notice.temporalResolutionStatus !== "resolved") return false;
   if (!getResolvedNoticeDate(notice)) return false;
   if (notice.expectedEndAt && !Number.isFinite(Date.parse(notice.expectedEndAt))) return false;
   return true;
