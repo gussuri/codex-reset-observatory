@@ -35,7 +35,7 @@ export type ResetReasonContext = {
 const REGULAR_RESET_PATTERN =
   /定期|weekly\s+(?:reset|refresh|update|cycle|schedule|timing)|one[- ]?week|regular\s+(?:reset|refresh|update)|1週間サイクル|常规|每周|周期更新/i;
 const COMPENSATION_PATTERN =
-  /compensation|reliability|incident|outage|bug|degradation|rate[- ]?limit|rate[- ]?limiting|障害|不具合|補償|詫び|復旧|信頼性|故障|补偿|可靠性|事故|中断|限流|速率限制/i;
+  /compensation|reliability|incident|outage|bug|degradation|quality\s+(?:issue|issues|problem|problems|regression|degradation)|rate[- ]?limit|rate[- ]?limiting|障害|不具合|品質(?:問題|劣化)|補償|詫び|復旧|信頼性|故障|补偿|可靠性|事故|中断|限流|速率限制/i;
 const USAGE_FIX_COMPENSATION_PATTERN =
   /(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)[\s\S]{0,240}\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b|\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b[\s\S]{0,240}(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)/i;
 const PERSONAL_RESET_PATTERN =
@@ -70,6 +70,18 @@ function hasCompensationEvidence(input: ResetReasonContext) {
 
 function hasUsageFixCompensationEvidence(input: ResetReasonContext) {
   return USAGE_FIX_COMPENSATION_PATTERN.test(getContextText(input));
+}
+
+const EXPLICIT_CELEBRATION_EVIDENCE_PATTERN =
+  /celebrat|launch|milestone|anniversary|gift|happy|campaign|thank|monday|記念|祝|周年|感謝|キャンペーン|突破|達成|ご祝儀/i;
+
+/** Related notices need an explicit reason cue; audience words alone are not enough. */
+export function hasExplicitResetReasonEvidence(input: ResetReasonContext) {
+  return Boolean(
+    hasCompensationEvidence(input) ||
+      hasUsageFixCompensationEvidence(input) ||
+      EXPLICIT_CELEBRATION_EVIDENCE_PATTERN.test(getContextText(input)),
+  );
 }
 
 export function inferResetCycleType(input: ResetReasonContext): ResetCycleType {

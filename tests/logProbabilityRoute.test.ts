@@ -5,7 +5,8 @@ import { getRadarViewModel, getLocalRadarData } from "../lib/radar";
 import { hasOfficialNoticeForLog } from "../lib/logProbability";
 
 test("log probability marks a dynamic official notice as official", () => {
-  const now = Date.now();
+  const calculationNow = new Date("2026-08-05T00:00:00.000Z");
+  const now = calculationNow.getTime();
   const data = getLocalRadarData({
     activeTiboSignals: [
       {
@@ -26,9 +27,10 @@ test("log probability marks a dynamic official notice as official", () => {
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow,
   });
 
-  const viewModel = getRadarViewModel(data, "ja");
+  const viewModel = getRadarViewModel(data, "ja", false, undefined, calculationNow);
 
   assert.equal(viewModel.activeWindow.active, true);
   assert.equal(viewModel.activeWindow.kind, "official");

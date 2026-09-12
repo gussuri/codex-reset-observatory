@@ -824,6 +824,9 @@ export function RadarDashboard({
     viewModel.activeWindow,
     state.data?.latestTiboActivity,
   );
+  const hasResolvedNoticeSchedule = Boolean(
+    viewModel.activeWindow.expectedAt || viewModel.activeWindow.expectedEndAt,
+  );
   const probability24h = isDataUnavailable
     ? undefined
     : viewModel.probability24h;
@@ -984,7 +987,7 @@ export function RadarDashboard({
             </div>
 
             <dl className="mt-4 space-y-3 border-t border-amber-200/80 pt-4">
-              {!hideUntimedBankedSchedule ? (
+              {!hideUntimedBankedSchedule && hasResolvedNoticeSchedule ? (
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
                   <dt className="shrink-0 text-sm font-semibold text-slate-600">
                     {translateUI("scheduledResetTime", locale)}{locale === "en" ? ": " : "："}
@@ -1025,9 +1028,7 @@ export function RadarDashboard({
                           </>
                         ) : null}
                       </span>
-                    ) : (
-                      translateUI("scheduledResetTimeUnknown", locale)
-                    )}
+                    ) : null}
                     {showTiboLocalTimeNote ? (
                       <p className="mt-2 text-base font-normal leading-6 text-slate-600">
                         {translateUI("tiboNoticeLocalTime", locale)}

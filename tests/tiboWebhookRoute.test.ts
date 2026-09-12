@@ -1057,7 +1057,7 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v4");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v5");
   } finally {
     restoreGemini();
     restoreFetch();

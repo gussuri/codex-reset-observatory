@@ -99,15 +99,13 @@ completion post が短く、たとえば `Reset all propagated. Sweet dreams.` �
 
 ### Sweet dreams の正規化例
 
-今回のレビューで示された例では、notice に `Hi Astra users`、skills/context experiment や bad engines による quality issue、reset の予告があり、completion は `Reset all propagated. Sweet dreams.` です。この場合の仕様上の変換は次のとおりです。
+Production の 2026-09-12 record では、notice tweet `2098612714704891959` と completion tweet `2098685367058612394` が同一 event の evidence です。notice は `Hi Astra users` という呼びかけと quality issue、reset の予告を含み、completion は `Reset all propagated. Sweet dreams.` です。この場合の仕様上の変換は次のとおりです。
 
 | 段階 | 内容 |
 | --- | --- |
 | source facts | notice が reset と quality issue を説明し、completion が実施完了を示す。`Astra users` は notice の呼びかけ対象。 |
 | canonical fields | `recordKind = confirmed_global`、`cycleType = ランダムリセット`、`reasonType = 詫びリセット`、`resetMethod = 強制リセット`、`scope = 全有料プラン`、notice は公式 notice、execution は authoritative completion/observation。 |
-| public presentation | display name は `Sweet dreams リセット` 相当、reason は `詫びリセット`、method は `強制リセット`。default scope の「対象」行は表示しない。 |
-
-この literal は現行の static fixture に追加する変更を意味しません。現在のデータ/コードに該当 event がない場合は、既存 history を書き換えず、将来同じ形の evidence を扱うときの normalization 例として使用します。
+| public presentation | JA は `品質問題修正に伴う詫びリセット`、EN は `Compensation Reset Following Quality Fixes`、ZH は `质量问题修复补偿重置`。reason は `詫びリセット`、method は `強制リセット`、default scope の「対象」行は表示しない。 |
 
 ## 6. Evidence priority
 
@@ -161,13 +159,11 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 次の例は static data または既存 test fixture に基づきます。各例を `source facts -> canonical fields -> public presentation` の順に読むことができます。
 
-### 1. Sweet dreams の notice-backed global reset
+### 1. 2026-09-12 の notice-backed global reset
 
-- **Source facts**: 上記の review-provided notice と短い completion。Astra は呼びかけ対象であり、reset scope の証拠ではない。
-- **Canonical fields**: `confirmed_global` / `ランダムリセット` / `詫びリセット` / `強制リセット` / `全有料プラン`。official notice を provenance にし、authoritative execution time を completion/observation から採る。
-- **Public presentation**: `Sweet dreams リセット` 相当の display name、詫びリセット、強制リセット。default scope row は非表示。
-
-この具体的な literal は現行treeの fixture には見当たらないため、既存 row を作成・変更する根拠にはしません。
+- **Source facts**: [`data/resetHistory.ts`](../data/resetHistory.ts) の `local-codex-sweet-dreams-reset-2026-09-12` は、official notice `2098612714704891959` と completion `2098685367058612394` を provenance として保持する。Astra は呼びかけ対象であり、reset scope の証拠ではない。completion の表示上の句は `Sweet dreams` だが、canonical reason は related notice の quality issue evidence から得る。
+- **Canonical fields**: `recordKind = confirmed_global`、`cycleType = ランダムリセット`、`reasonType = 詫びリセット`、`resetMethod = 強制リセット`、`scope = 全有料プラン`。execution は `2026-09-12T08:09:17.000Z` の completion time、notice は `officialNoticeTweetId` として保持する。
+- **Public presentation**: JA `品質問題修正に伴う詫びリセット`、EN `Compensation Reset Following Quality Fixes`、ZH `质量问题修复补偿重置`。reason と method を表示し、default scope row は非表示。
 
 ### 2. 障害対応の `詫びリセット`
 

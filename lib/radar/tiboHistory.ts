@@ -27,6 +27,7 @@ import {
 import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
 import {
   inferResetCycleType,
+  hasExplicitResetReasonEvidence,
   normalizeResetReasonType,
 } from "./resetReason";
 import {
@@ -315,12 +316,31 @@ function isAllPaidScope(text: string) {
   return /all\s+(?:paid\s+)?(?:users|accounts|plans)|all\s+paid\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\s+users|all\s+chatgpt\s+work\s+and\s+codex\s+users|全有料(?:プラン|ユーザー)|全ユーザー|全プラン/i.test(text);
 }
 
-function getScope(text: string) {
-  return isAllPaidScope(text) ? "全有料プラン" : "Codex / ChatGPT Work";
+function isExplicitNarrowScope(text: string) {
+  return /\b(?:some|certain|selected|affected|limited|specific|subset|individual)\s+(?:paid\s+)?(?:users|accounts|customers|plans)\b|一部(?:の)?(?:ユーザー|アカウント)|対象ユーザー|対象アカウント/i.test(text);
 }
 
-function getReasonType(signal: FormalTiboResetSignal) {
-  return normalizeResetReasonType({ text: signal.text });
+function getScope(texts: ReadonlyArray<string>) {
+  const normalizedTexts = texts.filter(Boolean);
+  if (normalizedTexts.some((text) => isAllPaidScope(text))) return "全有料プラン";
+  if (normalizedTexts.some((text) => isExplicitNarrowScope(text))) return "一部ユーザー";
+  return "Codex / ChatGPT Work";
+}
+
+function getReasonType(
+  signal: FormalTiboResetSignal,
+  relatedNotices: ReadonlyArray<TiboNoticeSignal>,
+) {
+  const completionReason = normalizeResetReasonType({ text: signal.text });
+  if (completionReason) return completionReason;
+
+  const relatedReasons = relatedNotices
+    .filter((notice) => hasExplicitResetReasonEvidence({ text: notice.text }))
+    .map((notice) => normalizeResetReasonType({ text: notice.text }))
+    .filter((reason): reason is NonNullable<typeof reason> => Boolean(reason));
+
+  return relatedReasons.find((reason) => reason === "詫びリセット") ??
+    relatedReasons.find((reason) => reason === "ご祝儀リセット");
 }
 
 function formatNoticeToExecution(minutes: number) {
@@ -620,9 +640,12 @@ export function convertTiboResetSignalToHistoryEvent(
   const noticeMinutes = firstAnnouncement
     ? Math.max(0, Math.round((getTimestamp(completedAt)! - getTimestamp(firstAnnouncement.tweet_created_at)!) / 60000))
     : 0;
-  const reasonType = getReasonType(signal);
+  const reasonType = getReasonType(signal, notices);
   const cycleType = inferResetCycleType({ text: signal.text });
-  const scope = getScope(signal.text);
+  const scope = getScope([
+    signal.text,
+    ...notices.map((notice) => notice.text),
+  ]);
   const summary = "Tibo氏がCodexの利用上限リセット完了を発表しました。";
   const title = "ランダムリセット";
 

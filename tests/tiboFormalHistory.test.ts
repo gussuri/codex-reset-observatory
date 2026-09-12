@@ -249,6 +249,78 @@ test("history separates the first announcement from the most specific representa
   ]);
 });
 
+test("normalizes canonical reason and scope from generic related notice evidence", () => {
+  const notice = noticeSignal({
+    tweet_id: "generic-quality-notice",
+    text: "Hi Astra users. We are fixing quality issues affecting Codex and ChatGPT Work, and will reset usage limits for all paid ChatGPT Work and Codex users.",
+    tweet_created_at: "2026-08-01T07:00:00.000Z",
+  });
+  const completion = resetSignal({
+    tweet_id: "generic-quality-completion",
+    text: "Reset all propagated. Good night.",
+    tweet_created_at: "2026-08-01T09:00:00.000Z",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.equal(event.recordKind, "confirmed_global");
+  assert.equal(event.details?.cycleType, "ランダムリセット");
+  assert.equal(event.details?.reasonType, "詫びリセット");
+  assert.equal(event.details?.resetMethod, "強制リセット");
+  assert.equal(event.scope, "全有料プラン");
+  assert.equal(event.details?.scope, "全有料プラン");
+  assert.equal(event.officialNoticeTweetId, notice.tweet_id);
+  assert.deepEqual(event.sourceTweetIds, [notice.tweet_id, completion.tweet_id]);
+});
+
+test("does not infer reason or audience scope from a greeting-only related notice", () => {
+  const notice = noticeSignal({
+    tweet_id: "greeting-only-notice",
+    text: "Hi Astra users. A reset is coming soon.",
+  });
+  const completion = resetSignal({
+    tweet_id: "greeting-only-completion",
+    text: "Reset all propagated. Good night.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.equal(event.details?.reasonType, undefined);
+  assert.equal(event.scope, "Codex / ChatGPT Work");
+  assert.equal(event.details?.scope, "Codex / ChatGPT Work");
+});
+
+test("normalizes a related notice with standalone quality-issue evidence as an apology reset", () => {
+  const notice = noticeSignal({
+    tweet_id: "quality-only-notice",
+    text: "We are addressing quality issues in Codex, and all paid users will receive a reset.",
+  });
+  const completion = resetSignal({
+    tweet_id: "quality-only-completion",
+    text: "Reset all propagated.",
+  });
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    completion,
+    notice,
+    undefined,
+    [notice],
+  );
+
+  assert.equal(event.details?.reasonType, "詫びリセット");
+  assert.equal(event.scope, "全有料プラン");
+});
+
 test("a narrower explicit range can outrank a broader deadline without changing the first announcement", () => {
   const deadline = noticeSignal({
     tweet_id: "notice-deadline",
@@ -895,17 +967,23 @@ test("regular forecast advances after the unconfirmed occurrence reaches its exp
 });
 
 test("formal reset contributes to the recent seven-day reset count", () => {
-  const withoutDynamic = getRecent7DayResetCount(getLocalRadarData({ formalTiboResets: [] }));
+  const calculationNow = new Date("2026-08-11T01:00:00.000Z");
+  const withoutDynamic = getRecent7DayResetCount(getLocalRadarData({
+    formalTiboResets: [],
+    calculationNow,
+  }), calculationNow);
   const withDynamic = getRecent7DayResetCount(
     getLocalRadarData({
       formalTiboResets: [
         resetSignal({
           tweet_id: "unique-recent-reset",
           tweet_url: "https://x.com/thsottiaux/status/unique-recent-reset",
-          tweet_created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+          tweet_created_at: "2026-08-10T22:00:00.000Z",
         }),
       ],
+      calculationNow,
     }),
+    calculationNow,
   );
 
   assert.equal(withDynamic, withoutDynamic + 1);

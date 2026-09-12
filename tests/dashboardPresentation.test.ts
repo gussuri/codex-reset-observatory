@@ -557,14 +557,12 @@ test("does not render the omitted 12-hour and 72-hour metrics", () => {
   assert.strictEqual((html.match(/role="progressbar"/g) ?? []).length, 2);
 });
 
-test("shows an unresolved notice without inventing a planned datetime", (t: TestContext) => {
-  t.mock.timers.enable({
-    apis: ["Date"],
-    now: new Date("2026-08-02T00:00:00.000Z"),
-  });
+test("shows an unresolved notice without inventing a planned datetime", () => {
+  const calculationNow = new Date("2026-08-02T00:00:00.000Z");
   const openedAt = "2026-08-01T23:45:00.000Z";
   const expiresAt = "2026-08-02T12:00:00.000Z";
   const data = getLocalRadarData({
+    calculationNow,
     activeTiboSignals: [
       {
         tweet_id: "presentation-notice",
@@ -579,19 +577,28 @@ test("shows an unresolved notice without inventing a planned datetime", (t: Test
     ],
   });
 
-  const html = renderToStaticMarkup(
-    React.createElement(RadarDashboard, {
-      initialData: toPublicRadarSnapshot(data, "en"),
-      initialFetchedAt: openedAt,
-      locale: "en",
-    }),
-  );
+  const localizedNoticeLabels = {
+    ja: /公式リセット予告/,
+    en: /Reset-related notice/,
+    zh: /重置相关预告/,
+  } as const;
+  const unknownScheduleLabels = /時刻未定|time not specified|时间未定/;
 
-  assert.match(html, /Planned reset/);
-  assert.match(html, /time not specified/);
-  assert.doesNotMatch(html, /An official reset notice has been detected\. Please check the latest status\./);
-  assert.doesNotMatch(html, /Notice posted/);
-  assert.match(html, /Tibo \(@thsottiaux\)/);
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, {
+        initialData: toPublicRadarSnapshot(data, locale, { calculationNow }),
+        initialFetchedAt: openedAt,
+        locale,
+      }),
+    );
+
+    assert.match(html, localizedNoticeLabels[locale]);
+    assert.doesNotMatch(html, unknownScheduleLabels);
+    assert.doesNotMatch(html, /An official reset notice has been detected\. Please check the latest status\./);
+    assert.doesNotMatch(html, /Notice posted/);
+    assert.match(html, /Tibo \(@thsottiaux\)/);
+  }
 });
 
 test("shows a resolved notice window with only the viewer-local schedule and source", () => {
@@ -1479,13 +1486,11 @@ test("teaser strength labels stay natural in English and Simplified Chinese", ()
   assert.match(chineseHtml, /重置暗示帖[\s\S]*有（较弱）/);
 });
 
-test("keeps the simplified official notice card above the probability card", (t: TestContext) => {
-  t.mock.timers.enable({
-    apis: ["Date"],
-    now: new Date("2026-08-02T00:00:00.000Z"),
-  });
+test("keeps the simplified official notice card above the probability card", () => {
+  const calculationNow = new Date("2026-08-02T00:00:00.000Z");
   const openedAt = "2026-08-01T23:45:00.000Z";
   const data = getLocalRadarData({
+    calculationNow,
     activeTiboSignals: [
       {
         tweet_id: "presentation-official-notice",
@@ -1501,13 +1506,13 @@ test("keeps the simplified official notice card above the probability card", (t:
   });
   const html = renderToStaticMarkup(
     React.createElement(RadarDashboard, {
-      initialData: toPublicRadarSnapshot(data, "en"),
+      initialData: toPublicRadarSnapshot(data, "en", { calculationNow }),
       initialFetchedAt: openedAt,
       locale: "en",
     }),
   );
 
-  const noticeIndex = html.indexOf("Planned reset");
+  const noticeIndex = html.indexOf("Reset-related notice");
   const probabilityIndex = html.indexOf("Within 24h");
 
   assert.ok(noticeIndex >= 0 && noticeIndex < probabilityIndex);

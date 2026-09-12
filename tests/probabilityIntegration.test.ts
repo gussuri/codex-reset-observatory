@@ -33,7 +33,8 @@ test("reset_executed resets days since last reset to 0 and updates effectiveLate
 });
 
 test("old teaser before reset_executed is not counted into probability boost", () => {
-  const now = Date.now();
+  const calculationNow = new Date("2026-07-20T12:00:00.000Z");
+  const now = calculationNow.getTime();
   const oldTeaserTime = new Date(now - 2 * 3600 * 1000).toISOString(); // 2 hours ago
   const resetExecutedTime = new Date(now - 1 * 3600 * 1000).toISOString(); // 1 hour ago
 
@@ -56,15 +57,17 @@ test("old teaser before reset_executed is not counted into probability boost", (
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow,
   });
 
-  const p24 = getLocalResetProbability(mockRadarData as any, "24h");
+  const p24 = getLocalResetProbability(mockRadarData as any, "24h", undefined, undefined, calculationNow);
   // Old teaser before reset_executed must NOT trigger 90% notice mode or boost
   assert.ok(p24 < 0.90, "Old teaser before reset_executed must not boost or trigger notice mode");
 });
 
 test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", () => {
-  const now = Date.now();
+  const calculationNow = new Date("2026-07-20T12:00:00.000Z");
+  const now = calculationNow.getTime();
   const resetExecutedTime = new Date(now - 1800 * 1000).toISOString(); // 30 mins ago
   const newNoticeTime = new Date(now).toISOString(); // now (AFTER reset)
 
@@ -87,10 +90,11 @@ test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", 
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow,
   });
 
-  const p24 = getLocalResetProbability(mockRadarData as any, "24h");
-  const p48 = getLocalResetProbability(mockRadarData as any, "48h");
+  const p24 = getLocalResetProbability(mockRadarData as any, "24h", undefined, undefined, calculationNow);
+  const p48 = getLocalResetProbability(mockRadarData as any, "48h", undefined, undefined, calculationNow);
 
   assert.strictEqual(p24, 0.90, "New notice after execution must trigger 24h 90% Notice Mode");
   assert.strictEqual(p48, 0.96, "New notice after execution must trigger 48h 96% Notice Mode");
@@ -471,7 +475,8 @@ test("getLocalResetProbabilityReason formats English summary without un-translat
 });
 
 test("old reset_executed does not cancel newer official_notice", () => {
-  const now = Date.now();
+  const calculationNow = new Date("2026-07-20T12:00:00.000Z");
+  const now = calculationNow.getTime();
   const oldExecutionTime = new Date(now - 1800 * 1000).toISOString(); // 30 mins ago
   const newNoticeTime = new Date(now).toISOString(); // now
 
@@ -494,14 +499,16 @@ test("old reset_executed does not cancel newer official_notice", () => {
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow,
   });
 
-  const p24 = getLocalResetProbability(mockRadarData as any, "24h");
+  const p24 = getLocalResetProbability(mockRadarData as any, "24h", undefined, undefined, calculationNow);
   assert.strictEqual(p24, 0.90, "Old execution must not cancel newer notice");
 });
 
 test("dynamic official notice drives probability, card, reason, and action together", () => {
-  const now = Date.now();
+  const calculationNow = new Date("2026-07-20T12:00:00.000Z");
+  const now = calculationNow.getTime();
   const resetCreatedAt = new Date(now - 1800 * 1000).toISOString();
   const noticeCreatedAt = new Date(now).toISOString();
   const noticeUrl = "https://x.com/tibo_maker/status/dynamic-notice";
@@ -526,9 +533,10 @@ test("dynamic official notice drives probability, card, reason, and action toget
         verification_status: "auto_unverified",
       },
     ],
+    calculationNow,
   });
 
-  const viewModel = getRadarViewModel(data, "en");
+  const viewModel = getRadarViewModel(data, "en", false, undefined, calculationNow);
 
   assert.strictEqual(viewModel.probability24h, 0.9);
   assert.strictEqual(viewModel.probability48h, 0.96);

@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v4";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v5";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 3 * 60 * 60 * 1000;
 
