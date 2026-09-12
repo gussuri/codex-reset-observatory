@@ -49,6 +49,7 @@ import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal
 import {
   getEffectiveTemporalPrecision,
   getTemporalExecutionWindowRelation,
+  hasDeadlineSemantics,
   isTemporalNoticeConsumedAtReset,
   TIBO_NOTICE_GRACE_MS,
   type ResetExecutionWindow,
@@ -95,6 +96,7 @@ export type ActiveOfficialNotice = {
   temporalConfidence?: number | null;
   temporalResolutionStatus?: TemporalResolutionStatus | null;
   temporalTimezone?: string | null;
+  isDeadline?: boolean;
 };
 
 export type ProbabilityPair = {
@@ -198,6 +200,17 @@ function toDynamicOfficialNotice(
   const persistentAfterInitialWindow = options.persistentAfterInitialWindow === true;
   const hideInitialSchedule = isOngoingBankedDistribution || persistentAfterInitialWindow;
   const consumption = getOfficialNoticeConsumption(signal.tweet_id);
+  const isDeadline = hideInitialSchedule
+    ? false
+    : hasDeadlineSemantics(
+        {
+          isDeadline: signal.is_deadline ?? undefined,
+          temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        },
+        signal.text,
+      );
   return {
     origin: "dynamic",
     id: signal.tweet_id,
@@ -212,6 +225,7 @@ function toDynamicOfficialNotice(
     text: signal.text ?? null,
     isBankedDistribution: isBankedDistributionNotice(signal.text),
     consumption,
+    isDeadline,
     ...(isOngoingBankedDistribution ? {
       isOngoingBankedDistribution: true,
       temporalPrecision: "unknown" as const,
@@ -1141,6 +1155,15 @@ export function getActiveOfficialNotice(
                       }) ?? "unknown",
                       expectedStartAt: signal.expected_start_at ?? null,
                       expectedEndAt: signal.expected_end_at ?? null,
+                      isDeadline: hasDeadlineSemantics(
+                        {
+                          isDeadline: signal.is_deadline ?? undefined,
+                          temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+                          expectedStartAt: signal.expected_start_at,
+                          expectedEndAt: signal.expected_end_at,
+                        },
+                        signal.text,
+                      ),
                     }
                   : null,
                 latestBoundaryTime === null ? null : new Date(latestBoundaryTime),
@@ -1180,6 +1203,15 @@ export function getActiveOfficialNotice(
       sourceLabel: signal.sourceLabel,
       isBankedDistribution: false,
       consumption: "one_shot",
+      isDeadline: hasDeadlineSemantics(
+        {
+          isDeadline: (signal as any).isDeadline ?? (signal as any).is_deadline,
+          temporalExpression: (signal as any).temporalExpression,
+          expectedStartAt: signal.expectedAt ?? null,
+          expectedEndAt: signal.expectedEndAt ?? null,
+        },
+        signal.title ?? null,
+      ),
     }));
 
   const representativeDynamicNotice = dynamicNotices
