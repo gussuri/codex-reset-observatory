@@ -33,12 +33,52 @@ export function isExcludedRecoveryObservationId(id: string | null | undefined): 
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全30件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
+ * 全31件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.cycleType distinguishes regular and random resets, while recordKind
  * remains an independent record classification and resetMethod describes how
  * the reset was delivered.
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  {
+    "id": "local-codex-sweet-dreams-reset-2026-09-12",
+    "recordKind": "confirmed_global",
+    "title": {
+      "ja": "Sweet dreams リセット",
+      "en": "Sweet dreams Reset",
+      "zh": "Sweet dreams 重置"
+    },
+    "kind": "reset_completed",
+    "status": "closed",
+    "opened_at": "2026-09-12T03:20:36.000Z",
+    "closed_at": "2026-09-12T08:09:17.000Z",
+    "completed_at": "2026-09-12T08:09:17.000Z",
+    "window_minutes": 289,
+    "scope": "全有料プラン",
+    "summary": {
+      "ja": "品質問題の修正報告および事前予告に基づき、CodexおよびChatGPT Workの利用上限リセットが実施されました。",
+      "en": "Following reports on quality fixes and advance notice, usage limits for Codex and ChatGPT Work were reset.",
+      "zh": "根据质量问题修复报告及预告，Codex 和 ChatGPT Work 的使用额度已完成重置。"
+    },
+    "source_url": "https://x.com/thsottiaux/status/2098685367058612394",
+    "sourceTweetIds": [
+      "2098612714704891959",
+      "2098685367058612394"
+    ],
+    "officialNoticeTweetId": "2098612714704891959",
+    "details": {
+      "cycleType": "ランダムリセット",
+      "reasonType": "詫びリセット",
+      "resetMethod": "強制リセット",
+      "scope": "全有料プラン",
+      "noticeToExecution": "4時間49分",
+      "noticeType": "公式予告あり",
+      "note": {
+        "ja": "品質問題の修正報告とともに予告されていたリセットが完了しました。",
+        "en": "The reset announced alongside reports on quality fixes has been completed.",
+        "zh": "随质量问题修复报告一并预告的重置已完成。"
+      }
+    }
+  },
   {
     "id": "local-codex-rolling-notice-reset-2026-09-08",
     "recordKind": "confirmed_global",
