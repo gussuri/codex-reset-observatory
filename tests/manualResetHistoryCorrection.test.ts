@@ -54,7 +54,9 @@ test("merging live Tibo execution signal with canonical static history produces 
   const jaVm = getRadarViewModel(data, "ja", false, undefined, calculationNow);
   const jaItem = jaVm.recentHistory[0];
   assert.equal(jaItem.key, "local-codex-sweet-dreams-reset-2026-09-12");
-  assert.equal(jaItem.title, "Sweet dreams リセット");
+  assert.equal(jaItem.title, "品質問題修正に伴う詫びリセット");
+  assert.equal(jaItem.summary, "品質問題への対応に伴い、CodexおよびChatGPT Workの利用上限が強制リセットされました。");
+  assert.equal(jaItem.details?.note, "品質問題への対応に伴い、CodexおよびChatGPT Workの利用上限が強制リセットされました。");
   assert.equal(jaItem.scope, "全有料プラン");
   assert.equal(jaItem.details?.scope, "全有料プラン");
   assert.equal(jaItem.details?.reasonType, "詫びリセット");
@@ -63,6 +65,9 @@ test("merging live Tibo execution signal with canonical static history produces 
 
   const enVm = getRadarViewModel(data, "en", false, undefined, calculationNow);
   const enItem = enVm.recentHistory[0];
+  assert.equal(enItem.title, "Compensation Reset Following Quality Fixes");
+  assert.equal(enItem.summary, "In response to quality issues, usage limits for Codex and ChatGPT Work were forcibly reset.");
+  assert.equal(enItem.details?.note, "In response to quality issues, usage limits for Codex and ChatGPT Work were forcibly reset.");
   assert.equal(enItem.scope, "All paid plans");
   assert.equal(enItem.details?.scope, "All paid plans");
   assert.equal(enItem.details?.reasonType, "Compensation reset");
@@ -70,6 +75,9 @@ test("merging live Tibo execution signal with canonical static history produces 
 
   const zhVm = getRadarViewModel(data, "zh", false, undefined, calculationNow);
   const zhItem = zhVm.recentHistory[0];
+  assert.equal(zhItem.title, "质量问题修复补偿重置");
+  assert.equal(zhItem.summary, "为应对质量问题，Codex 和 ChatGPT Work 的使用额度已被强制重置。");
+  assert.equal(zhItem.details?.note, "为应对质量问题，Codex 和 ChatGPT Work 的使用额度已被强制重置。");
   assert.equal(zhItem.scope, "所有付费套餐");
   assert.equal(zhItem.details?.scope, "所有付费套餐");
   assert.equal(zhItem.details?.reasonType, "故障补偿重置");
