@@ -902,7 +902,7 @@ test("formal reset contributes to the recent seven-day reset count", () => {
         resetSignal({
           tweet_id: "unique-recent-reset",
           tweet_url: "https://x.com/thsottiaux/status/unique-recent-reset",
-          tweet_created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          tweet_created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
         }),
       ],
     }),

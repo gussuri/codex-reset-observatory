@@ -21,7 +21,7 @@ test("log probability marks a dynamic official notice as official", () => {
         signal_type: "official_notice",
         text: "A dynamic official reset notice",
         confidence: 0.96,
-        tweet_created_at: new Date(now - 60 * 60 * 1000).toISOString(),
+        tweet_created_at: new Date(now).toISOString(),
         expires_at: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
         verification_status: "auto_unverified",
       },

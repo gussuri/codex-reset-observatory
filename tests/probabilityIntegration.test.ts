@@ -65,8 +65,8 @@ test("old teaser before reset_executed is not counted into probability boost", (
 
 test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", () => {
   const now = Date.now();
-  const resetExecutedTime = new Date(now - 2 * 3600 * 1000).toISOString(); // 2 hours ago
-  const newNoticeTime = new Date(now - 1 * 3600 * 1000).toISOString(); // 1 hour ago (AFTER reset)
+  const resetExecutedTime = new Date(now - 1800 * 1000).toISOString(); // 30 mins ago
+  const newNoticeTime = new Date(now).toISOString(); // now (AFTER reset)
 
   const mockRadarData = getLocalRadarData({
     activeTiboSignals: [
@@ -472,8 +472,8 @@ test("getLocalResetProbabilityReason formats English summary without un-translat
 
 test("old reset_executed does not cancel newer official_notice", () => {
   const now = Date.now();
-  const oldExecutionTime = new Date(now - 5 * 3600 * 1000).toISOString(); // 5 hours ago
-  const newNoticeTime = new Date(now - 1 * 3600 * 1000).toISOString(); // 1 hour ago
+  const oldExecutionTime = new Date(now - 1800 * 1000).toISOString(); // 30 mins ago
+  const newNoticeTime = new Date(now).toISOString(); // now
 
   const mockRadarData = getLocalRadarData({
     activeTiboSignals: [
@@ -502,8 +502,8 @@ test("old reset_executed does not cancel newer official_notice", () => {
 
 test("dynamic official notice drives probability, card, reason, and action together", () => {
   const now = Date.now();
-  const resetCreatedAt = new Date(now - 2 * 60 * 60 * 1000).toISOString();
-  const noticeCreatedAt = new Date(now - 60 * 60 * 1000).toISOString();
+  const resetCreatedAt = new Date(now - 1800 * 1000).toISOString();
+  const noticeCreatedAt = new Date(now).toISOString();
   const noticeUrl = "https://x.com/tibo_maker/status/dynamic-notice";
   const data = getLocalRadarData({
     activeTiboSignals: [
