@@ -1104,6 +1104,7 @@ function resolveExplicitClockSchedule(
   semantics: TiboTemporalSemantics,
   created: Date,
   timeZone: ResolvedTimeZone,
+  rejectPastPoint = false,
 ) {
   const explicitTimeParts = semantics.explicitTimeParts;
   if (!explicitTimeParts) return null;
@@ -1129,6 +1130,15 @@ function resolveExplicitClockSchedule(
       expectedEnd: candidate,
       precision: "range" as const,
       unresolved: false,
+    };
+  }
+
+  if (rejectPastPoint && (!candidate || candidate.getTime() <= created.getTime())) {
+    return {
+      expectedStart: null,
+      expectedEnd: null,
+      precision: "exact_time" as const,
+      unresolved: true,
     };
   }
 
@@ -1255,7 +1265,7 @@ export function resolveTiboTemporalSchedule(
     !semantics.explicitDateParts &&
     semantics.explicitTimeParts
   ) {
-    const schedule = resolveExplicitClockSchedule(createdLocal, semantics, created, timeZone);
+    const schedule = resolveExplicitClockSchedule(createdLocal, semantics, created, timeZone, true);
     expectedStart = schedule?.expectedStart ?? null;
     expectedEnd = schedule?.expectedEnd ?? null;
     precision = schedule?.precision ?? precision;

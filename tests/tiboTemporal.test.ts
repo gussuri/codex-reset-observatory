@@ -234,6 +234,24 @@ test("keeps an absolute at-time as a point instant", () => {
   assert.equal(result.temporalPrecision, "exact_time");
 });
 
+test("keeps a past date-less at-time unresolved", () => {
+  const result = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "at 8pm PST",
+      temporalKind: "absolute",
+      temporalPrecision: "exact_time",
+      weekday: null,
+      explicitTimeParts: { hour: 20, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-08-22T05:00:00.000Z",
+  );
+
+  assert.equal(result.status, "unresolved");
+  assert.equal(result.expectedStartAt, null);
+  assert.equal(result.expectedEndAt, null);
+});
+
 test("resolves today, tomorrow, and next-week calendar windows", () => {
   const tomorrow = resolveTiboTemporalSchedule(
     semantics({
