@@ -1332,7 +1332,7 @@ function getRecentHistory(
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: details.scope,
+        scope: details.scope ?? "",
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
         windowLength: item.window_human
           ? translateDynamic(item.window_human, locale)
