@@ -252,13 +252,14 @@ test("creates N-1 intervals and excludes invalid, future, duplicate, and non-pos
   );
 });
 
-test("filters intervals by endAt, including an out-of-range start and excluding an out-of-range end", () => {
+test("requires both interval endpoints inside the last-month range", () => {
   const intervals = buildRandomResetIntervals(
     [
       "2026-07-06T00:00:00.000Z",
       "2026-07-10T00:00:00.000Z",
       "2026-07-11T00:00:00.000Z",
       "2026-07-12T00:00:00.000Z",
+      "2026-08-02T00:00:00.000Z",
     ],
     INTERVAL_NOW,
   );
@@ -267,11 +268,39 @@ test("filters intervals by endAt, including an out-of-range start and excluding 
   assert.deepEqual(
     filtered.map((interval) => [interval.startAt, interval.endAt]),
     [
-      ["2026-07-10T00:00:00.000Z", "2026-07-11T00:00:00.000Z"],
       ["2026-07-11T00:00:00.000Z", "2026-07-12T00:00:00.000Z"],
+      ["2026-07-12T00:00:00.000Z", "2026-08-02T00:00:00.000Z"],
     ],
   );
   assert.equal(filtered.some((interval) => interval.endAt === "2026-07-10T00:00:00.000Z"), false);
+});
+
+test("excludes a last-month interval whose end is in the future", () => {
+  const filtered = filterRandomResetIntervals(
+    [
+      {
+        startAt: "2026-08-09T00:00:00.000Z",
+        endAt: "2026-08-10T01:00:00.000Z",
+        durationMs: 25 * 60 * 60 * 1000,
+      },
+    ],
+    "lastMonth",
+    INTERVAL_NOW,
+  );
+
+  assert.deepEqual(filtered, []);
+});
+
+test("excludes the August long interval that begins before the last-month boundary", () => {
+  const startAt = "2026-08-13T03:34:43.341Z";
+  const endAt = "2026-08-23T12:00:00.000Z";
+  const filtered = filterRandomResetIntervals(
+    [{ startAt, endAt, durationMs: new Date(endAt).getTime() - new Date(startAt).getTime() }],
+    "lastMonth",
+    new Date("2026-09-13T12:00:00.000Z"),
+  );
+
+  assert.deepEqual(filtered, []);
 });
 
 test("assigns exact duration boundaries to the required interval bins", () => {

@@ -244,6 +244,7 @@ export function filterRandomResetIntervals(
       && Number.isFinite(interval.durationMs)
       && interval.durationMs > 0
       && endTime > startAt
+      && startAt >= startTime
       && endTime >= startTime
       && endTime <= nowTime
     );
