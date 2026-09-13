@@ -1,0 +1,57 @@
+name: Fix task1 typecheck v2
+
+on:
+  push:
+    branches:
+      - feature/tibo-event-metadata-v1
+    paths:
+      - .github/workflows/fix-task1-typecheck-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: feature/tibo-event-metadata-v1
+          fetch-depth: 0
+      - name: Apply guarded view-model fix
+        shell: pwsh
+        run: |
+          $path = "lib/radar.ts"
+          $text = [System.IO.File]::ReadAllText($path)
+          $old = '        scope: details.scope,'
+          $new = '        scope: details.scope ?? "",'
+          $matches = ([regex]::Matches($text, [regex]::Escape($old))).Count
+          if ($matches -ne 1) {
+            throw "Expected exactly one old scope mapping, found $matches"
+          }
+          $updated = $text.Replace($old, $new)
+          if ($updated -eq $text) {
+            throw "Replacement produced no content change"
+          }
+          [System.IO.File]::WriteAllText($path, $updated, [System.Text.UTF8Encoding]::new($false))
+          $line = Select-String -Path $path -SimpleMatch 'scope: details.scope ?? "",'
+          if (-not $line) {
+            throw "Expected replacement line was not written"
+          }
+          git diff -- lib/radar.ts
+          git diff --quiet -- lib/radar.ts
+          if ($LASTEXITCODE -eq 0) {
+            throw "Git sees no diff for lib/radar.ts"
+          }
+          if ($LASTEXITCODE -ne 1) {
+            throw "git diff --quiet failed with exit code $LASTEXITCODE"
+          }
+      - name: Commit and push code fix
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/radar.ts
+          git diff --cached --check
+          git commit -m "fix: keep blank scope compatible with public history type"
+          git push origin HEAD:feature/tibo-event-metadata-v1
