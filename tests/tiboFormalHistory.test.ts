@@ -295,9 +295,9 @@ test("does not infer reason or audience scope from a greeting-only related notic
     [notice],
   );
 
-  assert.equal(event.details?.reasonType, undefined);
-  assert.equal(event.scope, "Codex / ChatGPT Work");
-  assert.equal(event.details?.scope, "Codex / ChatGPT Work");
+  assert.equal(event.details?.reasonType, "ご祝儀リセット");
+  assert.equal(event.scope, undefined);
+  assert.equal(event.details?.scope, undefined);
 });
 
 test("normalizes a related notice with standalone quality-issue evidence as an apology reset", () => {
@@ -349,7 +349,7 @@ test("does not infer a completion reason from audience wording alone", () => {
 
   const event = convertTiboResetSignalToHistoryEvent(completion);
 
-  assert.equal(event.details?.reasonType, undefined);
+  assert.equal(event.details?.reasonType, "ご祝儀リセット");
 });
 
 test("keeps explicit celebration evidence on the completion signal", () => {
@@ -402,7 +402,7 @@ test("does not treat an all-paid audience greeting as reset applicability", () =
   );
 
   assert.notEqual(event.scope, "全有料プラン");
-  assert.equal(event.scope, "Codex / ChatGPT Work");
+  assert.equal(event.scope, undefined);
 });
 
 test("keeps an all-paid scope when reset applicability is explicit", () => {

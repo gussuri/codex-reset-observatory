@@ -111,6 +111,7 @@ import {
   normalizeResetReasonType,
   type ResetReasonContext,
 } from "./radar/resetReason";
+import { normalizeResetScope } from "./radar/resetScope";
 import type { CodexRecoveryObservation } from "./codexUsageRecovery";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
@@ -908,7 +909,7 @@ function getHistoryDetails(
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
   if (isRegularHistoryItem(item)) {
     const resetMethod = getRegularResetMethod(item);
-    const scope = getRegularResetScope(item, resetMethod);
+    const scope = normalizeResetScope(getRegularResetScope(item, resetMethod));
     const note = resetMethod === BANKED_RESET_METHOD
       ? getRegularResetSummary(item, resetMethod)
       : REGULAR_RESET_NOTE;
@@ -917,7 +918,7 @@ function getHistoryDetails(
       cycleType: translateDynamic("定期リセット", locale),
       reasonType: translateDynamic("定期更新", locale),
       resetMethod: translateDynamic(resetMethod, locale),
-      scope: translateDynamic(scope, locale),
+      scope: scope ? translateDynamic(scope, locale) : "",
       noticeToExecution: "",
       noticeType: undefined,
       note: resolveLocalizedText(note, locale),
@@ -927,6 +928,7 @@ function getHistoryDetails(
   if (item.details) {
     const astraCorrection = getAstraBankedHistoryCorrection(item);
     const reason = getHistoryReasonTypeValue(item);
+    const scope = normalizeResetScope(item.details.scope ?? item.scope);
     const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
@@ -935,7 +937,7 @@ function getHistoryDetails(
         ? translateDynamic(astraCorrection.reasonType, locale)
         : reason ? translateDynamic(reason, locale) : "",
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: translateDynamic(item.details.scope, locale),
+      scope: scope ? translateDynamic(scope, locale) : "",
       noticeToExecution: noticePresentation === "none" ||
         !storedNoticeToExecution ||
         isZeroNoticeToExecution(storedNoticeToExecution)
@@ -955,7 +957,8 @@ function getHistoryDetails(
   }
 
   const astraCorrection = getAstraBankedHistoryCorrection(item);
-  const scope = item.scope ? translateDynamic(item.scope, locale) : translateDynamic("不明", locale);
+  const normalizedScope = normalizeResetScope(item.scope);
+  const scope = normalizedScope ? translateDynamic(normalizedScope, locale) : "";
 
   return {
     cycleType: getHistoryCycleType(item, locale),
@@ -1329,9 +1332,7 @@ function getRecentHistory(
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
         resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
-        scope: isRegular
-          ? details.scope
-          : translateDynamic(item.scope, locale),
+        scope: details.scope,
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
         windowLength: item.window_human
           ? translateDynamic(item.window_human, locale)

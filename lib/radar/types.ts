@@ -64,8 +64,7 @@ export type ResetMethodType =
 
 export type ResetScopeType =
   | "全有料プラン"
-  | "全ユーザー"
-  | "任意リセット未使用アカウント";
+  | "一部ユーザー";
 
 export type HistoryRecordKind =
   | "confirmed_global"
@@ -106,7 +105,7 @@ export type ResetHistoryDetails = {
   cycleType: ResetCycleType | string;
   reasonType?: ResetReasonType | string;
   resetMethod: ResetMethodType | string;
-  scope: ResetScopeType | string;
+  scope?: ResetScopeType | string;
   noticeToExecution: string;
   noticeType?: HistoryNoticeType | string;
   note?: LocalizedString | null;

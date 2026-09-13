@@ -1,6 +1,7 @@
 import React from "react";
 import type { Locale, RadarViewModel } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
+import { normalizeResetScope } from "@/lib/radar/resetScope";
 
 type ResetHistoryItem = RadarViewModel["recentHistory"][number];
 
@@ -19,11 +20,6 @@ function isMeaningfulValue(value: string | null | undefined) {
   return !new Set(["不明", "unknown", "未知", "なし", "none", "null"]).has(value.trim().toLowerCase());
 }
 
-const ALL_PAID_PLAN_SCOPES = new Set(["全有料プラン", "All paid plans", "所有付费套餐"]);
-
-function isAllPaidPlanScope(value: string | null | undefined) {
-  return Boolean(value && ALL_PAID_PLAN_SCOPES.has(value.trim()));
-}
 
 export function ResetHistoryDetails({
   item,
@@ -44,8 +40,8 @@ export function ResetHistoryDetails({
   };
 
   const rawScope = details.scope?.trim() || item.scope?.trim() || "";
-  const isAllPaid = isAllPaidPlanScope(rawScope);
-  const shouldShowScope = Boolean(rawScope && !isAllPaid && isMeaningfulValue(rawScope));
+  const canonicalScope = normalizeResetScope(rawScope);
+  const shouldShowScope = canonicalScope === "一部ユーザー";
 
   const recordKind = item.recordKind ?? "confirmed_global";
   const candidateRows: Array<{ id: string; label: string; value: string }> = [

@@ -30,6 +30,7 @@ import {
   hasExplicitResetReasonEvidence,
   normalizeResetReasonType,
 } from "./resetReason";
+import { normalizeResetScope } from "./resetScope";
 import {
   getTiboClassificationSafetyDecision,
   isCurrentUsageResetAnnouncement,
@@ -380,10 +381,10 @@ function getScope(texts: ReadonlyArray<string>) {
   const hasBroadApplicability = applicableClauses.some((clause) => hasExplicitBroadResetApplicability(clause));
   const hasNarrowApplicability = applicableClauses.some((clause) => isExplicitNarrowScope(clause));
 
-  if (hasBroadApplicability && hasNarrowApplicability) return "Codex / ChatGPT Work";
-  if (hasNarrowApplicability) return "一部ユーザー";
-  if (hasBroadApplicability) return "全有料プラン";
-  return "Codex / ChatGPT Work";
+  if (hasBroadApplicability && hasNarrowApplicability) return undefined;
+  if (hasNarrowApplicability) return normalizeResetScope("一部ユーザー");
+  if (hasBroadApplicability) return normalizeResetScope("全有料プラン");
+  return undefined;
 }
 
 function getReasonType(
@@ -401,7 +402,8 @@ function getReasonType(
     .filter((reason): reason is NonNullable<typeof reason> => Boolean(reason));
 
   return relatedReasons.find((reason) => reason === "詫びリセット") ??
-    relatedReasons.find((reason) => reason === "ご祝儀リセット");
+    relatedReasons.find((reason) => reason === "ご祝儀リセット") ??
+    "ご祝儀リセット";
 }
 
 function formatNoticeToExecution(minutes: number) {
