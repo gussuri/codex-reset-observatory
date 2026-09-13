@@ -99,6 +99,21 @@ export type ResetDisplayNameRecord = {
   input_hash: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  /** Safe event-level presentation metadata generated from canonical source posts. */
+  event_reason_type?: string | null;
+  event_scope?: string | null;
+  event_summary_ja?: string | null;
+  event_summary_en?: string | null;
+  event_summary_zh?: string | null;
+  event_note_ja?: string | null;
+  event_note_en?: string | null;
+  event_note_zh?: string | null;
+  event_metadata_model?: string | null;
+  event_metadata_prompt_version?: string | null;
+  event_metadata_status?: string | null;
+  event_metadata_flags?: string[] | null;
+  event_metadata_generated_at?: string | null;
+  event_metadata_input_hash?: string | null;
 };
 
 export type ResetHistoryDetails = {

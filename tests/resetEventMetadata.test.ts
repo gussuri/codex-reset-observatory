@@ -28,10 +28,16 @@ const validPayload = {
   noteEn: "The notice described the quality fix and the completion post confirmed the reset.",
   noteZh: "预告说明了质量问题修复，完成帖确认了重置实施。",
   reasonJa: "関連投稿のうち、完了文面より具体的な品質問題修正を主要文脈として採用。",
+  scopeEvidence: "will reset limits for all paid plans tonight",
 };
 
 test("accepts strict event metadata with the two-value public scope", () => {
-  const result = parseResetEventMetadataResponse(validPayload, "test-model", 12);
+  const result = parseResetEventMetadataResponse(
+    validPayload,
+    "test-model",
+    12,
+    sourceContext,
+  );
 
   assert.equal(result.status, "success");
   assert.equal(result.reasonType, "詫びリセット");
@@ -46,8 +52,10 @@ test("accepts strict event metadata with the two-value public scope", () => {
 
 test("allows unknown scope to stay null instead of guessing a product scope", () => {
   const result = parseResetEventMetadataResponse(
-    { ...validPayload, reasonType: "ご祝儀リセット", scope: null },
+    { ...validPayload, reasonType: "ご祝儀リセット", scope: null, scopeEvidence: null },
     "test-model",
+    0,
+    sourceContext,
   );
 
   assert.equal(result.status, "success");
@@ -108,7 +116,7 @@ test("generator parses Gemini JSON and never needs to infer scope from product n
   globalThis.fetch = async () => new Response(JSON.stringify({
     candidates: [{
       content: {
-        parts: [{ text: JSON.stringify({ ...validPayload, scope: null }) }],
+        parts: [{ text: JSON.stringify({ ...validPayload, scope: null, scopeEvidence: null }) }],
       },
     }],
   }), { status: 200 });
@@ -154,4 +162,29 @@ test("generator returns a safe failure result instead of throwing on upstream er
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("rejects broad scope without exact reset-applicability evidence", () => {
+  const result = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      scopeEvidence: "all paid users",
+    },
+    "test-model",
+    0,
+    "[Tibo post 1]\nHi all paid users. We are investigating an issue.",
+  );
+
+  assert.equal(result.status, "invalid_schema");
+});
+
+test("rejects scope evidence that is not present in the canonical source context", () => {
+  const result = parseResetEventMetadataResponse(
+    validPayload,
+    "test-model",
+    0,
+    sourceContext.replace("will reset limits for all paid plans tonight", "will reset limits tonight"),
+  );
+
+  assert.equal(result.status, "invalid_schema");
 });

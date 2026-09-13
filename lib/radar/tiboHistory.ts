@@ -1339,7 +1339,7 @@ function mergeDuplicateHistory(dynamicItem: WindowEventLike, staticItem: WindowE
       cycleType: staticDetails?.cycleType ?? dynamicDetails?.cycleType ?? "",
       reasonType: staticDetails?.reasonType ?? dynamicDetails?.reasonType ?? undefined,
       resetMethod: staticDetails?.resetMethod ?? dynamicDetails?.resetMethod ?? "",
-      scope: scope ?? "",
+      scope,
       noticeToExecution: staticDetails?.noticeToExecution ?? dynamicDetails?.noticeToExecution ?? "0分",
       noticeType: staticDetails?.noticeType ?? dynamicDetails?.noticeType,
       note,

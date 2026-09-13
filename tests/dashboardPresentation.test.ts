@@ -1887,7 +1887,7 @@ test("adds stable ChatGPT reset FAQ anchors and keeps the whole-service distinct
   }
 });
 
-test("renders the history scope row while retaining localized scope values", () => {
+test("renders only recognized non-default history scopes", () => {
   const calculationNow = new Date("2026-08-10T12:00:00.000Z");
   const template = toPublicRadarSnapshot(
     getLocalRadarData({ calculationNow }),
@@ -1936,7 +1936,10 @@ test("renders the history scope row while retaining localized scope values", () 
         }),
       );
       const translatedScope = translateDynamic(scope, locale);
-      if (scope === "全有料プラン") {
+      const shouldShowScope =
+        scope === "不具合対象ユーザー（約50万人）" ||
+        scope === "任意リセット未使用アカウント";
+      if (!shouldShowScope) {
         assert.doesNotMatch(html, new RegExp(scopeLabels[locale]));
         assert.doesNotMatch(
           html,

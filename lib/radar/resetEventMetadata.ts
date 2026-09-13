@@ -43,6 +43,8 @@ export type ResetEventMetadataResult = {
   noteEn: string | null;
   noteZh: string | null;
   reasonJa: string | null;
+  /** Exact source fragment supporting a non-null scope, never public. */
+  scopeEvidence: string | null;
   status: ResetEventMetadataStatus;
   flags: string[];
   model: string;
@@ -67,6 +69,8 @@ Rules:
 - Use "一部ユーザー" only when a subset, affected users, selected users, or another narrow group is explicit or a supplied deterministic fallback says so.
 - A product name, model name, greeting, or audience phrase such as "Codex", "ChatGPT Work", or "Astra users" alone is NOT a scope. If applicability is difficult to determine, return null.
 - Never return "Codex / ChatGPT Work" as scope.
+- If scope is not null, scopeEvidence MUST be a short exact substring of the supplied source context that contains both reset/credit applicability and the stated audience. A greeting alone is not evidence.
+- If scope is null, scopeEvidence MUST be null.
 - summaryJa, summaryEn, and summaryZh must concisely describe the same event-specific fact in Japanese, English, and Simplified Chinese.
 - noteJa, noteEn, and noteZh should briefly explain the evidence/context behind the event metadata in the corresponding language.
 - reasonJa must be a short Japanese audit explanation of why reasonType and scope were chosen.
@@ -76,6 +80,7 @@ Return only this JSON object:
 {
   "reasonType": "詫びリセット" | "ご祝儀リセット",
   "scope": "全有料プラン" | "一部ユーザー" | null,
+  "scopeEvidence": string | null,
   "summaryJa": "string",
   "summaryEn": "string",
   "summaryZh": "string",
@@ -119,6 +124,7 @@ function emptyResult(
     noteEn: null,
     noteZh: null,
     reasonJa: null,
+    scopeEvidence: null,
     status,
     flags: [],
     model,
@@ -139,10 +145,28 @@ function parseRequiredText(
   return normalized;
 }
 
+const RESET_APPLICABILITY_PATTERN =
+  /(?:reset|re-?set|refresh|credit|quota|limit|usage|allowance|リセット|上限|クレジット|配布|補償|重置|额度)/i;
+const BROAD_APPLICABILITY_PATTERN =
+  /(?:all\s+paid\s+(?:plans?|users?)|all\s+users|全有料(?:プラン|ユーザー)|所有付费(?:套餐|用户)|所有用户)/i;
+const NARROW_APPLICABILITY_PATTERN =
+  /(?:affected|selected|some|subset|limited|specific|unused|部分|対象|受影响|选定|一部|任意リセット未使用)/i;
+
+function hasScopeApplicabilityEvidence(
+  scope: GeneratedResetScope,
+  evidence: string,
+) {
+  if (!RESET_APPLICABILITY_PATTERN.test(evidence)) return false;
+  return scope === "全有料プラン"
+    ? BROAD_APPLICABILITY_PATTERN.test(evidence)
+    : NARROW_APPLICABILITY_PATTERN.test(evidence);
+}
+
 export function parseResetEventMetadataResponse(
   raw: unknown,
   model: string,
   latencyMs = 0,
+  sourceContext?: string,
 ): ResetEventMetadataResult {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return emptyResult("invalid_schema", model, latencyMs, 200);
@@ -159,6 +183,9 @@ export function parseResetEventMetadataResponse(
       : value.scope === "全有料プラン" || value.scope === "一部ユーザー"
         ? value.scope
         : undefined;
+  const scopeEvidence = value.scopeEvidence === null || value.scopeEvidence === undefined
+    ? null
+    : parseRequiredText(value.scopeEvidence, 300);
 
   const summaryJa = parseRequiredText(value.summaryJa, MAX_SUMMARY_LENGTH);
   const summaryEn = parseRequiredText(value.summaryEn, MAX_SUMMARY_LENGTH);
@@ -177,7 +204,13 @@ export function parseResetEventMetadataResponse(
     !noteJa ||
     !noteEn ||
     !noteZh ||
-    !reasonJa
+    !reasonJa ||
+    (scope === null && value.scopeEvidence !== undefined && value.scopeEvidence !== null) ||
+    (scope !== null && (
+      !scopeEvidence ||
+      !hasScopeApplicabilityEvidence(scope, scopeEvidence) ||
+      (sourceContext !== undefined && !sourceContext.toLocaleLowerCase().includes(scopeEvidence.toLocaleLowerCase()))
+    ))
   ) {
     return emptyResult("invalid_schema", model, latencyMs, 200);
   }
@@ -192,6 +225,7 @@ export function parseResetEventMetadataResponse(
     noteEn,
     noteZh,
     reasonJa,
+    scopeEvidence,
     status: "success",
     flags: [],
     model,
@@ -305,7 +339,12 @@ export async function generateResetEventMetadata(
     } catch {
       return emptyResult("invalid_json", model, latencyMs, 200);
     }
-    return parseResetEventMetadataResponse(parsed, model, latencyMs);
+    return parseResetEventMetadataResponse(
+      parsed,
+      model,
+      latencyMs,
+      input.sourceContext,
+    );
   } catch (error) {
     const latencyMs = Math.round(performance.now() - startedAt);
     if (error instanceof Error && error.message === "TIMEOUT") {

@@ -98,8 +98,17 @@ test("public projection contains the exact safe display-name fields and full kee
     "ai_prompt_version",
     "ai_status",
     "ai_flags",
+    "event_reason_type",
+    "event_scope",
+    "event_summary_ja",
+    "event_summary_en",
+    "event_summary_zh",
+    "event_note_ja",
+    "event_note_en",
+    "event_note_zh",
+    "event_metadata_status",
   ]);
-  assert.equal(fullFields.length, 20);
+  assert.equal(fullFields.length, 34);
   assert.equal(fullFields.includes("input_hash"), true);
   assert.equal(fullFields.includes("ai_model"), true);
   assert.equal(publicFields.includes("input_hash"), false);
@@ -107,6 +116,8 @@ test("public projection contains the exact safe display-name fields and full kee
   assert.equal(publicFields.includes("ai_reason"), false);
   assert.equal(publicFields.includes("ai_input_mode"), false);
   assert.equal(publicFields.includes("updated_at"), false);
+  assert.equal(publicFields.includes("event_metadata_model"), false);
+  assert.equal(publicFields.includes("event_metadata_input_hash"), false);
 });
 
 test("public and full projections produce identical JA/EN/ZH public snapshots", () => {
@@ -244,6 +255,15 @@ test("public projection preserves the localized and legacy fallback sequence", a
     "ai_prompt_version",
     "ai_status",
     "ai_flags",
+    "event_reason_type",
+    "event_scope",
+    "event_summary_ja",
+    "event_summary_en",
+    "event_summary_zh",
+    "event_note_ja",
+    "event_note_en",
+    "event_note_zh",
+    "event_metadata_status",
   ].join(","));
   assert.equal(selections[2], [
     "event_key",

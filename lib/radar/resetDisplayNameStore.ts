@@ -57,6 +57,20 @@ export const RESET_DISPLAY_NAME_COLUMNS = [
   "input_hash",
   "created_at",
   "updated_at",
+  "event_reason_type",
+  "event_scope",
+  "event_summary_ja",
+  "event_summary_en",
+  "event_summary_zh",
+  "event_note_ja",
+  "event_note_en",
+  "event_note_zh",
+  "event_metadata_model",
+  "event_metadata_prompt_version",
+  "event_metadata_status",
+  "event_metadata_flags",
+  "event_metadata_generated_at",
+  "event_metadata_input_hash",
 ].join(",");
 
 export type ResetDisplayNameReadMode = "public" | "full";
@@ -75,6 +89,15 @@ export const RESET_DISPLAY_NAME_PUBLIC_COLUMNS = [
   "ai_prompt_version",
   "ai_status",
   "ai_flags",
+  "event_reason_type",
+  "event_scope",
+  "event_summary_ja",
+  "event_summary_en",
+  "event_summary_zh",
+  "event_note_ja",
+  "event_note_en",
+  "event_note_zh",
+  "event_metadata_status",
 ].join(",");
 
 const RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS = [
@@ -96,6 +119,20 @@ const RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS = [
   "input_hash",
   "created_at",
   "updated_at",
+  "event_reason_type",
+  "event_scope",
+  "event_summary_ja",
+  "event_summary_en",
+  "event_summary_zh",
+  "event_note_ja",
+  "event_note_en",
+  "event_note_zh",
+  "event_metadata_model",
+  "event_metadata_prompt_version",
+  "event_metadata_status",
+  "event_metadata_flags",
+  "event_metadata_generated_at",
+  "event_metadata_input_hash",
 ].join(",");
 
 const RESET_DISPLAY_NAME_LEGACY_COLUMNS = [
@@ -129,6 +166,15 @@ const RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_COLUMNS = [
   "ai_prompt_version",
   "ai_status",
   "ai_flags",
+  "event_reason_type",
+  "event_scope",
+  "event_summary_ja",
+  "event_summary_en",
+  "event_summary_zh",
+  "event_note_ja",
+  "event_note_en",
+  "event_note_zh",
+  "event_metadata_status",
 ].join(",");
 
 const RESET_DISPLAY_NAME_PUBLIC_LEGACY_COLUMNS = [
@@ -265,7 +311,7 @@ export async function fetchResetDisplayNames(): Promise<ResetDisplayNameRecord[]
   return (await fetchResetDisplayNamesResult()).data;
 }
 
-async function fetchResetDisplayNameByKey(
+export async function fetchResetDisplayNameByKey(
   supabase: SupabaseClient,
   eventKey: string,
 ) {
@@ -355,6 +401,20 @@ function buildUpsertPayload(
     ai_generated_at: generatedAt,
     input_hash: inputHash,
     updated_at: generatedAt,
+    event_reason_type: existing?.event_reason_type ?? null,
+    event_scope: existing?.event_scope ?? null,
+    event_summary_ja: existing?.event_summary_ja ?? null,
+    event_summary_en: existing?.event_summary_en ?? null,
+    event_summary_zh: existing?.event_summary_zh ?? null,
+    event_note_ja: existing?.event_note_ja ?? null,
+    event_note_en: existing?.event_note_en ?? null,
+    event_note_zh: existing?.event_note_zh ?? null,
+    event_metadata_model: existing?.event_metadata_model ?? null,
+    event_metadata_prompt_version: existing?.event_metadata_prompt_version ?? null,
+    event_metadata_status: existing?.event_metadata_status ?? null,
+    event_metadata_flags: existing?.event_metadata_flags ?? null,
+    event_metadata_generated_at: existing?.event_metadata_generated_at ?? null,
+    event_metadata_input_hash: existing?.event_metadata_input_hash ?? null,
   };
 }
 
@@ -387,7 +447,25 @@ async function upsertResetDisplayName(
     .upsert(payload, { onConflict: "event_key" });
   if (!error) return;
   if (isMissingLocalizedColumnsError(error)) {
-    const { ai_name_en: _aiNameEn, ai_name_zh: _aiNameZh, ...legacyPayload } = payload;
+    const {
+      ai_name_en: _aiNameEn,
+      ai_name_zh: _aiNameZh,
+      event_reason_type: _eventReasonType,
+      event_scope: _eventScope,
+      event_summary_ja: _eventSummaryJa,
+      event_summary_en: _eventSummaryEn,
+      event_summary_zh: _eventSummaryZh,
+      event_note_ja: _eventNoteJa,
+      event_note_en: _eventNoteEn,
+      event_note_zh: _eventNoteZh,
+      event_metadata_model: _eventMetadataModel,
+      event_metadata_prompt_version: _eventMetadataPromptVersion,
+      event_metadata_status: _eventMetadataStatus,
+      event_metadata_flags: _eventMetadataFlags,
+      event_metadata_generated_at: _eventMetadataGeneratedAt,
+      event_metadata_input_hash: _eventMetadataInputHash,
+      ...legacyPayload
+    } = payload;
     const { error: legacyError } = await supabase
       .from("reset_display_names")
       .upsert(legacyPayload, { onConflict: "event_key" });

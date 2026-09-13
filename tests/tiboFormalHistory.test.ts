@@ -734,11 +734,11 @@ test("converted event uses a conservative scope and a fixed factual summary", ()
     resetSignal({ text: "I have reset usage limits." }),
   );
 
-  assert.equal(event.scope, "Codex / ChatGPT Work");
+  assert.equal(event.scope, undefined);
   assert.equal(event.title, "ランダムリセット");
   assert.equal(event.summary, "Tibo氏がCodexの利用上限リセット完了を発表しました。");
   assert.equal(event.details?.cycleType, "ランダムリセット");
-  assert.equal(event.details?.reasonType, undefined);
+  assert.equal(event.details?.reasonType, "ご祝儀リセット");
   assert.equal(event.details?.note, "Tibo氏がCodexの利用上限リセット完了を発表しました。");
   assert.equal(event.details?.resetMethod, "強制リセット");
 });
@@ -749,7 +749,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
     { id: "celebration", reason: "ご祝儀リセット" as const, text: "Celebrating launch! I reset usage limits for Codex and ChatGPT Work." },
     { id: "compensation", reason: "詫びリセット" as const, text: "I reset usage limits after a reliability incident." },
     { id: "regular", reason: "定期更新" as const, text: "I reset usage limits on the usual weekly cycle." },
-    { id: "fallback", reason: undefined, text: "I reset usage limits." },
+    { id: "fallback", reason: "ご祝儀リセット" as const, text: "I reset usage limits." },
   ] as const;
 
   for (const testCase of cases) {

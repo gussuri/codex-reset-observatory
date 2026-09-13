@@ -904,6 +904,7 @@ export function getHistoryNoticePresentation(
 }
 
 function getHistoryDetails(
+  data: RadarData | null,
   item: WindowLike & { kind?: string },
   locale: Locale,
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
@@ -928,16 +929,24 @@ function getHistoryDetails(
   if (item.details) {
     const astraCorrection = getAstraBankedHistoryCorrection(item);
     const reason = getHistoryReasonTypeValue(item);
+    const eventMetadata = getSafeEventMetadataRecord(data, item);
+    const metadataReason = eventMetadata?.event_reason_type === "詫びリセット" ||
+      eventMetadata?.event_reason_type === "ご祝儀リセット"
+      ? eventMetadata.event_reason_type
+      : null;
     const scope = normalizeResetScope(item.details.scope ?? item.scope);
+    const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
     const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
       reasonType: astraCorrection
         ? translateDynamic(astraCorrection.reasonType, locale)
-        : reason ? translateDynamic(reason, locale) : "",
+        : translateDynamic(metadataReason ?? reason ?? "", locale),
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: scope ? translateDynamic(scope, locale) : "",
+      scope: metadataScope
+        ? translateDynamic(metadataScope, locale)
+        : scope ? translateDynamic(scope, locale) : "",
       noticeToExecution: noticePresentation === "none" ||
         !storedNoticeToExecution ||
         isZeroNoticeToExecution(storedNoticeToExecution)
@@ -950,14 +959,17 @@ function getHistoryDetails(
           : undefined,
       note: astraCorrection
         ? translateUI(astraCorrection.noteTranslationKey, locale)
-        : item.details.note
+        : getLocalizedEventMetadataText(eventMetadata, "note", locale) ??
+          (item.details.note
           ? resolveLocalizedText(item.details.note, locale)
-          : null,
+          : null),
     };
   }
 
   const astraCorrection = getAstraBankedHistoryCorrection(item);
+  const eventMetadata = getSafeEventMetadataRecord(data, item);
   const normalizedScope = normalizeResetScope(item.scope);
+  const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
   const scope = normalizedScope ? translateDynamic(normalizedScope, locale) : "";
 
   return {
@@ -966,16 +978,19 @@ function getHistoryDetails(
       ? translateDynamic(astraCorrection.reasonType, locale)
       : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
-    scope,
+    scope: metadataScope ? translateDynamic(metadataScope, locale) : scope,
     noticeToExecution: "",
     noticeType: undefined,
     note: astraCorrection
       ? translateUI(astraCorrection.noteTranslationKey, locale)
-      : item.summary ? resolveLocalizedText(item.summary, locale) : null,
+      : getLocalizedEventMetadataText(eventMetadata, "note", locale) ??
+        getLocalizedEventMetadataText(eventMetadata, "summary", locale) ??
+        (item.summary ? resolveLocalizedText(item.summary, locale) : null),
   };
 }
 
 function getResetTypes(
+  data: RadarData | null,
   item: WindowLike & { kind?: string },
   locale: Locale = "ja",
 ) {
@@ -989,7 +1004,11 @@ function getResetTypes(
       item.recordKind === "regular_completed",
   );
   if (isCompleted) {
-    const reason = getHistoryReasonTypeValue(item);
+    const eventMetadata = getSafeEventMetadataRecord(data, item);
+    const reason = eventMetadata?.event_reason_type === "詫びリセット" ||
+      eventMetadata?.event_reason_type === "ご祝儀リセット"
+      ? eventMetadata.event_reason_type
+      : getHistoryReasonTypeValue(item);
     return reason ? [translateDynamic(reason, locale)] : [];
   }
 
@@ -1163,6 +1182,42 @@ function getResetDisplayNameRecord(
     : null;
 }
 
+function isStaticHistoryItem(item: WindowEventLike) {
+  const stableKey = item.id?.trim() || item.guid?.trim();
+  return Boolean(stableKey && LOCAL_RESET_HISTORY.some((entry) => {
+    const entryKey = entry.id?.trim() || entry.guid?.trim();
+    return entryKey === stableKey;
+  }));
+}
+
+function getSafeEventMetadataRecord(
+  data: RadarData | null | undefined,
+  item: WindowEventLike,
+) {
+  const record = getResetDisplayNameRecord(data, item);
+  if (
+    !record ||
+    record.event_metadata_status !== "success" ||
+    isStaticHistoryItem(item) ||
+    isRegularHistoryItem(item) ||
+    getHistoryRecordKind(item) === "reference"
+  ) {
+    return null;
+  }
+  return record;
+}
+
+function getLocalizedEventMetadataText(
+  record: ResetDisplayNameRecord | null,
+  field: "summary" | "note",
+  locale: Locale,
+) {
+  if (!record) return null;
+  const key = `event_${field}_${locale}` as const;
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function getHistoryDisplayTitle(
   data: RadarData | null | undefined,
   item: WindowEventLike,
@@ -1302,8 +1357,8 @@ function getRecentHistory(
       const monitorOnly = getMonitorOnlyExecutionEstimate(data, item) !== null;
       const resetTypes = isRegular
         ? [translateDynamic("定期更新", locale)]
-        : getResetTypes(item, locale);
-      const details = getHistoryDetails(item, locale);
+        : getResetTypes(data, item, locale);
+      const details = getHistoryDetails(data, item, locale);
       const noticePresentation = getHistoryNoticePresentation(item.details?.noticeType);
       const signalTime = item.opened_at ? new Date(item.opened_at).getTime() : Number.NaN;
       const resetTime = resetAt ? new Date(resetAt).getTime() : Number.NaN;
@@ -1341,9 +1396,11 @@ function getRecentHistory(
         sourceKind: isRegular ? "none" : sourceKind,
         summary: isRegular
           ? resolveLocalizedText(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
-          : item.summary
-            ? resolveLocalizedText(item.summary, locale)
-            : null,
+          : getLocalizedEventMetadataText(
+              getSafeEventMetadataRecord(data, item),
+              "summary",
+              locale,
+            ) ?? (item.summary ? resolveLocalizedText(item.summary, locale) : null),
       };
     })
     .sort((a, b) => {

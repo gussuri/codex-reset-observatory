@@ -24,6 +24,7 @@ type StoredRow = Record<string, any>;
 
 type WebhookState = {
   signals: Map<string, StoredRow>;
+  displayNames: Map<string, StoredRow>;
   ledgers: StoredRow[];
   estimates: StoredRow[];
   recoveries: StoredRow[];
@@ -39,6 +40,7 @@ type WebhookState = {
     nameZh: string | null;
     reason: string;
   };
+  geminiMetadataResult?: StoredRow;
 };
 
 function rememberEnvironment() {
@@ -107,6 +109,7 @@ function signal(
 function createState(overrides: Partial<WebhookState> = {}): WebhookState {
   return {
     signals: new Map(),
+    displayNames: new Map(),
     ledgers: [],
     estimates: [],
     recoveries: [],
@@ -276,11 +279,15 @@ function installSupabaseAndXMock(state: WebhookState) {
 
     if (url.includes("generativelanguage.googleapis.com")) {
       if (state.geminiApiError) return jsonResponse({ error: "Gemini unavailable" }, 503);
-      if (state.geminiNameResult) {
+      const isMetadataRequest = JSON.stringify(body).includes("Canonical related Tibo posts:");
+      const geminiResult = isMetadataRequest
+        ? state.geminiMetadataResult ?? state.geminiNameResult
+        : state.geminiNameResult;
+      if (geminiResult) {
         return jsonResponse({
           candidates: [{
             content: {
-              parts: [{ text: JSON.stringify(state.geminiNameResult) }],
+              parts: [{ text: JSON.stringify(geminiResult) }],
             },
           }],
         });
@@ -317,6 +324,27 @@ function installSupabaseAndXMock(state: WebhookState) {
 
     if (table === "codex_usage_monitor_state" && method === "GET") {
       return jsonResponse([]);
+    }
+
+    if (table === "reset_display_names") {
+      if (method === "GET") {
+        const eventFilter = parsed.searchParams.get("event_key");
+        const eventKey = eventFilter?.startsWith("eq.") ? eventFilter.slice(3) : null;
+        const rows = eventKey
+          ? [state.displayNames.get(eventKey)].filter((row): row is StoredRow => Boolean(row))
+          : Array.from(state.displayNames.values());
+        return jsonResponse(rows);
+      }
+      if (method === "POST" || method === "PATCH") {
+        const eventKey = typeof body?.event_key === "string" ? body.event_key : null;
+        if (eventKey) {
+          state.displayNames.set(eventKey, {
+            ...(state.displayNames.get(eventKey) ?? {}),
+            ...body,
+          });
+        }
+        return jsonResponse(body ?? {});
+      }
     }
 
     if (table === "codex_recovery_observations") {
@@ -358,7 +386,7 @@ async function runWebhook(
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   process.env.GEMINI_CLASSIFICATION_MODE = "off";
   process.env.GEMINI_TRANSLATION_MODE = "off";
-  if (state.geminiApiError || state.geminiNameResult) process.env.GEMINI_API_KEY = "test-gemini-key";
+  if (state.geminiApiError || state.geminiNameResult || state.geminiMetadataResult) process.env.GEMINI_API_KEY = "test-gemini-key";
   else delete process.env.GEMINI_API_KEY;
   if (state.xApiChain) process.env.X_API_BEARER_TOKEN = "test-x-api-token";
   else delete process.env.X_API_BEARER_TOKEN;
@@ -743,9 +771,10 @@ test("display-name API failure remains best-effort after durable enrichment", as
   assert.equal((await response.json()).formalAdoption.newlyAdopted, true);
   assert.equal(state.ledgers.length, 1);
   assert.equal(state.estimates.length, 1);
+  assert.ok(state.signals.get(A));
   assert.equal(
     state.calls.filter((call) => call.url.includes("generativelanguage.googleapis.com")).length,
-    1,
+    2,
   );
 });
 
@@ -834,6 +863,18 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
       nameZh: "GPT Astra 发布纪念重置",
       reason: "GPT Astraのリリースという投稿内の特徴を使った。",
     },
+    geminiMetadataResult: {
+      reasonType: "ご祝儀リセット",
+      scope: null,
+      scopeEvidence: null,
+      summaryJa: "GPT Astraリリースに伴うリセット",
+      summaryEn: "Reset associated with the GPT Astra release",
+      summaryZh: "与GPT Astra发布相关的重置",
+      noteJa: "関連する公式投稿を根拠にしたイベント情報です。",
+      noteEn: "This metadata is based on the related official post.",
+      noteZh: "此元数据基于相关官方帖子。",
+      reasonJa: "関連投稿に示されたリリース文脈を根拠にしました。",
+    },
   });
 
   const response = await runWebhook(state, {
@@ -863,6 +904,27 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
   assert.equal(displayNameWrite?.ai_name_ja, "GPT Astraリリース記念リセット");
   assert.equal(displayNameWrite?.ai_name_en, "GPT Astra Release Reset");
   assert.equal(displayNameWrite?.ai_name_zh, "GPT Astra 发布纪念重置");
+  assert.equal(
+    state.displayNames.get("usage-reset-monitor-e2e")?.event_metadata_status,
+    "success",
+  );
+  assert.equal(
+    state.displayNames.get("usage-reset-monitor-e2e")?.event_reason_type,
+    "ご祝儀リセット",
+  );
+
+  const geminiCallsAfterFirstDelivery = state.calls.filter((call) =>
+    call.url.includes("generativelanguage.googleapis.com"),
+  ).length;
+  const retryResponse = await runWebhook(state, {
+    tweetId: formalId,
+    tweetUrl: `https://x.com/thsottiaux/status/${formalId}`,
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.equal(
+    state.calls.filter((call) => call.url.includes("generativelanguage.googleapis.com")).length,
+    geminiCallsAfterFirstDelivery,
+  );
 
   const namingRequest = state.calls.find((call) =>
     call.url.includes("generativelanguage.googleapis.com"),

@@ -38,6 +38,7 @@ import { translateWithGemini } from "@/lib/radar/geminiTranslation";
 import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
+import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
 import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
 import {
   buildResetDisplayNameSourceContext,
@@ -1243,6 +1244,23 @@ export async function POST(req: NextRequest) {
             // not turn an otherwise successful webhook into a retry storm.
             if (displayNameResult.status === "api_error") {
               console.warn("[Webhook Warning] Reset display-name generation skipped", {
+                reason: "best_effort_failed",
+              });
+            }
+
+            const eventMetadataResult = await ensureResetEventMetadataForEvent(
+              displayNameItem,
+              {
+                canonicalEventKey: adoptionResolution.resetEventKey,
+                sourcePostText,
+                sourceTweetId: effectiveFormalCandidate.tweet_id,
+                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+                model: RANDOM_RESET_NAME_MODEL,
+                timeoutMs: 8_000,
+              },
+            );
+            if (["api_error", "read_error", "write_error", "generation_error"].includes(eventMetadataResult.status)) {
+              console.warn("[Webhook Warning] Reset event metadata generation skipped", {
                 reason: "best_effort_failed",
               });
             }

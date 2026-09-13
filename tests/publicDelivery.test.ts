@@ -890,7 +890,7 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   assert.equal(regular.details?.cycleType, "定期リセット");
   assert.equal(regular.details?.reasonType, "定期更新");
   assert.equal(regular.details?.resetMethod, "強制リセット");
-  assert.equal(regular.details?.scope, "任意リセット未使用アカウント");
+  assert.equal(regular.details?.scope, "一部ユーザー");
   assert.equal(regular.details?.noticeToExecution, "");
   assert.equal(regular.details?.noticeType, undefined);
   assert.equal(
