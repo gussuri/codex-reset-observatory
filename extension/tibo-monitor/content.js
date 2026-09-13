@@ -146,6 +146,7 @@
       console.log(`[Tibo Extension] Requested full text expansion for ${tweetId}.`);
       scheduleTextExpansionRescan(tweetId);
     } catch (error) {
+      textExpansionRequestedTweetIds.delete(tweetId);
       console.warn(`[Tibo Extension] Tweet text expansion failed for ${tweetId}.`, error);
     }
   }

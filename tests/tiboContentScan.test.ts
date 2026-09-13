@@ -289,6 +289,23 @@ test("content.js expands and rescans incomplete tweet text before parse success 
   assert.match(source, /expanded tweet rescan/);
 });
 
+test("content.js permits a later text expansion attempt after a click failure", () => {
+  const source = readContentScriptSource();
+  const functionStart = source.indexOf("function requestTweetTextExpansion");
+  const functionEnd = source.indexOf(
+    "\n  }\n\n  function runExtensionTask",
+    functionStart,
+  );
+  const functionBody = source.slice(functionStart, functionEnd);
+
+  assert.ok(functionStart >= 0);
+  assert.ok(functionEnd > functionStart);
+  assert.match(
+    functionBody,
+    /catch[\s\S]*textExpansionRequestedTweetIds\.delete\(tweetId\)/,
+  );
+});
+
 test("content.js quarantines terminal webhook failures and cools down retryable failures", () => {
   const source = readContentScriptSource();
 

@@ -31,6 +31,7 @@ function setupServiceWorkerContext(
     observatoryDomain?: string;
     extensionVersion?: string;
     fetchError?: string;
+    initialLocalStore?: Record<string, any>;
     fetchResponse?:
       | MockFetchResponse
       | ((url: string, fetchOpts: any, callIndex: number) => MockFetchResponse);
@@ -54,6 +55,7 @@ function setupServiceWorkerContext(
   if (opts.observatoryDomain !== undefined) {
     localStore.observatory_domain = opts.observatoryDomain;
   }
+  Object.assign(localStore, opts.initialLocalStore || {});
 
   const mockFetchCalls: Array<{ url: string; body: any }> = [];
 
@@ -795,6 +797,112 @@ test("network webhook failures remain retryable and are not quarantined", async 
   assert.equal(second.retryable, true);
   assert.equal(mockFetchCalls.length, 2);
   assert.equal(localStore.tibo_quarantined_tweet_ids, undefined);
+});
+
+test("retryable tweet payloads persist and retry at most one due item per reload alarm", async () => {
+  const first = setupServiceWorkerContext([], {
+    fetchResponse: {
+      ok: false,
+      status: 503,
+      text: async () => "temporarily unavailable",
+    },
+  });
+  first.localStore.webhook_secret = "test-secret";
+  const firstPayload = {
+    tweetId: "2088501704849534995",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2088501704849534995",
+    tweetCreatedAt: "2026-08-15T05:43:00.000Z",
+  };
+
+  const firstResult = await first.sendMessage({
+    action: "POST_TWEET",
+    payload: firstPayload,
+  });
+
+  assert.equal(firstResult.retryable, true);
+  assert.equal(first.localStore.tibo_pending_tweet_payloads.length, 1);
+  assert.equal(first.localStore.tibo_pending_tweet_payloads[0].tweetId, firstPayload.tweetId);
+  assert.equal(first.localStore.tibo_pending_tweet_payloads[0].attempts, 1);
+  assert.ok(first.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt > Date.now());
+  const duePendingEntries = first.localStore.tibo_pending_tweet_payloads.map((entry: any) => ({
+    ...entry,
+    nextAttemptAt: 0,
+  }));
+
+  const restarted = setupServiceWorkerContext([], {
+    initialLocalStore: {
+      webhook_secret: "test-secret",
+      tibo_pending_tweet_payloads: duePendingEntries,
+    },
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true }),
+    },
+  });
+  await restarted.fireAlarm("tibo_page_reload_alarm");
+
+  assert.equal(restarted.mockFetchCalls.length, 1);
+  assert.deepEqual(restarted.localStore.tibo_pending_tweet_payloads, []);
+  assert.deepEqual(restarted.localStore.tibo_processed_tweet_ids, [firstPayload.tweetId]);
+
+  restarted.localStore.tibo_pending_tweet_payloads = [
+    {
+      tweetId: "2088501704849534996",
+      payload: {
+        tweetId: "2088501704849534996",
+        text: "A second valid tweet",
+        tweetUrl: "https://x.com/thsottiaux/status/2088501704849534996",
+        tweetCreatedAt: "2026-08-15T05:44:00.000Z",
+      },
+      attempts: 1,
+      nextAttemptAt: 0,
+      retryExhausted: false,
+    },
+    {
+      tweetId: "2088501704849534997",
+      payload: {
+        tweetId: "2088501704849534997",
+        text: "A third valid tweet",
+        tweetUrl: "https://x.com/thsottiaux/status/2088501704849534997",
+        tweetCreatedAt: "2026-08-15T05:45:00.000Z",
+      },
+      attempts: 1,
+      nextAttemptAt: 0,
+      retryExhausted: false,
+    },
+  ];
+  await restarted.fireAlarm("tibo_page_reload_alarm");
+  assert.equal(restarted.mockFetchCalls.length, 2);
+  assert.equal(restarted.localStore.tibo_pending_tweet_payloads.length, 1);
+});
+
+test("pending tweet retries stop after the conservative attempt limit", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: {
+      ok: false,
+      status: 503,
+      text: async () => "temporarily unavailable",
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2088501704849534998",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2088501704849534998",
+    tweetCreatedAt: "2026-08-15T05:46:00.000Z",
+  };
+
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  const stopped = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(stopped.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].retryExhausted, true);
 });
 
 test("a quarantined tweet becomes retryable after an extension version update", async () => {

@@ -6,6 +6,10 @@
 importScripts("diagnostics.js", "scan-utils.js");
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
+const PENDING_QUEUE_KEY = "tibo_pending_tweet_payloads";
+const MAX_PENDING_TWEET_PAYLOADS = 50;
+const PENDING_RETRY_DELAY_MS = 10 * 60 * 1000;
+const MAX_PENDING_RETRY_ATTEMPTS = 3;
 const QUARANTINE_KEY = "tibo_quarantined_tweet_ids";
 const MAX_QUARANTINE_ENTRIES = 100;
 const AUTH_BLOCKED_REASON = "auth_blocked";
@@ -40,6 +44,7 @@ let notificationIconDiagnosticsUrl = null;
 
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
+let pendingQueueStorage = Promise.resolve();
 
 function restrictLocalStorageToTrustedContexts() {
   if (typeof chrome === "undefined" || !chrome.storage?.local?.setAccessLevel) return;
@@ -232,6 +237,7 @@ async function retryTweet(tweetId) {
   if (Object.keys(update).length > 0) {
     await chrome.storage.local.set(update);
   }
+  await removePendingTweet(tweetId);
 
   const notifiedTabs = await broadcastTweetRetry(tweetId);
   return {
@@ -264,6 +270,153 @@ async function clearAuthBlockedQuarantine() {
 
 function isRetryableWebhookStatus(status) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function getPendingTweetEntries(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        typeof entry.tweetId === "string" &&
+        entry.payload &&
+        typeof entry.payload === "object" &&
+        !Array.isArray(entry.payload),
+    )
+    .map((entry) => ({
+      tweetId: entry.tweetId,
+      payload: entry.payload,
+      attempts:
+        Number.isInteger(entry.attempts) && entry.attempts >= 0
+          ? entry.attempts
+          : 0,
+      nextAttemptAt: Number.isFinite(entry.nextAttemptAt)
+        ? entry.nextAttemptAt
+        : 0,
+      retryExhausted: entry.retryExhausted === true,
+    }));
+}
+
+function updatePendingTweetQueue(mutator) {
+  const task = pendingQueueStorage.then(async () => {
+    const data = await chrome.storage.local.get([PENDING_QUEUE_KEY]);
+    const entries = getPendingTweetEntries(data[PENDING_QUEUE_KEY]);
+    const mutatedEntries = mutator(entries);
+    const nextEntries = Array.isArray(mutatedEntries) ? mutatedEntries : entries;
+    await chrome.storage.local.set({ [PENDING_QUEUE_KEY]: nextEntries });
+    return nextEntries;
+  });
+
+  pendingQueueStorage = task.catch(() => {});
+  return task;
+}
+
+function persistPendingTweet(payload) {
+  const tweetId = payload?.tweetId;
+  if (typeof tweetId !== "string" || tweetId.length === 0) {
+    return Promise.resolve(null);
+  }
+
+  return updatePendingTweetQueue((entries) => {
+    const existingIndex = entries.findIndex((entry) => entry.tweetId === tweetId);
+    const freshEntry = {
+      tweetId,
+      payload,
+      attempts: 0,
+      nextAttemptAt: 0,
+      retryExhausted: false,
+    };
+
+    if (existingIndex >= 0) {
+      const existing = entries[existingIndex];
+      let samePayload = false;
+      try {
+        samePayload = JSON.stringify(existing.payload) === JSON.stringify(payload);
+      } catch {
+        samePayload = false;
+      }
+      entries[existingIndex] = samePayload
+        ? { ...existing, payload }
+        : freshEntry;
+      return entries;
+    }
+
+    if (entries.length >= MAX_PENDING_TWEET_PAYLOADS) {
+      return entries;
+    }
+
+    return [...entries, freshEntry];
+  }).then((entries) => {
+    const entry = entries.find((candidate) => candidate.tweetId === tweetId);
+    return entry
+      ? { stored: true, retryExhausted: entry.retryExhausted === true }
+      : { stored: false, retryExhausted: false };
+  });
+}
+
+function removePendingTweet(tweetId) {
+  if (typeof tweetId !== "string" || tweetId.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return updatePendingTweetQueue((entries) =>
+    entries.filter((entry) => entry.tweetId !== tweetId),
+  );
+}
+
+function recordPendingFailure(payload) {
+  const tweetId = payload?.tweetId;
+  if (typeof tweetId !== "string" || tweetId.length === 0) {
+    return Promise.resolve(false);
+  }
+
+  return updatePendingTweetQueue((entries) => {
+    let entryIndex = entries.findIndex((entry) => entry.tweetId === tweetId);
+    if (entryIndex < 0) {
+      if (entries.length >= MAX_PENDING_TWEET_PAYLOADS) return entries;
+      entries.push({
+        tweetId,
+        payload,
+        attempts: 0,
+        nextAttemptAt: 0,
+        retryExhausted: false,
+      });
+      entryIndex = entries.length - 1;
+    }
+
+    const current = entries[entryIndex];
+    const attempts = current.attempts + 1;
+    const retryExhausted = attempts >= MAX_PENDING_RETRY_ATTEMPTS;
+    const retryDelay = Math.min(
+      PENDING_RETRY_DELAY_MS * 2 ** (attempts - 1),
+      60 * 60 * 1000,
+    );
+
+    entries[entryIndex] = {
+      tweetId,
+      payload,
+      attempts,
+      nextAttemptAt: retryExhausted ? null : Date.now() + retryDelay,
+      retryExhausted,
+    };
+    return entries;
+  }).then((entries) => entries.some((entry) => entry.tweetId === tweetId));
+}
+
+async function getDuePendingTweet() {
+  await pendingQueueStorage;
+  const data = await chrome.storage.local.get([PENDING_QUEUE_KEY]);
+  const now = Date.now();
+  return getPendingTweetEntries(data[PENDING_QUEUE_KEY])
+    .filter(
+      (entry) =>
+        !entry.retryExhausted &&
+        Number.isFinite(entry.nextAttemptAt) &&
+        entry.nextAttemptAt <= now,
+    )
+    .sort((left, right) => left.nextAttemptAt - right.nextAttemptAt)[0] || null;
 }
 
 // Setup alarms on Service Worker initialization
@@ -477,6 +630,16 @@ async function reloadTimeline(timeline, tabs, now) {
 async function handleReloadAlarm() {
   const now = new Date().toISOString();
   try {
+    try {
+      await retryPendingTweet();
+    } catch (error) {
+      await saveServiceDiagnostic({
+        reasonCode: "pending_retry_error",
+        messages: ["The pending tweet retry could not be completed."],
+        error: error?.message || String(error),
+      });
+    }
+
     if (typeof chrome === "undefined" || !chrome.tabs) {
       return { success: false, error: "chrome.tabs is unavailable" };
     }
@@ -699,9 +862,61 @@ async function getConfig() {
 }
 
 function enqueuePostTweet(payload) {
-  const resultPromise = processQueue.then(() => executePostTweet(payload));
+  const persisted = persistPendingTweet(payload).catch((error) => {
+    void saveServiceDiagnostic({
+      reasonCode: "pending_queue_persist_error",
+      messages: ["The pending tweet queue could not be persisted."],
+      error: error?.message || String(error),
+      payloadMetadata: getTweetPayloadMetadata(payload),
+    });
+  });
+  const resultPromise = processQueue
+    .then(() => persisted)
+    .then((pendingState) => {
+      if (pendingState?.retryExhausted) {
+        return {
+          success: false,
+          retryable: true,
+          error: "Tweet webhook retry limit reached; use explicit retry to try again.",
+        };
+      }
+      return executePostTweetWithRecovery(payload);
+    });
   processQueue = resultPromise.catch(() => {});
   return resultPromise;
+}
+
+function retryPendingTweet() {
+  const resultPromise = processQueue.then(async () => {
+    const pendingEntry = await getDuePendingTweet();
+    if (!pendingEntry) return { success: true, skipped: true };
+    return executePostTweetWithRecovery(pendingEntry.payload);
+  });
+  processQueue = resultPromise.catch(() => {});
+  return resultPromise;
+}
+
+async function executePostTweetWithRecovery(payload) {
+  try {
+    return await executePostTweet(payload);
+  } catch (error) {
+    try {
+      await recordPendingFailure(payload);
+    } catch {
+      // Keep the existing direct send failure behavior if local storage is unavailable.
+    }
+    await saveServiceDiagnostic({
+      reasonCode: "webhook_processing_error",
+      messages: ["The tweet webhook processing failed unexpectedly."],
+      error: error?.message || String(error),
+      payloadMetadata: getTweetPayloadMetadata(payload),
+    });
+    return {
+      success: false,
+      retryable: true,
+      error: "Tweet webhook processing failed.",
+    };
+  }
 }
 
 async function executePostTweet(payload) {
@@ -717,6 +932,7 @@ async function executePostTweet(payload) {
   // 2. Skip if already processed in storage
   if (processedIds.includes(tweetId)) {
     console.log(`[Service Worker] Tweet ${tweetId} already processed. Skipping fetch.`);
+    await removePendingTweet(tweetId);
     return { success: true, skipped: true };
   }
 
@@ -730,6 +946,7 @@ async function executePostTweet(payload) {
     const quarantineReason = isAuthBlockedQuarantineEntry(quarantineEntry)
       ? AUTH_BLOCKED_REASON
       : quarantineEntry.reasonCode || "payload_rejected";
+    await removePendingTweet(tweetId);
     return {
       success: false,
       quarantined: true,
@@ -765,6 +982,7 @@ async function executePostTweet(payload) {
       error: err?.message || String(err),
       payloadMetadata: getTweetPayloadMetadata(payload),
     });
+    await recordPendingFailure(payload);
     return {
       success: false,
       retryable: true,
@@ -789,6 +1007,7 @@ async function executePostTweet(payload) {
     });
     const error = `Tweet webhook returned HTTP ${response.status}.`;
     if (isRetryableWebhookStatus(response.status)) {
+      await recordPendingFailure(payload);
       return { success: false, retryable: true, httpStatus: response.status, error };
     }
 
@@ -801,6 +1020,7 @@ async function executePostTweet(payload) {
           ? "payload_rejected"
           : "webhook_rejected",
     );
+    await removePendingTweet(tweetId);
     return {
       success: false,
       quarantined: true,
@@ -840,6 +1060,8 @@ async function executePostTweet(payload) {
       throw new Error(`Storage write verification failed for tweetId ${tweetId}. Value was not persisted.`);
     }
   }
+
+  await removePendingTweet(tweetId);
 
   return { success: true, data: json };
 }
