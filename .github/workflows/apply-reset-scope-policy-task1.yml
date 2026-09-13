@@ -20,7 +20,15 @@ jobs:
           fetch-depth: 0
       - name: Apply task 1 patch
         shell: pwsh
-        run: ./scripts/apply-reset-scope-policy-task1.ps1
+        run: |
+          $path = "scripts/apply-reset-scope-policy-task1.ps1"
+          $text = [System.IO.File]::ReadAllText($path)
+          $text = $text.Replace(
+            '[Parameter(Mandatory = $true)][string]$New',
+            '[Parameter(Mandatory = $true)][AllowEmptyString()][string]$New'
+          )
+          [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
+          ./scripts/apply-reset-scope-policy-task1.ps1
       - name: Commit task 1 implementation
         shell: pwsh
         run: |
