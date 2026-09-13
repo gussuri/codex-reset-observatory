@@ -39,12 +39,9 @@ jobs:
             throw "Expected replacement line was not written"
           }
           git diff -- lib/radar.ts
-          git diff --quiet -- lib/radar.ts
-          if ($LASTEXITCODE -eq 0) {
+          $status = git status --porcelain -- lib/radar.ts
+          if (-not $status) {
             throw "Git sees no diff for lib/radar.ts"
-          }
-          if ($LASTEXITCODE -ne 1) {
-            throw "git diff --quiet failed with exit code $LASTEXITCODE"
           }
       - name: Commit and push code fix
         shell: pwsh
