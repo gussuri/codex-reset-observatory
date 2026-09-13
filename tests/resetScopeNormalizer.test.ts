@@ -18,6 +18,8 @@ test("normalizes legacy narrow reset scope to partial users", () => {
 
 test("drops ambiguous or product-name-only scope labels", () => {
   assert.equal(normalizeResetScope("Codex / ChatGPT Work"), undefined);
+  assert.equal(normalizeResetScope("Codex"), undefined);
+  assert.equal(normalizeResetScope("ChatGPT Work"), undefined);
   assert.equal(normalizeResetScope("Astra users"), undefined);
   assert.equal(normalizeResetScope(""), undefined);
   assert.equal(normalizeResetScope(undefined), undefined);
