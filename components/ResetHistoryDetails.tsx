@@ -62,7 +62,7 @@ export function ResetHistoryDetails({
       ? [{
           id: "scope",
           label: translateUI("historyScope", locale),
-          value: rawScope,
+          value: canonicalScope ?? "",
         }]
       : []),
     ...(details.noticeType

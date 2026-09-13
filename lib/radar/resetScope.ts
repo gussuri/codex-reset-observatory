@@ -12,7 +12,7 @@ const BROAD_SCOPE_VALUES = new Set([
 ]);
 
 const NARROW_SCOPE_PATTERN =
-  /一部|対象ユーザー|不具合対象|任意リセット未使用|some users?|affected users?|selected users?|limited users?|specific users?|subset|部分用户|受影响用户/i;
+  /一部|対象ユーザー|不具合対象|任意リセット未使用|任意リセット(?:を)?(?:使っていない|使用していない)|限定(?:ユーザー|アカウント)|特定(?:の)?(?:ユーザー|アカウント)|some users?|affected users?|selected users?|limited users?|specific users?|subset|部分用户|受影响用户/i;
 
 /**
  * Public reset scope has exactly two non-empty values. Legacy/internal labels

@@ -735,7 +735,7 @@ function getHistoryReasonTypeValue(item: WindowLike & { kind?: string }) {
   return undefined;
 }
 
-const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
+const REGULAR_RESET_SCOPE = "一部ユーザー";
 const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
 const REGULAR_RESET_NOTE =

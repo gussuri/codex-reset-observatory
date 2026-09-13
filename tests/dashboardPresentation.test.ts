@@ -22,6 +22,7 @@ import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/ra
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { translateDynamic } from "../lib/radar/i18n";
 import { getHistoricalResetPresentationCorrection } from "../lib/radar/historicalResetCorrections";
+import { normalizeResetScope } from "../lib/radar/resetScope";
 import {
   buildResetExecutionEstimate,
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
@@ -1935,10 +1936,11 @@ test("renders only recognized non-default history scopes", () => {
           locale,
         }),
       );
-      const translatedScope = translateDynamic(scope, locale);
-      const shouldShowScope =
-        scope === "不具合対象ユーザー（約50万人）" ||
-        scope === "任意リセット未使用アカウント";
+      const canonicalScope = normalizeResetScope(scope);
+      const translatedScope = canonicalScope
+        ? translateDynamic(canonicalScope, locale)
+        : translateDynamic(scope, locale);
+      const shouldShowScope = canonicalScope === "一部ユーザー";
       if (!shouldShowScope) {
         assert.doesNotMatch(html, new RegExp(scopeLabels[locale]));
         assert.doesNotMatch(

@@ -69,6 +69,17 @@ function getScope(item: WindowEventLike) {
 
 function isNarrowScope(item: WindowEventLike) {
   const scope = getScope(item);
+  // The persisted regular schedule's legacy subset label is normalized to
+  // this canonical pair at the read boundary. Preserve its existing recovery
+  // behavior while keeping explicitly narrower regular inputs conservative.
+  if (
+    item.details?.cycleType === "定期リセット" &&
+    scope === "一部ユーザー" &&
+    item.details?.scope === "一部ユーザー"
+  ) {
+    return false;
+  }
+
   if (!scope) {
     return item.recordKind !== "confirmed_global";
   }

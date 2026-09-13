@@ -51,9 +51,9 @@ source facts
 
 notice-to-execution は notice と execution の差を人間向けに表す derived presentation です。履歴の canonical execution timestamp そのものではありません。現在の表示処理では notice がない場合、または保存値が `0分` 相当の場合にこの行を空にできます。これによって event identity や execution timestamp を変更してはいけません。
 
-### 現在実装にある保守的な scope fallback
+### Legacy scope input の扱い
 
-`convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text に broad scope が明示されていない場合、raw text から無理に `全有料プラン` と断定せず、現在は `Codex / ChatGPT Work` を保守的な scope として作ることがあります。この挙動は `tests/tiboFormalHistory.test.ts` で固定されています。static history や notice-backed canonical event で `全有料プラン` が確認済みの場合とは分けて扱います。
+`convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text や related notice に reset applicability の明示 evidence がない場合、product label を scope として作らず、scope を空にします。`Codex / ChatGPT Work` は canonical scopeではありません。旧partial labelは `normalizeResetScope()` で `一部ユーザー` としてread-side互換処理できますが、新しいcanonical/static/persisted rowは旧labelを出力しません。
 
 ## 3. `reasonType` の normalization
 
@@ -89,7 +89,7 @@ canonical/internal data では、通常の global random reset の scope は原�
 全有料プラン / All paid plans / 所有付费套餐
 ```
 
-これらは default scope なので「対象」行を表示しません。`不具合対象ユーザー`、`任意リセット未使用アカウント`、その他明示された限定対象のような特殊 scope は表示します。表示しないことは内部 scope を削除することではありません。
+これらは default scope なので「対象」行を表示しません。明示された限定対象は canonical value `一部ユーザー` として表示します。`不具合対象ユーザー` や `任意リセット未使用アカウント` は旧入力/evidence表現であり、canonical/public scopeとしては保存・出力しません。
 
 BANKED/conditional distribution では、`一部ユーザー` などの限定 scope を保持し、通常 global random reset の broad scope へ昇格させません。
 
@@ -180,7 +180,7 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 ### 4. regular reset reference
 
 - **Source facts**: [`data/resetHistory.ts`](../data/resetHistory.ts) の `local-codex-regular-reset-2026-08-08` は weekly timing、source URL なし、`任意リセット未使用アカウント` を示す。
-- **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `任意リセット未使用アカウント`。
+- **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `一部ユーザー`。source/noteの「任意リセット未使用」説明は補足 evidenceとして保持する。
 - **Public presentation**: 定期リセットとして表示し、weekly schedule の note と限定 scope を表示する。regular reference は broad random-reset probability event として扱わない。
 
 ### 5. BANKED/個別対象の補償配布
@@ -204,12 +204,12 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 ## 11. 既存実装との境界と今回変更しない項目
 
-現行コードには、legacy input normalization、unknown record の `reference` fallback、completion text の保守的な scope fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
+現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。legacy scope labelは入力互換のために受け付けますが、canonical outputでは `全有料プラン`、`一部ユーザー`、または空に正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
 今回この文書を追加しても、次は変更しません。
 
 - Production data、Supabase、DB schema、migration
-- Tibo classification、reason inference、scope inference、current history event
+- Tibo classification、reason inference、event identity、current history event。scopeのlegacy label除去はこの文書のcanonical normalization規則に従う。
 - BANKED/conditional semantics、event identity、execution estimate
 - public UI の既存表示挙動
 - Gemini prompt と AI audit fields

@@ -1,4 +1,5 @@
 import { isBroadResetScope } from "./resetEligibility";
+import { normalizeResetScope } from "./resetScope";
 import type { WindowEventLike } from "./types";
 
 export type RegularResetScheduleDefinition = {
@@ -20,7 +21,7 @@ export const DEFAULT_REGULAR_RESET_SCHEDULE: RegularResetScheduleDefinition = {
   cycle_days: 7,
   cycle_type: "定期リセット",
   reset_method: "強制リセット",
-  scope: "任意リセット未使用アカウント",
+  scope: "一部ユーザー",
   window_start_offset_minutes: -2,
   window_end_offset_minutes: 13,
 };
@@ -253,6 +254,7 @@ export function toRegularResetHistoryEvent(
       ? Math.max(0, Math.round((windowEnd.getTime() - windowStart.getTime()) / 60000))
       : 0;
   const isVoided = row.status === "voided";
+  const scope = normalizeResetScope(row.scope);
   const summary = "定期リセットが予定時刻に実施されました。";
 
   return {
@@ -266,14 +268,14 @@ export function toRegularResetHistoryEvent(
     completed_at: row.completed_at,
     window_minutes: windowMinutes,
     window_human: "定期実施",
-    scope: row.scope,
+    scope,
     summary,
     source_url: null,
     details: {
       cycleType: row.cycle_type,
       reasonType: "定期更新",
       resetMethod: row.reset_method,
-      scope: row.scope,
+      scope,
       noticeToExecution: "0分（定期）",
       noticeType: "なし",
       note: summary,
