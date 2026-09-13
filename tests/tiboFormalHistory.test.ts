@@ -1241,6 +1241,8 @@ test("history records distinguish confirmed resets, banked distributions, and so
     assert.equal(record?.details?.reasonType, "定期更新");
     assert.equal(record?.details?.resetMethod, "強制リセット");
   }
+  assert.equal(reference25?.details?.scope, "全有料プラン");
+  assert.equal(reference07?.details?.scope, "任意リセット未使用アカウント");
   assert.equal(reference18?.details?.scope, "全有料プラン");
   assert.equal(banked18 ? getHistoryRecordKind(banked18) : null, "banked_distribution");
   assert.equal(banked12 ? getHistoryRecordKind(banked12) : null, "banked_distribution");
@@ -1249,6 +1251,7 @@ test("history records distinguish confirmed resets, banked distributions, and so
   assert.equal(banked12?.details?.cycleType, "定期リセット");
   assert.equal(banked12?.details?.reasonType, "定期更新");
   assert.equal(banked12?.details?.resetMethod, "任意リセット権配布");
+  assert.equal(banked12?.details?.scope, "全有料プラン");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux/status/123" }), "direct_post");
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
   assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");

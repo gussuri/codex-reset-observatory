@@ -1995,6 +1995,56 @@ test("keeps all-paid-plan scope in internal history data and random-reset eligib
   );
 });
 
+test("shows the concrete regular target scope and hides full-paid regular scope in every locale", () => {
+  const calculationNow = new Date("2026-08-10T12:00:00.000Z");
+  const labels = {
+    ja: { label: "対象", value: "任意リセット未使用アカウント" },
+    en: { label: "Eligibility", value: "Accounts without a Banked Reset" },
+    zh: { label: "适用对象", value: "未使用任意重置的账户" },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const viewModel = getRadarViewModel(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      false,
+      undefined,
+      calculationNow,
+    );
+    const regular = viewModel.recentHistory.find(
+      (item) =>
+        item.recordKind === "regular_completed" &&
+        item.details?.scope === labels[locale].value,
+    );
+    assert.ok(regular, `${locale} regular history item should be present`);
+
+    const html = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, { item: regular, locale }),
+    );
+    assert.match(html, new RegExp(labels[locale].label));
+    assert.match(html, new RegExp(labels[locale].value));
+
+    const broadRegular = {
+      ...regular,
+      key: `${regular.key}-broad`,
+      scope: "全有料プラン",
+      details: {
+        cycleType: regular.details?.cycleType ?? "",
+        reasonType: regular.details?.reasonType,
+        resetMethod: regular.details?.resetMethod ?? "",
+        scope: translateDynamic("全有料プラン", locale),
+        noticeToExecution: regular.details?.noticeToExecution ?? "",
+        noticeType: regular.details?.noticeType,
+        note: regular.details?.note ?? null,
+      },
+    };
+    const broadHtml = renderToStaticMarkup(
+      React.createElement(ResetHistoryDetails, { item: broadRegular, locale }),
+    );
+    assert.doesNotMatch(broadHtml, new RegExp(labels[locale].label));
+  }
+});
+
 test("localizes the current reset supplement about per-account rollout timing", () => {
   const calculationNow = new Date("2026-09-08T06:00:00.000Z");
   const expected = {

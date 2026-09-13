@@ -4,7 +4,10 @@ import test from "node:test";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { isBroadResetScope } from "../lib/radar/resetEligibility";
 import { toRegularResetHistoryEvent } from "../lib/radar/regularResetSchedule";
-import { normalizeResetScope } from "../lib/radar/resetScope";
+import {
+  normalizeRegularResetScope,
+  normalizeResetScope,
+} from "../lib/radar/resetScope";
 
 test("normalizes broad reset scope to all paid plans", () => {
   assert.equal(normalizeResetScope("全有料プラン"), "全有料プラン");
@@ -63,7 +66,21 @@ test("an empty primary scope does not hide a product-only details scope", () => 
   );
 });
 
-test("legacy persisted regular scope is normalized at the history projection boundary", () => {
+test("regular scope preserves the concrete unused-account target separately from random scope", () => {
+  assert.equal(
+    normalizeRegularResetScope("任意リセット未使用アカウント"),
+    "任意リセット未使用アカウント",
+  );
+  assert.equal(
+    normalizeRegularResetScope("任意リセットを使っていないアカウント"),
+    "任意リセット未使用アカウント",
+  );
+  assert.equal(normalizeRegularResetScope("全有料プラン"), "全有料プラン");
+  assert.equal(normalizeRegularResetScope("一部ユーザー"), undefined);
+  assert.equal(normalizeRegularResetScope("Codex / ChatGPT Work"), undefined);
+});
+
+test("regular history projection preserves concrete and broad scopes", () => {
   const event = toRegularResetHistoryEvent({
     schedule_key: "legacy-scope",
     window_start_at: "2026-08-08T03:30:00.000Z",
@@ -78,16 +95,41 @@ test("legacy persisted regular scope is normalized at the history projection bou
     status: "completed",
   });
 
-  assert.equal(event.scope, "一部ユーザー");
-  assert.equal(event.details?.scope, "一部ユーザー");
+  assert.equal(event.scope, "任意リセット未使用アカウント");
+  assert.equal(event.details?.scope, "任意リセット未使用アカウント");
+
+  const broadEvent = toRegularResetHistoryEvent({
+    schedule_key: "broad-scope",
+    window_start_at: "2026-08-08T03:30:00.000Z",
+    window_end_at: "2026-08-08T03:45:00.000Z",
+    representative_at: "2026-08-08T03:32:00.000Z",
+    scheduled_at: "2026-08-08T03:32:00.000Z",
+    completed_at: "2026-08-08T03:32:00.000Z",
+    cycle_type: "定期リセット",
+    reset_method: "強制リセット",
+    scope: "全有料プラン",
+    record_kind: "regular_completed",
+    status: "completed",
+  });
+  assert.equal(broadEvent.scope, "全有料プラン");
+  assert.equal(broadEvent.details?.scope, "全有料プラン");
 });
 
-test("static canonical history emits only normalized scope values", () => {
-  const allowed = new Set(["全有料プラン", "一部ユーザー"]);
-  for (const item of LOCAL_RESET_HISTORY) {
-    if (item.scope !== undefined) assert.equal(allowed.has(item.scope), true, item.id);
-    if (item.details?.scope !== undefined) {
-      assert.equal(allowed.has(item.details.scope), true, item.id);
-    }
-  }
+test("static canonical history preserves separate regular and random scope taxonomies", () => {
+  const regularScope = LOCAL_RESET_HISTORY.find(
+    (item) => item.id === "local-codex-regular-reset-2026-08-08",
+  );
+  const randomScope = LOCAL_RESET_HISTORY.find(
+    (item) => item.details?.cycleType === "ランダムリセット" && item.recordKind === "confirmed_global",
+  );
+  const bankedScope = LOCAL_RESET_HISTORY.find(
+    (item) => item.id === "personal-reset-credit-2026-06-11",
+  );
+
+  assert.equal(regularScope?.scope, "任意リセット未使用アカウント");
+  assert.equal(regularScope?.details?.scope, "任意リセット未使用アカウント");
+  assert.equal(randomScope?.scope, "全有料プラン");
+  assert.equal(randomScope?.details?.scope, "全有料プラン");
+  assert.equal(bankedScope?.recordKind, "banked_distribution");
+  assert.equal(bankedScope?.details?.scope, "全有料プラン");
 });

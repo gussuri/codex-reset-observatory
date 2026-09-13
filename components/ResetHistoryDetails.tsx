@@ -1,7 +1,10 @@
 import React from "react";
 import type { Locale, RadarViewModel } from "@/lib/radar/types";
 import { translateUI, translateDynamic } from "@/lib/radar/i18n";
-import { normalizeResetScope } from "@/lib/radar/resetScope";
+import {
+  normalizeRegularResetScope,
+  normalizeResetScope,
+} from "@/lib/radar/resetScope";
 
 type ResetHistoryItem = RadarViewModel["recentHistory"][number];
 
@@ -39,11 +42,18 @@ export function ResetHistoryDetails({
     note: item.summary,
   };
 
-  const rawScope = details.scope?.trim() || item.scope?.trim() || "";
-  const canonicalScope = normalizeResetScope(rawScope);
-  const shouldShowScope = canonicalScope === "一部ユーザー";
-
   const recordKind = item.recordKind ?? "confirmed_global";
+  const rawScope = details.scope?.trim() || item.scope?.trim() || "";
+  const isRegular =
+    recordKind === "regular_completed" ||
+    ["定期リセット", "Weekly reset", "定期重置"].includes(details.cycleType);
+  const canonicalScope = isRegular
+    ? normalizeRegularResetScope(rawScope)
+    : normalizeResetScope(rawScope);
+  const shouldShowScope = isRegular
+    ? Boolean(canonicalScope) && canonicalScope !== "全有料プラン"
+    : canonicalScope === "一部ユーザー";
+
   const candidateRows: Array<{ id: string; label: string; value: string }> = [
     {
       id: "cycleType",

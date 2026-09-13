@@ -111,7 +111,10 @@ import {
   normalizeResetReasonType,
   type ResetReasonContext,
 } from "./radar/resetReason";
-import { normalizeResetScope } from "./radar/resetScope";
+import {
+  normalizeRegularResetScope,
+  normalizeResetScope,
+} from "./radar/resetScope";
 import type { CodexRecoveryObservation } from "./codexUsageRecovery";
 
 // 再エクスポート（外部ファイルからのインポート互換性を維持）
@@ -735,7 +738,7 @@ function getHistoryReasonTypeValue(item: WindowLike & { kind?: string }) {
   return undefined;
 }
 
-const REGULAR_RESET_SCOPE = "一部ユーザー";
+const REGULAR_RESET_SCOPE = "任意リセット未使用アカウント";
 const REGULAR_RESET_SUMMARY =
   "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。";
 const REGULAR_RESET_NOTE =
@@ -750,11 +753,12 @@ function getRegularResetMethod(item: WindowLike) {
 }
 
 function getRegularResetScope(item: WindowLike, resetMethod: string) {
-  if (resetMethod === BANKED_RESET_METHOD) {
-    return item.details?.scope ?? item.scope ?? "全有料プラン";
+  const explicitScope = item.details?.scope ?? item.scope;
+  if (explicitScope !== undefined) {
+    return normalizeRegularResetScope(explicitScope);
   }
 
-  return REGULAR_RESET_SCOPE;
+  return resetMethod === BANKED_RESET_METHOD ? "全有料プラン" : REGULAR_RESET_SCOPE;
 }
 
 function getRegularResetSummary(item: WindowLike, resetMethod: string) {
@@ -910,7 +914,7 @@ function getHistoryDetails(
 ): NonNullable<RadarViewModel["recentHistory"][number]["details"]> {
   if (isRegularHistoryItem(item)) {
     const resetMethod = getRegularResetMethod(item);
-    const scope = normalizeResetScope(getRegularResetScope(item, resetMethod));
+    const scope = getRegularResetScope(item, resetMethod);
     const note = resetMethod === BANKED_RESET_METHOD
       ? getRegularResetSummary(item, resetMethod)
       : REGULAR_RESET_NOTE;

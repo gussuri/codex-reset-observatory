@@ -55,6 +55,8 @@ notice-to-execution は notice と execution の差を人間向けに表す deri
 
 `convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text や related notice に reset applicability の明示 evidence がない場合、product label を scope として作らず、scope を空にします。`Codex / ChatGPT Work` は canonical scopeではありません。旧partial labelは `normalizeResetScope()` で `一部ユーザー` としてread-side互換処理できますが、新しいcanonical/static/persisted rowは旧labelを出力しません。
 
+定期リセットはこの random/Tibo 用の scope taxonomy とは別です。通常の weekly regular event は、対象が任意リセット未使用アカウントであるという schedule semantics を持つため、canonical scope を `任意リセット未使用アカウント` として保持します。`normalizeRegularResetScope()` はこの値（および既知の旧表現）と `全有料プラン` だけを regular scope として受け付け、`一部ユーザー` や product label へ圧縮しません。例外的に全有料プランへ適用する regular event は `全有料プラン` を保持します。regular の scope を random/Tibo の `一部ユーザー` として保存・生成してはいけません。
+
 ## 3. `reasonType` の normalization
 
 `cycleType` と `reasonType` は別軸です。`ランダムリセット` は理由ではありません。
@@ -89,7 +91,9 @@ canonical/internal data では、通常の global random reset の scope は原�
 全有料プラン / All paid plans / 所有付费套餐
 ```
 
-これらは default scope なので「対象」行を表示しません。明示された限定対象は canonical value `一部ユーザー` として表示します。`不具合対象ユーザー` や `任意リセット未使用アカウント` は旧入力/evidence表現であり、canonical/public scopeとしては保存・出力しません。
+これらは default scope なので「対象」行を表示しません。明示された限定対象は canonical value `一部ユーザー` として表示します。`不具合対象ユーザー` は random/Tibo の旧入力/evidence表現であり、canonical/public scopeとしては保存・出力しません。`任意リセット未使用アカウント` は regular schedule 用の concrete scope であり、下記の regular presentation rule に従います。
+
+regular history は別の presentation rule を使います。`任意リセット未使用アカウント` は具体的な regular target なので「対象」行に表示し、`全有料プラン` は default scope として隠します。regular に不明な scope が渡った場合は broad へ推測せず、対象行を表示しません。`一部ユーザー` は random/Tibo の narrow scope であり、regular scopeの代用品にはしません。
 
 BANKED/conditional distribution では、`一部ユーザー` などの限定 scope を保持し、通常 global random reset の broad scope へ昇格させません。
 
@@ -180,8 +184,10 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 ### 4. regular reset reference
 
 - **Source facts**: [`data/resetHistory.ts`](../data/resetHistory.ts) の `local-codex-regular-reset-2026-08-08` は weekly timing、source URL なし、`任意リセット未使用アカウント` を示す。
-- **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `一部ユーザー`。source/noteの「任意リセット未使用」説明は補足 evidenceとして保持する。
-- **Public presentation**: 定期リセットとして表示し、weekly schedule の note と限定 scope を表示する。regular reference は broad random-reset probability event として扱わない。
+- **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `任意リセット未使用アカウント`。source/noteの「任意リセット未使用」説明と schedule target は同じ concrete scope を補強する。
+- **Public presentation**: 定期リセットとして表示し、weekly schedule の note と `任意リセット未使用アカウント` を表示する。regular reference は broad random-reset probability event として扱わない。
+
+全有料プランへ明示的に適用される regular event は scope を `全有料プラン` として保持するが、default scope presentation により「対象」行は表示しない。BANKED delivery は record kind と reset method を維持し、regular scopeの扱いで global random eventへ変換しない。
 
 ### 5. BANKED/個別対象の補償配布
 
@@ -204,12 +210,12 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 ## 11. 既存実装との境界と今回変更しない項目
 
-現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。legacy scope labelは入力互換のために受け付けますが、canonical outputでは `全有料プラン`、`一部ユーザー`、または空に正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
+現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
 今回この文書を追加しても、次は変更しません。
 
 - Production data、Supabase、DB schema、migration
-- Tibo classification、reason inference、event identity、current history event。scopeのlegacy label除去はこの文書のcanonical normalization規則に従う。
+- Tibo classification、reason inference、event identity、current history event。random/Tibo scopeのlegacy label除去とregular scopeの具体値復元は、この文書のcanonical normalization規則に従う。
 - BANKED/conditional semantics、event identity、execution estimate
 - public UI の既存表示挙動
 - Gemini prompt と AI audit fields

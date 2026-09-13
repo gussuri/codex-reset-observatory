@@ -78,6 +78,7 @@ test("creates one completed regular event seven days after the latest anchor", (
   assert.equal(rows[0].cycle_type, "定期リセット");
   assert.equal(rows[0].record_kind, "regular_completed");
   assert.equal(rows[0].status, "completed");
+  assert.equal(rows[0].scope, "任意リセット未使用アカウント");
 });
 
 test("an observed regular recovery uses the monitor observation time, not the schedule time", () => {
@@ -119,12 +120,15 @@ test("a scheduled Banked Reset remains a regular event, not a random event", () 
   const rows = getDueRegularResetEventRows(new Date("2026-08-15T03:32:00.000Z"), INITIAL_ANCHOR_AT, {
     ...DEFAULT_REGULAR_RESET_SCHEDULE,
     reset_method: "任意リセット権配布",
+    scope: "全有料プラン",
   });
 
   const history = toRegularResetHistoryEvent(rows[0]);
   assert.equal(history.recordKind, "regular_completed");
   assert.equal(history.details?.cycleType, "定期リセット");
   assert.equal(history.details?.resetMethod, "任意リセット権配布");
+  assert.equal(history.scope, "全有料プラン");
+  assert.equal(history.details?.scope, "全有料プラン");
 });
 
 test("persisted regular reset restarts the elapsed-time boundary without becoming a random target", () => {
