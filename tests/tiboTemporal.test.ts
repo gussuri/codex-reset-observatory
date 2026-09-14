@@ -641,12 +641,12 @@ test("keeps Gemini's end-of-day interpretation when a later account cutoff share
 
   const resolution = resolveTiboTemporalSchedule(
     parsed,
-    "2026-09-12T03:20:36.000Z",
+    "2026-09-04T20:57:17.000Z",
     TIBO_SOURCE_TIME_ZONE,
   );
   assert.equal(resolution.status, "resolved");
-  assert.equal(resolution.expectedStartAt, "2026-09-12T03:20:36.000Z");
-  assert.equal(resolution.expectedEndAt, "2026-09-12T07:00:00.000Z");
+  assert.equal(resolution.expectedStartAt, "2026-09-04T20:57:17.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-09-05T07:00:00.000Z");
 });
 
 test("preserves a true reset execution clock in the same source-grounding path", () => {
@@ -701,6 +701,35 @@ test("does not use upgrade or account-creation cutoff clocks as reset execution 
     assert.equal(parsed.explicitTimeParts, null, fixture.source);
     assert.equal(parsed.explicitTimezone, null, fixture.source);
   }
+});
+
+test("keeps execution clocks when eligible users are the reset audience", () => {
+  for (const source of [
+    "Reset for eligible users at 8pm PT.",
+    "Reset for eligible users lands at 8pm PT.",
+  ]) {
+    const parsed = parseTiboTemporalSemantics(null, source);
+    assert.ok(parsed, source);
+    assert.equal(parsed.temporalKind, "absolute", source);
+    assert.deepEqual(parsed.explicitTimeParts, { hour: 20, minute: 0 }, source);
+    assert.equal(parsed.explicitTimezone, "PT", source);
+
+    const resolution = resolveTiboTemporalSchedule(
+      parsed,
+      "2026-09-04T20:00:00.000Z",
+      TIBO_SOURCE_TIME_ZONE,
+    );
+    assert.equal(resolution.status, "resolved", source);
+    assert.equal(resolution.expectedStartAt, "2026-09-05T03:00:00.000Z", source);
+  }
+});
+
+test("does not invent a reset time from an account-creation eligibility deadline", () => {
+  const parsed = parseTiboTemporalSemantics(
+    null,
+    "Create your account by 8pm PT to be eligible for the reset.",
+  );
+  assert.equal(parsed, null);
 });
 
 test("keeps the recent official-notice corpus source-grounded without rewriting stored history", () => {

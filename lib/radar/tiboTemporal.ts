@@ -210,7 +210,7 @@ const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
 const RESET_CUE_PATTERN =
   /\b(?:reset|resets|resetting|quota|usage limits?|rate limits?|land(?:s|ed|ing)?|refresh(?:ed|es|ing)?|performative)\b/i;
 const NON_EXECUTION_CLOCK_CONTEXT_PATTERN =
-  /\b(?:create|open|make)\s+(?:(?:a|an|the|your)\s+)?(?:new\s+)?account\b|\b(?:sign\s*up|signup|register(?:ed|ing)?|registration|apply|application|upgrade|subscribe|enroll(?:ed|ing)?|enrollment|eligib(?:le|ility)|qualif(?:y|ied|ication))\b/i;
+  /\b(?:create|open|make)\s+(?:(?:a|an|the|your)\s+)?(?:new\s+)?account\b|\b(?:sign\s*up|signup|register(?:ed|ing)?|registration|apply|application|upgrade|subscribe|enroll(?:ed|ing)?|enrollment)\b/i;
 const RESET_BUTTON_REUSE_ACTION_PATTERN =
   /\b(?:find|press|hit|use|reuse)\s+(?:it|the\s+reset\s+button)\b|\b(?:dust\s+it\s+up|bring\s+it\s+back|take\s+it\s+out)\b/i;
 const RESET_BUTTON_REUSE_NEGATION_PATTERN =
