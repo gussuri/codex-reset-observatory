@@ -29,6 +29,8 @@ const REMOVED_HISTORY_FIELDS = [
   "quote_context_text",
   "quote_tweet_url",
   "quote_author_handle",
+  "temporal_resolution_source",
+  "temporal_resolution_version",
 ] as const;
 
 const REQUIRED_HISTORY_FIELDS = [
@@ -57,11 +59,9 @@ const REQUIRED_HISTORY_FIELDS = [
   "temporal_precision",
   "temporal_timezone",
   "temporal_confidence",
-  "temporal_resolution_source",
   "expected_start_at",
   "expected_end_at",
   "temporal_resolution_status",
-  "temporal_resolution_version",
   "translated_text_ja",
   "translated_text_zh",
   "is_reply",
