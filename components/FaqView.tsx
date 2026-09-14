@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/radar/types";
 import { DeveloperLink } from "./DeveloperLink";
+import { TrackedLocaleLink } from "./TrackedLocaleLink";
 
 type FaqViewProps = {
   locale: Locale;
@@ -368,30 +369,30 @@ export function FaqView({ locale }: FaqViewProps) {
           </Link>
           {locale === "ja" ? (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/faq">
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="en" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/faq">
                 English FAQ
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/faq">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="zh" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/faq">
                 简体中文 FAQ
-              </Link>
+              </TrackedLocaleLink>
             </>
           ) : locale === "en" ? (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/faq">
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="ja" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/faq">
                 日本語 FAQ
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/faq">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="zh" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/faq">
                 简体中文 FAQ
-              </Link>
+              </TrackedLocaleLink>
             </>
           ) : (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/faq">
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="ja" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/faq">
                 日本語 FAQ
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/faq">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="faq" toLocale="en" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/faq">
                 English FAQ
-              </Link>
+              </TrackedLocaleLink>
             </>
           )}
         </nav>

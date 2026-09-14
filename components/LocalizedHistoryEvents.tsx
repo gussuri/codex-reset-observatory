@@ -7,6 +7,7 @@ import { DISPLAY_TIME_ZONE, isSafeHttpUrl } from "@/lib/radar/helpers";
 import { translateDynamic, translateUI } from "@/lib/radar/i18n";
 import { getBrowserTimeZone, LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ResetHistoryDetails } from "@/components/ResetHistoryDetails";
+import { getAnalyticsSourceType, trackSourceLinkClick } from "@/lib/analyticsEvents";
 
 type HistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
 
@@ -102,6 +103,7 @@ function HistorySource({ item, locale }: { item: HistoryItem; locale: Locale }) 
     <a
       className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
       href={item.source ?? undefined}
+      onClick={() => trackSourceLinkClick(locale, "history", getAnalyticsSourceType(item.sourceKind))}
       rel="noreferrer"
       target="_blank"
     >

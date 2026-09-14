@@ -3,6 +3,7 @@ import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { translateUI } from "@/lib/radar/i18n";
 import { getTiboDisplayLabel } from "@/lib/radar/tiboHandle";
 import type { Locale, PublicTiboActivity } from "@/lib/radar/types";
+import { trackSourceLinkClick } from "@/lib/analyticsEvents";
 
 function getClassificationKey(
   activity: PublicTiboActivity,
@@ -135,6 +136,7 @@ export function TiboActivityCard({
               <a
                 className="inline-flex items-center gap-1 text-base font-semibold text-teal-700 underline-offset-4 hover:underline"
                 href={activity.sourceUrl}
+                onClick={() => trackSourceLinkClick(locale, "home", "tibo")}
                 target="_blank"
                 rel="noreferrer"
               >

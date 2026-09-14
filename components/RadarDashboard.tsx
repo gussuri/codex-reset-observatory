@@ -56,8 +56,10 @@ import {
   type ResetMarkerPayload,
 } from "@/lib/radar/resetMarker";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
+import { getAnalyticsSourceType, trackSourceLinkClick } from "@/lib/analyticsEvents";
 import { DeveloperLink } from "./DeveloperLink";
 import { ObservationGuide } from "./ObservationGuide";
+import { TrackedLocaleLink } from "./TrackedLocaleLink";
 import { LocalizedDateTime } from "@/components/LocalizedDateTime";
 import { ProbabilityMetrics } from "@/components/ProbabilityMetrics";
 import { RandomResetTimeHeatmap } from "@/components/RandomResetTimeHeatmap";
@@ -921,28 +923,37 @@ export function RadarDashboard({
           </div>
           <div className="flex flex-wrap justify-end gap-2 sm:justify-start">
             {locale !== "ja" && (
-              <Link
+              <TrackedLocaleLink
                 className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/"
+                fromLocale={locale}
+                route="home"
+                toLocale="ja"
               >
                 日本語
-              </Link>
+              </TrackedLocaleLink>
             )}
             {locale !== "en" && (
-              <Link
+              <TrackedLocaleLink
                 className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/en"
+                fromLocale={locale}
+                route="home"
+                toLocale="en"
               >
                 English
-              </Link>
+              </TrackedLocaleLink>
             )}
             {locale !== "zh" && (
-              <Link
+              <TrackedLocaleLink
                 className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
                 href="/zh"
+                fromLocale={locale}
+                route="home"
+                toLocale="zh"
               >
                 简体中文
-              </Link>
+              </TrackedLocaleLink>
             )}
           </div>
         </header>
@@ -1269,6 +1280,7 @@ export function RadarDashboard({
                         <a
                           className="inline-flex items-center gap-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
                           href={item.source ?? undefined}
+                          onClick={() => trackSourceLinkClick(locale, "home", getAnalyticsSourceType(item.sourceKind))}
                           rel="noreferrer"
                           target="_blank"
                         >
@@ -1355,30 +1367,30 @@ export function RadarDashboard({
             </Link>
             {locale === "ja" ? (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/en">
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="en" className="underline-offset-4 hover:underline" href="/en">
                   English
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/zh">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="zh" className="underline-offset-4 hover:underline" href="/zh">
                   简体中文
-                </Link>
+                </TrackedLocaleLink>
               </>
             ) : locale === "en" ? (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/">
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="ja" className="underline-offset-4 hover:underline" href="/">
                   日本語
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/zh">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="zh" className="underline-offset-4 hover:underline" href="/zh">
                   简体中文
-                </Link>
+                </TrackedLocaleLink>
               </>
             ) : (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/">
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="ja" className="underline-offset-4 hover:underline" href="/">
                   日本語
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/en">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="home" toLocale="en" className="underline-offset-4 hover:underline" href="/en">
                   English
-                </Link>
+                </TrackedLocaleLink>
               </>
             )}
           </nav>

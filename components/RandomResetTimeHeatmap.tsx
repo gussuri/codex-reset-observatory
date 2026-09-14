@@ -24,6 +24,7 @@ import type {
   RandomResetTimeHeatmapBin,
   RandomResetTimeHeatmapRange,
 } from "@/lib/radar/resetTimeHeatmap";
+import { trackHistoryRangeChange } from "@/lib/analyticsEvents";
 import { getBrowserTimeZone, getTimeZoneLabel } from "./LocalizedDateTime";
 
 const CONTENT = {
@@ -164,7 +165,10 @@ export function RandomResetTimeHeatmap({
                     : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700"
                 }`}
                 key={value}
-                onClick={() => setRange(value)}
+                onClick={() => {
+                  trackHistoryRangeChange(locale, value === "lastMonth" ? "last_month" : "all");
+                  setRange(value);
+                }}
                 type="button"
               >
                 {label}

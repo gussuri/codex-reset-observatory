@@ -3,6 +3,7 @@ import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
+import { TrackedLocaleLink } from "./TrackedLocaleLink";
 
 type AboutViewProps = {
   locale: Locale;
@@ -114,30 +115,30 @@ export function AboutView({ locale }: AboutViewProps) {
           </Link>
           {locale === "ja" ? (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/about">
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="en" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/about">
                 English
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/about">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="zh" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/about">
                 简体中文
-              </Link>
+              </TrackedLocaleLink>
             </>
           ) : locale === "en" ? (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/about">
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="ja" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/about">
                 日本語
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/about">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="zh" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/zh/about">
                 简体中文
-              </Link>
+              </TrackedLocaleLink>
             </>
           ) : (
             <>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/about">
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="ja" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/about">
                 日本語
-              </Link>
-              <Link className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/about">
+              </TrackedLocaleLink>
+              <TrackedLocaleLink fromLocale={locale} route="about" toLocale="en" className="font-semibold text-teal-700 underline-offset-4 hover:underline" href="/en/about">
                 English
-              </Link>
+              </TrackedLocaleLink>
             </>
           )}
         </nav>

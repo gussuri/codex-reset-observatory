@@ -4,6 +4,7 @@ import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedHistoryEvents } from "./LocalizedHistoryEvents";
+import { TrackedLocaleLink } from "./TrackedLocaleLink";
 
 type HistoryViewProps = {
   data: PublicRadarSnapshot;
@@ -125,30 +126,30 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
             </Link>
             {locale === "ja" ? (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/en/history">
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="en" className="underline-offset-4 hover:underline" href="/en/history">
                   English history
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/zh/history">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="zh" className="underline-offset-4 hover:underline" href="/zh/history">
                   简体中文历史
-                </Link>
+                </TrackedLocaleLink>
               </>
             ) : locale === "en" ? (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/history">
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="ja" className="underline-offset-4 hover:underline" href="/history">
                   日本語履歴
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/zh/history">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="zh" className="underline-offset-4 hover:underline" href="/zh/history">
                   简体中文历史
-                </Link>
+                </TrackedLocaleLink>
               </>
             ) : (
               <>
-                <Link className="underline-offset-4 hover:underline" href="/history">
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="ja" className="underline-offset-4 hover:underline" href="/history">
                   日本語履歴
-                </Link>
-                <Link className="underline-offset-4 hover:underline" href="/en/history">
+                </TrackedLocaleLink>
+                <TrackedLocaleLink fromLocale={locale} route="history" toLocale="en" className="underline-offset-4 hover:underline" href="/en/history">
                   English history
-                </Link>
+                </TrackedLocaleLink>
               </>
             )}
             <DeveloperLink
