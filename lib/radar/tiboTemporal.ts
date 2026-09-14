@@ -264,6 +264,12 @@ type SourceSegment = {
   end: number;
 };
 
+type ConditionalClauseRelation = "antecedent" | "consequent" | "outside" | "ambiguous";
+
+const CONDITIONAL_MARKER_PATTERN = /\b(?:if|unless)\b/gi;
+const CONDITIONAL_CLAUSE_BOUNDARY_PATTERN = /[,;]|\bthen\b/i;
+const CONDITIONAL_SENTENCE_BOUNDARY_PATTERN = /[.!?\n—–]/;
+
 function getSourceSegments(sourceText: string): SourceSegment[] {
   const segments: SourceSegment[] = [];
   let start = 0;
@@ -282,6 +288,110 @@ function getSourceSegments(sourceText: string): SourceSegment[] {
     segments.push({ text: tail, start: tailStart, end: tailStart + tail.length });
   }
   return segments;
+}
+
+function getConditionalClauseRelation(sourceText: string, anchorIndex: number): ConditionalClauseRelation {
+  const relations: ConditionalClauseRelation[] = [];
+
+  for (const marker of Array.from(sourceText.matchAll(CONDITIONAL_MARKER_PATTERN))) {
+    const markerIndex = marker.index ?? -1;
+    if (markerIndex < 0) continue;
+
+    const markerPrefix = sourceText.slice(Math.max(0, markerIndex - 48), markerIndex);
+    if (/\b(?:see|know|wonder|ask|check|find\s+out|determine|learn)\s*$/i.test(markerPrefix)) {
+      continue;
+    }
+
+    const markerEnd = markerIndex + marker[0].length;
+    if (anchorIndex < markerEnd) continue;
+
+    const afterMarker = sourceText.slice(markerEnd);
+    const sentenceBoundary = CONDITIONAL_SENTENCE_BOUNDARY_PATTERN.exec(afterMarker);
+    const sentenceEnd = markerEnd + (sentenceBoundary?.index ?? afterMarker.length);
+    if (anchorIndex >= sentenceEnd) continue;
+
+    const conditionalClause = sourceText.slice(markerEnd, sentenceEnd);
+    const clauseBoundary = CONDITIONAL_CLAUSE_BOUNDARY_PATTERN.exec(conditionalClause);
+    const boundaryIndex = clauseBoundary?.index === undefined
+      ? sentenceEnd
+      : markerEnd + clauseBoundary.index;
+    relations.push(anchorIndex < boundaryIndex ? "antecedent" : "consequent");
+  }
+
+  if (relations.length === 0) return "outside";
+  const hasAntecedent = relations.includes("antecedent");
+  const hasConsequent = relations.includes("consequent");
+  if (hasAntecedent && hasConsequent) return "ambiguous";
+  return hasAntecedent ? "antecedent" : "consequent";
+}
+
+function getTextMatchIndices(sourceText: string, value: string): number[] {
+  const normalizedSource = sourceText.toLocaleLowerCase();
+  const normalizedValue = value.toLocaleLowerCase();
+  if (!normalizedValue) return [];
+
+  const indices: number[] = [];
+  let searchFrom = 0;
+  while (searchFrom < normalizedSource.length) {
+    const index = normalizedSource.indexOf(normalizedValue, searchFrom);
+    if (index < 0) break;
+    indices.push(index);
+    searchFrom = index + Math.max(normalizedValue.length, 1);
+  }
+  return indices;
+}
+
+function getTemporalExpressionAnchorIndices(
+  sourceText: string,
+  semantics: TiboTemporalSemantics,
+): number[] {
+  const expression = semantics.temporalExpression?.trim();
+  if (expression) {
+    const expressionMatches = getTextMatchIndices(sourceText, expression);
+    if (expressionMatches.length > 0) return expressionMatches;
+  }
+
+  const fallbackTokens = [
+    semantics.relativeDayOffset === 0 ? "today" : null,
+    semantics.relativeDayOffset === 1 ? "tomorrow" : null,
+    semantics.weekday,
+    semantics.daypart,
+  ].filter((token): token is string => Boolean(token));
+  return Array.from(new Set(fallbackTokens.flatMap((token) => getTextMatchIndices(sourceText, token))));
+}
+
+function isConditionalAntecedentAnchor(sourceText: string, anchorIndex: number) {
+  return getConditionalClauseRelation(sourceText, anchorIndex) === "antecedent";
+}
+
+function filterConditionalTemporalCandidates(
+  sourceText: string,
+  candidates: SourceTemporalCandidate[],
+): SourceTemporalCandidate[] {
+  return candidates.filter((candidate) => {
+    const anchorIndices = [candidate.clock?.index, candidate.day?.index]
+      .filter((index): index is number => index !== undefined);
+    return !anchorIndices.some((index) => {
+      const relation = getConditionalClauseRelation(sourceText, index);
+      return relation === "antecedent" || relation === "ambiguous";
+    });
+  });
+}
+
+function isConditionalAntecedentTemporal(sourceText: string, semantics: TiboTemporalSemantics) {
+  const anchorIndices = getTemporalExpressionAnchorIndices(sourceText, semantics);
+  if (anchorIndices.length === 0) return false;
+  return anchorIndices.every((index) => isConditionalAntecedentAnchor(sourceText, index));
+}
+
+function isAmbiguousConditionalTemporal(sourceText: string, semantics: TiboTemporalSemantics) {
+  const anchorIndices = getTemporalExpressionAnchorIndices(sourceText, semantics);
+  if (anchorIndices.length === 0) return false;
+  const relations = anchorIndices.map((index) => getConditionalClauseRelation(sourceText, index));
+  return relations.includes("ambiguous") || (
+    relations.includes("antecedent") &&
+    relations.some((relation) => relation !== "antecedent")
+  );
 }
 
 function normalizeSourceClock(match: RegExpMatchArray, offset: number): { clock: SourceClock | null; rejected: boolean } {
@@ -863,7 +973,8 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   if (sourceExtraction.rejected) return null;
 
   const geminiSemantics = parseGeminiTemporalSemantics(value, sourceText);
-  const candidates = sourceExtraction.candidates;
+  const candidates = filterConditionalTemporalCandidates(sourceText, sourceExtraction.candidates);
+  const sourceSemantics = candidates.length === 1 ? candidates[0].semantics : null;
   const untrustedGeminiClock = Boolean(
     value &&
       typeof value === "object" &&
@@ -872,10 +983,17 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
         (typeof (value as Record<string, unknown>).temporalExpression === "string" &&
           hasClockExpression((value as Record<string, unknown>).temporalExpression as string))),
   );
+  if (
+    geminiSemantics &&
+    (isConditionalAntecedentTemporal(sourceText, geminiSemantics) ||
+      isAmbiguousConditionalTemporal(sourceText, geminiSemantics))
+  ) {
+    return sourceSemantics;
+  }
   if (!geminiSemantics) {
     return untrustedGeminiClock && !candidates.some((candidate) => Boolean(candidate.clock))
       ? null
-      : sourceExtraction.semantics;
+      : sourceSemantics;
   }
   if (candidates.length === 0) return geminiSemantics;
   if (
@@ -955,7 +1073,7 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   }
 
   const dayMatches = candidates.filter(matchesGeminiDay);
-  if (dayMatches.length !== 1) return sourceExtraction.semantics;
+  if (dayMatches.length !== 1) return sourceSemantics;
   const candidate = dayMatches[0];
   if (!candidate.clock) {
     return {

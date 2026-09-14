@@ -732,6 +732,93 @@ test("does not invent a reset time from an account-creation eligibility deadline
   assert.equal(parsed, null);
 });
 
+test("does not use a conditional antecedent day as a reset schedule", () => {
+  const source =
+    "Last time I did this you all burned through it in a few hours. If the dashboard looks as funny tomorrow as it does now, I might have to find that button again.";
+  const parsed = parseTiboTemporalSemantics(
+    semantics({
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      weekday: null,
+      relativeDayOffset: 1,
+    }),
+    source,
+  );
+
+  assert.equal(parsed, null);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "unresolved");
+});
+
+test("keeps a relative day attached to the reset action after a conditional clause", () => {
+  const source = "If things still look bad, I'll press the button tomorrow.";
+  const parsed = parseTiboTemporalSemantics(
+    semantics({
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      weekday: null,
+      relativeDayOffset: 1,
+    }),
+    source,
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "relative_day");
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "resolved");
+});
+
+test("keeps reset tomorrow while excluding an account eligibility cutoff", () => {
+  const source = "If you sign up by 8pm PT, the reset lands tomorrow.";
+  const parsed = parseTiboTemporalSemantics(
+    semantics({
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      weekday: null,
+      relativeDayOffset: 1,
+    }),
+    source,
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.equal(parsed.explicitTimeParts, null);
+  assert.equal(parsed.explicitTimezone, null);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "resolved");
+});
+
+test("keeps an execution clock in the conditional reset consequent", () => {
+  const source = "If the load stays high, the reset lands at 6pm PT.";
+  const parsed = parseTiboTemporalSemantics(null, source);
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "absolute");
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 18, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "PT");
+  const resolution = resolveTiboTemporalSchedule(parsed, CREATED_AT, TIBO_SOURCE_TIME_ZONE);
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.expectedStartAt, "2026-08-09T01:00:00.000Z");
+});
+
+test("does not use an unless antecedent day as a reset schedule", () => {
+  const source = "Unless capacity improves tomorrow, I might press the button again.";
+  const parsed = parseTiboTemporalSemantics(
+    semantics({
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      weekday: null,
+      relativeDayOffset: 1,
+    }),
+    source,
+  );
+
+  assert.equal(parsed, null);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "unresolved");
+});
+
 test("keeps the recent official-notice corpus source-grounded without rewriting stored history", () => {
   const fixtures = [
     {
