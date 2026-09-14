@@ -33,6 +33,15 @@ async function prepareLocalPage(page: Page) {
       body: "",
     }),
   );
+  // Speed Insights is served by Vercel; keep the local E2E server from
+  // turning its optional instrumentation script into a console error.
+  await page.route("**/_vercel/speed-insights/script.js", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/javascript",
+      body: "",
+    }),
+  );
   // The local E2E server intentionally has no Supabase credentials. Provide
   // an empty marker baseline so that this optional read does not create a
   // browser console error while the marker route itself is tested separately.
