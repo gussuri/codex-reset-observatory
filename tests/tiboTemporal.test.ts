@@ -819,6 +819,48 @@ test("does not use an unless antecedent day as a reset schedule", () => {
   assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "unresolved");
 });
 
+test("recognizes a no-comma conditional consequent relative day", () => {
+  const source = "If things still look bad I'll press the button tomorrow.";
+  const parsed = parseTiboTemporalSemantics(
+    semantics({
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      weekday: null,
+      relativeDayOffset: 1,
+    }),
+    source,
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "relative_day");
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "resolved");
+});
+
+test("recognizes a no-comma conditional consequent execution clock", () => {
+  const source = "If the load stays high the reset lands at 6pm PT.";
+  const parsed = parseTiboTemporalSemantics(null, source);
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalKind, "absolute");
+  assert.equal(parsed.temporalPrecision, "exact_time");
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 18, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "PT");
+  assert.equal(
+    resolveTiboTemporalSchedule(parsed, CREATED_AT, TIBO_SOURCE_TIME_ZONE).expectedStartAt,
+    "2026-08-09T01:00:00.000Z",
+  );
+});
+
+test("does not use a reset in a no-comma conditional antecedent as a schedule", () => {
+  const source = "If the reset lands tomorrow we'll celebrate.";
+  const parsed = parseTiboTemporalSemantics(null, source);
+
+  assert.equal(parsed, null);
+  assert.equal(resolveTiboTemporalSchedule(parsed, CREATED_AT).status, "unresolved");
+});
+
 test("keeps the recent official-notice corpus source-grounded without rewriting stored history", () => {
   const fixtures = [
     {

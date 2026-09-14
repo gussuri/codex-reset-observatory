@@ -269,6 +269,10 @@ type ConditionalClauseRelation = "antecedent" | "consequent" | "outside" | "ambi
 const CONDITIONAL_MARKER_PATTERN = /\b(?:if|unless)\b/gi;
 const CONDITIONAL_CLAUSE_BOUNDARY_PATTERN = /[,;]|\bthen\b/i;
 const CONDITIONAL_SENTENCE_BOUNDARY_PATTERN = /[.!?\n—–]/;
+const CONDITIONAL_RESET_EXECUTION_CLAUSE_PATTERN =
+  /\b(?:(?:the|a|your|this|another)\s+)?reset\s+(?:will\s+|is\s+|gets?\s+|should\s+|may\s+|might\s+|can\s+|could\s+)?(?:land(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|come|comes|coming|hit|happen(?:s|ed|ing)?|take\s+effect)\b/i;
+const CONDITIONAL_RESET_BUTTON_ACTION_PATTERN =
+  /\b(?:I|we)(?:['’]ll)?\s+(?:(?:(?:might|may|could|should|will|would|can|have\s+to|need\s+to)\s+){0,3})(?:press|hit|use|find|reuse)\s+(?:(?:the|that|this|a)\s+)?(?:reset\s+)?button\b/i;
 
 function getSourceSegments(sourceText: string): SourceSegment[] {
   const segments: SourceSegment[] = [];
@@ -288,6 +292,30 @@ function getSourceSegments(sourceText: string): SourceSegment[] {
     segments.push({ text: tail, start: tailStart, end: tailStart + tail.length });
   }
   return segments;
+}
+
+function getNoPunctuationConditionalConsequentBoundary(
+  sourceText: string,
+  markerEnd: number,
+  sentenceEnd: number,
+): number | null {
+  const conditionalClause = sourceText.slice(markerEnd, sentenceEnd);
+  const matches = [
+    CONDITIONAL_RESET_EXECUTION_CLAUSE_PATTERN.exec(conditionalClause),
+    CONDITIONAL_RESET_BUTTON_ACTION_PATTERN.exec(conditionalClause),
+  ]
+    .filter((match): match is RegExpExecArray => match !== null && match.index !== undefined)
+    .map((match) => markerEnd + match.index)
+    .sort((left, right) => left - right);
+
+  return matches.find((matchIndex) => {
+    const antecedentWords = sourceText
+      .slice(markerEnd, matchIndex)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return antecedentWords.length >= 2;
+  }) ?? null;
 }
 
 function getConditionalClauseRelation(sourceText: string, anchorIndex: number): ConditionalClauseRelation {
@@ -312,9 +340,12 @@ function getConditionalClauseRelation(sourceText: string, anchorIndex: number): 
 
     const conditionalClause = sourceText.slice(markerEnd, sentenceEnd);
     const clauseBoundary = CONDITIONAL_CLAUSE_BOUNDARY_PATTERN.exec(conditionalClause);
-    const boundaryIndex = clauseBoundary?.index === undefined
-      ? sentenceEnd
-      : markerEnd + clauseBoundary.index;
+    const inferredBoundary = clauseBoundary?.index === undefined
+      ? getNoPunctuationConditionalConsequentBoundary(sourceText, markerEnd, sentenceEnd)
+      : null;
+    const boundaryIndex = clauseBoundary?.index !== undefined
+      ? markerEnd + clauseBoundary.index
+      : inferredBoundary ?? sentenceEnd;
     relations.push(anchorIndex < boundaryIndex ? "antecedent" : "consequent");
   }
 
