@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v5";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v6";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 3 * 60 * 60 * 1000;
 
@@ -209,6 +209,8 @@ const SOURCE_DAY_PATTERN =
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
 const RESET_CUE_PATTERN =
   /\b(?:reset|resets|resetting|quota|usage limits?|rate limits?|land(?:s|ed|ing)?|refresh(?:ed|es|ing)?|performative)\b/i;
+const NON_EXECUTION_CLOCK_CONTEXT_PATTERN =
+  /\b(?:create|open|make)\s+(?:(?:a|an|the|your)\s+)?(?:new\s+)?account\b|\b(?:sign\s*up|signup|register(?:ed|ing)?|registration|apply|application|upgrade|subscribe|enroll(?:ed|ing)?|enrollment|eligib(?:le|ility)|qualif(?:y|ied|ication))\b/i;
 const RESET_BUTTON_REUSE_ACTION_PATTERN =
   /\b(?:find|press|hit|use|reuse)\s+(?:it|the\s+reset\s+button)\b|\b(?:dust\s+it\s+up|bring\s+it\s+back|take\s+it\s+out)\b/i;
 const RESET_BUTTON_REUSE_NEGATION_PATTERN =
@@ -387,6 +389,25 @@ function getSourceDayOnlyExpression(sourceText: string, day: SourceDay, segment:
   return sourceText.slice(start, day.end).trim();
 }
 
+function getLastPatternIndex(value: string, pattern: RegExp) {
+  const globalPattern = new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`);
+  let lastIndex = -1;
+  for (const match of Array.from(value.matchAll(globalPattern))) {
+    if (match.index !== undefined) lastIndex = match.index;
+  }
+  return lastIndex;
+}
+
+function isNonExecutionClockCandidate(sourceText: string, segment: SourceSegment, clock: SourceClock) {
+  const beforeClock = sourceText.slice(segment.start, clock.index);
+  const lastResetCueIndex = getLastPatternIndex(beforeClock, RESET_CUE_PATTERN);
+  const lastNonExecutionContextIndex = getLastPatternIndex(
+    beforeClock,
+    NON_EXECUTION_CLOCK_CONTEXT_PATTERN,
+  );
+  return lastNonExecutionContextIndex > lastResetCueIndex;
+}
+
 function buildSourceClockCandidate(
   sourceText: string,
   segment: SourceSegment,
@@ -396,6 +417,7 @@ function buildSourceClockCandidate(
   if (!RESET_CUE_PATTERN.test(segment.text) || days.length > 1) return null;
   const day = days[0] ?? null;
   const timezone = getSourceTimezoneMatch(segment, clock);
+  if (isNonExecutionClockCandidate(sourceText, segment, clock)) return null;
   if (day) {
     const betweenClockAndDay = day.index > clock.end
       ? sourceText.slice(clock.end, day.index).trim()

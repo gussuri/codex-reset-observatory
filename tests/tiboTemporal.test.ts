@@ -36,7 +36,7 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v5");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v6");
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {
@@ -613,6 +613,94 @@ test("uses a source-grounded exact clock to complete a Gemini day-only result", 
   assert.deepEqual(parsed.explicitTimeParts, { hour: 14, minute: 0 });
   assert.equal(parsed.explicitTimezone, "PST");
   assert.equal(parsed.resolutionSource, "merged");
+});
+
+test("keeps Gemini's end-of-day interpretation when a later account cutoff shares the segment", () => {
+  const source =
+    "Some Plus and Business users won't yet get access to Astra today, we've got you covered with a banked reset. Lands by end of day and if you create your account by 8pm PT then you'll get it too.";
+  const parsed = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "end of day",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      relativeDayOffset: null,
+      explicitTimeParts: null,
+      explicitTimezone: null,
+      daypart: "day",
+      temporalConfidence: 0.98,
+    },
+    source,
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed.temporalExpression, "end of day");
+  assert.equal(parsed.temporalKind, "daypart");
+  assert.equal(parsed.temporalPrecision, "daypart");
+  assert.equal(parsed.explicitTimeParts, null);
+  assert.equal(parsed.explicitTimezone, null);
+
+  const resolution = resolveTiboTemporalSchedule(
+    parsed,
+    "2026-09-12T03:20:36.000Z",
+    TIBO_SOURCE_TIME_ZONE,
+  );
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.expectedStartAt, "2026-09-12T03:20:36.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-09-12T07:00:00.000Z");
+});
+
+test("preserves a true reset execution clock in the same source-grounding path", () => {
+  const parsed = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      relativeDayOffset: 1,
+      explicitTimeParts: null,
+      explicitTimezone: null,
+      temporalConfidence: 0.97,
+    },
+    "Reset will land at 2pm PST tomorrow.",
+  );
+
+  assert.ok(parsed);
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 14, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "PST");
+  assert.equal(parsed.resolutionSource, "merged");
+});
+
+test("does not use upgrade or account-creation cutoff clocks as reset execution times", () => {
+  const cases = [
+    {
+      source: "Reset lands end of day. Upgrade before 7pm PT to be eligible.",
+      temporalExpression: "end of day",
+      daypart: "day",
+    },
+    {
+      source: "The reset will land tonight. Create your account by 6pm PT if you want to receive it.",
+      temporalExpression: "tonight",
+      daypart: "tonight",
+    },
+  ];
+
+  for (const fixture of cases) {
+    const parsed = parseTiboTemporalSemantics(
+      {
+        temporalExpression: fixture.temporalExpression,
+        temporalKind: "daypart",
+        temporalPrecision: "daypart",
+        relativeDayOffset: null,
+        explicitTimeParts: null,
+        explicitTimezone: null,
+        daypart: fixture.daypart,
+        temporalConfidence: 0.98,
+      },
+      fixture.source,
+    );
+    assert.ok(parsed, fixture.source);
+    assert.equal(parsed.explicitTimeParts, null, fixture.source);
+    assert.equal(parsed.explicitTimezone, null, fixture.source);
+  }
 });
 
 test("keeps the recent official-notice corpus source-grounded without rewriting stored history", () => {
