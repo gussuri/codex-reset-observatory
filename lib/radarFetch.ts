@@ -53,6 +53,7 @@ import { attachNextGenerationBPublicTrainingState } from "@/lib/radar/publishedP
 import {
   getNextGenerationRandomTargetEvents,
   loadNextGenerationTrainingState,
+  type NextGenerationTrainingState,
 } from "@/lib/radar/nextGenerationTraining";
 import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
@@ -988,17 +989,47 @@ export async function getActiveTiboSignals(): Promise<ActiveTiboSignal[]> {
   return (await getTiboSignalBundle()).activeSignals;
 }
 
-async function attachPublicBTrainingState(
+type FetchCurrentRadarDataOptions = {
+  cache?: RequestCache;
+  revalidate?: number;
+  calculationNow?: Date;
+  /** Bypass Next's Data Cache while preserving the Production normalizer. */
+  bypassCache?: boolean;
+  /** Selects the reset-name row projection for this internal read. */
+  resetDisplayNameReadMode?: ResetDisplayNameReadMode;
+};
+
+function createEmptyNextGenerationTrainingState(
+  status: "ok" | "error",
+  reason: string | null,
+): NextGenerationTrainingState {
+  return {
+    status,
+    reason,
+    bRows: [],
+    aRows: [],
+    cRows: [],
+    cV2Rows: [],
+    totalRows: 0,
+    skipReasons: {
+      pre_freeze: 0,
+      missing_b_forecast: 0,
+      invalid_b_forecast: 0,
+      incomplete_a_components: 0,
+      invalid_generated_at: 0,
+    },
+    backfill: false,
+  };
+}
+
+async function readNextGenerationTrainingState(
   data: RadarData,
   calculationNow: Date,
-): Promise<RadarData> {
+): Promise<NextGenerationTrainingState> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return attachNextGenerationBPublicTrainingState(data, {
-      trainingRows: [],
-      trainingReadStatus: "error",
-    });
+    return createEmptyNextGenerationTrainingState("error", "credentials unavailable");
   }
 
   try {
@@ -1009,30 +1040,29 @@ async function attachPublicBTrainingState(
       asOf: calculationNow,
       randomEvents: getNextGenerationRandomTargetEvents(data, calculationNow),
     });
-    return attachNextGenerationBPublicTrainingState(data, {
-      trainingRows: trainingState.bRows,
-      trainingReadStatus: trainingState.status,
-    });
+    return trainingState;
   } catch {
-    return attachNextGenerationBPublicTrainingState(data, {
-      trainingRows: [],
-      trainingReadStatus: "error",
-    });
+    return createEmptyNextGenerationTrainingState(
+      "error",
+      "prediction_history query failed",
+    );
   }
 }
 
-export async function fetchCurrentRadarData(
-  options: {
-    cache?: RequestCache;
-    revalidate?: number;
-    calculationNow?: Date;
-    /** Bypass Next's Data Cache while preserving the Production normalizer. */
-    bypassCache?: boolean;
-    /** Selects the reset-name row projection for this internal read. */
-    resetDisplayNameReadMode?: ResetDisplayNameReadMode;
-  } = {},
+function attachPublicBTrainingState(
+  data: RadarData,
+  trainingState: NextGenerationTrainingState,
+): RadarData {
+  return attachNextGenerationBPublicTrainingState(data, {
+    trainingRows: trainingState.bRows,
+    trainingReadStatus: trainingState.status,
+  });
+}
+
+async function fetchCurrentRadarDataBase(
+  options: FetchCurrentRadarDataOptions,
+  calculationNow: Date,
 ): Promise<RadarData> {
-  const calculationNow = options.calculationNow ?? new Date();
   const checkedAt = calculationNow.toISOString();
   const resetDisplayNameReadMode = options.resetDisplayNameReadMode ?? "public";
   const resetDisplayNamesPromise = options.bypassCache
@@ -1086,7 +1116,32 @@ export async function fetchCurrentRadarData(
     codexRecoveryObservations: codexRecovery.data,
   });
 
-  return attachPublicBTrainingState(radarData, calculationNow);
+  return radarData;
+}
+
+export async function fetchCurrentRadarData(
+  options: FetchCurrentRadarDataOptions = {},
+): Promise<RadarData> {
+  const calculationNow = options.calculationNow ?? new Date();
+  const data = await fetchCurrentRadarDataBase(options, calculationNow);
+  const trainingState = await readNextGenerationTrainingState(data, calculationNow);
+  return attachPublicBTrainingState(data, trainingState);
+}
+
+/**
+ * Loads the base Radar data and its next-generation training state together so
+ * request-level callers can reuse one training read for every calculation.
+ */
+export async function fetchCurrentRadarDataWithTrainingState(
+  options: FetchCurrentRadarDataOptions = {},
+): Promise<{ data: RadarData; trainingState: NextGenerationTrainingState }> {
+  const calculationNow = options.calculationNow ?? new Date();
+  const data = await fetchCurrentRadarDataBase(options, calculationNow);
+  const trainingState = await readNextGenerationTrainingState(data, calculationNow);
+  return {
+    data: attachPublicBTrainingState(data, trainingState),
+    trainingState,
+  };
 }
 
 type SharedRadarCore = {

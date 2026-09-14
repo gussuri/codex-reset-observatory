@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchCurrentRadarData } from "@/lib/radarFetch";
+import { fetchCurrentRadarDataWithTrainingState } from "@/lib/radarFetch";
 import { getRadarViewModel } from "@/lib/radar";
 import {
   getActiveOfficialNotice,
@@ -14,10 +14,6 @@ import {
   hasOfficialNoticeForLog,
 } from "@/lib/logProbability";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "@/lib/nextGenerationLogging";
-import {
-  getNextGenerationRandomTargetEvents,
-  loadNextGenerationTrainingState,
-} from "@/lib/radar/nextGenerationTraining";
 import { NEXT_GENERATION_FREEZE_AT } from "@/data/shadowProbabilityConfig";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
@@ -58,7 +54,7 @@ async function handleLogRequest(request: NextRequest) {
   try {
     const calculationNow = new Date();
     // 1. 最新の観測データをフェッチ
-    const rawData = await fetchCurrentRadarData({
+    const { data: rawData, trainingState } = await fetchCurrentRadarDataWithTrainingState({
       cache: "no-store",
       calculationNow,
     });
@@ -96,10 +92,6 @@ async function handleLogRequest(request: NextRequest) {
     const supabase = getSupabaseClient();
     let forecastsForLogging = experimentalProbabilityForecasts;
     if (calculationNow.getTime() >= new Date(NEXT_GENERATION_FREEZE_AT).getTime()) {
-      const trainingState = await loadNextGenerationTrainingState(supabase, {
-        asOf: calculationNow,
-        randomEvents: getNextGenerationRandomTargetEvents(rawData, calculationNow),
-      });
       forecastsForLogging = buildNextGenerationExperimentalProbabilityForecasts({
         data: rawData,
         calculationOptions: {
