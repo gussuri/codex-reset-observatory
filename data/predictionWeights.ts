@@ -4,6 +4,11 @@ export const EXPECTATION_THRESHOLDS = {
   veryHigh: { p24h: 0.80, p48h: 0.85 },
 } as const;
 
+export const ELAPSED_RELATIVE_HAZARD_THRESHOLDS = {
+  low: 0.75,
+  high: 1.25,
+} as const;
+
 export const REFRESH_INTERVAL_THRESHOLDS = {
   medium: 0.20,
   high: EXPECTATION_THRESHOLDS.high.p24h,

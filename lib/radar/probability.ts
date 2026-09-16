@@ -1,6 +1,7 @@
 import { LOCAL_OBSERVATION_SIGNALS, type LocalObservationSignal } from "@/data/observationSignals";
 import {
   AUTOMATED_TIBO_SIGNAL_WEIGHTS,
+  ELAPSED_RELATIVE_HAZARD_THRESHOLDS,
   LOCAL_PROBABILITY_WEIGHTS,
   PROBABILITY_MODEL_VERSION,
   TIBO_TEASER_DECAY_HOURS,
@@ -1699,24 +1700,18 @@ type DisplayProbabilityModelContext = {
   majorModelReleaseAdjustment?: MajorModelReleaseAdjustment;
 };
 
-type DisplayHazardBin = {
+export type DisplayHazardBin = {
   startHour: number;
   endHour: number | null;
   posteriorLambdaPerHour: number;
 };
 
-type DisplayElapsedDiagnostics = {
+export type DisplayElapsedDiagnostics = {
   bins: DisplayHazardBin[];
   globalLambdaPerHour: number;
 };
 
-type DisplayHazardReason =
-  | "cooldown"
-  | "low"
-  | "approaching"
-  | "overlap"
-  | "very_high"
-  | null;
+export type RelativeHazardLevel = "low" | "medium" | "high";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
@@ -1756,7 +1751,7 @@ function readDisplayHazardBins(value: unknown): DisplayHazardBin[] {
     .sort((left, right) => left.startHour - right.startHour);
 }
 
-function getPublishedElapsedDiagnostics(
+export function getPublishedElapsedDiagnostics(
   publishedCalculation?: DisplayProbabilityModelContext,
 ): DisplayElapsedDiagnostics | null {
   if (
@@ -1780,7 +1775,7 @@ function getPublishedElapsedDiagnostics(
   return { bins, globalLambdaPerHour };
 }
 
-function getDisplayHazardRateAtAge(
+export function getDisplayHazardRateAtAge(
   bins: DisplayHazardBin[],
   ageHours: number,
 ) {
@@ -1807,60 +1802,111 @@ function getDisplayHazardRateAtAge(
     (next.posteriorLambdaPerHour - current.posteriorLambdaPerHour) * progress;
 }
 
-function getAverageDisplayHazard(
-  diagnostics: DisplayElapsedDiagnostics,
+export function integrateDisplayHazard(
+  bins: DisplayHazardBin[],
   startHour: number,
-  endHour: number,
-) {
-  if (endHour <= startHour) return null;
-
-  const sampleCount = Math.max(4, Math.ceil((endHour - startHour) / 6));
-  let total = 0;
-  for (let index = 0; index < sampleCount; index += 1) {
-    const sampleAge = startHour + ((index + 0.5) / sampleCount) * (endHour - startHour);
-    const rate = getDisplayHazardRateAtAge(diagnostics.bins, sampleAge);
-    if (rate === null) return null;
-    total += rate;
+  horizonHours: number,
+): number | null {
+  if (
+    bins.length === 0 ||
+    !Number.isFinite(startHour) ||
+    !Number.isFinite(horizonHours) ||
+    startHour < 0 ||
+    horizonHours <= 0
+  ) {
+    return null;
   }
 
-  return total / sampleCount;
+  const start = startHour;
+  const end = start + horizonHours;
+
+  const partitionPoints = new Set<number>([start, end]);
+  for (const bin of bins) {
+    if (bin.startHour > start && bin.startHour < end) {
+      partitionPoints.add(bin.startHour);
+    }
+    if (bin.endHour !== null && bin.endHour > start && bin.endHour < end) {
+      partitionPoints.add(bin.endHour);
+    }
+  }
+
+  const sortedPoints = Array.from(partitionPoints).sort((a, b) => a - b);
+  let total = 0;
+
+  for (let i = 0; i < sortedPoints.length - 1; i += 1) {
+    const p1 = sortedPoints[i];
+    const p2 = sortedPoints[i + 1];
+    if (p2 <= p1) continue;
+
+    const rate1 = getDisplayHazardRateAtAge(bins, p1);
+    const rate2 = getDisplayHazardRateAtAge(bins, p2);
+    if (rate1 === null || rate2 === null) return null;
+
+    total += ((rate1 + rate2) / 2) * (p2 - p1);
+  }
+
+  return total;
 }
 
-function getDisplayHazardReason(
+export function getRelativeDisplayHazard(
   diagnostics: DisplayElapsedDiagnostics | null,
   elapsedHours: number,
-  expectationKey: Exclude<ExpectationKey, "unknown">,
-): DisplayHazardReason {
-  if (!diagnostics) return null;
-
-  const currentRate = getDisplayHazardRateAtAge(diagnostics.bins, elapsedHours);
-  const futureRate = getAverageDisplayHazard(
-    diagnostics,
-    elapsedHours + 24,
-    elapsedHours + 48,
-  );
-  if (currentRate === null || futureRate === null) return null;
-
-  const currentRatio = currentRate / diagnostics.globalLambdaPerHour;
-  const futureRatio = futureRate / diagnostics.globalLambdaPerHour;
-
-  if (expectationKey === "low" && elapsedHours < 24 && currentRatio < 0.9) {
-    return "cooldown";
-  }
-  if (expectationKey === "low" && futureRatio <= 0.85) {
-    return "low";
-  }
-  if (expectationKey === "very_high" && futureRatio >= 1.5) {
-    return "very_high";
-  }
-  if (expectationKey === "high" && futureRatio >= 1.1) {
-    return "overlap";
-  }
-  if (expectationKey === "medium" && futureRatio >= 1.1) {
-    return "approaching";
+  horizonHours: number,
+): number | null {
+  if (
+    !diagnostics ||
+    !Number.isFinite(elapsedHours) ||
+    !Number.isFinite(horizonHours) ||
+    horizonHours <= 0 ||
+    diagnostics.globalLambdaPerHour <= 0
+  ) {
+    return null;
   }
 
-  return null;
+  const integral = integrateDisplayHazard(diagnostics.bins, elapsedHours, horizonHours);
+  if (integral === null) return null;
+
+  return integral / (horizonHours * diagnostics.globalLambdaPerHour);
+}
+
+export function getRelativeHazardLevel(
+  relativeHazard: number,
+  thresholds = ELAPSED_RELATIVE_HAZARD_THRESHOLDS,
+): RelativeHazardLevel {
+  if (relativeHazard < thresholds.low) return "low";
+  if (relativeHazard > thresholds.high) return "high";
+  return "medium";
+}
+
+function formatRelativeHazardLevel(
+  level: RelativeHazardLevel,
+  locale: Locale,
+): string {
+  switch (level) {
+    case "low":
+      return translateUI("outlookRelativeHazardLevelLow", locale);
+    case "medium":
+      return translateUI("outlookRelativeHazardLevelMedium", locale);
+    case "high":
+      return translateUI("outlookRelativeHazardLevelHigh", locale);
+  }
+}
+
+function replaceRelativeHazardPlaceholders(
+  text: string,
+  params: { elapsed: string; level24?: string; level48?: string; level?: string },
+): string {
+  let result = text.replace("{elapsed}", params.elapsed);
+  if (params.level24 !== undefined) {
+    result = result.replace("{level24}", params.level24);
+  }
+  if (params.level48 !== undefined) {
+    result = result.replace("{level48}", params.level48);
+  }
+  if (params.level !== undefined) {
+    result = result.replace("{level}", params.level);
+  }
+  return result;
 }
 
 function replaceElapsedPlaceholder(text: string, elapsed: string) {
@@ -2030,33 +2076,30 @@ export function getDisplayProbabilityReason(
   }
 
   const elapsedHours = elapsedMs / (60 * 60 * 1000);
-  const hazardReason = getDisplayHazardReason(
-    getPublishedElapsedDiagnostics(publishedCalculation),
-    elapsedHours,
-    expectationKey,
-  );
+  const diagnostics = getPublishedElapsedDiagnostics(publishedCalculation);
+  const rel24 = getRelativeDisplayHazard(diagnostics, elapsedHours, 24);
+  const rel48 = getRelativeDisplayHazard(diagnostics, elapsedHours, 48);
 
-  if (hazardReason === "cooldown") {
-    const key = elapsedMs < 60 * 1000
-      ? "outlookLowCooldownSubminute"
-      : "outlookLowCooldown";
-    return replaceElapsedPlaceholder(translateUI(key, locale), elapsed);
-  }
+  if (rel24 !== null && rel48 !== null) {
+    const level24 = getRelativeHazardLevel(rel24);
+    const level48 = getRelativeHazardLevel(rel48);
 
-  if (hazardReason === "low") {
-    return replaceElapsedPlaceholder(translateUI("outlookLowHistorical", locale), elapsed);
-  }
+    if (level24 === level48) {
+      const formattedLevel = formatRelativeHazardLevel(level24, locale);
+      return replaceRelativeHazardPlaceholders(
+        translateUI("outlookRelativeHazardSame", locale),
+        { elapsed, level: formattedLevel },
+      );
+    }
 
-  if (hazardReason === "approaching" && expectationKey === "medium") {
-    return replaceElapsedPlaceholder(translateUI("outlookModerateApproaching", locale), elapsed);
-  }
-
-  if (hazardReason === "overlap" && expectationKey === "high") {
-    return replaceElapsedPlaceholder(translateUI("outlookHighOverlap", locale), elapsed);
-  }
-
-  if (hazardReason === "very_high" && expectationKey === "very_high") {
-    return replaceElapsedPlaceholder(translateUI("outlookVeryHighOverlap", locale), elapsed);
+    return replaceRelativeHazardPlaceholders(
+      translateUI("outlookRelativeHazardDifferent", locale),
+      {
+        elapsed,
+        level24: formatRelativeHazardLevel(level24, locale),
+        level48: formatRelativeHazardLevel(level48, locale),
+      },
+    );
   }
 
   return replaceElapsedPlaceholder(

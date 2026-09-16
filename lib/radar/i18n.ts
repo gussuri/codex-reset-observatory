@@ -202,35 +202,30 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Usage-limit anomalies have been observed, so the possibility of a reset is somewhat higher.",
     zh: "已发现使用上限相关异常，重置的可能性略有上升。",
   },
-  outlookLowCooldown: {
-    ja: "前回のランダムリセットから{elapsed}しか経過しておらず、過去の発生傾向でもリセット直後は起きにくいため、現在の見込みは低めです。",
-    en: "It has only been {elapsed} since the last random reset, and resets have historically been less common immediately after a reset, so the current outlook is low.",
-    zh: "距离上次随机重置仅过去{elapsed}，根据过去的发生趋势，重置后不久通常较少发生重置，因此目前的可能性较低。",
+  outlookRelativeHazardDifferent: {
+    ja: "前回のランダムリセットから{elapsed}が経過しています。過去の発生傾向に基づくと、今から24時間以内は{level24}、48時間以内は{level48}です。",
+    en: "It has been {elapsed} since the last random reset. Based on historical reset trends, the outlook is {level24} for the next 24 hours and {level48} for the next 48 hours.",
+    zh: "距离上次随机重置已过去{elapsed}。根据过去的发生趋势，未来24小时内{level24}，48小时内{level48}。",
   },
-  outlookLowCooldownSubminute: {
-    ja: "前回のランダムリセットからまだ1分も経過しておらず、過去の発生傾向でもリセット直後は起きにくいため、現在の見込みは低めです。",
-    en: "Less than a minute has passed since the last random reset, and resets have historically been less common immediately after a reset, so the current outlook is low.",
-    zh: "距离上次随机重置还不到1分钟，根据过去的发生趋势，重置后不久通常较少发生重置，因此目前的可能性较低。",
+  outlookRelativeHazardSame: {
+    ja: "前回のランダムリセットから{elapsed}が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに{level}です。",
+    en: "It has been {elapsed} since the last random reset. Based on historical reset trends, the outlook is {level} for both the next 24 and 48 hours.",
+    zh: "距离上次随机重置已过去{elapsed}。根据过去的发生趋势，未来24小时内与48小时内均{level}。",
   },
-  outlookLowHistorical: {
-    ja: "前回のランダムリセットから{elapsed}が経過していますが、過去の発生傾向では今後24〜48時間のリセット発生率が低いため、現在の見込みは低めです。",
-    en: "It has been {elapsed} since the last random reset, but historical reset rates over the next 24–48 hours are low, so the current outlook is low.",
-    zh: "距离上次随机重置已过去{elapsed}，但根据过去的发生趋势，未来24至48小时内的重置发生率较低，因此目前的可能性较低。",
+  outlookRelativeHazardLevelLow: {
+    ja: "低め",
+    en: "low",
+    zh: "较低",
   },
-  outlookModerateApproaching: {
-    ja: "前回のランダムリセットから{elapsed}が経過し、今後24〜48時間が過去にリセットの起きやすかった時間帯に近づいているため、現在の見込みは中程度です。",
-    en: "It has been {elapsed} since the last random reset, and the next 24–48 hours approach periods when resets have historically been more likely, so the current outlook is moderate.",
-    zh: "距离上次随机重置已过去{elapsed}，未来24至48小时将逐渐接近过去较容易发生重置的时段，因此目前的可能性处于中等水平。",
+  outlookRelativeHazardLevelMedium: {
+    ja: "中程度",
+    en: "moderate",
+    zh: "处于中等水平",
   },
-  outlookHighOverlap: {
-    ja: "前回のランダムリセットから{elapsed}が経過し、今後24〜48時間が過去にリセットの起きやすかった時間帯と重なるため、現在の見込みは高めです。",
-    en: "It has been {elapsed} since the last random reset, and the next 24–48 hours overlap periods when resets have historically been more likely, so the current outlook is high.",
-    zh: "距离上次随机重置已过去{elapsed}，未来24至48小时与过去较容易发生重置的时段重叠，因此目前的可能性较高。",
-  },
-  outlookVeryHighOverlap: {
-    ja: "前回のランダムリセットから{elapsed}が経過し、今後24〜48時間が過去に特にリセットの起きやすかった時間帯と重なるため、現在の見込みは非常に高いです。",
-    en: "It has been {elapsed} since the last random reset, and the next 24–48 hours overlap periods when resets have historically been especially likely, so the current outlook is very high.",
-    zh: "距离上次随机重置已过去{elapsed}，未来24至48小时与过去特别容易发生重置的时段重叠，因此目前的可能性非常高。",
+  outlookRelativeHazardLevelHigh: {
+    ja: "高め",
+    en: "high",
+    zh: "较高",
   },
   outlookGenericLow: {
     ja: "前回のランダムリセットから{elapsed}が経過しており、現在の予測ではリセットの見込みは低めです。",

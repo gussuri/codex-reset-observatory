@@ -4,9 +4,13 @@ import test from "node:test";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import {
   getDisplayProbabilityReason,
+  getRelativeDisplayHazard,
+  getRelativeHazardLevel,
+  integrateDisplayHazard,
   getLocalSignalEvaluation,
   type ActiveOfficialNotice,
 } from "../lib/radar/probability";
+import { ELAPSED_RELATIVE_HAZARD_THRESHOLDS } from "../data/predictionWeights";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
@@ -203,21 +207,21 @@ test("uses clear English and Chinese wording for teaser strength", () => {
   );
 });
 
-test("matches the existing expectation level in normal explanations", () => {
+test("matches expectation level in fallback generic explanations without diagnostics", () => {
   assert.match(
-    reasonFor({ probability24h: 0.1, probability48h: 0.1 }) ?? "",
+    reasonFor({ probability24h: 0.1, probability48h: 0.1, source: "legacy-shadow-fallback" }) ?? "",
     /見込みは低めです。$/,
   );
   assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.4, elapsedHours: 20 }) ?? "",
+    reasonFor({ probability24h: 0.3, probability48h: 0.4, elapsedHours: 20, source: "legacy-shadow-fallback" }) ?? "",
     /見込みは中程度です。$/,
   );
   assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.7, elapsedHours: 48 }) ?? "",
+    reasonFor({ probability24h: 0.3, probability48h: 0.7, elapsedHours: 48, source: "legacy-shadow-fallback" }) ?? "",
     /見込みは高めです。$/,
   );
   assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96 }) ?? "",
+    reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96, source: "legacy-shadow-fallback" }) ?? "",
     /見込みは非常に高いです。$/,
   );
 });
@@ -232,27 +236,27 @@ test("elapsed-only publication uses the normal outlook wording despite raw regim
   const regularResetEvents = [regularResetAt("2026-08-03T04:00:00.000Z")];
   assert.match(
     reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /前回のランダムリセットから2日20時間が経過し、.*中程度です。$/,
+    /前回のランダムリセットから2日20時間が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。$/,
   );
   assert.match(
     reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /It has been 2 days and 20 hours since the last random reset.*moderate\.$/,
+    /It has been 2 days and 20 hours since the last random reset\. Based on historical reset trends, the outlook is high for both the next 24 and 48 hours\.$/,
   );
   assert.match(
     reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /距离上次随机重置已过去2天20小时.*中等水平。$/,
+    /距离上次随机重置已过去2天20小时。根据过去的发生趋势，未来24小时内与48小时内均较高。$/,
   );
 });
 
-test("uses the same expectation conclusion in English and Chinese", () => {
+test("uses consistent outlook phrasing across English and Chinese", () => {
   const regularResetEvents = [regularResetAt("2026-08-02T00:00:00.000Z")];
   assert.equal(
     reasonFor({ locale: "en", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "It has been 2 days and 20 hours since the last random reset, and the next 24–48 hours approach periods when resets have historically been more likely, so the current outlook is moderate.",
+    "It has been 2 days and 20 hours since the last random reset. Based on historical reset trends, the outlook is high for both the next 24 and 48 hours.",
   );
   assert.equal(
     reasonFor({ locale: "zh", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "距离上次随机重置已过去2天20小时，未来24至48小时将逐渐接近过去较容易发生重置的时段，因此目前的可能性处于中等水平。",
+    "距离上次随机重置已过去2天20小时。根据过去的发生趋势，未来24小时内与48小时内均较高。",
   );
 });
 
@@ -296,7 +300,7 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       probability24h: 0.1,
       probability48h: 0.1,
     }),
-    "前回のランダムリセットから7日が経過しており、現在の予測ではリセットの見込みは低めです。",
+    "前回のランダムリセットから7日が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。",
   );
 });
 
@@ -311,7 +315,7 @@ test("uses minute precision immediately after a random reset despite a regular b
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /前回のランダムリセットから30分しか経過しておらず/,
+    /前回のランダムリセットから30分が経過しています/,
   );
   assert.match(
     reasonFor({
@@ -321,7 +325,7 @@ test("uses minute precision immediately after a random reset despite a regular b
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /前回のランダムリセットからまだ1分も経過しておらず/,
+    /前回のランダムリセットから1分未満が経過しています/,
   );
   assert.match(
     reasonFor({
@@ -332,7 +336,7 @@ test("uses minute precision immediately after a random reset despite a regular b
       probability24h: 0.1,
       probability48h: 0.1,
     }) ?? "",
-    /Less than a minute has passed since the last random reset/,
+    /It has been less than 1 minute since the last random reset/,
   );
   const oneMinuteReason = reasonFor({
     locale: "en",
@@ -342,7 +346,7 @@ test("uses minute precision immediately after a random reset despite a regular b
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(oneMinuteReason, /It has only been 1 minute since the last random reset/);
+  assert.match(oneMinuteReason, /It has been 1 minute since the last random reset/);
   assert.doesNotMatch(oneMinuteReason, /1 minute have passed/);
 
   const thirtyMinuteReason = reasonFor({
@@ -353,7 +357,7 @@ test("uses minute precision immediately after a random reset despite a regular b
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(thirtyMinuteReason, /It has only been 30 minutes since the last random reset/);
+  assert.match(thirtyMinuteReason, /It has been 30 minutes since the last random reset/);
 
   const oneHourReason = reasonFor({
     locale: "en",
@@ -363,18 +367,18 @@ test("uses minute precision immediately after a random reset despite a regular b
     probability24h: 0.1,
     probability48h: 0.1,
   }) ?? "";
-  assert.match(oneHourReason, /It has only been 1 hour since the last random reset/);
+  assert.match(oneHourReason, /It has been 1 hour since the last random reset/);
   assert.doesNotMatch(oneHourReason, /1 hour have passed/);
 });
 
-test("uses the displayed elapsed duration for high and compound-duration explanations", () => {
+test("uses the displayed elapsed duration for compound-duration explanations", () => {
   assert.match(
     reasonFor({
       probability24h: 0.3,
       probability48h: 0.7,
       regularResetEvents: [regularResetAt("2026-08-02T00:00:00.000Z")],
     }) ?? "",
-    /前回のランダムリセットから2日20時間が経過し、.*見込みは高めです。$/,
+    /前回のランダムリセットから2日20時間が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。$/,
   );
   assert.match(
     reasonFor({
@@ -560,4 +564,164 @@ test("strong timed teaser outlook says strength is included in all supported loc
   assert.match(en ?? "", /chance of a reset is higher than usual/);
   assert.match(zh ?? "", /Tibo 正在强烈暗示/);
   assert.match(zh ?? "", /重置的可能性高于平时/);
+});
+
+test("relative hazard threshold unit tests", () => {
+  assert.equal(getRelativeHazardLevel(0), "low");
+  assert.equal(getRelativeHazardLevel(0.74), "low");
+  assert.equal(getRelativeHazardLevel(0.7499), "low");
+  assert.equal(getRelativeHazardLevel(0.75), "medium");
+  assert.equal(getRelativeHazardLevel(1.00), "medium");
+  assert.equal(getRelativeHazardLevel(1.25), "medium");
+  assert.equal(getRelativeHazardLevel(1.2501), "high");
+  assert.equal(getRelativeHazardLevel(2.0), "high");
+  assert.equal(ELAPSED_RELATIVE_HAZARD_THRESHOLDS.low, 0.75);
+  assert.equal(ELAPSED_RELATIVE_HAZARD_THRESHOLDS.high, 1.25);
+});
+
+test("relative hazard horizon semantics: 24h is [t, t+24] and 48h is [t, t+48]", () => {
+  const bins = [
+    { startHour: 0, endHour: 24, posteriorLambdaPerHour: 0.02 },
+    { startHour: 24, endHour: 48, posteriorLambdaPerHour: 0.00 },
+    { startHour: 48, endHour: null, posteriorLambdaPerHour: 0.00 },
+  ];
+  const globalLambdaPerHour = 0.01;
+  const diagnostics = { bins, globalLambdaPerHour };
+
+  const cum24 = integrateDisplayHazard(bins, 0, 24)!;
+  const cum48 = integrateDisplayHazard(bins, 0, 48)!;
+  const cumSecondDay = integrateDisplayHazard(bins, 24, 24)!;
+
+  assert.ok(cum24 > 0);
+  assert.equal(Math.round((cum24 + cumSecondDay) * 10000), Math.round(cum48 * 10000));
+  assert.notEqual(cum48, cumSecondDay);
+
+  const r24 = getRelativeDisplayHazard(diagnostics, 0, 24)!;
+  const r48 = getRelativeDisplayHazard(diagnostics, 0, 48)!;
+  assert.equal(r24, cum24 / (24 * globalLambdaPerHour));
+  assert.equal(r48, cum48 / (48 * globalLambdaPerHour));
+});
+
+test("evaluates representative elapsed ages 0h through 168h correctly on V4 model", () => {
+  const referenceNow = new Date("2026-09-17T06:00:00.000Z");
+  const radarData = getLocalRadarData({ calculationNow: referenceNow });
+  const model = calculateRegimeElapsedProbability(radarData, { now: referenceNow });
+  const diagnostics = {
+    bins: model.hazard.bins,
+    globalLambdaPerHour: model.hazard.globalLambdaPerHour,
+  };
+
+  const expectedCases: Array<{
+    age: number;
+    level24: "low" | "medium" | "high";
+    level48: "low" | "medium" | "high";
+  }> = [
+    { age: 0, level24: "medium", level48: "high" },
+    { age: 12, level24: "high", level48: "high" },
+    { age: 24, level24: "high", level48: "high" },
+    { age: 48, level24: "medium", level48: "medium" },
+    { age: 72, level24: "medium", level48: "medium" },
+    { age: 96, level24: "medium", level48: "medium" },
+    { age: 104, level24: "medium", level48: "low" },
+    { age: 107, level24: "medium", level48: "low" },
+    { age: 110, level24: "medium", level48: "low" },
+    { age: 120, level24: "low", level48: "low" },
+    { age: 144, level24: "low", level48: "low" },
+    { age: 168, level24: "low", level48: "low" },
+  ];
+
+  for (const { age, level24, level48 } of expectedCases) {
+    const r24 = getRelativeDisplayHazard(diagnostics, age, 24)!;
+    const r48 = getRelativeDisplayHazard(diagnostics, age, 48)!;
+    assert.equal(getRelativeHazardLevel(r24), level24, `age ${age}h 24h level`);
+    assert.equal(getRelativeHazardLevel(r48), level48, `age ${age}h 48h level`);
+  }
+});
+
+test("formats 107h representative age matching user specification in all locales", () => {
+  const referenceNow = new Date("2026-09-17T06:00:00.000Z");
+  const resetAt = new Date(referenceNow.getTime() - 107 * 3600 * 1000).toISOString();
+  const testData = getLocalRadarData({
+    calculationNow: referenceNow,
+    formalTiboResets: [
+      {
+        tweet_id: "reset-107h",
+        text: "Reset",
+        tweet_url: "https://x.com/thsottiaux/status/107",
+        tweet_created_at: resetAt,
+        signal_type: "reset_executed",
+        confidence: 1,
+        verification_status: "confirmed",
+      },
+    ],
+  });
+  const model = calculateRegimeElapsedProbability(testData, { now: referenceNow });
+  const publishedCalculation = {
+    source: "shadow" as const,
+    shadow: {
+      hazard: {
+        bins: model.hazard.bins,
+        globalLambdaPerHour: model.hazard.globalLambdaPerHour,
+      },
+      regimeElapsed: {
+        mode: "elapsed-only" as const,
+        bins: model.hazard.bins,
+      },
+    },
+  };
+
+  const evaluation = getLocalSignalEvaluation(testData, referenceNow);
+  const ja = getDisplayProbabilityReason(testData, 0.2, 0.35, "ja", evaluation, null, referenceNow, publishedCalculation);
+  const en = getDisplayProbabilityReason(testData, 0.2, 0.35, "en", evaluation, null, referenceNow, publishedCalculation);
+  const zh = getDisplayProbabilityReason(testData, 0.2, 0.35, "zh", evaluation, null, referenceNow, publishedCalculation);
+
+  assert.equal(
+    ja,
+    "前回のランダムリセットから4日11時間が経過しています。過去の発生傾向に基づくと、今から24時間以内は中程度、48時間以内は低めです。",
+  );
+  assert.equal(
+    en,
+    "It has been 4 days and 11 hours since the last random reset. Based on historical reset trends, the outlook is moderate for the next 24 hours and low for the next 48 hours.",
+  );
+  assert.equal(
+    zh,
+    "距离上次随机重置已过去4天11小时。根据过去的发生趋势，未来24小时内处于中等水平，48小时内较低。",
+  );
+});
+
+test("renders distinct templates for same-level vs different-level across locales", () => {
+  const binsLow = [
+    { startHour: 0, endHour: null, posteriorLambdaPerHour: 0.001 },
+  ];
+  const diagSameLow = {
+    source: "shadow" as const,
+    shadow: {
+      hazard: { bins: binsLow, globalLambdaPerHour: 0.005 },
+      regimeElapsed: { mode: "elapsed-only" as const, bins: binsLow },
+    },
+  };
+  const testNow = new Date("2026-08-09T00:00:00.000Z");
+  const testData = getLocalRadarData({
+    calculationNow: testNow,
+    formalTiboResets: [
+      {
+        tweet_id: "reset-same",
+        text: "Reset",
+        tweet_url: "https://x.com/thsottiaux/status/same",
+        tweet_created_at: new Date(testNow.getTime() - 5 * 24 * 3600 * 1000).toISOString(),
+        signal_type: "reset_executed",
+        confidence: 1,
+        verification_status: "confirmed",
+      },
+    ],
+  });
+  const evaluation = getLocalSignalEvaluation(testData, testNow);
+
+  const jaSame = getDisplayProbabilityReason(testData, 0.1, 0.1, "ja", evaluation, null, testNow, diagSameLow);
+  const enSame = getDisplayProbabilityReason(testData, 0.1, 0.1, "en", evaluation, null, testNow, diagSameLow);
+  const zhSame = getDisplayProbabilityReason(testData, 0.1, 0.1, "zh", evaluation, null, testNow, diagSameLow);
+
+  assert.match(jaSame ?? "", /今から24時間以内・48時間以内ともに低めです。$/);
+  assert.match(enSame ?? "", /the outlook is low for both the next 24 and 48 hours\.$/);
+  assert.match(zhSame ?? "", /未来24小时内与48小时内均较低。$/);
 });
