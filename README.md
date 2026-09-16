@@ -1,72 +1,72 @@
-# Codex Reset Observatory (Codex リセット観測所)
+# Codex Reset Observatory
 
 Track and explain signals around Codex usage-limit resets.
 
-OpenAI Codex および ChatGPT Work の利用上限（レートリミット）に関するリセットシグナルを集め、リセット履歴やステータス情報とあわせて確率予測・可視化するダッシュボードです。
+This dashboard collects reset signals related to OpenAI Codex and ChatGPT Work usage limits, then combines them with reset history and status information to estimate and visualize reset probabilities.
 
 [**Open the live observatory →**](https://codex.gussuriworks.com/en)
 
-## 主な機能
+## Features
 
-- 📊 **確率予測レーダー**: 直近のリセット履歴・経過日数・障害件数・コミュニティの報告量を統合し、24時間以内／48時間以内のリセット確率を試算。
-- 📝 **公式シグナルの監視**: Chrome拡張機能とWebhookでTibo氏（@thsottiaux）の投稿を収集し、分類結果と監査情報を保存。
-- 🌐 **多言語ダッシュボード**: 日本語 (`ja`)・英語 (`en`)・中国語 (`zh`) に対応し、時間表現の自動解釈も行います。
+- 📊 **Reset probability estimates**: Estimate the probability of a reset within 24 or 48 hours by combining recent reset history, elapsed time, incident counts, and the volume of community reports.
+- 📝 **Official signal monitoring**: Collect posts by Tibo (`@thsottiaux`) through a Chrome extension and webhook, then store classification results and audit information.
+- 🌐 **Multilingual dashboard**: Supports Japanese (`ja`), English (`en`), and Chinese (`zh`), including automatic interpretation of time expressions.
 
-## LLMを含む技術的な特徴
+## LLM-assisted classification
 
-Tibo氏の投稿は、常に実行されるルールベース分類と、設定時だけ呼び出すGemini分類を組み合わせて処理します。
+Posts by Tibo (`@thsottiaux`) are processed with rule-based classification, which always runs, and optionally with Gemini classification when configured.
 
-- `off`: ルール分類のみ。
-- `shadow`: ルール分類を最終結果として採用し、Geminiの結果を監査列へ保存。
-- `primary`: Geminiの有効な成功結果を採用し、タイムアウト・レート制限・不正応答・APIエラーなどの失敗時はルール分類へfallback。
-- `hybrid`: `primary` と同じ動作をする後方互換名。
+- `off`: Rule-based classification only; Gemini is not called.
+- `shadow`: Use the rule-based classification as the final result and save the Gemini result in the audit columns.
+- `primary`: Use a valid successful Gemini result; fall back to rule-based classification when Gemini times out, is rate-limited, returns an invalid response, or encounters an API error.
+- `hybrid`: Behaves the same as `primary`; retained as a backward-compatible name.
 
-1投稿あたりのGemini API呼び出しは最大1回で、モデルの自動フォールバックは行いません。設定例と保存される分類ステータスの詳細は、[Gemini分類モードと環境変数](docs/gemini-classification.md)にまとめています。
+Gemini is called at most once per post, and automatic model fallback is not used. For configuration examples and details about saved classification statuses, see [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md).
 
-## 技術スタック
+## Tech stack
 
 - **Framework**: Next.js 15 (App Router), React 18, TypeScript
 - **Data**: Supabase (PostgreSQL / RLS)
 - **Monitoring**: Chrome Manifest V3 extension
 - **Deployment**: Vercel
 
-## データフロー
+## Data flow
 
 ```text
-Tibo氏のXプロフィール
-  → Manifest V3監視拡張
+Tibo's X profile
+  → Manifest V3 monitoring extension
   → /api/webhook/tibo
-  → ルール分類 + 任意のGemini分類
-  → Supabase の tibo_signals
-  → リセット履歴・ステータス情報とのレーダー集約
-  → Next.jsダッシュボード
+  → Rule-based classification + optional Gemini classification
+  → Supabase tibo_signals
+  → Radar aggregation with reset history and status information
+  → Next.js dashboard
 ```
 
-## ローカル開発
+## Local development
 
-Node.js と pnpm（`package.json` の `packageManager` は pnpm 11.18.0）を用意してください。
+Prepare Node.js and pnpm (`package.json` specifies pnpm 11.18.0 through `packageManager`).
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-開発サーバーは通常 `http://localhost:3000` で起動します。動的な監視・分類を試す場合のSupabase、Webhook、Geminiの環境変数はリポジトリ外で設定し、[運用・復旧手順](docs/operations/tibo-monitor-runbook.md)と[Gemini分類モードと環境変数](docs/gemini-classification.md)を参照してください。
+The development server normally starts at `http://localhost:3000`. To try dynamic monitoring and classification, configure the Supabase, webhook, and Gemini environment variables outside the repository. See [Operations and recovery runbook (Japanese)](docs/operations/tibo-monitor-runbook.md) and [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md).
 
-## 詳細ドキュメント
+## Detailed documentation
 
-- [Gemini分類モードと環境変数](docs/gemini-classification.md)
-- [AI分類の比較・監査用SQL](docs/ai-classification-audit.md)
-- [Tibo監視とリセット履歴更新の運用・復旧手順](docs/operations/tibo-monitor-runbook.md)
-- [TiboのXフィード調査](docs/tibo-x-feed-research.md)
-- [監視拡張機能のREADME](extension/tibo-monitor/README.md)
+- [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md)
+- [AI classification comparison and audit SQL (Japanese)](docs/ai-classification-audit.md)
+- [Tibo monitoring and reset history operations and recovery runbook (Japanese)](docs/operations/tibo-monitor-runbook.md)
+- [Tibo X feed research (Japanese)](docs/tibo-x-feed-research.md)
+- [Monitoring extension README (Japanese)](extension/tibo-monitor/README.md)
 
 ## Developer
 
-開発・運用の記録や個人開発について、Xで発信しています。
+I share development and personal project updates on X.
 
-[Xで開発者をフォロー](https://x.com/gussuri_s)
+[Follow the developer on X](https://x.com/gussuri_s)
 
-## 📄 ライセンス
+## 📄 License
 
 This project is open-source under the [MIT License](LICENSE).
