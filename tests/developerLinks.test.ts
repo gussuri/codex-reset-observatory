@@ -88,5 +88,5 @@ test("README contains the developer X profile link without changing site source"
   const readme = readRepoFile("README.md");
 
   assert.match(readme, /## Developer/);
-  assert.match(readme, /\[Xで開発者をフォロー\]\(https:\/\/x\.com\/gussuri_s\)/);
+  assert.match(readme, /\[Follow the developer on X\]\(https:\/\/x\.com\/gussuri_s\)/);
 });
