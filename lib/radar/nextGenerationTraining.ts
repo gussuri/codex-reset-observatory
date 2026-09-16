@@ -2,6 +2,7 @@ import {
   LOCAL_RESET_HISTORY,
 } from "@/data/resetHistory";
 import {
+  CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
@@ -9,6 +10,7 @@ import {
   NEXT_GENERATION_C_V2_FREEZE_AT,
   NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
 import type { ShadowResetEvent } from "./shadowProbability";
@@ -22,6 +24,11 @@ import type {
   NextGenerationEnsembleTrainingRow,
 } from "./nextGenerationEnsemble";
 import type { ContextualBurstCalibrationRow } from "./contextualBurstProbability";
+import {
+  isContextAwareContextProvenance,
+  isKnownContextAwareContextProvenance,
+  type ContextAwareCalibrationRow,
+} from "./contextAwareContinuousProbability";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -46,6 +53,23 @@ const C_TRAINING_PROJECTION_FIELDS = [
   "rawProbability24h",
   "rawProbability48h",
 ] as const;
+const CONTEXT_AWARE_TRAINING_PROJECTION_FIELDS = [
+  "modelVersion",
+  "generatedAt",
+  "contextAware->contextSnapshotVersion",
+  "contextAware->baselineProbability24h",
+  "contextAware->baselineProbability48h",
+  "contextAware->contextState",
+  "contextAware->contextStateProvenance",
+  "contextAware->trainingEligible",
+  "contextAware->contextExclusionReason",
+] as const;
+const CONTEXT_AWARE_FALLBACK_CHALLENGER_FIELDS = [
+  "modelVersion",
+  "generatedAt",
+  "baseline24h",
+  "baseline48h",
+] as const;
 
 function trainingProjectionField(
   alias: string,
@@ -59,7 +83,7 @@ function trainingProjectionAlias(prefix: string, field: string) {
   const snakeCaseField = field
     .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
     .replace(/\d+/g, (digits) => `_${digits}`);
-  return `${prefix}_${snakeCaseField}`;
+  return `${prefix}_${snakeCaseField.replace(/[^a-zA-Z0-9_]+/g, "_")}`;
 }
 
 function buildTrainingProjectionSelectFields() {
@@ -105,6 +129,24 @@ function buildTrainingProjectionSelectFields() {
       ),
     );
   }
+  for (const field of CONTEXT_AWARE_TRAINING_PROJECTION_FIELDS) {
+    fields.push(
+      trainingProjectionField(
+        trainingProjectionAlias("context_aware", field),
+        CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
+        field,
+      ),
+    );
+  }
+  for (const field of CONTEXT_AWARE_FALLBACK_CHALLENGER_FIELDS) {
+    fields.push(
+      trainingProjectionField(
+        trainingProjectionAlias("context_challenger", field),
+        RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+        field,
+      ),
+    );
+  }
   return fields.join(",");
 }
 
@@ -138,6 +180,7 @@ export type NextGenerationTrainingRows = {
   aRows: Array<NextGenerationEnsembleTrainingRow>;
   cRows: Array<ContextualBurstCalibrationRow>;
   cV2Rows: Array<ContextualBurstCalibrationRow>;
+  contextAwareRows: Array<ContextAwareCalibrationRow>;
   totalRows: number;
   skipReasons: NextGenerationTrainingSkipReasons;
   backfill: false;
@@ -152,6 +195,23 @@ export type NextGenerationTrainingQueryOptions = {
   asOf: Date;
   randomEvents: Array<ShadowResetEvent>;
 };
+
+function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
+  const parts = path.split("->");
+  let current = target;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (index === parts.length - 1) {
+      current[part] = value;
+      return;
+    }
+    const existing = current[part];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+      current[part] = {};
+    }
+    current = current[part] as Record<string, unknown>;
+  }
+}
 
 function timestamp(value: string | null | undefined) {
   if (!value) return null;
@@ -240,6 +300,84 @@ function maybePushContextualBurstRow(
   });
 }
 
+function isValidContextAwareForecast(value: unknown) {
+  const forecast = asRecord(value);
+  const audit = asRecord(forecast?.contextAware);
+  return forecast !== null
+    && forecast.modelVersion === CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION
+    && typeof forecast.generatedAt === "string"
+    && timestamp(forecast.generatedAt) !== null
+    && audit?.contextSnapshotVersion === "v1"
+    && isProbability(audit.baselineProbability24h)
+    && isProbability(audit.baselineProbability48h)
+    && (audit.contextState === "none" || audit.contextState === "weak" || audit.contextState === "strong" || audit.contextState === "unknown")
+    && isContextAwareContextProvenance(audit.contextStateProvenance)
+    && typeof audit.trainingEligible === "boolean";
+}
+
+function getStoredContextAwareRow(
+  forecasts: Record<string, unknown> | null,
+  options: NextGenerationTrainingQueryOptions,
+  asOfTime: number,
+) {
+  const candidate = asRecord(forecasts?.[CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION]);
+  const challenger = asRecord(forecasts?.[RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]);
+  const generatedAt = typeof candidate?.generatedAt === "string"
+    ? candidate.generatedAt
+      : typeof challenger?.generatedAt === "string"
+        ? challenger.generatedAt
+        : null;
+  const generatedTime = timestamp(generatedAt);
+  if (
+    generatedAt === null
+    || generatedTime === null
+    || generatedTime >= asOfTime
+  ) return null;
+
+  const actual24h = getActualLabel(options.randomEvents, generatedAt, asOfTime, 24);
+  const actual48h = getActualLabel(options.randomEvents, generatedAt, asOfTime, 48);
+  const candidateAudit = asRecord(candidate?.contextAware);
+  if (candidate && candidateAudit && isValidContextAwareForecast(candidate)) {
+    const audit = candidateAudit;
+    return {
+      generatedAt,
+      baselineProbability24h: audit.baselineProbability24h as number,
+      baselineProbability48h: audit.baselineProbability48h as number,
+      contextState: audit.contextState as ContextAwareCalibrationRow["contextState"],
+      actual24h,
+      actual48h,
+      trainingEligible: audit.trainingEligible as boolean,
+      contextStateProvenance: typeof audit.contextStateProvenance === "string"
+        ? audit.contextStateProvenance as ContextAwareCalibrationRow["contextStateProvenance"]
+        : "unknown",
+      contextExclusionReason: typeof audit.contextExclusionReason === "string"
+        ? audit.contextExclusionReason
+        : null,
+      source: "saved-context-aware-feature-snapshot",
+    } satisfies ContextAwareCalibrationRow;
+  }
+
+  const challengerGeneratedAt = typeof challenger?.generatedAt === "string" ? challenger.generatedAt : null;
+  const challengerMatches = challengerGeneratedAt !== null
+    && timestamp(challengerGeneratedAt) === generatedTime
+    && isProbability(challenger?.baseline24h)
+    && isProbability(challenger?.baseline48h);
+  if (!challengerMatches) return null;
+
+  return {
+    generatedAt,
+    baselineProbability24h: challenger?.baseline24h as number,
+    baselineProbability48h: challenger?.baseline48h as number,
+    contextState: "unknown",
+    actual24h,
+    actual48h,
+    trainingEligible: false,
+    contextStateProvenance: "unknown",
+    contextExclusionReason: "unknown_context",
+    source: "missing-saved-context-aware-audit+18-54-challenger",
+  } satisfies ContextAwareCalibrationRow;
+}
+
 export function parseNextGenerationTrainingRows(
   rows: Array<NextGenerationTrainingHistoryRow>,
   options: NextGenerationTrainingQueryOptions,
@@ -250,11 +388,17 @@ export function parseNextGenerationTrainingRows(
   const aRows: Array<NextGenerationEnsembleTrainingRow> = [];
   const cRows: Array<ContextualBurstCalibrationRow> = [];
   const cV2Rows: Array<ContextualBurstCalibrationRow> = [];
+  const contextAwareRows: Array<ContextAwareCalibrationRow> = [];
   const skipReasons = createSkipReasons();
 
   for (const row of rows) {
     const debugInfo = parseDebugInfo(row.debug_info);
     const forecasts = asRecord(debugInfo?.experimentalProbabilityForecasts);
+
+    if (Number.isFinite(asOfTime)) {
+      const contextAwareRow = getStoredContextAwareRow(forecasts, options, asOfTime);
+      if (contextAwareRow) contextAwareRows.push(contextAwareRow);
+    }
 
     // C has its own freeze/version contract and must not depend on B/A presence.
     if (Number.isFinite(asOfTime)) {
@@ -350,6 +494,7 @@ export function parseNextGenerationTrainingRows(
     aRows,
     cRows,
     cV2Rows,
+    contextAwareRows,
     totalRows: rows.length,
     skipReasons,
     backfill: false,
@@ -366,7 +511,7 @@ function getProjectedForecast(
   for (const field of fields) {
     const value = row[trainingProjectionAlias(prefix, field)];
     if (value !== undefined) hasProjectedValue = true;
-    forecast[field] = value;
+    setNestedValue(forecast, field, value);
   }
   return hasProjectedValue ? forecast : null;
 }
@@ -394,6 +539,18 @@ function toTrainingHistoryRow(
   if (cForecast) forecasts[NEXT_GENERATION_C_MODEL_VERSION] = cForecast;
   const cV2Forecast = getProjectedForecast(row, "c_v2", C_TRAINING_PROJECTION_FIELDS);
   if (cV2Forecast) forecasts[NEXT_GENERATION_C_V2_MODEL_VERSION] = cV2Forecast;
+  const contextAwareForecast = getProjectedForecast(
+    row,
+    "context_aware",
+    CONTEXT_AWARE_TRAINING_PROJECTION_FIELDS,
+  );
+  if (contextAwareForecast) forecasts[CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION] = contextAwareForecast;
+  const contextChallengerForecast = getProjectedForecast(
+    row,
+    "context_challenger",
+    CONTEXT_AWARE_FALLBACK_CHALLENGER_FIELDS,
+  );
+  if (contextChallengerForecast) forecasts[RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION] = contextChallengerForecast;
 
   return {
     logged_hour: row.logged_hour,
@@ -427,6 +584,7 @@ export async function loadNextGenerationTrainingState(
     aRows: [],
     cRows: [],
     cV2Rows: [],
+    contextAwareRows: [],
     totalRows: 0,
     skipReasons: createSkipReasons(),
     backfill: false,

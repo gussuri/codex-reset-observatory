@@ -168,6 +168,25 @@ export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS = {
   truncationHours: 54,
 } as const;
 
+// Prospective context-aware shadow layered on the fixed 18/54 challenger.
+// This is intentionally a separate identity and freeze boundary; it is never
+// selected by the public model aliases.
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION =
+  "hazard-regime-random-continuous-context-calibrated-bw18-tr54-v1";
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_FREEZE_AT =
+  "2026-09-16T18:25:40.948Z";
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_FREEZE_POLICY =
+  "A single reset, miss, or new observation must not trigger retuning.";
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_EVALUATION_MODE = "prospective" as const;
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_BACKFILL = false as const;
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_PRIOR_STD_DEV = 0.5;
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MINIMUM_SAMPLES = 10;
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_TARGET_DEFINITION =
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_TARGET_DEFINITION;
+export const CONTEXT_AWARE_CONTINUOUS_PROBABILITY_OPTIONS = {
+  ...RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS,
+} as const;
+
 // Third next-generation shadow. Keep its identity, fit constants, and freeze
 // boundary independent from A/B so future changes require a new C version.
 export const NEXT_GENERATION_C_MODEL_VERSION = "hazard-contextual-burst-circadian-v1";

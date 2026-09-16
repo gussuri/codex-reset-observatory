@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_C_FREEZE_AT,
@@ -9,6 +10,8 @@ import {
   NEXT_GENERATION_C_V2_FREEZE_AT,
   NEXT_GENERATION_C_V2_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
   loadNextGenerationTrainingState,
@@ -85,6 +88,55 @@ function contextualV2OnlyRow(generatedAt: string) {
   };
 }
 
+function contextAwareHistoryRow(generatedAt: string, includeSnapshot = true) {
+  return {
+    logged_hour: generatedAt,
+    debug_info: {
+      calculated_at: generatedAt,
+      experimentalProbabilityForecasts: {
+        [CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION]: {
+          modelVersion: CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
+          generatedAt,
+          contextAware: {
+            contextSnapshotVersion: "v1",
+            baselineProbability24h: 0.21,
+            baselineProbability48h: 0.42,
+            contextState: "weak",
+            contextStateProvenance: "saved-feature-snapshot",
+            trainingEligible: true,
+            contextExclusionReason: null,
+          },
+        },
+        [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]: {
+          modelVersion: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+          generatedAt,
+          baseline24h: 0.21,
+          baseline48h: 0.42,
+        },
+        [NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION]: {
+          modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+          generatedAt,
+          officialNoticeOverride: false,
+          ...(includeSnapshot
+            ? {
+                featureSnapshot: {
+                  featureSnapshotVersion: "v1",
+                  bankedEventWithin48h: false,
+                  usableTiboSignal: true,
+                  statusIncident: false,
+                  tiboSignalAgeHours: 2,
+                  tiboSignalType: "teaser",
+                  tiboSignalConfidence: 0.9,
+                  tiboTeaserStrength: "weak",
+                },
+              }
+            : {}),
+        },
+      },
+    },
+  };
+}
+
 function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
   const row: Record<string, unknown> = {
     logged_hour: generatedAt,
@@ -117,8 +169,9 @@ function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
 test("compact training select projects only the required forecast fields", () => {
   const fields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
   assert.equal(fields[0], "logged_hour");
-  assert.equal(fields.length, 31);
+  assert.equal(fields.length, 44);
   assert.ok(fields.slice(1).every((field) => field.includes("debug_info->experimentalProbabilityForecasts")));
+  assert.ok(fields.length > 31);
   assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /(^|,)debug_info(,|$)/);
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_raw_probability_24h:/);
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_probability_24h:/);
@@ -129,6 +182,53 @@ test("compact training select projects only the required forecast fields", () =>
   ]) {
     assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, new RegExp(`->${modelVersion}->`));
   }
+  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_aware_.*context_snapshot_version:/);
+  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_challenger_.*baseline_24h:/);
+  assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /featureSnapshot|context_v3/);
+});
+
+test("context-aware training prefers its saved audit and keeps PIT labels", () => {
+  const generatedAt = "2026-09-01T00:00:00.000Z";
+  const parsed = parseNextGenerationTrainingRows(
+    [contextAwareHistoryRow(generatedAt)],
+    {
+      asOf: new Date("2026-09-04T00:00:00.000Z"),
+      randomEvents: [{ id: "random-context", resetAt: "2026-09-02T00:00:00.000Z" }],
+    },
+  );
+
+  assert.equal(parsed.contextAwareRows.length, 1);
+  assert.deepEqual(parsed.contextAwareRows[0], {
+    generatedAt,
+    baselineProbability24h: 0.21,
+    baselineProbability48h: 0.42,
+    contextState: "weak",
+    actual24h: true,
+    actual48h: true,
+    trainingEligible: true,
+    contextStateProvenance: "saved-feature-snapshot",
+    contextExclusionReason: null,
+    source: "saved-context-aware-feature-snapshot",
+  });
+});
+
+test("missing saved context-aware feature data becomes unknown instead of a guessed none", () => {
+  const source = contextAwareHistoryRow("2026-09-01T00:00:00.000Z", false);
+  delete (source.debug_info.experimentalProbabilityForecasts as Record<string, unknown>)[
+    CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION
+  ];
+  const parsed = parseNextGenerationTrainingRows(
+    [source],
+    {
+      asOf: new Date("2026-09-04T00:00:00.000Z"),
+      randomEvents: [],
+    },
+  );
+
+  assert.equal(parsed.contextAwareRows.length, 1);
+  assert.equal(parsed.contextAwareRows[0].contextState, "unknown");
+  assert.equal(parsed.contextAwareRows[0].trainingEligible, false);
+  assert.equal(parsed.contextAwareRows[0].contextExclusionReason, "unknown_context");
 });
 
 test("training parser excludes pre-freeze rows and labels only random boundaries", () => {

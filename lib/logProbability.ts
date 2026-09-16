@@ -17,6 +17,7 @@ import type { RadarViewModel } from "@/lib/radar/types";
 import type { ProbabilityCalculationAudit } from "@/lib/radar/probability";
 import type { PublishedProbabilityCalculation } from "@/lib/radar/publishedProbability";
 import type { PublishedV3FeatureSnapshot } from "@/lib/radar/publishedV3FeatureSnapshot";
+import type { ContextAwareForecastAudit } from "@/lib/radar/contextAwareContinuousProbability";
 import {
   calculateAllRecencyWeightedShadowProbabilities,
 } from "@/lib/radar/recencyWeightedProbability";
@@ -89,6 +90,7 @@ export type ExperimentalProbabilityForecast = {
   integrationStepHours?: number;
   experimentRole?: "control" | "challenger";
   featureSnapshot?: PublishedV3FeatureSnapshot;
+  contextAware?: ContextAwareForecastAudit;
   regimeMultiplierPolicyVersion?: string;
   priorStdDev?: number;
   minimumSamples?: number;
@@ -144,7 +146,7 @@ export type ExperimentalProbabilityForecast = {
   }>;
   freezeAt?: string;
   freezePolicy?: string;
-  nextGenerationRole?: "candidate-a" | "candidate-b" | "candidate-c" | "candidate-c-v2";
+  nextGenerationRole?: "candidate-a" | "candidate-b" | "candidate-c" | "candidate-c-v2" | "candidate-context-aware";
   trainingReadStatus?: "ok" | "error";
   fallbackReason?: string | null;
   officialNoticeTimingPolicyVersion?: string;
@@ -220,6 +222,7 @@ export type ExperimentalProbabilityForecast = {
   circadianCycleMeanBeforeNormalization?: number | null;
   circadianCycleMeanAfterNormalization?: number | null;
   circadianNormalizationFallbackReason?: string | null;
+  backfilled?: false;
 };
 
 export type ExperimentalProbabilityForecasts = Record<string, ExperimentalProbabilityForecast>;

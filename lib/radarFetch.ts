@@ -1010,6 +1010,7 @@ function createEmptyNextGenerationTrainingState(
     aRows: [],
     cRows: [],
     cV2Rows: [],
+    contextAwareRows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,

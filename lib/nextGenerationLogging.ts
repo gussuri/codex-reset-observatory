@@ -1,5 +1,6 @@
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  CONTEXT_AWARE_CONTINUOUS_PROBABILITY_FREEZE_AT,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -32,6 +33,10 @@ import {
   type NextGenerationAResult,
   type NextGenerationComponentForecast,
 } from "./radar/nextGenerationEnsemble";
+import {
+  calculateContextAwareContinuousProbability,
+  toContextAwareForecastAudit,
+} from "./radar/contextAwareContinuousProbability";
 import {
   calculateNextGenerationBPostResetAgeCandidate,
   calculateNextGenerationBProbability,
@@ -148,6 +153,61 @@ function toRawBandwidthForecast(
     experimentRole,
     freezeAt: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT,
     freezePolicy: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY,
+  };
+}
+
+function isValidContextAwareResult(result: ReturnType<typeof calculateContextAwareContinuousProbability>) {
+  return [
+    result.predictions.probability12h,
+    result.predictions.probability24h,
+    result.predictions.probability48h,
+    result.predictions.probability72h,
+    result.baseline.probability24h,
+    result.baseline.probability48h,
+  ].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.predictions.probability48h >= result.predictions.probability24h;
+}
+
+function toContextAwareForecast(
+  result: ReturnType<typeof calculateContextAwareContinuousProbability>,
+): ExperimentalProbabilityForecast {
+  const underlying = toRandomContinuousExperimentalProbabilityForecast(result.randomContinuousResult);
+  return {
+    ...underlying,
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability12h: result.predictions.probability12h,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    probability72h: result.predictions.probability72h,
+    baseline12h: result.baseline.probability12h,
+    baseline24h: result.baseline.probability24h,
+    baseline48h: result.baseline.probability48h,
+    baseline72h: result.baseline.probability72h,
+    combinedSignalMultiplier24h: 1,
+    combinedSignalMultiplier48h: 1,
+    combinedSignalMultiplier72h: 1,
+    officialNoticeOverride: result.officialNoticeOverride.active,
+    targetDefinition: result.targetDefinition,
+    rawModelVersion: result.underlyingModelVersion,
+    rawProbability24h: result.contextAdjusted.probability24h,
+    rawProbability48h: result.contextAdjusted.probability48h,
+    calibrationApplied: false,
+    confidence: result.randomContinuousResult.confidence.level,
+    confidenceReason: result.randomContinuousResult.confidence.reason,
+    regimeMultiplierPolicyVersion: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+    evaluationMode: result.evaluationMode,
+    backfilled: false,
+    freezeAt: result.freezeAt,
+    freezePolicy: result.freezePolicy,
+    nextGenerationRole: "candidate-context-aware",
+    trainingReadStatus: result.trainingReadStatus,
+    fallbackUsed: result.fitFallbackUsed,
+    fallbackReason: result.fitFallbackReason,
+    horizonCoherenceAdjusted: result.horizonCoherenceAdjusted,
+    officialNoticeTimingPolicyVersion: result.officialNoticeTimingPolicyVersion,
+    signalMultipliers: result.signalMultipliers,
+    contextAware: toContextAwareForecastAudit(result),
   };
 }
 
@@ -425,28 +485,52 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
   }
 
   let withBandwidthExperiment = withA;
+  let bandwidthPair: ReturnType<typeof calculateRandomContinuousBandwidthShadowPair> | null = null;
   if (generatedAt.getTime() >= new Date(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT).getTime()) {
-    const pair = calculateRandomContinuousBandwidthShadowPair(
+    bandwidthPair = calculateRandomContinuousBandwidthShadowPair(
       options.data,
       options.calculationOptions,
     );
     withBandwidthExperiment = {
       ...withA,
       [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_MODEL_VERSION]: toRawBandwidthForecast(
-        pair.control,
+        bandwidthPair.control,
         "control",
       ),
       [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]: toRawBandwidthForecast(
-        pair.challenger,
+        bandwidthPair.challenger,
         "challenger",
       ),
     };
   }
 
-  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
-    return withBandwidthExperiment;
+  let withContextAware = withBandwidthExperiment;
+  if (
+    bandwidthPair &&
+    generatedAt.getTime() >= new Date(CONTEXT_AWARE_CONTINUOUS_PROBABILITY_FREEZE_AT).getTime()
+  ) {
+    const savedFeatureSnapshot = withAllBVariants[
+      NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION
+    ]?.featureSnapshot;
+    const contextAwareResult = calculateContextAwareContinuousProbability(options.data, {
+      ...options.calculationOptions,
+      precomputedChallenger: bandwidthPair.challenger,
+      trainingRows: options.trainingState.contextAwareRows ?? [],
+      trainingReadStatus: options.trainingState.status,
+      savedFeatureSnapshot,
+    });
+    if (isValidContextAwareResult(contextAwareResult)) {
+      withContextAware = {
+        ...withBandwidthExperiment,
+        [contextAwareResult.modelVersion]: toContextAwareForecast(contextAwareResult),
+      };
+    }
   }
-  let withC = withBandwidthExperiment;
+
+  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
+    return withContextAware;
+  }
+  let withC = withContextAware;
   const cResult = calculateContextualBurstProbability(options.data, {
     ...options.calculationOptions,
     trainingRows: options.trainingState.cRows,
@@ -454,7 +538,7 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
   });
   if (isValidCResult(cResult)) {
     withC = {
-      ...withBandwidthExperiment,
+      ...withContextAware,
       [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
     };
   }

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
+  CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -14,6 +15,7 @@ import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -64,6 +66,7 @@ function state(status: "ok" | "error"): NextGenerationTrainingState {
     aRows: [],
     cRows: [],
     cV2Rows: [],
+    contextAwareRows: [],
     totalRows: 0,
     skipReasons: {
       pre_freeze: 0,
@@ -196,6 +199,32 @@ test("training error preserves fallback semantics for selective hybrid v3 in log
   assert.equal(v3.fallbackReason, "prediction_history_training_query_failed");
   // Candidate A omitted due to training error
   assert.equal(forecasts[NEXT_GENERATION_A_MODEL_VERSION], undefined);
+});
+
+test("post-freeze logging adds the context-aware candidate without changing existing forecasts", () => {
+  const generatedAt = new Date("2026-09-17T05:00:00.000Z");
+  const existing = existingForecasts();
+  const forecasts = buildNextGenerationExperimentalProbabilityForecasts({
+    data: null,
+    calculationOptions: { now: generatedAt },
+    existingForecasts: existing,
+    trainingState: state("ok"),
+  });
+
+  const candidate = forecasts[CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION];
+  assert.ok(candidate, "context-aware candidate is saved after its freeze");
+  assert.equal(candidate.modelVersion, CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION);
+  assert.equal(candidate.generatedAt, generatedAt.toISOString());
+  assert.equal(candidate.nextGenerationRole, "candidate-context-aware");
+  assert.equal(candidate.contextAware?.contextSnapshotVersion, "v1");
+  assert.equal(
+    candidate.contextAware?.underlyingModelVersion,
+    RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  );
+  assert.equal(candidate.contextAware?.ordinarySemanticSignalsApplied, false);
+  assert.equal(candidate.contextAware?.trainingReadStatus, "ok");
+  assert.equal(candidate.contextAware?.fitFallbackReason, "insufficient_training_samples");
+  assert.deepEqual(forecasts[CALIBRATED_SHADOW_MODEL_VERSION], existing[CALIBRATED_SHADOW_MODEL_VERSION]);
 });
 
 test("prospective evaluator reads post-boundary logged rows as comparable active v3 + baseline v2", () => {
