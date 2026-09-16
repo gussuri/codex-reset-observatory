@@ -145,7 +145,7 @@ test("uses the latest broad regular recovery boundary, ignoring newer narrow rec
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のランダムリセットから1日3時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから1日3時間が経過しています。",
       );
     },
   );
@@ -161,7 +161,7 @@ test("uses a broad regular reference when it is the latest recovery boundary", (
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のランダムリセットから1日3時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから1日3時間が経過しています。",
       );
     },
   );
@@ -193,7 +193,7 @@ test("uses persisted regular_completed as the display boundary and not the older
       assert.equal(getLastDisplayResetAt(data, NOW)?.toISOString(), regularAt);
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のランダムリセットから9日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから9日8時間が経過しています。",
       );
     },
   );
@@ -212,15 +212,15 @@ test("uses the same regular recovery boundary in JA, EN, and ZH display reasons"
 
       assert.equal(
         getReasonForData(data, "ja"),
-        "前回のランダムリセットから9日8時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから9日8時間が経過しています。",
       );
       assert.equal(
         getReasonForData(data, "en"),
-        "It has been 9 days and 8 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
+        "It has been 9 days and 8 hours since the last random reset.",
       );
       assert.equal(
         getReasonForData(data, "zh"),
-        "距离上次随机重置已过去9天8小时，根据当前预测，重置的可能性处于中等水平。",
+        "距离上次随机重置已过去9天8小时。",
       );
     },
   );
@@ -280,15 +280,15 @@ test("renders the normal outlook sentence in all supported locales", () => {
     () => {
       assert.equal(
         getReason("ja"),
-        "前回のランダムリセットから2日2時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+        "前回のランダムリセットから2日2時間が経過しています。",
       );
       assert.equal(
         getReason("en"),
-        "It has been 2 days and 2 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
+        "It has been 2 days and 2 hours since the last random reset.",
       );
       assert.equal(
         getReason("zh"),
-        "距离上次随机重置已过去2天2小时，根据当前预测，重置的可能性处于中等水平。",
+        "距离上次随机重置已过去2天2小时。",
       );
     },
   );

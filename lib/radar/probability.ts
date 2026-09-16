@@ -1878,37 +1878,6 @@ export function getRelativeHazardLevel(
   return "medium";
 }
 
-function formatRelativeHazardLevel(
-  level: RelativeHazardLevel,
-  locale: Locale,
-): string {
-  switch (level) {
-    case "low":
-      return translateUI("outlookRelativeHazardLevelLow", locale);
-    case "medium":
-      return translateUI("outlookRelativeHazardLevelMedium", locale);
-    case "high":
-      return translateUI("outlookRelativeHazardLevelHigh", locale);
-  }
-}
-
-function replaceRelativeHazardPlaceholders(
-  text: string,
-  params: { elapsed: string; level24?: string; level48?: string; level?: string },
-): string {
-  let result = text.replace("{elapsed}", params.elapsed);
-  if (params.level24 !== undefined) {
-    result = result.replace("{level24}", params.level24);
-  }
-  if (params.level48 !== undefined) {
-    result = result.replace("{level48}", params.level48);
-  }
-  if (params.level !== undefined) {
-    result = result.replace("{level}", params.level);
-  }
-  return result;
-}
-
 function replaceElapsedPlaceholder(text: string, elapsed: string) {
   return text.replace("{elapsed}", elapsed);
 }
@@ -2072,40 +2041,11 @@ export function getDisplayProbabilityReason(
     : null;
 
   if (!hasElapsed || !elapsed) {
-    return translateUI(getGenericOutlookKey(expectationKey, false), locale);
+    return translateUI("outlookNeutral", locale);
   }
 
-  const elapsedHours = elapsedMs / (60 * 60 * 1000);
-  const diagnostics = getPublishedElapsedDiagnostics(publishedCalculation);
-  const rel24 = getRelativeDisplayHazard(diagnostics, elapsedHours, 24);
-  const rel48 = getRelativeDisplayHazard(diagnostics, elapsedHours, 48);
-
-  if (rel24 !== null && rel48 !== null) {
-    const level24 = getRelativeHazardLevel(rel24);
-    const level48 = getRelativeHazardLevel(rel48);
-
-    if (level24 === level48) {
-      const formattedLevel = formatRelativeHazardLevel(level24, locale);
-      return replaceRelativeHazardPlaceholders(
-        translateUI("outlookRelativeHazardSame", locale),
-        { elapsed, level: formattedLevel },
-      );
-    }
-
-    return replaceRelativeHazardPlaceholders(
-      translateUI("outlookRelativeHazardDifferent", locale),
-      {
-        elapsed,
-        level24: formatRelativeHazardLevel(level24, locale),
-        level48: formatRelativeHazardLevel(level48, locale),
-      },
-    );
-  }
-
-  return replaceElapsedPlaceholder(
-    translateUI(getGenericOutlookKey(expectationKey, true), locale),
-    elapsed,
-  );
+  // Recovery-boundary diagnostics do not share the random-reset clock named by this sentence.
+  return replaceElapsedPlaceholder(translateUI("outlookElapsedNeutral", locale), elapsed);
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {

@@ -212,6 +212,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "It has been {elapsed} since the last random reset. Based on historical reset trends, the outlook is {level} for both the next 24 and 48 hours.",
     zh: "距离上次随机重置已过去{elapsed}。根据过去的发生趋势，未来24小时内与48小时内均{level}。",
   },
+  outlookElapsedNeutral: {
+    ja: "前回のランダムリセットから{elapsed}が経過しています。",
+    en: "It has been {elapsed} since the last random reset.",
+    zh: "距离上次随机重置已过去{elapsed}。",
+  },
+  outlookNeutral: {
+    ja: "現在のリセット状況を表示しています。",
+    en: "Showing the current reset status.",
+    zh: "当前显示重置状态。",
+  },
   outlookRelativeHazardLevelLow: {
     ja: "低め",
     en: "low",

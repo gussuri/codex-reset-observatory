@@ -207,22 +207,36 @@ test("uses clear English and Chinese wording for teaser strength", () => {
   );
 });
 
-test("matches expectation level in fallback generic explanations without diagnostics", () => {
-  assert.match(
-    reasonFor({ probability24h: 0.1, probability48h: 0.1, source: "legacy-shadow-fallback" }) ?? "",
-    /見込みは低めです。$/,
+test("uses neutral elapsed wording even without elapsed diagnostics", () => {
+  const expected = "前回のランダムリセットから2日20時間が経過しています。";
+  assert.equal(
+    reasonFor({ probability24h: 0.1, probability48h: 0.1, source: "legacy-shadow-fallback" }),
+    expected,
   );
-  assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.4, elapsedHours: 20, source: "legacy-shadow-fallback" }) ?? "",
-    /見込みは中程度です。$/,
+  assert.equal(
+    reasonFor({ probability24h: 0.3, probability48h: 0.4, elapsedHours: 20, source: "legacy-shadow-fallback" }),
+    expected,
   );
-  assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.7, elapsedHours: 48, source: "legacy-shadow-fallback" }) ?? "",
-    /見込みは高めです。$/,
+  assert.equal(
+    reasonFor({ probability24h: 0.3, probability48h: 0.7, elapsedHours: 48, source: "legacy-shadow-fallback" }),
+    expected,
   );
-  assert.match(
-    reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96, source: "legacy-shadow-fallback" }) ?? "",
-    /見込みは非常に高いです。$/,
+  assert.equal(
+    reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96, source: "legacy-shadow-fallback" }),
+    expected,
+  );
+});
+
+test("uses neutral wording when no random reset baseline is available", () => {
+  assert.equal(
+    reasonFor({
+      probability24h: 0.3,
+      probability48h: 0.7,
+      formalTiboResets: [],
+      regularResetEvents: [],
+      now: new Date("2020-01-01T00:00:00.000Z"),
+    }),
+    "現在のリセット状況を表示しています。",
   );
 });
 
@@ -232,19 +246,19 @@ test("does not use indirect or technical elapsed-time wording", () => {
   assert.doesNotMatch(reason ?? "", /時間が浅い|低発生帯|経過時間による抑制/);
 });
 
-test("elapsed-only publication uses the normal outlook wording despite raw regime diagnostics", () => {
+test("elapsed-only publication uses neutral wording despite raw regime diagnostics", () => {
   const regularResetEvents = [regularResetAt("2026-08-03T04:00:00.000Z")];
-  assert.match(
+  assert.equal(
     reasonFor({ multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /前回のランダムリセットから2日20時間が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。$/,
+    "前回のランダムリセットから2日20時間が経過しています。",
   );
-  assert.match(
+  assert.equal(
     reasonFor({ locale: "en", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /It has been 2 days and 20 hours since the last random reset\. Based on historical reset trends, the outlook is high for both the next 24 and 48 hours\.$/,
+    "It has been 2 days and 20 hours since the last random reset.",
   );
-  assert.match(
+  assert.equal(
     reasonFor({ locale: "zh", multiplier: 1.5, elapsedHours: 48, mode: "elapsed-only", regularResetEvents }) ?? "",
-    /距离上次随机重置已过去2天20小时。根据过去的发生趋势，未来24小时内与48小时内均较高。$/,
+    "距离上次随机重置已过去2天20小时。",
   );
 });
 
@@ -252,26 +266,26 @@ test("uses consistent outlook phrasing across English and Chinese", () => {
   const regularResetEvents = [regularResetAt("2026-08-02T00:00:00.000Z")];
   assert.equal(
     reasonFor({ locale: "en", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "It has been 2 days and 20 hours since the last random reset. Based on historical reset trends, the outlook is high for both the next 24 and 48 hours.",
+    "It has been 2 days and 20 hours since the last random reset.",
   );
   assert.equal(
     reasonFor({ locale: "zh", probability24h: 0.3, probability48h: 0.4, regularResetEvents }),
-    "距离上次随机重置已过去2天20小时。根据过去的发生趋势，未来24小时内与48小时内均较高。",
+    "距离上次随机重置已过去2天20小时。",
   );
 });
 
-test("does not use regime diagnostics when the published model falls back", () => {
+test("uses neutral elapsed wording when the published model falls back", () => {
   assert.equal(
     reasonFor({ source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "前回のランダムリセットから2日20時間が経過しており、現在の予測ではリセットの見込みは中程度です。",
+    "前回のランダムリセットから2日20時間が経過しています。",
   );
   assert.equal(
     reasonFor({ locale: "en", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "It has been 2 days and 20 hours since the last random reset, and the current forecast puts the outlook for a reset at moderate.",
+    "It has been 2 days and 20 hours since the last random reset.",
   );
   assert.equal(
     reasonFor({ locale: "zh", source: "legacy-shadow-fallback", multiplier: 1.5, elapsedHours: 96 }),
-    "距离上次随机重置已过去2天20小时，根据当前预测，重置的可能性处于中等水平。",
+    "距离上次随机重置已过去2天20小时。",
   );
 });
 
@@ -300,7 +314,7 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
       probability24h: 0.1,
       probability48h: 0.1,
     }),
-    "前回のランダムリセットから7日が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。",
+    "前回のランダムリセットから7日が経過しています。",
   );
 });
 
@@ -371,14 +385,14 @@ test("uses minute precision immediately after a random reset despite a regular b
   assert.doesNotMatch(oneHourReason, /1 hour have passed/);
 });
 
-test("uses the displayed elapsed duration for compound-duration explanations", () => {
+test("uses the displayed elapsed duration for neutral explanations", () => {
   assert.match(
     reasonFor({
       probability24h: 0.3,
       probability48h: 0.7,
       regularResetEvents: [regularResetAt("2026-08-02T00:00:00.000Z")],
     }) ?? "",
-    /前回のランダムリセットから2日20時間が経過しています。過去の発生傾向に基づくと、今から24時間以内・48時間以内ともに高めです。$/,
+    /前回のランダムリセットから2日20時間が経過しています。$/,
   );
   assert.match(
     reasonFor({
@@ -677,19 +691,19 @@ test("formats 107h representative age matching user specification in all locales
 
   assert.equal(
     ja,
-    "前回のランダムリセットから4日11時間が経過しています。過去の発生傾向に基づくと、今から24時間以内は中程度、48時間以内は低めです。",
+    "前回のランダムリセットから4日11時間が経過しています。",
   );
   assert.equal(
     en,
-    "It has been 4 days and 11 hours since the last random reset. Based on historical reset trends, the outlook is moderate for the next 24 hours and low for the next 48 hours.",
+    "It has been 4 days and 11 hours since the last random reset.",
   );
   assert.equal(
     zh,
-    "距离上次随机重置已过去4天11小时。根据过去的发生趋势，未来24小时内处于中等水平，48小时内较低。",
+    "距离上次随机重置已过去4天11小时。",
   );
 });
 
-test("renders distinct templates for same-level vs different-level across locales", () => {
+test("renders the neutral elapsed template across locales", () => {
   const binsLow = [
     { startHour: 0, endHour: null, posteriorLambdaPerHour: 0.001 },
   ];
@@ -721,7 +735,7 @@ test("renders distinct templates for same-level vs different-level across locale
   const enSame = getDisplayProbabilityReason(testData, 0.1, 0.1, "en", evaluation, null, testNow, diagSameLow);
   const zhSame = getDisplayProbabilityReason(testData, 0.1, 0.1, "zh", evaluation, null, testNow, diagSameLow);
 
-  assert.match(jaSame ?? "", /今から24時間以内・48時間以内ともに低めです。$/);
-  assert.match(enSame ?? "", /the outlook is low for both the next 24 and 48 hours\.$/);
-  assert.match(zhSame ?? "", /未来24小时内与48小时内均较低。$/);
+  assert.equal(jaSame, "前回のランダムリセットから5日が経過しています。");
+  assert.equal(enSame, "It has been 5 days since the last random reset.");
+  assert.equal(zhSame, "距离上次随机重置已过去5天。");
 });
