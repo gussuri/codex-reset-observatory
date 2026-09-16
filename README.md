@@ -44,7 +44,7 @@ Tibo's X profile
 
 ## Local development
 
-Prepare Node.js and pnpm (`package.json` specifies pnpm 11.18.0 through `packageManager`).
+Install Node.js and pnpm (`package.json` specifies pnpm 11.18.0 through `packageManager`).
 
 ```bash
 pnpm install
