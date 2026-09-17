@@ -85,6 +85,20 @@ test("OG model localizes labels without changing the shared values", () => {
   assert.equal(model.updated, "2026/09/17 22:54 JST");
 });
 
+test("OG model localizes the full card copy for the Chinese route", () => {
+  const model = buildRadarOgImageModel(snapshot(), "zh");
+
+  assert.ok(model);
+  assert.equal(model.copy.title, "Codex 重置观测站");
+  assert.equal(model.copy.expectation, "随机重置倾向");
+  assert.equal(model.copy.within24h, "未来24小时");
+  assert.equal(model.copy.within48h, "未来48小时");
+  assert.equal(model.copy.officialNotice, "官方预告");
+  assert.equal(model.copy.teaser, "暗示");
+  assert.equal(model.copy.incident, "故障");
+  assert.equal(model.copy.elapsed, "距上次随机重置");
+});
+
 test("OG generation fails closed to the static fallback when the snapshot is degraded or invalid", () => {
   assert.equal(
     buildRadarOgImageModel(snapshot({ dataHealth: { ...snapshot().dataHealth, overall: "degraded" } }), "ja"),

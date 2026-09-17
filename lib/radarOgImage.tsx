@@ -233,7 +233,7 @@ function RadarOgImage({ model }: { model: RadarOgImageModel }) {
   }[model.expectationTone];
 
   return (
-    <div style={{ background: "radial-gradient(circle at 18% 12%, rgba(20, 184, 166, 0.2), transparent 34%), radial-gradient(circle at 84% 4%, rgba(245, 158, 11, 0.16), transparent 30%), linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #f7f7f0 100%)", color: "#0f172a", display: "flex", flexDirection: "column", fontFamily: "NotoSansJP", height: "100%", overflow: "hidden", padding: "52px 60px 42px", position: "relative", width: "100%" }}>
+    <div style={{ background: "radial-gradient(circle at 18% 12%, rgba(20, 184, 166, 0.2), transparent 34%), radial-gradient(circle at 84% 4%, rgba(245, 158, 11, 0.16), transparent 30%), linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #f7f7f0 100%)", color: "#0f172a", display: "flex", flexDirection: "column", fontFamily: "NotoSansJP", height: "100%", overflow: "hidden", padding: "38px 48px 28px", position: "relative", width: "100%" }}>
       <div style={{ backgroundImage: "linear-gradient(rgba(15, 118, 110, 0.13) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 118, 110, 0.13) 1px, transparent 1px)", backgroundSize: "34px 34px", display: "flex", height: 390, opacity: 0.45, position: "absolute", right: -18, top: -22, width: 520 }} />
       <div style={{ display: "flex", height: 500, opacity: 0.48, position: "absolute", right: -76, top: -126, width: 500 }}>
         <div style={{ border: "2px solid rgba(20, 184, 166, 0.34)", borderRadius: 250, display: "flex", height: 500, position: "absolute", width: 500 }} />
@@ -245,41 +245,41 @@ function RadarOgImage({ model }: { model: RadarOgImageModel }) {
 
       <div style={{ display: "flex", flex: 1, flexDirection: "column", position: "relative" }}>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", fontSize: 39, fontWeight: 700 }}>{copy.title}</div>
-          <div style={{ color: "#475569", display: "flex", fontSize: 23, marginTop: 9 }}>{copy.subtitle}</div>
+          <div style={{ display: "flex", fontSize: 44, fontWeight: 700 }}>{copy.title}</div>
+          <div style={{ color: "#475569", display: "flex", fontSize: 25, marginTop: 7 }}>{copy.subtitle}</div>
         </div>
 
-        <div style={{ display: "flex", gap: 18, marginTop: 34 }}>
-          <div style={{ background: expectationTone.background, border: `2px solid ${expectationTone.border}`, borderRadius: 8, boxShadow: "0 10px 26px rgba(15, 23, 42, 0.08)", display: "flex", flexDirection: "column", justifyContent: "center", padding: "20px 28px", width: 350 }}>
-            <div style={{ color: "#475569", display: "flex", fontSize: 20 }}>{copy.expectation}</div>
-            <div style={{ color: expectationTone.color, display: "flex", fontSize: 48, fontWeight: 700, marginTop: 8 }}>{model.expectation}</div>
+        <div style={{ display: "flex", gap: 14, marginTop: 22 }}>
+          <div style={{ background: expectationTone.background, border: `2px solid ${expectationTone.border}`, borderRadius: 8, boxShadow: "0 10px 26px rgba(15, 23, 42, 0.08)", display: "flex", flexDirection: "column", justifyContent: "center", padding: "16px 24px", width: 350 }}>
+            <div style={{ color: "#475569", display: "flex", fontSize: 22 }}>{copy.expectation}</div>
+            <div style={{ color: expectationTone.color, display: "flex", fontSize: 64, fontWeight: 700, marginTop: 4 }}>{model.expectation}</div>
           </div>
-          <div style={{ background: "rgba(255, 255, 255, 0.82)", border: "2px solid rgba(20, 184, 166, 0.2)", borderRadius: 8, boxShadow: "0 10px 26px rgba(15, 23, 42, 0.08)", display: "flex", flex: 1, gap: 38, padding: "20px 28px" }}>
-            <div style={{ borderLeft: "4px solid rgba(20, 184, 166, 0.42)", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", paddingLeft: 16 }}>
-              <div style={{ color: "#475569", display: "flex", fontSize: 20 }}>{copy.within24h}</div>
-              <div style={{ color: "#0f172a", display: "flex", fontSize: 51, fontWeight: 700, marginTop: 7 }}>{model.probability24h}</div>
+          <div style={{ background: "rgba(255, 255, 255, 0.82)", border: "2px solid rgba(20, 184, 166, 0.2)", borderRadius: 8, boxShadow: "0 10px 26px rgba(15, 23, 42, 0.08)", display: "flex", flex: 1, gap: 28, padding: "16px 24px" }}>
+            <div style={{ borderLeft: "5px solid rgba(20, 184, 166, 0.42)", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", paddingLeft: 14 }}>
+              <div style={{ color: "#475569", display: "flex", fontSize: 22 }}>{copy.within24h}</div>
+              <div style={{ color: "#0f172a", display: "flex", fontSize: 70, fontWeight: 700, marginTop: 2 }}>{model.probability24h}</div>
             </div>
-            <div style={{ borderLeft: "4px solid rgba(245, 158, 11, 0.42)", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", paddingLeft: 16 }}>
-              <div style={{ color: "#475569", display: "flex", fontSize: 20 }}>{copy.within48h}</div>
-              <div style={{ color: "#0f172a", display: "flex", fontSize: 51, fontWeight: 700, marginTop: 7 }}>{model.probability48h}</div>
+            <div style={{ borderLeft: "5px solid rgba(245, 158, 11, 0.42)", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", paddingLeft: 14 }}>
+              <div style={{ color: "#475569", display: "flex", fontSize: 22 }}>{copy.within48h}</div>
+              <div style={{ color: "#0f172a", display: "flex", fontSize: 70, fontWeight: 700, marginTop: 2 }}>{model.probability48h}</div>
             </div>
           </div>
         </div>
 
-        <div style={{ background: "rgba(255, 255, 255, 0.48)", borderBottom: "1px solid rgba(15, 118, 110, 0.2)", borderTop: "1px solid rgba(15, 118, 110, 0.2)", display: "flex", gap: 26, marginTop: 28, padding: "17px 4px" }}>
+        <div style={{ background: "rgba(255, 255, 255, 0.48)", borderBottom: "1px solid rgba(15, 118, 110, 0.2)", borderTop: "1px solid rgba(15, 118, 110, 0.2)", display: "flex", gap: 20, marginTop: 20, padding: "12px 4px" }}>
           <StatusPill inactiveValue={copy.no} label={copy.officialNotice} value={model.officialNotice} />
           <StatusPill inactiveValue={copy.no} label={copy.teaser} value={model.teaser} />
           <StatusPill inactiveValue={copy.no} label={copy.incident} value={model.incident} />
         </div>
 
         <div style={{ alignItems: "flex-end", display: "flex", justifyContent: "space-between", marginTop: "auto" }}>
-          <div style={{ color: "#334155", display: "flex", flexDirection: "column", fontSize: 23, gap: 5 }}>
+          <div style={{ color: "#334155", display: "flex", flexDirection: "column", fontSize: 25, gap: 5 }}>
             <div style={{ alignItems: "baseline", display: "flex" }}>
-              <span style={{ color: "#64748b", fontSize: 19 }}>{`${copy.elapsed}:`}</span>
+              <span style={{ color: "#64748b", fontSize: 20 }}>{`${copy.elapsed}:`}</span>
               <span style={{ marginLeft: 8 }}>{model.elapsed}</span>
             </div>
           </div>
-          <div style={{ color: "#64748b", display: "flex", fontSize: 18 }}><span>{`${copy.updated} ${model.updated}`}</span></div>
+          <div style={{ color: "#64748b", display: "flex", fontSize: 19 }}><span>{`${copy.updated} ${model.updated}`}</span></div>
         </div>
       </div>
     </div>
