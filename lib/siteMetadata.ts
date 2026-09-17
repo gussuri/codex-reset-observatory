@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 export const SITE_URL = "https://codex.gussuriworks.com";
 export const SITE_NAME = "Codex Reset Observatory";
 export const SITE_NAME_JA = "Codexリセット観測所";
-export const SITE_OG_IMAGE_URL = SITE_URL + "/og-image.png";
+export const SITE_STATIC_OG_IMAGE_URL = SITE_URL + "/og-image.png";
+// Kept as the static fallback for non-home pages and dynamic image failures.
+export const SITE_OG_IMAGE_URL = SITE_STATIC_OG_IMAGE_URL;
 
 export const HOME_TITLE_JA = "Codexリセット観測所｜タイミング・履歴・次回予測";
 export const HOME_DESCRIPTION_JA =
@@ -25,6 +27,11 @@ export function siteUrl(path = "/"): string {
 }
 
 export type SiteLocale = "ja" | "en" | "zh";
+
+export function siteOgImageUrl(locale: SiteLocale): string {
+  const path = locale === "ja" ? "/opengraph-image" : `/${locale}/opengraph-image`;
+  return siteUrl(path);
+}
 
 export function getRootMetadata(locale: SiteLocale): Metadata {
   const path = locale === "ja" ? "/" : `/${locale}`;
@@ -59,13 +66,13 @@ export function getRootMetadata(locale: SiteLocale): Metadata {
       siteName: SITE_NAME,
       locale: openGraphLocale,
       type: "website",
-      images: [{ url: SITE_OG_IMAGE_URL, width: 1200, height: 630, alt: SITE_NAME }],
+      images: [{ url: siteOgImageUrl(locale), width: 1200, height: 630, alt: SITE_NAME }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [SITE_OG_IMAGE_URL],
+      images: [siteOgImageUrl(locale)],
     },
   };
 }

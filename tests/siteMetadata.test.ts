@@ -22,6 +22,7 @@ import {
   SITE_NAME_JA,
   SITE_OG_IMAGE_URL,
   SITE_URL,
+  siteOgImageUrl,
   siteUrl,
 } from "../lib/siteMetadata";
 import { metadata as jaHomeMetadata, revalidate as jaHomeRevalidate } from "../app/(ja)/page";
@@ -109,12 +110,14 @@ test("home metadata preserves exact localized SEO contracts", () => {
         : firstImage instanceof URL
           ? firstImage.toString()
           : firstImage?.url;
-    assert.strictEqual(firstImageUrl, SITE_OG_IMAGE_URL, item.locale);
+    assert.strictEqual(firstImageUrl, siteOgImageUrl(item.locale), item.locale);
 
     assert.strictEqual(item.metadata.twitter?.title, item.expectedTitle, item.locale);
     assert.strictEqual(item.metadata.twitter?.description, item.expectedDescription, item.locale);
-    assert.deepStrictEqual(item.metadata.twitter?.images, [SITE_OG_IMAGE_URL], item.locale);
+    assert.deepStrictEqual(item.metadata.twitter?.images, [siteOgImageUrl(item.locale)], item.locale);
   }
+
+  assert.strictEqual(SITE_OG_IMAGE_URL, siteUrl("/og-image.png"));
 });
 
 test("localized radar pages use a one-hour ISR interval", () => {

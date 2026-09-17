@@ -5,7 +5,7 @@ import {
   HOME_DESCRIPTION_EN,
   HOME_TITLE_EN,
   SITE_NAME,
-  SITE_OG_IMAGE_URL,
+  siteOgImageUrl,
   siteUrl,
 } from "@/lib/siteMetadata";
 
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     alternateLocale: ["ja_JP"],
     images: [
       {
-        url: SITE_OG_IMAGE_URL,
+        url: siteOgImageUrl("en"),
         width: 1200,
         height: 630,
         alt: SITE_NAME,
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: HOME_TITLE_EN,
     description: HOME_DESCRIPTION_EN,
-    images: [SITE_OG_IMAGE_URL],
+    images: [siteOgImageUrl("en")],
   },
 };
 
