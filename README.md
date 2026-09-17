@@ -12,6 +12,74 @@ This dashboard collects reset signals related to OpenAI Codex and ChatGPT Work u
 - 📝 **Official signal monitoring**: Collect posts by Tibo (`@thsottiaux`) through a Chrome extension and webhook, then store classification results and audit information.
 - 🌐 **Multilingual dashboard**: Supports Japanese (`ja`), English (`en`), and Chinese (`zh`), including automatic interpretation of time expressions.
 
+## Public API
+
+The observatory provides a read-only endpoint for the current reset status and probability estimates:
+
+```text
+GET https://codex.gussuriworks.com/api/current
+```
+
+Pass a locale when you want localized labels in the response:
+
+```text
+GET https://codex.gussuriworks.com/api/current?locale=en
+```
+
+`locale` supports `ja`, `en`, and `zh`. If it is omitted or unsupported, the response falls back to Japanese.
+
+### Response
+
+The response uses `schemaVersion: "public-v1"`. This is the API response schema version, not a forecast model version.
+
+| Field | Meaning |
+| --- | --- |
+| `schemaVersion` | Version of the public response shape. |
+| `checkedAt` | When the current data was checked. |
+| `dataHealth` | Health and freshness information for the data sources. |
+| `viewModel.probability12h` | Estimated probability within the next 12 hours. |
+| `viewModel.probability24h` | Estimated probability within the next 24 hours. |
+| `viewModel.probability48h` | Estimated probability within the next 48 hours. |
+| `viewModel.probability72h` | Estimated probability within the next 72 hours. |
+
+Probability values are numbers from `0.0` to `1.0`, not percentages. For example, `0.25` means `25%`.
+
+### Example
+
+Request:
+
+```bash
+curl "https://codex.gussuriworks.com/api/current?locale=en"
+```
+
+The following is an illustrative example only. The numbers are not a fixed or guaranteed forecast:
+
+```json
+{
+  "schemaVersion": "public-v1",
+  "checkedAt": "...",
+  "dataHealth": { "overall": "ok" },
+  "viewModel": {
+    "probability12h": 0.03,
+    "probability24h": 0.06,
+    "probability48h": 0.19,
+    "probability72h": 0.42
+  }
+}
+```
+
+### Caching and compatibility
+
+The service uses a 10-minute shared calculation/cache cadence. Polling at intervals of 10 minutes or more is recommended; polling more often will normally not produce a newer forecast.
+
+Clients should use `schemaVersion` and ignore unknown fields. Additive fields may be introduced over time.
+
+### CORS
+
+Server-side applications and native clients can consume the endpoint normally. Direct browser requests from another origin may be blocked by the browser because cross-origin access is not currently enabled.
+
+This is an unofficial API. Forecasts are statistical estimates, not guarantees. Data may be delayed or temporarily unavailable. The service is provided on a best-effort basis without an SLA.
+
 ## LLM-assisted classification
 
 Posts by Tibo (`@thsottiaux`) are processed with rule-based classification, which always runs, and optionally with Gemini classification when configured.
