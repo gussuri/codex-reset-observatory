@@ -1,12 +1,12 @@
 # 次世代確率モデルの運用と公開状態
 
-公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-10T01:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、その後`2026-09-11T02:20:00.000Z`までは `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid v3）、その後`2026-09-17T08:00:00.000Z`までは `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4）、それ以後は `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（frozen raw continuous 18/54）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/C、selective v3、raw 18/54は採用期間以外ではshadowとして観測します。
+公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-10T01:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、その後`2026-09-11T02:20:00.000Z`までは `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid v3）、その後`2026-09-17T05:45:00.000Z`までは `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4）、それ以後は `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（frozen raw continuous 18/54）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/C、selective v3、raw 18/54は採用期間以外ではshadowとして観測します。
 
 - B v1: `hazard-regime-random-continuous-calibrated-v1`（2026-08-23T02:04:00.000Z以後のhistorical public model）
 - B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（2026-09-01T08:00:00.000Z以後、v3 boundary前のpublic model）
 - selective hybrid v3: `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（2026-09-10T01:00:00.000Z〜2026-09-11T02:20:00.000Zのhistorical public period、24h diagnostic-only / 48h apply）
-- corrective rollback V4: `hazard-odds-v4-logit-calibrated-prequential-v3`（2026-09-11T02:20:00.000Z〜2026-09-17T08:00:00.000Z）
-- raw continuous 18/54: `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（2026-09-17T08:00:00.000Z以後のmanual corrective public period; no calibration）
+- corrective rollback V4: `hazard-odds-v4-logit-calibrated-prequential-v3`（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z）
+- raw continuous 18/54: `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（2026-09-17T05:45:00.000Z以後のmanual corrective public period; no calibration）
 - A: `hazard-ensemble-logit-stack-v1`（shadow）
 - C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
@@ -19,7 +19,7 @@
 - v2 adoption boundary: `2026-09-01T08:00:00.000Z`（historical `production_boundary_set`）
 - selective hybrid v3 adoption boundary: `2026-09-10T01:00:00.000Z`（`production_boundary_set`）
 - corrective rollback V4 boundary: `2026-09-11T02:20:00.000Z`
-- raw continuous 18/54 adoption boundary: `2026-09-17T08:00:00.000Z`
+- raw continuous 18/54 adoption boundary: `2026-09-17T05:45:00.000Z`
 - raw continuous 18/54 freeze: `2026-09-02T09:00:00.000Z`; refit/retuning/backfillは禁止
 - v2 calibration training source: B v1
 - backfill: false

@@ -55,7 +55,7 @@ forecast rows. The gate is advisory and manual-review-only.
 After the frozen prospective experiment, the challenger
 `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1` is scheduled
 for a separate manual corrective adoption at
-`2026-09-17T08:00:00.000Z` (UTC). This is a public-selector change to an
+`2026-09-17T05:45:00.000Z` (UTC). This is a public-selector change to an
 already frozen challenger, not a new fit, calibration, retuning, or automatic
 gate promotion. The preregistered freeze remains `2026-09-02T09:00:00.000Z`.
 

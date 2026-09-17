@@ -56,7 +56,7 @@ test("published model governance config records the manual selective hybrid and 
   );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS, "not_met");
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
-  assert.equal(PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT, "2026-09-17T08:00:00.000Z");
+  assert.equal(PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT, "2026-09-17T05:45:00.000Z");
   assert.equal(PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE, "2026-09-17");
   assert.equal(NEXT_GENERATION_EVALUATION_MODE, "prospective");
   assert.equal(NEXT_GENERATION_BACKFILL, false);

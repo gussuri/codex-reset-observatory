@@ -6,9 +6,9 @@
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（2026-09-17T08:00:00.000Z以後） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（raw continuous 18/54） |
+| 公開モデル（2026-09-17T05:45:00.000Z以後） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（raw continuous 18/54） |
 | 公開モデル（2026-09-10T01:00:00.000Z〜2026-09-11T02:20:00.000Z） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid） |
-| 公開モデル（2026-09-11T02:20:00.000Z〜2026-09-17T08:00:00.000Z） | `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4） |
+| 公開モデル（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z） | `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4） |
 | 比較用のprevious model（raw 18/54採用後） | `hazard-odds-v4-logit-calibrated-prequential-v3` |
 | v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
@@ -21,7 +21,7 @@
 | current boundary status | `production_boundary_set` |
 | v2 calibration training source | `hazard-regime-random-continuous-calibrated-v1` |
 | raw 18/54 adoption mode | `manual corrective adoption` |
-| raw 18/54 adoption timestamp | `2026-09-17T08:00:00.000Z` |
+| raw 18/54 adoption timestamp | `2026-09-17T05:45:00.000Z` |
 | raw 18/54 adoption date | `2026-09-17` |
 | raw 18/54 freeze timestamp | `2026-09-02T09:00:00.000Z` |
 
@@ -31,7 +31,7 @@ Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-bur
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3やraw 18/54を自動publishしたり、V4を自動rollbackしたりしません。
 
-selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4を使用します。`2026-09-17T08:00:00.000Z`以後は、凍結済みraw 18/54 challengerの予測が有効な場合に選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補はその期間の既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4を使用します。`2026-09-17T05:45:00.000Z`以後は、凍結済みraw 18/54 challengerの予測が有効な場合に選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補はその期間の既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
 
 logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは採用境界ごとに対象期間を分離し、過去boundary前のrowを現行モデルとして再利用しません。
 
@@ -39,7 +39,7 @@ logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、
 
 - model: `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`
 - previous public model: `hazard-odds-v4-logit-calibrated-prequential-v3`
-- adoption boundary: `2026-09-17T08:00:00.000Z` (UTC)
+- adoption boundary: `2026-09-17T05:45:00.000Z` (UTC)
 - adoption date: `2026-09-17`
 - adoption mode: `manual corrective adoption`
 - freeze timestamp: `2026-09-02T09:00:00.000Z` (UTC)
