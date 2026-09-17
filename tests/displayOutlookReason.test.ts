@@ -9,11 +9,13 @@ import {
   integrateDisplayHazard,
   getLocalSignalEvaluation,
   type ActiveOfficialNotice,
+  type DisplayElapsedDiagnostics,
 } from "../lib/radar/probability";
 import { ELAPSED_RELATIVE_HAZARD_THRESHOLDS } from "../data/predictionWeights";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
+import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "../lib/radar/recoveryBoundary";
 import type { RadarData } from "../lib/radar/types";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
@@ -62,9 +64,11 @@ function modelContext(
   source: "shadow" | "legacy-shadow-fallback" | "heuristic-fallback" = "shadow",
   mode?: "full" | "elapsed-only" | "regime-only",
   bins = hazardBins([0.0002, 0.0015, 0.0015]),
+  randomElapsedDiagnostics?: DisplayElapsedDiagnostics,
 ) {
   return {
     source,
+    randomElapsedDiagnostics,
     shadow: {
       hazard: {
         globalLambdaPerHour: 0.001,
@@ -111,6 +115,7 @@ function reasonFor({
   now = NOW,
   formalTiboResets = [],
   regularResetEvents = [],
+  randomElapsedDiagnostics,
 }: {
   locale?: "ja" | "en" | "zh";
   signals?: ReturnType<typeof signal>[];
@@ -127,6 +132,7 @@ function reasonFor({
   now?: Date;
   formalTiboResets?: RadarData["formal_tibo_resets"];
   regularResetEvents?: RegularResetEventRow[];
+  randomElapsedDiagnostics?: DisplayElapsedDiagnostics;
 } = {}) {
   const data = getLocalRadarData({
     calculationNow: now,
@@ -149,7 +155,7 @@ function reasonFor({
     evaluation,
     notice,
     now,
-    modelContext(multiplier, elapsedHours, source, mode, bins),
+    modelContext(multiplier, elapsedHours, source, mode, bins, randomElapsedDiagnostics),
   );
 }
 
@@ -225,6 +231,92 @@ test("uses neutral elapsed wording even without elapsed diagnostics", () => {
     reasonFor({ probability24h: 0.3, probability48h: 0.93, elapsedHours: 96, source: "legacy-shadow-fallback" }),
     expected,
   );
+});
+
+test("uses random-only relative hazard levels when display diagnostics are available", () => {
+  const resetAt = new Date(NOW.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const diagnostics = {
+    bins: [],
+    globalLambdaPerHour: 0.001,
+    integrateHazard: (startHour: number, horizonHours: number) => {
+      const endHour = startHour + horizonHours;
+      const overlap = (left: number, right: number) => Math.max(
+        0,
+        Math.min(endHour, right) - Math.max(startHour, left),
+      );
+      return overlap(48, 72) * 0.0005 + overlap(72, Number.POSITIVE_INFINITY) * 0.002;
+    },
+  };
+
+  const ja = reasonFor({
+    probability24h: 0.2,
+    probability48h: 0.35,
+    formalTiboResets: [randomResetAt(resetAt)],
+    randomElapsedDiagnostics: diagnostics,
+  });
+  const en = reasonFor({
+    locale: "en",
+    probability24h: 0.2,
+    probability48h: 0.35,
+    formalTiboResets: [randomResetAt(resetAt)],
+    randomElapsedDiagnostics: diagnostics,
+  });
+  const zh = reasonFor({
+    locale: "zh",
+    probability24h: 0.2,
+    probability48h: 0.35,
+    formalTiboResets: [randomResetAt(resetAt)],
+    randomElapsedDiagnostics: diagnostics,
+  });
+
+  assert.equal(
+    ja,
+    "前回のランダムリセットから2日が経過しています。経過時間だけに基づく過去の傾向では、今から24時間以内は低め、48時間以内は中程度です。",
+  );
+  assert.equal(
+    en,
+    "It has been 2 days since the last random reset. Looking only at historical timing patterns, the relative reset tendency is low over the next 24 hours and moderate over the next 48 hours.",
+  );
+  assert.equal(
+    zh,
+    "距离上次随机重置已过去2天。仅根据历史时间模式，未来24小时的相对重置倾向为较低，未来48小时为处于中等水平。",
+  );
+});
+
+test("Radar view uses the random reset clock even when a regular boundary is newer", () => {
+  const now = new Date("2026-08-10T00:00:00.000Z");
+  const randomAt = "2026-08-02T00:00:00.000Z";
+  const regularAt = "2026-08-09T00:00:00.000Z";
+  assert.ok(new Date(regularAt).getTime() > new Date(randomAt).getTime());
+  const withoutRegularData = getLocalRadarData({
+    calculationNow: now,
+    formalTiboResets: [randomResetAt(randomAt)],
+  });
+  const withRegularData = getLocalRadarData({
+    calculationNow: now,
+    formalTiboResets: [randomResetAt(randomAt)],
+    regularResetEvents: [regularResetAt(regularAt)],
+  });
+  const withoutRegular = getRadarViewModel(
+    withoutRegularData,
+    "ja",
+    false,
+    undefined,
+    now,
+  );
+  const withRegular = getRadarViewModel(
+    withRegularData,
+    "ja",
+    false,
+    undefined,
+    now,
+  );
+
+  assert.equal(getLastRandomRecoveryResetAt(withRegularData, now), randomAt);
+  assert.equal(getLastRecoveryResetAt(withRegularData, now), regularAt);
+  assert.match(withoutRegular.displayReasoningSummary ?? "", /経過時間だけに基づく過去の傾向では/);
+  assert.equal(withRegular.displayReasoningSummary, withoutRegular.displayReasoningSummary);
+  assert.match(withRegular.displayReasoningSummary ?? "", /前回のランダムリセットから8日/);
 });
 
 test("uses neutral wording when no random reset baseline is available", () => {

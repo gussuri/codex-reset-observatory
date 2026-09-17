@@ -96,8 +96,17 @@ import {
   getLastGlobalResetAt,
   getDisplayProbabilityReason,
   getLocalProbabilityReason,
+  type DisplayElapsedDiagnostics,
   type LocalSignalEvaluation,
 } from "./radar/probability";
+import {
+  getRecoveryResetEvents,
+} from "./radar/recoveryBoundary";
+import {
+  buildRandomContinuousHazard,
+  integrateRandomContinuousHazard,
+} from "./radar/randomContinuousProbability";
+import { getRandomElapsedBoundaries } from "./radar/randomElapsedProbability";
 import { calculatePublishedProbability } from "./radar/publishedProbability";
 import {
   formatOfficialNoticeSummary,
@@ -210,6 +219,41 @@ export type RadarCalculationContext = {
   source: RadarData | null;
   canonicalHistoryContext: CanonicalResetHistoryContext;
 };
+
+function getRandomElapsedDisplayDiagnostics(
+  source: RadarData | null,
+  calculationNow: Date,
+  canonicalHistoryContext: CanonicalResetHistoryContext,
+): DisplayElapsedDiagnostics | null {
+  const boundaries = getRecoveryResetEvents(
+    source,
+    calculationNow,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
+  const randomBoundaries = getRandomElapsedBoundaries(boundaries);
+  if (randomBoundaries.length === 0) return null;
+
+  const hazard = buildRandomContinuousHazard(randomBoundaries, calculationNow);
+  if (
+    !Number.isFinite(hazard.globalLambdaPerHour) ||
+    hazard.globalLambdaPerHour <= 0 ||
+    !Number.isFinite(hazard.integrationStepHours) ||
+    hazard.integrationStepHours <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    bins: [],
+    globalLambdaPerHour: hazard.globalLambdaPerHour,
+    integrateHazard: (startHour, horizonHours) => {
+      const probability = integrateRandomContinuousHazard(hazard, startHour, horizonHours);
+      if (!Number.isFinite(probability) || probability < 0 || probability >= 1) return null;
+      return -Math.log1p(-probability);
+    },
+  };
+}
 
 function getAutoResolvedHistoryItems(): Array<WindowEventLike> {
   const autoResolvedSignals = LOCAL_OBSERVATION_SIGNALS.filter(
@@ -347,6 +391,14 @@ export function getRadarViewModel(
     regularResetExpectedAt: regularResetForecast.expectedAt,
     canonicalHistoryContext,
   });
+  const randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
+    source,
+    calculationNow,
+    canonicalHistoryContext,
+  );
+  const displayProbabilityCalculation = randomElapsedDiagnostics
+    ? { ...probabilityCalculation, randomElapsedDiagnostics }
+    : probabilityCalculation;
   const probability12h = probabilityCalculation.probability12h;
   const probability24h = probabilityCalculation.probability24h;
   const probability48h = probabilityCalculation.probability48h;
@@ -414,7 +466,7 @@ export function getRadarViewModel(
       signalEvaluation,
       activeOfficialNotice,
       calculationNow,
-      probabilityCalculation,
+      displayProbabilityCalculation,
       canonicalHistoryContext,
     ),
     codexOperationalStatus:

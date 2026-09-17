@@ -5,8 +5,10 @@
 - Model version: `hazard-regime-random-continuous-v1`
 - Preregistration/freeze timestamp: `2026-08-18T16:14:21.000Z` (UTC)
 - Evaluation mode: prospective only
-- Public model: unchanged
-- Database/API/UI: unchanged
+- Public probability model: unchanged
+- Public selector, probability API schema, and published model version: unchanged
+- UI diagnostic use: the frozen raw random-age hazard may be shown only as a descriptive
+  historical timing diagnostic; it is not a published forecast or model promotion
 
 ## Scope
 
@@ -26,7 +28,27 @@ The continuous estimator and the existing coarse random shadow must therefore re
 same boundary IDs and timestamps. The local static-history fixture is not backfilled with
 Production's later three boundaries for this preregistration.
 
+## Public diagnostic boundary
+
+The random continuous forecast model remains **shadow-only**. It is not selected by the
+public probability selector and it does not provide public probability values. Calibration,
+semantic signal multipliers, regime multipliers, and official-notice overrides are not used
+to produce the UI diagnostic.
+
+The UI may use the frozen raw random-age hazard, based only on elapsed time since the latest
+broad-scope random reset, as a **descriptive historical timing diagnostic**. This explains
+historical timing tendencies; it is not a current forecast, a published probability, or a
+promotion of the shadow model.
+
+The freeze policy, no-retuning rule, no-auto-publish rule, and no-backfill rule remain in
+force. This diagnostic does not change the public probability API schema, published
+`modelVersion`, prediction-history probability values, or selector behavior.
+
 ## Frozen estimator
+
+The frozen full estimator below remains the shadow/evaluation path. It is separate from
+the public display diagnostic described above, which intentionally uses only raw random-age
+timing information.
 
 - Mode: full, including the existing point-in-time regime and signal/notice multipliers.
 - Random clock: elapsed time since the latest broad random boundary.

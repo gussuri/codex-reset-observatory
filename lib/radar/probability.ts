@@ -1698,6 +1698,7 @@ type DisplayProbabilityModelContext = {
   shadow?: unknown;
   stableShadow?: unknown;
   majorModelReleaseAdjustment?: MajorModelReleaseAdjustment;
+  randomElapsedDiagnostics?: DisplayElapsedDiagnostics | null;
 };
 
 export type DisplayHazardBin = {
@@ -1709,6 +1710,8 @@ export type DisplayHazardBin = {
 export type DisplayElapsedDiagnostics = {
   bins: DisplayHazardBin[];
   globalLambdaPerHour: number;
+  /** Internal display-only integrator for a non-binned hazard. */
+  integrateHazard?: (startHour: number, horizonHours: number) => number | null;
 };
 
 export type RelativeHazardLevel = "low" | "medium" | "high";
@@ -1858,13 +1861,22 @@ export function getRelativeDisplayHazard(
     !Number.isFinite(elapsedHours) ||
     !Number.isFinite(horizonHours) ||
     horizonHours <= 0 ||
+    !Number.isFinite(diagnostics.globalLambdaPerHour) ||
     diagnostics.globalLambdaPerHour <= 0
   ) {
     return null;
   }
 
-  const integral = integrateDisplayHazard(diagnostics.bins, elapsedHours, horizonHours);
+  let integral: number | null;
+  try {
+    integral = diagnostics.integrateHazard
+      ? diagnostics.integrateHazard(elapsedHours, horizonHours)
+      : integrateDisplayHazard(diagnostics.bins, elapsedHours, horizonHours);
+  } catch {
+    return null;
+  }
   if (integral === null) return null;
+  if (!Number.isFinite(integral) || integral < 0) return null;
 
   return integral / (horizonHours * diagnostics.globalLambdaPerHour);
 }
@@ -1880,6 +1892,33 @@ export function getRelativeHazardLevel(
 
 function replaceElapsedPlaceholder(text: string, elapsed: string) {
   return text.replace("{elapsed}", elapsed);
+}
+
+function replaceRelativeHazardPlaceholders(
+  text: string,
+  elapsed: string,
+  level24: string,
+  level48: string,
+) {
+  return text
+    .replace("{elapsed}", elapsed)
+    .replace("{level24}", level24)
+    .replace("{level48}", level48)
+    .replace("{level}", level24);
+}
+
+function getRelativeHazardLevelText(
+  level: RelativeHazardLevel,
+  locale: Locale,
+) {
+  return translateUI(
+    level === "low"
+      ? "outlookRelativeHazardLevelLow"
+      : level === "high"
+        ? "outlookRelativeHazardLevelHigh"
+        : "outlookRelativeHazardLevelMedium",
+    locale,
+  );
 }
 
 function replaceTeaserWindowPlaceholders(text: string, start: string, end: string) {
@@ -2044,8 +2083,31 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookNeutral", locale);
   }
 
-  // Recovery-boundary diagnostics do not share the random-reset clock named by this sentence.
-  return replaceElapsedPlaceholder(translateUI("outlookElapsedNeutral", locale), elapsed);
+  const elapsedHours = elapsedMs / (60 * 60 * 1000);
+  const randomElapsedDiagnostics = publishedCalculation?.randomElapsedDiagnostics ?? null;
+  const relative24 = getRelativeDisplayHazard(randomElapsedDiagnostics, elapsedHours, 24);
+  const relative48 = getRelativeDisplayHazard(randomElapsedDiagnostics, elapsedHours, 48);
+  if (relative24 === null || relative48 === null) {
+    return replaceElapsedPlaceholder(translateUI("outlookElapsedNeutral", locale), elapsed);
+  }
+
+  const level24 = getRelativeHazardLevelText(
+    getRelativeHazardLevel(relative24),
+    locale,
+  );
+  const level48 = getRelativeHazardLevelText(
+    getRelativeHazardLevel(relative48),
+    locale,
+  );
+  const key = level24 === level48
+    ? "outlookRelativeHazardSame"
+    : "outlookRelativeHazardDifferent";
+  return replaceRelativeHazardPlaceholders(
+    translateUI(key, locale),
+    elapsed,
+    level24,
+    level48,
+  );
 }
 
 function clampCount(value: number | undefined, min: number, max: number) {
