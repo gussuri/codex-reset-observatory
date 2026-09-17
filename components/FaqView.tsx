@@ -31,7 +31,7 @@ export function FaqView({ locale }: FaqViewProps) {
         {
           id: "forecast-method",
           question: "リセット期待度とは何ですか？",
-          answer: "今後リセットが行われる可能性の目安です。過去のリセット間隔から基礎確率を算出し、公式予告、Statusの障害情報、コミュニティの動きなど現在の観測シグナルで補正しています。公式な確率ではありません。",
+          answer: "今後24時間・48時間以内にランダムリセットが行われる可能性の目安です。過去のランダムリセット間隔から、前回のランダムリセット後の経過時間ごとの発生傾向を推定し、公式予告、OpenAI Statusの障害情報、コミュニティの動きなど現在の観測シグナルを加味しています。公式な確率ではありません。",
         },
         {
           id: "teaser-forecast-method",
@@ -141,7 +141,7 @@ export function FaqView({ locale }: FaqViewProps) {
         },
         {
           question: "Why does the reset forecast change?",
-          answer: "The forecast starts with a baseline derived from past reset intervals and is adjusted as official notices, OpenAI Status incidents, capacity or rate-limit signals, community reports, and current timing change. The percentage is not guaranteed and may move up or down.",
+          answer: "The forecast changes as the model combines past random-reset intervals, time since the last random reset, and current signals such as official notices, OpenAI Status incidents, capacity or rate-limit reports, and community activity. The percentage is not guaranteed and may move up or down.",
         },
         {
           question: "What does this site track?",
@@ -150,7 +150,7 @@ export function FaqView({ locale }: FaqViewProps) {
         {
           id: "forecast-method",
           question: "What is the random reset probability?",
-          answer: "It is a statistical reference forecast. A baseline derived from past reset intervals is adjusted using official notices, Status incident logs, community reports, and other current signals. It is not an official probability.",
+          answer: "It is a statistical reference for how likely a random reset may be within the next 24 or 48 hours. The model estimates how reset tendency changes with time since the last random reset from past random-reset intervals, then takes current observable signals such as official notices, OpenAI Status incidents, and community activity into account. It is not an official probability.",
         },
         {
           id: "teaser-forecast-method",
@@ -215,7 +215,7 @@ export function FaqView({ locale }: FaqViewProps) {
         {
           id: "forecast-method",
           question: "重置可能性是什么意思？",
-          answer: "重置可能性表示未来发生重置的参考概率。本站先根据过去的重置间隔计算基础概率，再根据官方预告、OpenAI Status 故障信息、社区讨论等当前观测信号进行调整。这并不是 OpenAI 官方公布的概率。",
+          answer: "它表示未来24小时或48小时内发生随机重置的可能性参考。模型根据过去的随机重置间隔，估计距上次随机重置不同经过时间下的发生趋势，并结合官方预告、OpenAI Status 故障信息、社区动态等当前可观测信号。它不是官方概率。",
         },
         {
           id: "teaser-forecast-method",

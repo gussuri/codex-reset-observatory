@@ -1793,6 +1793,35 @@ test("adds the forecast-method anchor to each localized FAQ", () => {
   }
 });
 
+test("describes the current random reset model in localized About and FAQ content", () => {
+  const cases = {
+    ja: {
+      about: "ランダムリセット期待度は、過去のランダムリセット間隔と、前回のランダムリセットからの経過時間をもとに発生傾向を推定し、現在の観測シグナルを加味した統計予測です。",
+      faq: "今後24時間・48時間以内にランダムリセットが行われる可能性の目安です。過去のランダムリセット間隔から、前回のランダムリセット後の経過時間ごとの発生傾向を推定し、公式予告、OpenAI Statusの障害情報、コミュニティの動きなど現在の観測シグナルを加味しています。",
+    },
+    en: {
+      about: "The random reset likelihood is a statistical forecast based on past random-reset intervals and how long it has been since the last random reset, with current observable signals taken into account.",
+      faq: "It is a statistical reference for how likely a random reset may be within the next 24 or 48 hours. The model estimates how reset tendency changes with time since the last random reset from past random-reset intervals, then takes current observable signals such as official notices, OpenAI Status incidents, and community activity into account.",
+    },
+    zh: {
+      about: "随机重置期望度是一种统计预测：根据过去的随机重置间隔和距上次随机重置的经过时间估计发生趋势，并结合当前可观测信号。",
+      faq: "它表示未来24小时或48小时内发生随机重置的可能性参考。模型根据过去的随机重置间隔，估计距上次随机重置不同经过时间下的发生趋势，并结合官方预告、OpenAI Status 故障信息、社区动态等当前可观测信号。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const aboutHtml = renderToStaticMarkup(React.createElement(AboutView, { locale }));
+    const faqHtml = renderToStaticMarkup(React.createElement(FaqView, { locale }));
+
+    assert.ok(aboutHtml.includes(cases[locale].about), locale);
+    assert.ok(faqHtml.includes(cases[locale].faq), locale);
+    assert.doesNotMatch(
+      `${aboutHtml}${faqHtml}`,
+      /基礎確率|baseline derived from past reset intervals|根据过去的重置间隔计算基础概率/,
+    );
+  }
+});
+
 test("explains teaser timing and strength weighting in every localized FAQ", () => {
   const cases = {
     ja: {
