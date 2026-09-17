@@ -271,16 +271,43 @@ test("uses random-only relative hazard levels when display diagnostics are avail
 
   assert.equal(
     ja,
-    "前回のランダムリセットから2日が経過しています。この経過時間に基づく過去の傾向では、今から24時間以内は低め、48時間以内は中程度です。",
+    "前回のランダムリセットから2日が経過しています。過去の傾向では、24時間以内は低め、48時間以内は中程度です。",
   );
   assert.equal(
     en,
-    "It has been 2 days since the last random reset. Based on historical timing patterns at this elapsed time, the relative reset tendency is low over the next 24 hours and moderate over the next 48 hours.",
+    "It has been 2 days since the last random reset. Based on historical patterns, the relative reset tendency is low within 24 hours and moderate within 48 hours.",
   );
   assert.equal(
     zh,
-    "距离上次随机重置已过去2天。根据这一经过时间对应的历史时间模式，未来24小时的相对重置倾向为较低，未来48小时为处于中等水平。",
+    "距离上次随机重置已过去2天。根据历史趋势，未来24小时的相对重置倾向为较低，未来48小时为处于中等水平。",
   );
+});
+
+test("uses concise same-level timing wording in all supported locales", () => {
+  const resetAt = new Date(NOW.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const diagnostics = {
+    bins: [],
+    globalLambdaPerHour: 0.001,
+    integrateHazard: (_startHour: number, horizonHours: number) => horizonHours * 0.001,
+  };
+  const expected = {
+    ja: "前回のランダムリセットから2日が経過しています。過去の傾向では、24時間以内・48時間以内ともに中程度です。",
+    en: "It has been 2 days since the last random reset. Based on historical patterns, the relative reset tendency is moderate within both 24 and 48 hours.",
+    zh: "距离上次随机重置已过去2天。根据历史趋势，未来24小时和48小时的相对重置倾向均为处于中等水平。",
+  };
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    assert.equal(
+      reasonFor({
+        locale,
+        probability24h: 0.2,
+        probability48h: 0.35,
+        formalTiboResets: [randomResetAt(resetAt)],
+        randomElapsedDiagnostics: diagnostics,
+      }),
+      expected[locale],
+    );
+  }
 });
 
 test("Radar view uses the random reset clock even when a regular boundary is newer", () => {
@@ -314,7 +341,7 @@ test("Radar view uses the random reset clock even when a regular boundary is new
 
   assert.equal(getLastRandomRecoveryResetAt(withRegularData, now), randomAt);
   assert.equal(getLastRecoveryResetAt(withRegularData, now), regularAt);
-  assert.match(withoutRegular.displayReasoningSummary ?? "", /この経過時間に基づく過去の傾向では/);
+  assert.match(withoutRegular.displayReasoningSummary ?? "", /過去の傾向では/);
   assert.equal(withRegular.displayReasoningSummary, withoutRegular.displayReasoningSummary);
   assert.match(withRegular.displayReasoningSummary ?? "", /前回のランダムリセットから8日/);
 });
