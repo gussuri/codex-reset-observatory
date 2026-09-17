@@ -18,7 +18,7 @@ export function AboutView({ locale }: AboutViewProps) {
       paragraphs: [
         "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
         "リセット履歴、公式予告、コミュニティ上の動きなどをもとに、現在の状況を分かりやすく確認できるようまとめています。",
-        "ランダムリセット期待度は、過去のリセット間隔から算出した基礎確率を現在の観測シグナルで補正した統計予測です。公式情報や確定的な確率ではありません。",
+        "ランダムリセット期待度は、過去のランダムリセット間隔と、前回のランダムリセットからの経過時間をもとに発生傾向を推定し、現在の観測シグナルを加味した統計予測です。公式情報や確定的な確率ではありません。",
         "実際のリセット実施有無や時期については、必ず公式情報をご確認ください。",
         "任意リセットを使用すると、対象の利用上限が更新されます。その後の7日間枠や表示されるリセット日時は、アカウントの利用状況によって異なる場合があります。",
         "CodexとChatGPT Workは、対象プランでは同じエージェント利用量・クレジットのプールを共有しています。Codexはソフトウェア開発向け、ChatGPT Workは長めの複数ステップ作業や成果物作成向けの別の体験です。本サイトはCodexを主対象としていますが、この共有利用枠に影響するリセットは、ChatGPT Workなどの利用にも関係する場合があります。",
@@ -36,7 +36,7 @@ export function AboutView({ locale }: AboutViewProps) {
       paragraphs: [
         SITE_NAME + " collects reset-related information in one place so users can quickly check recent reset history and the current reset situation.",
         "It brings together official reset notices and past reset history so you can compare what is happening now with earlier reset patterns.",
-        "The random reset probability is a statistical forecast: a baseline derived from past reset intervals is adjusted using current observable signals. It is not an official OpenAI notice or probability.",
+        "The random reset likelihood is a statistical forecast based on past random-reset intervals and how long it has been since the last random reset, with current observable signals taken into account. It is not an official OpenAI probability or a certainty.",
         "Using a Banked Reset refreshes the applicable usage limit. The resulting usage window and reset date may differ by account.",
         "On eligible plans, Codex and ChatGPT Work share the same agentic usage and credits pool. Codex remains a separate software-development experience, while Work is designed for longer multi-step tasks and finished deliverables. This site remains focused on Codex, but a reset affecting that shared pool may also affect usage in ChatGPT Work and other agentic experiences.",
       ],
@@ -53,7 +53,7 @@ export function AboutView({ locale }: AboutViewProps) {
       paragraphs: [
         SITE_NAME + "旨在将重置相关的信息汇总在一处，以便用户快速查看最近的重置历史和当前的重置状况。",
         "它汇集了官方重置预告和历史重置记录，让您可以将当前状况与早期的重置模式进行对比。",
-        "随机重置期望度是一种统计预测：先根据过去的重置间隔计算基础概率，再根据当前可观测信号进行调整，并非 OpenAI 官方通知或概率。",
+        "随机重置期望度是一种统计预测：根据过去的随机重置间隔和距上次随机重置的经过时间估计发生趋势，并结合当前可观测信号。它不是 OpenAI 官方概率，也不是确定结果。",
         "使用手动重置后，适用的使用上限会被刷新。之后的使用周期以及账号中显示的重置日期可能因账号而异。",
         "在符合条件的方案中，Codex 和 ChatGPT Work 共享同一个代理式使用量和额度池。Codex仍是面向软件开发的独立体验，而 Work 更适合较长的多步骤任务和成品交付。本网站仍以 Codex 为主，但影响这一共享额度池的重置也可能影响 ChatGPT Work 等其他代理式体验的使用。",
       ],
