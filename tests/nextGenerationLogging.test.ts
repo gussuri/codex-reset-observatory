@@ -227,7 +227,7 @@ test("post-freeze logging adds the context-aware candidate without changing exis
   assert.deepEqual(forecasts[CALIBRATED_SHADOW_MODEL_VERSION], existing[CALIBRATED_SHADOW_MODEL_VERSION]);
 });
 
-test("prospective evaluator reads post-boundary logged rows as comparable active v3 + baseline v2", () => {
+test("prospective evaluator reads post-boundary logged rows as comparable raw 18/54 + corrective V4", () => {
   const postBoundaryAt = "2026-09-10T05:00:00.000Z";
   const postBoundaryForecasts = buildNextGenerationExperimentalProbabilityForecasts({
     data: null,
@@ -250,9 +250,10 @@ test("prospective evaluator reads post-boundary logged rows as comparable active
     [postBoundaryRow],
     [],
     new Date("2026-09-12T00:00:00.000Z"),
+    { adoptionAt: postBoundaryAt, rollbackAt: null },
   );
-  assert.equal(report.activeModelVersion, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
-  assert.equal(report.baselineModelVersion, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(report.activeModelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(report.baselineModelVersion, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
   assert.equal(report.forecastCounts.comparable, 1);
   assert.equal(report.forecastCounts.active, 1);
   assert.equal(report.forecastCounts.baseline, 1);

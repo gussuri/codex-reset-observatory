@@ -6,12 +6,14 @@ import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
   PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
@@ -70,6 +72,18 @@ function comparableV3Row(generatedAt: string) {
         probability24h: 0.3,
         probability48h: 0.5,
       },
+      [RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]: {
+        modelVersion: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+        generatedAt,
+        probability24h: 0.25,
+        probability48h: 0.45,
+      },
+      [CALIBRATED_SHADOW_MODEL_VERSION]: {
+        modelVersion: CALIBRATED_SHADOW_MODEL_VERSION,
+        generatedAt,
+        probability24h: 0.28,
+        probability48h: 0.48,
+      },
     },
   };
 }
@@ -77,7 +91,8 @@ function comparableV3Row(generatedAt: string) {
 test("corrective rollback rollout records a future boundary without changing the v3 identity", () => {
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 
 test("published model periods keep historical V4 and corrective V4 separate", () => {
@@ -131,7 +146,10 @@ test("published v3 evaluation ends at a future rollback boundary while the v3 sh
     ],
     [],
     new Date("2026-09-12T00:00:00.000Z"),
-    { rollbackAt: ROLLBACK_AT },
+    {
+      adoptionAt: PUBLISHED_PROBABILITY_ADOPTION_AT,
+      rollbackAt: ROLLBACK_AT,
+    },
   );
 
   assert.equal(report.forecastCounts.comparable, 1);

@@ -4,7 +4,9 @@ import {
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   SHADOW_TARGET_DEFINITION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -1401,11 +1403,11 @@ export function evaluatePublishedModelProspectively(
 
   const usesConfiguredBoundary = options.adoptionAt === undefined;
   const configuredAdoptionValue = usesConfiguredBoundary
-    ? PUBLISHED_PROBABILITY_ADOPTION_AT
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : options.adoptionAt;
   const adoptionAt = timestamp(configuredAdoptionValue);
   const configuredRollbackValue = options.rollbackAt === undefined
-    ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
+    ? null
     : options.rollbackAt;
   const rollbackAt = timestamp(configuredRollbackValue);
   if (configuredRollbackValue !== null && rollbackAt === null) {
@@ -1499,10 +1501,10 @@ export function evaluatePublishedModelProspectively(
       })
       .map((event) => ({ id: event.id, resetAt: event.resetAt }));
   const scoreboard = buildPublishedV3ProspectiveScoreboard(rows, events, asOf, {
-    activeModelVersion: PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
-    previousModelVersion: PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
-    adoptionAt: configuredAdoptionValue,
-    adoptionBoundaryPending,
+    activeModelVersion: PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+    previousModelVersion: PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
+    adoptionAt: PUBLISHED_PROBABILITY_ADOPTION_AT,
+    adoptionBoundaryPending: false,
     features: options.scoreboardFeatures,
   });
 

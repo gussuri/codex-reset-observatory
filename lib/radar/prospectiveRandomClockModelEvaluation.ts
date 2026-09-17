@@ -1,5 +1,6 @@
 import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   RANDOM_ELAPSED_SHADOW_FREEZE_AT,
   RANDOM_ELAPSED_SHADOW_FREEZE_POLICY,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
@@ -287,16 +288,24 @@ export function evaluateRandomClockModelProspectively(
   rows: Array<ProspectiveForecastRow>,
   boundaries: Array<RecoveryResetBoundary>,
   asOf: Date,
+  options: { publishedAdoptionAt?: string | null } = {},
 ): RandomClockProspectiveEvaluationReport {
   if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
 
   const freezeTime = timestamp(RANDOM_ELAPSED_SHADOW_FREEZE_AT);
   if (freezeTime === null) throw new RangeError("RANDOM_ELAPSED_SHADOW_FREEZE_AT must be a valid date");
+  const usesConfiguredBoundary = options.publishedAdoptionAt === undefined;
+  const publishedAdoptionAt = timestamp(
+    usesConfiguredBoundary ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT : options.publishedAdoptionAt,
+  );
+  const adoptionBoundaryPending = usesConfiguredBoundary && publishedAdoptionAt === null;
   const isEligibleForecast = (row: ProspectiveForecastRow) => {
     const generatedAt = timestamp(row.generatedAt);
     return generatedAt !== null
       && generatedAt >= freezeTime
-      && generatedAt <= asOf.getTime();
+      && generatedAt <= asOf.getTime()
+      && !adoptionBoundaryPending
+      && (publishedAdoptionAt === null || generatedAt >= publishedAdoptionAt);
   };
   const comparableRows = selectComparableRandomClockForecasts(rows).filter((row) => {
     return isEligibleForecast(row);

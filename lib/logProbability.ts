@@ -7,6 +7,11 @@ import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_MODE,
+  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
@@ -452,7 +457,23 @@ export function buildProbabilityDebugInfo(
   const calculatedAtIso = calculatedAt.toISOString();
   const rawShadow = publishedProbability?.rawShadow ?? publishedProbability?.shadow ?? null;
   const publishedB = publishedProbability?.nextGenerationB ?? null;
-  const publishedConfidence = publishedB?.randomContinuousResult.confidence ?? rawShadow?.confidence ?? null;
+  const publishedConfidence = publishedB?.randomContinuousResult.confidence
+    ?? publishedProbability?.rawContinuous?.confidence
+    ?? rawShadow?.confidence
+    ?? null;
+  const rawContinuousPublished = publishedProbability?.adoptedModel === PUBLISHED_PROBABILITY_MODEL_VERSION;
+  const publishedAdoptionDate = rawContinuousPublished
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE
+    : PUBLISHED_PROBABILITY_ADOPTION_DATE;
+  const publishedAdoptionAt = rawContinuousPublished
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
+    : PUBLISHED_PROBABILITY_ADOPTION_AT;
+  const publishedPreviousModelVersion = rawContinuousPublished
+    ? PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION
+    : PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION;
+  const publishedPreviousAdoptionAt = rawContinuousPublished
+    ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
+    : PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT;
 
   return {
     ...base,
@@ -482,13 +503,16 @@ export function buildProbabilityDebugInfo(
             completedIntervalCount: publishedConfidence?.completedIntervalCount ?? null,
             totalExposureDays: publishedConfidence?.totalExposureDays ?? null,
             adoptionMode: PUBLISHED_PROBABILITY_ADOPTION_MODE,
-            adoptionDate: PUBLISHED_PROBABILITY_ADOPTION_DATE,
-            adoptionAt: PUBLISHED_PROBABILITY_ADOPTION_AT,
-            previousModelVersion: PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
-            previousAdoptionAt: PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
+            adoptionDate: publishedAdoptionDate,
+            adoptionAt: publishedAdoptionAt,
+            previousModelVersion: publishedPreviousModelVersion,
+            previousAdoptionAt: publishedPreviousAdoptionAt,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
             adoptionBoundaryStatus: PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
-            rawModelVersion: publishedB?.rawModelVersion ?? rawShadow?.modelVersion ?? null,
+            rawModelVersion: publishedB?.rawModelVersion
+              ?? publishedProbability?.rawContinuous?.modelVersion
+              ?? rawShadow?.modelVersion
+              ?? null,
             calibratedFallbackUsed: publishedB?.fallbackUsed ?? publishedProbability.calibrated?.fallbackUsed ?? null,
             calibrationAlpha24h: publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
             calibrationAlpha48h: publishedB?.alpha48h ?? publishedProbability.calibrated?.alpha48h ?? null,

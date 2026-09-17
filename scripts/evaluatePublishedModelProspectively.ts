@@ -5,6 +5,7 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
@@ -27,7 +28,6 @@ import {
   buildSavedArtifactHybridForecast,
   PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
   PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
-  selectDailyFirstPublishedForecasts,
   selectDailyFirstForecastsForModelPair,
   formatPublishedProspectiveMetric,
   type PublishedProspectiveEvaluationReport,
@@ -270,7 +270,11 @@ function buildRetrospectiveCandidateForecasts(
       && (adoptionTime === null || generatedTime >= adoptionTime!);
   });
   const trainingRows = buildV3TrainingRows(rows, events, asOf);
-  const dailyRows = selectDailyFirstPublishedForecasts(comparableDailyRows);
+  const dailyRows = selectDailyFirstForecastsForModelPair(
+    comparableDailyRows,
+    NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
+  );
   return Object.fromEntries(
     dailyRows.flatMap((row) => {
       const generatedTime = parseTimestamp(row.generatedAt);

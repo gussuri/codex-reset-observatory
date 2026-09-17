@@ -1,7 +1,7 @@
 import {
   PUBLISHED_PROBABILITY_ADOPTION_AT,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import { getActualWithinHorizon } from "./prequentialCalibration";
 import {
@@ -466,8 +466,8 @@ export function buildPublishedV3ProspectiveScoreboard(
   asOf: Date,
   options: PublishedV3ProspectiveScoreboardOptions = {},
 ): PublishedV3ProspectiveScoreboard {
-  const activeModelVersion = options.activeModelVersion ?? PUBLISHED_PROBABILITY_MODEL_VERSION;
-  const previousModelVersion = options.previousModelVersion ?? PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION;
+  const activeModelVersion = options.activeModelVersion ?? PUBLISHED_SELECTIVE_V3_MODEL_VERSION;
+  const previousModelVersion = options.previousModelVersion ?? PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION;
   const adoptionAt = options.adoptionAt === undefined
     ? PUBLISHED_PROBABILITY_ADOPTION_AT
     : options.adoptionAt;

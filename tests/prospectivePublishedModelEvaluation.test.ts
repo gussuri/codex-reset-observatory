@@ -21,6 +21,8 @@ import {
   NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
 import { parsePredictionHistoryRows } from "../scripts/evaluateProspectiveProbabilityForecasts";
@@ -44,10 +46,22 @@ function forecastRow(
       probability24h: activeProbability24h,
       probability48h: activeProbability48h,
     };
+    forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION] = {
+      modelVersion: PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+      generatedAt,
+      probability24h: activeProbability24h,
+      probability48h: activeProbability48h,
+    };
   }
   if (includeBaseline) {
     forecasts[PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION] = {
       modelVersion: PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
+      generatedAt,
+      probability24h: baselineProbability24h,
+      probability48h: baselineProbability48h,
+    };
+    forecasts[PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION] = {
+      modelVersion: PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
       generatedAt,
       probability24h: baselineProbability24h,
       probability48h: baselineProbability48h,
@@ -57,6 +71,11 @@ function forecastRow(
   if (active) {
     active.rawProbability24h = activeProbability24h;
     active.rawProbability48h = activeProbability48h;
+  }
+  const selective = forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION];
+  if (selective) {
+    selective.rawProbability24h = activeProbability24h;
+    selective.rawProbability48h = activeProbability48h;
   }
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
@@ -87,11 +106,13 @@ function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
-test("published prospective evaluation uses selective hybrid v3 after its boundary and v2 as the baseline", () => {
+test("published prospective evaluation uses raw 18/54 after its boundary and corrective V4 as the baseline", () => {
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, PUBLISHED_PROBABILITY_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.notEqual(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.notEqual(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
 test("published metric formatting includes bias without breaking legacy metric callers", () => {
@@ -762,6 +783,10 @@ test("v3 scoreboard compares saved raw and v2 24h values on the same origins and
   assert.ok(active);
   active.rawProbability24h = 0.3;
   active.rawProbability48h = 0.55;
+  const selective = row.forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION];
+  assert.ok(selective);
+  selective.rawProbability24h = 0.3;
+  selective.rawProbability48h = 0.55;
   const scoreboard = buildPublishedV3ProspectiveScoreboard(
     [row],
     [],
@@ -808,7 +833,9 @@ test("v3 scoreboard prefers the saved feature snapshot over a conflicting featur
   const generatedAt = "2026-09-10T00:30:00.000Z";
   const row = forecastRow(generatedAt);
   const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+  const selective = row.forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION];
   assert.ok(active);
+  assert.ok(selective);
   active.featureSnapshot = {
     featureSnapshotVersion: "v1",
     bankedEventWithin48h: false,
@@ -819,6 +846,7 @@ test("v3 scoreboard prefers the saved feature snapshot over a conflicting featur
     tiboSignalConfidence: 0.8,
     tiboTeaserStrength: "weak",
   };
+  selective.featureSnapshot = active.featureSnapshot;
 
   const scoreboard = buildPublishedV3ProspectiveScoreboard(
     [row],
@@ -935,10 +963,14 @@ function gatedScoreboardRows(
     );
     if (index >= commonOriginCount) {
       delete row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION]?.rawProbability24h;
+      delete row.forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION]?.rawProbability24h;
     } else {
       const active = row.forecasts[PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION];
+      const selective = row.forecasts[PUBLISHED_SELECTIVE_V3_MODEL_VERSION];
       assert.ok(active);
+      assert.ok(selective);
       active.rawProbability24h = probabilities.raw24h;
+      selective.rawProbability24h = probabilities.raw24h;
     }
     return row;
   });

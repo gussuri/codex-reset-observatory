@@ -30,8 +30,10 @@ export const NEXT_GENERATION_B_POST_RESET_AGE_START_HOURS = 24;
 // audit identity, not a new calibration fit or a backfill instruction.
 export const NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION =
   NEXT_GENERATION_B_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_MODEL_VERSION = NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
+// Historical selective-v3 identity. Keep this stable for saved-artifact and
+// prospective v3 evaluation even after a later public model adoption.
+export const PUBLISHED_SELECTIVE_V3_MODEL_VERSION = NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION;
+export const PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION = NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION;
 export const PUBLISHED_STABLE_FALLBACK_MODEL_VERSION = ELAPSED_ONLY_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_ADOPTION_MODE = "manual" as const;
 // This future UTC boundary is the point from which selective-calibration v3
@@ -167,6 +169,16 @@ export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS = {
   bandwidthHours: 18,
   truncationHours: 54,
 } as const;
+
+// The current public identity is intentionally separate from the historical
+// selective-v3 aliases above. This explicit future boundary is the only
+// point at which the challenger can become public; earlier rows stay in their
+// historical periods.
+export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
+export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT: string | null = "2026-09-17T08:00:00.000Z";
+export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE: string | null = "2026-09-17";
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

@@ -49,3 +49,24 @@ diagnostics for `[0,24)`, `[24,48)`, `[48,72)`, and `[72, infinity)` age buckets
 
 Results alone never publish a model, retune parameters, or rewrite historical
 forecast rows. The gate is advisory and manual-review-only.
+
+## Subsequent manual corrective adoption
+
+After the frozen prospective experiment, the challenger
+`hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1` is scheduled
+for a separate manual corrective adoption at
+`2026-09-17T08:00:00.000Z` (UTC). This is a public-selector change to an
+already frozen challenger, not a new fit, calibration, retuning, or automatic
+gate promotion. The preregistered freeze remains `2026-09-02T09:00:00.000Z`.
+
+Before that boundary, historical B v1/B v2/selective-v3/corrective-V4 periods
+remain unchanged. At and after the boundary, the public selector may use the
+challenger only when its four horizons are finite, bounded, and monotonic. An
+invalid or exceptional challenger falls back to the corrective V4 chain. The
+existing B1/v2/v3/V4/A/C/C2/context-aware experimental logging continues, and
+no historical prediction row is backfilled, relabeled, or rewritten.
+
+The adoption is manual and carries the experiment's uncertainty: the raw
+18/54 challenger is not claimed to be universally superior, and a single
+reset, miss, or new observation must not trigger parameter changes. The
+`public-v1` DTO does not expose challenger audit fields.

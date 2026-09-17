@@ -8,8 +8,8 @@ import {
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
 import { getLocalRadarData } from "../lib/radar";
@@ -18,11 +18,7 @@ import {
   calculateNextGenerationBProbability,
 } from "../lib/radar/nextGenerationProbability";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
-import {
-  PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION,
-  PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION,
-  evaluatePublishedModelProspectively,
-} from "../lib/radar/prospectivePublishedModelEvaluation";
+import { buildPublishedV3ProspectiveScoreboard } from "../lib/radar/prospectiveV3Scoreboard";
 import type { NextGenerationTrainingState } from "../lib/radar/nextGenerationTraining";
 
 const V2_ADOPTION_BOUNDARY = "2026-09-01T08:00:00.000Z";
@@ -71,16 +67,14 @@ function resetHistory(now: Date, ageHours: number) {
   }];
 }
 
-test("promotion metadata names selective hybrid v3 with v2 as its previous and B v1 calibration source", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+test("historical promotion metadata names selective hybrid v3 with v2 as its previous and B v1 calibration source", () => {
+  assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(
     NEXT_GENERATION_B_POST_RESET_AGE_CALIBRATION_TRAINING_MODEL_VERSION,
     NEXT_GENERATION_B_MODEL_VERSION,
   );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_AT, HYBRID_ADOPTION_BOUNDARY);
-  assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
-  assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
 test("the hybrid v3 adoption boundary keeps v2 before it and selects hybrid at the boundary", () => {
@@ -208,7 +202,7 @@ test("logging stores v2, selective hybrid, and the old B baseline at the same or
   );
 });
 
-test("prospective evaluation uses only post-boundary hybrid and v2 rows", () => {
+test("historical v3 scoreboard uses only post-boundary hybrid and v2 rows", () => {
   const before = "2026-09-09T22:00:00.000Z";
   const after = "2026-09-10T02:00:00.000Z";
   const row = (generatedAt: string) => ({
@@ -235,15 +229,21 @@ test("prospective evaluation uses only post-boundary hybrid and v2 rows", () => 
       },
     },
   });
-  const report = evaluatePublishedModelProspectively(
+  const scoreboard = buildPublishedV3ProspectiveScoreboard(
     [row(before), row(after)],
     [],
-    new Date("2026-09-12T00:00:00.000Z"),
-    { adoptionAt: HYBRID_ADOPTION_BOUNDARY },
+    new Date("2026-09-12T03:00:00.000Z"),
+    {
+      adoptionAt: HYBRID_ADOPTION_BOUNDARY,
+      activeModelVersion: PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+      previousModelVersion: PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
+    },
   );
 
-  assert.deepEqual(report.forecastCounts, { active: 1, baseline: 1, comparable: 1 });
-  assert.equal(report.evaluationStartAt, after);
-  assert.equal(report.activeModelVersion, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
-  assert.equal(report.baselineModelVersion, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(scoreboard.dailyFirstOriginCount, 1);
+  assert.equal(scoreboard.dailyFirstOrigins[0], after);
+  assert.equal(scoreboard.metrics.publishedV3.metrics24h.count, 1);
+  assert.equal(scoreboard.comparisons.v2Policy48h.metric.count, 1);
+  assert.equal(scoreboard.modelVersion, PUBLISHED_SELECTIVE_V3_MODEL_VERSION);
+  assert.equal(scoreboard.previousModelVersion, PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION);
 });

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 import {
+  CALIBRATED_SHADOW_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
   NEXT_GENERATION_A_MODEL_VERSION,
   NEXT_GENERATION_AUTO_PUBLISH,
@@ -14,6 +15,11 @@ import {
   NEXT_GENERATION_C_MODEL_VERSION,
   NEXT_GENERATION_EVALUATION_MODE,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
+  PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
+  PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
@@ -34,8 +40,10 @@ const PUBLISHED_EVALUATION_DOC = resolve("docs/prospective-published-model-evalu
 const NEXT_GENERATION_DOC = resolve("docs/probability/next-generation-shadow-models.md");
 
 test("published model governance config records the manual selective hybrid and rollback boundaries", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
+  assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PUBLISHED_STABLE_FALLBACK_MODEL_VERSION, ELAPSED_ONLY_MODEL_VERSION);
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_MODE, "manual");
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_DATE, "2026-09-10");
@@ -48,6 +56,8 @@ test("published model governance config records the manual selective hybrid and 
   );
   assert.equal(PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS, "not_met");
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
+  assert.equal(PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT, "2026-09-17T08:00:00.000Z");
+  assert.equal(PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE, "2026-09-17");
   assert.equal(NEXT_GENERATION_EVALUATION_MODE, "prospective");
   assert.equal(NEXT_GENERATION_BACKFILL, false);
   assert.equal(NEXT_GENERATION_AUTO_PUBLISH, false);
@@ -88,7 +98,7 @@ test("the previous B v1 remains effective before the explicit v2 boundary", () =
   assert.equal(published.fallbackReason, null);
 });
 
-test("prospective evaluation notes name the selective hybrid boundary and v2 as its baseline", () => {
+test("prospective evaluation notes name the current raw boundary and V4 as its baseline", () => {
   const report = evaluatePublishedModelProspectively(
     [],
     [],
@@ -102,7 +112,7 @@ test("prospective evaluation notes name the selective hybrid boundary and v2 as 
   assert.doesNotMatch(notes, /calibrated .* public model was manually adopted/);
 });
 
-test("current governance documents do not claim that v3 is still public", () => {
+test("current governance documents separate raw adoption from historical v3 evidence", () => {
   const governance = readFileSync(GOVERNANCE_DOC, "utf8");
   const publishedEvaluation = readFileSync(PUBLISHED_EVALUATION_DOC, "utf8");
   const nextGeneration = readFileSync(NEXT_GENERATION_DOC, "utf8");
@@ -115,8 +125,10 @@ test("current governance documents do not claim that v3 is still public", () => 
   assert.match(governance, /retrospective documentation/i);
   assert.match(governance, /material calibration regression/i);
 
-  assert.match(publishedEvaluation, new RegExp(PUBLISHED_PROBABILITY_MODEL_VERSION));
-  assert.match(publishedEvaluation, new RegExp(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION));
+  // This report is a historical v3 snapshot. Do not rewrite it to the current
+  // raw challenger identity merely because the public alias has moved on.
+  assert.match(publishedEvaluation, new RegExp(PUBLISHED_SELECTIVE_V3_MODEL_VERSION));
+  assert.match(publishedEvaluation, new RegExp(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION));
   assert.match(publishedEvaluation, /2026-09-01T08:00:00\.000Z/);
   assert.doesNotMatch(
     publishedEvaluation,

@@ -95,6 +95,7 @@ test("prospective comparison excludes unresolved horizons and never enables auto
     [row("2026-08-11T19:00:00.000Z"), row("2026-08-13T00:00:00.000Z")],
     [boundary("regular", "2026-08-12T07:00:00.000Z", false, true)],
     new Date("2026-08-15T01:00:00.000Z"),
+    { publishedAdoptionAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT },
   );
 
   assert.equal(report.evaluationStartAt, "2026-08-11T19:00:00.000Z");
@@ -111,6 +112,7 @@ test("prospective comparison ignores boundaries after the as-of time", () => {
     [row("2026-08-11T19:00:00.000Z")],
     [boundary("future-random", "2026-08-13T00:00:00.000Z", true, false)],
     new Date("2026-08-12T20:00:00.000Z"),
+    { publishedAdoptionAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT },
   );
 
   assert.equal(report.comparison.resolved24h, 1);
@@ -133,6 +135,7 @@ test("freeze timestamp is fixed, not in the future, and excludes earlier rows wi
     ],
     [],
     new Date("2026-08-14T01:00:00.000Z"),
+    { publishedAdoptionAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT },
   );
 
   assert.equal(report.backfilled, false);
@@ -150,6 +153,7 @@ test("zero random-clock rows remain insufficient_data without altering public-on
     [row("2026-08-11T19:00:00.000Z", false, true)],
     [],
     new Date("2026-08-12T20:00:00.000Z"),
+    { publishedAdoptionAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT },
   );
 
   assert.equal(report.status, "insufficient_data");
