@@ -17,6 +17,9 @@ import {
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_MODEL_VERSION,
+  RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT,
+  RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_POLICY,
+  RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS,
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
@@ -55,6 +58,10 @@ import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
 import {
   calculateRandomContinuousBandwidthShadowPair,
 } from "./radar/randomContinuousBandwidthShadow";
+import {
+  calculateRandomContinuousBandwidthAgeDiagnostics,
+  type RandomContinuousBandwidthAgeDiagnosticResult,
+} from "./radar/randomContinuousBandwidthAgeDiagnostics";
 
 function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilityForecast {
   const random = result.randomContinuousResult;
@@ -154,6 +161,46 @@ function toRawBandwidthForecast(
     freezeAt: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_AT,
     freezePolicy: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_FREEZE_POLICY,
   };
+}
+
+function isValidRandomBandwidthAgeDiagnosticResult(
+  result: RandomContinuousBandwidthAgeDiagnosticResult,
+) {
+  const values = [
+    result.predictions.probability12h,
+    result.predictions.probability24h,
+    result.predictions.probability48h,
+    result.predictions.probability72h,
+    result.baseline.probability24h,
+    result.baseline.probability48h,
+  ];
+  return values.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.predictions.probability12h <= result.predictions.probability24h
+    && result.predictions.probability24h <= result.predictions.probability48h
+    && result.predictions.probability48h <= result.predictions.probability72h;
+}
+
+function toRandomBandwidthAgeDiagnosticForecast(
+  result: RandomContinuousBandwidthAgeDiagnosticResult,
+) {
+  const forecast = toRandomContinuousExperimentalProbabilityForecast(result);
+  return {
+    ...forecast,
+    modelVersion: result.modelVersion,
+    rawModelVersion: result.modelVersion,
+    rawProbability24h: result.baseline.probability24h,
+    rawProbability48h: result.baseline.probability48h,
+    confidence: result.confidence.level,
+    confidenceReason: result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: result.randomContinuous.integrationStepHours,
+    regimeMultiplierPolicyVersion: result.randomContinuous.regimeMultiplierPolicyVersion,
+    evaluationMode: "prospective" as const,
+    experimentRole: "diagnostic" as const,
+    freezeAt: RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT,
+    freezePolicy: RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_POLICY,
+    backfilled: false as const,
+  } satisfies ExperimentalProbabilityForecast;
 }
 
 function isValidContextAwareResult(result: ReturnType<typeof calculateContextAwareContinuousProbability>) {
@@ -504,7 +551,35 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     };
   }
 
-  let withContextAware = withBandwidthExperiment;
+  let withBandwidthAgeDiagnostics = withBandwidthExperiment;
+  if (generatedAt.getTime() >= new Date(RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT).getTime()) {
+    try {
+      const diagnostics = calculateRandomContinuousBandwidthAgeDiagnostics(
+        options.data,
+        options.calculationOptions,
+        undefined,
+        bandwidthPair?.challenger,
+      );
+      const diagnosticForecasts = Object.fromEntries(
+        Object.entries(diagnostics).flatMap(([modelVersion, result]) => {
+          if (!RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS.includes(
+            modelVersion as typeof RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS[number],
+          ) || !isValidRandomBandwidthAgeDiagnosticResult(result)) {
+            return [];
+          }
+          return [[modelVersion, toRandomBandwidthAgeDiagnosticForecast(result)]];
+        }),
+      ) as ExperimentalProbabilityForecasts;
+      withBandwidthAgeDiagnostics = {
+        ...withBandwidthExperiment,
+        ...diagnosticForecasts,
+      };
+    } catch {
+      // Age-shape diagnostics are fail-open and cannot affect public results.
+    }
+  }
+
+  let withContextAware = withBandwidthAgeDiagnostics;
   if (
     bandwidthPair &&
     generatedAt.getTime() >= new Date(CONTEXT_AWARE_CONTINUOUS_PROBABILITY_FREEZE_AT).getTime()
@@ -521,7 +596,7 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     });
     if (isValidContextAwareResult(contextAwareResult)) {
       withContextAware = {
-        ...withBandwidthExperiment,
+        ...withBandwidthAgeDiagnostics,
         [contextAwareResult.modelVersion]: toContextAwareForecast(contextAwareResult),
       };
     }

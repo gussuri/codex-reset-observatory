@@ -170,6 +170,29 @@ export const RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS = {
   truncationHours: 54,
 } as const;
 
+// Prospective-only age-shape diagnostic. This is deliberately a separate
+// family from the preregistered 24/72 versus 18/54 pair: truncation is fixed
+// at 54h and only the Gaussian bandwidth varies.
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT = "2026-09-17T19:11:07.362Z";
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_POLICY =
+  "The diagnostic architecture and settings are frozen at experiment start; future observations may accumulate, but no historical backfill, retrospective relabeling, retuning, or auto-publish is allowed.";
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_TARGET_DEFINITION =
+  RANDOM_CONTINUOUS_SHADOW_TARGET_DEFINITION;
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_BANDWIDTH_HOURS = [6, 9, 12, 18, 24] as const;
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_TRUNCATION_HOURS = 54;
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS = [
+  "hazard-regime-random-continuous-post-reset-age-raw-bw6-tr54-age-diagnostic-v1",
+  "hazard-regime-random-continuous-post-reset-age-raw-bw9-tr54-age-diagnostic-v1",
+  "hazard-regime-random-continuous-post-reset-age-raw-bw12-tr54-age-diagnostic-v1",
+  "hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-age-diagnostic-v1",
+  "hazard-regime-random-continuous-post-reset-age-raw-bw24-tr54-age-diagnostic-v1",
+] as const;
+export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_COMMON_OPTIONS = {
+  ...NEXT_GENERATION_B_FROZEN_CONTINUOUS_CONFIG,
+  truncationHours: RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_TRUNCATION_HOURS,
+  regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
+} as const;
+
 // The current public identity is intentionally separate from the historical
 // selective-v3 aliases above. This explicit future boundary is the only
 // point at which the challenger can become public; earlier rows stay in their

@@ -93,7 +93,7 @@ export type ExperimentalProbabilityForecast = {
   confidenceReason?: string;
   calibrationApplied?: boolean;
   integrationStepHours?: number;
-  experimentRole?: "control" | "challenger";
+  experimentRole?: "control" | "challenger" | "diagnostic";
   featureSnapshot?: PublishedV3FeatureSnapshot;
   contextAware?: ContextAwareForecastAudit;
   regimeMultiplierPolicyVersion?: string;
