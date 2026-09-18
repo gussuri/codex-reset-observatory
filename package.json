@@ -34,6 +34,7 @@
     "evaluate:prospective-random-continuous": "tsx scripts/evaluateRandomContinuousModelProspectively.ts",
     "evaluate:prospective-random-bandwidth": "tsx scripts/evaluateProspectiveRandomBandwidthModel.ts",
     "evaluate:prospective-random-bandwidth-age": "tsx scripts/analyze-bandwidth-age-diagnostics.ts",
+    "evaluate:prospective-late-age-regime": "tsx scripts/analyze-late-age-regime-diagnostics.ts",
     "evaluate:prospective-next-generation": "tsx scripts/evaluateNextGenerationProbabilityModels.ts",
     "evaluate:prospective-contextual-burst": "tsx scripts/evaluateContextualBurstProbabilityModel.ts",
     "evaluate:prospective-context-aware": "tsx scripts/evaluateProspectiveContextAwareContinuousModel.ts",

@@ -23,6 +23,9 @@ import {
   RECENCY_H30_PROBABILITY_MODEL_VERSION,
   REGIME_ELAPSED_FULL_MODEL_VERSION,
   RANDOM_ELAPSED_SHADOW_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
 } from "@/data/shadowProbabilityConfig";
 import type {
   ExperimentalProbabilityForecast,
@@ -62,6 +65,10 @@ import {
   calculateRandomContinuousBandwidthAgeDiagnostics,
   type RandomContinuousBandwidthAgeDiagnosticResult,
 } from "./radar/randomContinuousBandwidthAgeDiagnostics";
+import {
+  calculateRandomContinuousLateAgeRegimeDiagnostics,
+  type LateAgeRegimeDiagnosticResults,
+} from "./radar/randomContinuousLateAgeRegimeDiagnostics";
 
 function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilityForecast {
   const random = result.randomContinuousResult;
@@ -199,6 +206,54 @@ function toRandomBandwidthAgeDiagnosticForecast(
     experimentRole: "diagnostic" as const,
     freezeAt: RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT,
     freezePolicy: RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_POLICY,
+    backfilled: false as const,
+  } satisfies ExperimentalProbabilityForecast;
+}
+
+function isValidLateAgeRegimeDiagnosticResult(
+  result: LateAgeRegimeDiagnosticResults[typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number]],
+) {
+  const values = [
+    result.result.predictions.probability12h,
+    result.result.predictions.probability24h,
+    result.result.predictions.probability48h,
+    result.result.predictions.probability72h,
+    result.result.baseline.probability24h,
+    result.result.baseline.probability48h,
+  ];
+  return values.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.result.predictions.probability12h <= result.result.predictions.probability24h
+    && result.result.predictions.probability24h <= result.result.predictions.probability48h
+    && result.result.predictions.probability48h <= result.result.predictions.probability72h
+    && Number.isFinite(result.lateAgeStartHours)
+    && result.lateAgeStartHours >= 0;
+}
+
+function toLateAgeRegimeDiagnosticForecast(
+  arm: LateAgeRegimeDiagnosticResults[typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number]],
+) {
+  const forecast = toRandomContinuousExperimentalProbabilityForecast(arm.result);
+  return {
+    ...forecast,
+    modelVersion: arm.modelVersion,
+    rawModelVersion: arm.modelVersion,
+    rawProbability24h: arm.result.baseline.probability24h,
+    rawProbability48h: arm.result.baseline.probability48h,
+    confidence: arm.result.confidence.level,
+    confidenceReason: arm.result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: arm.result.randomContinuous.integrationStepHours,
+    regimeMultiplierPolicyVersion: arm.lateAgeRegimePolicy,
+    evaluationMode: "prospective" as const,
+    experimentRole: "diagnostic" as const,
+    nextGenerationRole: "late-age-regime-diagnostic" as const,
+    freezeAt: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+    freezePolicy: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+    lateAgeRegimePolicy: arm.lateAgeRegimePolicy,
+    lateAgeStartHours: arm.lateAgeStartHours,
+    preResetRegimeMultiplier: arm.preResetRegimeMultiplier,
+    preResetRegimeMultiplierFallbackUsed: arm.preResetRegimeMultiplierFallbackUsed,
+    preResetRegimeMultiplierFallbackReason: arm.preResetRegimeMultiplierFallbackReason,
     backfilled: false as const,
   } satisfies ExperimentalProbabilityForecast;
 }
@@ -451,6 +506,7 @@ export type NextGenerationShadowBuildOptions = {
   calculationOptions: ShadowProbabilityOptions;
   existingForecasts: ExperimentalProbabilityForecasts;
   trainingState: NextGenerationTrainingState;
+  lateAgeRegimeDiagnosticsCalculator?: typeof calculateRandomContinuousLateAgeRegimeDiagnostics;
 };
 
 export function buildNextGenerationExperimentalProbabilityForecasts(
@@ -602,32 +658,62 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     }
   }
 
-  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
-    return withContextAware;
-  }
   let withC = withContextAware;
-  const cResult = calculateContextualBurstProbability(options.data, {
-    ...options.calculationOptions,
-    trainingRows: options.trainingState.cRows,
-    trainingReadStatus: options.trainingState.status,
-  });
-  if (isValidCResult(cResult)) {
-    withC = {
-      ...withContextAware,
-      [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
-    };
+  if (generatedAt.getTime() >= new Date(NEXT_GENERATION_C_FREEZE_AT).getTime()) {
+    const cResult = calculateContextualBurstProbability(options.data, {
+      ...options.calculationOptions,
+      trainingRows: options.trainingState.cRows,
+      trainingReadStatus: options.trainingState.status,
+    });
+    if (isValidCResult(cResult)) {
+      withC = {
+        ...withContextAware,
+        [NEXT_GENERATION_C_MODEL_VERSION]: toContextualBurstForecast(cResult),
+      };
+    }
   }
-  if (generatedAt.getTime() < new Date(NEXT_GENERATION_C_V2_FREEZE_AT).getTime()) {
-    return withC;
+
+  let withC2 = withC;
+  if (generatedAt.getTime() >= new Date(NEXT_GENERATION_C_V2_FREEZE_AT).getTime()) {
+    const cV2Result = calculateNormalizedContextualBurstProbability(options.data, {
+      ...options.calculationOptions,
+      trainingRows: options.trainingState.cV2Rows,
+      trainingReadStatus: options.trainingState.status,
+    });
+    if (isValidCResult(cV2Result)) {
+      withC2 = {
+        ...withC,
+        [NEXT_GENERATION_C_V2_MODEL_VERSION]: toContextualBurstForecast(cV2Result, "candidate-c-v2"),
+      };
+    }
   }
-  const cV2Result = calculateNormalizedContextualBurstProbability(options.data, {
-    ...options.calculationOptions,
-    trainingRows: options.trainingState.cV2Rows,
-    trainingReadStatus: options.trainingState.status,
-  });
-  if (!isValidCResult(cV2Result)) return withC;
-  return {
-    ...withC,
-    [NEXT_GENERATION_C_V2_MODEL_VERSION]: toContextualBurstForecast(cV2Result, "candidate-c-v2"),
-  };
+
+  let withLateAgeDiagnostics = withC2;
+  if (generatedAt.getTime() >= new Date(RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT).getTime()) {
+    try {
+      const calculateDiagnostics = options.lateAgeRegimeDiagnosticsCalculator
+        ?? calculateRandomContinuousLateAgeRegimeDiagnostics;
+      const diagnostics = calculateDiagnostics(options.data, options.calculationOptions);
+      const allValid = RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.every((modelVersion) => {
+        const arm = diagnostics[modelVersion];
+        return Boolean(arm && isValidLateAgeRegimeDiagnosticResult(arm));
+      });
+      if (allValid) {
+        const diagnosticForecasts = Object.fromEntries(
+          RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.map((modelVersion) => [
+            modelVersion,
+            toLateAgeRegimeDiagnosticForecast(diagnostics[modelVersion]),
+          ]),
+        ) as ExperimentalProbabilityForecasts;
+        withLateAgeDiagnostics = {
+          ...withC2,
+          ...diagnosticForecasts,
+        };
+      }
+    } catch {
+      // Late-age diagnostics are fail-open and cannot affect normal logging.
+    }
+  }
+
+  return withLateAgeDiagnostics;
 }

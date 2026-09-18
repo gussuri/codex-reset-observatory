@@ -1,0 +1,471 @@
+import {
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+} from "@/data/shadowProbabilityConfig";
+import {
+  getRandomClockOutcome,
+} from "./prospectiveRandomClockModelEvaluation";
+import {
+  selectDailyFirstForecasts,
+  type ProspectiveCalibrationBucket,
+  type ProspectiveForecastRow,
+  type ProspectiveMetric,
+  type ProspectiveStoredForecast,
+} from "./prospectiveProbabilityEvaluation";
+import type { RecoveryResetBoundary } from "./recoveryBoundary";
+
+const HOUR_MS = 60 * 60 * 1000;
+const LOG_LOSS_EPSILON = 1e-12;
+
+export const LATE_AGE_REGIME_DIAGNOSTIC_AGE_BUCKETS = [
+  "<120h",
+  "120-144h",
+  "144-168h",
+  "168-192h",
+  "192-216h",
+  ">=216h",
+] as const;
+
+export type LateAgeRegimeDiagnosticAgeBucket =
+  typeof LATE_AGE_REGIME_DIAGNOSTIC_AGE_BUCKETS[number];
+
+export type LateAgeRegimeHorizonMetrics = {
+  metrics24h: ProspectiveMetric;
+  metrics48h: ProspectiveMetric;
+};
+
+export type LateAgeRegimeAgeBucketMetrics = LateAgeRegimeHorizonMetrics & {
+  ageBucket: LateAgeRegimeDiagnosticAgeBucket;
+};
+
+export type LateAgeRegimeModelEvaluation = {
+  modelVersion: string;
+  forecastCount: number;
+  comparableOriginCount: number;
+  dailyFirstOriginCount: number;
+  metrics24h: ProspectiveMetric;
+  metrics48h: ProspectiveMetric;
+  ageBuckets: Record<LateAgeRegimeDiagnosticAgeBucket, LateAgeRegimeAgeBucketMetrics>;
+  unknownAgeCount: number;
+};
+
+export type LateAgeRegimePrimaryComparison = {
+  controlModelVersion: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION;
+  primaryModelVersion: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION;
+  resolved24h: number;
+  resolved48h: number;
+  lateAgeResolved24h: number;
+  lateAgeResolved48h: number;
+  brierDifference24h: number | null;
+  brierDifference48h: number | null;
+  logLossDifference24h: number | null;
+  logLossDifference48h: number | null;
+};
+
+export type LateAgeRegimeComparison = {
+  primary: LateAgeRegimePrimaryComparison;
+  secondary: Array<{
+    modelVersion: string;
+    brierDifference24h: number | null;
+    brierDifference48h: number | null;
+    logLossDifference24h: number | null;
+    logLossDifference48h: number | null;
+  }>;
+};
+
+export type ProspectiveLateAgeRegimeDiagnosticsReport = {
+  schemaVersion: "prospective-late-age-regime-diagnostics-v1";
+  status: "insufficient_data" | "available";
+  generatedAt: string;
+  asOf: string;
+  evaluationMode: "prospective";
+  backfilled: false;
+  source: "prediction_history.debug_info.experimentalProbabilityForecasts";
+  targetDefinition: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION;
+  freezeAt: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT;
+  freezePolicy: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY;
+  lateAgeStartHours: typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS;
+  evaluationStartAt: string | null;
+  canonicalRandomBoundaryCount: number;
+  forecastCounts: Record<string, number>;
+  models: Record<
+    typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number],
+    LateAgeRegimeModelEvaluation
+  >;
+  comparison: LateAgeRegimeComparison;
+  notes: string[];
+};
+
+type EvaluationPoint = {
+  generatedAt: string;
+  prediction: number;
+  actual: number;
+  targetIds: string[];
+  ageHours: number | null;
+};
+
+function timestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampProbability(value: number) {
+  return Number.isFinite(value)
+    ? Math.min(1 - LOG_LOSS_EPSILON, Math.max(LOG_LOSS_EPSILON, value))
+    : 0.5;
+}
+
+function getCalibrationBuckets(values: Array<{ prediction: number; actual: number }>) {
+  return [0, 0.2, 0.4, 0.6, 0.8].map((lower): ProspectiveCalibrationBucket => {
+    const upper = lower + 0.2;
+    const bucket = values.filter(({ prediction }) =>
+      prediction >= lower && (prediction < upper || (upper === 1 && prediction <= upper)),
+    );
+    return {
+      range: `${Math.round(lower * 100)}-${Math.round(upper * 100)}%`,
+      count: bucket.length,
+      averagePrediction: bucket.length === 0
+        ? 0
+        : bucket.reduce((sum, value) => sum + value.prediction, 0) / bucket.length,
+      actualRate: bucket.length === 0
+        ? 0
+        : bucket.reduce((sum, value) => sum + value.actual, 0) / bucket.length,
+    };
+  });
+}
+
+function emptyMetric(): ProspectiveMetric {
+  return {
+    count: 0,
+    positiveCount: 0,
+    actualRate: 0,
+    averagePrediction: 0,
+    brier: 0,
+    logLoss: 0,
+    calibration: getCalibrationBuckets([]),
+    periodStart: null,
+    periodEnd: null,
+    targetResetCount: 0,
+  };
+}
+
+function calculateMetric(points: EvaluationPoint[]): ProspectiveMetric {
+  if (points.length === 0) return emptyMetric();
+  const values = points.map((point) => ({
+    prediction: Math.min(1, Math.max(0, point.prediction)),
+    actual: point.actual,
+  }));
+  return {
+    count: values.length,
+    positiveCount: values.reduce((sum, value) => sum + value.actual, 0),
+    actualRate: values.reduce((sum, value) => sum + value.actual, 0) / values.length,
+    averagePrediction: values.reduce((sum, value) => sum + value.prediction, 0) / values.length,
+    brier: values.reduce((sum, value) => sum + (value.prediction - value.actual) ** 2, 0) / values.length,
+    logLoss: values.reduce((sum, value) => {
+      const prediction = clampProbability(value.prediction);
+      return sum - (value.actual * Math.log(prediction) + (1 - value.actual) * Math.log(1 - prediction));
+    }, 0) / values.length,
+    calibration: getCalibrationBuckets(values),
+    periodStart: points[0].generatedAt,
+    periodEnd: points.at(-1)?.generatedAt ?? null,
+    targetResetCount: new Set(points.flatMap((point) => point.targetIds)).size,
+  };
+}
+
+function isStoredLateAgeForecast(
+  value: unknown,
+  modelVersion: string,
+): value is ProspectiveStoredForecast {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const forecast = value as Record<string, unknown>;
+  return forecast.modelVersion === modelVersion
+    && typeof forecast.generatedAt === "string"
+    && timestamp(forecast.generatedAt) !== null
+    && typeof forecast.probability24h === "number"
+    && Number.isFinite(forecast.probability24h)
+    && typeof forecast.probability48h === "number"
+    && Number.isFinite(forecast.probability48h)
+    && forecast.backfilled !== true;
+}
+
+function hasSameOriginGeneratedAt(
+  row: ProspectiveForecastRow,
+  modelVersion: string,
+) {
+  const forecast = row.forecasts[modelVersion];
+  return isStoredLateAgeForecast(forecast, modelVersion)
+    && timestamp(forecast.generatedAt) === timestamp(row.generatedAt);
+}
+
+export function selectComparableLateAgeRegimeForecasts(
+  rows: Array<ProspectiveForecastRow>,
+) {
+  return rows.filter((row) =>
+    timestamp(row.generatedAt) !== null
+    && RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.every((modelVersion) =>
+      hasSameOriginGeneratedAt(row, modelVersion),
+    ),
+  );
+}
+
+export function getLateAgeRegimeAgeBucket(
+  ageHours: number,
+): LateAgeRegimeDiagnosticAgeBucket | null {
+  if (!Number.isFinite(ageHours) || ageHours < 0) return null;
+  if (ageHours < 120) return "<120h";
+  if (ageHours < 144) return "120-144h";
+  if (ageHours < 168) return "144-168h";
+  if (ageHours < 192) return "168-192h";
+  if (ageHours < 216) return "192-216h";
+  return ">=216h";
+}
+
+function getTargetIds(
+  boundaries: Array<RecoveryResetBoundary>,
+  origin: string,
+  horizonHours: 24 | 48,
+) {
+  const originTime = timestamp(origin);
+  if (originTime === null) return [];
+  const end = originTime + horizonHours * HOUR_MS;
+  return boundaries
+    .filter((boundary) => {
+      const boundaryTime = timestamp(boundary.resetAt);
+      return boundaryTime !== null && boundaryTime > originTime && boundaryTime <= end && boundary.isRandom;
+    })
+    .map((boundary) => boundary.id);
+}
+
+function getResolvedPoints(
+  rows: Array<ProspectiveForecastRow>,
+  modelVersion: string,
+  horizonHours: 24 | 48,
+  boundaries: Array<RecoveryResetBoundary>,
+  asOf: Date,
+) {
+  const asOfTime = asOf.getTime();
+  return rows.flatMap((row) => {
+    const forecast = row.forecasts[modelVersion];
+    const generatedTime = timestamp(row.generatedAt);
+    if (
+      !isStoredLateAgeForecast(forecast, modelVersion)
+      || generatedTime === null
+      || !Number.isFinite(asOfTime)
+      || generatedTime + horizonHours * HOUR_MS > asOfTime
+    ) {
+      return [];
+    }
+    const actual = getRandomClockOutcome(boundaries, row.generatedAt, horizonHours);
+    if (actual === null) return [];
+    const ageHours = typeof forecast.randomElapsedHours === "number"
+      && Number.isFinite(forecast.randomElapsedHours)
+      ? forecast.randomElapsedHours
+      : null;
+    return [{
+      generatedAt: row.generatedAt,
+      prediction: horizonHours === 24 ? forecast.probability24h : forecast.probability48h,
+      actual: actual ? 1 : 0,
+      targetIds: actual ? getTargetIds(boundaries, row.generatedAt, horizonHours) : [],
+      ageHours,
+    }];
+  });
+}
+
+function getEmptyAgeBuckets(): Record<LateAgeRegimeDiagnosticAgeBucket, LateAgeRegimeAgeBucketMetrics> {
+  return Object.fromEntries(
+    LATE_AGE_REGIME_DIAGNOSTIC_AGE_BUCKETS.map((ageBucket) => [ageBucket, {
+      ageBucket,
+      metrics24h: emptyMetric(),
+      metrics48h: emptyMetric(),
+    }]),
+  ) as Record<LateAgeRegimeDiagnosticAgeBucket, LateAgeRegimeAgeBucketMetrics>;
+}
+
+function createModelEvaluation(
+  comparableRows: Array<ProspectiveForecastRow>,
+  dailyRows: Array<ProspectiveForecastRow>,
+  modelVersion: string,
+  boundaries: Array<RecoveryResetBoundary>,
+  asOf: Date,
+): LateAgeRegimeModelEvaluation {
+  const points24h = getResolvedPoints(dailyRows, modelVersion, 24, boundaries, asOf);
+  const points48h = getResolvedPoints(dailyRows, modelVersion, 48, boundaries, asOf);
+  const ageBuckets = getEmptyAgeBuckets();
+  const bucketPoints24h = new Map<LateAgeRegimeDiagnosticAgeBucket, Array<EvaluationPoint>>();
+  const bucketPoints48h = new Map<LateAgeRegimeDiagnosticAgeBucket, Array<EvaluationPoint>>();
+  let unknownAgeCount = 0;
+  for (const row of dailyRows) {
+    const forecast = row.forecasts[modelVersion];
+    const ageHours = forecast?.randomElapsedHours;
+    const bucket = typeof ageHours === "number"
+      ? getLateAgeRegimeAgeBucket(ageHours)
+      : null;
+    if (!bucket) {
+      unknownAgeCount += 1;
+      continue;
+    }
+    const bucket24h = getResolvedPoints([row], modelVersion, 24, boundaries, asOf);
+    const bucket48h = getResolvedPoints([row], modelVersion, 48, boundaries, asOf);
+    bucketPoints24h.set(bucket, [
+      ...(bucketPoints24h.get(bucket) ?? []),
+      ...bucket24h,
+    ]);
+    bucketPoints48h.set(bucket, [
+      ...(bucketPoints48h.get(bucket) ?? []),
+      ...bucket48h,
+    ]);
+  }
+  for (const ageBucket of LATE_AGE_REGIME_DIAGNOSTIC_AGE_BUCKETS) {
+    ageBuckets[ageBucket].metrics24h = calculateMetric(bucketPoints24h.get(ageBucket) ?? []);
+    ageBuckets[ageBucket].metrics48h = calculateMetric(bucketPoints48h.get(ageBucket) ?? []);
+  }
+  return {
+    modelVersion,
+    forecastCount: comparableRows.length,
+    comparableOriginCount: comparableRows.length,
+    dailyFirstOriginCount: dailyRows.length,
+    metrics24h: calculateMetric(points24h),
+    metrics48h: calculateMetric(points48h),
+    ageBuckets,
+    unknownAgeCount,
+  };
+}
+
+function difference(candidate: number, control: number) {
+  return Number.isFinite(candidate) && Number.isFinite(control)
+    ? candidate - control
+    : null;
+}
+
+function buildComparison(
+  models: ProspectiveLateAgeRegimeDiagnosticsReport["models"],
+  dailyRows: Array<ProspectiveForecastRow>,
+  boundaries: Array<RecoveryResetBoundary>,
+  asOf: Date,
+): LateAgeRegimeComparison {
+  const control = models[RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION];
+  const primary = models[RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION];
+  const control24 = getResolvedPoints(dailyRows, control.modelVersion, 24, boundaries, asOf);
+  const control48 = getResolvedPoints(dailyRows, control.modelVersion, 48, boundaries, asOf);
+  const primary24 = getResolvedPoints(dailyRows, primary.modelVersion, 24, boundaries, asOf);
+  const primary48 = getResolvedPoints(dailyRows, primary.modelVersion, 48, boundaries, asOf);
+  const controlLate24 = control24.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
+  const controlLate48 = control48.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
+  const primaryLate24 = primary24.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
+  const primaryLate48 = primary48.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
+  const control24Metric = calculateMetric(control24);
+  const control48Metric = calculateMetric(control48);
+  const primary24Metric = calculateMetric(primary24);
+  const primary48Metric = calculateMetric(primary48);
+  const secondary = [
+    RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+    RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+  ].map((modelVersion) => {
+    const model24 = calculateMetric(getResolvedPoints(dailyRows, modelVersion, 24, boundaries, asOf));
+    const model48 = calculateMetric(getResolvedPoints(dailyRows, modelVersion, 48, boundaries, asOf));
+    return {
+      modelVersion,
+      brierDifference24h: model24.count > 0 && control24Metric.count > 0
+        ? difference(model24.brier, control24Metric.brier)
+        : null,
+      brierDifference48h: model48.count > 0 && control48Metric.count > 0
+        ? difference(model48.brier, control48Metric.brier)
+        : null,
+      logLossDifference24h: model24.count > 0 && control24Metric.count > 0
+        ? difference(model24.logLoss, control24Metric.logLoss)
+        : null,
+      logLossDifference48h: model48.count > 0 && control48Metric.count > 0
+        ? difference(model48.logLoss, control48Metric.logLoss)
+        : null,
+    };
+  });
+  return {
+    primary: {
+      controlModelVersion: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+      primaryModelVersion: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+      resolved24h: Math.min(control24Metric.count, primary24Metric.count),
+      resolved48h: Math.min(control48Metric.count, primary48Metric.count),
+      lateAgeResolved24h: Math.min(controlLate24.length, primaryLate24.length),
+      lateAgeResolved48h: Math.min(controlLate48.length, primaryLate48.length),
+      brierDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
+        ? difference(primary24Metric.brier, control24Metric.brier)
+        : null,
+      brierDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
+        ? difference(primary48Metric.brier, control48Metric.brier)
+        : null,
+      logLossDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
+        ? difference(primary24Metric.logLoss, control24Metric.logLoss)
+        : null,
+      logLossDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
+        ? difference(primary48Metric.logLoss, control48Metric.logLoss)
+        : null,
+    },
+    secondary,
+  };
+}
+
+export function evaluateLateAgeRegimeDiagnostics(
+  rows: Array<ProspectiveForecastRow>,
+  boundaries: Array<RecoveryResetBoundary>,
+  asOf: Date,
+): ProspectiveLateAgeRegimeDiagnosticsReport {
+  if (!Number.isFinite(asOf.getTime())) throw new RangeError("asOf must be a valid date");
+  const freezeTime = timestamp(RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT)!;
+  const asOfTime = asOf.getTime();
+  const prospectiveRows = rows.filter((row) => {
+    const generatedTime = timestamp(row.generatedAt);
+    return generatedTime !== null
+      && generatedTime >= freezeTime
+      && generatedTime <= asOfTime
+      && row.forecasts[RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION]?.backfilled !== true;
+  });
+  const comparableRows = selectComparableLateAgeRegimeForecasts(prospectiveRows);
+  const dailyRows = selectDailyFirstForecasts(comparableRows);
+  const models = Object.fromEntries(
+    RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.map((modelVersion) => [
+      modelVersion,
+      createModelEvaluation(comparableRows, dailyRows, modelVersion, boundaries, asOf),
+    ]),
+  ) as ProspectiveLateAgeRegimeDiagnosticsReport["models"];
+  const comparison = buildComparison(models, dailyRows, boundaries, asOf);
+  const evaluationStartAt = dailyRows[0]?.generatedAt ?? null;
+  const hasResolvedSample = comparison.primary.resolved24h > 0 || comparison.primary.resolved48h > 0;
+  return {
+    schemaVersion: "prospective-late-age-regime-diagnostics-v1",
+    status: hasResolvedSample ? "available" : "insufficient_data",
+    generatedAt: asOf.toISOString(),
+    asOf: asOf.toISOString(),
+    evaluationMode: "prospective",
+    backfilled: false,
+    source: "prediction_history.debug_info.experimentalProbabilityForecasts",
+    targetDefinition: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION,
+    freezeAt: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+    freezePolicy: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+    lateAgeStartHours: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+    evaluationStartAt,
+    canonicalRandomBoundaryCount: boundaries.filter((boundary) => boundary.isRandom).length,
+    forecastCounts: Object.fromEntries(
+      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.map((modelVersion) => [
+        modelVersion,
+        models[modelVersion].forecastCount,
+      ]),
+    ),
+    models,
+    comparison,
+    notes: [
+      "Only saved experimentalProbabilityForecasts after the fixed freezeAt are evaluated; historical rows are not recomputed, backfilled, or relabeled.",
+      "The primary comparison is the late-no-downward arm against the control on the same daily-first origins.",
+      "Outcomes use the existing random-clock target and censor semantics; regular boundaries do not count as random positives.",
+      "This report is diagnostic only and does not select a winner, retune parameters, publish a model, or change a gate.",
+      "Age buckets are half-open: [120,144), [144,168), [168,192), [192,216), with >=216h as the final bucket.",
+    ],
+  };
+}

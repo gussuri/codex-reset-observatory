@@ -193,6 +193,37 @@ export const RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_COMMON_OPTIONS = {
   regimeMultiplierPolicy: NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
 } as const;
 
+// Prospective-only late-age regime policy diagnostics. The four arms share
+// the frozen 18/54 estimator and differ only in how the point-in-time regime
+// multiplier is applied at ages at and after the preregistered threshold.
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT = "2026-09-18T00:34:36.271Z";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY =
+  "The diagnostic architecture and settings are frozen at experiment start; future observations may accumulate, but no historical backfill, retrospective relabeling, retuning, or auto-publish is allowed.";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION =
+  RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_TARGET_DEFINITION;
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS = 144;
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS = {
+  ...RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS,
+} as const;
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG =
+  NEXT_GENERATION_B_FROZEN_REGIME_CONFIG;
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG =
+  NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG;
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION =
+  "hazard-regime-random-continuous-bw18-tr54-late-regime-control-v1";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION =
+  "hazard-regime-random-continuous-bw18-tr54-late-neutral-144h-v1";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION =
+  "hazard-regime-random-continuous-bw18-tr54-late-no-downward-144h-v1";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION =
+  "hazard-regime-random-continuous-bw18-tr54-pre-reset-frozen-regime-v1";
+export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS = [
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+] as const;
+
 // The current public identity is intentionally separate from the historical
 // selective-v3 aliases above. This explicit future boundary is the only
 // point at which the challenger can become public; earlier rows stay in their

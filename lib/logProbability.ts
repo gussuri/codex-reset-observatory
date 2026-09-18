@@ -151,7 +151,13 @@ export type ExperimentalProbabilityForecast = {
   }>;
   freezeAt?: string;
   freezePolicy?: string;
-  nextGenerationRole?: "candidate-a" | "candidate-b" | "candidate-c" | "candidate-c-v2" | "candidate-context-aware";
+  nextGenerationRole?:
+    | "candidate-a"
+    | "candidate-b"
+    | "candidate-c"
+    | "candidate-c-v2"
+    | "candidate-context-aware"
+    | "late-age-regime-diagnostic";
   trainingReadStatus?: "ok" | "error";
   fallbackReason?: string | null;
   officialNoticeTimingPolicyVersion?: string;
@@ -227,6 +233,15 @@ export type ExperimentalProbabilityForecast = {
   circadianCycleMeanBeforeNormalization?: number | null;
   circadianCycleMeanAfterNormalization?: number | null;
   circadianNormalizationFallbackReason?: string | null;
+  lateAgeRegimePolicy?:
+    | "control"
+    | "late-neutral"
+    | "late-no-downward"
+    | "pre-reset-frozen";
+  lateAgeStartHours?: number;
+  preResetRegimeMultiplier?: number | null;
+  preResetRegimeMultiplierFallbackUsed?: boolean;
+  preResetRegimeMultiplierFallbackReason?: string | null;
   backfilled?: false;
 };
 

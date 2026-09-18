@@ -51,6 +51,7 @@ export type RandomContinuousModelOptions = {
   minimumDailyProbability?: number;
   maximumDailyProbability?: number;
   regimeMultiplierPolicy?: RandomContinuousRegimeMultiplierPolicy;
+  regimeMultiplierAtAge?: RegimeMultiplierAtAge;
 };
 
 export type RandomContinuousRegimeMultiplierPolicy =
@@ -494,9 +495,10 @@ export function calculateRandomContinuousProbability(
   const randomElapsedHours = getLatestElapsedHours(randomBoundaries, now);
   const recoveryElapsedHours = getLatestElapsedHours(boundaries, now);
   const regimeMultiplier = recoveryResult.regimeElapsed.regime.regimeMultiplier;
-  const getRegimeMultiplierAtAge = modelOptions.regimeMultiplierPolicy === NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION
-    ? getPostResetRegimeMultiplierAtAge
-    : undefined;
+  const getRegimeMultiplierAtAge = modelOptions.regimeMultiplierAtAge
+    ?? (modelOptions.regimeMultiplierPolicy === NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION
+      ? getPostResetRegimeMultiplierAtAge
+      : undefined);
   const evaluator = createContinuousHazardEvaluator(hazard);
   const baseline = makeHorizons(
     hazard,
