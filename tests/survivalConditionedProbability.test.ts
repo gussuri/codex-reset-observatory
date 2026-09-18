@@ -25,8 +25,8 @@ import {
 } from "../lib/radar/contextualBurstContext";
 import type { RecoveryResetBoundary } from "../lib/radar/recoveryBoundary";
 import {
-  frozenCanonicalSurvivalBoundaries,
-  frozenCanonicalSurvivalStaticHistory,
+  frozenSupportShapeSurvivalBoundaries,
+  frozenSupportShapeSurvivalStaticHistory,
 } from "./fixtures/survivalConditionedHistory";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -114,25 +114,25 @@ function validationFixture(hazard: ReturnType<typeof buildSurvivalConditionedHaz
   } as never;
 }
 
-test("the frozen canonical 37-boundary fixture passes at 36 intervals and remains valid with more history", () => {
-  const canonical = buildSurvivalConditionedHazard(
-    frozenCanonicalSurvivalBoundaries(),
+test("the frozen support-shape 37-boundary fixture passes at 36 intervals and remains valid with more history", () => {
+  const supportShape = buildSurvivalConditionedHazard(
+    frozenSupportShapeSurvivalBoundaries(),
     new Date("2026-09-19T00:00:00.000Z"),
   );
-  assert.equal(frozenCanonicalSurvivalBoundaries().length, 37);
-  assert.equal(canonical.completedIntervalCount, 36);
-  assert.equal(canonical.maxSupportedAgeHours, 221);
-  assert.equal(isValidSurvivalConditionedPrediction(validationFixture(canonical)), true);
+  assert.equal(frozenSupportShapeSurvivalBoundaries().length, 37);
+  assert.equal(supportShape.completedIntervalCount, 36);
+  assert.equal(supportShape.maxSupportedAgeHours, 221);
+  assert.equal(isValidSurvivalConditionedPrediction(validationFixture(supportShape)), true);
 
   const largerHistory = buildSurvivalConditionedHazard(
-    frozenCanonicalSurvivalBoundaries([60]),
+    frozenSupportShapeSurvivalBoundaries([60]),
     new Date("2026-09-19T00:00:00.000Z"),
   );
   assert.equal(largerHistory.completedIntervalCount, 37);
   assert.equal(isValidSurvivalConditionedPrediction(validationFixture(largerHistory)), true);
 });
 
-test("the tail-convergence stress fixture is kept separate from the canonical support fixture", () => {
+test("the tail-convergence stress fixture is kept separate from the support-shape fixture", () => {
   const stress = buildSurvivalConditionedHazard(
     tailConvergenceStressBoundaries(37),
     new Date("2026-02-01T00:00:00.000Z"),
@@ -140,14 +140,14 @@ test("the tail-convergence stress fixture is kept separate from the canonical su
   assert.equal(stress.completedIntervalCount, 36);
   assert.equal(stress.maxSupportedAgeHours, 221);
   assert.notDeepEqual(stress.intervals, buildSurvivalConditionedHazard(
-    frozenCanonicalSurvivalBoundaries(),
+    frozenSupportShapeSurvivalBoundaries(),
     new Date("2026-09-19T00:00:00.000Z"),
   ).intervals);
 });
 
-test("the fixed canonical hazard snapshot keeps the 0-15 day curve finite and reaches its tail anchor", () => {
+test("the fixed support-shape hazard snapshot keeps the 0-15 day curve finite and reaches its tail anchor", () => {
   const hazard = buildSurvivalConditionedHazard(
-    frozenCanonicalSurvivalBoundaries(),
+    frozenSupportShapeSurvivalBoundaries(),
     new Date("2026-09-19T00:00:00.000Z"),
   );
   assert.equal(hazard.completedIntervalCount, 36);
@@ -182,14 +182,14 @@ test("the fixed canonical hazard snapshot keeps the 0-15 day curve finite and re
 
 test("survival circadian context arms reuse the clamp-aware C v2 normalization", () => {
   const now = new Date("2026-09-19T00:00:00.000Z");
-  const staticHistory = frozenCanonicalSurvivalStaticHistory();
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
   const base = calculateSurvivalConditionedProbability(null, { now, staticHistory });
   const arms = calculateSurvivalConditionedContextArms(null, { now, staticHistory }, base);
   const circadian = Object.values(arms).find((arm) => arm.contextArm === "circadian");
   assert.ok(circadian);
   assert.ok(circadian.contextFit);
 
-  const randomResetTimes = frozenCanonicalSurvivalBoundaries().map((item) => new Date(item.resetAt));
+  const randomResetTimes = frozenSupportShapeSurvivalBoundaries().map((item) => new Date(item.resetAt));
   const normalization = calculateCircadianNormalization(circadian.contextFit.coefficients);
   const expected = getContextualBurstMultiplier(
     getContextualBurstRawFeatures(randomResetTimes, now),
@@ -231,6 +231,47 @@ test("survival smoothing widens with lower ESS and keeps small samples below one
   assert.ok(early.q >= 0 && early.q <= 1);
   assert.ok(late.q >= 0 && late.q <= 1);
   assert.ok(early.lambdaPerHour >= 0 && late.lambdaPerHour >= 0);
+});
+
+test("adaptive neighbor smoothing uses risk exposure and excludes the target bin", () => {
+  const hazard = buildSurvivalConditionedHazard(
+    [
+      boundary("r0", 0),
+      boundary("r1", 24),
+      boundary("r2", 48),
+      boundary("r3", 72),
+      boundary("r4", 96),
+      boundary("r5", 120),
+      boundary("r6", 144),
+      boundary("r7", 168),
+      boundary("r8", 192),
+    ],
+    new Date("2026-01-10T00:00:00.000Z"),
+  );
+  const ageHours = 12;
+  const diagnostics = getSurvivalConditionedHazardDiagnosticsAtAge(hazard, ageHours);
+  const targetBinIndex = Math.floor(ageHours / hazard.binHours);
+  let expectedEvents = 0;
+  let expectedRisk = 0;
+  let includingTargetEvents = 0;
+  let includingTargetRisk = 0;
+  for (let index = 0; index < hazard.bins.length; index += 1) {
+    const bin = hazard.bins[index];
+    if (!(bin.weightedRisk > 0)) continue;
+    const normalized = (bin.centerHour - ageHours) / diagnostics.smoothingBandwidthHours;
+    const kernel = Math.exp(-0.5 * normalized ** 2);
+    includingTargetEvents += kernel * bin.weightedEvents;
+    includingTargetRisk += kernel * bin.weightedRisk;
+    if (index === targetBinIndex) continue;
+    expectedEvents += kernel * bin.weightedEvents;
+    expectedRisk += kernel * bin.weightedRisk;
+  }
+
+  assert.ok(expectedRisk > 0);
+  assert.ok(Math.abs(diagnostics.qNeighbor - expectedEvents / expectedRisk) < 1e-12);
+  assert.ok(Math.abs(
+    diagnostics.qNeighbor - includingTargetEvents / includingTargetRisk,
+  ) > 1e-6);
 });
 
 test("survival horizons integrate directly and remain monotone", () => {
@@ -310,14 +351,14 @@ test("the future adoption boundary is exact and leaves the pre-boundary public m
   assert.equal(afterResult.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
 });
 
-test("a canonical 36-interval history selects survival only when an explicit promotion boundary is supplied", () => {
+test("a support-shape 36-interval history selects survival only when an explicit promotion boundary is supplied", () => {
   const now = new Date(SURVIVAL_TEST_ADOPTION_AT);
   const published = calculatePublishedProbability(
     getLocalRadarData({ calculationNow: now }),
     {
       now,
       activeOfficialNotice: null,
-      staticHistory: frozenCanonicalSurvivalStaticHistory(),
+      staticHistory: frozenSupportShapeSurvivalStaticHistory(),
       publishedSurvivalConditionedAdoptionAt: SURVIVAL_TEST_ADOPTION_AT,
     },
     { logFallback: false },

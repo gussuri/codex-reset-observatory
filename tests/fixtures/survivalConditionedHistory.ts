@@ -4,10 +4,10 @@ import type { WindowEventLike } from "../../lib/radar/types";
 const HOUR_MS = 60 * 60 * 1000;
 const ANCHOR_TIME = Date.parse("2026-04-01T00:00:00.000Z");
 
-// Frozen diagnostic fixture only. It mirrors the canonical support shape
+// Frozen diagnostic fixture only. It mirrors the support shape
 // (37 random boundaries, 36 completed intervals, Tmax 221h) without reading
 // from or standing in for runtime Production history.
-export const SURVIVAL_CANONICAL_INTERVAL_HOURS = [
+export const SURVIVAL_SUPPORT_SHAPE_INTERVAL_HOURS = [
   221, 168, 144, 120, 96, 72, 48, 60, 84, 108, 132, 96,
   72, 54, 90, 120, 66, 84, 102, 78, 126, 96, 60, 88,
   114, 72, 108, 90, 132, 66, 84, 120, 96, 72, 104, 80,
@@ -23,19 +23,19 @@ function resetBoundary(id: string, time: number): RecoveryResetBoundary {
   };
 }
 
-export function frozenCanonicalSurvivalBoundaries(extraIntervals: number[] = []) {
-  const intervals = [...SURVIVAL_CANONICAL_INTERVAL_HOURS, ...extraIntervals];
-  const boundaries = [resetBoundary("canonical-survival-r0", ANCHOR_TIME)];
+export function frozenSupportShapeSurvivalBoundaries(extraIntervals: number[] = []) {
+  const intervals = [...SURVIVAL_SUPPORT_SHAPE_INTERVAL_HOURS, ...extraIntervals];
+  const boundaries = [resetBoundary("support-shape-survival-r0", ANCHOR_TIME)];
   let time = ANCHOR_TIME;
   intervals.forEach((interval, index) => {
     time += interval * HOUR_MS;
-    boundaries.push(resetBoundary(`canonical-survival-r${index + 1}`, time));
+    boundaries.push(resetBoundary(`support-shape-survival-r${index + 1}`, time));
   });
   return boundaries;
 }
 
-export function frozenCanonicalSurvivalStaticHistory(extraIntervals: number[] = []): WindowEventLike[] {
-  return frozenCanonicalSurvivalBoundaries(extraIntervals).map((boundary) => ({
+export function frozenSupportShapeSurvivalStaticHistory(extraIntervals: number[] = []): WindowEventLike[] {
+  return frozenSupportShapeSurvivalBoundaries(extraIntervals).map((boundary) => ({
     id: boundary.id,
     recordKind: "confirmed_global",
     title: boundary.id,

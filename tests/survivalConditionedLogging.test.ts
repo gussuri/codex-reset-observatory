@@ -16,11 +16,11 @@ import {
   type SurvivalConditionedContextArm,
 } from "../lib/radar/survivalConditionedProbability";
 import type { NextGenerationTrainingState } from "../lib/radar/nextGenerationTraining";
-import { frozenCanonicalSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
+import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
 import { getSurvivalConditionedHazardDiagnosticsAtAge } from "../lib/radar/survivalConditionedProbability";
 
 function supportedStaticHistory() {
-  return frozenCanonicalSurvivalStaticHistory();
+  return frozenSupportShapeSurvivalStaticHistory();
 }
 
 function trainingState(): NextGenerationTrainingState {

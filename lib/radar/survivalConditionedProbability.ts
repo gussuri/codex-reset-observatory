@@ -328,16 +328,18 @@ function getNeighborEstimate(
   ageHours: number,
   bandwidthHours: number,
 ) {
-  let weighted = 0;
-  let total = 0;
-  for (const bin of hazard.bins) {
-    if (bin.qRaw === null) continue;
+  const targetBinIndex = getBinIndex(hazard, ageHours);
+  let weightedEvents = 0;
+  let weightedRisk = 0;
+  for (let index = 0; index < hazard.bins.length; index += 1) {
+    const bin = hazard.bins[index];
+    if (index === targetBinIndex || !(bin.weightedRisk > 0)) continue;
     const normalized = (bin.centerHour - ageHours) / Math.max(EPSILON, bandwidthHours);
     const kernel = Math.exp(-0.5 * normalized ** 2);
-    weighted += kernel * bin.qRaw;
-    total += kernel;
+    weightedEvents += kernel * bin.weightedEvents;
+    weightedRisk += kernel * bin.weightedRisk;
   }
-  return total > 0 ? clamp(weighted / total, 0, 1) : clamp(
+  return weightedRisk > 0 ? clamp(weightedEvents / weightedRisk, 0, 1) : clamp(
     1 - Math.exp(-hazard.longTermHazardPerHour * hazard.binHours),
     0,
     1,
