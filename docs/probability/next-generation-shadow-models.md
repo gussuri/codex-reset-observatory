@@ -1,5 +1,7 @@
 # 次世代確率モデルの運用と公開状態
 
+モデルidentityとpublic deployment periodのcanonical inventoryは[model-registry.md](model-registry.md)（machine-readable source: data/probabilityModelRegistry.ts）で管理します。この文書は運用上の説明と履歴記録です。
+
 公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-10T01:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、その後`2026-09-11T02:20:00.000Z`までは `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid v3）、その後`2026-09-17T05:45:00.000Z`までは `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4）、その後`2026-09-18T06:00:00.000Z`までは `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical frozen raw continuous 18/54）、それ以後は `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（frozen broad-banked random continuous 18/54）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/C、selective v3、raw 18/54、late-age diagnostic armsは採用期間以外ではshadowとして観測します。
 
 - B v1: `hazard-regime-random-continuous-calibrated-v1`（2026-08-23T02:04:00.000Z以後のhistorical public model）

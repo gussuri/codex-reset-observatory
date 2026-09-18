@@ -2,6 +2,8 @@
 
 この文書は、2026-09-18時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
 
+Canonical model inventory: [model-registry.md](model-registry.md)（machine-readable source: data/probabilityModelRegistry.ts）。
+
 ## Current status
 
 | 役割 | model version / value |
@@ -139,4 +141,4 @@ At the scheduled boundary, the periods remain separate: historical V4 before B v
 
 ## Source of truth
 
-model version、adoption timestamp、boundary status、mode、gate status、calibration training sourceの機械可読なsource of truthは`data/shadowProbabilityConfig.ts`です。runtimeの選択とfallbackは`lib/radar/publishedProbability.ts`、同一origin loggingは`lib/nextGenerationLogging.ts`、prospective reportの生成は`lib/radar/prospectivePublishedModelEvaluation.ts`が担います。この文書はそれらの意味と監査履歴を補足するもので、新しいDB schemaや公開DTOを追加しません。
+model constant、adoption timestamp、boundary status、mode、gate status、calibration training sourceの原値は`data/shadowProbabilityConfig.ts`が保持し、model identityとpublic deployment periodのcanonical inventoryは`data/probabilityModelRegistry.ts`です。runtimeの選択とfallbackは`lib/radar/publishedProbability.ts`、同一origin loggingは`lib/nextGenerationLogging.ts`、prospective reportの生成は`lib/radar/prospectivePublishedModelEvaluation.ts`が担います。この文書はそれらの意味と監査履歴を補足するもので、新しいDB schemaや公開DTOを追加しません。

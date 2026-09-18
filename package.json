@@ -40,6 +40,9 @@
     "evaluate:prospective-next-generation": "tsx scripts/evaluateNextGenerationProbabilityModels.ts",
     "evaluate:prospective-contextual-burst": "tsx scripts/evaluateContextualBurstProbabilityModel.ts",
     "evaluate:prospective-context-aware": "tsx scripts/evaluateProspectiveContextAwareContinuousModel.ts",
+    "models:list": "tsx scripts/list-probability-models.ts",
+    "models:registry:generate": "tsx scripts/generate-probability-model-registry.ts",
+    "models:registry:check": "tsx scripts/generate-probability-model-registry.ts --check",
     "check": "pnpm test && pnpm run lint && pnpm run typecheck",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "tsx --test tests/*.test.ts"
