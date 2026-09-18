@@ -203,6 +203,17 @@ test("all four arms share origin, target, frozen settings, signal inputs, and no
     return arm;
   });
   assert.equal(new Set(arms.map((arm) => arm.result.calculatedAt)).size, 1);
+  for (const arm of arms) {
+    if (arm.modelVersion === RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION) {
+      assert.equal(arm.preResetRegimeMultiplierFallbackUsed, false);
+      assert.equal(arm.preResetRegimeMultiplierFallbackReason, null);
+      assert.ok(Number.isFinite(arm.preResetRegimeMultiplier));
+    } else {
+      assert.equal(arm.preResetRegimeMultiplier, null);
+      assert.equal(arm.preResetRegimeMultiplierFallbackUsed, false);
+      assert.equal(arm.preResetRegimeMultiplierFallbackReason, null);
+    }
+  }
 });
 
 test("pre-reset-frozen uses only history before the latest reset and excludes future resets", () => {
@@ -275,6 +286,15 @@ test("all late-age arms are omitted before freeze and saved together after freez
     assert.equal(forecast.nextGenerationRole, "late-age-regime-diagnostic");
     assert.equal(forecast.backfilled, false);
     assert.equal(forecast.lateAgeStartHours, 144);
+    if (modelVersion === RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION) {
+      assert.ok(Number.isFinite(forecast.preResetRegimeMultiplier));
+      assert.equal(forecast.preResetRegimeMultiplierFallbackUsed, true);
+      assert.equal(forecast.preResetRegimeMultiplierFallbackReason, "insufficient_random_history");
+    } else {
+      assert.equal(forecast.preResetRegimeMultiplier, null);
+      assert.equal(forecast.preResetRegimeMultiplierFallbackUsed, false);
+      assert.equal(forecast.preResetRegimeMultiplierFallbackReason, null);
+    }
     assertFiniteMonotonic(forecast);
   }
 });
@@ -296,24 +316,52 @@ test("a late-age diagnostic failure is fail-open and preserves other forecasts",
   assert.ok(forecasts[RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION]);
 });
 
-function forecast(modelVersion: string, generatedAt: string, ageHours: number, backfilled: false | true = false) {
+type PredictionOverride = {
+  probability24h: number;
+  probability48h: number;
+};
+
+function forecast(
+  modelVersion: string,
+  generatedAt: string,
+  ageHours: number,
+  backfilled: false | true = false,
+  prediction: PredictionOverride = { probability24h: 0.2, probability48h: 0.35 },
+) {
   return {
     modelVersion,
     generatedAt,
-    probability24h: 0.2,
-    probability48h: 0.35,
-    baseline24h: 0.2,
-    baseline48h: 0.35,
+    probability24h: prediction.probability24h,
+    probability48h: prediction.probability48h,
+    baseline24h: prediction.probability24h,
+    baseline48h: prediction.probability48h,
     randomElapsedHours: ageHours,
     backfilled,
   };
 }
 
-function row(generatedAt: string, options: { missingModel?: string; backfilled?: boolean } = {}): ProspectiveForecastRow {
+function row(
+  generatedAt: string,
+  options: {
+    missingModel?: string;
+    backfilled?: boolean;
+    ageHours?: number;
+    predictions?: Record<string, PredictionOverride>;
+  } = {},
+): ProspectiveForecastRow {
   const forecasts = Object.fromEntries(
     RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS
       .filter((modelVersion) => modelVersion !== options.missingModel)
-      .map((modelVersion) => [modelVersion, forecast(modelVersion, generatedAt, 150, options.backfilled === true)]),
+      .map((modelVersion) => [
+        modelVersion,
+        forecast(
+          modelVersion,
+          generatedAt,
+          options.ageHours ?? 150,
+          options.backfilled === true,
+          options.predictions?.[modelVersion],
+        ),
+      ]),
   );
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
@@ -345,7 +393,75 @@ test("prospective evaluator is saved-artifact-only, daily-first, and excludes ma
   assert.equal(control.metrics48h.count, 2);
   assert.equal(report.comparison.primary.resolved24h, 2);
   assert.equal(report.comparison.primary.resolved48h, 2);
-  assert.equal(report.comparison.primary.brierDifference24h, 0);
+  assert.equal(report.comparison.primary.overallBrierDifference24h, 0);
+});
+
+test("primary comparison separates all-origin metrics from late-age-only metrics on the same daily-first origins", () => {
+  const control = RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION;
+  const primary = RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION;
+  const rows = [
+    row("2026-09-18T12:00:00.000Z", {
+      ageHours: 120,
+      predictions: {
+        [control]: { probability24h: 0.1, probability48h: 0.2 },
+        [primary]: { probability24h: 0.9, probability48h: 0.8 },
+      },
+    }),
+    row("2026-09-19T12:00:00.000Z", {
+      ageHours: 150,
+      predictions: {
+        [control]: { probability24h: 0.2, probability48h: 0.2 },
+        [primary]: { probability24h: 0.6, probability48h: 0.7 },
+      },
+    }),
+  ];
+  const report = evaluateLateAgeRegimeDiagnostics(
+    rows,
+    [boundary("late-event", "2026-09-20T00:00:00.000Z")],
+    new Date("2026-09-22T00:00:00.000Z"),
+  );
+  const comparison = report.comparison.primary;
+
+  assert.equal(comparison.resolved24h, 2);
+  assert.equal(comparison.resolved48h, 2);
+  assert.equal(comparison.lateAgeResolved24h, 1);
+  assert.equal(comparison.lateAgeResolved48h, 1);
+  assert.ok(Math.abs((comparison.overallBrierDifference24h ?? 0) - 0.16) < 1e-12);
+  assert.ok(Math.abs((comparison.lateAgeBrierDifference24h ?? 0) + 0.48) < 1e-12);
+  assert.ok(Math.abs((comparison.overallBrierDifference48h ?? 0) + 0.575) < 1e-12);
+  assert.ok(Math.abs((comparison.lateAgeBrierDifference48h ?? 0) + 0.55) < 1e-12);
+  assert.ok(Math.abs((comparison.overallLogLossDifference24h ?? 0) - Math.log(3) / 2) < 1e-12);
+  assert.ok(Math.abs((comparison.lateAgeLogLossDifference24h ?? 0) + Math.log(3)) < 1e-12);
+  assert.ok(Math.abs((comparison.overallLogLossDifference48h ?? 0) - ((Math.log(0.8) - Math.log(0.2)) + (Math.log(0.7) - Math.log(0.2))) / -2) < 1e-12);
+  assert.ok(Math.abs((comparison.lateAgeLogLossDifference48h ?? 0) - Math.log(2 / 7)) < 1e-12);
+  assert.notEqual(comparison.overallBrierDifference24h, comparison.lateAgeBrierDifference24h);
+});
+
+test("late-age-only differences are null when no comparable origin reaches the threshold", () => {
+  const report = evaluateLateAgeRegimeDiagnostics(
+    [row("2026-09-18T12:00:00.000Z", { ageHours: 120 })],
+    [],
+    new Date("2026-09-20T12:00:00.000Z"),
+  );
+  const comparison = report.comparison.primary;
+  assert.equal(comparison.lateAgeBrierDifference24h, null);
+  assert.equal(comparison.lateAgeBrierDifference48h, null);
+  assert.equal(comparison.lateAgeLogLossDifference24h, null);
+  assert.equal(comparison.lateAgeLogLossDifference48h, null);
+});
+
+test("canonical random boundary count excludes future and invalid timestamps", () => {
+  const asOf = new Date("2026-09-20T12:00:00.000Z");
+  const report = evaluateLateAgeRegimeDiagnostics(
+    [],
+    [
+      boundary("past", "2026-09-20T11:59:59.000Z"),
+      boundary("future", "2026-09-20T12:00:01.000Z"),
+      boundary("invalid", "not-a-timestamp"),
+    ],
+    asOf,
+  );
+  assert.equal(report.canonicalRandomBoundaryCount, 1);
 });
 
 test("late-age evaluator keeps primary comparison on age >= 144h and uses half-open buckets", () => {

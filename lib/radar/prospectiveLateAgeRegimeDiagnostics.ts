@@ -63,10 +63,14 @@ export type LateAgeRegimePrimaryComparison = {
   resolved48h: number;
   lateAgeResolved24h: number;
   lateAgeResolved48h: number;
-  brierDifference24h: number | null;
-  brierDifference48h: number | null;
-  logLossDifference24h: number | null;
-  logLossDifference48h: number | null;
+  overallBrierDifference24h: number | null;
+  overallBrierDifference48h: number | null;
+  overallLogLossDifference24h: number | null;
+  overallLogLossDifference48h: number | null;
+  lateAgeBrierDifference24h: number | null;
+  lateAgeBrierDifference48h: number | null;
+  lateAgeLogLossDifference24h: number | null;
+  lateAgeLogLossDifference48h: number | null;
 };
 
 export type LateAgeRegimeComparison = {
@@ -345,6 +349,34 @@ function difference(candidate: number, control: number) {
     : null;
 }
 
+function getSavedRandomElapsedHours(
+  row: ProspectiveForecastRow,
+  modelVersion: string,
+) {
+  const forecast = row.forecasts[modelVersion];
+  return typeof forecast?.randomElapsedHours === "number"
+    && Number.isFinite(forecast.randomElapsedHours)
+    ? forecast.randomElapsedHours
+    : null;
+}
+
+function selectLateAgeRows(rows: Array<ProspectiveForecastRow>) {
+  return rows.filter((row) => {
+    const controlAge = getSavedRandomElapsedHours(
+      row,
+      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+    );
+    const primaryAge = getSavedRandomElapsedHours(
+      row,
+      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+    );
+    return controlAge !== null
+      && controlAge >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS
+      && primaryAge !== null
+      && primaryAge >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS;
+  });
+}
+
 function buildComparison(
   models: ProspectiveLateAgeRegimeDiagnosticsReport["models"],
   dailyRows: Array<ProspectiveForecastRow>,
@@ -357,14 +389,19 @@ function buildComparison(
   const control48 = getResolvedPoints(dailyRows, control.modelVersion, 48, boundaries, asOf);
   const primary24 = getResolvedPoints(dailyRows, primary.modelVersion, 24, boundaries, asOf);
   const primary48 = getResolvedPoints(dailyRows, primary.modelVersion, 48, boundaries, asOf);
-  const controlLate24 = control24.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
-  const controlLate48 = control48.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
-  const primaryLate24 = primary24.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
-  const primaryLate48 = primary48.filter((point) => (point.ageHours ?? -1) >= RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS);
+  const lateAgeRows = selectLateAgeRows(dailyRows);
+  const controlLate24 = getResolvedPoints(lateAgeRows, control.modelVersion, 24, boundaries, asOf);
+  const controlLate48 = getResolvedPoints(lateAgeRows, control.modelVersion, 48, boundaries, asOf);
+  const primaryLate24 = getResolvedPoints(lateAgeRows, primary.modelVersion, 24, boundaries, asOf);
+  const primaryLate48 = getResolvedPoints(lateAgeRows, primary.modelVersion, 48, boundaries, asOf);
   const control24Metric = calculateMetric(control24);
   const control48Metric = calculateMetric(control48);
   const primary24Metric = calculateMetric(primary24);
   const primary48Metric = calculateMetric(primary48);
+  const controlLate24Metric = calculateMetric(controlLate24);
+  const controlLate48Metric = calculateMetric(controlLate48);
+  const primaryLate24Metric = calculateMetric(primaryLate24);
+  const primaryLate48Metric = calculateMetric(primaryLate48);
   const secondary = [
     RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
     RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
@@ -395,17 +432,29 @@ function buildComparison(
       resolved48h: Math.min(control48Metric.count, primary48Metric.count),
       lateAgeResolved24h: Math.min(controlLate24.length, primaryLate24.length),
       lateAgeResolved48h: Math.min(controlLate48.length, primaryLate48.length),
-      brierDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
+      overallBrierDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
         ? difference(primary24Metric.brier, control24Metric.brier)
         : null,
-      brierDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
+      overallBrierDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
         ? difference(primary48Metric.brier, control48Metric.brier)
         : null,
-      logLossDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
+      overallLogLossDifference24h: control24Metric.count > 0 && primary24Metric.count > 0
         ? difference(primary24Metric.logLoss, control24Metric.logLoss)
         : null,
-      logLossDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
+      overallLogLossDifference48h: control48Metric.count > 0 && primary48Metric.count > 0
         ? difference(primary48Metric.logLoss, control48Metric.logLoss)
+        : null,
+      lateAgeBrierDifference24h: controlLate24Metric.count > 0 && primaryLate24Metric.count > 0
+        ? difference(primaryLate24Metric.brier, controlLate24Metric.brier)
+        : null,
+      lateAgeBrierDifference48h: controlLate48Metric.count > 0 && primaryLate48Metric.count > 0
+        ? difference(primaryLate48Metric.brier, controlLate48Metric.brier)
+        : null,
+      lateAgeLogLossDifference24h: controlLate24Metric.count > 0 && primaryLate24Metric.count > 0
+        ? difference(primaryLate24Metric.logLoss, controlLate24Metric.logLoss)
+        : null,
+      lateAgeLogLossDifference48h: controlLate48Metric.count > 0 && primaryLate48Metric.count > 0
+        ? difference(primaryLate48Metric.logLoss, controlLate48Metric.logLoss)
         : null,
     },
     secondary,
@@ -451,7 +500,10 @@ export function evaluateLateAgeRegimeDiagnostics(
     freezePolicy: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
     lateAgeStartHours: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
     evaluationStartAt,
-    canonicalRandomBoundaryCount: boundaries.filter((boundary) => boundary.isRandom).length,
+    canonicalRandomBoundaryCount: boundaries.filter((boundary) => {
+      const boundaryTime = timestamp(boundary.resetAt);
+      return boundary.isRandom && boundaryTime !== null && boundaryTime <= asOfTime;
+    }).length,
     forecastCounts: Object.fromEntries(
       RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.map((modelVersion) => [
         modelVersion,
@@ -462,7 +514,8 @@ export function evaluateLateAgeRegimeDiagnostics(
     comparison,
     notes: [
       "Only saved experimentalProbabilityForecasts after the fixed freezeAt are evaluated; historical rows are not recomputed, backfilled, or relabeled.",
-      "The primary comparison is the late-no-downward arm against the control on the same daily-first origins.",
+      "The overallBrierDifference* and overallLogLossDifference* fields are all-origin descriptive comparisons and are not the late-age primary score.",
+      "The lateAge*Difference* fields are the primary late-age score: late-no-downward minus control on the same daily-first comparable origins with saved randomElapsedHours >= 144h.",
       "Outcomes use the existing random-clock target and censor semantics; regular boundaries do not count as random positives.",
       "This report is diagnostic only and does not select a winner, retune parameters, publish a model, or change a gate.",
       "Age buckets are half-open: [120,144), [144,168), [168,192), [192,216), with >=216h as the final bucket.",

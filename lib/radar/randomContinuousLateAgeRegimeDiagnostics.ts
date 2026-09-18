@@ -177,21 +177,30 @@ export function calculateRandomContinuousLateAgeRegimeDiagnostics(
   const makeArm = (
     modelVersion: LateAgeRegimeDiagnosticArm["modelVersion"],
     lateAgeRegimePolicy: LateAgeRegimePolicy,
-  ): LateAgeRegimeDiagnosticArm => ({
-    modelVersion,
-    result: withArmIdentity(
-      calculateRandomContinuousProbability(
-        data,
-        sharedOptions,
-        regimeResult,
-        getModelOptions(lateAgeRegimePolicy, preReset.preResetRegimeMultiplier ?? 1),
-      ),
+  ): LateAgeRegimeDiagnosticArm => {
+    const audit = lateAgeRegimePolicy === "pre-reset-frozen"
+      ? preReset
+      : {
+          preResetRegimeMultiplier: null,
+          preResetRegimeMultiplierFallbackUsed: false,
+          preResetRegimeMultiplierFallbackReason: null,
+        };
+    return {
       modelVersion,
-    ),
-    lateAgeRegimePolicy,
-    lateAgeStartHours: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
-    ...preReset,
-  });
+      result: withArmIdentity(
+        calculateRandomContinuousProbability(
+          data,
+          sharedOptions,
+          regimeResult,
+          getModelOptions(lateAgeRegimePolicy, preReset.preResetRegimeMultiplier ?? 1),
+        ),
+        modelVersion,
+      ),
+      lateAgeRegimePolicy,
+      lateAgeStartHours: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+      ...audit,
+    };
+  };
 
   return {
     [RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION]: makeArm(
