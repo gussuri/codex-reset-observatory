@@ -34,6 +34,7 @@ import {
   getRecoveryResetEvents,
   type RecoveryResetBoundary,
 } from "./recoveryBoundary";
+import { getRandomResetEligibilityPolicyVersion } from "./resetEligibility";
 import { getRandomElapsedBoundaries } from "./randomElapsedProbability";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -95,6 +96,7 @@ export type RandomContinuousAudit = {
   regimeMultiplier: number;
   effectiveRegimeMultiplier: number;
   regimeMultiplierPolicyVersion?: RandomContinuousRegimeMultiplierPolicy;
+  randomEligibilityPolicyVersion?: string;
   integrationStepHours: number;
   recentRatePerDay: number;
   longTermRatePerDay: number;
@@ -487,6 +489,7 @@ export function calculateRandomContinuousProbability(
     now,
     options.staticHistory,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomContinuousHazard(randomBoundaries, now, modelOptions);
@@ -569,6 +572,13 @@ export function calculateRandomContinuousProbability(
       regimeMultiplier,
       effectiveRegimeMultiplier,
       regimeMultiplierPolicyVersion: modelOptions.regimeMultiplierPolicy,
+      ...(options.randomEligibilityPolicy
+        ? {
+            randomEligibilityPolicyVersion: getRandomResetEligibilityPolicyVersion(
+              options.randomEligibilityPolicy,
+            ),
+          }
+        : {}),
       integrationStepHours: hazard.integrationStepHours,
       recentRatePerDay: recoveryResult.regimeElapsed.regime.recentRatePerDay,
       longTermRatePerDay: recoveryResult.regimeElapsed.regime.longTermRatePerDay,
@@ -605,6 +615,7 @@ export function calculateRandomContinuousProbability(
         now,
         options.staticHistory,
         options.canonicalHistoryContext,
+        options.randomEligibilityPolicy,
       ),
     },
   };

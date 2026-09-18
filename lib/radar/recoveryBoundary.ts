@@ -6,7 +6,11 @@ import {
   getCanonicalResetHistoryForStaticHistory,
   type CanonicalResetHistoryContext,
 } from "./tiboHistory";
-import { isEligibleRandomResetEvent } from "./resetEligibility";
+import {
+  isEligibleRandomResetEvent,
+  isEligibleRandomResetEventWithPolicy,
+  type RandomResetEligibilityPolicy,
+} from "./resetEligibility";
 import type { ResetExecutionWindow } from "./tiboTemporal";
 
 const RECOVERY_BOUNDARY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
@@ -84,6 +88,7 @@ export function isEligibleRecoveryResetEvent(
   item: WindowEventLike,
   completedAt: number | null,
   nowTime: number,
+  policy?: RandomResetEligibilityPolicy,
 ) {
   if (isRejectedOrVoided(item) || isNarrowScope(item)) return false;
   if (!Number.isFinite(completedAt) || !Number.isFinite(nowTime) || completedAt! > nowTime) {
@@ -91,7 +96,10 @@ export function isEligibleRecoveryResetEvent(
   }
 
   const cycleType = item.details?.cycleType;
-  return cycleType === "定期リセット" || isEligibleRandomResetEvent(item, completedAt, nowTime);
+  const randomEligible = policy === undefined
+    ? isEligibleRandomResetEvent(item, completedAt, nowTime)
+    : isEligibleRandomResetEventWithPolicy(item, completedAt, nowTime, policy);
+  return cycleType === "定期リセット" || randomEligible;
 }
 
 function isEligibleRegularRecoveryResetEvent(
@@ -143,6 +151,18 @@ function getCombinedHistory(
   );
 }
 
+function isEligibleRandomBoundary(
+  item: WindowEventLike,
+  completedAt: number | null,
+  nowTime: number,
+  policy?: RandomResetEligibilityPolicy,
+) {
+  if (policy === undefined) {
+    return isEligibleRandomResetEvent(item, completedAt, nowTime) && !isRejectedOrVoided(item);
+  }
+  return isEligibleRandomResetEventWithPolicy(item, completedAt, nowTime, policy);
+}
+
 function getAuditReason(
   item: WindowEventLike,
   completedAt: number | null,
@@ -167,11 +187,12 @@ export function getRecoveryBoundaryAudit(
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
 ): RecoveryBoundaryAudit[] {
   const nowTime = now.getTime();
   return getCombinedHistory(data, staticHistory, canonicalHistoryContext).map((item, index) => {
     const completedAt = getCompletedTimestamp(item);
-    const randomEligible = isEligibleRandomResetEvent(item, completedAt, nowTime) && !isRejectedOrVoided(item);
+    const randomEligible = isEligibleRandomBoundary(item, completedAt, nowTime, policy);
     const regularEligible = isEligibleRegularRecoveryResetEvent(item, completedAt, nowTime);
     const included = randomEligible || regularEligible;
     return {
@@ -190,6 +211,7 @@ export function getRecoveryResetEvents(
   now: Date,
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
 ): RecoveryResetBoundary[] {
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return [];
@@ -197,7 +219,7 @@ export function getRecoveryResetEvents(
   const candidates = getCombinedHistory(data, staticHistory, canonicalHistoryContext)
     .flatMap((item, index) => {
       const completedAt = getCompletedTimestamp(item);
-      const randomEligible = isEligibleRandomResetEvent(item, completedAt, nowTime) && !isRejectedOrVoided(item);
+      const randomEligible = isEligibleRandomBoundary(item, completedAt, nowTime, policy);
       const regularEligible = isEligibleRegularRecoveryResetEvent(item, completedAt, nowTime);
       if (!randomEligible && !regularEligible || completedAt === null) return [];
       return [{
@@ -242,8 +264,9 @@ export function getLastRecoveryResetAt(
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
 ) {
-  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext).at(-1)?.resetAt ?? null;
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy).at(-1)?.resetAt ?? null;
 }
 
 export function getLastRandomRecoveryResetAt(
@@ -251,8 +274,9 @@ export function getLastRandomRecoveryResetAt(
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
 ) {
-  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext)
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
     .filter((boundary) => boundary.isRandom)
     .at(-1)?.resetAt ?? null;
 }
@@ -262,8 +286,9 @@ export function getLastRandomRecoveryResetWindow(
   now: Date = new Date(),
   staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
 ): ResetExecutionWindow | null {
-  const boundary = getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext)
+  const boundary = getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
     .filter((candidate) => candidate.isRandom)
     .at(-1);
   if (!boundary) return null;

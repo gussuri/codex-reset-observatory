@@ -26,6 +26,13 @@ import {
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
+  BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT,
+  BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_POLICY,
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+  BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
 } from "@/data/shadowProbabilityConfig";
 import type {
   ExperimentalProbabilityForecast,
@@ -69,6 +76,14 @@ import {
   calculateRandomContinuousLateAgeRegimeDiagnostics,
   type LateAgeRegimeDiagnosticResults,
 } from "./radar/randomContinuousLateAgeRegimeDiagnostics";
+import {
+  calculateBroadBankedRandomContinuousShadow,
+  type BroadBankedRandomContinuousShadowResult,
+} from "./radar/broadBankedRandomContinuousShadow";
+import {
+  calculateRandomContinuousBroadBankedLateAgeRegimeDiagnostics,
+  type BroadBankedLateAgeRegimeDiagnosticResults,
+} from "./radar/randomContinuousBroadBankedLateAgeRegimeDiagnostics";
 
 function toCommonForecast(result: NextGenerationBResult): ExperimentalProbabilityForecast {
   const random = result.randomContinuousResult;
@@ -170,6 +185,30 @@ function toRawBandwidthForecast(
   };
 }
 
+function toBroadBankedRandomContinuousForecast(
+  result: BroadBankedRandomContinuousShadowResult,
+): ExperimentalProbabilityForecast {
+  const forecast = toRandomContinuousExperimentalProbabilityForecast(result);
+  return {
+    ...forecast,
+    modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    rawModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    rawProbability24h: result.baseline.probability24h,
+    rawProbability48h: result.baseline.probability48h,
+    confidence: result.confidence.level,
+    confidenceReason: result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: result.randomContinuous.integrationStepHours,
+    regimeMultiplierPolicyVersion: result.randomContinuous.regimeMultiplierPolicyVersion,
+    randomEligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+    evaluationMode: "prospective",
+    experimentRole: "diagnostic",
+    freezeAt: BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT,
+    freezePolicy: BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_POLICY,
+    backfilled: false,
+  };
+}
+
 function isValidRandomBandwidthAgeDiagnosticResult(
   result: RandomContinuousBandwidthAgeDiagnosticResult,
 ) {
@@ -249,6 +288,55 @@ function toLateAgeRegimeDiagnosticForecast(
     nextGenerationRole: "late-age-regime-diagnostic" as const,
     freezeAt: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
     freezePolicy: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+    lateAgeRegimePolicy: arm.lateAgeRegimePolicy,
+    lateAgeStartHours: arm.lateAgeStartHours,
+    preResetRegimeMultiplier: arm.preResetRegimeMultiplier,
+    preResetRegimeMultiplierFallbackUsed: arm.preResetRegimeMultiplierFallbackUsed,
+    preResetRegimeMultiplierFallbackReason: arm.preResetRegimeMultiplierFallbackReason,
+    backfilled: false as const,
+  } satisfies ExperimentalProbabilityForecast;
+}
+
+function isValidBroadBankedLateAgeRegimeDiagnosticResult(
+  result: BroadBankedLateAgeRegimeDiagnosticResults[typeof BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number]],
+) {
+  const values = [
+    result.result.predictions.probability12h,
+    result.result.predictions.probability24h,
+    result.result.predictions.probability48h,
+    result.result.predictions.probability72h,
+    result.result.baseline.probability24h,
+    result.result.baseline.probability48h,
+  ];
+  return values.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    && result.result.predictions.probability12h <= result.result.predictions.probability24h
+    && result.result.predictions.probability24h <= result.result.predictions.probability48h
+    && result.result.predictions.probability48h <= result.result.predictions.probability72h
+    && Number.isFinite(result.lateAgeStartHours)
+    && result.lateAgeStartHours >= 0;
+}
+
+function toBroadBankedLateAgeRegimeDiagnosticForecast(
+  arm: BroadBankedLateAgeRegimeDiagnosticResults[typeof BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number]],
+) {
+  const forecast = toRandomContinuousExperimentalProbabilityForecast(arm.result);
+  return {
+    ...forecast,
+    modelVersion: arm.modelVersion,
+    rawModelVersion: arm.modelVersion,
+    rawProbability24h: arm.result.baseline.probability24h,
+    rawProbability48h: arm.result.baseline.probability48h,
+    confidence: arm.result.confidence.level,
+    confidenceReason: arm.result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: arm.result.randomContinuous.integrationStepHours,
+    regimeMultiplierPolicyVersion: arm.lateAgeRegimePolicy,
+    randomEligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+    evaluationMode: "prospective" as const,
+    experimentRole: "diagnostic" as const,
+    nextGenerationRole: "late-age-regime-diagnostic" as const,
+    freezeAt: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+    freezePolicy: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
     lateAgeRegimePolicy: arm.lateAgeRegimePolicy,
     lateAgeStartHours: arm.lateAgeStartHours,
     preResetRegimeMultiplier: arm.preResetRegimeMultiplier,
@@ -507,6 +595,8 @@ export type NextGenerationShadowBuildOptions = {
   existingForecasts: ExperimentalProbabilityForecasts;
   trainingState: NextGenerationTrainingState;
   lateAgeRegimeDiagnosticsCalculator?: typeof calculateRandomContinuousLateAgeRegimeDiagnostics;
+  broadBankedRandomContinuousShadowCalculator?: typeof calculateBroadBankedRandomContinuousShadow;
+  broadBankedLateAgeRegimeDiagnosticsCalculator?: typeof calculateRandomContinuousBroadBankedLateAgeRegimeDiagnostics;
 };
 
 export function buildNextGenerationExperimentalProbabilityForecasts(
@@ -688,7 +778,29 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     }
   }
 
-  let withLateAgeDiagnostics = withC2;
+  let withBroadBankedShadow = withC2;
+  if (generatedAt.getTime() >= new Date(BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT).getTime()) {
+    try {
+      const calculateShadow = options.broadBankedRandomContinuousShadowCalculator
+        ?? calculateBroadBankedRandomContinuousShadow;
+      const broadBankedResult = calculateShadow(options.data, options.calculationOptions);
+      if (
+        isValidRandomBandwidthAgeDiagnosticResult(broadBankedResult)
+        && broadBankedResult.modelVersion === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION
+      ) {
+        withBroadBankedShadow = {
+          ...withC2,
+          [BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION]: toBroadBankedRandomContinuousForecast(
+            broadBankedResult,
+          ),
+        };
+      }
+    } catch {
+      // Broad-banked v2 is a fail-open shadow and cannot affect normal logging.
+    }
+  }
+
+  let withLateAgeDiagnostics = withBroadBankedShadow;
   if (generatedAt.getTime() >= new Date(RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT).getTime()) {
     try {
       const calculateDiagnostics = options.lateAgeRegimeDiagnosticsCalculator
@@ -706,12 +818,38 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
           ]),
         ) as ExperimentalProbabilityForecasts;
         withLateAgeDiagnostics = {
-          ...withC2,
+          ...withBroadBankedShadow,
           ...diagnosticForecasts,
         };
       }
     } catch {
       // Late-age diagnostics are fail-open and cannot affect normal logging.
+    }
+  }
+
+  if (generatedAt.getTime() >= new Date(BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT).getTime()) {
+    try {
+      const calculateDiagnostics = options.broadBankedLateAgeRegimeDiagnosticsCalculator
+        ?? calculateRandomContinuousBroadBankedLateAgeRegimeDiagnostics;
+      const diagnostics = calculateDiagnostics(options.data, options.calculationOptions);
+      const allValid = BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.every((modelVersion) => {
+        const arm = diagnostics[modelVersion];
+        return Boolean(arm && isValidBroadBankedLateAgeRegimeDiagnosticResult(arm));
+      });
+      if (allValid) {
+        const diagnosticForecasts = Object.fromEntries(
+          BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS.map((modelVersion) => [
+            modelVersion,
+            toBroadBankedLateAgeRegimeDiagnosticForecast(diagnostics[modelVersion]),
+          ]),
+        ) as ExperimentalProbabilityForecasts;
+        withLateAgeDiagnostics = {
+          ...withLateAgeDiagnostics,
+          ...diagnosticForecasts,
+        };
+      }
+    } catch {
+      // Broad-banked late-age diagnostics are fail-open and cannot affect normal logging.
     }
   }
 

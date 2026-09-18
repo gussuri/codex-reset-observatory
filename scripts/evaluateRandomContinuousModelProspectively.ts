@@ -13,7 +13,11 @@ import {
   evaluateRandomContinuousModelProspectively,
   type RandomContinuousProspectiveEvaluationReport,
 } from "../lib/radar/prospectiveRandomContinuousModelEvaluation";
-import { getRecoveryResetEvents, type RecoveryResetBoundary } from "../lib/radar/recoveryBoundary";
+import {
+  getRecoveryResetEvents,
+  type RecoveryResetBoundary,
+} from "../lib/radar/recoveryBoundary";
+import type { RandomResetEligibilityPolicy } from "../lib/radar/resetEligibility";
 import { formatPublishedProspectiveMetric } from "../lib/radar/prospectivePublishedModelEvaluation";
 import {
   loadPredictionHistoryRows,
@@ -38,7 +42,10 @@ function parseAsOf(args: Array<string>) {
   return asOf;
 }
 
-export async function loadProductionBoundaries(asOf: Date): Promise<{
+export async function loadProductionBoundaries(
+  asOf: Date,
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy,
+): Promise<{
   boundaries: Array<RecoveryResetBoundary>;
   reason: string | null;
 }> {
@@ -79,7 +86,7 @@ export async function loadProductionBoundaries(asOf: Date): Promise<{
       .filter((row): row is NonNullable<typeof row> => row !== null),
   });
   return {
-    boundaries: getRecoveryResetEvents(data, asOf, LOCAL_RESET_HISTORY),
+    boundaries: getRecoveryResetEvents(data, asOf, LOCAL_RESET_HISTORY, undefined, randomEligibilityPolicy),
     reason: null,
   };
 }

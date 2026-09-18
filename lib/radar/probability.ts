@@ -35,7 +35,11 @@ import {
   type CanonicalResetHistoryContext,
   type TiboNoticeSignal,
 } from "./tiboHistory";
-import { isEligibleRandomResetEvent } from "./resetEligibility";
+import {
+  isEligibleRandomResetEvent,
+  isEligibleRandomResetEventWithPolicy,
+  type RandomResetEligibilityPolicy,
+} from "./resetEligibility";
 import {
   getLastRandomRecoveryResetAt,
   getLastRandomRecoveryResetWindow,
@@ -1303,6 +1307,7 @@ export function getRecent7DayResetCount(
   data?: RadarData | null,
   now: Date = new Date(),
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy,
 ): number {
   const nowTime = now.getTime();
   const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
@@ -1329,7 +1334,10 @@ export function getRecent7DayResetCount(
 
   return combinedHistory.filter((item) => {
     const time = getCompletedResetTimestamp(item);
-    return isEligibleRandomResetEvent(item, time, nowTime) && time! >= sevenDaysAgo;
+    const eligible = randomEligibilityPolicy === undefined
+      ? isEligibleRandomResetEvent(item, time, nowTime)
+      : isEligibleRandomResetEventWithPolicy(item, time, nowTime, randomEligibilityPolicy);
+    return eligible && time! >= sevenDaysAgo;
   }).length;
 }
 

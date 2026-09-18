@@ -97,6 +97,7 @@ export type ExperimentalProbabilityForecast = {
   featureSnapshot?: PublishedV3FeatureSnapshot;
   contextAware?: ContextAwareForecastAudit;
   regimeMultiplierPolicyVersion?: string;
+  randomEligibilityPolicyVersion?: string;
   priorStdDev?: number;
   minimumSamples?: number;
   lastResolvedOrigin24h?: string | null;

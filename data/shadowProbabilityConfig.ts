@@ -1,4 +1,13 @@
 export const LEGACY_SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v2-random-only";
+export type RandomResetEligibilityPolicy =
+  | "legacy-random-cycle-v1"
+  | "broad-banked-boundary-v2";
+export const LEGACY_RANDOM_RESET_ELIGIBILITY_POLICY =
+  "legacy-random-cycle-v1" as const;
+export const BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY =
+  "broad-banked-boundary-v2" as const;
+export const BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION =
+  "broad-banked-distribution-random-clock-v2" as const;
 export const SHADOW_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-random-inclusive";
 export const RECENCY_H30_PROBABILITY_MODEL_VERSION = "hazard-odds-v3-recency-bayes-h30-r3";
 export const CALIBRATED_SHADOW_MODEL_VERSION_V1 =
@@ -222,6 +231,54 @@ export const RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS = [
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+] as const;
+
+// Prospective-only broad BANKED random-clock semantics. This family changes
+// only the random-boundary eligibility policy; the 18/54 estimator, regime,
+// signal, notice, and post-reset attenuation settings remain frozen copies of
+// the current Production-equivalent challenger settings.
+export const BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT = "2026-09-18T03:10:48.666Z";
+export const BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_POLICY =
+  "Broad banked distribution eligibility is a new prospective random-clock semantics; no historical backfill, relabeling, retuning, or auto-publish is allowed.";
+export const BROAD_BANKED_RANDOM_CLOCK_V2_TARGET_DEFINITION =
+  "Broad-scope random reset probability modeled by the existing 18/54 continuous estimator, with broad completed banked distributions admitted as random boundaries only under broad-banked-boundary-v2.";
+export const BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION =
+  "hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2";
+export const BROAD_BANKED_RANDOM_CLOCK_V2_OPTIONS = {
+  ...RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS,
+} as const;
+export const BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_CONFIG =
+  NEXT_GENERATION_B_FROZEN_REGIME_CONFIG;
+export const BROAD_BANKED_RANDOM_CLOCK_V2_SIGNAL_CONFIG =
+  NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG;
+
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT =
+  BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY =
+  BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_POLICY;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION =
+  BROAD_BANKED_RANDOM_CLOCK_V2_TARGET_DEFINITION;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS =
+  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS =
+  BROAD_BANKED_RANDOM_CLOCK_V2_OPTIONS;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG =
+  BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_CONFIG;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG =
+  BROAD_BANKED_RANDOM_CLOCK_V2_SIGNAL_CONFIG;
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION =
+  "hazard-regime-broad-banked-random-continuous-bw18-tr54-late-regime-control-v2";
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION =
+  "hazard-regime-broad-banked-random-continuous-bw18-tr54-late-neutral-144h-v2";
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION =
+  "hazard-regime-broad-banked-random-continuous-bw18-tr54-late-no-downward-144h-v2";
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION =
+  "hazard-regime-broad-banked-random-continuous-bw18-tr54-pre-reset-frozen-regime-v2";
+export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS = [
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
 ] as const;
 
 // The current public identity is intentionally separate from the historical

@@ -510,6 +510,7 @@ export function calculateRegimeElapsedProbability(
     now,
     options.staticHistory ?? LOCAL_RESET_HISTORY,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const hazard = buildRegimeElapsedHazard(boundaries, now, modelOptions);
   const regime = calculateRegimeDiagnostics(boundaries, now, modelOptions);
@@ -521,6 +522,7 @@ export function calculateRegimeElapsedProbability(
     now,
     options.staticHistory ?? LOCAL_RESET_HISTORY,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const resetExecutionWindow = randomExecutionWindow &&
       getTimestamp(randomExecutionWindow.executionWindowEndAt) === getTimestamp(latestRecoveryResetAt)
@@ -550,6 +552,7 @@ export function calculateRegimeElapsedProbability(
     modelOptions.signalMultiplierConfig,
     resetExecutionWindow,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const regimeMultiplier = mode === "elapsed-only" ? 1 : regime.regimeMultiplier;
@@ -639,6 +642,7 @@ export function calculateRegimeElapsedProbability(
         now,
         options.staticHistory ?? LOCAL_RESET_HISTORY,
         options.canonicalHistoryContext,
+        options.randomEligibilityPolicy,
       ),
       officialNoticeTimingPolicyVersion: OFFICIAL_NOTICE_TIMING_POLICY_VERSION,
     },

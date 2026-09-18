@@ -1,14 +1,19 @@
 import {
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG,
-  RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+  BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
+  BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY,
 } from "@/data/shadowProbabilityConfig";
-import type { RadarData, WindowEventLike } from "./types";
+import type { RadarData } from "./types";
 import {
   calculateRegimeDiagnostics,
   calculateRegimeElapsedProbability,
@@ -24,28 +29,13 @@ import {
   type RandomContinuousProbabilityResult,
 } from "./randomContinuousProbability";
 import type { ShadowProbabilityOptions } from "./shadowProbability";
+import type {
+  LateAgeRegimeDiagnosticArm,
+  LateAgeRegimePolicy,
+} from "./randomContinuousLateAgeRegimeDiagnostics";
 
-export type LateAgeRegimePolicy =
-  | "control"
-  | "late-neutral"
-  | "late-no-downward"
-  | "pre-reset-frozen";
-
-export type LateAgeRegimeDiagnosticArm = {
-  modelVersion: string;
-  result: RandomContinuousProbabilityResult;
-  lateAgeRegimePolicy: LateAgeRegimePolicy;
-  lateAgeStartHours: number;
-  preResetRegimeMultiplier: number | null;
-  preResetRegimeMultiplierFallbackUsed: boolean;
-  preResetRegimeMultiplierFallbackReason: string | null;
-};
-
-export type LateAgeRegimeDiagnosticResults = Record<
-  typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION
-    | typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION
-    | typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION
-    | typeof RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+export type BroadBankedLateAgeRegimeDiagnosticResults = Record<
+  typeof BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS[number],
   LateAgeRegimeDiagnosticArm
 >;
 
@@ -53,7 +43,7 @@ function safeRegimeMultiplier(value: number) {
   return Number.isFinite(value) ? Math.max(0, value) : 1;
 }
 
-export function getLateAgeRegimeMultiplierAtAge(
+export function getBroadBankedLateAgeRegimeMultiplierAtAge(
   ageHours: number,
   regimeMultiplier: number,
   policy: LateAgeRegimePolicy,
@@ -64,12 +54,12 @@ export function getLateAgeRegimeMultiplierAtAge(
   const safeRegime = safeRegimeMultiplier(regimeMultiplier);
   if (policy === "control") return safeRegime;
   if (policy === "late-neutral") {
-    return ageHours < RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS
+    return ageHours < BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS
       ? safeRegime
       : 1;
   }
   if (policy === "late-no-downward") {
-    return ageHours < RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS
+    return ageHours < BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS
       ? safeRegime
       : Math.max(1, safeRegime);
   }
@@ -77,7 +67,7 @@ export function getLateAgeRegimeMultiplierAtAge(
 }
 
 function getPreResetRegime(
-  boundaries: RecoveryResetBoundary[],
+  boundaries: Array<RecoveryResetBoundary>,
 ): Pick<LateAgeRegimeDiagnosticArm, "preResetRegimeMultiplier" | "preResetRegimeMultiplierFallbackUsed" | "preResetRegimeMultiplierFallbackReason"> {
   const randomBoundaries = boundaries.filter((boundary) => boundary.isRandom);
   const latest = randomBoundaries.at(-1);
@@ -101,7 +91,7 @@ function getPreResetRegime(
   const diagnostics: RegimeDiagnostics = calculateRegimeDiagnostics(
     randomBoundaries.slice(0, -1),
     latestTime,
-    RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
+    BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
   );
   if (!Number.isFinite(diagnostics.regimeMultiplier) || diagnostics.regimeMultiplier < 0) {
     return {
@@ -118,13 +108,16 @@ function getPreResetRegime(
   };
 }
 
-function withArmIdentity(
-  result: RandomContinuousProbabilityResult,
-  modelVersion: string,
-) {
+function withV2Identity(result: RandomContinuousProbabilityResult, modelVersion: string) {
   return {
     ...result,
     modelVersion,
+    targetDefinition: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_TARGET_DEFINITION,
+    randomContinuous: {
+      ...result.randomContinuous,
+      freezeAt: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
+      freezePolicy: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
+    },
   };
 }
 
@@ -132,13 +125,11 @@ function getModelOptions(
   policy: LateAgeRegimePolicy,
   preResetRegimeMultiplier: number,
 ): RandomContinuousModelOptions {
-  if (policy === "control") {
-    return RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS;
-  }
+  if (policy === "control") return BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS;
   return {
-    ...RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS,
+    ...BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_COMMON_OPTIONS,
     regimeMultiplierAtAge: (ageHours, regimeMultiplier) =>
-      getLateAgeRegimeMultiplierAtAge(
+      getBroadBankedLateAgeRegimeMultiplierAtAge(
         ageHours,
         regimeMultiplier,
         policy,
@@ -147,36 +138,36 @@ function getModelOptions(
   };
 }
 
-export function calculateRandomContinuousLateAgeRegimeDiagnostics(
+export function calculateRandomContinuousBroadBankedLateAgeRegimeDiagnostics(
   data: RadarData | null,
   options: ShadowProbabilityOptions = {},
-): LateAgeRegimeDiagnosticResults {
-  const { now: requestedNow, ...optionsWithoutNow } = options;
-  const calculationNow = requestedNow ?? new Date();
+): BroadBankedLateAgeRegimeDiagnosticResults {
+  const requestedNow = options.now ?? new Date();
   const sharedOptions: ShadowProbabilityOptions = {
-    ...optionsWithoutNow,
-    now: calculationNow,
+    ...options,
+    now: requestedNow,
+    randomEligibilityPolicy: BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY,
   };
   const regimeResult = calculateRegimeElapsedProbability(
     data,
     sharedOptions,
     {
-      ...RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
+      ...BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_REGIME_CONFIG,
       modelVersion: "hazard-regime-elapsed-v1",
       mode: "full",
-      signalMultiplierConfig: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG,
+      signalMultiplierConfig: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_SIGNAL_CONFIG,
     },
   );
   const boundaries = getRecoveryResetEvents(
     data,
-    calculationNow,
+    requestedNow,
     options.staticHistory,
     options.canonicalHistoryContext,
-    options.randomEligibilityPolicy,
+    BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY,
   );
   const preReset = getPreResetRegime(boundaries);
   const makeArm = (
-    modelVersion: LateAgeRegimeDiagnosticArm["modelVersion"],
+    modelVersion: string,
     lateAgeRegimePolicy: LateAgeRegimePolicy,
   ): LateAgeRegimeDiagnosticArm => {
     const audit = lateAgeRegimePolicy === "pre-reset-frozen"
@@ -188,7 +179,7 @@ export function calculateRandomContinuousLateAgeRegimeDiagnostics(
         };
     return {
       modelVersion,
-      result: withArmIdentity(
+      result: withV2Identity(
         calculateRandomContinuousProbability(
           data,
           sharedOptions,
@@ -198,26 +189,26 @@ export function calculateRandomContinuousLateAgeRegimeDiagnostics(
         modelVersion,
       ),
       lateAgeRegimePolicy,
-      lateAgeStartHours: RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
+      lateAgeStartHours: BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_THRESHOLD_HOURS,
       ...audit,
     };
   };
 
   return {
-    [RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION]: makeArm(
-      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
+    [BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION]: makeArm(
+      BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
       "control",
     ),
-    [RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION]: makeArm(
-      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
+    [BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION]: makeArm(
+      BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
       "late-neutral",
     ),
-    [RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION]: makeArm(
-      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
+    [BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION]: makeArm(
+      BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
       "late-no-downward",
     ),
-    [RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION]: makeArm(
-      RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
+    [BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION]: makeArm(
+      BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
       "pre-reset-frozen",
     ),
   };

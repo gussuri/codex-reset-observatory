@@ -43,7 +43,11 @@ import {
   getNoticeBackedHistoryInputs,
   type CanonicalResetHistoryContext,
 } from "./tiboHistory";
-import { isEligibleRandomResetEvent } from "./resetEligibility";
+import {
+  isEligibleRandomResetEvent,
+  isEligibleRandomResetEventWithPolicy,
+  type RandomResetEligibilityPolicy,
+} from "./resetEligibility";
 import {
   getEffectiveTeaserStrength,
   getTeaserStrengthSignals,
@@ -76,6 +80,7 @@ export type ShadowResetEvent = {
 
 export type ShadowResetEventCollectionOptions = {
   preserveDistinctCanonicalIds?: boolean;
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy;
 };
 
 export type ShadowHazardBin = {
@@ -190,6 +195,7 @@ export type ShadowProbabilityOptions = {
   staticHistory?: Array<WindowEventLike>;
   localObservationSignals?: Array<LocalObservationSignal>;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy;
 };
 
 export type ShadowSignalMultiplierConfig = {
@@ -255,8 +261,15 @@ function getTweetId(sourceUrl: string | null | undefined) {
   return sourceUrl?.match(/\/status\/(\d+)/i)?.[1] ?? null;
 }
 
-function isShadowTargetReset(item: WindowEventLike, nowTime: number) {
-  return isEligibleRandomResetEvent(item, getCompletedResetTimestamp(item), nowTime);
+function isShadowTargetReset(
+  item: WindowEventLike,
+  nowTime: number,
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy,
+) {
+  const completedAt = getCompletedResetTimestamp(item);
+  return randomEligibilityPolicy === undefined
+    ? isEligibleRandomResetEvent(item, completedAt, nowTime)
+    : isEligibleRandomResetEventWithPolicy(item, completedAt, nowTime, randomEligibilityPolicy);
 }
 
 export function getShadowCompletedResetEvents(
@@ -295,7 +308,7 @@ export function getShadowCompletedResetEvents(
   const seen = new Set<string>();
 
   return combinedHistory
-    .filter((item) => isShadowTargetReset(item, nowTime))
+    .filter((item) => isShadowTargetReset(item, nowTime, options.randomEligibilityPolicy))
     .flatMap((item) => {
       const resetAt = getCompletedResetTimestamp(item);
       if (resetAt === null) return [];
@@ -1057,6 +1070,7 @@ export function getShadowSignalInputs(
   signalMultiplierConfig: ShadowSignalMultiplierConfig = SHADOW_SIGNAL_MULTIPLIER_CONFIG,
   resetExecutionWindow?: ResetExecutionWindow | null,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  randomEligibilityPolicy?: RandomResetEligibilityPolicy,
 ): ShadowSignalInputs {
   const environment = signalEvaluation.environment;
   const derivedExecutionWindow = getLastRandomRecoveryResetWindow(
@@ -1064,6 +1078,7 @@ export function getShadowSignalInputs(
     now,
     LOCAL_RESET_HISTORY,
     canonicalHistoryContext,
+    randomEligibilityPolicy,
   );
   const effectiveExecutionWindow = resetExecutionWindow === undefined
     ? derivedExecutionWindow && getTimestamp(derivedExecutionWindow.executionWindowEndAt) === latestResetTime
@@ -1087,7 +1102,12 @@ export function getShadowSignalInputs(
     canonicalHistoryContext,
   );
   return {
-    recentResetCount7d: getRecent7DayResetCount(data, now, canonicalHistoryContext),
+    recentResetCount7d: getRecent7DayResetCount(
+      data,
+      now,
+      canonicalHistoryContext,
+      randomEligibilityPolicy,
+    ),
     regularResetProximity: getRegularProximityScore(regularResetExpectedAt, now),
     teaserScore,
     teaserScore24h: timedTeaserScores?.probability24h ?? teaserScore,
@@ -1226,7 +1246,7 @@ export function calculateShadowProbabilityForModel(
     data,
     now,
     options.staticHistory,
-    {},
+    { randomEligibilityPolicy: options.randomEligibilityPolicy },
     options.canonicalHistoryContext,
   );
   const hazard = buildShadowHazard(events, now, modelOptions.hazardOptions);
@@ -1238,6 +1258,7 @@ export function calculateShadowProbabilityForModel(
     now,
     options.staticHistory ?? LOCAL_RESET_HISTORY,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const resetExecutionWindow = randomExecutionWindow &&
       getTimestamp(randomExecutionWindow.executionWindowEndAt) === latestResetTime
@@ -1275,6 +1296,7 @@ export function calculateShadowProbabilityForModel(
     modelOptions.signalMultiplierConfig,
     resetExecutionWindow,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const multipliers = calculateShadowSignalMultipliers(inputs, modelOptions.signalMultiplierConfig);
   const adjusted: ShadowProbabilityHorizons = {
@@ -1384,7 +1406,7 @@ export function getShadowResultWithoutSignals(
     data,
     now,
     options.staticHistory,
-    {},
+    { randomEligibilityPolicy: options.randomEligibilityPolicy },
     options.canonicalHistoryContext,
   );
   const hazard = buildShadowHazard(events, now);

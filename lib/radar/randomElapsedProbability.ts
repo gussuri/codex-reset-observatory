@@ -154,6 +154,7 @@ export function calculateRandomElapsedProbability(
     now,
     options.staticHistory,
     options.canonicalHistoryContext,
+    options.randomEligibilityPolicy,
   );
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildRandomElapsedHazard(boundaries, now, modelOptions);
@@ -240,6 +241,7 @@ export function calculateRandomElapsedProbability(
         now,
         options.staticHistory,
         options.canonicalHistoryContext,
+        options.randomEligibilityPolicy,
       ),
       officialNoticeTimingPolicyVersion: recoveryResult.regimeElapsed.officialNoticeTimingPolicyVersion,
       freezeAt: RANDOM_ELAPSED_SHADOW_FREEZE_AT,
