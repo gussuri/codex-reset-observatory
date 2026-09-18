@@ -310,6 +310,7 @@ function sortedBoundaryTimes(boundaries: RecoveryResetBoundary[], asOf: Date) {
 function buildTrainingCells(
   boundaries: RecoveryResetBoundary[],
   asOf: Date,
+  includeLiveInterval = true,
 ): TrainingCell[] {
   const resetTimes = sortedBoundaryTimes(boundaries, asOf);
   if (resetTimes.length < 3) return [];
@@ -318,6 +319,7 @@ function buildTrainingCells(
 
   // The previous interval first becomes knowable immediately after the second reset.
   for (let intervalIndex = 1; intervalIndex < resetTimes.length; intervalIndex += 1) {
+    if (!includeLiveInterval && intervalIndex + 1 >= resetTimes.length) continue;
     const intervalStart = resetTimes[intervalIndex];
     const intervalEnd = intervalIndex + 1 < resetTimes.length
       ? resetTimes[intervalIndex + 1]
@@ -350,7 +352,11 @@ function buildTrainingCells(
   return cells;
 }
 
-function normalizeCells(cells: TrainingCell[], hazard: RandomContinuousHazard) {
+function normalizeCells(
+  cells: TrainingCell[],
+  hazard: RandomContinuousHazard | null,
+  getHazardAtAge?: (ageHours: number) => number,
+) {
   const countValues = cells.map((cell) => Math.log1p(cell.raw.randomResetCount72h));
   const previousValues = cells.map((cell) => Math.log1p(cell.raw.previousRandomIntervalHours ?? 0));
   const count72Mean = mean(countValues);
@@ -376,7 +382,9 @@ function normalizeCells(cells: TrainingCell[], hazard: RandomContinuousHazard) {
     // during every objective/gradient iteration without changing model semantics.
     baseCumulativeHazard: Math.max(
       PROBABILITY_EPSILON,
-      getRandomContinuousHazardAtAge(hazard, cell.randomAgeHours) * cell.durationHours,
+      (getHazardAtAge ?? ((ageHours: number) => hazard
+        ? getRandomContinuousHazardAtAge(hazard, ageHours)
+        : 0))(cell.randomAgeHours) * cell.durationHours,
     ),
   }));
   return { normalized, stats };
@@ -427,12 +435,16 @@ function gradient(
 export function fitContextualBurstContext(
   randomBoundaries: RecoveryResetBoundary[],
   asOf: Date,
-  hazard: RandomContinuousHazard,
+  hazard: RandomContinuousHazard | null,
+  options: {
+    includeLiveInterval?: boolean;
+    getHazardAtAge?: (ageHours: number) => number;
+  } = {},
 ): ContextualBurstFit {
-  const cells = buildTrainingCells(randomBoundaries, asOf);
+  const cells = buildTrainingCells(randomBoundaries, asOf, options.includeLiveInterval ?? true);
   const trainingEventCount = cells.filter((cell) => cell.event).length;
   const exposureCellCount = cells.length;
-  const { normalized, stats } = normalizeCells(cells, hazard);
+  const { normalized, stats } = normalizeCells(cells, hazard, options.getHazardAtAge);
   if (
     trainingEventCount < NEXT_GENERATION_C_MINIMUM_RANDOM_EVENTS
     || exposureCellCount < NEXT_GENERATION_C_MINIMUM_EXPOSURE_CELLS
@@ -520,20 +532,29 @@ function standardizedBurst(raw: ContextualBurstRawFeatures, fit: ContextualBurst
 export function getContextualBurstMultiplier(
   raw: ContextualBurstRawFeatures,
   fit: ContextualBurstFit,
-  ablation: "full" | "noBurst" | "noCircadian" = "full",
+  ablation:
+    | "full"
+    | "noBurst"
+    | "noCircadian"
+    | "previousIntervalOnly"
+    | "circadianOnly"
+    | "previousIntervalCircadianOnly" = "full",
   normalization?: CircadianNormalization,
 ) {
   if (fit.fallbackUsed) return 1;
   const burst = standardizedBurst(raw, fit);
-  const burstTerm = ablation === "noBurst"
+  const burstTerm = ablation === "noBurst" || ablation === "circadianOnly"
     ? 0
-    : fit.coefficients.count72 * burst.count72
-      + fit.coefficients.previousInterval * burst.previousInterval;
-  let circadianTerm = ablation === "noCircadian"
+    : (ablation === "previousIntervalOnly" || ablation === "previousIntervalCircadianOnly")
+      ? fit.coefficients.previousInterval * burst.previousInterval
+      : fit.coefficients.count72 * burst.count72
+        + fit.coefficients.previousInterval * burst.previousInterval;
+  let circadianTerm = ablation === "noCircadian" || ablation === "previousIntervalOnly"
     ? 0
     : fit.coefficients.hourSin * raw.hourSin
       + fit.coefficients.hourCos * raw.hourCos;
-  if (ablation !== "noCircadian" && normalization?.constant !== null && normalization?.constant !== undefined) {
+  const includesCircadian = ablation !== "noCircadian" && ablation !== "previousIntervalOnly";
+  if (includesCircadian && normalization?.constant !== null && normalization?.constant !== undefined) {
     circadianTerm -= Math.log(normalization.constant);
   }
   return clamp(

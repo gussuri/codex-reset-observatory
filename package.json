@@ -40,6 +40,7 @@
     "evaluate:prospective-next-generation": "tsx scripts/evaluateNextGenerationProbabilityModels.ts",
     "evaluate:prospective-contextual-burst": "tsx scripts/evaluateContextualBurstProbabilityModel.ts",
     "evaluate:prospective-context-aware": "tsx scripts/evaluateProspectiveContextAwareContinuousModel.ts",
+    "evaluate:prospective-survival-conditioned": "tsx scripts/evaluateProspectiveSurvivalConditionedModel.ts",
     "models:list": "tsx scripts/list-probability-models.ts",
     "models:registry:generate": "tsx scripts/generate-probability-model-registry.ts",
     "models:registry:check": "tsx scripts/generate-probability-model-registry.ts --check",

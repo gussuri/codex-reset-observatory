@@ -1701,6 +1701,7 @@ type DisplayProbabilityModelContext = {
     | "calibrated"
     | "broad-banked-raw-continuous"
     | "raw-continuous"
+    | "survival-conditioned"
     | "shadow"
     | "stable-shadow-fallback"
     | "legacy-shadow-fallback"

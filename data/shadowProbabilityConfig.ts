@@ -325,14 +325,13 @@ export const SURVIVAL_CONTEXT_MODEL_VERSIONS = [
 export const SURVIVAL_CONTEXT_MIN_MULTIPLIER = 0.5;
 export const SURVIVAL_CONTEXT_MAX_MULTIPLIER = 2;
 
-// The current public identity is intentionally separate from the historical
-// selective-v3 aliases above. This explicit future boundary is the only
-// point at which broad-banked v2 can become public; earlier rows stay in their
-// historical periods.
+// The current public identity remains broad-banked v2 until the explicit future
+// survival boundary. The survival candidate is scheduled separately so the
+// current runtime and historical identity stay stable before that boundary.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION =
-  SURVIVAL_CONDITIONED_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT: string | null = "2026-09-17T05:45:00.000Z";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE: string | null = "2026-09-17";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION =
@@ -343,8 +342,8 @@ export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT: string | null = "2026-09-18T
 export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE: string | null = "2026-09-18";
 export const PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION =
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
-export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT: string | null = "2026-09-19T00:00:00.000Z";
-export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE: string | null = "2026-09-19";
+export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT: string | null = "2026-09-20T00:00:00.000Z";
+export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE: string | null = "2026-09-20";
 export const PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION =
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
 

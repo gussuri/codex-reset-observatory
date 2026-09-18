@@ -19,7 +19,9 @@ import {
   ELAPSED_ONLY_MODEL_VERSION,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
   RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -97,6 +99,10 @@ test("the current public model and pointer view resolve to registered identities
   assert.ok(getProbabilityModelByVersion(PROBABILITY_MODEL_POINTERS.stableFallback));
   assert.equal(getCurrentPublicProbabilityPeriod().id, "broad-banked-v2");
   assert.equal(getCurrentPublicProbabilityPeriod().modelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
+  assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.at(-1)?.modelVersion,
+    SURVIVAL_CONDITIONED_MODEL_VERSION,
+  );
 });
 
 test("heuristic-v2-time-consistent is a fallback model but not a public period", () => {
@@ -178,7 +184,10 @@ test("public probability period registry is contiguous with one open-ended curre
   const ids = PUBLIC_PROBABILITY_PERIOD_REGISTRY.map((period) => period.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(PUBLIC_PROBABILITY_PERIOD_REGISTRY.filter((period) => period.endAt === null).length, 1);
-  assert.equal(getCurrentPublicProbabilityPeriod().endAt, null);
+  assert.equal(
+    getCurrentPublicProbabilityPeriod().endAt,
+    PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+  );
 
   for (let index = 1; index < PUBLIC_PROBABILITY_PERIOD_REGISTRY.length; index += 1) {
     const previous = PUBLIC_PROBABILITY_PERIOD_REGISTRY[index - 1];
@@ -195,6 +204,10 @@ test("public probability period registry is contiguous with one open-ended curre
   assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "broad-banked-v2")?.modelVersion,
     BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+  );
+  assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "survival-conditioned-v1")?.startAt,
+    PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   );
 });
 
@@ -221,6 +234,10 @@ test("registry period classification matches the unchanged public selector at ev
   assert.equal(
     getProbabilityPeriodAt(PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT!)?.id,
     "broad-banked-v2",
+  );
+  assert.equal(
+    getProbabilityPeriodAt(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT!)?.id,
+    "survival-conditioned-v1",
   );
 });
 

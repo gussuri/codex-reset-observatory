@@ -1165,11 +1165,11 @@ function getConfidence(
   };
 }
 
-function applyOfficialNoticeTimingPolicy(
+export function applyOfficialNoticeTimingPolicy(
   baseline: ShadowProbabilityHorizons,
   notice: ActiveOfficialNotice | null,
   now: Date,
-  legacyOfficialNoticeOverride: boolean,
+  legacyOfficialNoticeOverride = false,
 ) {
   if (!notice) return null;
   if (legacyOfficialNoticeOverride) {

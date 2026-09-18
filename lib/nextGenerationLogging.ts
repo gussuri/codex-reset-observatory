@@ -33,6 +33,10 @@ import {
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
+  SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_FREEZE_POLICY,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
+  SURVIVAL_CONTEXT_MODEL_VERSIONS,
 } from "@/data/shadowProbabilityConfig";
 import type {
   ExperimentalProbabilityForecast,
@@ -65,6 +69,13 @@ import type { NextGenerationTrainingState } from "./radar/nextGenerationTraining
 import type { RadarData } from "./radar/types";
 import { buildPublishedV3FeatureSnapshot } from "./radar/publishedV3FeatureSnapshot";
 import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
+import {
+  calculateSurvivalConditionedContextArms,
+  calculateSurvivalConditionedProbability,
+  isValidSurvivalConditionedPrediction,
+  type SurvivalConditionedContextArm,
+  type SurvivalConditionedProbabilityResult,
+} from "./radar/survivalConditionedProbability";
 import {
   calculateRandomContinuousBandwidthShadowPair,
 } from "./radar/randomContinuousBandwidthShadow";
@@ -346,6 +357,71 @@ function toBroadBankedLateAgeRegimeDiagnosticForecast(
   } satisfies ExperimentalProbabilityForecast;
 }
 
+function toSurvivalConditionedForecast(
+  result: SurvivalConditionedProbabilityResult | SurvivalConditionedContextArm,
+  contextArm?: string,
+): ExperimentalProbabilityForecast {
+  const base = "base" in result ? result.base : result;
+  const fit = "contextFit" in result ? result.contextFit : null;
+  const survival = base.survival;
+  const fallbackUsed = survival.fallbackUsed || Boolean(fit?.fallbackUsed);
+  return {
+    modelVersion: result.modelVersion,
+    generatedAt: result.calculatedAt,
+    probability12h: result.predictions.probability12h,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    probability72h: result.predictions.probability72h,
+    halfLifeDays: survival.recencyHalfLifeDays,
+    completedEventCount: survival.completedIntervalCount,
+    completedIntervalCount: survival.completedIntervalCount,
+    weightedEventCount: survival.weightedEventCount,
+    weightedExposureDays: survival.weightedExposureDays,
+    baseline12h: result.baseline.probability12h,
+    baseline24h: result.baseline.probability24h,
+    baseline48h: result.baseline.probability48h,
+    baseline72h: result.baseline.probability72h,
+    combinedSignalMultiplier24h: survival.ordinarySignalMultipliers.combinedAfterCap.probability24h,
+    combinedSignalMultiplier48h: survival.ordinarySignalMultipliers.combinedAfterCap.probability48h,
+    combinedSignalMultiplier72h: survival.ordinarySignalMultipliers.combinedAfterCap.probability48h,
+    officialNoticeOverride: base.officialNoticeOverride.active,
+    targetDefinition: base.targetDefinition,
+    rawModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    rawProbability24h: result.baseline.probability24h,
+    rawProbability48h: result.baseline.probability48h,
+    confidence: base.confidence.level,
+    confidenceReason: base.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: survival.integrationStepHours,
+    experimentRole: "diagnostic",
+    randomEligibilityPolicyVersion: survival.randomEligibilityPolicyVersion,
+    elapsedHoursSinceRandom: survival.randomElapsedHours,
+    randomElapsedHours: survival.randomElapsedHours,
+    latestRandomResetAt: survival.latestRandomResetAt,
+    estimator: "survival-conditioned",
+    instantaneousHazardPerHour: base.hazard.longTermHazardPerHour,
+    freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
+    freezePolicy: SURVIVAL_CONDITIONED_FREEZE_POLICY,
+    nextGenerationRole: "survival-conditioned-shadow",
+    fallbackUsed,
+    fallbackReason: fit?.fallbackReason ?? survival.fallbackReason,
+    survivalConditioned: survival,
+    survivalContextArm: contextArm ?? "base",
+    ...(fit
+      ? {
+          contextCoefficients: fit.coefficients,
+          burstStats: fit.burstStats,
+          contextTrainingEventCount: fit.trainingEventCount,
+          contextExposureCellCount: fit.exposureCellCount,
+          contextFallbackUsed: fit.fallbackUsed,
+          contextFallbackReason: fit.fallbackReason,
+          contextSolver: fit.solver,
+        }
+      : {}),
+    backfilled: false,
+  };
+}
+
 function isValidContextAwareResult(result: ReturnType<typeof calculateContextAwareContinuousProbability>) {
   return [
     result.predictions.probability12h,
@@ -597,6 +673,8 @@ export type NextGenerationShadowBuildOptions = {
   lateAgeRegimeDiagnosticsCalculator?: typeof calculateRandomContinuousLateAgeRegimeDiagnostics;
   broadBankedRandomContinuousShadowCalculator?: typeof calculateBroadBankedRandomContinuousShadow;
   broadBankedLateAgeRegimeDiagnosticsCalculator?: typeof calculateRandomContinuousBroadBankedLateAgeRegimeDiagnostics;
+  survivalConditionedCalculator?: typeof calculateSurvivalConditionedProbability;
+  survivalConditionedContextArmsCalculator?: typeof calculateSurvivalConditionedContextArms;
 };
 
 export function buildNextGenerationExperimentalProbabilityForecasts(
@@ -853,5 +931,44 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
     }
   }
 
-  return withLateAgeDiagnostics;
+  let withSurvival = withLateAgeDiagnostics;
+  if (generatedAt.getTime() >= new Date(SURVIVAL_CONDITIONED_FREEZE_AT).getTime()) {
+    try {
+      const calculateSurvival = options.survivalConditionedCalculator
+        ?? calculateSurvivalConditionedProbability;
+      const survivalResult = calculateSurvival(options.data, options.calculationOptions);
+      if (isValidSurvivalConditionedPrediction(survivalResult)) {
+        const calculateArms = options.survivalConditionedContextArmsCalculator
+          ?? calculateSurvivalConditionedContextArms;
+        let contextArms: Record<string, SurvivalConditionedContextArm> = {};
+        try {
+          contextArms = calculateArms(options.data, options.calculationOptions, survivalResult);
+        } catch {
+          // A context-arm failure must not suppress the valid survival base artifact.
+        }
+        const forecasts: ExperimentalProbabilityForecasts = {
+          [SURVIVAL_CONDITIONED_MODEL_VERSION]: toSurvivalConditionedForecast(survivalResult),
+          ...Object.fromEntries(
+            SURVIVAL_CONTEXT_MODEL_VERSIONS.flatMap((modelVersion) => {
+              const arm = contextArms[modelVersion];
+              if (!arm) return [];
+              try {
+                return [[modelVersion, toSurvivalConditionedForecast(arm, arm.contextArm)]];
+              } catch {
+                return [];
+              }
+            }),
+          ),
+        };
+        withSurvival = {
+          ...withLateAgeDiagnostics,
+          ...forecasts,
+        };
+      }
+    } catch {
+      // Survival-conditioned shadow logging is fail-open and cannot affect public results.
+    }
+  }
+
+  return withSurvival;
 }

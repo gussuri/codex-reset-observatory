@@ -11,6 +11,7 @@ import {
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
@@ -54,11 +55,17 @@ import {
   calculateBroadBankedRandomContinuousShadow,
   type BroadBankedRandomContinuousShadowResult,
 } from "./broadBankedRandomContinuousShadow";
+import {
+  calculateSurvivalConditionedProbability,
+  isValidSurvivalConditionedPrediction,
+  type SurvivalConditionedProbabilityResult,
+} from "./survivalConditionedProbability";
 import type { RadarData } from "./types";
 import type { CanonicalResetHistoryContext } from "./tiboHistory";
 
 export type PublishedProbabilitySource =
   | "calibrated"
+  | "survival-conditioned"
   | "broad-banked-raw-continuous"
   | "raw-continuous"
   | "stable-shadow-fallback"
@@ -76,6 +83,8 @@ export type PublishedProbabilityFallbackReason =
   | "shadow_invalid_prediction"
   | "broad_banked_v2_exception"
   | "broad_banked_v2_invalid_prediction"
+  | "survival_conditioned_exception"
+  | "survival_conditioned_invalid_prediction"
   | "raw_continuous_exception"
   | "raw_continuous_invalid_prediction";
 
@@ -138,7 +147,8 @@ export type PublishedProbabilityPeriod =
   | "selective-v3"
   | "corrective-rollback-v4"
   | "raw-continuous-18-54"
-  | "broad-banked-v2";
+  | "broad-banked-v2"
+  | "survival-conditioned-v1";
 
 export type PublishedProbabilityPeriodOptions = {
   historicalV4AdoptionAt?: string | null;
@@ -148,6 +158,7 @@ export type PublishedProbabilityPeriodOptions = {
   rollbackAt?: string | null;
   rawContinuousAdoptionAt?: string | null;
   broadBankedV2AdoptionAt?: string | null;
+  survivalConditionedAdoptionAt?: string | null;
 };
 
 function resolveBoundary<T>(value: T | undefined, fallback: T) {
@@ -189,6 +200,12 @@ export function getPublishedProbabilityPeriodAt(
   const broadBankedV2AdoptionTime = parseAdoptionTime(
     resolveBoundary(options.broadBankedV2AdoptionAt, PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT),
   );
+  const survivalConditionedAdoptionTime = parseAdoptionTime(
+    resolveBoundary(
+      options.survivalConditionedAdoptionAt,
+      PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+    ),
+  );
 
   if (historicalV4AdoptionTime !== null && valueTime < historicalV4AdoptionTime) {
     return "historical-elapsed-v1";
@@ -208,6 +225,9 @@ export function getPublishedProbabilityPeriodAt(
     && (broadBankedV2AdoptionTime === null || valueTime < broadBankedV2AdoptionTime)
   ) {
     return "raw-continuous-18-54";
+  }
+  if (survivalConditionedAdoptionTime !== null && valueTime >= survivalConditionedAdoptionTime) {
+    return "survival-conditioned-v1";
   }
   if (broadBankedV2AdoptionTime !== null && valueTime >= broadBankedV2AdoptionTime) {
     return "broad-banked-v2";
@@ -279,6 +299,7 @@ export type PublishedProbabilityCalculation = {
   rawShadow: ShadowProbabilityResult | null;
   stableShadow: ShadowProbabilityResult | null;
   shadow: ShadowProbabilityResult | null;
+  survivalConditioned?: SurvivalConditionedProbabilityResult | null;
   majorModelReleaseAdjustment: MajorModelReleaseAdjustment;
 };
 
@@ -432,6 +453,12 @@ export function selectPublishedProbability(
       PublishedProbabilityFallbackReason,
       "raw_continuous_exception" | "raw_continuous_invalid_prediction"
     > | null;
+    allowSurvivalConditioned?: boolean;
+    survivalConditioned?: SurvivalConditionedProbabilityResult | null;
+    survivalConditionedFailureReason?: Extract<
+      PublishedProbabilityFallbackReason,
+      "survival_conditioned_exception" | "survival_conditioned_invalid_prediction"
+    > | null;
   } = {},
 ): PublishedProbabilityCalculation {
   const broadBankedV2 = selectionOptions.broadBankedV2 ?? null;
@@ -443,6 +470,11 @@ export function selectPublishedProbability(
   const rawContinuousActive = selectionOptions.allowRawContinuous === true;
   const rawContinuousFailureReason = rawContinuousActive
     ? selectionOptions.rawContinuousFailureReason ?? null
+    : null;
+  const survivalConditioned = selectionOptions.survivalConditioned ?? null;
+  const survivalConditionedActive = selectionOptions.allowSurvivalConditioned === true;
+  const survivalConditionedFailureReason = survivalConditionedActive
+    ? selectionOptions.survivalConditionedFailureReason ?? null
     : null;
   const calibratedFallbackReason = selectionOptions.allowNextGenerationB === false
     ? calibrated && isValidCalibratedPrediction(calibrated)
@@ -456,11 +488,38 @@ export function selectPublishedProbability(
             : fallbackReason
     : fallbackReason;
   const publicFallbackReason = broadBankedV2FailureReason
+    ?? survivalConditionedFailureReason
     ?? (rawContinuousFailureReason
     && calibrated
     && isValidCalibratedPrediction(calibrated)
     ? rawContinuousFailureReason
     : calibratedFallbackReason);
+
+  if (
+    survivalConditionedActive
+    && survivalConditioned
+    && isValidSurvivalConditionedPrediction(survivalConditioned)
+  ) {
+    return {
+      probability12h: survivalConditioned.predictions.probability12h,
+      probability24h: survivalConditioned.predictions.probability24h,
+      probability48h: survivalConditioned.predictions.probability48h,
+      probability72h: survivalConditioned.predictions.probability72h,
+      adoptedModel: survivalConditioned.modelVersion,
+      source: "survival-conditioned",
+      fallbackReason: null,
+      primary,
+      nextGenerationB,
+      broadBankedV2,
+      rawContinuous,
+      calibrated,
+      rawShadow,
+      stableShadow,
+      shadow: null,
+      survivalConditioned,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
+    };
+  }
 
   if (
     broadBankedV2Active
@@ -474,7 +533,7 @@ export function selectPublishedProbability(
       probability72h: broadBankedV2.predictions.probability72h,
       adoptedModel: broadBankedV2.modelVersion,
       source: "broad-banked-raw-continuous",
-      fallbackReason: null,
+      fallbackReason: survivalConditionedActive ? publicFallbackReason : null,
       primary,
       nextGenerationB,
       broadBankedV2,
@@ -483,6 +542,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -508,6 +568,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -533,6 +594,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -554,6 +616,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: null,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -575,6 +638,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: stableShadow,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -596,6 +660,7 @@ export function selectPublishedProbability(
       rawShadow,
       stableShadow,
       shadow: legacyShadow,
+      survivalConditioned,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -618,6 +683,7 @@ export function selectPublishedProbability(
     rawShadow,
     stableShadow,
     shadow: stableShadow,
+    survivalConditioned,
     majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
   };
 }
@@ -645,6 +711,8 @@ function logPublishedProbabilityFallback(
     reason: calculation.fallbackReason,
     broadBankedV2ModelVersion: calculation.broadBankedV2?.modelVersion ?? null,
     broadBankedV2Policy: calculation.broadBankedV2?.randomContinuous.randomEligibilityPolicyVersion ?? null,
+    survivalConditionedModelVersion: calculation.survivalConditioned?.modelVersion ?? null,
+    survivalConditionedFallbackReason: calculation.survivalConditioned?.survival.fallbackReason ?? null,
     nextGenerationBModelVersion: calculation.nextGenerationB?.modelVersion ?? null,
     nextGenerationBFallbackUsed: calculation.nextGenerationB?.fallbackUsed ?? null,
     nextGenerationBFallbackReason: calculation.nextGenerationB?.fallbackReason ?? null,
@@ -676,6 +744,8 @@ export type PublishedProbabilityOptions = {
   publishedRawContinuousAdoptionAt?: string | null;
   /** Explicit future boundary for the broad-banked v2 public adoption. */
   publishedBroadBankedV2AdoptionAt?: string | null;
+  /** Explicit future boundary for the survival-conditioned public adoption. */
+  publishedSurvivalConditionedAdoptionAt?: string | null;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
@@ -692,6 +762,7 @@ export function calculatePublishedProbability(
     publishedV4RollbackAt,
     publishedRawContinuousAdoptionAt,
     publishedBroadBankedV2AdoptionAt,
+    publishedSurvivalConditionedAdoptionAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -719,6 +790,9 @@ export function calculatePublishedProbability(
   const resolvedPublishedBroadBankedV2AdoptionAt = publishedBroadBankedV2AdoptionAt === undefined
     ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
     : publishedBroadBankedV2AdoptionAt;
+  const resolvedPublishedSurvivalConditionedAdoptionAt = publishedSurvivalConditionedAdoptionAt === undefined
+    ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
+    : publishedSurvivalConditionedAdoptionAt;
   const rollbackActive = isPublishedV4RollbackActive(
     publicModelOptions.now,
     resolvedPublishedV4RollbackAt,
@@ -735,6 +809,11 @@ export function calculatePublishedProbability(
   let stableShadow: ShadowProbabilityResult | null = null;
   let rawContinuous: RandomBandwidthTruncationShadowPair["challenger"] | null = null;
   let broadBankedV2: BroadBankedRandomContinuousShadowResult | null = null;
+  let survivalConditioned: SurvivalConditionedProbabilityResult | null = null;
+  let survivalConditionedFailureReason: Extract<
+    PublishedProbabilityFallbackReason,
+    "survival_conditioned_exception" | "survival_conditioned_invalid_prediction"
+  > | null = null;
   let broadBankedV2FailureReason: Extract<
     PublishedProbabilityFallbackReason,
     "broad_banked_v2_exception" | "broad_banked_v2_invalid_prediction"
@@ -802,6 +881,33 @@ export function calculatePublishedProbability(
     }
   }
 
+  const survivalConditionedAdoptionTime = parseAdoptionTime(
+    resolvedPublishedSurvivalConditionedAdoptionAt,
+  );
+  const survivalConditionedActive = survivalConditionedAdoptionTime !== null
+    && publicModelOptions.now.getTime() >= survivalConditionedAdoptionTime;
+  if (survivalConditionedActive) {
+    try {
+      survivalConditioned = calculateSurvivalConditionedProbability(
+        data,
+        publicModelOptions,
+      );
+      if (!isValidSurvivalConditionedPrediction(survivalConditioned)) {
+        survivalConditionedFailureReason = "survival_conditioned_invalid_prediction";
+        survivalConditioned = {
+          ...survivalConditioned,
+          survival: {
+            ...survivalConditioned.survival,
+            fallbackUsed: true,
+            fallbackReason: survivalConditionedFailureReason,
+          },
+        };
+      }
+    } catch {
+      survivalConditionedFailureReason = "survival_conditioned_exception";
+    }
+  }
+
   try {
     rawShadow = calculateShadowProbability(data, publicModelOptions);
     calibrated = calculateCalibratedShadowProbability(data, {
@@ -861,6 +967,9 @@ export function calculatePublishedProbability(
       allowRawContinuous: rawContinuousActive,
       rawContinuous,
       rawContinuousFailureReason,
+      allowSurvivalConditioned: survivalConditionedActive,
+      survivalConditioned,
+      survivalConditionedFailureReason,
     },
   );
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);

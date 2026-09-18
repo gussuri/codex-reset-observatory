@@ -29,6 +29,7 @@ import {
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
   PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
@@ -37,6 +38,14 @@ import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
+  SURVIVAL_CONDITIONED_BIN_HOURS,
+  SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
+  SURVIVAL_CONTEXT_BURST_MODEL_VERSION,
+  SURVIVAL_CONTEXT_CIRCADIAN_MODEL_VERSION,
+  SURVIVAL_CONTEXT_OLD_REGIME_MODEL_VERSION,
+  SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_CIRCADIAN_MODEL_VERSION,
+  SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION,
   RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_BANDWIDTH_HOURS,
   RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_FREEZE_AT,
   RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS,
@@ -69,7 +78,7 @@ import {
 } from "../scripts/evaluateProbabilityModels";
 
 export type ProbabilityModelKind = "forecast" | "diagnostic" | "ensemble";
-export type ProbabilityModelPublicStatus = "current" | "historical" | "never";
+export type ProbabilityModelPublicStatus = "current" | "scheduled" | "historical" | "never";
 export type ProbabilityModelLifecycleStatus = "active" | "archived" | "retired";
 export type ProbabilityModelRole =
   | "public-runtime"
@@ -117,7 +126,8 @@ export type PublicProbabilityPeriodId =
   | "selective-v3"
   | "corrective-rollback-v4"
   | "raw-continuous-18-54"
-  | "broad-banked-v2";
+  | "broad-banked-v2"
+  | "survival-conditioned-v1";
 
 export type PublicProbabilityPeriodEntry = {
   id: PublicProbabilityPeriodId;
@@ -688,6 +698,54 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     calibration: "none",
     differenceFromParent: "Broad completed banked distributions become eligible random-clock boundaries; estimator and frozen 18/54 parameters remain unchanged.",
   }),
+  model({
+    key: "survival-conditioned/base/v1",
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    displayName: "Survival-Conditioned Adaptive H45 Tail H24 v1",
+    family: "survival-conditioned",
+    variant: "adaptive-h45-tail-h24",
+    revision: "v1",
+    kind: "forecast",
+    publicStatus: "scheduled",
+    status: "active",
+    roles: ["public-runtime", "fallback", "experimental-log"],
+    parentModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    comparisonBaselineModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
+    eligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+    bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
+    truncationHours: null,
+    calibration: "none",
+    differenceFromParent: "Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate.",
+    notes: "Scheduled future public candidate; broad-banked v2 remains the current runtime pointer until the explicit adoption boundary.",
+  }),
+  ...[
+    ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
+    ["circadian", SURVIVAL_CONTEXT_CIRCADIAN_MODEL_VERSION],
+    ["previous-interval-circadian", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_CIRCADIAN_MODEL_VERSION],
+    ["burst", SURVIVAL_CONTEXT_BURST_MODEL_VERSION],
+    ["old-regime", SURVIVAL_CONTEXT_OLD_REGIME_MODEL_VERSION],
+  ].map(([variant, modelVersion]) => model({
+    key: `survival-conditioned-context/${variant}/v1`,
+    modelVersion,
+    displayName: `Survival-Conditioned ${variant} Context v1`,
+    family: "survival-conditioned-context",
+    variant,
+    revision: "v1",
+    kind: "forecast",
+    publicStatus: "never",
+    status: "active",
+    roles: ["shadow", "experimental-log"],
+    parentModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    comparisonBaselineModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
+    eligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+    regimePolicyVersion: variant === "old-regime" ? NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION : null,
+    bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
+    truncationHours: null,
+    calibration: "contextual",
+    differenceFromParent: `Shadow context arm: ${variant}; it cannot change public selection or fallback behavior.`,
+  })),
   ...broadBankedLateAgeEntries,
   model({
     key: "context-aware/continuous/bw18-tr54/v1",
@@ -868,9 +926,17 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
     id: "broad-banked-v2",
     modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
     startAt: PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+    endAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+    adoptionMode: "manual",
+    note: "Previous public broad-banked random continuous 18/54 period; it remains the runtime fallback after the scheduled survival-conditioned boundary.",
+  },
+  {
+    id: "survival-conditioned-v1",
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    startAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
     endAt: null,
     adoptionMode: "manual",
-    note: "Current public broad-banked random continuous 18/54 period.",
+    note: "Scheduled future survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows.",
   },
 ];
 
@@ -899,7 +965,9 @@ export function getPublicProbabilityPeriods() {
 }
 
 export function getCurrentPublicProbabilityPeriod() {
-  return PUBLIC_PROBABILITY_PERIOD_REGISTRY[PUBLIC_PROBABILITY_PERIOD_REGISTRY.length - 1];
+  return PUBLIC_PROBABILITY_PERIOD_REGISTRY.find(
+    (period) => period.modelVersion === PROBABILITY_MODEL_POINTERS.currentPublic,
+  )!;
 }
 
 export function getProbabilityPeriodAt(value: Date | string) {

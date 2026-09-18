@@ -31,6 +31,8 @@ import {
   PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   SHADOW_PROBABILITY_MODEL_VERSION,
+  BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
   calculateShadowProbability,
@@ -219,6 +221,9 @@ test("public DTO and UI expose v2 probabilities without diagnostic-only fields",
     "preResetRegimeMultiplierFallbackUsed",
     "preResetRegimeMultiplierFallbackReason",
     "experimentalProbabilityForecasts",
+    "survivalConditioned",
+    "survivalContextArm",
+    SURVIVAL_CONDITIONED_MODEL_VERSION,
   ];
 
   for (const field of forbidden) {
@@ -645,6 +650,157 @@ test("valid calibrated values are adopted as the published model", () => {
   assert.equal(selected.probability48h, 0.31);
   assert.equal(selected.probability12h, 1 - Math.pow(1 - 0.18, 12 / 24));
   assert.equal(selected.probability72h, 1 - Math.pow(1 - 0.31, 72 / 48));
+});
+
+test("the future survival selector adopts a valid result without changing the fallback reason", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const validSurvival = {
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    predictions: {
+      probability12h: 0.08,
+      probability24h: 0.14,
+      probability48h: 0.25,
+      probability72h: 0.34,
+    },
+    baseline: {
+      probability12h: 0.07,
+      probability24h: 0.12,
+      probability48h: 0.22,
+      probability72h: 0.31,
+    },
+    hazard: {
+      randomEligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+      completedIntervalCount: 12,
+      ess0: 8,
+      maxSupportedAgeHours: 216,
+      longTermHazardPerHour: 0.001,
+    },
+    survival: {
+      modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+      randomElapsedHours: 48,
+      liveIntervalIncludedInTraining: false,
+    },
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowSurvivalConditioned: true,
+      survivalConditioned: validSurvival,
+    },
+  );
+
+  assert.equal(selected.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(selected.source, "survival-conditioned");
+  assert.equal(selected.fallbackReason, null);
+  assert.equal(selected.probability24h, 0.14);
+});
+
+test("an invalid survival result falls back to valid broad-banked v2 with a survival reason", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const broad = {
+    modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    predictions: {
+      probability12h: 0.05,
+      probability24h: 0.1,
+      probability48h: 0.2,
+      probability72h: 0.3,
+    },
+  } as never;
+  const invalidSurvival = {
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+    hazard: {},
+    survival: {},
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowSurvivalConditioned: true,
+      survivalConditioned: invalidSurvival,
+      survivalConditionedFailureReason: "survival_conditioned_invalid_prediction",
+      allowBroadBankedV2: true,
+      broadBankedV2: broad,
+    },
+  );
+
+  assert.equal(selected.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(selected.source, "broad-banked-raw-continuous");
+  assert.equal(selected.fallbackReason, "survival_conditioned_invalid_prediction");
+  assert.equal(selected.probability48h, 0.2);
+});
+
+test("a broad-banked failure reason wins when both future public candidates are invalid", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const current = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
+  const invalidBroad = {
+    modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+  } as never;
+  const invalidSurvival = {
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+    baseline: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+    hazard: {},
+    survival: {},
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowSurvivalConditioned: true,
+      survivalConditioned: invalidSurvival,
+      survivalConditionedFailureReason: "survival_conditioned_invalid_prediction",
+      allowBroadBankedV2: true,
+      broadBankedV2: invalidBroad,
+      broadBankedV2FailureReason: "broad_banked_v2_invalid_prediction",
+    },
+  );
+
+  assert.equal(selected.source, "calibrated");
+  assert.equal(selected.fallbackReason, "broad_banked_v2_invalid_prediction");
 });
 
 test("valid low-confidence Shadow values do not emit a fallback warning", () => {
