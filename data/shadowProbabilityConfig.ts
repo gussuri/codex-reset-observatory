@@ -281,14 +281,58 @@ export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS = [
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_PRE_RESET_FROZEN_MODEL_VERSION,
 ] as const;
 
+// Survival-conditioned public candidate. The estimator trains only on completed
+// broad-banked random intervals, treats the live interval as the query rather
+// than training exposure, recency-weights completed intervals with a 45-day
+// half-life, adapts smoothing strength to effective sample size, and reverts
+// smoothly from the last supported tail hazard toward the weighted long-run
+// rate after the historical maximum duration.
+export const SURVIVAL_CONDITIONED_MODEL_VERSION =
+  "hazard-survival-conditioned-adaptive-h45-tail-h24-v1";
+export const SURVIVAL_CONDITIONED_FREEZE_AT = "2026-09-18T18:55:00.000Z";
+export const SURVIVAL_CONDITIONED_FREEZE_POLICY =
+  "The survival-conditioned architecture and H45/H24 settings are frozen at adoption; future observations may accumulate, but no retrospective relabeling or parameter retuning is allowed under this model identity.";
+export const SURVIVAL_CONDITIONED_TARGET_DEFINITION =
+  "Broad-scope random reset probability conditioned on survival to the current random-reset age, using completed broad-banked intervals only for training. The live interval is query-only and ages beyond historical support revert smoothly toward the recency-weighted long-run hazard.";
+export const SURVIVAL_CONDITIONED_RECENCY_HALF_LIFE_DAYS = 45;
+export const SURVIVAL_CONDITIONED_BIN_HOURS = 6;
+export const SURVIVAL_CONDITIONED_MIN_SMOOTH_HOURS = 6;
+export const SURVIVAL_CONDITIONED_MAX_SMOOTH_HOURS = 24;
+export const SURVIVAL_CONDITIONED_TAIL_HALF_LIFE_HOURS = 24;
+export const SURVIVAL_CONDITIONED_INTEGRATION_STEP_MINUTES = 10;
+export const SURVIVAL_CONDITIONED_SIGNAL_CONFIG =
+  NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG;
+
+// Context variants remain shadow-only. They all use the survival-conditioned
+// base hazard and differ only in the additional short-horizon/circadian block.
+export const SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION =
+  "hazard-survival-conditioned-context-previous-interval-v1";
+export const SURVIVAL_CONTEXT_CIRCADIAN_MODEL_VERSION =
+  "hazard-survival-conditioned-context-circadian-v1";
+export const SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_CIRCADIAN_MODEL_VERSION =
+  "hazard-survival-conditioned-context-previous-interval-circadian-v1";
+export const SURVIVAL_CONTEXT_BURST_MODEL_VERSION =
+  "hazard-survival-conditioned-context-burst-v1";
+export const SURVIVAL_CONTEXT_OLD_REGIME_MODEL_VERSION =
+  "hazard-survival-conditioned-context-old-regime-v1";
+export const SURVIVAL_CONTEXT_MODEL_VERSIONS = [
+  SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION,
+  SURVIVAL_CONTEXT_CIRCADIAN_MODEL_VERSION,
+  SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_CIRCADIAN_MODEL_VERSION,
+  SURVIVAL_CONTEXT_BURST_MODEL_VERSION,
+  SURVIVAL_CONTEXT_OLD_REGIME_MODEL_VERSION,
+] as const;
+export const SURVIVAL_CONTEXT_MIN_MULTIPLIER = 0.5;
+export const SURVIVAL_CONTEXT_MAX_MULTIPLIER = 2;
+
 // The current public identity is intentionally separate from the historical
 // selective-v3 aliases above. This explicit future boundary is the only
 // point at which broad-banked v2 can become public; earlier rows stay in their
 // historical periods.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION =
-  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+  SURVIVAL_CONDITIONED_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
-  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT: string | null = "2026-09-17T05:45:00.000Z";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE: string | null = "2026-09-17";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION =
@@ -299,6 +343,10 @@ export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT: string | null = "2026-09-18T
 export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE: string | null = "2026-09-18";
 export const PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION =
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
+export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT: string | null = "2026-09-19T00:00:00.000Z";
+export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE: string | null = "2026-09-19";
+export const PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION =
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never
