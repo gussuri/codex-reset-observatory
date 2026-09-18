@@ -10,6 +10,7 @@ import {
   CALIBRATED_V2_MODEL_VERSION,
   CONSTANT_HAZARD_MODEL_VERSION,
 } from "../scripts/evaluateProbabilityModels";
+import { normalizeLineEndings } from "../scripts/normalizeLineEndings";
 import { getPublishedProbabilityPeriodAt } from "../lib/radar/publishedProbability";
 import {
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
@@ -242,7 +243,10 @@ test("registry lookup helpers remain pure and return the expected slices", () =>
 
 test("generated registry documentation is synchronized", () => {
   const expected = formatProbabilityModelRegistryMarkdown();
-  assert.equal(readFileSync(MODEL_REGISTRY_DOC, "utf8"), expected);
+  assert.equal(
+    normalizeLineEndings(readFileSync(MODEL_REGISTRY_DOC, "utf8")),
+    normalizeLineEndings(expected),
+  );
 });
 
 test("required public and diagnostic identities remain separated by family", () => {

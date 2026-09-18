@@ -2,13 +2,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { formatProbabilityModelRegistryMarkdown } from "../data/probabilityModelRegistry";
+import { normalizeLineEndings } from "./normalizeLineEndings";
 
 const outputPath = resolve("docs/probability/model-registry.md");
 const expected = formatProbabilityModelRegistryMarkdown();
 const checkOnly = process.argv.slice(2).includes("--check");
 
 if (checkOnly) {
-  if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== expected) {
+  if (
+    !existsSync(outputPath)
+    || normalizeLineEndings(readFileSync(outputPath, "utf8")) !== normalizeLineEndings(expected)
+  ) {
     console.error("Probability model registry documentation is stale: " + outputPath);
     process.exitCode = 1;
   } else {
