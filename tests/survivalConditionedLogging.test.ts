@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   NEXT_GENERATION_FREEZE_AT,
   SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   SURVIVAL_CONTEXT_MODEL_VERSIONS,
 } from "../data/shadowProbabilityConfig";
@@ -36,6 +37,20 @@ function resetEvent(id: string, completedAt: string): WindowEventLike {
   };
 }
 
+function supportedStaticHistory() {
+  const hour = 60 * 60 * 1000;
+  const anchor = Date.parse("2026-01-01T00:00:00.000Z");
+  const offsets = [
+    0,
+    221,
+    ...Array.from({ length: 35 }, (_, index) => 222 + index),
+  ];
+  return offsets.map((offset, index) => resetEvent(
+    `supported-${index}`,
+    new Date(anchor + offset * hour).toISOString(),
+  ));
+}
+
 function trainingState(): NextGenerationTrainingState {
   return {
     status: "ok",
@@ -59,14 +74,9 @@ function trainingState(): NextGenerationTrainingState {
 
 test("post-freeze logging stores survival base and every context arm at one origin", () => {
   const now = new Date("2026-09-19T00:00:00.000Z");
-  const staticHistory = [
-    resetEvent("r0", "2026-08-20T00:00:00.000Z"),
-    resetEvent("r1", "2026-08-25T00:00:00.000Z"),
-    resetEvent("r2", "2026-09-01T00:00:00.000Z"),
-    resetEvent("r3", "2026-09-10T00:00:00.000Z"),
-  ];
+  const staticHistory = supportedStaticHistory();
   const base = calculateSurvivalConditionedProbability(null, { now, staticHistory });
-  assert.ok(base.hazard.completedIntervalCount > 0);
+  assert.equal(base.hazard.completedIntervalCount, SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT);
 
   const contextArms = Object.fromEntries(SURVIVAL_CONTEXT_MODEL_VERSIONS.map((modelVersion, index) => [
     modelVersion,
@@ -130,12 +140,7 @@ test("survival logging does not create a pre-freeze artifact", () => {
 
 test("a context-arm failure keeps the valid survival base artifact", () => {
   const now = new Date("2026-09-19T00:00:00.000Z");
-  const staticHistory = [
-    resetEvent("r0", "2026-08-20T00:00:00.000Z"),
-    resetEvent("r1", "2026-08-25T00:00:00.000Z"),
-    resetEvent("r2", "2026-09-01T00:00:00.000Z"),
-    resetEvent("r3", "2026-09-10T00:00:00.000Z"),
-  ];
+  const staticHistory = supportedStaticHistory();
   const base = calculateSurvivalConditionedProbability(null, { now, staticHistory });
   const forecasts = buildNextGenerationExperimentalProbabilityForecasts({
     data: null,

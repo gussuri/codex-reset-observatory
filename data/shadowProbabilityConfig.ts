@@ -294,6 +294,7 @@ export const SURVIVAL_CONDITIONED_FREEZE_POLICY =
   "The survival-conditioned architecture and H45/H24 settings are frozen at adoption; future observations may accumulate, but no retrospective relabeling or parameter retuning is allowed under this model identity.";
 export const SURVIVAL_CONDITIONED_TARGET_DEFINITION =
   "Broad-scope random reset probability conditioned on survival to the current random-reset age, using completed broad-banked intervals only for training. The live interval is query-only and ages beyond historical support revert smoothly toward the recency-weighted long-run hazard.";
+export const SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT = 36;
 export const SURVIVAL_CONDITIONED_RECENCY_HALF_LIFE_DAYS = 45;
 export const SURVIVAL_CONDITIONED_BIN_HOURS = 6;
 export const SURVIVAL_CONDITIONED_MIN_SMOOTH_HOURS = 6;

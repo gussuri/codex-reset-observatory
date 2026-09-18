@@ -6,16 +6,20 @@ import {
   BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 import {
   buildSurvivalConditionedHazard,
+  calculateSurvivalConditionedProbability,
   getSurvivalConditionedHazardDiagnosticsAtAge,
   integrateSurvivalConditionedHazard,
+  isValidSurvivalConditionedPrediction,
 } from "../lib/radar/survivalConditionedProbability";
 import type { RecoveryResetBoundary } from "../lib/radar/recoveryBoundary";
+import type { WindowEventLike } from "../lib/radar/types";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -32,6 +36,109 @@ function boundary(id: string, ageHours: number): RecoveryResetBoundary {
 test("the survival candidate is not the current public model before its future adoption", () => {
   assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(SURVIVAL_CONDITIONED_MODEL_VERSION, "hazard-survival-conditioned-adaptive-h45-tail-h24-v1");
+});
+
+test("static-only history can calculate survival values but fails the public support gate", () => {
+  const now = new Date(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT!);
+  const result = calculateSurvivalConditionedProbability(
+    getLocalRadarData({ calculationNow: now }),
+    { now, activeOfficialNotice: null },
+  );
+
+  assert.ok(result.predictions.probability24h >= 0);
+  assert.ok(result.predictions.probability48h >= result.predictions.probability24h);
+  assert.ok(result.hazard.completedIntervalCount < SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT);
+  assert.equal(result.survival.minimumCompletedIntervalCount, SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT);
+  assert.equal(result.survival.historySupportValid, false);
+  assert.equal(isValidSurvivalConditionedPrediction(result), false);
+});
+
+test("public selection falls back from insufficient history and audits the support failure", () => {
+  const now = new Date(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT!);
+  const published = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: now }),
+    { now, activeOfficialNotice: null },
+    { logFallback: false },
+  );
+
+  assert.equal(published.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(published.source, "broad-banked-raw-continuous");
+  assert.equal(published.fallbackReason, "survival_conditioned_invalid_prediction");
+  assert.equal(published.survivalConditioned?.survival.historySupportValid, false);
+  assert.equal(
+    published.survivalConditioned?.survival.fallbackReason,
+    "survival_conditioned_invalid_prediction",
+  );
+});
+
+function productionLikeBoundaries(count: number) {
+  const boundaries = [boundary("production-r0", 0), boundary("production-r1", 221)];
+  for (let index = 2; index < count; index += 1) {
+    boundaries.push(boundary(`production-r${index}`, 221 + index - 1));
+  }
+  return boundaries;
+}
+
+function validationFixture(hazard: ReturnType<typeof buildSurvivalConditionedHazard>) {
+  const horizons = {
+    probability12h: 0.1,
+    probability24h: 0.2,
+    probability48h: 0.3,
+    probability72h: 0.4,
+  };
+  return {
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    predictions: horizons,
+    baseline: horizons,
+    hazard,
+    survival: {
+      modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+      randomElapsedHours: 48,
+      minimumCompletedIntervalCount: SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
+      historySupportValid: hazard.completedIntervalCount >= SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
+      liveIntervalIncludedInTraining: false,
+    },
+  } as never;
+}
+
+function staticHistoryEvent(id: string, completedAt: string): WindowEventLike {
+  return {
+    id,
+    recordKind: "confirmed_global",
+    title: id,
+    kind: "reset_completed",
+    status: "closed",
+    scope: "全有料プラン",
+    closed_at: completedAt,
+    completed_at: completedAt,
+    details: {
+      cycleType: "ランダムリセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "0分",
+    },
+  };
+}
+
+function productionLikeStaticHistory(count: number): WindowEventLike[] {
+  return productionLikeBoundaries(count).map((item) => staticHistoryEvent(item.id, item.resetAt));
+}
+
+test("production-like 37-boundary history passes at 36 intervals and remains valid with more history", () => {
+  const productionLike = buildSurvivalConditionedHazard(
+    productionLikeBoundaries(37),
+    new Date("2026-01-20T00:00:00.000Z"),
+  );
+  assert.equal(productionLike.completedIntervalCount, 36);
+  assert.equal(productionLike.maxSupportedAgeHours, 221);
+  assert.equal(isValidSurvivalConditionedPrediction(validationFixture(productionLike)), true);
+
+  const largerHistory = buildSurvivalConditionedHazard(
+    productionLikeBoundaries(38),
+    new Date("2026-01-20T00:00:00.000Z"),
+  );
+  assert.equal(largerHistory.completedIntervalCount, 37);
+  assert.equal(isValidSurvivalConditionedPrediction(validationFixture(largerHistory)), true);
 });
 
 test("completed-only survival hazard excludes the live interval from training", () => {
@@ -127,7 +234,25 @@ test("the future adoption boundary is exact and leaves the pre-boundary public m
   );
 
   assert.equal(beforeResult.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
-  assert.equal(exactResult.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
-  assert.equal(exactResult.source, "survival-conditioned");
-  assert.equal(afterResult.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(exactResult.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(exactResult.fallbackReason, "survival_conditioned_invalid_prediction");
+  assert.equal(afterResult.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+});
+
+test("a production-like 36-interval history selects survival at the exact adoption boundary", () => {
+  const now = new Date(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT!);
+  const published = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: now }),
+    {
+      now,
+      activeOfficialNotice: null,
+      staticHistory: productionLikeStaticHistory(37),
+    },
+    { logFallback: false },
+  );
+
+  assert.equal(published.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(published.source, "survival-conditioned");
+  assert.equal(published.fallbackReason, null);
+  assert.equal(published.survivalConditioned?.survival.historySupportValid, true);
 });

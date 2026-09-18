@@ -60,7 +60,7 @@ import {
   isValidSurvivalConditionedPrediction,
   type SurvivalConditionedProbabilityResult,
 } from "./survivalConditionedProbability";
-import type { RadarData } from "./types";
+import type { RadarData, WindowEventLike } from "./types";
 import type { CanonicalResetHistoryContext } from "./tiboHistory";
 
 export type PublishedProbabilitySource =
@@ -734,6 +734,7 @@ export type PublishedProbabilityOptions = {
   signalEvaluation?: LocalSignalEvaluation;
   activeOfficialNotice?: ActiveOfficialNotice | null;
   regularResetExpectedAt?: string | null;
+  staticHistory?: Array<WindowEventLike>;
   nextGenerationBTrainingRows?: Array<NextGenerationCalibrationRow>;
   nextGenerationBTrainingReadStatus?: NextGenerationTrainingReadStatus;
   /** Explicit Production switch boundary; omitted uses the committed boundary. */

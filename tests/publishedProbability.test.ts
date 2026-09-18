@@ -32,6 +32,7 @@ import {
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   SHADOW_PROBABILITY_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+  SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
@@ -671,7 +672,7 @@ test("the future survival selector adopts a valid result without changing the fa
     },
     hazard: {
       randomEligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
-      completedIntervalCount: 12,
+      completedIntervalCount: SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
       ess0: 8,
       maxSupportedAgeHours: 216,
       longTermHazardPerHour: 0.001,
@@ -680,6 +681,8 @@ test("the future survival selector adopts a valid result without changing the fa
       modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
       randomElapsedHours: 48,
       liveIntervalIncludedInTraining: false,
+      minimumCompletedIntervalCount: SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
+      historySupportValid: true,
     },
   } as never;
 

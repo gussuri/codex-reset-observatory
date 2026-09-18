@@ -6,6 +6,7 @@ import {
   SURVIVAL_CONDITIONED_FREEZE_AT,
   SURVIVAL_CONDITIONED_FREEZE_POLICY,
   SURVIVAL_CONDITIONED_INTEGRATION_STEP_MINUTES,
+  SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MAX_SMOOTH_HOURS,
   SURVIVAL_CONDITIONED_MIN_SMOOTH_HOURS,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
@@ -107,6 +108,8 @@ export type SurvivalConditionedAudit = {
   randomElapsedHours: number;
   latestRandomResetAt: string | null;
   completedIntervalCount: number;
+  minimumCompletedIntervalCount: number;
+  historySupportValid: boolean;
   weightedEventCount: number;
   weightedExposureDays: number;
   ess0: number;
@@ -590,6 +593,8 @@ export function calculateSurvivalConditionedProbability(
       randomElapsedHours,
       latestRandomResetAt,
       completedIntervalCount: hazard.completedIntervalCount,
+      minimumCompletedIntervalCount: SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
+      historySupportValid: hazard.completedIntervalCount >= SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
       weightedEventCount: hazard.weightedEventCount,
       weightedExposureDays: hazard.weightedExposureHours / 24,
       ess0: hazard.ess0,
@@ -654,6 +659,9 @@ export function isValidSurvivalConditionedPrediction(
     && result.survival.randomElapsedHours >= 0
     && result.hazard.randomEligibilityPolicyVersion === BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION
     && result.hazard.completedIntervalCount > 0
+    && result.hazard.completedIntervalCount >= SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT
+    && result.survival.minimumCompletedIntervalCount === SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT
+    && result.survival.historySupportValid === true
     && result.hazard.ess0 > 0
     && result.hazard.maxSupportedAgeHours > 0
     && isValidHorizonSet(predictionValues)
