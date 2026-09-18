@@ -72,6 +72,7 @@ import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
 import {
   calculateSurvivalConditionedContextArms,
   calculateSurvivalConditionedProbability,
+  getSurvivalConditionedHazardDiagnosticsAtAge,
   isValidSurvivalConditionedPrediction,
   type SurvivalConditionedContextArm,
   type SurvivalConditionedProbabilityResult,
@@ -399,7 +400,10 @@ function toSurvivalConditionedForecast(
     randomElapsedHours: survival.randomElapsedHours,
     latestRandomResetAt: survival.latestRandomResetAt,
     estimator: "survival-conditioned",
-    instantaneousHazardPerHour: base.hazard.longTermHazardPerHour,
+    instantaneousHazardPerHour: getSurvivalConditionedHazardDiagnosticsAtAge(
+      base.hazard,
+      survival.randomElapsedHours,
+    ).lambdaPerHour,
     freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
     freezePolicy: SURVIVAL_CONDITIONED_FREEZE_POLICY,
     nextGenerationRole: "survival-conditioned-shadow",

@@ -15,40 +15,12 @@ import {
   calculateSurvivalConditionedProbability,
   type SurvivalConditionedContextArm,
 } from "../lib/radar/survivalConditionedProbability";
-import type { WindowEventLike } from "../lib/radar/types";
 import type { NextGenerationTrainingState } from "../lib/radar/nextGenerationTraining";
-
-function resetEvent(id: string, completedAt: string): WindowEventLike {
-  return {
-    id,
-    recordKind: "confirmed_global",
-    title: id,
-    kind: "reset_completed",
-    status: "closed",
-    scope: "全有料プラン",
-    closed_at: completedAt,
-    completed_at: completedAt,
-    details: {
-      cycleType: "ランダムリセット",
-      resetMethod: "強制リセット",
-      scope: "全有料プラン",
-      noticeToExecution: "0分",
-    },
-  };
-}
+import { frozenCanonicalSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
+import { getSurvivalConditionedHazardDiagnosticsAtAge } from "../lib/radar/survivalConditionedProbability";
 
 function supportedStaticHistory() {
-  const hour = 60 * 60 * 1000;
-  const anchor = Date.parse("2026-01-01T00:00:00.000Z");
-  const offsets = [
-    0,
-    221,
-    ...Array.from({ length: 35 }, (_, index) => 222 + index),
-  ];
-  return offsets.map((offset, index) => resetEvent(
-    `supported-${index}`,
-    new Date(anchor + offset * hour).toISOString(),
-  ));
+  return frozenCanonicalSurvivalStaticHistory();
 }
 
 function trainingState(): NextGenerationTrainingState {
@@ -121,6 +93,16 @@ test("post-freeze logging stores survival base and every context arm at one orig
     assert.equal(forecast.backfilled, false);
     assert.equal(forecast.survivalConditioned?.liveIntervalIncludedInTraining, false);
   }
+  const baseForecast = forecasts[SURVIVAL_CONDITIONED_MODEL_VERSION];
+  assert.ok(baseForecast);
+  assert.equal(
+    baseForecast.instantaneousHazardPerHour,
+    getSurvivalConditionedHazardDiagnosticsAtAge(
+      base.hazard,
+      base.survival.randomElapsedHours,
+    ).lambdaPerHour,
+  );
+  assert.notEqual(baseForecast.instantaneousHazardPerHour, base.hazard.longTermHazardPerHour);
 });
 
 test("survival logging does not create a pre-freeze artifact", () => {

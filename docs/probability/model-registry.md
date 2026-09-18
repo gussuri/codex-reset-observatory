@@ -20,8 +20,7 @@
 | selective-v3 | hazard-regime-random-continuous-selective-calibration-post-reset-age-v3 | 2026-09-10T01:00:00.000Z | 2026-09-11T02:20:00.000Z | manual | Historical selective calibration v3 period. |
 | corrective-rollback-v4 | hazard-odds-v4-logit-calibrated-prequential-v3 | 2026-09-11T02:20:00.000Z | 2026-09-17T05:45:00.000Z | manual | Corrective rollback to the calibrated V4 identity. |
 | raw-continuous-18-54 | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | 2026-09-17T05:45:00.000Z | 2026-09-18T06:00:00.000Z | manual | Historical raw continuous 18/54 period. |
-| broad-banked-v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | 2026-09-18T06:00:00.000Z | 2026-09-20T00:00:00.000Z | manual | Previous public broad-banked random continuous 18/54 period; it remains the runtime fallback after the scheduled survival-conditioned boundary. |
-| survival-conditioned-v1 | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | 2026-09-20T00:00:00.000Z | — | manual | Scheduled future survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows. |
+| broad-banked-v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | 2026-09-18T06:00:00.000Z | — | manual | Current public broad-banked random continuous 18/54 period; it remains open until a separate survival promotion commit. |
 
 ## Public history model entries
 

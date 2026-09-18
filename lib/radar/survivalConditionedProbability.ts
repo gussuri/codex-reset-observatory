@@ -43,9 +43,11 @@ import {
 import { getRandomElapsedBoundaries } from "./randomElapsedProbability";
 import { getRandomResetEligibilityPolicyVersion } from "./resetEligibility";
 import {
+  calculateCircadianNormalization,
   fitContextualBurstContext,
   getContextualBurstMultiplier,
   getContextualBurstRawFeatures,
+  type CircadianNormalization,
   type ContextualBurstFit,
 } from "./contextualBurstContext";
 import { getPostResetRegimeMultiplierAtAge } from "./randomContinuousProbability";
@@ -729,6 +731,7 @@ function integrateContextHazard(
   fit: ContextualBurstFit,
   ablation: Parameters<typeof getContextualBurstMultiplier>[2],
   horizonHours: number,
+  normalization?: CircadianNormalization,
 ) {
   const start = Math.max(0, randomElapsedHours);
   return integrateHazardWithMultiplier(
@@ -741,6 +744,7 @@ function integrateContextHazard(
         getContextualBurstRawFeatures(randomResetTimes, at),
         fit,
         ablation,
+        normalization,
       );
     },
   );
@@ -753,12 +757,13 @@ function contextHorizons(
   now: Date,
   fit: ContextualBurstFit,
   ablation: Parameters<typeof getContextualBurstMultiplier>[2],
+  normalization?: CircadianNormalization,
 ): ShadowProbabilityHorizons {
   return {
-    probability12h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 12),
-    probability24h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 24),
-    probability48h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 48),
-    probability72h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 72),
+    probability12h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 12, normalization),
+    probability24h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 24, normalization),
+    probability48h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 48, normalization),
+    probability72h: integrateContextHazard(hazard, randomElapsedHours, randomResetTimes, now, fit, ablation, 72, normalization),
   };
 }
 
@@ -788,6 +793,7 @@ export function calculateSurvivalConditionedContextArms(
     includeLiveInterval: false,
     getHazardAtAge: (ageHours) => getSurvivalConditionedHazardDiagnosticsAtAge(base.hazard, ageHours).lambdaPerHour,
   });
+  const circadianNormalization = calculateCircadianNormalization(fit.coefficients);
   const arms = [
     {
       modelVersion: SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION,
@@ -848,6 +854,7 @@ export function calculateSurvivalConditionedContextArms(
           now,
           fit,
           arm.ablation,
+          circadianNormalization,
         );
     const signalAdjusted = applySurvivalSignalMultipliers(adjustedBaseline, base.multipliers);
     const predictions = base.officialNoticeOverride.active ? base.predictions : signalAdjusted;
@@ -862,7 +869,7 @@ export function calculateSurvivalConditionedContextArms(
       contextFit: fit,
       contextMultiplierAtOrigin: arm.contextArm === "old-regime"
         ? getPostResetRegimeMultiplierAtAge(base.survival.randomElapsedHours, oldRegimeMultiplier)
-        : getContextualBurstMultiplier(originRaw, fit, arm.ablation),
+        : getContextualBurstMultiplier(originRaw, fit, arm.ablation, circadianNormalization),
     } satisfies SurvivalConditionedContextArm];
   })) as Record<string, SurvivalConditionedContextArm>;
   return result;

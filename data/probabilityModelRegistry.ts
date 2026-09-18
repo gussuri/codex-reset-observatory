@@ -717,7 +717,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     truncationHours: null,
     calibration: "none",
     differenceFromParent: "Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate.",
-    notes: "Scheduled future public candidate; broad-banked v2 remains the current runtime pointer until the explicit adoption boundary.",
+    notes: "Scheduled future public candidate; broad-banked v2 remains current until a separate promotion commit explicitly sets the adoption boundary.",
   }),
   ...[
     ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
@@ -928,16 +928,18 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
     startAt: PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
     endAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
     adoptionMode: "manual",
-    note: "Previous public broad-banked random continuous 18/54 period; it remains the runtime fallback after the scheduled survival-conditioned boundary.",
+    note: "Current public broad-banked random continuous 18/54 period; it remains open until a separate survival promotion commit.",
   },
-  {
-    id: "survival-conditioned-v1",
-    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
-    startAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
-    endAt: null,
-    adoptionMode: "manual",
-    note: "Scheduled future survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows.",
-  },
+  ...(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT === null
+    ? []
+    : [{
+        id: "survival-conditioned-v1" as const,
+        modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+        startAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+        endAt: null,
+        adoptionMode: "manual" as const,
+        note: "Promoted survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows.",
+      }]),
 ];
 
 export function getProbabilityModelByVersion(modelVersion: string) {
