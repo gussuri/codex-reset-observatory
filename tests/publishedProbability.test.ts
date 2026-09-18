@@ -13,6 +13,7 @@ import {
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
   ELAPSED_ONLY_MODEL_VERSION,
@@ -45,11 +46,11 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
-test("the current public model keeps corrective V4 as its previous baseline", () => {
+test("the current public model adopts broad-banked v2 with raw 18/54 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
@@ -91,7 +92,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -196,6 +197,34 @@ test("calibrated public calculations are stable within a ten-minute display inte
   assert.equal(sameInterval.calibrated?.alpha24h, first.calibrated?.alpha24h);
   assert.equal(sameInterval.calibrated?.alpha48h, first.calibrated?.alpha48h);
   assert.equal(nextInterval.calibrated?.calculatedAt, "2026-08-04T00:10:00.000Z");
+});
+
+test("public DTO and UI expose v2 probabilities without diagnostic-only fields", () => {
+  const now = new Date("2026-09-18T06:10:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const snapshot = toPublicRadarSnapshot(data, "ja", {
+    calculationNow: now,
+    limitHistory: false,
+  });
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: snapshot,
+      locale: "ja",
+    }),
+  );
+  const forbidden = [
+    "lateAgeRegimePolicy",
+    "lateAgeStartHours",
+    "preResetRegimeMultiplier",
+    "preResetRegimeMultiplierFallbackUsed",
+    "preResetRegimeMultiplierFallbackReason",
+    "experimentalProbabilityForecasts",
+  ];
+
+  for (const field of forbidden) {
+    assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(field));
+    assert.doesNotMatch(html, new RegExp(field));
+  }
 });
 
 function dataWithTeaserStrength(

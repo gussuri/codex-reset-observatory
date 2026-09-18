@@ -1699,6 +1699,7 @@ export function getLocalProbabilityReason(
 type DisplayProbabilityModelContext = {
   source:
     | "calibrated"
+    | "broad-banked-raw-continuous"
     | "raw-continuous"
     | "shadow"
     | "stable-shadow-fallback"

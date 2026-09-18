@@ -18,10 +18,16 @@ import {
 } from "../lib/radar/probability";
 import type { WindowEventLike } from "../lib/radar/types";
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
+  PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
@@ -93,7 +99,7 @@ test("fixed calculation time makes probability and audit output reproducible", (
   );
 });
 
-test("strict history classification uses the adopted calibrated public probability", () => {
+test("pre-adoption history classification uses the calibrated fallback under the current public alias", () => {
   const now = new Date("2026-08-04T03:32:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });
   const viewModel = getRadarViewModel(
@@ -105,11 +111,57 @@ test("strict history classification uses the adopted calibrated public probabili
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);
   assert.equal(viewModel.probability48h, published.probability48h);
+});
+
+test("published audit metadata distinguishes broad-banked v2 from historical raw v1", () => {
+  const now = new Date("2026-09-18T06:10:00.000Z");
+  const data = getLocalRadarData({ calculationNow: now });
+  const published = calculatePublishedProbability(data, { now }, { logFallback: false });
+  const debug = buildProbabilityDebugInfo(
+    {},
+    published.primary,
+    data.checked_at,
+    now,
+    published.rawShadow ?? published.shadow,
+    published,
+  );
+  const audit = debug.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(audit.version, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(audit.adoptionDate, PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE);
+  assert.equal(audit.adoptionAt, PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT);
+  assert.equal(audit.previousModelVersion, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(audit.previousAdoptionAt, PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT);
+  assert.equal(audit.rawModelVersion, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.doesNotMatch(JSON.stringify(audit), /lateAgeRegimePolicy|preResetRegimeMultiplier/);
+
+  const historicalNow = new Date("2026-09-17T06:00:00.000Z");
+  const historicalData = getLocalRadarData({ calculationNow: historicalNow });
+  const historicalPublished = calculatePublishedProbability(
+    historicalData,
+    { now: historicalNow },
+    { logFallback: false },
+  );
+  const historicalDebug = buildProbabilityDebugInfo(
+    {},
+    historicalPublished.primary,
+    historicalData.checked_at,
+    historicalNow,
+    historicalPublished.rawShadow ?? historicalPublished.shadow,
+    historicalPublished,
+  );
+  const historicalAudit = historicalDebug.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(historicalPublished.adoptedModel, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(historicalAudit.adoptionDate, PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE);
+  assert.equal(historicalAudit.adoptionAt, PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT);
+  assert.equal(historicalAudit.previousModelVersion, CALIBRATED_SHADOW_MODEL_VERSION);
+  assert.equal(historicalAudit.previousAdoptionAt, PUBLISHED_PROBABILITY_V4_ROLLBACK_AT);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

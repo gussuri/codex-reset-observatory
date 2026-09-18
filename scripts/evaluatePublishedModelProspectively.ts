@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
@@ -60,6 +61,18 @@ function parseAsOf(args: Array<string>) {
   const asOf = value ? new Date(value) : new Date();
   if (!Number.isFinite(asOf.getTime())) throw new Error(`Invalid --as-of timestamp: ${value}`);
   return asOf;
+}
+
+export function buildPublishedProspectiveCanonicalEvents(
+  data: RadarData | null,
+  asOf: Date,
+): Array<ShadowResetEvent> {
+  return data
+    ? getShadowCompletedResetEvents(data, asOf, LOCAL_RESET_HISTORY, {
+        preserveDistinctCanonicalIds: true,
+        randomEligibilityPolicy: BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY,
+      })
+    : [];
 }
 
 function formatPostResetDiagnosticMetric(metric: PublishedProspectiveEvaluationReport["postResetDiagnostic"]["metrics24h"]) {
@@ -563,11 +576,7 @@ async function main() {
   const asOf = parseAsOf(process.argv.slice(2));
   const history = await loadPredictionHistoryRows();
   const production = await loadProductionCanonicalRadarData(asOf);
-  const events: Array<ShadowResetEvent> = production.data
-    ? getShadowCompletedResetEvents(production.data, asOf, LOCAL_RESET_HISTORY, {
-        preserveDistinctCanonicalIds: true,
-      })
-    : [];
+  const events = buildPublishedProspectiveCanonicalEvents(production.data, asOf);
   const v3Forecasts = buildRetrospectiveV3Forecasts(history.rows, production.data, events, asOf);
   const hybridReplayForecasts = buildRetrospectiveHybridForecasts(history.rows, production.data, events, asOf);
   const savedArtifactHybrid = buildSavedArtifactHybridForecasts(history.rows, asOf);

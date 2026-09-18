@@ -1,21 +1,25 @@
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
   PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_MODE,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE,
+  PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
+  PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_ADOPTION_AT,
+  PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
   RECENCY_SHADOW_MODEL_CONFIG,
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   SHADOW_PROBABILITY_MODEL_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type { RadarViewModel } from "@/lib/radar/types";
@@ -473,22 +477,33 @@ export function buildProbabilityDebugInfo(
   const calculatedAtIso = calculatedAt.toISOString();
   const rawShadow = publishedProbability?.rawShadow ?? publishedProbability?.shadow ?? null;
   const publishedB = publishedProbability?.nextGenerationB ?? null;
-  const publishedConfidence = publishedB?.randomContinuousResult.confidence
-    ?? publishedProbability?.rawContinuous?.confidence
-    ?? rawShadow?.confidence
-    ?? null;
-  const rawContinuousPublished = publishedProbability?.adoptedModel === PUBLISHED_PROBABILITY_MODEL_VERSION;
-  const publishedAdoptionDate = rawContinuousPublished
+  const broadBankedV2Published = publishedProbability?.adoptedModel === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+  const rawContinuousPublished = publishedProbability?.adoptedModel === RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
+  const publishedConfidence = broadBankedV2Published
+    ? publishedProbability?.broadBankedV2?.confidence ?? null
+    : publishedB?.randomContinuousResult.confidence
+      ?? publishedProbability?.rawContinuous?.confidence
+      ?? rawShadow?.confidence
+      ?? null;
+  const publishedAdoptionDate = broadBankedV2Published
+    ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE
+    : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE
     : PUBLISHED_PROBABILITY_ADOPTION_DATE;
-  const publishedAdoptionAt = rawContinuousPublished
+  const publishedAdoptionAt = broadBankedV2Published
+    ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
+    : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : PUBLISHED_PROBABILITY_ADOPTION_AT;
-  const publishedPreviousModelVersion = rawContinuousPublished
-    ? PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION
+  const publishedPreviousModelVersion = broadBankedV2Published
+    ? PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION
+    : rawContinuousPublished
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION
     : PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION;
-  const publishedPreviousAdoptionAt = rawContinuousPublished
-    ? PUBLISHED_PROBABILITY_V4_ROLLBACK_AT
+  const publishedPreviousAdoptionAt = broadBankedV2Published
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
+    : rawContinuousPublished
+    ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_ADOPTION_AT
     : PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT;
 
   return {
@@ -525,10 +540,12 @@ export function buildProbabilityDebugInfo(
             previousAdoptionAt: publishedPreviousAdoptionAt,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
             adoptionBoundaryStatus: PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
-            rawModelVersion: publishedB?.rawModelVersion
-              ?? publishedProbability?.rawContinuous?.modelVersion
-              ?? rawShadow?.modelVersion
-              ?? null,
+            rawModelVersion: broadBankedV2Published
+              ? publishedProbability?.broadBankedV2?.modelVersion ?? null
+              : publishedB?.rawModelVersion
+                ?? publishedProbability?.rawContinuous?.modelVersion
+                ?? rawShadow?.modelVersion
+                ?? null,
             calibratedFallbackUsed: publishedB?.fallbackUsed ?? publishedProbability.calibrated?.fallbackUsed ?? null,
             calibrationAlpha24h: publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
             calibrationAlpha48h: publishedB?.alpha48h ?? publishedProbability.calibrated?.alpha48h ?? null,
@@ -542,7 +559,9 @@ export function buildProbabilityDebugInfo(
               publishedB?.calibrationTrainingModelVersion
               ?? PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
             regimeMultiplierPolicyVersion:
-              publishedB?.regimeMultiplierPolicyVersion ?? null,
+              broadBankedV2Published
+                ? publishedProbability?.broadBankedV2?.randomContinuous.regimeMultiplierPolicyVersion ?? null
+                : publishedB?.regimeMultiplierPolicyVersion ?? null,
             majorModelReleaseAdjustment: publishedProbability.majorModelReleaseAdjustment,
           },
         }

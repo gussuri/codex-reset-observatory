@@ -225,7 +225,7 @@ test("v2 base shadow and v2 late-age control share exactly the same random bound
   assert.equal(control.randomContinuous.truncationHours, 54);
 });
 
-test("v2 forecast logging is frozen separately, records policy identity, and leaves v1/public identities unchanged", () => {
+test("v2 forecast logging is frozen separately, records policy identity, and keeps diagnostic identities separate", () => {
   const after = new Date(Date.parse(BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT) + 60_000);
   const forecasts = buildNextGenerationExperimentalProbabilityForecasts({
     data: null,
@@ -238,7 +238,7 @@ test("v2 forecast logging is frozen separately, records policy identity, and lea
     trainingState: trainingState(),
   });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, "hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1");
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(RANDOM_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT < BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT, true);
   assert.equal(BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT, BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT);
   assert.ok(forecasts[BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION]);

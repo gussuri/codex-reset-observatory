@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   CALIBRATED_SHADOW_MODEL_VERSION,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
-  PUBLISHED_PROBABILITY_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getLocalRadarData } from "../lib/radar";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
@@ -77,7 +76,6 @@ test("raw continuous public adoption is boundary-defined and uses the frozen cha
 
   assert.equal(beforeResult.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(exactResult.adoptedModel, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
-  assert.equal(exactResult.adoptedModel, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(exactResult.source, "raw-continuous");
   assert.equal(exactResult.fallbackReason, null);
   assert.deepEqual(exactResult.rawContinuous?.predictions, pair.challenger.predictions);

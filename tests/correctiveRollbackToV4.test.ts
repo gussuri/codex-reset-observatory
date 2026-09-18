@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
@@ -78,6 +79,12 @@ function comparableV3Row(generatedAt: string) {
         probability24h: 0.25,
         probability48h: 0.45,
       },
+      [BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION]: {
+        modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+        generatedAt,
+        probability24h: 0.22,
+        probability48h: 0.42,
+      },
       [CALIBRATED_SHADOW_MODEL_VERSION]: {
         modelVersion: CALIBRATED_SHADOW_MODEL_VERSION,
         generatedAt,
@@ -91,7 +98,7 @@ function comparableV3Row(generatedAt: string) {
 test("corrective rollback rollout records a future boundary without changing the v3 identity", () => {
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 

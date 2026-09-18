@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
@@ -128,10 +129,10 @@ function row(
   return { generatedAt, loggedHour: generatedAt, forecasts };
 }
 
-test("Production 24/72 settings and public selector remain unchanged", () => {
+test("Production 24/72 settings remain unchanged and public alias points to v2", () => {
   assert.equal(RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS, 24);
   assert.equal(RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS, 72);
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS.bandwidthHours, 24);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS.truncationHours, 72);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS.bandwidthHours, 18);

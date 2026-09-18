@@ -26,8 +26,14 @@ import {
 } from "../data/shadowProbabilityConfig";
 import type { ProspectiveForecastRow } from "../lib/radar/prospectiveProbabilityEvaluation";
 import { parsePredictionHistoryRows } from "../scripts/evaluateProspectiveProbabilityForecasts";
-import { buildProspectiveScoreboardFeatures } from "../scripts/evaluatePublishedModelProspectively";
+import {
+  buildProspectiveScoreboardFeatures,
+  buildPublishedProspectiveCanonicalEvents,
+} from "../scripts/evaluatePublishedModelProspectively";
 import { getLocalRadarData } from "../lib/radar";
+import { getShadowCompletedResetEvents } from "../lib/radar/shadowProbability";
+import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
+import { BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY } from "../data/shadowProbabilityConfig";
 
 function forecastRow(
   generatedAt: string,
@@ -106,13 +112,39 @@ function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
-test("published prospective evaluation uses raw 18/54 after its boundary and corrective V4 as the baseline", () => {
+test("published prospective evaluation uses broad-banked v2 after its boundary and raw 18/54 as the baseline", () => {
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.notEqual(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
   assert.notEqual(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
+});
+
+test("the default prospective canonical truth uses the broad-banked v2 eligibility policy", () => {
+  const asOf = new Date("2026-06-13T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow: asOf });
+  const defaultEvents = buildPublishedProspectiveCanonicalEvents(data, asOf);
+  const legacyEvents = getShadowCompletedResetEvents(data, asOf, LOCAL_RESET_HISTORY, {
+    preserveDistinctCanonicalIds: true,
+  });
+
+  assert.ok(defaultEvents.some((event) => event.id === "personal-reset-credit-2026-06-11"));
+  assert.ok(!legacyEvents.some((event) => event.id === "personal-reset-credit-2026-06-11"));
+  assert.equal(BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY, "broad-banked-boundary-v2");
+});
+
+test("the default prospective adoption boundary is the exact broad-banked v2 boundary", () => {
+  const generatedAt = "2026-09-18T06:00:00.000Z";
+  const report = evaluatePublishedModelProspectively(
+    [forecastRow(generatedAt)],
+    [],
+    new Date("2026-09-19T00:00:00.000Z"),
+  );
+
+  assert.equal(report.forecastCounts.comparable, 1);
+  assert.equal(report.evaluationStartAt, generatedAt);
+  assert.match(report.notes.join("\n"), /2026-09-18T06:00:00\.000Z/);
 });
 
 test("published metric formatting includes bias without breaking legacy metric callers", () => {

@@ -283,13 +283,22 @@ export const BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS = [
 
 // The current public identity is intentionally separate from the historical
 // selective-v3 aliases above. This explicit future boundary is the only
-// point at which the challenger can become public; earlier rows stay in their
+// point at which broad-banked v2 can become public; earlier rows stay in their
 // historical periods.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION = CALIBRATED_SHADOW_MODEL_VERSION;
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT: string | null = "2026-09-17T05:45:00.000Z";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE: string | null = "2026-09-17";
+export const PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION =
+  CALIBRATED_SHADOW_MODEL_VERSION;
+export const PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_ADOPTION_AT =
+  PUBLISHED_PROBABILITY_V4_ROLLBACK_AT;
+export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT: string | null = "2026-09-18T06:00:00.000Z";
+export const PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE: string | null = "2026-09-18";
+export const PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION =
+  RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

@@ -1,15 +1,16 @@
 # 公開確率モデルのgovernance記録
 
-この文書は、2026-09-17時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
+この文書は、2026-09-18時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
 
 ## Current status
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（2026-09-17T05:45:00.000Z以後） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（raw continuous 18/54） |
+| 公開モデル（2026-09-18T06:00:00.000Z以後） | `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（broad-banked random continuous 18/54） |
+| 公開モデル（2026-09-17T05:45:00.000Z〜2026-09-18T06:00:00.000Z） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical raw continuous 18/54） |
 | 公開モデル（2026-09-10T01:00:00.000Z〜2026-09-11T02:20:00.000Z） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid） |
 | 公開モデル（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z） | `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4） |
-| 比較用のprevious model（raw 18/54採用後） | `hazard-odds-v4-logit-calibrated-prequential-v3` |
+| 比較用のprevious model（broad-banked v2採用後） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1` |
 | v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
@@ -24,16 +25,38 @@
 | raw 18/54 adoption timestamp | `2026-09-17T05:45:00.000Z` |
 | raw 18/54 adoption date | `2026-09-17` |
 | raw 18/54 freeze timestamp | `2026-09-02T09:00:00.000Z` |
+| broad-banked v2 adoption timestamp | `2026-09-18T06:00:00.000Z` |
+| broad-banked v2 adoption date | `2026-09-18` |
+| broad-banked v2 freeze timestamp | `2026-09-18T03:10:48.666Z` |
+| broad-banked v2 regime policy | `broad-banked-boundary-v2` |
 
-Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。raw 18/54の採用は、新しいfit・retuning・calibrationではなく、凍結済みchallengerの手動corrective adoptionです。18時間bandwidth、54時間truncation、既存のpost-reset age/regime、ordinary signal、official notice、teaser、horizon coherence policyをそのまま使います。selective hybrid v3のhistorical identityとprospective scoreboardは継続し、24hのcalibrationをdiagnostic-only、48hのcalibrationを適用する意味を保持します。official notice override、teaser policy、horizon coherence、B v1由来のcalibration training identityは変更しません。
+Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。broad-banked v2の採用は、新しいfit・retuning・calibrationではなく、凍結済みchallengerの公開切替です。18時間bandwidth、54時間truncation、既存のpost-reset age/regime、ordinary signal、official notice、teaser、horizon coherence policyをそのまま使い、broad completed banked distributionだけを`broad-banked-boundary-v2`でrandom boundaryとして扱います。late-age diagnostic arms、pre-reset-frozen arm、その他のexperiment-only fieldsはpublic selectorへ接続しません。selective hybrid v3とraw 18/54のhistorical identityおよびprospective scoreboardは継続します。official notice override、teaser policy、horizon coherence、freezeAt、model versionsは変更しません。
 
 ## Gate and manual adoption
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3やraw 18/54を自動publishしたり、V4を自動rollbackしたりしません。
 
-selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4を使用します。`2026-09-17T05:45:00.000Z`以後は、凍結済みraw 18/54 challengerの予測が有効な場合に選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補はその期間の既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4、raw boundaryからbroad-banked v2 boundaryまではhistorical raw 18/54を使用します。`2026-09-18T06:00:00.000Z`（JST 15:00）以後は、凍結済みbroad-banked v2 challengerの予測が有効な場合に選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補はその期間の既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
 
 logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは採用境界ごとに対象期間を分離し、過去boundary前のrowを現行モデルとして再利用しません。
+
+## 2026-09-18 broad-banked random clock v2 adoption
+
+- model: `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`
+- previous public model: `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`
+- adoption boundary: `2026-09-18T06:00:00.000Z` (UTC), 2026-09-18 15:00 (JST)
+- adoption mode: `manual`
+- freeze timestamp: `2026-09-18T03:10:48.666Z` (UTC)
+- regime policy: `broad-banked-boundary-v2`
+- target: broad-scope completed random reset and broad completed banked distribution
+- calibration: none; the frozen 18/54 challenger is used as the public base/control arm
+- late-age regime diagnostic arms: shadow-only; no late-age arm is publicly selected
+- refit/retuning: 実施しない
+- backfill/relabel: 実施しない
+- public API/DTO/UI: diagnostic-only fields are not exposed
+- DB schema/migration: 変更なし
+
+The selector checks the v2 boundary first, then the historical raw 18/54 boundary, then the existing historical fallback chain. If the v2 calculation throws or produces an invalid/non-monotonic prediction, it falls back to the historical raw 18/54 result and records a v2-specific audit reason. Existing historical rows retain their original model identity and metadata.
 
 ## 2026-09-17 raw 18/54 corrective adoption
 

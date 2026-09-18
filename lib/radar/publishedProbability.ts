@@ -1,4 +1,5 @@
 import {
+  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
@@ -9,6 +10,7 @@ import {
   PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
+  PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
@@ -48,11 +50,16 @@ import {
   calculateRandomContinuousBandwidthShadowPair,
   type RandomBandwidthTruncationShadowPair,
 } from "./randomContinuousBandwidthShadow";
+import {
+  calculateBroadBankedRandomContinuousShadow,
+  type BroadBankedRandomContinuousShadowResult,
+} from "./broadBankedRandomContinuousShadow";
 import type { RadarData } from "./types";
 import type { CanonicalResetHistoryContext } from "./tiboHistory";
 
 export type PublishedProbabilitySource =
   | "calibrated"
+  | "broad-banked-raw-continuous"
   | "raw-continuous"
   | "stable-shadow-fallback"
   | "legacy-shadow-fallback"
@@ -67,6 +74,8 @@ export type PublishedProbabilityFallbackReason =
   | "stable_shadow_invalid_prediction"
   | "shadow_exception"
   | "shadow_invalid_prediction"
+  | "broad_banked_v2_exception"
+  | "broad_banked_v2_invalid_prediction"
   | "raw_continuous_exception"
   | "raw_continuous_invalid_prediction";
 
@@ -128,7 +137,8 @@ export type PublishedProbabilityPeriod =
   | "b-v2"
   | "selective-v3"
   | "corrective-rollback-v4"
-  | "raw-continuous-18-54";
+  | "raw-continuous-18-54"
+  | "broad-banked-v2";
 
 export type PublishedProbabilityPeriodOptions = {
   historicalV4AdoptionAt?: string | null;
@@ -137,6 +147,7 @@ export type PublishedProbabilityPeriodOptions = {
   selectiveModelAdoptionAt?: string | null;
   rollbackAt?: string | null;
   rawContinuousAdoptionAt?: string | null;
+  broadBankedV2AdoptionAt?: string | null;
 };
 
 function resolveBoundary<T>(value: T | undefined, fallback: T) {
@@ -175,6 +186,9 @@ export function getPublishedProbabilityPeriodAt(
   const rawContinuousAdoptionTime = parseAdoptionTime(
     resolveBoundary(options.rawContinuousAdoptionAt, PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT),
   );
+  const broadBankedV2AdoptionTime = parseAdoptionTime(
+    resolveBoundary(options.broadBankedV2AdoptionAt, PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT),
+  );
 
   if (historicalV4AdoptionTime !== null && valueTime < historicalV4AdoptionTime) {
     return "historical-elapsed-v1";
@@ -188,8 +202,15 @@ export function getPublishedProbabilityPeriodAt(
   if (selectiveModelAdoptionTime === null || valueTime < selectiveModelAdoptionTime) {
     return "b-v2";
   }
-  if (rawContinuousAdoptionTime !== null && valueTime >= rawContinuousAdoptionTime) {
+  if (
+    rawContinuousAdoptionTime !== null
+    && valueTime >= rawContinuousAdoptionTime
+    && (broadBankedV2AdoptionTime === null || valueTime < broadBankedV2AdoptionTime)
+  ) {
     return "raw-continuous-18-54";
+  }
+  if (broadBankedV2AdoptionTime !== null && valueTime >= broadBankedV2AdoptionTime) {
+    return "broad-banked-v2";
   }
   if (rollbackTime !== null && valueTime >= rollbackTime) {
     return "corrective-rollback-v4";
@@ -252,6 +273,7 @@ export type PublishedProbabilityCalculation = {
   fallbackReason: PublishedProbabilityFallbackReason | null;
   primary: ProbabilityCalculationAudit;
   nextGenerationB: NextGenerationBResult | null;
+  broadBankedV2: BroadBankedRandomContinuousShadowResult | null;
   rawContinuous: RandomBandwidthTruncationShadowPair["challenger"] | null;
   calibrated: CalibratedShadowProbabilityResult | null;
   rawShadow: ShadowProbabilityResult | null;
@@ -293,6 +315,15 @@ export function isValidRawContinuousPrediction(
   >,
 ) {
   return isValidModelPrediction(result, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+}
+
+export function isValidBroadBankedV2Prediction(
+  result: Pick<
+    BroadBankedRandomContinuousShadowResult,
+    "modelVersion" | "predictions"
+  >,
+) {
+  return isValidModelPrediction(result, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
 }
 
 export function isValidCalibratedPrediction(
@@ -389,6 +420,12 @@ export function selectPublishedProbability(
   nextGenerationB: NextGenerationBResult | null = null,
   selectionOptions: {
     allowNextGenerationB?: boolean;
+    allowBroadBankedV2?: boolean;
+    broadBankedV2?: BroadBankedRandomContinuousShadowResult | null;
+    broadBankedV2FailureReason?: Extract<
+      PublishedProbabilityFallbackReason,
+      "broad_banked_v2_exception" | "broad_banked_v2_invalid_prediction"
+    > | null;
     allowRawContinuous?: boolean;
     rawContinuous?: RandomBandwidthTruncationShadowPair["challenger"] | null;
     rawContinuousFailureReason?: Extract<
@@ -397,6 +434,11 @@ export function selectPublishedProbability(
     > | null;
   } = {},
 ): PublishedProbabilityCalculation {
+  const broadBankedV2 = selectionOptions.broadBankedV2 ?? null;
+  const broadBankedV2Active = selectionOptions.allowBroadBankedV2 === true;
+  const broadBankedV2FailureReason = broadBankedV2Active
+    ? selectionOptions.broadBankedV2FailureReason ?? null
+    : null;
   const rawContinuous = selectionOptions.rawContinuous ?? null;
   const rawContinuousActive = selectionOptions.allowRawContinuous === true;
   const rawContinuousFailureReason = rawContinuousActive
@@ -413,11 +455,37 @@ export function selectPublishedProbability(
             ? "calibrated_exception"
             : fallbackReason
     : fallbackReason;
-  const publicFallbackReason = rawContinuousFailureReason
+  const publicFallbackReason = broadBankedV2FailureReason
+    ?? (rawContinuousFailureReason
     && calibrated
     && isValidCalibratedPrediction(calibrated)
     ? rawContinuousFailureReason
-    : calibratedFallbackReason;
+    : calibratedFallbackReason);
+
+  if (
+    broadBankedV2Active
+    && broadBankedV2
+    && isValidBroadBankedV2Prediction(broadBankedV2)
+  ) {
+    return {
+      probability12h: broadBankedV2.predictions.probability12h,
+      probability24h: broadBankedV2.predictions.probability24h,
+      probability48h: broadBankedV2.predictions.probability48h,
+      probability72h: broadBankedV2.predictions.probability72h,
+      adoptedModel: broadBankedV2.modelVersion,
+      source: "broad-banked-raw-continuous",
+      fallbackReason: null,
+      primary,
+      nextGenerationB,
+      broadBankedV2,
+      rawContinuous,
+      calibrated,
+      rawShadow,
+      stableShadow,
+      shadow: null,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
+    };
+  }
 
   if (
     rawContinuousActive
@@ -431,9 +499,10 @@ export function selectPublishedProbability(
       probability72h: rawContinuous.predictions.probability72h,
       adoptedModel: rawContinuous.modelVersion,
       source: "raw-continuous",
-      fallbackReason: null,
+      fallbackReason: publicFallbackReason,
       primary,
       nextGenerationB,
+      broadBankedV2,
       rawContinuous,
       calibrated,
       rawShadow,
@@ -458,6 +527,7 @@ export function selectPublishedProbability(
       fallbackReason: null,
       primary,
       nextGenerationB,
+      broadBankedV2,
       rawContinuous,
       calibrated,
       rawShadow,
@@ -478,6 +548,7 @@ export function selectPublishedProbability(
       fallbackReason: publicFallbackReason,
       primary,
       nextGenerationB,
+      broadBankedV2,
       rawContinuous,
       calibrated,
       rawShadow,
@@ -498,6 +569,7 @@ export function selectPublishedProbability(
       fallbackReason: publicFallbackReason ?? "calibrated_invalid_prediction",
       primary,
       nextGenerationB,
+      broadBankedV2,
       rawContinuous,
       calibrated,
       rawShadow,
@@ -518,6 +590,7 @@ export function selectPublishedProbability(
       fallbackReason: publicFallbackReason ?? "stable_shadow_invalid_prediction",
       primary,
       nextGenerationB,
+      broadBankedV2,
       rawContinuous,
       calibrated,
       rawShadow,
@@ -539,6 +612,7 @@ export function selectPublishedProbability(
     fallbackReason: resolvedFallbackReason,
     primary,
     nextGenerationB,
+    broadBankedV2,
     rawContinuous,
     calibrated,
     rawShadow,
@@ -569,6 +643,8 @@ function logPublishedProbabilityFallback(
 
   console.warn("[Published probability fallback]", {
     reason: calculation.fallbackReason,
+    broadBankedV2ModelVersion: calculation.broadBankedV2?.modelVersion ?? null,
+    broadBankedV2Policy: calculation.broadBankedV2?.randomContinuous.randomEligibilityPolicyVersion ?? null,
     nextGenerationBModelVersion: calculation.nextGenerationB?.modelVersion ?? null,
     nextGenerationBFallbackUsed: calculation.nextGenerationB?.fallbackUsed ?? null,
     nextGenerationBFallbackReason: calculation.nextGenerationB?.fallbackReason ?? null,
@@ -598,6 +674,8 @@ export type PublishedProbabilityOptions = {
   publishedV4RollbackAt?: string | null;
   /** Explicit future boundary for the raw 18/54 challenger adoption. */
   publishedRawContinuousAdoptionAt?: string | null;
+  /** Explicit future boundary for the broad-banked v2 public adoption. */
+  publishedBroadBankedV2AdoptionAt?: string | null;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
@@ -613,6 +691,7 @@ export function calculatePublishedProbability(
     publishedModelAdoptionAt,
     publishedV4RollbackAt,
     publishedRawContinuousAdoptionAt,
+    publishedBroadBankedV2AdoptionAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -637,6 +716,9 @@ export function calculatePublishedProbability(
   const resolvedPublishedRawContinuousAdoptionAt = publishedRawContinuousAdoptionAt === undefined
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : publishedRawContinuousAdoptionAt;
+  const resolvedPublishedBroadBankedV2AdoptionAt = publishedBroadBankedV2AdoptionAt === undefined
+    ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
+    : publishedBroadBankedV2AdoptionAt;
   const rollbackActive = isPublishedV4RollbackActive(
     publicModelOptions.now,
     resolvedPublishedV4RollbackAt,
@@ -652,6 +734,11 @@ export function calculatePublishedProbability(
   let calibrated: CalibratedShadowProbabilityResult | null = null;
   let stableShadow: ShadowProbabilityResult | null = null;
   let rawContinuous: RandomBandwidthTruncationShadowPair["challenger"] | null = null;
+  let broadBankedV2: BroadBankedRandomContinuousShadowResult | null = null;
+  let broadBankedV2FailureReason: Extract<
+    PublishedProbabilityFallbackReason,
+    "broad_banked_v2_exception" | "broad_banked_v2_invalid_prediction"
+  > | null = null;
   let nextGenerationBFallbackReason: NextGenerationBFallbackReason | null = null;
   let fallbackReason: PublishedProbabilityFallbackReason | null = null;
   let rawContinuousFailureReason: Extract<
@@ -695,6 +782,23 @@ export function calculatePublishedProbability(
       }
     } catch {
       rawContinuousFailureReason = "raw_continuous_exception";
+    }
+  }
+
+  const broadBankedV2AdoptionTime = parseAdoptionTime(resolvedPublishedBroadBankedV2AdoptionAt);
+  const broadBankedV2Active = broadBankedV2AdoptionTime !== null
+    && publicModelOptions.now.getTime() >= broadBankedV2AdoptionTime;
+  if (broadBankedV2Active) {
+    try {
+      broadBankedV2 = calculateBroadBankedRandomContinuousShadow(
+        data,
+        publicModelOptions,
+      );
+      if (!isValidBroadBankedV2Prediction(broadBankedV2)) {
+        broadBankedV2FailureReason = "broad_banked_v2_invalid_prediction";
+      }
+    } catch {
+      broadBankedV2FailureReason = "broad_banked_v2_exception";
     }
   }
 
@@ -751,6 +855,9 @@ export function calculatePublishedProbability(
     nextGenerationB,
     {
       allowNextGenerationB: !rollbackActive,
+      allowBroadBankedV2: broadBankedV2Active,
+      broadBankedV2,
+      broadBankedV2FailureReason,
       allowRawContinuous: rawContinuousActive,
       rawContinuous,
       rawContinuousFailureReason,
