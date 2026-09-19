@@ -44,6 +44,7 @@ import {
   getLastRandomRecoveryResetAt,
   getLastRandomRecoveryResetWindow,
   getLastRecoveryResetAt,
+  getRecoveryResetEvents,
 } from "./recoveryBoundary";
 import {
   aggregateResetTeaserStatus,
@@ -1059,26 +1060,49 @@ export function getActiveOfficialNotice(
   includeTerminatedExecutionEvidence = false,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
 ): ActiveOfficialNotice | null {
-  const recoveryBoundaryAt = getLastResetBoundaryAt(data, now, canonicalHistoryContext);
+  // Notice consumption has a narrower meaning than the display/recovery
+  // boundary: a regular-only reset must not consume an official notice.
+  const recoveryBoundaryIso = getLastRandomRecoveryResetAt(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
+  const recoveryBoundaryAt = recoveryBoundaryIso ? new Date(recoveryBoundaryIso) : null;
+  const knownRecoveryBoundaries = getRecoveryResetEvents(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
   const suppliedResetTime = latestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const suppliedResetIsRegularOnly = Number.isFinite(suppliedResetTime) &&
+    knownRecoveryBoundaries.some(
+      (boundary) =>
+        !boundary.isRandom &&
+        boundary.isRegular &&
+        getDateTime(boundary.resetAt) === suppliedResetTime,
+    );
+  const suppliedRandomResetAt = suppliedResetIsRegularOnly ? null : latestResetAt;
+  const suppliedRandomResetTime = suppliedRandomResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const recoveryBoundaryTime = recoveryBoundaryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-  const resolvedLatestResetAt = suppliedResetTime >= recoveryBoundaryTime
-    ? latestResetAt
+  const resolvedLatestResetAt = suppliedRandomResetTime >= recoveryBoundaryTime
+    ? suppliedRandomResetAt
     : recoveryBoundaryAt;
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
-  const dynamicRecoveryBoundaryAt = getLastRecoveryResetAt(data, now, [], canonicalHistoryContext);
+  const dynamicRandomRecoveryBoundaryAt = getLastRandomRecoveryResetAt(data, now, [], canonicalHistoryContext);
   const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, [], canonicalHistoryContext);
-  const activeResetExecutionWindow = dynamicRecoveryBoundaryAt &&
-      dynamicRandomRecoveryWindow?.executionWindowEndAt === dynamicRecoveryBoundaryAt
+  const activeResetExecutionWindow = dynamicRandomRecoveryBoundaryAt &&
+      dynamicRandomRecoveryWindow?.executionWindowEndAt === dynamicRandomRecoveryBoundaryAt
     ? dynamicRandomRecoveryWindow
     : resetExecutionWindow;
   // Prefer a dynamic canonical boundary over a later completion post. If the
   // current data has no dynamic boundary, preserve the legacy Tibo-only and
   // static-history cutoff behavior. A newer confirmed reset boundary must never
   // be superseded by an older dynamic boundary.
-  const cutoff = dynamicRecoveryBoundaryAt &&
-      getDateTime(dynamicRecoveryBoundaryAt) >= (resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
-    ? getDateTime(dynamicRecoveryBoundaryAt)
+  const cutoff = dynamicRandomRecoveryBoundaryAt &&
+      getDateTime(dynamicRandomRecoveryBoundaryAt) >= (resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
+    ? getDateTime(dynamicRandomRecoveryBoundaryAt)
     : Math.max(
         resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
         latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
