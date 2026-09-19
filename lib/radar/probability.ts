@@ -62,6 +62,7 @@ import {
 } from "./tiboTemporal";
 import { getTiboDisplayLabel } from "./tiboHandle";
 import {
+  isReplyContextBankedDistributionNotice,
   isBankedDistributionNotice,
   isRecurringConditionalBankedDistributionNotice,
   isSupersededBankedNotice,
@@ -95,6 +96,8 @@ export type ActiveOfficialNotice = {
   source: string | null;
   sourceLabel: string;
   text?: string | null;
+  /** Display-only notices must not activate probability override policies. */
+  affectsProbability?: boolean;
   isBankedDistribution?: boolean;
   isOngoingBankedDistribution?: boolean;
   consumption?: OfficialNoticeConsumption;
@@ -200,6 +203,9 @@ function toDynamicOfficialNotice(
   options: {
     ongoingBankedDistribution?: boolean;
     persistentAfterInitialWindow?: boolean;
+    affectsProbability?: boolean;
+    bankedDistribution?: boolean;
+    preserveSourceTemporalPrecision?: boolean;
   } = {},
 ): ActiveOfficialNotice {
   const isOngoingBankedDistribution = options.ongoingBankedDistribution === true;
@@ -229,7 +235,8 @@ function toDynamicOfficialNotice(
     source: signal.tweet_url ?? null,
     sourceLabel: getTiboDisplayLabel(signal.tweet_url),
     text: signal.text ?? null,
-    isBankedDistribution: isBankedDistributionNotice(signal.text),
+    affectsProbability: options.affectsProbability !== false,
+    isBankedDistribution: options.bankedDistribution ?? isBankedDistributionNotice(signal.text),
     consumption,
     isDeadline,
     ...(isOngoingBankedDistribution ? {
@@ -241,12 +248,19 @@ function toDynamicOfficialNotice(
       temporalResolutionStatus: "unresolved" as const,
       temporalTimezone: null,
     } : {
-      temporalPrecision: getEffectiveTemporalPrecision({
-        status: signal.temporal_resolution_status,
-        temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
-        expectedStartAt: signal.expected_start_at,
-        expectedEndAt: signal.expected_end_at,
-      }),
+      temporalPrecision: options.preserveSourceTemporalPrecision
+        ? signal.temporal_precision ?? signal.ai_temporal_precision ?? getEffectiveTemporalPrecision({
+          status: signal.temporal_resolution_status,
+          temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        })
+        : getEffectiveTemporalPrecision({
+          status: signal.temporal_resolution_status,
+          temporalPrecision: signal.temporal_precision ?? signal.ai_temporal_precision,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        }),
       temporalConfidence: signal.temporal_confidence ?? signal.ai_temporal_confidence ?? null,
       temporalResolutionStatus: signal.temporal_resolution_status ?? null,
       temporalTimezone: signal.temporal_timezone ?? signal.ai_temporal_timezone ?? null,
@@ -489,6 +503,9 @@ export function getLocalProbabilityCalculation(
     options.activeOfficialNotice === undefined
       ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, options.canonicalHistoryContext)
       : options.activeOfficialNotice;
+  const probabilityOfficialNotice = activeOfficialNotice?.affectsProbability === false
+    ? null
+    : activeOfficialNotice;
   const regularResetExpectedAt = options.regularResetExpectedAt ?? null;
   const components = getProbabilityComponents(data, signalEvaluation, now, options.canonicalHistoryContext);
   const lastResetAt = getLastGlobalResetAt(data, now, options.canonicalHistoryContext);
@@ -509,7 +526,7 @@ export function getLocalProbabilityCalculation(
     elapsedDaysSinceReset,
     recentCompletedResetCount7d,
     regularResetExpectedAt,
-    activeOfficialNotice: Boolean(activeOfficialNotice),
+    activeOfficialNotice: Boolean(probabilityOfficialNotice),
     activeTeaserCount: components.activeTeaserCount,
     weightedStatusScore: signalEvaluation.statusIncidents.weightedStatusScore,
     officialIncidentHintCount: components.officialIncidentHintCount,
@@ -526,7 +543,7 @@ export function getLocalProbabilityCalculation(
     probability24h: LOCAL_PROBABILITY_WEIGHTS.base.within24h,
     probability48h: LOCAL_PROBABILITY_WEIGHTS.base.within48h,
   };
-  if (activeOfficialNotice) {
+  if (probabilityOfficialNotice) {
     const probability24h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within24h;
     const probability48h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within48h;
     return {
@@ -1127,10 +1144,13 @@ export function getActiveOfficialNotice(
     .flatMap((signal) => {
       const consumption = getOfficialNoticeConsumption(signal.tweet_id);
       const isPersistent = consumption === "persistent";
+      const isReplyContextBanked = signal.is_reply === true &&
+        isReplyContextBankedDistributionNotice(signal.text, signal.reply_context_text);
       if (
         signal.signal_type !== "official_notice" ||
-        signal.is_reply === true ||
-        (signal.confidence ?? 0) < 0.95 ||
+        (signal.is_reply === true && !isReplyContextBanked) ||
+        (signal.is_reply === true && (signal.confidence ?? 0) < 0.8) ||
+        (signal.is_reply !== true && (signal.confidence ?? 0) < 0.95) ||
         signal.verification_status === "rejected" ||
         (isOfficialNoticeTerminatedAt(signal.tweet_id, now) && !includeTerminatedExecutionEvidence) ||
         (!isPersistent && isSupersededBankedNotice(signal, rawSignals))
@@ -1209,7 +1229,12 @@ export function getActiveOfficialNotice(
         return [];
       }
 
-      return [toDynamicOfficialNotice(signal, { persistentAfterInitialWindow })];
+      return [toDynamicOfficialNotice(signal, {
+        persistentAfterInitialWindow,
+        affectsProbability: !isReplyContextBanked,
+        bankedDistribution: isReplyContextBanked || undefined,
+        preserveSourceTemporalPrecision: isReplyContextBanked,
+      })];
     });
   const localNotices = localObservationSignals
     .filter(

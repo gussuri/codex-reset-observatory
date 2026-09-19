@@ -1171,7 +1171,7 @@ export function applyOfficialNoticeTimingPolicy(
   now: Date,
   legacyOfficialNoticeOverride = false,
 ) {
-  if (!notice) return null;
+  if (!notice || notice.affectsProbability === false) return null;
   if (legacyOfficialNoticeOverride) {
     return {
       probability12h: derive12hFrom24hProbability(0.9),
@@ -1317,13 +1317,13 @@ export function calculateShadowProbabilityForModel(
       multipliers.combinedAfterCap.probability48h,
     ),
   };
-  const officialNoticeActive = Boolean(resolvedOfficialNotice);
   const officialNoticePredictions = applyOfficialNoticeTimingPolicy(
     baseline,
     resolvedOfficialNotice,
     now,
     modelOptions.legacyOfficialNoticeOverride === true,
   );
+  const officialNoticeActive = officialNoticePredictions !== null;
   const officialNoticeOverride = {
     active: officialNoticeActive,
     probability12h: officialNoticePredictions?.probability12h ?? null,

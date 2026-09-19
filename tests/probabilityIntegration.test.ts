@@ -9,6 +9,8 @@ import {
   getDaysSinceLastGlobalReset,
   getOngoingBankedNotice,
 } from "../lib/radar/probability";
+import { calculateSurvivalConditionedProbability } from "../lib/radar/survivalConditionedProbability";
+import { getLastRandomRecoveryResetAt, getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 
 test("reset_executed resets days since last reset to 0 and updates effectiveLatestResetAt", () => {
   const now = new Date("2026-07-18T15:00:00.000Z");
@@ -126,6 +128,66 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
+});
+
+test("a qualified BANKED reply is display-active without changing Survival probability or reset history", () => {
+  const now = new Date("2026-09-20T00:00:00.000Z");
+  const reply = {
+    tweet_id: "2101352781219258527",
+    text: "OK fine. But it's also still coming in Tuesday",
+    tweet_url: "https://x.com/thsottiaux/status/2101352781219258527",
+    signal_type: "official_notice" as const,
+    confidence: 0.85,
+    tweet_created_at: "2026-09-19T00:00:00.000Z",
+    expires_at: "2026-09-24T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    is_reply: true,
+    reply_context_text: "ok tibo you guys didn't ship anything interesting this week / you owe us a banked reset / sorry i don't make the rules",
+    expected_start_at: "2026-09-22T00:00:00.000Z",
+    expected_end_at: "2026-09-23T00:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    temporal_kind: "weekday" as const,
+    temporal_precision: "day" as const,
+    temporal_timezone: "UTC",
+  };
+  const baseline = getLocalRadarData({ calculationNow: now });
+  const data = getLocalRadarData({
+    activeTiboSignals: [reply],
+    recentTiboSignals: Array.from({ length: 21 }, (_, index) => ({
+      tweet_id: `newer-${index}`,
+      text: `Unrelated update ${index}`,
+      signal_type: "irrelevant" as const,
+      confidence: 0.9,
+      tweet_created_at: new Date(now.getTime() - index * 60_000).toISOString(),
+      expires_at: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
+      verification_status: "auto_unverified" as const,
+    })),
+    calculationNow: now,
+  });
+
+  const notice = getActiveOfficialNotice(data, null, now);
+  assert.equal(notice?.id, reply.tweet_id);
+  assert.equal(notice?.isBankedDistribution, true);
+  assert.equal(notice?.affectsProbability, false);
+  const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
+  assert.equal(viewModel.activeWindow.active, true);
+  assert.equal(viewModel.activeWindow.noticeKind, "banked");
+  assert.equal(viewModel.activeWindow.expectedPrecision, "day");
+  assert.equal(viewModel.activeWindow.expectedAt, reply.expected_start_at);
+
+  const survival = calculateSurvivalConditionedProbability(data, { now });
+  assert.equal(survival.survival.officialNoticeOverride, false);
+  assert.notEqual(survival.predictions.probability24h, 0.9);
+  assert.notEqual(survival.predictions.probability48h, 0.96);
+
+  assert.deepEqual(
+    getRecoveryResetEvents(data, now),
+    getRecoveryResetEvents(baseline, now),
+  );
+  assert.equal(
+    getLastRandomRecoveryResetAt(data, now),
+    getLastRandomRecoveryResetAt(baseline, now),
+  );
 });
 
 test("an explicitly registered persistent BANKED policy stays active after delivery", () => {

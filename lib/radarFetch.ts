@@ -256,7 +256,7 @@ export function applyActiveTiboQueryFilters(
     .not("expires_at", "is", null)
     .gt("expires_at", expiryBoundaryIso)
     .or("verification_status.is.null,verification_status.neq.rejected")
-    .or("is_reply.is.null,is_reply.eq.false")
+    .or("is_reply.is.null,is_reply.eq.false,and(is_reply.eq.true,signal_type.eq.official_notice)")
     .in("signal_type", [...ACTIVE_TIBO_SIGNAL_TYPES]);
 }
 

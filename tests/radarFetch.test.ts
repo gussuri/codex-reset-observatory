@@ -207,8 +207,8 @@ test("active Tibo filters are applied before ordering and limit", () => {
       calls.push("gt:expires_at");
       return builder;
     },
-    or: () => {
-      calls.push(calls.some((call) => call === "or:verification_status") ? "or:is_reply" : "or:verification_status");
+    or: (filters: string) => {
+      calls.push(`or:${filters}`);
       return builder;
     },
     in: (_column: string, values: string[]) => {
@@ -232,8 +232,8 @@ test("active Tibo filters are applied before ordering and limit", () => {
   assert.deepEqual(calls, [
     "not:expires_at.is.null",
     "gt:expires_at",
-    "or:verification_status",
-    "or:is_reply",
+    "or:verification_status.is.null,verification_status.neq.rejected",
+    "or:is_reply.is.null,is_reply.eq.false,and(is_reply.eq.true,signal_type.eq.official_notice)",
     `in:signal_type:${ACTIVE_TIBO_SIGNAL_TYPES.join(",")}`,
     "order",
     "limit",

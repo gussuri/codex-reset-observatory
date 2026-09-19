@@ -11,6 +11,7 @@ import {
   isBankedDistributionCompletionSignal,
   hasFutureBankedDistributionIntent,
   isBankedDistributionNotice,
+  isReplyContextBankedDistributionNotice,
   getBankedDistributionEventKey,
   isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
@@ -96,6 +97,37 @@ test("recognizes a broad BANKED distribution notice without treating generic res
   assert.equal(isBankedDistributionNotice("The reset button is my favorite product feature."), false);
   assert.equal(isBroadBankedDistributionNotice("I received a BANKED reset."), false);
   assert.equal(isBroadBankedDistributionNotice("I gave all my friends a BANKED reset."), false);
+});
+
+test("recognizes only a qualified reply-context BANKED delivery continuation", () => {
+  const parent = "ok tibo you guys didn't ship anything interesting this week / you owe us a banked reset / sorry i don't make the rules";
+  assert.equal(
+    isReplyContextBankedDistributionNotice(
+      "OK fine. But it's also still coming in Tuesday",
+      parent,
+    ),
+    true,
+  );
+
+  assert.equal(
+    isReplyContextBankedDistributionNotice("No, that's not happening.", parent),
+    false,
+  );
+  assert.equal(
+    isReplyContextBankedDistributionNotice("Maybe", parent),
+    false,
+  );
+  assert.equal(
+    isReplyContextBankedDistributionNotice("It's still coming Tuesday", "Can we get an update?"),
+    false,
+  );
+  assert.equal(
+    isReplyContextBankedDistributionNotice(
+      "It's still coming Tuesday",
+      "We got a banked reset last week and used it already.",
+    ),
+    false,
+  );
 });
 
 test("recognizes future BANKED execution language without treating personal operations as notices", () => {
