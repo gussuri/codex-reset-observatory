@@ -331,6 +331,41 @@ test("public Tibo activity exposes only the UI teaser strength, not its audit de
   assert.doesNotMatch(serialized, /teaserStrengthConfidence|teaserStrengthEvidenceQuote|teaserStrengthReasonJa/);
 });
 
+test("public Tibo activity presents an ambiguous reset reply as a weak teaser without its exact time", () => {
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const target = {
+    tweet_id: "ambiguous-official-reply",
+    signal_type: "official_notice" as const,
+    confidence: 0.85,
+    text: "OK fine. But it's also still coming in Tuesday",
+    tweet_url: "https://x.com/thsottiaux/status/ambiguous-official-reply",
+    tweet_created_at: "2026-08-03T23:00:00.000Z",
+    expires_at: "2026-08-05T00:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    is_reply: true,
+    reply_context_text: "you owe us a banked reset",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  };
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow, recentTiboSignals: [target] }),
+    "en",
+    { calculationNow },
+  );
+
+  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.equal(snapshot.viewModel.activeWindow.active, false);
+  assert.notEqual(snapshot.viewModel.activeWindow.noticeKind, "banked");
+  assert.equal(snapshot.latestTiboActivity?.classification, "teaser");
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "weak");
+  assert.equal(snapshot.latestTiboActivity?.isReply, true);
+  assert.equal(snapshot.latestTiboActivity?.replyContextText, "you owe us a banked reset");
+  assert.equal(snapshot.latestTiboActivity?.temporalResolutionStatus, undefined);
+  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, undefined);
+  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, undefined);
+});
+
 test("missing teaser strength stays unknown instead of becoming none", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(

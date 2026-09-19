@@ -164,6 +164,15 @@ test("an ambiguous BANKED reply stays out of active notice and probability overr
 
   const survival = calculateSurvivalConditionedProbability(data, { now });
   assert.equal(survival.survival.officialNoticeOverride, false);
+  const baselineCalculation = getLocalProbabilityCalculation(baseline, { now });
+  const targetCalculation = getLocalProbabilityCalculation(data, { now });
+  assert.equal(targetCalculation.probability24h, baselineCalculation.probability24h);
+  assert.equal(targetCalculation.probability48h, baselineCalculation.probability48h);
+  const baselineViewModel = getRadarViewModel(baseline, "ja", false, undefined, now);
+  assert.equal(viewModel.probability12h, baselineViewModel.probability12h);
+  assert.equal(viewModel.probability24h, baselineViewModel.probability24h);
+  assert.equal(viewModel.probability48h, baselineViewModel.probability48h);
+  assert.equal(viewModel.probability72h, baselineViewModel.probability72h);
   assert.deepEqual(
     getRecoveryResetEvents(data, now),
     getRecoveryResetEvents(baseline, now),

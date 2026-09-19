@@ -7,6 +7,7 @@ import { createObservedRegularResetEventRow } from "../lib/radar/regularResetSch
 import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
+  getFallbackUiTeaserStrength,
 } from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
@@ -246,6 +247,85 @@ test("uses an active weak reply teaser for the related activity card", () => {
   assert.equal(snapshot.latestTiboActivity?.isReply, true);
   assert.equal(snapshot.latestTiboActivity?.replyContextText, "are we going to get a reset when codex crosses 20M users?");
   assert.deepEqual(snapshot.latestTiboActivity?.replyToHandles, ["@Ananth7e"]);
+});
+
+test("derives a weak UI teaser for an ambiguous reset-related official reply", () => {
+  const ambiguousReply = signal("ambiguous-official-reply", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "official_notice",
+    confidence: 0.85,
+    is_reply: true,
+    text: "OK fine. But it's also still coming in Tuesday",
+    reply_context_text: "you owe us a banked reset",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  });
+
+  assert.equal(getFallbackUiTeaserStrength(ambiguousReply, NOW), "weak");
+  assert.equal(
+    aggregateResetTeaserStatus([ambiguousReply], null, NOW),
+    "weak",
+  );
+});
+
+test("does not derive a UI teaser from ordinary, unrelated, rejected, or context-free replies", () => {
+  const base = {
+    is_reply: true,
+    signal_type: "official_notice" as const,
+    confidence: 0.85,
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  };
+  const ordinaryReply = signal("ordinary-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    signal_type: "irrelevant",
+    text: "Always improving",
+    reply_context_text: "Thanks for the update.",
+  });
+  const unrelatedTuesday = signal("unrelated-tuesday", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    text: "I will check Tuesday",
+    reply_context_text: "See you then.",
+  });
+  const rejected = signal("rejected-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    text: "The reset is still coming Tuesday",
+    reply_context_text: "you owe us a reset",
+    verification_status: "rejected",
+  });
+  const contextFree = signal("context-free-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    text: "The reset is still coming Tuesday",
+    reply_context_text: null,
+  });
+  const explicitNo = signal("explicit-no-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    text: "No reset tonight",
+    reply_context_text: "you owe us a banked reset",
+  });
+  const completed = signal("completed-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    text: "I already pressed the reset button Tuesday",
+    reply_context_text: "you owe us a banked reset",
+  });
+  const old = signal("old-reply", "2026-07-31T23:00:00.000Z", null, {
+    ...base,
+    text: "It is still coming Tuesday",
+    reply_context_text: "you owe us a banked reset",
+  });
+  const highConfidenceNotice = signal("high-confidence-notice", "2026-08-03T23:00:00.000Z", null, {
+    ...base,
+    is_reply: false,
+    confidence: 0.99,
+    text: "The reset is still coming Tuesday",
+    reply_context_text: "you owe us a banked reset",
+  });
+
+  for (const candidate of [ordinaryReply, unrelatedTuesday, rejected, contextFree, explicitNo, completed, old, highConfidenceNotice]) {
+    assert.equal(getFallbackUiTeaserStrength(candidate, NOW), null, candidate.tweet_id);
+  }
+  assert.equal(aggregateResetTeaserStatus([ordinaryReply], null, NOW), "unknown");
 });
 
 test("keeps the latest post projection separate from the aggregated teaser status", () => {

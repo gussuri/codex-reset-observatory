@@ -252,15 +252,25 @@ export function toPublicTiboActivity(
   ).filter((signal) => {
     const strength = getEffectiveTeaserStrength(signal);
     return strength === "strong" || strength === "weak";
-  });
+  }) as NonNullable<RadarData["recent_tibo_signals"]>;
   const eligibleTeaserIds = new Set(
     eligibleTeaserSignals
       .map((signal) => signal.tweet_id)
       .filter((tweetId): tweetId is string => typeof tweetId === "string"),
   );
-  const expandedSignals = expandTiboSignalVariants(sourceSignals.filter((signal) =>
-    !isTiboForecastSignalTerminatedAt(signal.tweet_id, now)
-  ));
+  const uiFallbackIds = new Set(
+    eligibleTeaserSignals
+      .filter((signal) => signal.ui_teaser_fallback === true)
+      .map((signal) => signal.tweet_id)
+      .filter((tweetId): tweetId is string => typeof tweetId === "string"),
+  );
+  const expandedSignals = expandTiboSignalVariants([
+    ...sourceSignals.filter((signal) =>
+      !isTiboForecastSignalTerminatedAt(signal.tweet_id, now) &&
+      !uiFallbackIds.has(signal.tweet_id)
+    ),
+    ...eligibleTeaserSignals.filter((signal) => signal.ui_teaser_fallback === true),
+  ]);
   // UI teaser eligibility is the source of truth here; unlike official notices,
   // teaser expiry is intentionally not reapplied to the related card.
   const relatedCandidates = expandedSignals
@@ -283,7 +293,7 @@ export function toPublicTiboActivity(
     );
 
   const relatedOfficialNotices = relatedCandidates
-    .filter((signal) => signal.signal_type === "official_notice")
+    .filter((signal) => signal.signal_type === "official_notice" && signal.ui_teaser_fallback !== true)
     .sort((left, right) =>
       compareTiboNoticeSpecificity(
         toNoticeSpecificitySignal(left),
@@ -292,9 +302,12 @@ export function toPublicTiboActivity(
     );
   const latest = relatedOfficialNotices[0] ?? relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
+  const isUiFallback = latest.ui_teaser_fallback === true;
 
   return {
-    classification: latest.signal_type as PublicTiboActivity["classification"],
+    classification: isUiFallback
+      ? "teaser"
+      : latest.signal_type as PublicTiboActivity["classification"],
     teaserStrength: isTeaserStrength(getEffectiveTeaserStrength(latest))
       ? getEffectiveTeaserStrength(latest)
       : null,
@@ -308,13 +321,13 @@ export function toPublicTiboActivity(
     replyToHandles: latest.is_reply === true
       ? normalizePublicReplyHandles(latest.reply_to_handles)
       : [],
-    ...(latest.temporal_resolution_status
+    ...(!isUiFallback && latest.temporal_resolution_status
       ? { temporalResolutionStatus: latest.temporal_resolution_status }
       : {}),
-    ...(latest.expected_start_at
+    ...(!isUiFallback && latest.expected_start_at
       ? { expectedStartAt: latest.expected_start_at }
       : {}),
-    ...(latest.expected_end_at
+    ...(!isUiFallback && latest.expected_end_at
       ? { expectedEndAt: latest.expected_end_at }
       : {}),
   };

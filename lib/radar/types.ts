@@ -237,6 +237,8 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
+  /** Read-side-only marker for an ambiguous UI teaser fallback; never persisted. */
+  ui_teaser_fallback?: boolean;
 };
 
 export type PublicTiboActivity = {
