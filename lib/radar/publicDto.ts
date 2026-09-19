@@ -18,6 +18,7 @@ import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
   getUiResetTeaserSignals,
+  interpretTiboSignal,
   isTeaserStrength,
 } from "./teaserStrength";
 import {
@@ -140,7 +141,7 @@ function isCurrentOfficialNotice(
   sourceSignals: NonNullable<RadarData["recent_tibo_signals"]>,
   resetExecutionWindow: ResetExecutionWindow | null = null,
 ) {
-  if (signal.signal_type !== "official_notice" || signal.is_reply === true) return false;
+  if (!interpretTiboSignal(signal, new Date(nowTime)).officialNoticeEligible) return false;
   if (isTiboForecastSignalTerminatedAt(signal.tweet_id, new Date(nowTime))) return false;
   if (signal.verification_status === "rejected") return false;
   if (isSupersededBankedNotice(signal, sourceSignals)) return false;

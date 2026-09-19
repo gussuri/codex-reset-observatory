@@ -254,6 +254,31 @@ test("teaser strength parsing keeps the auxiliary value separate from signal typ
   });
 });
 
+test("independent teaser strength is preserved for an official source classification", () => {
+  const text = "The reset may still be coming tomorrow.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    signalType: "official_notice",
+    confidence: 0.85,
+    temporalDirection: "future",
+    evidenceQuote: "reset may still be coming tomorrow",
+    reasonJa: "公式予告としては確度が不足しています。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    teaserStrength: "weak",
+    teaserStrengthConfidence: 0.82,
+    teaserStrengthEvidenceQuote: "may still be coming tomorrow",
+    teaserStrengthReasonJa: "将来のresetを弱く示唆しています。",
+    model: "test-model",
+    status: "success",
+    classifiedAt: new Date().toISOString(),
+  });
+
+  assert.equal(guarded.signalType, "official_notice");
+  assert.equal(guarded.teaserStrength, "weak");
+  assert.equal(guarded.teaserStrengthConfidence, 0.82);
+  assert.equal(guarded.teaserStrengthEvidenceQuote, "may still be coming tomorrow");
+});
+
 test("missing or invalid teaser strength remains unknown instead of being coerced to none", () => {
   const parsed = parseTeaserStrengthAssessment(
     {

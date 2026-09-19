@@ -11,6 +11,27 @@ export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 export type TeaserStrength = (typeof TIBO_TEASER_STRENGTHS)[number];
 export type ResetTeaserStatus = TeaserStrength | "unknown";
 
+export type TiboSignalPresentationDisposition =
+  | "official"
+  | "strong_teaser"
+  | "weak_teaser"
+  | "none";
+
+export type TiboSignalContextDependence =
+  | "direct"
+  | "reply_context"
+  | "ambiguous";
+
+export type TiboSignalInterpretation = {
+  presentationDisposition: TiboSignalPresentationDisposition;
+  officialNoticeEligible: boolean;
+  probabilityTeaserEligible: boolean;
+  historyEligible: boolean;
+  contextDependence: TiboSignalContextDependence;
+  reason: string;
+  uiTeaserFallback: boolean;
+};
+
 const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 export type ResetTeaserSignal = {
@@ -24,6 +45,8 @@ export type ResetTeaserSignal = {
   verification_status?: string | null;
   is_reply?: boolean | null;
   reply_context_text?: string | null;
+  is_quote?: boolean | null;
+  quote_context_text?: string | null;
   expires_at?: string | null;
   temporal_precision?: "exact_time" | "day" | "daypart" | "range" | "unknown" | null;
   temporal_confidence?: number | null;
@@ -71,8 +94,167 @@ const FUTURE_TIMING_PATTERN = /\b(?:today|tonight|tomorrow|soon|later|next\s+(?:
 const EXPLICIT_NEGATION_PATTERN = /\b(?:no|nope|never|not|isn't|isnt|wasn't|wasnt|won't|wont|don't|dont|doesn't|doesnt|cannot|can't|cant|cancel(?:led|ed)?|canceled)\b[\s\S]{0,100}\b(?:reset|button|limit|quota)\b|\b(?:reset|button|limit|quota)\b[\s\S]{0,100}\b(?:no|nope|never|not|isn't|isnt|wasn't|wasnt|won't|wont|don't|dont|doesn't|doesnt|cancel(?:led|ed)?|canceled)\b/i;
 const COMPLETION_PATTERN = /\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b[\s\S]{0,100}\b(?:reset|button|limit|quota)\b|\b(?:reset|button|limit|quota)\b[\s\S]{0,100}\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b|\b(?:i|we)\s+(?:pressed|hit|used|activated)\s+(?:the\s+)?(?:reset\s+)?button\b/i;
 
+function getContextDependence(signal: ResetTeaserSignal): TiboSignalContextDependence {
+  const hasContext = Boolean(
+    signal.reply_context_text?.trim() || signal.quote_context_text?.trim(),
+  );
+
+  if (signal.is_reply === true) return hasContext ? "reply_context" : "ambiguous";
+  if (signal.is_quote === true) return "ambiguous";
+  return hasContext ? "ambiguous" : "direct";
+}
+
+function getExternalContext(signal: ResetTeaserSignal) {
+  return [signal.reply_context_text, signal.quote_context_text]
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    .join("\n");
+}
+
+function canDeriveAmbiguousContextTeaser(
+  signal: ResetTeaserSignal,
+  now: Date,
+) {
+  if (getEffectiveTeaserStrength(signal) !== null) return false;
+  if (signal.signal_type !== "official_notice") return false;
+  if (signal.is_reply !== true && signal.is_quote !== true) return false;
+  if (signal.verification_status === "rejected") return false;
+  if (typeof signal.confidence !== "number" || !Number.isFinite(signal.confidence) || signal.confidence >= 0.95) {
+    return false;
+  }
+
+  const externalContext = getExternalContext(signal);
+  if (!externalContext) return false;
+  if (signal.temporal_resolution_status !== "resolved") return false;
+  const createdTime = getTimestamp(signal.tweet_created_at);
+  const nowTime = now.getTime();
+  if (!Number.isFinite(nowTime) || createdTime === null || createdTime > nowTime || createdTime < nowTime - RESET_TEASER_LOOKBACK_MS) {
+    return false;
+  }
+
+  const expectedStartTime = getTimestamp(signal.expected_start_at);
+  const expectedEndTime = getTimestamp(signal.expected_end_at);
+  if (expectedStartTime === null && expectedEndTime === null) return false;
+  if ((expectedStartTime !== null && expectedStartTime <= createdTime) &&
+      (expectedEndTime !== null && expectedEndTime <= createdTime)) {
+    return false;
+  }
+
+  const authorText = signal.text ?? "";
+  const combinedText = `${authorText}\n${externalContext}`;
+  if (!RESET_WORD_PATTERN.test(combinedText) || !USAGE_RESET_CONTEXT_PATTERN.test(combinedText)) return false;
+  if (!FUTURE_TIMING_PATTERN.test(authorText)) return false;
+  if (EXPLICIT_NEGATION_PATTERN.test(combinedText) || COMPLETION_PATTERN.test(authorText)) return false;
+
+  return true;
+}
+
 /**
- * Returns a weak, presentation-only fallback for an ambiguous reply that the
+ * Interprets stored source facts for a caller-specific presentation/use case.
+ * This does not rewrite persisted signal_type or promote an ambiguous signal
+ * into probability or canonical-history inputs.
+ */
+export function interpretTiboSignal(
+  signal: ResetTeaserSignal,
+  now: Date = new Date(),
+): TiboSignalInterpretation {
+  const effectiveStrength = getEffectiveTeaserStrength(signal);
+  const rejected = signal.verification_status === "rejected";
+  const officialNoticeEligible = !rejected &&
+    signal.signal_type === "official_notice" &&
+    signal.is_reply !== true &&
+    signal.is_quote !== true &&
+    typeof signal.confidence === "number" &&
+    Number.isFinite(signal.confidence) &&
+    signal.confidence >= 0.95;
+  const probabilityTeaserEligible = !rejected &&
+    signal.signal_type === "teaser" &&
+    signal.is_reply !== true &&
+    signal.is_quote !== true &&
+    (effectiveStrength === "strong" || effectiveStrength === "weak");
+  const historyEligible = !rejected &&
+    signal.signal_type === "reset_executed" &&
+    signal.is_reply !== true &&
+    signal.is_quote !== true &&
+    typeof signal.confidence === "number" &&
+    Number.isFinite(signal.confidence) &&
+    signal.confidence >= 0.95;
+  const contextDependence = getContextDependence(signal);
+
+  if (rejected) {
+    return {
+      presentationDisposition: "none",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      historyEligible,
+      contextDependence,
+      reason: "rejected",
+      uiTeaserFallback: false,
+    };
+  }
+
+  if (officialNoticeEligible) {
+    return {
+      presentationDisposition: "official",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      historyEligible,
+      contextDependence,
+      reason: "official_source",
+      uiTeaserFallback: false,
+    };
+  }
+
+  if (signal.signal_type === "reset_executed") {
+    return {
+      presentationDisposition: "none",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      historyEligible,
+      contextDependence,
+      reason: "reset_executed",
+      uiTeaserFallback: false,
+    };
+  }
+
+  if (effectiveStrength === "strong" || effectiveStrength === "weak") {
+    return {
+      presentationDisposition: effectiveStrength === "strong" ? "strong_teaser" : "weak_teaser",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      historyEligible,
+      contextDependence,
+      reason: signal.signal_type === "official_notice"
+        ? "independent_teaser_strength"
+        : "persisted_teaser_strength",
+      uiTeaserFallback: signal.signal_type === "official_notice",
+    };
+  }
+
+  if (canDeriveAmbiguousContextTeaser(signal, now)) {
+    return {
+      presentationDisposition: "weak_teaser",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      historyEligible,
+      contextDependence,
+      reason: "ambiguous_context",
+      uiTeaserFallback: true,
+    };
+  }
+
+  return {
+    presentationDisposition: "none",
+    officialNoticeEligible,
+    probabilityTeaserEligible,
+    historyEligible,
+    contextDependence,
+    reason: "no_teaser_evidence",
+    uiTeaserFallback: false,
+  };
+}
+
+/**
+ * Returns a weak, presentation-only fallback for an ambiguous reply or quote that the
  * classifier related to a reset but did not safely admit as an official notice.
  * This deliberately never produces a strong signal and is not used by model
  * probability inputs.
@@ -81,32 +263,7 @@ export function getFallbackUiTeaserStrength(
   signal: ResetTeaserSignal,
   now: Date = new Date(),
 ): Extract<TeaserStrength, "weak"> | null {
-  if (getEffectiveTeaserStrength(signal) !== null) return null;
-  if (signal.signal_type !== "official_notice" || signal.is_reply !== true) return null;
-  if (signal.verification_status === "rejected") return null;
-  if (typeof signal.confidence !== "number" || !Number.isFinite(signal.confidence) || signal.confidence >= 0.95) {
-    return null;
-  }
-  if (!signal.reply_context_text?.trim()) return null;
-  if (signal.temporal_resolution_status !== "resolved") return null;
-  const createdTime = getTimestamp(signal.tweet_created_at);
-  const nowTime = now.getTime();
-  if (!Number.isFinite(nowTime) || createdTime === null || createdTime > nowTime || createdTime < nowTime - RESET_TEASER_LOOKBACK_MS) return null;
-  const expectedStartTime = getTimestamp(signal.expected_start_at);
-  const expectedEndTime = getTimestamp(signal.expected_end_at);
-  if (expectedStartTime === null && expectedEndTime === null) return null;
-  if ((expectedStartTime !== null && expectedStartTime <= createdTime) &&
-      (expectedEndTime !== null && expectedEndTime <= createdTime)) {
-    return null;
-  }
-
-  const authorText = signal.text ?? "";
-  const combinedText = `${authorText}\n${signal.reply_context_text}`;
-  if (!RESET_WORD_PATTERN.test(combinedText) || !USAGE_RESET_CONTEXT_PATTERN.test(combinedText)) return null;
-  if (!FUTURE_TIMING_PATTERN.test(authorText)) return null;
-  if (EXPLICIT_NEGATION_PATTERN.test(combinedText) || COMPLETION_PATTERN.test(authorText)) return null;
-
-  return "weak";
+  return interpretTiboSignal(signal, now).uiTeaserFallback ? "weak" : null;
 }
 
 /**
@@ -137,10 +294,15 @@ export function getTeaserStrengthSignals(
 
   return expandedSignals
     .map((signal) => {
-      if (includeUiFallback && getFallbackUiTeaserStrength(signal, now) === "weak") {
+      const interpretation = includeUiFallback ? interpretTiboSignal(signal, now) : null;
+      if (interpretation?.uiTeaserFallback &&
+          (interpretation.presentationDisposition === "weak_teaser" ||
+            interpretation.presentationDisposition === "strong_teaser")) {
         return {
           ...signal,
-          teaser_strength: "weak" as const,
+          teaser_strength: interpretation.presentationDisposition === "strong_teaser"
+            ? "strong" as const
+            : "weak" as const,
           ui_teaser_fallback: true,
         };
       }

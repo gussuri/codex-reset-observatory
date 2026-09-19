@@ -8,6 +8,7 @@ import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
   getFallbackUiTeaserStrength,
+  interpretTiboSignal,
 } from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
@@ -268,6 +269,70 @@ test("derives a weak UI teaser for an ambiguous reset-related official reply", (
   );
 });
 
+test("central interpretation separates source facts from presentation and eligibility", () => {
+  const ambiguousReply = signal("ambiguous-interpretation", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "official_notice",
+    confidence: 0.85,
+    is_reply: true,
+    text: "OK fine. But it's also still coming in Tuesday",
+    reply_context_text: "you owe us a banked reset",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  });
+
+  assert.deepEqual(interpretTiboSignal(ambiguousReply, NOW), {
+    presentationDisposition: "weak_teaser",
+    officialNoticeEligible: false,
+    probabilityTeaserEligible: false,
+    historyEligible: false,
+    contextDependence: "reply_context",
+    reason: "ambiguous_context",
+    uiTeaserFallback: true,
+  });
+});
+
+test("central interpretation keeps a strict official notice from becoming a duplicate teaser", () => {
+  const official = signal("strict-official", "2026-08-03T23:00:00.000Z", "weak", {
+    signal_type: "official_notice",
+    confidence: 0.99,
+    is_reply: false,
+    text: "The usage reset is scheduled for tomorrow.",
+    expires_at: "2026-08-05T00:00:00.000Z",
+  });
+
+  assert.deepEqual(interpretTiboSignal(official, NOW), {
+    presentationDisposition: "official",
+    officialNoticeEligible: true,
+    probabilityTeaserEligible: false,
+    historyEligible: false,
+    contextDependence: "direct",
+    reason: "official_source",
+    uiTeaserFallback: false,
+  });
+});
+
+test("central interpretation preserves direct teaser and history eligibility as separate axes", () => {
+  const directTeaser = signal("direct-teaser", "2026-08-03T23:00:00.000Z", "strong", {
+    signal_type: "teaser",
+    confidence: 0.9,
+    is_reply: false,
+    text: "Maybe I will press the reset button tomorrow.",
+  });
+  const completed = signal("completed-reset", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    is_reply: false,
+    text: "Usage limits have been reset for everyone.",
+  });
+
+  assert.equal(interpretTiboSignal(directTeaser, NOW).presentationDisposition, "strong_teaser");
+  assert.equal(interpretTiboSignal(directTeaser, NOW).probabilityTeaserEligible, true);
+  assert.equal(interpretTiboSignal(directTeaser, NOW).historyEligible, false);
+  assert.equal(interpretTiboSignal(completed, NOW).presentationDisposition, "none");
+  assert.equal(interpretTiboSignal(completed, NOW).historyEligible, true);
+});
+
 test("does not derive a UI teaser from ordinary, unrelated, rejected, or context-free replies", () => {
   const base = {
     is_reply: true,
@@ -389,6 +454,7 @@ test("uses the newest related post while keeping status aggregation independent"
     activitySignal("weak", "2026-08-03T21:00:00.000Z", "weak"),
     activitySignal("notice", "2026-08-03T23:00:00.000Z", null, {
       signal_type: "official_notice",
+      confidence: 0.99,
       expires_at: "2026-08-05T01:00:00.000Z",
     }),
   ]);
