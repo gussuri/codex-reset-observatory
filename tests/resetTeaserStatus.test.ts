@@ -250,7 +250,7 @@ test("uses an active weak reply teaser for the related activity card", () => {
   assert.deepEqual(snapshot.latestTiboActivity?.replyToHandles, ["@Ananth7e"]);
 });
 
-test("derives a weak UI teaser for an ambiguous reset-related official reply", () => {
+test("derives a strong UI teaser for a resolved affirmative reset-related official reply", () => {
   const ambiguousReply = signal("ambiguous-official-reply", "2026-08-03T23:00:00.000Z", null, {
     signal_type: "official_notice",
     confidence: 0.85,
@@ -262,10 +262,10 @@ test("derives a weak UI teaser for an ambiguous reset-related official reply", (
     expected_end_at: "2026-08-06T00:00:00.000Z",
   });
 
-  assert.equal(getFallbackUiTeaserStrength(ambiguousReply, NOW), "weak");
+  assert.equal(getFallbackUiTeaserStrength(ambiguousReply, NOW), "strong");
   assert.equal(
     aggregateResetTeaserStatus([ambiguousReply], null, NOW),
-    "weak",
+    "strong",
   );
 });
 
@@ -282,14 +282,31 @@ test("central interpretation separates source facts from presentation and eligib
   });
 
   assert.deepEqual(interpretTiboSignal(ambiguousReply, NOW), {
-    presentationDisposition: "weak_teaser",
+    presentationDisposition: "strong_teaser",
     officialNoticeEligible: false,
     probabilityTeaserEligible: false,
+    timedProbabilityEligible: true,
     historyEligible: false,
     contextDependence: "reply_context",
-    reason: "ambiguous_context",
+    reason: "strong_timed_context",
     uiTeaserFallback: true,
   });
+});
+
+test("weak contextual replies remain presentation-only and have no timed probability eligibility", () => {
+  const weakReply = signal("weak-context", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "official_notice",
+    confidence: 0.85,
+    is_reply: true,
+    text: "Maybe tomorrow",
+    reply_context_text: "you owe us a banked reset",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
+  });
+
+  assert.equal(interpretTiboSignal(weakReply, NOW).presentationDisposition, "weak_teaser");
+  assert.equal(interpretTiboSignal(weakReply, NOW).timedProbabilityEligible, false);
 });
 
 test("central interpretation keeps a strict official notice from becoming a duplicate teaser", () => {
@@ -305,6 +322,7 @@ test("central interpretation keeps a strict official notice from becoming a dupl
     presentationDisposition: "official",
     officialNoticeEligible: true,
     probabilityTeaserEligible: false,
+    timedProbabilityEligible: false,
     historyEligible: false,
     contextDependence: "direct",
     reason: "official_source",
@@ -318,6 +336,9 @@ test("central interpretation preserves direct teaser and history eligibility as 
     confidence: 0.9,
     is_reply: false,
     text: "Maybe I will press the reset button tomorrow.",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-06T00:00:00.000Z",
   });
   const completed = signal("completed-reset", "2026-08-03T23:00:00.000Z", null, {
     signal_type: "reset_executed",
@@ -328,6 +349,7 @@ test("central interpretation preserves direct teaser and history eligibility as 
 
   assert.equal(interpretTiboSignal(directTeaser, NOW).presentationDisposition, "strong_teaser");
   assert.equal(interpretTiboSignal(directTeaser, NOW).probabilityTeaserEligible, true);
+  assert.equal(interpretTiboSignal(directTeaser, NOW).timedProbabilityEligible, true);
   assert.equal(interpretTiboSignal(directTeaser, NOW).historyEligible, false);
   assert.equal(interpretTiboSignal(completed, NOW).presentationDisposition, "none");
   assert.equal(interpretTiboSignal(completed, NOW).historyEligible, true);

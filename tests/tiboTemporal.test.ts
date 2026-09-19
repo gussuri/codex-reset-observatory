@@ -5,6 +5,7 @@ import {
   getEffectiveTemporalPrecision,
   getTemporalExecutionWindowRelation,
   getTemporalNoticeCoverage,
+  getTemporalTeaserCdf,
   getTemporalTeaserCoverage,
   isTemporalNoticeConsumedAtReset,
   parseTiboTemporalSemantics,
@@ -647,6 +648,27 @@ test("keeps Gemini's end-of-day interpretation when a later account cutoff share
   assert.equal(resolution.status, "resolved");
   assert.equal(resolution.expectedStartAt, "2026-09-04T20:57:17.000Z");
   assert.equal(resolution.expectedEndAt, "2026-09-05T07:00:00.000Z");
+});
+
+test("builds a conditional CDF for a resolved teaser window without reusing resolver confidence", () => {
+  const resolution = {
+    status: "resolved" as const,
+    temporalPrecision: "day" as const,
+    confidence: 0.4,
+    expectedStartAt: "2026-09-22T07:00:00.000Z",
+    expectedEndAt: "2026-09-23T07:00:00.000Z",
+  };
+
+  const beforeWindow = new Date("2026-09-19T22:00:00.000Z");
+  assert.equal(getTemporalTeaserCdf(resolution, beforeWindow, 48), 0);
+  assert.equal(getTemporalTeaserCdf(resolution, beforeWindow, 72), 0.625);
+
+  const insideWindow = new Date("2026-09-22T19:00:00.000Z");
+  assert.equal(getTemporalTeaserCdf(resolution, insideWindow, 6), 0.5);
+  assert.equal(getTemporalTeaserCdf(resolution, insideWindow, 12), 1);
+
+  const afterWindow = new Date("2026-09-24T07:00:00.000Z");
+  assert.equal(getTemporalTeaserCdf(resolution, afterWindow, 72), 0);
 });
 
 test("preserves a true reset execution clock in the same source-grounding path", () => {

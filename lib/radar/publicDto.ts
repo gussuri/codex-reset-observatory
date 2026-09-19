@@ -304,6 +304,11 @@ export function toPublicTiboActivity(
   const latest = relatedOfficialNotices[0] ?? relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
   const isUiFallback = latest.ui_teaser_fallback === true;
+  const latestInterpretation = interpretTiboSignal(
+    sourceSignals.find((signal) => signal.tweet_id === latest.tweet_id) ?? latest,
+    now,
+  );
+  const exposeTemporalResolution = !isUiFallback || latestInterpretation.timedProbabilityEligible;
 
   return {
     classification: isUiFallback
@@ -322,13 +327,13 @@ export function toPublicTiboActivity(
     replyToHandles: latest.is_reply === true
       ? normalizePublicReplyHandles(latest.reply_to_handles)
       : [],
-    ...(!isUiFallback && latest.temporal_resolution_status
+    ...(exposeTemporalResolution && latest.temporal_resolution_status
       ? { temporalResolutionStatus: latest.temporal_resolution_status }
       : {}),
-    ...(!isUiFallback && latest.expected_start_at
+    ...(exposeTemporalResolution && latest.expected_start_at
       ? { expectedStartAt: latest.expected_start_at }
       : {}),
-    ...(!isUiFallback && latest.expected_end_at
+    ...(exposeTemporalResolution && latest.expected_end_at
       ? { expectedEndAt: latest.expected_end_at }
       : {}),
   };

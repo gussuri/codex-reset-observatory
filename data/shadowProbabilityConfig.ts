@@ -304,6 +304,15 @@ export const SURVIVAL_CONDITIONED_INTEGRATION_STEP_MINUTES = 10;
 export const SURVIVAL_CONDITIONED_SIGNAL_CONFIG =
   NEXT_GENERATION_B_FROZEN_SIGNAL_CONFIG;
 
+// Timed contextual teasers are a separate, conservative read-side policy. The
+// weight is frozen explicitly because the current resolved contextual sample is
+// too small for a new calibration fit; it never changes the survival hazard.
+export const TIMED_TEASER_REALLOCATION_POLICY_VERSION =
+  "teaser-temporal-reallocation-v1" as const;
+export const TIMED_TEASER_REALLOCATION_CONFIG = {
+  contextualStrongWeight: 0.2,
+} as const;
+
 // Context variants remain shadow-only. They all use the survival-conditioned
 // base hazard and differ only in the additional short-horizon/circadian block.
 export const SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION =

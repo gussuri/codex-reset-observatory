@@ -331,7 +331,7 @@ test("public Tibo activity exposes only the UI teaser strength, not its audit de
   assert.doesNotMatch(serialized, /teaserStrengthConfidence|teaserStrengthEvidenceQuote|teaserStrengthReasonJa/);
 });
 
-test("public Tibo activity presents an ambiguous reset reply as a weak teaser without its exact time", () => {
+test("public Tibo activity presents a resolved affirmative reset reply as a strong timed teaser", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const target = {
     tweet_id: "ambiguous-official-reply",
@@ -354,16 +354,16 @@ test("public Tibo activity presents an ambiguous reset reply as a weak teaser wi
     { calculationNow },
   );
 
-  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.equal(snapshot.resetTeaserStatus, "strong");
   assert.equal(snapshot.viewModel.activeWindow.active, false);
   assert.notEqual(snapshot.viewModel.activeWindow.noticeKind, "banked");
   assert.equal(snapshot.latestTiboActivity?.classification, "teaser");
-  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "weak");
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "strong");
   assert.equal(snapshot.latestTiboActivity?.isReply, true);
   assert.equal(snapshot.latestTiboActivity?.replyContextText, "you owe us a banked reset");
-  assert.equal(snapshot.latestTiboActivity?.temporalResolutionStatus, undefined);
-  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, undefined);
-  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, undefined);
+  assert.equal(snapshot.latestTiboActivity?.temporalResolutionStatus, "resolved");
+  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, "2026-08-05T00:00:00.000Z");
+  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-08-06T00:00:00.000Z");
 });
 
 test("missing teaser strength stays unknown instead of becoming none", () => {

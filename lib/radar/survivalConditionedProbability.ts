@@ -21,6 +21,7 @@ import {
   SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION,
   SURVIVAL_CONTEXT_MAX_MULTIPLIER,
   SURVIVAL_CONTEXT_MIN_MULTIPLIER,
+  TIMED_TEASER_REALLOCATION_POLICY_VERSION,
 } from "@/data/shadowProbabilityConfig";
 import type { RadarData } from "./types";
 import {
@@ -51,6 +52,11 @@ import {
   type ContextualBurstFit,
 } from "./contextualBurstContext";
 import { getPostResetRegimeMultiplierAtAge } from "./randomContinuousProbability";
+import {
+  applyTimedTeaserProbabilityReallocation,
+  getTimedTeaserCandidates,
+  type TimedTeaserReallocationAudit,
+} from "./timedTeaserProbability";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -128,6 +134,8 @@ export type SurvivalConditionedAudit = {
   ordinarySignalMultipliers: ShadowSignalMultipliers;
   officialNoticeOverride: boolean;
   officialNoticeTimingPolicyVersion: string;
+  timedTeaserPolicyVersion: typeof TIMED_TEASER_REALLOCATION_POLICY_VERSION;
+  timedTeaserReallocation: TimedTeaserReallocationAudit | null;
   fallbackUsed: boolean;
   fallbackReason: string | null;
   freezeAt: typeof SURVIVAL_CONDITIONED_FREEZE_AT;
@@ -564,7 +572,21 @@ export function calculateSurvivalConditionedProbability(
   };
   const notice = getNotice(data, sharedOptions, latestRecoveryResetAt, now);
   const noticeHorizons = applyOfficialNoticeTimingPolicy(baseline, notice, now);
-  const predictions = noticeHorizons ?? adjusted;
+  const timedTeaserCandidate = noticeHorizons === null
+    ? getTimedTeaserCandidates(
+        data,
+        latestRandomResetAt,
+        now,
+        null,
+        options.canonicalHistoryContext,
+      ).find((candidate) => !candidate.interpretation.probabilityTeaserEligible) ?? null
+    : null;
+  const timedTeaserResult = applyTimedTeaserProbabilityReallocation(
+    adjusted,
+    timedTeaserCandidate,
+    now,
+  );
+  const predictions = noticeHorizons ?? timedTeaserResult.predictions;
   const currentDiagnostics = getSurvivalConditionedHazardDiagnosticsAtAge(hazard, randomElapsedHours);
   const confidence = makeConfidence(hazard, noticeHorizons !== null);
   const warnings = [
@@ -615,6 +637,10 @@ export function calculateSurvivalConditionedProbability(
       ordinarySignalMultipliers: regimeResult.multipliers,
       officialNoticeOverride: noticeHorizons !== null,
       officialNoticeTimingPolicyVersion: regimeResult.regimeElapsed.officialNoticeTimingPolicyVersion,
+      timedTeaserPolicyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
+      timedTeaserReallocation: timedTeaserResult.audit.applied
+        ? timedTeaserResult.audit
+        : null,
       fallbackUsed: false,
       fallbackReason: null,
       freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,

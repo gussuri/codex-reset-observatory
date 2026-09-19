@@ -1661,6 +1661,38 @@ export function getTemporalNoticeCoverage(
 }
 
 /**
+ * Returns the time-window CDF used when a resolved teaser reallocates
+ * probability mass. This deliberately reuses the notice coverage semantics,
+ * but treats the resolved window as a timing distribution rather than applying
+ * the resolver's confidence as a second probability multiplier.
+ */
+export function getTemporalTeaserCdf(
+  resolution: Pick<
+    TiboTemporalResolution,
+    "status" | "temporalPrecision" | "confidence" | "expectedStartAt" | "expectedEndAt"
+  > & { isDeadline?: boolean; temporalExpression?: string | null } | null | undefined,
+  now: Date,
+  horizonHours: number,
+) {
+  if (!resolution || resolution.status !== "resolved") return null;
+  const nowTime = now.getTime();
+  const endTime = resolution.expectedEndAt
+    ? Date.parse(resolution.expectedEndAt)
+    : resolution.expectedStartAt
+      ? Date.parse(resolution.expectedStartAt)
+      : Number.NaN;
+  if (!Number.isFinite(nowTime) || !Number.isFinite(endTime)) return null;
+  if (endTime <= nowTime) return 0;
+
+  const coverage = getTemporalNoticeCoverage(
+    { ...resolution, confidence: 1 },
+    now,
+    horizonHours,
+  );
+  return coverage === null ? null : Math.max(0, Math.min(1, coverage));
+}
+
+/**
  * Timing weight for teaser signals. A resolved teaser follows the hinted
  * window instead of aging out from the post timestamp. After the window ends,
  * the effect fades through the existing three-hour grace period.
