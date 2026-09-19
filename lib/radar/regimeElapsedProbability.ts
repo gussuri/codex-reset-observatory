@@ -446,7 +446,7 @@ export function applyOfficialNoticeTimingPolicy(
   notice: ActiveOfficialNotice | null,
   now: Date,
 ) {
-  if (!notice || notice.affectsProbability === false) return null;
+  if (!notice) return null;
 
   const temporalResolution = {
     status: notice.temporalResolutionStatus ?? "unresolved",
@@ -575,12 +575,12 @@ export function calculateRegimeElapsedProbability(
       multipliers.combinedAfterCap.probability48h,
     ),
   };
+  const officialNoticeActive = Boolean(resolvedOfficialNotice);
   const officialNoticePredictions = applyOfficialNoticeTimingPolicy(
     baseline,
     resolvedOfficialNotice,
     now,
   );
-  const officialNoticeActive = officialNoticePredictions !== null;
   const officialNoticeOverride = {
     active: officialNoticeActive,
     probability12h: officialNoticePredictions?.probability12h ?? null,

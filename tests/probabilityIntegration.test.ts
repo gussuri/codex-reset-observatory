@@ -130,7 +130,7 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
 });
 
-test("a qualified BANKED reply is display-active without changing Survival probability or reset history", () => {
+test("an ambiguous BANKED reply stays out of active notice and probability override", () => {
   const now = new Date("2026-09-20T00:00:00.000Z");
   const reply = {
     tweet_id: "2101352781219258527",
@@ -142,7 +142,7 @@ test("a qualified BANKED reply is display-active without changing Survival proba
     expires_at: "2026-09-24T00:00:00.000Z",
     verification_status: "auto_unverified" as const,
     is_reply: true,
-    reply_context_text: "ok tibo you guys didn't ship anything interesting this week / you owe us a banked reset / sorry i don't make the rules",
+    reply_context_text: "you owe us a banked reset",
     expected_start_at: "2026-09-22T00:00:00.000Z",
     expected_end_at: "2026-09-23T00:00:00.000Z",
     temporal_resolution_status: "resolved" as const,
@@ -153,33 +153,17 @@ test("a qualified BANKED reply is display-active without changing Survival proba
   const baseline = getLocalRadarData({ calculationNow: now });
   const data = getLocalRadarData({
     activeTiboSignals: [reply],
-    recentTiboSignals: Array.from({ length: 21 }, (_, index) => ({
-      tweet_id: `newer-${index}`,
-      text: `Unrelated update ${index}`,
-      signal_type: "irrelevant" as const,
-      confidence: 0.9,
-      tweet_created_at: new Date(now.getTime() - index * 60_000).toISOString(),
-      expires_at: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
-      verification_status: "auto_unverified" as const,
-    })),
+    recentTiboSignals: [reply],
     calculationNow: now,
   });
 
-  const notice = getActiveOfficialNotice(data, null, now);
-  assert.equal(notice?.id, reply.tweet_id);
-  assert.equal(notice?.isBankedDistribution, true);
-  assert.equal(notice?.affectsProbability, false);
+  assert.equal(getActiveOfficialNotice(data, null, now), null);
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
-  assert.equal(viewModel.activeWindow.active, true);
-  assert.equal(viewModel.activeWindow.noticeKind, "banked");
-  assert.equal(viewModel.activeWindow.expectedPrecision, "day");
-  assert.equal(viewModel.activeWindow.expectedAt, reply.expected_start_at);
+  assert.equal(viewModel.activeWindow.active, false);
+  assert.notEqual(viewModel.activeWindow.noticeKind, "banked");
 
   const survival = calculateSurvivalConditionedProbability(data, { now });
   assert.equal(survival.survival.officialNoticeOverride, false);
-  assert.notEqual(survival.predictions.probability24h, 0.9);
-  assert.notEqual(survival.predictions.probability48h, 0.96);
-
   assert.deepEqual(
     getRecoveryResetEvents(data, now),
     getRecoveryResetEvents(baseline, now),
@@ -187,6 +171,10 @@ test("a qualified BANKED reply is display-active without changing Survival proba
   assert.equal(
     getLastRandomRecoveryResetAt(data, now),
     getLastRandomRecoveryResetAt(baseline, now),
+  );
+  assert.equal(
+    survival.survival.completedIntervalCount,
+    calculateSurvivalConditionedProbability(baseline, { now }).survival.completedIntervalCount,
   );
 });
 

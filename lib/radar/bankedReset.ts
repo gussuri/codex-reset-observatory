@@ -125,35 +125,6 @@ export function hasFutureBankedDistributionIntent(text: string | null | undefine
   );
 }
 
-const BANKED_PARENT_REQUEST_PATTERN =
-  /\b(?:owe|owes|owed|need|needs|want|wants|deserve|deserves|promise|promised|request|requested|asking|waiting)\b|\b(?:are|will|can|could|should)\s+we\s+(?:get|getting|receive|receiving)\b/i;
-const REPLY_BANKED_POSITIVE_PATTERN =
-  /\b(?:ok(?:ay)?|yep|yes|yeah|sure|fine|correct|confirmed|indeed|still|also|coming|arriv\w*|land\w*|deliver\w*|issue\w*|grant\w*|give\w*|send\w*|scheduled)\b/i;
-const REPLY_BANKED_FUTURE_TIMING_PATTERN =
-  /\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|this\s+week|next\s+week|coming|soon|later|by|at|around|in\s+\d+\s+(?:hours?|days?|weeks?))\b/i;
-const REPLY_BANKED_REJECTION_PATTERN =
-  /\b(?:no|nope|nah|not|won't|will\s+not|can't|cannot|don't|do\s+not|never|cancel(?:led|ed)?|rejected|maybe|perhaps|possibly|i\s+don't\s+know|idk|not\s+happening)\b/i;
-
-/**
- * A reply may confirm a BANKED delivery announced in its parent without
- * becoming a generic official notice. Both sides must carry evidence: the
- * parent supplies the BANKED obligation/request, while the reply supplies a
- * positive future continuation or timing cue.
- */
-export function isReplyContextBankedDistributionNotice(
-  replyText: string | null | undefined,
-  replyContextText: string | null | undefined,
-) {
-  if (typeof replyText !== "string" || typeof replyContextText !== "string") return false;
-  const reply = replyText.trim();
-  const parent = replyContextText.trim();
-  if (!reply || !parent) return false;
-  if (!hasResetCreditTerm(parent)) return false;
-  if (!BANKED_PARENT_REQUEST_PATTERN.test(parent) && !hasFutureBankedDistributionIntent(parent)) return false;
-  if (REPLY_BANKED_REJECTION_PATTERN.test(reply)) return false;
-  return REPLY_BANKED_POSITIVE_PATTERN.test(reply) && REPLY_BANKED_FUTURE_TIMING_PATTERN.test(reply);
-}
-
 const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:resets?|credits?)|reset\s+credits?)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|(?:is|are)\s+(?:now\s+)?available)\b/i;
 const GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN =
   /\bfor\s+(?:each|every)\s+day\s+you\s+(?:do\s+not|don't)\s+have\s+access\s+to\b[\s\S]{0,120}\bon\s+your\s+paid\s+chatgpt\s+plan\b/i;

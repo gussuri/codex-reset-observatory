@@ -828,9 +828,7 @@ export function calculateContextAwareContinuousProbability(
   ).challenger;
   const state = resolveContextAwareContext(data, now, {
     savedFeatureSnapshot: options.savedFeatureSnapshot,
-    officialNoticeActive: options.activeOfficialNotice !== null &&
-      options.activeOfficialNotice !== undefined &&
-      options.activeOfficialNotice.affectsProbability !== false,
+    officialNoticeActive: options.activeOfficialNotice !== null && options.activeOfficialNotice !== undefined,
     otherContextActive: hasExcludedSignalMultipliers(challenger.multipliers),
   });
   const rows = options.trainingRows ?? [];
