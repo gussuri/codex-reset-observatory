@@ -18,7 +18,7 @@ export const HOME_DESCRIPTION_ZH =
 
 export function siteUrl(path = "/"): string {
   if (path === "/") {
-    return SITE_URL + "/";
+    return SITE_URL;
   }
 
   return SITE_URL + (path.startsWith("/") ? path : "/" + path);

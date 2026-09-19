@@ -62,6 +62,7 @@ test("only the exact legacy host activates the redirect", () => {
 
 test("published site URLs and robots sitemap use the new domain", () => {
   assert.equal(SITE_URL, `https://${newHost}`);
+  assert.equal(siteUrl("/"), SITE_URL);
   assert.equal(siteUrl("/en"), `https://${newHost}/en`);
   assert.equal(robots().sitemap, `https://${newHost}/sitemap.xml`);
 
