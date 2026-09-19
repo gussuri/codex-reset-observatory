@@ -49,9 +49,13 @@ import {
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import { expandTiboSignalVariants } from "@/lib/radar/tiboSecondarySignal";
 import type { RegularResetEventRow } from "@/lib/radar/regularResetSchedule";
-import { attachNextGenerationBPublicTrainingState } from "@/lib/radar/publishedProbability";
+import {
+  attachNextGenerationBPublicTrainingState,
+  getAttachedNextGenerationBPublicTrainingState,
+} from "@/lib/radar/publishedProbability";
 import {
   getNextGenerationRandomTargetEvents,
+  loadNextGenerationBTrainingState,
   loadNextGenerationTrainingState,
   type NextGenerationTrainingState,
 } from "@/lib/radar/nextGenerationTraining";
@@ -154,10 +158,9 @@ const ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = [
   "is_quote",
 ].join(",");
 
-// History consumers need the semantic, temporal, reply, and edit-identity
-// columns below. Write-time AI audit mirrors and quote-source metadata are not
-// read from this path; nested secondary_signal keeps the data needed for its
-// expansion, while the compatibility fallback remains unchanged.
+// History consumers need the semantic, temporal, and edit-identity columns
+// below. UI-only translations and reply context are fetched separately for a
+// small recent window so old canonical rows do not carry those large fields.
 export const TIBO_HISTORY_SELECT_FIELDS = [
   "tweet_id",
   "text",
@@ -187,11 +190,7 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "expected_start_at",
   "expected_end_at",
   "temporal_resolution_status",
-  "translated_text_ja",
-  "translated_text_zh",
   "is_reply",
-  "reply_to_handles",
-  "reply_context_text",
   "verification_status",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
@@ -214,6 +213,8 @@ const TIBO_HISTORY_FALLBACK_SELECT_FIELDS = [
 ].join(",");
 
 export const TIBO_HISTORY_MAX_ROWS = 1000;
+export const TIBO_RECENT_MAX_ROWS = 20;
+export const TIBO_RECENT_SELECT_FIELDS = ACTIVE_TIBO_SIGNAL_SELECT_FIELDS;
 
 type TiboHistoryQueryResult = {
   data: Array<FormalTiboResetSignal> | null;
@@ -223,6 +224,7 @@ type TiboHistoryQueryResult = {
 type TiboHistoryQueryRunner = (
   fields: string,
   includeReplies: boolean,
+  limit?: number,
 ) => Promise<TiboHistoryQueryResult>;
 
 type TiboHistoryQueryBuilder = {
@@ -234,6 +236,7 @@ type TiboHistoryQueryBuilder = {
 export type TiboHistoryReadResult = {
   withReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
   withoutReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
+  recent?: DataFetchResult<Array<FormalTiboResetSignal>>;
 };
 
 type ActiveTiboQueryBuilder = {
@@ -329,7 +332,8 @@ export function splitTiboHistorySignals(
   signals: readonly FormalTiboResetSignal[],
 ) {
   return {
-    // Keep the database ordering and complete row values for recent/UI use.
+    // Keep the database ordering for canonical history consumers. The wider
+    // recent/UI projection is fetched separately and is not derived here.
     withReplies: signals,
     // This matches the former PostgREST `is_reply IS NULL OR is_reply = false`
     // predicate without transferring the same wide rows twice.
@@ -355,10 +359,12 @@ async function executeTiboHistoryQuery(
   queryTiboHistory: TiboHistoryQueryRunner,
   fields: string,
   includeReplies: boolean,
+  limit = TIBO_HISTORY_MAX_ROWS,
+  fallbackFields = TIBO_HISTORY_FALLBACK_SELECT_FIELDS,
 ): Promise<TiboHistoryQueryResult> {
-  let result = await queryTiboHistory(fields, includeReplies);
+  let result = await queryTiboHistory(fields, includeReplies, limit);
   if (result.error && isMissingTiboOptionalColumnError(result.error)) {
-    result = await queryTiboHistory(TIBO_HISTORY_FALLBACK_SELECT_FIELDS, includeReplies);
+    result = await queryTiboHistory(fallbackFields, includeReplies, limit);
   }
   return result;
 }
@@ -412,6 +418,7 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
     return {
       withReplies: { data: [], health: configuration },
       withoutReplies: { data: [], health: configuration },
+      recent: { data: [], health: configuration },
     };
   }
 
@@ -419,7 +426,7 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const queryTiboHistory: TiboHistoryQueryRunner = async (fields, includeReplies) => {
+    const queryTiboHistory: TiboHistoryQueryRunner = async (fields, includeReplies, limit = TIBO_HISTORY_MAX_ROWS) => {
       const query = supabase
         .from("tibo_signals")
         .select(fields) as unknown as TiboHistoryQueryBuilder;
@@ -428,15 +435,30 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
         : query.or("is_reply.is.null,is_reply.eq.false");
       return await filteredQuery
         .order("tweet_created_at", { ascending: false })
-        .limit(TIBO_HISTORY_MAX_ROWS);
+        .limit(limit);
     };
-    return await readTiboHistorySignals(queryTiboHistory, configuration);
+    const history = await readTiboHistorySignals(queryTiboHistory, configuration);
+    const recentResult = await executeTiboHistoryQuery(
+      queryTiboHistory,
+      TIBO_RECENT_SELECT_FIELDS,
+      true,
+      TIBO_RECENT_MAX_ROWS,
+      ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS,
+    );
+    if (recentResult.error) {
+      console.error("Recent Tibo signal query failed", recentResult.error);
+    }
+    return {
+      ...history,
+      recent: toTiboHistoryFetchResult(configuration, recentResult),
+    };
   } catch (error) {
     console.error("Failed to load Tibo reset history", error);
     const health = { state: "degraded", detail: "request_failed" } as const;
     return {
       withReplies: { data: [], health },
       withoutReplies: { data: [], health },
+      recent: { data: [], health },
     };
   }
 }
@@ -587,7 +609,7 @@ export async function fetchResetDisplayNameCandidateNoticeSignals(
 
 const getCachedTiboHistorySignals = unstable_cache(
   () => fetchRawTiboHistorySignals(),
-  ["tibo-history-signals-cache-v3"],
+  ["tibo-history-signals-cache-v4"],
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -903,7 +925,9 @@ async function getTiboSignalBundle(
     return !isNaN(expiresTime) && expiresTime > now.getTime();
   });
   const signals = historyResult.withoutReplies.data;
-  const recentSignalsSource = historyResult.withReplies.data;
+  const recentSignalsSource = historyResult.recent && historyResult.recent.health.state !== "degraded"
+    ? historyResult.recent.data
+    : historyResult.withReplies.data;
   const acceptedResets = signals.filter(isFormalTiboResetSignal);
   const notices = expandTiboSignalVariants(signals)
     .map(toNoticeSignal)
@@ -1026,6 +1050,7 @@ function createEmptyNextGenerationTrainingState(
 async function readNextGenerationTrainingState(
   data: RadarData,
   calculationNow: Date,
+  mode: "public" | "full" = "full",
 ): Promise<NextGenerationTrainingState> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1037,7 +1062,10 @@ async function readNextGenerationTrainingState(
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const trainingState = await loadNextGenerationTrainingState(supabase, {
+    const loadTrainingState = mode === "public"
+      ? loadNextGenerationBTrainingState
+      : loadNextGenerationTrainingState;
+    const trainingState = await loadTrainingState(supabase, {
       asOf: calculationNow,
       randomEvents: getNextGenerationRandomTargetEvents(data, calculationNow),
     });
@@ -1057,6 +1085,7 @@ function attachPublicBTrainingState(
   return attachNextGenerationBPublicTrainingState(data, {
     trainingRows: trainingState.bRows,
     trainingReadStatus: trainingState.status,
+    trainingRowCount: trainingState.totalRows,
   });
 }
 
@@ -1125,7 +1154,7 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const data = await fetchCurrentRadarDataBase(options, calculationNow);
-  const trainingState = await readNextGenerationTrainingState(data, calculationNow);
+  const trainingState = await readNextGenerationTrainingState(data, calculationNow, "public");
   return attachPublicBTrainingState(data, trainingState);
 }
 
@@ -1149,6 +1178,16 @@ type SharedRadarCore = {
   data: RadarData;
   generatedAt: string;
 };
+
+type SharedRadarCoreLoad = {
+  core: SharedRadarCore;
+  fallback: boolean;
+};
+
+// The API snapshot, page, and heatmap caches all share this core. A local
+// single-flight prevents concurrent misses on one server instance from
+// rebuilding the same Supabase-backed core more than once.
+let radarCoreInFlight: Promise<SharedRadarCoreLoad> | null = null;
 
 export function getPublicRadarSnapshotCalculationBucket(
   calculationNow: Date | number = Date.now(),
@@ -1270,8 +1309,10 @@ const getCachedRadarCore = unstable_cache(
   async (): Promise<SharedRadarCore> => {
     const computeStartedAt = performance.now();
     let dataHealth: "ok" | "degraded" | null = null;
+    let computedData: RadarData | null = null;
     try {
       const data = await fetchCurrentRadarData({ cache: "no-store" });
+      computedData = data;
       dataHealth = data.data_health?.overall ?? null;
       if (dataHealth === "degraded") {
         // Do not replace a healthy Data Cache entry with a partial live result.
@@ -1285,8 +1326,17 @@ const getCachedRadarCore = unstable_cache(
     } finally {
       console.info(JSON.stringify({
         event: "radar_core_compute",
+        cachePath: "shared-core",
+        calculationBucket: computedData
+          ? getPublicRadarSnapshotCalculationBucket(new Date(computedData.checked_at ?? ""))
+          : null,
         durationMs: performance.now() - computeStartedAt,
         dataHealth,
+        tiboHistoryRowCount: computedData?.formal_tibo_resets?.length ?? 0,
+        tiboRecentRowCount: computedData?.recent_tibo_signals?.length ?? 0,
+        predictionHistoryRowCount: getAttachedNextGenerationBPublicTrainingState(computedData)
+          ?.trainingRowCount ?? 0,
+        resetDisplayNameRowCount: computedData?.reset_display_names?.length ?? 0,
       }));
     }
   },
@@ -1431,19 +1481,9 @@ async function getSafeRadarFallback(): Promise<SharedRadarCore> {
   };
 }
 
-export async function fetchSharedRadarCore() {
+async function loadSharedRadarCore(): Promise<SharedRadarCoreLoad> {
   try {
-    const core = await getCachedRadarCore();
-    const stale = isOlderThanCacheTtl(core.generatedAt);
-    if (stale) {
-      console.warn("[Radar stale fallback] serving an older cached snapshot", {
-        reason: "cached_data_stale",
-      });
-    }
-    return {
-      ...core,
-      stale,
-    };
+    return { core: await getCachedRadarCore(), fallback: false };
   } catch {
     // A first-request failure has no Data Cache value to serve. The existing
     // local/static fallback remains renderable and is marked degraded/stale.
@@ -1451,8 +1491,7 @@ export async function fetchSharedRadarCore() {
       reason: "live_data_unavailable",
     });
     try {
-      const fallback = await getSafeRadarFallback();
-      return { ...fallback, stale: true };
+      return { core: await getSafeRadarFallback(), fallback: true };
     } catch {
       const checkedAt = new Date().toISOString();
       const fallback = getLocalRadarData({
@@ -1466,8 +1505,31 @@ export async function fetchSharedRadarCore() {
           },
         },
       });
-      return { data: fallback, generatedAt: checkedAt, stale: true };
+      return {
+        core: { data: fallback, generatedAt: checkedAt },
+        fallback: true,
+      };
     }
+  }
+}
+
+export async function fetchSharedRadarCore() {
+  if (!radarCoreInFlight) radarCoreInFlight = loadSharedRadarCore();
+  const inFlight = radarCoreInFlight;
+  try {
+    const loaded = await inFlight;
+    const stale = loaded.fallback || isOlderThanCacheTtl(loaded.core.generatedAt);
+    if (stale && !loaded.fallback) {
+      console.warn("[Radar stale fallback] serving an older cached snapshot", {
+        reason: "cached_data_stale",
+      });
+    }
+    return {
+      ...loaded.core,
+      stale,
+    };
+  } finally {
+    if (radarCoreInFlight === inFlight) radarCoreInFlight = null;
   }
 }
 

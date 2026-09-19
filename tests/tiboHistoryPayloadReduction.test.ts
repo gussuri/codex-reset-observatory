@@ -10,6 +10,8 @@ import {
   splitTiboHistorySignals,
   TIBO_HISTORY_MAX_ROWS,
   TIBO_HISTORY_SELECT_FIELDS,
+  TIBO_RECENT_MAX_ROWS,
+  TIBO_RECENT_SELECT_FIELDS,
 } from "../lib/radarFetch";
 import {
   isFormalTiboResetSignal,
@@ -62,16 +64,19 @@ const REQUIRED_HISTORY_FIELDS = [
   "expected_start_at",
   "expected_end_at",
   "temporal_resolution_status",
-  "translated_text_ja",
-  "translated_text_zh",
   "is_reply",
-  "reply_to_handles",
-  "reply_context_text",
   "verification_status",
   "logical_post_id",
   "edit_history_tweet_ids",
   "edit_version",
   "edit_metadata_source",
+] as const;
+
+const RECENT_UI_FIELDS = [
+  "translated_text_ja",
+  "translated_text_zh",
+  "reply_to_handles",
+  "reply_context_text",
 ] as const;
 
 const NOW = new Date("2026-09-11T00:00:00.000Z");
@@ -209,12 +214,15 @@ function makeSemanticFixture() {
   return [editRoot, editLatest, notice, reply, rejected, banked];
 }
 
-function buildComparableRadarData(rows: readonly FormalTiboResetSignal[]) {
+function buildComparableRadarData(
+  rows: readonly FormalTiboResetSignal[],
+  recentRows: readonly FormalTiboResetSignal[] = rows,
+) {
   const formal = rows.filter(isFormalTiboResetSignal);
   const rejected = rows
     .filter((row) => row.signal_type === "reset_executed" && row.verification_status === "rejected")
     .map(({ tweet_id, tweet_url, tweet_created_at }) => ({ tweet_id, tweet_url, tweet_created_at }));
-  const active = rows.map((row) => ({
+  const active = recentRows.map((row) => ({
     ...row,
     confidence: row.confidence ?? undefined,
     classification_reason: row.classification_reason ?? undefined,
@@ -236,7 +244,39 @@ test("history projection excludes only audited source metadata and keeps semanti
   const fields = new Set(TIBO_HISTORY_SELECT_FIELDS.split(","));
   for (const field of REMOVED_HISTORY_FIELDS) assert.equal(fields.has(field), false, field);
   for (const field of REQUIRED_HISTORY_FIELDS) assert.equal(fields.has(field), true, field);
+  for (const field of RECENT_UI_FIELDS) assert.equal(fields.has(field), false, field);
   assert.equal(fields.size, REQUIRED_HISTORY_FIELDS.length);
+});
+
+test("recent Tibo projection keeps UI text fields in a bounded window", () => {
+  const fields = new Set(TIBO_RECENT_SELECT_FIELDS.split(","));
+  for (const field of RECENT_UI_FIELDS) assert.equal(fields.has(field), true, field);
+  assert.equal(TIBO_RECENT_MAX_ROWS, 20);
+  assert.ok(fields.size > REQUIRED_HISTORY_FIELDS.length);
+});
+
+test("bounded recent UI projection reduces a representative 1000-row history payload", () => {
+  const row = resetRow("payload", "official_notice", {
+    text: "notice ".repeat(350),
+    translated_text_ja: "日本語の翻訳 ".repeat(160),
+    translated_text_zh: "中文翻译 ".repeat(160),
+    reply_context_text: "reply context ".repeat(120),
+    reply_to_handles: Array.from({ length: 12 }, (_, index) => `@user${index}`),
+  });
+  const legacyFields = [TIBO_HISTORY_SELECT_FIELDS, ...RECENT_UI_FIELDS].join(",");
+  const legacyRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, () =>
+    projectRows([row], legacyFields)[0]);
+  const boundedHistoryRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, () =>
+    projectRows([row], TIBO_HISTORY_SELECT_FIELDS)[0]);
+  const boundedRecentRows = Array.from({ length: TIBO_RECENT_MAX_ROWS }, () =>
+    projectRows([row], TIBO_RECENT_SELECT_FIELDS)[0]);
+  const legacyBytes = Buffer.byteLength(JSON.stringify(legacyRows));
+  const boundedBytes = Buffer.byteLength(JSON.stringify({
+    history: boundedHistoryRows,
+    recent: boundedRecentRows,
+  }));
+
+  assert.ok(boundedBytes < legacyBytes, `${boundedBytes} >= ${legacyBytes}`);
 });
 
 test("history read keeps one query below 1000 rows and locally derives replies", async () => {
@@ -277,7 +317,7 @@ test("history read keeps the exactly-1000 formal fallback and reply-heavy comple
   assert.deepEqual(result.withoutReplies.data.map((row) => row.tweet_id), ["older-formal"]);
 });
 
-test("removed history metadata does not change formal/rejected/edit/secondary/temporal/BANKED consumers or public output", () => {
+test("separating recent UI fields does not change formal/rejected/edit/secondary/temporal/BANKED consumers or public output", () => {
   const fullRows = makeSemanticFixture();
   const reducedRows = projectRows(fullRows, TIBO_HISTORY_SELECT_FIELDS);
   const fullSplit = splitTiboHistorySignals(fullRows);
@@ -301,7 +341,10 @@ test("removed history metadata does not change formal/rejected/edit/secondary/te
   );
 
   const fullData = buildComparableRadarData(fullRows);
-  const reducedData = buildComparableRadarData(reducedRows);
+  const reducedData = buildComparableRadarData(
+    reducedRows,
+    projectRows(fullRows, TIBO_RECENT_SELECT_FIELDS),
+  );
   for (const locale of ["ja", "en", "zh"] as const) {
     for (const limitHistory of [true, false]) {
       const fullSnapshot = toPublicRadarSnapshot(fullData, locale, {

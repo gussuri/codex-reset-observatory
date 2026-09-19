@@ -14,7 +14,9 @@ import {
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import {
+  loadNextGenerationBTrainingState,
   loadNextGenerationTrainingState,
+  NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
   NEXT_GENERATION_TRAINING_SELECT_FIELDS,
   parseNextGenerationTrainingProjectionRows,
   parseNextGenerationTrainingRows,
@@ -185,6 +187,25 @@ test("compact training select projects only the required forecast fields", () =>
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_aware_.*context_snapshot_version:/);
   assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_challenger_.*baseline_24h:/);
   assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /featureSnapshot|context_v3/);
+});
+
+test("public training select is limited to B fields while research keeps the full projection", () => {
+  const publicFields = NEXT_GENERATION_B_TRAINING_SELECT_FIELDS.split(",");
+  const fullFields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
+  assert.equal(publicFields[0], "logged_hour");
+  assert.equal(publicFields.length, 7);
+  assert.ok(fullFields.length > publicFields.length);
+
+  const projectRepresentativeRow = (selectFields: string) => Object.fromEntries(
+    selectFields.split(",").map((field) => [field.split(":", 1)[0], "x".repeat(80)]),
+  );
+  const publicBytes = Buffer.byteLength(JSON.stringify(projectRepresentativeRow(
+    NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
+  )));
+  const fullBytes = Buffer.byteLength(JSON.stringify(projectRepresentativeRow(
+    NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+  )));
+  assert.ok(publicBytes < fullBytes);
 });
 
 test("context-aware training prefers its saved audit and keeps PIT labels", () => {
@@ -420,4 +441,56 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.equal(failed.bRows.length, 0);
   assert.equal(failed.aRows.length, 0);
   assert.equal(failed.cRows.length, 0);
+});
+
+test("public training query preserves B rows while requesting only the B projection", async () => {
+  const calls: string[] = [];
+  const client = {
+    from(table: string) {
+      calls.push(`from:${table}`);
+      return {
+        select(fields: string) {
+          calls.push(`select:${fields}`);
+          return {
+            gte(column: string, value: string) {
+              calls.push(`gte:${column}:${value}`);
+              return {
+                lt(nextColumn: string, nextValue: string) {
+                  calls.push(`lt:${nextColumn}:${nextValue}`);
+                  return {
+                    order(orderColumn: string) {
+                      calls.push(`order:${orderColumn}`);
+                      return {
+                        limit(count: number) {
+                          calls.push(`limit:${count}`);
+                          return Promise.resolve({
+                            data: [projectedHistoryRow()],
+                            error: null,
+                          });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const result = await loadNextGenerationBTrainingState(client, {
+    asOf: new Date("2026-08-24T00:00:00.000Z"),
+    randomEvents: [],
+  });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.bRows.length, 1);
+  assert.equal(result.totalRows, 1);
+  assert.deepEqual(calls.slice(0, 3), [
+    "from:prediction_history",
+    `select:${NEXT_GENERATION_B_TRAINING_SELECT_FIELDS}`,
+    "gte:logged_hour:2026-08-21T03:00:00.000Z",
+  ]);
 });

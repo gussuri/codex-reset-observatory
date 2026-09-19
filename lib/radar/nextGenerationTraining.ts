@@ -150,7 +150,22 @@ function buildTrainingProjectionSelectFields() {
   return fields.join(",");
 }
 
+function buildBTrainingProjectionSelectFields() {
+  const fields = ["logged_hour"];
+  for (const field of B_TRAINING_PROJECTION_FIELDS) {
+    fields.push(
+      trainingProjectionField(
+        trainingProjectionAlias("b", field),
+        NEXT_GENERATION_B_MODEL_VERSION,
+        field,
+      ),
+    );
+  }
+  return fields.join(",");
+}
+
 export const NEXT_GENERATION_TRAINING_SELECT_FIELDS = buildTrainingProjectionSelectFields();
+export const NEXT_GENERATION_B_TRAINING_SELECT_FIELDS = buildBTrainingProjectionSelectFields();
 
 function getLoggedHourQueryStart() {
   const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
@@ -579,6 +594,29 @@ export async function loadNextGenerationTrainingState(
   client: any,
   options: NextGenerationTrainingQueryOptions,
 ): Promise<NextGenerationTrainingState> {
+  return loadTrainingStateWithProjection(
+    client,
+    options,
+    NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+  );
+}
+
+export async function loadNextGenerationBTrainingState(
+  client: any,
+  options: NextGenerationTrainingQueryOptions,
+): Promise<NextGenerationTrainingState> {
+  return loadTrainingStateWithProjection(
+    client,
+    options,
+    NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
+  );
+}
+
+async function loadTrainingStateWithProjection(
+  client: any,
+  options: NextGenerationTrainingQueryOptions,
+  selectFields: string,
+): Promise<NextGenerationTrainingState> {
   const empty: NextGenerationTrainingRows = {
     bRows: [],
     aRows: [],
@@ -597,7 +635,7 @@ export async function loadNextGenerationTrainingState(
   try {
     const result = await client
       .from("prediction_history")
-      .select(NEXT_GENERATION_TRAINING_SELECT_FIELDS)
+      .select(selectFields)
       .gte("logged_hour", getLoggedHourQueryStart())
       .lt("logged_hour", options.asOf.toISOString())
       .order("logged_hour", { ascending: true })

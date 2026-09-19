@@ -53,8 +53,18 @@ test("radar cache callbacks log compute timing without changing cache identity o
   );
 
   assert.match(coreBlock, /event: "radar_core_compute"/);
-  assert.match(coreBlock, /durationMs/);
-  assert.match(coreBlock, /dataHealth/);
+  for (const field of [
+    "cachePath",
+    "calculationBucket",
+    "durationMs",
+    "dataHealth",
+    "tiboHistoryRowCount",
+    "tiboRecentRowCount",
+    "predictionHistoryRowCount",
+    "resetDisplayNameRowCount",
+  ]) {
+    assert.match(coreBlock, new RegExp(`\\b${field}\\b`));
+  }
   assert.match(coreBlock, /\["radar-core-cache-v6"\]/);
   assert.match(coreBlock, /revalidate: RADAR_CORE_CACHE_TTL_SECONDS/);
   assert.match(coreBlock, /tags: \["radar-data"\]/);
@@ -68,6 +78,10 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
   assert.doesNotMatch(snapshotBlock, /\blocale\b/);
   assert.match(snapshotBlock, /tags: \["radar-data"\]/);
+
+  assert.match(radarFetchSource, /let radarCoreInFlight: Promise<SharedRadarCoreLoad> \| null = null/);
+  assert.match(radarFetchSource, /async function loadSharedRadarCore\(\)/);
+  assert.match(radarFetchSource, /if \(!radarCoreInFlight\) radarCoreInFlight = loadSharedRadarCore\(\)/);
 
   assert.equal((bundleBuilderBlock.match(/createRadarCalculationContext\(/g) ?? []).length, 1);
   assert.equal((bundleBuilderBlock.match(/toPublicRadarSnapshot\(/g) ?? []).length, 3);

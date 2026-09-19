@@ -262,6 +262,7 @@ export function roundPublicProbabilityTime(now: Date) {
 export type NextGenerationBPublicTrainingState = {
   trainingRows: Array<NextGenerationCalibrationRow>;
   trainingReadStatus: NextGenerationTrainingReadStatus;
+  trainingRowCount?: number;
 };
 
 type RadarDataWithNextGenerationBTraining = RadarData & {
@@ -278,7 +279,7 @@ export function attachNextGenerationBPublicTrainingState(
   } as RadarDataWithNextGenerationBTraining;
 }
 
-function getAttachedNextGenerationBPublicTrainingState(data: RadarData | null) {
+export function getAttachedNextGenerationBPublicTrainingState(data: RadarData | null) {
   return (data as RadarDataWithNextGenerationBTraining | null)
     ?.__nextGenerationBPublicTrainingState ?? null;
 }

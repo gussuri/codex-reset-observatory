@@ -363,10 +363,12 @@ test("Tibo radar queries use explicit field lists instead of wildcard reads", ()
   assert.match(TIBO_HISTORY_SELECT_FIELDS, /(^|,)is_reply(,|$)/);
 });
 
-test("Tibo history uses one reply-inclusive cache entry and derives the formal view locally", () => {
+test("Tibo history keeps canonical rows narrow and bounds the wider recent read", () => {
   const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
-  assert.match(source, /\["tibo-history-signals-cache-v3"\]/);
+  assert.match(source, /\["tibo-history-signals-cache-v4"\]/);
   assert.match(source, /TIBO_HISTORY_SELECT_FIELDS/);
+  assert.match(source, /TIBO_RECENT_SELECT_FIELDS/);
+  assert.match(source, /TIBO_RECENT_MAX_ROWS/);
   assert.match(source, /TIBO_HISTORY_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /isMissingTiboOptionalColumnError\(result\.error\)/);
