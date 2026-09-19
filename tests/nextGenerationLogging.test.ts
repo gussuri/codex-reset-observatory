@@ -227,14 +227,30 @@ test("post-freeze logging adds the context-aware candidate without changing exis
   assert.deepEqual(forecasts[CALIBRATED_SHADOW_MODEL_VERSION], existing[CALIBRATED_SHADOW_MODEL_VERSION]);
 });
 
-test("prospective evaluator reads post-boundary logged rows as comparable broad-banked v2 + raw 18/54", () => {
-  const postBoundaryAt = "2026-09-18T06:10:00.000Z";
+test("prospective evaluator reads post-boundary logged rows as comparable Survival v1 + broad-banked v2", () => {
+  const postBoundaryAt = "2026-09-19T06:10:00.000Z";
   const postBoundaryForecasts = buildNextGenerationExperimentalProbabilityForecasts({
     data: null,
     calculationOptions: { now: new Date(postBoundaryAt) },
     existingForecasts: existingForecasts(),
     trainingState: state("ok"),
   });
+  const savedForecastTemplate = postBoundaryForecasts[CALIBRATED_SHADOW_MODEL_VERSION];
+  assert.ok(savedForecastTemplate, "fixture includes a saved forecast shape");
+  postBoundaryForecasts[PUBLISHED_PROBABILITY_MODEL_VERSION] = {
+    ...savedForecastTemplate,
+    modelVersion: PUBLISHED_PROBABILITY_MODEL_VERSION,
+    generatedAt: postBoundaryAt,
+    probability24h: 0.3,
+    probability48h: 0.5,
+  };
+  postBoundaryForecasts[PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION] = {
+    ...savedForecastTemplate,
+    modelVersion: PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+    generatedAt: postBoundaryAt,
+    probability24h: 0.25,
+    probability48h: 0.45,
+  };
 
   const postBoundaryRow: ProspectiveForecastRow = {
     generatedAt: postBoundaryAt,
@@ -249,7 +265,7 @@ test("prospective evaluator reads post-boundary logged rows as comparable broad-
   const report = evaluatePublishedModelProspectively(
     [postBoundaryRow],
     [],
-    new Date("2026-09-19T00:00:00.000Z"),
+    new Date("2026-09-20T00:00:00.000Z"),
     { adoptionAt: postBoundaryAt, rollbackAt: null },
   );
   assert.equal(report.activeModelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);

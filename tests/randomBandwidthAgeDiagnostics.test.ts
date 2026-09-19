@@ -11,6 +11,7 @@ import {
   RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_MODEL_VERSIONS,
   RANDOM_BANDWIDTH_AGE_DIAGNOSTIC_TRUNCATION_HOURS,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
 import type { ExperimentalProbabilityForecasts } from "../lib/logProbability";
@@ -128,7 +129,7 @@ test("all five diagnostics share one origin and bw18 matches the existing raw ch
   assert.equal(bw18.randomContinuous.bandwidthHours, 18);
   assert.deepEqual(bw18.predictions, pair.challenger.predictions);
   assert.deepEqual(bw18.baseline, pair.challenger.baseline);
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
 });
 
 test("diagnostic forecasts are persisted after their freeze and omitted before it", () => {

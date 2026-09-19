@@ -49,11 +49,11 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
-test("the current public model adopts broad-banked v2 with raw 18/54 as its previous baseline", () => {
+test("the current public model adopts Survival-Conditioned v1 with broad-banked v2 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
@@ -95,7 +95,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -751,6 +751,41 @@ test("an invalid survival result falls back to valid broad-banked v2 with a surv
   assert.equal(selected.source, "broad-banked-raw-continuous");
   assert.equal(selected.fallbackReason, "survival_conditioned_invalid_prediction");
   assert.equal(selected.probability48h, 0.2);
+});
+
+test("a Survival runtime exception falls back to valid broad-banked v2", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const broad = {
+    modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    predictions: {
+      probability12h: 0.05,
+      probability24h: 0.1,
+      probability48h: 0.2,
+      probability72h: 0.3,
+    },
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowSurvivalConditioned: true,
+      survivalConditioned: null,
+      survivalConditionedFailureReason: "survival_conditioned_exception",
+      allowBroadBankedV2: true,
+      broadBankedV2: broad,
+    },
+  );
+
+  assert.equal(selected.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(selected.source, "broad-banked-raw-continuous");
+  assert.equal(selected.fallbackReason, "survival_conditioned_exception");
 });
 
 test("a broad-banked failure reason wins when both future public candidates are invalid", () => {

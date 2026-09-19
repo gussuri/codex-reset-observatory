@@ -15,6 +15,7 @@ import {
   RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS,
   RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import type { ExperimentalProbabilityForecasts } from "../lib/logProbability";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
@@ -132,7 +133,7 @@ function row(
 test("Production 24/72 settings remain unchanged and public alias points to v2", () => {
   assert.equal(RANDOM_CONTINUOUS_SHADOW_BANDWIDTH_HOURS, 24);
   assert.equal(RANDOM_CONTINUOUS_SHADOW_TRUNCATION_HOURS, 72);
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS.bandwidthHours, 24);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CONTROL_OPTIONS.truncationHours, 72);
   assert.equal(RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_OPTIONS.bandwidthHours, 18);

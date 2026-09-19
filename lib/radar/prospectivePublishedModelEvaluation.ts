@@ -4,7 +4,7 @@ import {
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
-  PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
   PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
@@ -1403,7 +1403,7 @@ export function evaluatePublishedModelProspectively(
 
   const usesConfiguredBoundary = options.adoptionAt === undefined;
   const configuredAdoptionValue = usesConfiguredBoundary
-    ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
+    ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
     : options.adoptionAt;
   const adoptionAt = timestamp(configuredAdoptionValue);
   const configuredRollbackValue = options.rollbackAt === undefined

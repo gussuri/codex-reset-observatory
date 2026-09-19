@@ -22,20 +22,21 @@ import {
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
 import { getRandomResetEligibilityPolicyVersion } from "../lib/radar/resetEligibility";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 
-test("public governance adopts broad-banked v2 over raw 18/54 v1 at the exact boundary", () => {
+test("public governance retains broad-banked v2 as the historical period before Survival promotion", () => {
   assert.equal(PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT, "2026-09-18T06:00:00.000Z");
   assert.equal(PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE, "2026-09-18");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(
     PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION,
     RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
 });
 
 test("published period classification has a half-open raw-v1 period and exact v2 adoption", () => {

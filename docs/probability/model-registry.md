@@ -4,9 +4,9 @@
 
 ## Current public model
 
-- key: broad-banked/base/v2
-- modelVersion: hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2
-- previous public modelVersion: hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1
+- key: survival-conditioned/base/v1
+- modelVersion: hazard-survival-conditioned-adaptive-h45-tail-h24-v1
+- previous public modelVersion: hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2
 - stable fallback modelVersion: hazard-elapsed-v1
 
 ## Public probability periods
@@ -20,7 +20,8 @@
 | selective-v3 | hazard-regime-random-continuous-selective-calibration-post-reset-age-v3 | 2026-09-10T01:00:00.000Z | 2026-09-11T02:20:00.000Z | manual | Historical selective calibration v3 period. |
 | corrective-rollback-v4 | hazard-odds-v4-logit-calibrated-prequential-v3 | 2026-09-11T02:20:00.000Z | 2026-09-17T05:45:00.000Z | manual | Corrective rollback to the calibrated V4 identity. |
 | raw-continuous-18-54 | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | 2026-09-17T05:45:00.000Z | 2026-09-18T06:00:00.000Z | manual | Historical raw continuous 18/54 period. |
-| broad-banked-v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | 2026-09-18T06:00:00.000Z | — | manual | Current public broad-banked random continuous 18/54 period; it remains open until a separate survival promotion commit. |
+| broad-banked-v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | 2026-09-18T06:00:00.000Z | 2026-09-19T06:00:00.000Z | manual | Historical broad-banked random continuous 18/54 period; retained as the fallback and comparison baseline after survival promotion. |
+| survival-conditioned-v1 | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | 2026-09-19T06:00:00.000Z | — | manual | Promoted survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows. |
 
 ## Public history model entries
 
@@ -32,6 +33,7 @@
 | b-family/post-reset-age/v2 | hazard-regime-random-continuous-calibrated-post-reset-age-v2 | Next Generation B Post-Reset Age v2 | b-family | post-reset-age | v2 | forecast | historical | active | public-runtime, shadow, ensemble-component, experimental-log | hazard-regime-random-continuous-calibrated-v1 | — | 2026-08-21T03:27:00.000Z | legacy-random-cycle-v1 | post-reset-regime-attenuation-0-24h-v1 | 24 | 72 | prequential-logit | Adds the frozen post-reset-age regime attenuation policy to B v1. | — |
 | b-family/selective-calibration/v3 | hazard-regime-random-continuous-selective-calibration-post-reset-age-v3 | Next Generation Selective Calibration v3 | b-family | selective-calibration | v3 | forecast | historical | active | public-runtime, shadow, experimental-log | hazard-regime-random-continuous-calibrated-post-reset-age-v2 | — | 2026-08-21T03:27:00.000Z | legacy-random-cycle-v1 | post-reset-regime-attenuation-0-24h-v1 | 24 | 72 | selective | Applies the selective calibration policy to the frozen B post-reset-age forecast. | — |
 | raw-continuous/bw18-tr54/v1 | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | Raw Continuous Bandwidth 18/54 v1 | raw-continuous-bandwidth | bw18-tr54 | v1 | forecast | historical | active | fallback, experimental-log | hazard-regime-random-continuous-post-reset-age-raw-bw24-tr72-v1 | — | 2026-09-02T09:00:00.000Z | legacy-random-cycle-v1 | post-reset-regime-attenuation-0-24h-v1 | 18 | 54 | none | Uses the preregistered 18h bandwidth and 54h truncation instead of the 24/72 control. | — |
+| broad-banked/base/v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | Broad-Banked Random Continuous 18/54 v2 | broad-banked | base | v2 | forecast | historical | active | public-runtime, fallback, experimental-log | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | — | 2026-09-18T03:10:48.666Z | broad-banked-distribution-random-clock-v2 | post-reset-regime-attenuation-0-24h-v1 | 18 | 54 | none | Broad completed banked distributions become eligible random-clock boundaries; estimator and frozen 18/54 parameters remain unchanged. | — |
 
 ## Active and shadow model entries
 

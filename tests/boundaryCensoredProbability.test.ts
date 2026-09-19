@@ -25,6 +25,7 @@ import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 
 function boundary(
@@ -274,7 +275,7 @@ test("candidate evaluation model stays separate from the public recency model", 
   const publicResult = calculatePublishedProbability(data, options, { logFallback: false });
   const candidateResult = calculateBoundaryCensoredProbability(data, options);
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(publicResult.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(candidateResult.modelVersion, BOUNDARY_CENSORED_MODEL_VERSION);
 });

@@ -16,6 +16,7 @@ import {
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
 import { getLocalRadarData } from "../lib/radar";
@@ -98,7 +99,7 @@ function comparableV3Row(generatedAt: string) {
 test("corrective rollback rollout records a future boundary without changing the v3 identity", () => {
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 
@@ -145,7 +146,7 @@ test("published evaluator keeps old and corrective V4 periods as separate daily-
   assert.deepEqual(correctiveV4.map((row) => row.generatedAt), ["2026-09-11T02:00:00.000Z"]);
 });
 
-test("published v3 evaluation ends at a future rollback boundary while the v3 shadow scoreboard continues", () => {
+test("historical v3 rows stay out of current evaluation while the v3 shadow scoreboard continues", () => {
   const report = evaluatePublishedModelProspectively(
     [
       comparableV3Row("2026-09-10T05:00:00.000Z"),
@@ -159,8 +160,8 @@ test("published v3 evaluation ends at a future rollback boundary while the v3 sh
     },
   );
 
-  assert.equal(report.forecastCounts.comparable, 1);
-  assert.equal(report.evaluationStartAt, "2026-09-10T05:00:00.000Z");
+  assert.equal(report.forecastCounts.comparable, 0);
+  assert.equal(report.evaluationStartAt, null);
   assert.equal(report.scoreboard.dailyFirstOriginCount, 2);
   assert.match(report.notes.join("\n"), /rollback boundary/);
 });

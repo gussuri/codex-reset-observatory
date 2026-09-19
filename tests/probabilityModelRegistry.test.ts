@@ -97,7 +97,7 @@ test("the current public model and pointer view resolve to registered identities
   assert.equal(PROBABILITY_MODEL_POINTERS.currentPublic, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.ok(getProbabilityModelByVersion(PROBABILITY_MODEL_POINTERS.previousPublic));
   assert.ok(getProbabilityModelByVersion(PROBABILITY_MODEL_POINTERS.stableFallback));
-  assert.equal(getCurrentPublicProbabilityPeriod().id, "broad-banked-v2");
+  assert.equal(getCurrentPublicProbabilityPeriod().id, "survival-conditioned-v1");
   assert.equal(getCurrentPublicProbabilityPeriod().modelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.at(-1)?.modelVersion,
@@ -207,12 +207,16 @@ test("public probability period registry is contiguous with one open-ended curre
   );
   assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "survival-conditioned-v1")?.startAt,
-    undefined,
+    PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   );
-  assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT, null);
+  assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "broad-banked-v2")?.endAt,
+    PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+  );
+  assert.ok(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT);
   assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.some((period) => period.id === "survival-conditioned-v1"),
-    false,
+    true,
   );
 });
 
@@ -242,11 +246,11 @@ test("registry period classification matches the unchanged public selector at ev
   );
   assert.equal(
     getProbabilityPeriodAt("2030-01-01T00:00:00.000Z")?.id,
-    "broad-banked-v2",
+    "survival-conditioned-v1",
   );
   assert.equal(
     getPublishedProbabilityPeriodAt("2030-01-01T00:00:00.000Z"),
-    "broad-banked-v2",
+    "survival-conditioned-v1",
   );
 });
 

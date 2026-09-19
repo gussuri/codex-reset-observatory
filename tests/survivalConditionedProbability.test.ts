@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
@@ -42,9 +43,10 @@ function boundary(id: string, ageHours: number): RecoveryResetBoundary {
   };
 }
 
-test("the survival candidate is not the current public model before its future adoption", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+test("Survival-Conditioned v1 is the configured current public model at its explicit adoption boundary", () => {
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(SURVIVAL_CONDITIONED_MODEL_VERSION, "hazard-survival-conditioned-adaptive-h45-tail-h24-v1");
+  assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT, "2026-09-19T06:00:00.000Z");
 });
 
 test("static-only history can calculate survival values but fails the public support gate", () => {
@@ -368,4 +370,52 @@ test("a support-shape 36-interval history selects survival only when an explicit
   assert.equal(published.source, "survival-conditioned");
   assert.equal(published.fallbackReason, null);
   assert.equal(published.survivalConditioned?.survival.historySupportValid, true);
+});
+
+test("the production adoption boundary switches from broad-banked v2 to valid Survival v1", () => {
+  const adoptionAt = PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT!;
+  const boundaryAt = new Date(adoptionAt);
+  const before = new Date(boundaryAt.getTime() - 60 * 1000);
+  const supportHistory = frozenSupportShapeSurvivalStaticHistory();
+
+  const beforeResult = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: before }),
+    {
+      now: before,
+      activeOfficialNotice: null,
+      staticHistory: supportHistory,
+    },
+    { logFallback: false },
+  );
+  const atResult = calculatePublishedProbability(
+    getLocalRadarData({ calculationNow: boundaryAt }),
+    {
+      now: boundaryAt,
+      activeOfficialNotice: null,
+      staticHistory: supportHistory,
+    },
+    { logFallback: false },
+  );
+
+  assert.equal(beforeResult.adoptedModel, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(atResult.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(atResult.source, "survival-conditioned");
+  assert.equal(atResult.fallbackReason, null);
+  assert.equal(atResult.survivalConditioned?.survival.historySupportValid, true);
+  assert.equal(atResult.survivalConditioned?.survival.liveIntervalIncludedInTraining, false);
+  assert.ok(
+    (atResult.survivalConditioned?.hazard.completedIntervalCount ?? 0)
+      >= SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
+  );
+
+  const predictions = [
+    atResult.probability12h,
+    atResult.probability24h,
+    atResult.probability48h,
+    atResult.probability72h,
+  ];
+  assert.ok(predictions.every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
+  assert.ok(predictions[0] <= predictions[1]);
+  assert.ok(predictions[1] <= predictions[2]);
+  assert.ok(predictions[2] <= predictions[3]);
 });

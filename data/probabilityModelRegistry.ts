@@ -686,9 +686,9 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "base",
     revision: "v2",
     kind: "forecast",
-    publicStatus: "current",
+    publicStatus: "historical",
     status: "active",
-    roles: ["public-runtime", "experimental-log"],
+    roles: ["public-runtime", "fallback", "experimental-log"],
     parentModelVersion: RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
     freezeAt: BROAD_BANKED_RANDOM_CLOCK_V2_FREEZE_AT,
     eligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
@@ -706,7 +706,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "adaptive-h45-tail-h24",
     revision: "v1",
     kind: "forecast",
-    publicStatus: "scheduled",
+    publicStatus: "current",
     status: "active",
     roles: ["public-runtime", "fallback", "experimental-log"],
     parentModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
@@ -717,7 +717,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     truncationHours: null,
     calibration: "none",
     differenceFromParent: "Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate.",
-    notes: "Scheduled future public candidate; broad-banked v2 remains current until a separate promotion commit explicitly sets the adoption boundary.",
+    notes: "Current public model from the explicit manual adoption boundary; broad-banked v2 remains the historical fallback and comparison baseline.",
   }),
   ...[
     ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
@@ -928,7 +928,7 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
     startAt: PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
     endAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
     adoptionMode: "manual",
-    note: "Current public broad-banked random continuous 18/54 period; it remains open until a separate survival promotion commit.",
+    note: "Historical broad-banked random continuous 18/54 period; retained as the fallback and comparison baseline after survival promotion.",
   },
   ...(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT === null
     ? []
