@@ -35,6 +35,7 @@ import {
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
   SURVIVAL_CONDITIONED_FREEZE_AT,
   SURVIVAL_CONDITIONED_FREEZE_POLICY,
+  SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   SURVIVAL_CONTEXT_MODEL_VERSIONS,
 } from "@/data/shadowProbabilityConfig";
@@ -368,6 +369,7 @@ function toSurvivalConditionedForecast(
   const fallbackUsed = survival.fallbackUsed || Boolean(fit?.fallbackUsed);
   return {
     modelVersion: result.modelVersion,
+    forecastPolicyVersion: SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
     generatedAt: result.calculatedAt,
     probability12h: result.predictions.probability12h,
     probability24h: result.predictions.probability24h,

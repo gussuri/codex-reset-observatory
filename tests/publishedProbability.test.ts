@@ -222,8 +222,10 @@ test("public DTO and UI expose v2 probabilities without diagnostic-only fields",
     "preResetRegimeMultiplierFallbackUsed",
     "preResetRegimeMultiplierFallbackReason",
     "experimentalProbabilityForecasts",
+    "forecastPolicyVersion",
     "survivalConditioned",
     "survivalContextArm",
+    "timed_tibo_signals",
     SURVIVAL_CONDITIONED_MODEL_VERSION,
   ];
 

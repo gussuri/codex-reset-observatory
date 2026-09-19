@@ -7,6 +7,7 @@ import {
   ACTIVE_TIBO_SIGNAL_TYPES,
   ACTIVE_TIBO_SIGNAL_SELECT_FIELDS,
   applyActiveTiboQueryFilters,
+  applyTimedTiboQueryFilters,
   associateTiboNotices,
   buildPublicRadarSnapshotBundle,
   getEffectiveRadarCalculationNow,
@@ -22,6 +23,9 @@ import {
   splitTiboHistorySignals,
   TIBO_HISTORY_MAX_ROWS,
   TIBO_HISTORY_SELECT_FIELDS,
+  TIBO_RECENT_MAX_ROWS,
+  TIMED_TIBO_SIGNAL_MAX_ROWS,
+  TIMED_TIBO_SIGNAL_SELECT_FIELDS,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -238,6 +242,52 @@ test("active Tibo filters are applied before ordering and limit", () => {
     "order",
     "limit",
   ]);
+});
+
+test("timed Tibo query stays narrow and only returns live resolved windows", () => {
+  const calls: string[] = [];
+  const builder = {
+    in: (_column: string, values: string[]) => {
+      calls.push(`in:signal_type:${values.join(",")}`);
+      return builder;
+    },
+    eq: (column: string, value: string) => {
+      calls.push(`eq:${column}:${value}`);
+      return builder;
+    },
+    gt: (column: string, value: string) => {
+      calls.push(`gt:${column}:${value}`);
+      return builder;
+    },
+    lte: (column: string, value: string) => {
+      calls.push(`lte:${column}:${value}`);
+      return builder;
+    },
+    or: (filters: string) => {
+      calls.push(`or:${filters}`);
+      return builder;
+    },
+    order: (column: string, options: { ascending: boolean }) => {
+      calls.push(`order:${column}:${options.ascending}`);
+      return builder;
+    },
+    limit: async (_count: number) => ({ data: [], error: null }),
+  };
+
+  applyTimedTiboQueryFilters(builder, "2026-09-19T22:00:00.000Z");
+
+  assert.deepEqual(calls, [
+    "in:signal_type:teaser,official_notice",
+    "eq:temporal_resolution_status:resolved",
+    "gt:expected_end_at:2026-09-19T22:00:00.000Z",
+    "lte:tweet_created_at:2026-09-19T22:00:00.000Z",
+    "or:verification_status.is.null,verification_status.neq.rejected",
+    "order:tweet_created_at:false",
+  ]);
+  assert.equal(TIMED_TIBO_SIGNAL_MAX_ROWS, 40);
+  assert.ok(TIMED_TIBO_SIGNAL_SELECT_FIELDS.split(",").length < ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(",").length);
+  assert.equal(TIBO_RECENT_MAX_ROWS, 20);
+  assert.equal(TIBO_HISTORY_MAX_ROWS, 1000);
 });
 
 test("one reply-inclusive history result derives the formal view without changing the recent view", () => {

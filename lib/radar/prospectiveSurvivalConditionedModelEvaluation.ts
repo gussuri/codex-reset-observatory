@@ -2,6 +2,7 @@ import {
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
   SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
   SURVIVAL_CONDITIONED_FREEZE_POLICY,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   SURVIVAL_CONTEXT_BURST_MODEL_VERSION,
@@ -92,6 +93,7 @@ export type SurvivalProspectiveMetric = SurvivalProspectiveScoreSummary & {
 
 export type SurvivalProspectiveModelEvaluation = {
   modelVersion: string;
+  forecastPolicyVersion: string | null;
   forecastCount: number;
   comparableOriginCount: number;
   metrics: Record<`${SurvivalProspectiveHorizon}h`, SurvivalProspectiveMetric>;
@@ -108,6 +110,7 @@ export type SurvivalProspectiveModelEvaluationReport = {
   targetDefinition: typeof SURVIVAL_CONDITIONED_TARGET_DEFINITION;
   freezeAt: typeof SURVIVAL_CONDITIONED_FREEZE_AT;
   freezePolicy: typeof SURVIVAL_CONDITIONED_FREEZE_POLICY;
+  forecastPolicyVersion: typeof SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION;
   randomEligibilityPolicyVersion: typeof BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION;
   originPolicy: "six-hour-first";
   forecastCounts: Record<string, number> & {
@@ -139,6 +142,12 @@ function isProbability(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+function expectedForecastPolicyVersion(modelVersion: string) {
+  return modelVersion === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION
+    ? null
+    : SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION;
+}
+
 function getForecast(row: ProspectiveForecastRow, modelVersion: string): StoredForecast | null {
   const forecast = asRecord(row.forecasts[modelVersion]);
   if (
@@ -147,6 +156,10 @@ function getForecast(row: ProspectiveForecastRow, modelVersion: string): StoredF
     || typeof forecast.generatedAt !== "string"
     || timestamp(forecast.generatedAt) === null
   ) {
+    return null;
+  }
+  const expectedPolicyVersion = expectedForecastPolicyVersion(modelVersion);
+  if (expectedPolicyVersion !== null && forecast.forecastPolicyVersion !== expectedPolicyVersion) {
     return null;
   }
   return forecast as StoredForecast;
@@ -421,6 +434,7 @@ function metric(
 function emptyModelEvaluation(modelVersion: string): SurvivalProspectiveModelEvaluation {
   return {
     modelVersion,
+    forecastPolicyVersion: expectedForecastPolicyVersion(modelVersion),
     forecastCount: 0,
     comparableOriginCount: 0,
     metrics: {
@@ -503,6 +517,7 @@ export function evaluateProspectiveSurvivalConditionedModel(
     targetDefinition: SURVIVAL_CONDITIONED_TARGET_DEFINITION,
     freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
     freezePolicy: SURVIVAL_CONDITIONED_FREEZE_POLICY,
+    forecastPolicyVersion: SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
     randomEligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
     originPolicy: "six-hour-first",
     forecastCounts,
@@ -513,6 +528,7 @@ export function evaluateProspectiveSurvivalConditionedModel(
     notes: [
       `Only saved forecasts at or after ${SURVIVAL_CONDITIONED_FREEZE_AT} are eligible; no historical forecast is reconstructed, backfilled, or relabeled.`,
       "All model metrics use the same six-hour-first comparable origin set; model availability is never mixed across separate origin sets.",
+      `Survival forecasts are evaluated only when forecastPolicyVersion is ${SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION}; missing or mismatched policy identity is treated as legacy and excluded without backfill.`,
       "The survival age segment uses only the saved survivalConditioned.randomElapsedHours audit value; missing metadata is reported as unknown.",
       "Training is represented by the saved forecast artifact. The evaluator never refits, adds future features, or fills missing feature metadata from current read-side data.",
       "Actual outcomes use canonical random boundaries only; regular-only boundaries do not become positive target events.",

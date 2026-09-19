@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   SURVIVAL_CONTEXT_BURST_MODEL_VERSION,
   SURVIVAL_CONTEXT_CIRCADIAN_MODEL_VERSION,
@@ -31,6 +32,9 @@ function makeRow(
     {
       modelVersion,
       generatedAt,
+      ...(modelVersion === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION
+        ? {}
+        : { forecastPolicyVersion: SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION }),
       probability12h: 0.04 + modelIndex * 0.01 + index * 0.002,
       probability24h: 0.08 + modelIndex * 0.01 + index * 0.002,
       probability48h: 0.16 + modelIndex * 0.01 + index * 0.002,
@@ -140,6 +144,35 @@ test("does not reconstruct missing survival age from current or generated timest
     report.models[SURVIVAL_CONDITIONED_MODEL_VERSION].metrics["24h"].ageBuckets["0-24h"].count,
     0,
   );
+});
+
+test("does not mix legacy or mismatched forecast-policy artifacts with the current policy", () => {
+  const current = makeRow("2026-09-19T00:00:00.000Z", 1, 30);
+  const legacy = makeRow("2026-09-19T06:00:00.000Z", 2, 36);
+  for (const modelVersion of MODEL_VERSIONS) {
+    if (modelVersion === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION) continue;
+    const forecast = legacy.forecasts[modelVersion] as Record<string, unknown>;
+    forecast.forecastPolicyVersion = "teaser-temporal-reallocation-v1";
+  }
+
+  const selected = selectComparableSurvivalOrigins(
+    [current, legacy],
+    new Date("2026-09-24T00:00:00.000Z"),
+  );
+  assert.deepEqual(selected.map((row) => row.generatedAt), [current.generatedAt]);
+
+  const report = evaluateProspectiveSurvivalConditionedModel(
+    [current, legacy],
+    boundaries,
+    new Date("2026-09-24T00:00:00.000Z"),
+  );
+  assert.equal(report.forecastPolicyVersion, SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION);
+  assert.equal(report.forecastCounts.commonComparable, 1);
+  assert.equal(
+    report.models[SURVIVAL_CONDITIONED_MODEL_VERSION].forecastPolicyVersion,
+    SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
+  );
+  assert.match(report.notes.join("\n"), /forecastPolicyVersion/);
 });
 
 test("keeps the model inventory limited to the base, five arms, and broad v2", () => {

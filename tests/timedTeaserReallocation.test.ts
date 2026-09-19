@@ -5,6 +5,7 @@ import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
   calculateSurvivalConditionedProbability,
+  calculateSurvivalConditionedContextArms,
 } from "../lib/radar/survivalConditionedProbability";
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
 import {
@@ -13,6 +14,7 @@ import {
   getTimedTeaserCandidates,
 } from "../lib/radar/timedTeaserProbability";
 import { interpretTiboSignal } from "../lib/radar/teaserStrength";
+import { getTiboReadSideSignals } from "../lib/radar/tiboLogicalProjection";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
 
@@ -39,10 +41,14 @@ function contextualSignal(overrides: Partial<ActiveTiboSignal> = {}): ActiveTibo
   };
 }
 
-function survivalData(signals: ActiveTiboSignal[] = []) {
+function survivalData(
+  signals: ActiveTiboSignal[] = [],
+  timedTiboSignals: ActiveTiboSignal[] = [],
+) {
   return getLocalRadarData({
     calculationNow: NOW,
     recentTiboSignals: signals,
+    timedTiboSignals,
   });
 }
 
@@ -230,6 +236,117 @@ test("window completion releases the timed adjustment instead of creating a perm
   )[0] ?? null;
   assert.equal(afterCandidate, null);
   assert.deepEqual(applyTimedTeaserProbabilityReallocation(base, afterCandidate, afterNow).predictions, base);
+});
+
+test("resolved timed teasers remain eligible after the former 48-hour tweet lookback", () => {
+  const oldSignal = contextualSignal({
+    tweet_id: "old-but-unexpired-timed",
+    tweet_created_at: "2026-09-18T00:00:00.000Z",
+    teaser_strength: "strong",
+  });
+  const lateNow = new Date("2026-09-20T12:00:00.000Z");
+  const candidate = getTimedTeaserCandidates(
+    getLocalRadarData({ calculationNow: lateNow, recentTiboSignals: [oldSignal] }),
+    null,
+    lateNow,
+  )[0];
+
+  assert.ok(lateNow.getTime() - Date.parse(oldSignal.tweet_created_at) > 48 * 60 * 60 * 1000);
+  assert.ok(candidate);
+  assert.equal(candidate.signal.tweet_id, oldSignal.tweet_id);
+});
+
+test("unresolved timed evidence keeps the existing 48-hour lookback", () => {
+  const oldSignal = contextualSignal({
+    tweet_id: "old-unresolved-timed",
+    tweet_created_at: "2026-09-18T00:00:00.000Z",
+    temporal_resolution_status: "unresolved",
+    expected_start_at: null,
+    expected_end_at: null,
+    teaser_strength: "strong",
+  });
+  const lateNow = new Date("2026-09-20T12:00:00.000Z");
+
+  assert.equal(
+    getTimedTeaserCandidates(
+      getLocalRadarData({ calculationNow: lateNow, recentTiboSignals: [oldSignal] }),
+      null,
+      lateNow,
+    )[0] ?? null,
+    null,
+  );
+});
+
+test("resolved timed teasers expire by their temporal CDF rather than tweet age", () => {
+  const signal = contextualSignal({
+    tweet_id: "resolved-window-expiry",
+    tweet_created_at: "2026-09-18T00:00:00.000Z",
+  });
+  const afterWindow = new Date("2026-09-23T08:00:00.000Z");
+  const candidate = getTimedTeaserCandidates(
+    getLocalRadarData({ calculationNow: afterWindow, recentTiboSignals: [signal] }),
+    null,
+    afterWindow,
+  )[0] ?? null;
+
+  assert.equal(candidate, null);
+});
+
+test("resolved timed teasers outside the 72-hour horizon do not become candidates", () => {
+  const farFuture = contextualSignal({
+    tweet_id: "resolved-far-future",
+    tweet_created_at: "2026-09-19T07:00:00.000Z",
+    expected_start_at: "2026-09-25T07:00:00.000Z",
+    expected_end_at: "2026-09-26T07:00:00.000Z",
+  });
+  const candidate = getTimedTeaserCandidates(
+    getLocalRadarData({ calculationNow: NOW, recentTiboSignals: [farFuture] }),
+    null,
+    NOW,
+  )[0] ?? null;
+
+  assert.equal(candidate, null);
+});
+
+test("the narrow timed read-side projection participates without widening recent signals", () => {
+  const timedOnly = contextualSignal({
+    tweet_id: "timed-only-projection",
+    tweet_created_at: "2026-09-18T00:00:00.000Z",
+  });
+  const candidate = getTimedTeaserCandidates(
+    survivalData([], [timedOnly]),
+    null,
+    NOW,
+  )[0];
+
+  assert.ok(candidate);
+  assert.equal(candidate.signal.tweet_id, timedOnly.tweet_id);
+  assert.equal(
+    getTiboReadSideSignals(survivalData([], [timedOnly]), "all")
+      .some((signal) => signal.tweet_id === timedOnly.tweet_id),
+    false,
+  );
+});
+
+test("the timed overlay is applied to every Survival context arm", () => {
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const baselineArms = calculateSurvivalConditionedContextArms(
+    survivalData(),
+    { now: NOW, staticHistory },
+  );
+  const timedArms = calculateSurvivalConditionedContextArms(
+    survivalData([contextualSignal()]),
+    { now: NOW, staticHistory },
+  );
+
+  for (const modelVersion of Object.keys(baselineArms)) {
+    const baseline = baselineArms[modelVersion];
+    const timed = timedArms[modelVersion];
+    assert.ok(baseline);
+    assert.ok(timed);
+    assert.ok(timed.predictions.probability24h < baseline.predictions.probability24h);
+    assert.equal(timed.base.survival.timedTeaserReallocation?.applied, true);
+  }
 });
 
 test("official notice timing remains authoritative and ordinary replies have no timed effect", () => {

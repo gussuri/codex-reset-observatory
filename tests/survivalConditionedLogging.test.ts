@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   NEXT_GENERATION_FREEZE_AT,
   SURVIVAL_CONDITIONED_FREEZE_AT,
+  SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
   SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   SURVIVAL_CONTEXT_MODEL_VERSIONS,
@@ -90,6 +91,7 @@ test("post-freeze logging stores survival base and every context arm at one orig
     assert.equal(forecast.generatedAt, now.toISOString());
     assert.equal(forecast.freezeAt, SURVIVAL_CONDITIONED_FREEZE_AT);
     assert.equal(forecast.nextGenerationRole, "survival-conditioned-shadow");
+    assert.equal(forecast.forecastPolicyVersion, SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION);
     assert.equal(forecast.backfilled, false);
     assert.equal(forecast.survivalConditioned?.liveIntervalIncludedInTraining, false);
   }

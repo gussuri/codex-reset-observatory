@@ -120,9 +120,9 @@ function asResetTeaserSignal(signal: ResetTeaserSignal): ResetTeaserSignal {
 }
 
 /**
- * Returns the recent read-side signals that are eligible for the bounded
- * contextual timed-teaser policy. This only reads the already-loaded logical
- * projection; it does not fetch canonical history or add a database query.
+ * Returns bounded read-side signals that are eligible for the contextual
+ * timed-teaser policy, including resolved windows from the dedicated narrow
+ * projection. This only reads the already-loaded logical projections.
  */
 export function getTimedTeaserCandidates(
   data: RadarData | null,
@@ -144,12 +144,15 @@ export function getTimedTeaserCandidates(
   const seen = new Set<string>();
 
   return expandTiboSignalVariants(
-    getTiboReadSideSignals(
-      data,
-      "teaser",
-      false,
-      canonicalHistoryContext?.readSideProjection,
-    ),
+    [
+      ...getTiboReadSideSignals(
+        data,
+        "teaser",
+        false,
+        canonicalHistoryContext?.readSideProjection,
+      ),
+      ...getTiboReadSideSignals(data, "timed"),
+    ],
   )
     .map(asResetTeaserSignal)
     .filter((signal) => {
@@ -158,7 +161,9 @@ export function getTimedTeaserCandidates(
       seen.add(key);
 
       const createdTime = timestamp(signal.tweet_created_at);
-      if (createdTime === null || createdTime > nowTime || createdTime < cutoffTime) return false;
+      const isResolved = signal.temporal_resolution_status === "resolved";
+      if (createdTime === null || createdTime > nowTime) return false;
+      if (!isResolved && createdTime < cutoffTime) return false;
       if (isTiboForecastSignalTerminatedAt(signal.tweet_id, now)) return false;
       if (signal.verification_status === "rejected") return false;
 
@@ -177,12 +182,26 @@ export function getTimedTeaserCandidates(
         temporalRelation === "before";
       if (!isSemanticallyAfterBoundary) return false;
 
-      const interpretation = interpretTiboSignal(signal, now);
-      return interpretation.timedProbabilityEligible;
+      const interpretation = interpretTiboSignal(signal, now, {
+        ignoreCreatedAtLookback: isResolved,
+      });
+      if (!interpretation.timedProbabilityEligible) return false;
+
+      // Resolved windows are lifecycle-bound by their actual temporal CDF,
+      // not by the age of the post that announced them. Keep unresolved
+      // evidence on the existing bounded lookback because it has no reliable
+      // execution window to anchor its lifetime.
+      if (isResolved) {
+        const cdf = getCdf(signal, now);
+        return cdf !== null && Object.values(cdf).some((value) => value > 0);
+      }
+      return true;
     })
     .map((signal) => ({
       signal,
-      interpretation: interpretTiboSignal(signal, now),
+      interpretation: interpretTiboSignal(signal, now, {
+        ignoreCreatedAtLookback: signal.temporal_resolution_status === "resolved",
+      }),
     }))
     .sort((left, right) =>
       contextSpecificity(right.interpretation.contextDependence) -

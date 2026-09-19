@@ -33,6 +33,11 @@ export type TiboSignalInterpretation = {
   uiTeaserFallback: boolean;
 };
 
+export type TiboSignalInterpretationOptions = {
+  /** Timed policy may use a still-live resolved window beyond post age 48h. */
+  ignoreCreatedAtLookback?: boolean;
+};
+
 const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 export type ResetTeaserSignal = {
@@ -136,6 +141,7 @@ function hasResetContext(signal: ResetTeaserSignal) {
 function hasStrongContextualTimedTeaserEvidence(
   signal: ResetTeaserSignal,
   now: Date,
+  options: TiboSignalInterpretationOptions = {},
 ) {
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") return false;
   if (signal.is_reply !== true && signal.is_quote !== true) return false;
@@ -147,7 +153,8 @@ function hasStrongContextualTimedTeaserEvidence(
   const authorText = signal.text ?? "";
   const createdTime = getTimestamp(signal.tweet_created_at);
   const nowTime = now.getTime();
-  if (createdTime === null || !Number.isFinite(nowTime) || createdTime > nowTime || createdTime < nowTime - RESET_TEASER_LOOKBACK_MS) {
+  if (createdTime === null || !Number.isFinite(nowTime) || createdTime > nowTime ||
+      (!options.ignoreCreatedAtLookback && createdTime < nowTime - RESET_TEASER_LOOKBACK_MS)) {
     return false;
   }
   if (!hasResetContext(signal) || !FUTURE_TIMING_PATTERN.test(authorText)) return false;
@@ -203,6 +210,7 @@ function canDeriveAmbiguousContextTeaser(
 export function interpretTiboSignal(
   signal: ResetTeaserSignal,
   now: Date = new Date(),
+  options: TiboSignalInterpretationOptions = {},
 ): TiboSignalInterpretation {
   const effectiveStrength = getEffectiveTeaserStrength(signal);
   const rejected = signal.verification_status === "rejected";
@@ -228,7 +236,7 @@ export function interpretTiboSignal(
   const contextDependence = getContextDependence(signal);
   const strongContextualTimedTeaser =
     (effectiveStrength === null || effectiveStrength === "strong") &&
-    hasStrongContextualTimedTeaserEvidence(signal, now);
+    hasStrongContextualTimedTeaserEvidence(signal, now, options);
   const directStrongTimedTeaser = !rejected &&
     signal.signal_type === "teaser" &&
     signal.is_reply !== true &&

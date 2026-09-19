@@ -824,6 +824,16 @@ export function calculateSurvivalConditionedContextArms(
     getHazardAtAge: (ageHours) => getSurvivalConditionedHazardDiagnosticsAtAge(base.hazard, ageHours).lambdaPerHour,
   });
   const circadianNormalization = calculateCircadianNormalization(fit.coefficients);
+  const timedTeaserCandidate = base.officialNoticeOverride.active
+    ? null
+    : getTimedTeaserCandidates(
+        data,
+        base.survival.latestRandomResetAt,
+        now,
+        null,
+        options.canonicalHistoryContext,
+      )[0] ?? null;
+  const ordinarySignalData = excludeTimedTeaserFromOrdinaryPath(data, timedTeaserCandidate);
   const arms = [
     {
       modelVersion: SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION,
@@ -852,7 +862,7 @@ export function calculateSurvivalConditionedContextArms(
     },
   ];
   const oldRegimeResult = calculateRegimeElapsedProbability(
-    data,
+    ordinarySignalData,
     {
       ...options,
       now,
@@ -887,7 +897,14 @@ export function calculateSurvivalConditionedContextArms(
           circadianNormalization,
         );
     const signalAdjusted = applySurvivalSignalMultipliers(adjustedBaseline, base.multipliers);
-    const predictions = base.officialNoticeOverride.active ? base.predictions : signalAdjusted;
+    const timedTeaserResult = applyTimedTeaserProbabilityReallocation(
+      signalAdjusted,
+      timedTeaserCandidate,
+      now,
+    );
+    const predictions = base.officialNoticeOverride.active
+      ? base.predictions
+      : timedTeaserResult.predictions;
     const originRaw = getContextualBurstRawFeatures(randomResetTimes, now);
     return [arm.modelVersion, {
       modelVersion: arm.modelVersion,

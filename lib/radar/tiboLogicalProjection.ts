@@ -41,12 +41,14 @@ export type TiboReadSideSignalScope =
   | "all"
   | "active"
   | "recent"
+  | "timed"
   | "probability"
   | "teaser";
 
 export type TiboReadSideInput = {
   active_tibo_signals?: readonly TiboReadSideSignal[] | null;
   recent_tibo_signals?: readonly TiboReadSideSignal[] | null;
+  timed_tibo_signals?: readonly TiboReadSideSignal[] | null;
   formal_tibo_resets?: readonly TiboReadSideSignal[] | null;
 };
 
@@ -559,6 +561,13 @@ export function getTiboReadSideSignals(
   projection?: TiboReadSideProjection,
 ) {
   if (!data) return [];
+
+  // Timed evidence comes from a separate narrow query. Keep it out of the
+  // shared all/active/recent/probability projections so unrelated consumers
+  // cannot observe a new egress path or a second copy of the same signal.
+  if (scope === "timed") {
+    return buildTiboReadSideProjection(data.timed_tibo_signals ?? []).effectiveSignals;
+  }
 
   if (projection) {
     return selectTiboReadSideSignals(

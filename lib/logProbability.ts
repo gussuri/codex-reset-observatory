@@ -70,6 +70,8 @@ export function hasOfficialNoticeForLog(
 export type ExperimentalProbabilityForecast = {
   modelVersion: string;
   generatedAt: string;
+  /** Separates post-model evidence-policy epochs from the hazard model identity. */
+  forecastPolicyVersion?: string;
   probability12h?: number;
   probability24h: number;
   probability48h: number;

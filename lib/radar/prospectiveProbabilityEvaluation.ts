@@ -26,6 +26,8 @@ export type ProspectiveStoredForecast = {
   generatedAt: string;
   probability24h: number;
   probability48h: number;
+  /** Optional policy identity for separating post-model forecast epochs. */
+  forecastPolicyVersion?: string;
   [key: string]: unknown;
 };
 

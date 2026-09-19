@@ -313,6 +313,8 @@ export const TIMED_TEASER_REALLOCATION_CONFIG = {
   strongContextualWeight: 0.4,
   strongDirectWeight: 0.5,
 } as const;
+export const SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION =
+  TIMED_TEASER_REALLOCATION_POLICY_VERSION;
 
 // Context variants remain shadow-only. They all use the survival-conditioned
 // base hazard and differ only in the additional short-horizon/circadian block.
