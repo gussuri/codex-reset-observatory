@@ -1440,6 +1440,7 @@ export type NoticeBackedHistoryData = Pick<
   RadarData,
   | "active_tibo_signals"
   | "recent_tibo_signals"
+  | "canonical_tibo_signals"
   | "formal_tibo_resets"
   | "rejected_tibo_resets"
   | "regular_reset_events"
@@ -1614,8 +1615,9 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
       .map((estimate) => estimate.officialNoticeTweetId?.trim())
       .filter((tweetId): tweetId is string => Boolean(tweetId)),
   );
+  const canonicalSignals = data?.canonical_tibo_signals ?? data?.recent_tibo_signals ?? [];
   const recoveryEvidenceSignals = collectTiboRecoveryEvidenceSignals(
-    data?.recent_tibo_signals ?? [],
+    canonicalSignals,
     data?.active_tibo_signals ?? [],
     officialNoticeTweetIds,
   );
@@ -1623,7 +1625,7 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
   return {
     noticeSignals: recoveryEvidenceSignals,
     bankedSignals: collectBankedDistributionSignals(
-      data?.recent_tibo_signals ?? [],
+      canonicalSignals,
       data?.active_tibo_signals ?? [],
     ),
     recoveryObservations,

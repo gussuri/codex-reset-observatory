@@ -373,6 +373,8 @@ export type RadarData = {
   openai_status_history?: Array<OpenAIStatusHistoryItem>;
   active_tibo_signals?: Array<ActiveTiboSignal>;
   recent_tibo_signals?: Array<ActiveTiboSignal>;
+  /** Internal narrow historical Tibo evidence for canonical reconstruction; never public DTO data. */
+  canonical_tibo_signals?: Array<FormalTiboResetSignal>;
   formal_tibo_resets?: Array<FormalTiboResetSignal>;
   rejected_tibo_resets?: Array<RejectedTiboResetSignal>;
   regular_reset_events?: Array<RegularResetEventRow>;

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getLocalRadarData } from "../lib/radar";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
+import { getPointInTimeRadarData } from "../lib/radar/prequentialCalibration";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
@@ -362,4 +363,35 @@ test("separating recent UI fields does not change formal/rejected/edit/secondary
   const fullProbability = getLocalProbabilityCalculation(fullData, { now: NOW });
   const reducedProbability = getLocalProbabilityCalculation(reducedData, { now: NOW });
   assert.equal(JSON.stringify(reducedProbability), JSON.stringify(fullProbability));
+});
+
+test("canonical historical Tibo evidence stays internal and respects point-in-time filtering", () => {
+  const past = resetRow("canonical-past", "official_notice", {
+    tweet_created_at: "2026-09-10T12:00:00.000Z",
+    detected_at: "2026-09-10T12:01:00.000Z",
+  });
+  const future = resetRow("canonical-future", "official_notice", {
+    tweet_created_at: "2026-09-12T12:00:00.000Z",
+    detected_at: "2026-09-12T12:01:00.000Z",
+  });
+  const data = getLocalRadarData({
+    calculationNow: NOW,
+    recentTiboSignals: [],
+    canonicalTiboSignals: [past, future],
+  });
+
+  const snapshot = toPublicRadarSnapshot(data, "en", {
+    calculationNow: NOW,
+    limitHistory: true,
+  });
+  assert.equal("canonical_tibo_signals" in snapshot, false);
+
+  const pointInTime = getPointInTimeRadarData(
+    data,
+    new Date("2026-09-11T00:00:00.000Z"),
+  );
+  assert.deepEqual(
+    pointInTime?.canonical_tibo_signals?.map((signal) => signal.tweet_id),
+    ["canonical-past"],
+  );
 });

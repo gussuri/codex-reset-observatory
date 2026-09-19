@@ -405,6 +405,9 @@ export function getPointInTimeRadarData(data: RadarData | null, origin: Date): R
     recent_tibo_signals: (data.recent_tibo_signals ?? []).filter((signal) =>
       isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
     ),
+    canonical_tibo_signals: data.canonical_tibo_signals?.filter((signal) =>
+      isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
+    ),
     formal_tibo_resets: (data.formal_tibo_resets ?? []).filter((signal) =>
       isAvailableAt(signal.detected_at ?? signal.tweet_created_at, originTime),
     ),

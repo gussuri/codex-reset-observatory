@@ -864,6 +864,7 @@ function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null 
 type TiboSignalBundle = {
   activeSignals: Array<ActiveTiboSignal>;
   recentSignals: Array<ActiveTiboSignal>;
+  canonicalSignals: Array<FormalTiboResetSignal>;
   formalResets: Array<FormalTiboResetSignal>;
   rejectedResets: Array<RejectedTiboResetSignal>;
   health: DataSourceHealth;
@@ -988,6 +989,7 @@ async function getTiboSignalBundle(
   return {
     activeSignals,
     recentSignals,
+    canonicalSignals: signals,
     formalResets,
     rejectedResets,
     health: combineDataSourceHealth(
@@ -1134,6 +1136,7 @@ async function fetchCurrentRadarDataBase(
     openAIStatus: openAIStatus.data,
     activeTiboSignals: tiboSignals.activeSignals,
     recentTiboSignals: tiboSignals.recentSignals,
+    canonicalTiboSignals: tiboSignals.canonicalSignals,
     formalTiboResets: tiboSignals.formalResets,
     rejectedTiboResets: tiboSignals.rejectedResets,
     regularResetEvents: regularResetEvents.data,

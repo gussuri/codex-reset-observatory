@@ -366,6 +366,33 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
 });
 
+test("restores BANKED history from canonical evidence outside the bounded recent UI window", () => {
+  const recentUiSignals = Array.from({ length: 20 }, (_, index) => ({
+    ...notice,
+    tweet_id: `recent-ui-${index}`,
+    text: `A recent unrelated Tibo update ${index}.`,
+  }));
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: recentUiSignals,
+    canonical_tibo_signals: [notice],
+    active_tibo_signals: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [estimate],
+  } as Parameters<typeof getNoticeBackedHistoryInputs>[0]);
+
+  assert.equal(recentUiSignals.length, 20);
+  assert.equal(
+    recentUiSignals.some((signal) => signal.tweet_id === notice.tweet_id),
+    false,
+  );
+
+  const restored = findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates);
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0]?.officialNoticeTweetId, notice.tweet_id);
+  assert.equal(restored[0]?.id, estimate.resetEventKey);
+});
+
 test("creates the observed Astra BANKED event without promoting it to generic global history", () => {
   const astraNotice = {
     ...notice,
