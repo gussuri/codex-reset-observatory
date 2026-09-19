@@ -133,11 +133,10 @@ function hasResetContext(signal: ResetTeaserSignal) {
     USAGE_RESET_CONTEXT_PATTERN.test(combinedText);
 }
 
-function canDeriveStrongContextualTimedTeaser(
+function hasStrongContextualTimedTeaserEvidence(
   signal: ResetTeaserSignal,
   now: Date,
 ) {
-  if (getEffectiveTeaserStrength(signal) !== null) return false;
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") return false;
   if (signal.is_reply !== true && signal.is_quote !== true) return false;
   if (signal.verification_status === "rejected") return false;
@@ -227,7 +226,9 @@ export function interpretTiboSignal(
     Number.isFinite(signal.confidence) &&
     signal.confidence >= 0.95;
   const contextDependence = getContextDependence(signal);
-  const strongContextualTimedTeaser = canDeriveStrongContextualTimedTeaser(signal, now);
+  const strongContextualTimedTeaser =
+    (effectiveStrength === null || effectiveStrength === "strong") &&
+    hasStrongContextualTimedTeaserEvidence(signal, now);
   const directStrongTimedTeaser = !rejected &&
     signal.signal_type === "teaser" &&
     signal.is_reply !== true &&

@@ -68,6 +68,21 @@ test("contextual timed replies become strong presentation evidence without becom
   assert.equal(contextualSignal().signal_type, "official_notice");
 });
 
+test("stored strong contextual replies remain eligible for the timed policy", () => {
+  const signal = contextualSignal({ teaser_strength: "strong" });
+  const interpretation = interpretTiboSignal(signal, NOW);
+  assert.equal(interpretation.presentationDisposition, "strong_teaser");
+  assert.equal(interpretation.timedProbabilityEligible, true);
+  assert.deepEqual(getTimedTeaserReallocationWeight(interpretation), {
+    timedEvidenceClass: "strong_contextual",
+    reallocationWeight: 0.4,
+  });
+  const baseline = calculate();
+  const adjusted = calculate([signal]);
+  assert.equal(adjusted.survival.timedTeaserReallocation?.applied, true);
+  assert.ok(adjusted.predictions.probability24h < baseline.predictions.probability24h);
+});
+
 test("timed evidence weight is derived from the shared interpretation", () => {
   const contextual = interpretTiboSignal(contextualSignal(), NOW);
   assert.deepEqual(getTimedTeaserReallocationWeight(contextual), {
