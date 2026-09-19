@@ -54,6 +54,7 @@ import {
 import { getPostResetRegimeMultiplierAtAge } from "./randomContinuousProbability";
 import {
   applyTimedTeaserProbabilityReallocation,
+  excludeTimedTeaserFromOrdinaryPath,
   getTimedTeaserCandidates,
   type TimedTeaserReallocationAudit,
 } from "./timedTeaserProbability";
@@ -550,8 +551,21 @@ export function calculateSurvivalConditionedProbability(
   );
   const randomBoundaries = getRandomElapsedBoundaries(boundaries);
   const hazard = buildSurvivalConditionedHazard(randomBoundaries, now);
+  const latestRandomResetAt = latestReset(randomBoundaries);
+  const latestRecoveryResetAt = latestReset(boundaries);
+  const notice = getNotice(data, sharedOptions, latestRecoveryResetAt, now);
+  const timedTeaserCandidate = notice === null
+    ? getTimedTeaserCandidates(
+        data,
+        latestRandomResetAt,
+        now,
+        null,
+        options.canonicalHistoryContext,
+      )[0] ?? null
+    : null;
+  const ordinarySignalData = excludeTimedTeaserFromOrdinaryPath(data, timedTeaserCandidate);
   const regimeResult = precomputedRecoveryResult ?? calculateRegimeElapsedProbability(
-    data,
+    ordinarySignalData,
     sharedOptions,
     {
       ...NEXT_GENERATION_B_FROZEN_REGIME_CONFIG,
@@ -560,8 +574,6 @@ export function calculateSurvivalConditionedProbability(
       signalMultiplierConfig: SURVIVAL_CONDITIONED_SIGNAL_CONFIG,
     },
   );
-  const latestRandomResetAt = latestReset(randomBoundaries);
-  const latestRecoveryResetAt = latestReset(boundaries);
   const randomElapsedHours = safeRandomElapsedHours(randomBoundaries, now);
   const baseline = directHorizons(hazard, randomElapsedHours);
   const adjusted: ShadowProbabilityHorizons = {
@@ -570,17 +582,7 @@ export function calculateSurvivalConditionedProbability(
     probability48h: applyOddsMultiplier(baseline.probability48h, regimeResult.multipliers.combinedAfterCap.probability48h),
     probability72h: applyOddsMultiplier(baseline.probability72h, regimeResult.multipliers.combinedAfterCap.probability48h),
   };
-  const notice = getNotice(data, sharedOptions, latestRecoveryResetAt, now);
   const noticeHorizons = applyOfficialNoticeTimingPolicy(baseline, notice, now);
-  const timedTeaserCandidate = noticeHorizons === null
-    ? getTimedTeaserCandidates(
-        data,
-        latestRandomResetAt,
-        now,
-        null,
-        options.canonicalHistoryContext,
-      ).find((candidate) => !candidate.interpretation.probabilityTeaserEligible) ?? null
-    : null;
   const timedTeaserResult = applyTimedTeaserProbabilityReallocation(
     adjusted,
     timedTeaserCandidate,

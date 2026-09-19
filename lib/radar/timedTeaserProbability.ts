@@ -28,11 +28,19 @@ export type TimedTeaserCandidate = {
   interpretation: TiboSignalInterpretation;
 };
 
+export type TimedTeaserEvidenceClass = "strong_contextual" | "strong_direct";
+
+export type TimedTeaserReallocationWeight = {
+  timedEvidenceClass: TimedTeaserEvidenceClass;
+  reallocationWeight: number;
+};
+
 export type TimedTeaserReallocationAudit = {
   policyVersion: typeof TIMED_TEASER_REALLOCATION_POLICY_VERSION;
   applied: boolean;
   contextDependence: TiboSignalContextDependence | null;
-  weight: number | null;
+  timedEvidenceClass: TimedTeaserEvidenceClass | null;
+  reallocationWeight: number | null;
   temporalPrecision: ResetTeaserSignal["temporal_precision"] | null;
   cdf: {
     probability12h: number;
@@ -41,6 +49,41 @@ export type TimedTeaserReallocationAudit = {
     probability72h: number;
   } | null;
 };
+
+/**
+ * Converts the shared signal interpretation into a conservative time-window
+ * evidence class. No source text or signal-specific heuristics are repeated
+ * here; the interpretation is the single semantic input to this policy.
+ */
+export function getTimedTeaserReallocationWeight(
+  interpretation: TiboSignalInterpretation,
+): TimedTeaserReallocationWeight | null {
+  if (
+    interpretation.presentationDisposition !== "strong_teaser" ||
+    !interpretation.timedProbabilityEligible
+  ) {
+    return null;
+  }
+
+  if (interpretation.contextDependence === "direct") {
+    return {
+      timedEvidenceClass: "strong_direct",
+      reallocationWeight: TIMED_TEASER_REALLOCATION_CONFIG.strongDirectWeight,
+    };
+  }
+
+  if (
+    interpretation.contextDependence === "reply_context" ||
+    interpretation.contextDependence === "ambiguous"
+  ) {
+    return {
+      timedEvidenceClass: "strong_contextual",
+      reallocationWeight: TIMED_TEASER_REALLOCATION_CONFIG.strongContextualWeight,
+    };
+  }
+
+  return null;
+}
 
 function timestamp(value: string | Date | null | undefined) {
   if (value instanceof Date) {
@@ -150,6 +193,36 @@ export function getTimedTeaserCandidates(
     );
 }
 
+/**
+ * Direct strong teasers are removed from the pre-existing ordinary signal
+ * multiplier path before the timed policy is applied. Contextual candidates
+ * are not ordinary probability teasers, so their source data is unchanged.
+ */
+export function excludeTimedTeaserFromOrdinaryPath(
+  data: RadarData | null,
+  candidate: TimedTeaserCandidate | null,
+) {
+  if (
+    !data ||
+    !candidate ||
+    candidate.interpretation.contextDependence !== "direct" ||
+    !candidate.signal.tweet_id
+  ) {
+    return data;
+  }
+
+  const tweetId = candidate.signal.tweet_id;
+  const filter = <T extends { tweet_id?: string | null }>(signals: T[] | undefined) =>
+    signals?.filter((signal) => signal.tweet_id !== tweetId);
+
+  return {
+    ...data,
+    active_tibo_signals: filter(data.active_tibo_signals),
+    recent_tibo_signals: filter(data.recent_tibo_signals),
+    formal_tibo_resets: filter(data.formal_tibo_resets),
+  };
+}
+
 function getCdf(signal: ResetTeaserSignal, now: Date) {
   const resolution = {
     status: signal.temporal_resolution_status === "resolved" ? "resolved" as const : "unresolved" as const,
@@ -184,9 +257,9 @@ function monotoneHorizons(values: ShadowProbabilityHorizons): ShadowProbabilityH
 }
 
 /**
- * Reallocates a bounded amount of probability mass toward one resolved,
- * contextual future window. Direct formal teasers remain on their existing
- * ordinary teaser path, so they are not counted twice here.
+ * Reallocates a bounded amount of probability mass toward one resolved future
+ * window. The caller removes a direct strong candidate from the ordinary
+ * teaser path before this policy runs, so the evidence is counted once.
  */
 export function applyTimedTeaserProbabilityReallocation(
   base: ShadowProbabilityHorizons,
@@ -197,18 +270,22 @@ export function applyTimedTeaserProbabilityReallocation(
     policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
     applied: false,
     contextDependence: null,
-    weight: null,
+    timedEvidenceClass: null,
+    reallocationWeight: null,
     temporalPrecision: null,
     cdf: null,
   };
-  if (!candidate || candidate.interpretation.probabilityTeaserEligible) {
+  const weightPolicy = candidate
+    ? getTimedTeaserReallocationWeight(candidate.interpretation)
+    : null;
+  if (!candidate || !weightPolicy) {
     return { predictions: base, audit: emptyAudit };
   }
 
   const cdf = getCdf(candidate.signal, now);
   if (!cdf) return { predictions: base, audit: emptyAudit };
 
-  const weight = TIMED_TEASER_REALLOCATION_CONFIG.contextualStrongWeight;
+  const weight = weightPolicy.reallocationWeight;
   const predictions = monotoneHorizons({
     probability12h: mix(base.probability12h, cdf.probability12h, weight),
     probability24h: mix(base.probability24h, cdf.probability24h, weight),
@@ -221,7 +298,8 @@ export function applyTimedTeaserProbabilityReallocation(
       policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
       applied: true,
       contextDependence: candidate.interpretation.contextDependence,
-      weight,
+      timedEvidenceClass: weightPolicy.timedEvidenceClass,
+      reallocationWeight: weight,
       temporalPrecision: candidate.signal.temporal_precision ?? null,
       cdf,
     } satisfies TimedTeaserReallocationAudit,

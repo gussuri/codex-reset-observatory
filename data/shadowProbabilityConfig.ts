@@ -308,9 +308,10 @@ export const SURVIVAL_CONDITIONED_SIGNAL_CONFIG =
 // weight is frozen explicitly because the current resolved contextual sample is
 // too small for a new calibration fit; it never changes the survival hazard.
 export const TIMED_TEASER_REALLOCATION_POLICY_VERSION =
-  "teaser-temporal-reallocation-v1" as const;
+  "teaser-temporal-reallocation-v2" as const;
 export const TIMED_TEASER_REALLOCATION_CONFIG = {
-  contextualStrongWeight: 0.2,
+  strongContextualWeight: 0.4,
+  strongDirectWeight: 0.5,
 } as const;
 
 // Context variants remain shadow-only. They all use the survival-conditioned

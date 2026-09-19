@@ -9,6 +9,7 @@ import {
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
 import {
   applyTimedTeaserProbabilityReallocation,
+  getTimedTeaserReallocationWeight,
   getTimedTeaserCandidates,
 } from "../lib/radar/timedTeaserProbability";
 import { interpretTiboSignal } from "../lib/radar/teaserStrength";
@@ -67,6 +68,32 @@ test("contextual timed replies become strong presentation evidence without becom
   assert.equal(contextualSignal().signal_type, "official_notice");
 });
 
+test("timed evidence weight is derived from the shared interpretation", () => {
+  const contextual = interpretTiboSignal(contextualSignal(), NOW);
+  assert.deepEqual(getTimedTeaserReallocationWeight(contextual), {
+    timedEvidenceClass: "strong_contextual",
+    reallocationWeight: 0.4,
+  });
+
+  const direct = interpretTiboSignal(contextualSignal({
+    signal_type: "teaser",
+    is_reply: false,
+    reply_context_text: null,
+    teaser_strength: "strong",
+    text: "The reset is coming Tuesday.",
+  }), NOW);
+  assert.deepEqual(getTimedTeaserReallocationWeight(direct), {
+    timedEvidenceClass: "strong_direct",
+    reallocationWeight: 0.5,
+  });
+
+  const weak = interpretTiboSignal(contextualSignal({
+    teaser_strength: "weak",
+    text: "Maybe tomorrow.",
+  }), NOW);
+  assert.equal(getTimedTeaserReallocationWeight(weak), null);
+});
+
 test("the public timed teaser card shares the interpretation and keeps its resolved window", () => {
   const snapshot = toPublicRadarSnapshot(survivalData([contextualSignal()]), "en", {
     calculationNow: NOW,
@@ -90,10 +117,13 @@ test("timed reallocation moves pre-window mass toward the future window without 
   assert.equal(adjusted.officialNoticeOverride.active, false);
   assert.equal(adjusted.survival.timedTeaserReallocation?.applied, true);
   assert.equal(adjusted.survival.timedTeaserReallocation?.contextDependence, "reply_context");
-  assert.equal(adjusted.survival.timedTeaserReallocation?.weight, 0.2);
+  assert.equal(adjusted.survival.timedTeaserReallocation?.timedEvidenceClass, "strong_contextual");
+  assert.equal(adjusted.survival.timedTeaserReallocation?.reallocationWeight, 0.4);
+  assert.equal(adjusted.survival.timedTeaserReallocation?.policyVersion, "teaser-temporal-reallocation-v2");
   const timedAudit = adjusted.survival.timedTeaserReallocation;
   assert.ok(timedAudit?.cdf);
   assert.equal(timedAudit.cdf.probability48h, 0);
+  assert.ok(timedAudit.cdf.probability72h > 0);
   assert.ok(adjusted.predictions.probability12h < baseline.predictions.probability12h);
   assert.ok(adjusted.predictions.probability24h < baseline.predictions.probability24h);
   assert.ok(adjusted.predictions.probability48h < baseline.predictions.probability48h);
@@ -109,6 +139,54 @@ test("timed reallocation moves pre-window mass toward the future window without 
   ];
   assert.ok(values.every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
   assert.ok(values[0] <= values[1] && values[1] <= values[2] && values[2] <= values[3]);
+});
+
+test("window-before horizons use the exact contextual 0.6 baseline mixture", () => {
+  const base = {
+    probability12h: 0.2,
+    probability24h: 0.3,
+    probability48h: 0.5,
+    probability72h: 0.7,
+  };
+  const candidate = getTimedTeaserCandidates(
+    getLocalRadarData({ calculationNow: NOW, recentTiboSignals: [contextualSignal()] }),
+    null,
+    NOW,
+  )[0];
+  assert.ok(candidate);
+
+  const result = applyTimedTeaserProbabilityReallocation(base, candidate, NOW);
+  assert.equal(result.audit.reallocationWeight, 0.4);
+  assert.deepEqual(result.predictions, {
+    probability12h: 0.12,
+    probability24h: 0.18,
+    probability48h: 0.3,
+    probability72h: result.predictions.probability72h,
+  });
+  assert.ok(result.predictions.probability72h > result.predictions.probability48h);
+});
+
+test("the current pre-window target is lower than the former 0.2 policy on one snapshot", () => {
+  const base = {
+    probability12h: 0.23258,
+    probability24h: 0.39248,
+    probability48h: 0.69465,
+    probability72h: 0.88994,
+  };
+  const candidate = getTimedTeaserCandidates(
+    getLocalRadarData({ calculationNow: NOW, recentTiboSignals: [contextualSignal()] }),
+    null,
+    NOW,
+  )[0];
+  assert.ok(candidate);
+
+  const adjusted = applyTimedTeaserProbabilityReallocation(base, candidate, NOW).predictions;
+  const formerPolicy = [base.probability12h, base.probability24h, base.probability48h]
+    .map((value) => value * 0.8);
+  assert.ok(adjusted.probability12h < formerPolicy[0]);
+  assert.ok(adjusted.probability24h < formerPolicy[1]);
+  assert.ok(adjusted.probability48h < formerPolicy[2]);
+  assert.ok(adjusted.probability72h > adjusted.probability48h);
 });
 
 test("window completion releases the timed adjustment instead of creating a permanent boost", () => {
@@ -165,7 +243,19 @@ test("official notice timing remains authoritative and ordinary replies have no 
   assert.equal(interpretation.timedProbabilityEligible, false);
 });
 
-test("multiple timed candidates are represented once and direct strong teasers keep the ordinary path", () => {
+test("weak contextual teasers keep the probability unchanged", () => {
+  const weak = contextualSignal({
+    tweet_id: "weak-contextual",
+    teaser_strength: "weak",
+    text: "Maybe tomorrow.",
+  });
+  const baseline = calculate();
+  const result = calculate([weak]);
+  assert.deepEqual(result.predictions, baseline.predictions);
+  assert.equal(result.survival.timedTeaserReallocation, null);
+});
+
+test("multiple timed candidates are represented once and direct strong teasers get the stronger timed policy", () => {
   const signals = [
     contextualSignal({ tweet_id: "older-context" }),
     contextualSignal({ tweet_id: "newer-context", tweet_created_at: "2026-09-20T06:00:00.000Z" }),
@@ -183,7 +273,8 @@ test("multiple timed candidates are represented once and direct strong teasers k
     NOW,
   );
   assert.equal(selected.audit.applied, true);
-  assert.equal(selected.audit.weight, 0.2);
+  assert.equal(selected.audit.timedEvidenceClass, "strong_contextual");
+  assert.equal(selected.audit.reallocationWeight, 0.4);
 
   const direct = contextualSignal({
     tweet_id: "direct-strong",
@@ -206,6 +297,50 @@ test("multiple timed candidates are represented once and direct strong teasers k
       directCandidate,
       NOW,
     ).audit.applied,
-    false,
+    true,
   );
+  const directResult = applyTimedTeaserProbabilityReallocation(
+    { probability12h: 0.2, probability24h: 0.3, probability48h: 0.5, probability72h: 0.7 },
+    directCandidate,
+    NOW,
+  );
+  assert.equal(directResult.audit.timedEvidenceClass, "strong_direct");
+  assert.equal(directResult.audit.reallocationWeight, 0.5);
+});
+
+test("direct strong timed teasers use one reallocation policy without ordinary double counting", () => {
+  const direct = contextualSignal({
+    tweet_id: "direct-active-strong",
+    signal_type: "teaser",
+    is_reply: false,
+    reply_context_text: null,
+    teaser_strength: "strong",
+    text: "The reset is coming Tuesday.",
+  });
+  const baseData = getLocalRadarData({ calculationNow: NOW });
+  const directData = getLocalRadarData({
+    calculationNow: NOW,
+    activeTiboSignals: [direct],
+    recentTiboSignals: [direct],
+  });
+  const base = calculateSurvivalConditionedProbability(baseData, {
+    now: NOW,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const directResult = calculateSurvivalConditionedProbability(directData, {
+    now: NOW,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const candidate = getTimedTeaserCandidates(directData, null, NOW)[0];
+  assert.ok(candidate);
+  assert.equal(candidate.interpretation.contextDependence, "direct");
+
+  const expected = applyTimedTeaserProbabilityReallocation(
+    base.predictions,
+    candidate,
+    NOW,
+  );
+  assert.deepEqual(directResult.predictions, expected.predictions);
+  assert.equal(directResult.survival.timedTeaserReallocation?.timedEvidenceClass, "strong_direct");
+  assert.equal(directResult.survival.timedTeaserReallocation?.reallocationWeight, 0.5);
 });
