@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildGeminiTranslationPrompt,
   translateWithGemini,
+  translateWithGeminiWithRetry,
 } from "../lib/radar/geminiTranslation";
 
 test("builds a translation prompt that treats the post as untrusted text", () => {
@@ -66,6 +67,49 @@ test("does not throw and classifies a translation rate limit", async () => {
   assert.equal(result.status, "rate_limited");
   assert.equal(result.textJa, null);
   assert.equal(result.textZh, null);
+});
+
+test("retries a transient translation failure once and stores the successful result", async () => {
+  let calls = 0;
+  const result = await translateWithGeminiWithRetry(
+    { text: "A post" },
+    {
+      apiKey: "test-key",
+      model: "gemini-3.5-flash-lite",
+      retryDelayMs: 0,
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) return new Response("temporary failure", { status: 503 });
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: "翻訳", zh: "翻译" }) }] } }],
+        }), { status: 200 });
+      },
+    },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "success");
+  assert.equal(result.textJa, "翻訳");
+  assert.equal(result.textZh, "翻译");
+});
+
+test("stops retrying at the bounded attempt count for rate limits", async () => {
+  let calls = 0;
+  const result = await translateWithGeminiWithRetry(
+    { text: "A post" },
+    {
+      apiKey: "test-key",
+      model: "gemini-3.5-flash-lite",
+      retryDelayMs: 0,
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response("rate limited", { status: 429 });
+      },
+    },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "rate_limited");
 });
 
 test("skips translation without making an API request when disabled", async () => {

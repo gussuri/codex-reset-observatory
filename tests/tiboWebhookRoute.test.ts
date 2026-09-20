@@ -1455,3 +1455,139 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     restoreEnvironment(previous);
   }
 });
+
+test("preserves an existing locale translation while filling only the missing locale", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const upserts: Record<string, unknown>[] = [];
+  let translationCalls = 0;
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "on";
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("generativelanguage.googleapis.com")) {
+      translationCalls += 1;
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: "上書き禁止", zh: "新的中文" }) }] } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "POST" && url.includes("/tibo_signals")) {
+      upserts.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ data: [], error: null }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (method === "GET" && url.includes("/tibo_signals") && url.includes("tweet_id=eq.2084000000000000200")) {
+      return new Response(JSON.stringify({
+        tweet_id: "2084000000000000200",
+        text: "Previously stored post",
+        tweet_url: "https://x.com/thsottiaux/status/2084000000000000200",
+        tweet_created_at: "2026-08-04T00:00:00.000Z",
+        detected_at: "2026-08-04T00:00:00.000Z",
+        signal_type: "irrelevant",
+        confidence: 0.8,
+        classification_reason: "existing semantic state",
+        verification_status: "unverified",
+        classification_source: "rule",
+        is_reply: false,
+        translated_text_ja: "既存の日本語",
+        translated_text_zh: null,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "GET") {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2084000000000000200",
+      text: "Just saying hello.",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(translationCalls, 1);
+    assert.equal(upserts.length, 1);
+    assert.equal(upserts[0]?.translated_text_ja, "既存の日本語");
+    assert.equal(upserts[0]?.translated_text_zh, "新的中文");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
+test("persists the source event after the bounded translation retry is exhausted", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const upserts: Record<string, unknown>[] = [];
+  let translationCalls = 0;
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "on";
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("generativelanguage.googleapis.com")) {
+      translationCalls += 1;
+      return new Response("temporary provider failure", { status: 503 });
+    }
+    if (method === "POST" && url.includes("/tibo_signals")) {
+      upserts.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ data: [], error: null }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (method === "GET") {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [], error: null }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2084000000000000203",
+      text: "Just saying hello.",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(translationCalls, 2);
+    assert.equal(upserts.length, 1);
+    assert.equal(upserts[0]?.tweet_id, "2084000000000000203");
+    assert.equal(upserts[0]?.translated_text_ja, null);
+    assert.equal(upserts[0]?.translated_text_zh, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});

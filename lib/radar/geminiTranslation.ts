@@ -29,6 +29,21 @@ export type GeminiTranslationOptions = {
   fetchImpl?: typeof fetch;
 };
 
+export type GeminiTranslationRetryOptions = GeminiTranslationOptions & {
+  maxAttempts?: number;
+  retryDelayMs?: number;
+  sleepImpl?: (milliseconds: number) => Promise<void>;
+};
+
+export const GEMINI_TRANSLATION_MAX_ATTEMPTS = 2;
+export const GEMINI_TRANSLATION_RETRY_DELAY_MS = 250;
+
+const RETRYABLE_TRANSLATION_STATUSES = new Set<GeminiTranslationStatus>([
+  "timeout",
+  "rate_limited",
+  "api_error",
+]);
+
 const TRANSLATION_SYSTEM_PROMPT = `
 You translate public posts from Tibo (@thsottiaux) for the Codex Reset Observatory.
 Translate the post into natural Japanese and Simplified Chinese.
@@ -170,4 +185,47 @@ export async function translateWithGemini(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function boundedAttemptCount(value: number | undefined) {
+  if (!Number.isFinite(value)) return GEMINI_TRANSLATION_MAX_ATTEMPTS;
+  return Math.min(
+    GEMINI_TRANSLATION_MAX_ATTEMPTS,
+    Math.max(1, Math.floor(value as number)),
+  );
+}
+
+/**
+ * Retries only transient provider failures and keeps the total API work bounded.
+ * Invalid model output is not retried because repeating a schema failure does
+ * not make the source event safer to persist.
+ */
+export async function translateWithGeminiWithRetry(
+  input: GeminiTranslationInput,
+  options: GeminiTranslationRetryOptions = {},
+): Promise<GeminiTranslationOutput> {
+  const {
+    maxAttempts,
+    retryDelayMs,
+    sleepImpl = (milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
+    ...translationOptions
+  } = options;
+  const attempts = boundedAttemptCount(maxAttempts);
+  const delay = Number.isFinite(retryDelayMs) && (retryDelayMs as number) >= 0
+    ? retryDelayMs as number
+    : GEMINI_TRANSLATION_RETRY_DELAY_MS;
+
+  let result: GeminiTranslationOutput | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    result = await translateWithGemini(input, translationOptions);
+    if (
+      !RETRYABLE_TRANSLATION_STATUSES.has(result.status) ||
+      attempt === attempts - 1
+    ) {
+      return result;
+    }
+    if (delay > 0) await sleepImpl(delay);
+  }
+
+  return result ?? fallback("api_error", translationOptions.model ?? null, null);
 }

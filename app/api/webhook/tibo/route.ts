@@ -34,7 +34,7 @@ import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
-import { translateWithGemini } from "@/lib/radar/geminiTranslation";
+import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
 import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
@@ -731,10 +731,10 @@ export async function POST(req: NextRequest) {
 
     const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja);
     const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh);
-    let translationResult: Awaited<ReturnType<typeof translateWithGemini>> | null = null;
+    let translationResult: Awaited<ReturnType<typeof translateWithGeminiWithRetry>> | null = null;
 
     if (!existingTranslationJa || !existingTranslationZh) {
-      translationResult = await translateWithGemini({
+      translationResult = await translateWithGeminiWithRetry({
         text: text.trim(),
         tweetCreatedAt: createdDate.toISOString(),
       });
@@ -752,8 +752,8 @@ export async function POST(req: NextRequest) {
     const payloadWithTranslations = {
       ...payload,
       ...editIdentityForPayload,
-      translated_text_ja: translationResult?.textJa ?? existingTranslationJa,
-      translated_text_zh: translationResult?.textZh ?? existingTranslationZh,
+      translated_text_ja: existingTranslationJa ?? translationResult?.textJa ?? null,
+      translated_text_zh: existingTranslationZh ?? translationResult?.textZh ?? null,
     };
     let persistedPayload = preserveTiboWebhookState(
       payloadWithTranslations,
