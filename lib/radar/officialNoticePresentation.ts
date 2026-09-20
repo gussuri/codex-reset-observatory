@@ -31,8 +31,7 @@ function getPresentationTimeZone(timeZone: string) {
 function getResolvedNoticeDate(notice: OfficialNoticePresentationInput) {
   if (
     !notice.expectedAt ||
-    notice.temporalResolutionStatus === "unresolved" ||
-    notice.temporalResolutionStatus === "rejected" ||
+    notice.temporalResolutionStatus !== "resolved" ||
     !notice.temporalPrecision ||
     notice.temporalPrecision === "unknown" ||
     !notice.temporalTimezone

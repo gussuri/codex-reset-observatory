@@ -1203,3 +1203,42 @@ test("public Tibo activity exposes only resolved teaser window timestamps needed
   assert.equal(snapshot.latestTiboActivity?.expectedStartAt, "2026-08-27T07:00:00.000Z");
   assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-08-28T07:00:00.000Z");
 });
+
+test("public Tibo activity hides stale timestamps unless temporal resolution is resolved", () => {
+  const calculationNow = new Date("2026-08-02T00:00:00.000Z");
+
+  for (const status of [undefined, null, "unresolved", "rejected"] as const) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow,
+        recentTiboSignals: [{
+          tweet_id: `stale-public-temporal-${status ?? "missing"}`,
+          signal_type: "official_notice",
+          text: "A reset notice with stale timing metadata",
+          tweet_url: "https://x.com/thsottiaux/status/stale-public-temporal",
+          tweet_created_at: "2026-08-01T23:45:00.000Z",
+          expires_at: "2026-08-02T12:00:00.000Z",
+          confidence: 0.96,
+          verification_status: "auto_unverified",
+          expected_start_at: "2026-08-02T01:00:00.000Z",
+          expected_end_at: "2026-08-02T02:00:00.000Z",
+          temporal_resolution_status: status,
+          temporal_precision: "exact_time",
+          temporal_timezone: "America/Los_Angeles",
+        }],
+      }),
+      "en",
+      { calculationNow },
+    );
+
+    const activity = snapshot.latestTiboActivity;
+    assert.ok(activity);
+    assert.equal("expectedStartAt" in activity, false);
+    assert.equal("expectedEndAt" in activity, false);
+    if (status === undefined || status === null) {
+      assert.equal("temporalResolutionStatus" in activity, false);
+    } else {
+      assert.equal(activity.temporalResolutionStatus, status);
+    }
+  }
+});

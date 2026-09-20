@@ -22,6 +22,7 @@ import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/ra
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { translateDynamic } from "../lib/radar/i18n";
 import { getHistoricalResetPresentationCorrection } from "../lib/radar/historicalResetCorrections";
+import { formatOfficialNoticeSummary } from "../lib/radar/officialNoticePresentation";
 import { normalizeResetScope } from "../lib/radar/resetScope";
 import {
   buildResetExecutionEstimate,
@@ -626,14 +627,30 @@ test("hides stale schedule timestamps when an official notice resolution is unre
 
   const unknownScheduleLabels = /時刻未定|time not specified|时间未定/;
   for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+    assert.equal(snapshot.viewModel.activeWindow.active, true);
+    assert.equal(snapshot.viewModel.activeWindow.expectedAt, null);
+    assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, null);
+    assert.equal(snapshot.viewModel.activeWindow.expectedPrecision, null);
+    assert.equal(snapshot.viewModel.activeWindow.expectedTimeZone, null);
+    assert.equal(
+      snapshot.viewModel.activeWindow.summary,
+      locale === "ja"
+        ? "公式リセットの予告があります。最新状況をご確認ください。"
+        : locale === "zh"
+          ? "已检测到官方重置预告。请确认最新状态。"
+          : "An official reset notice has been detected. Please check the latest status.",
+    );
+
     const html = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
-        initialData: toPublicRadarSnapshot(data, locale, { calculationNow }),
+        initialData: snapshot,
         initialFetchedAt: openedAt,
         locale,
       }),
     );
 
+    assert.doesNotMatch(snapshot.viewModel.activeWindow.summary, /August|8月|6:00|18:00/);
     assert.doesNotMatch(html, /リセット予定|Planned reset|重置安排/);
     assert.doesNotMatch(html, unknownScheduleLabels);
   }
@@ -665,9 +682,24 @@ test("hides schedule timestamps when notice resolution status is missing", () =>
     });
 
     for (const locale of ["ja", "en", "zh"] as const) {
+      const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+      assert.equal(snapshot.viewModel.activeWindow.active, true);
+      assert.equal(snapshot.viewModel.activeWindow.expectedAt, null);
+      assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, null);
+      assert.equal(snapshot.viewModel.activeWindow.expectedPrecision, null);
+      assert.equal(snapshot.viewModel.activeWindow.expectedTimeZone, null);
+      assert.equal(
+        snapshot.viewModel.activeWindow.summary,
+        locale === "ja"
+          ? "公式リセットの予告があります。最新状況をご確認ください。"
+          : locale === "zh"
+            ? "已检测到官方重置预告。请确认最新状态。"
+            : "An official reset notice has been detected. Please check the latest status.",
+      );
+
       const html = renderToStaticMarkup(
         React.createElement(RadarDashboard, {
-          initialData: toPublicRadarSnapshot(data, locale, { calculationNow }),
+          initialData: snapshot,
           initialFetchedAt: openedAt,
           locale,
         }),
@@ -677,6 +709,38 @@ test("hides schedule timestamps when notice resolution status is missing", () =>
       assert.doesNotMatch(html, unknownScheduleLabels);
     }
   }
+});
+
+test("official notice summary only uses a schedule with resolved temporal status", () => {
+  const baseNotice = {
+    expectedAt: "2026-08-02T01:00:00.000Z",
+    expectedEndAt: "2026-08-02T02:00:00.000Z",
+    temporalPrecision: "exact_time" as const,
+    temporalTimezone: "America/Los_Angeles",
+  };
+  const genericSummary = {
+    ja: "公式リセットの予告があります。最新状況をご確認ください。",
+    en: "An official reset notice has been detected. Please check the latest status.",
+    zh: "已检测到官方重置预告。请确认最新状态。",
+  } as const;
+
+  for (const status of [undefined, null, "unresolved", "rejected"] as const) {
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const summary = formatOfficialNoticeSummary({
+        ...baseNotice,
+        temporalResolutionStatus: status,
+      }, locale);
+      assert.equal(summary, genericSummary[locale]);
+      assert.doesNotMatch(summary, /August|8月|6:00|18:00/);
+    }
+  }
+
+  const resolvedSummary = formatOfficialNoticeSummary({
+    ...baseNotice,
+    temporalResolutionStatus: "resolved",
+  }, "en");
+  assert.match(resolvedSummary, /August 1/);
+  assert.match(resolvedSummary, /6:00 PM/);
 });
 
 test("shows a resolved notice window with only the viewer-local schedule and source", () => {

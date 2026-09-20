@@ -318,6 +318,8 @@ export function toPublicTiboActivity(
     now,
   );
   const exposeTemporalResolution = !isUiFallback || latestInterpretation.timedProbabilityEligible;
+  const exposeResolvedTemporalWindow = exposeTemporalResolution &&
+    latest.temporal_resolution_status === "resolved";
 
   return {
     classification: isUiFallback
@@ -339,10 +341,10 @@ export function toPublicTiboActivity(
     ...(exposeTemporalResolution && latest.temporal_resolution_status
       ? { temporalResolutionStatus: latest.temporal_resolution_status }
       : {}),
-    ...(exposeTemporalResolution && latest.expected_start_at
+    ...(exposeResolvedTemporalWindow && latest.expected_start_at
       ? { expectedStartAt: latest.expected_start_at }
       : {}),
-    ...(exposeTemporalResolution && latest.expected_end_at
+    ...(exposeResolvedTemporalWindow && latest.expected_end_at
       ? { expectedEndAt: latest.expected_end_at }
       : {}),
   };
