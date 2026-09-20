@@ -9,7 +9,7 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
   readTiboHistorySignals,
   splitTiboHistorySignals,
-  TIBO_HISTORY_MAX_ROWS,
+  TIBO_HISTORY_PAGE_SIZE,
   TIBO_HISTORY_SELECT_FIELDS,
   TIBO_RECENT_MAX_ROWS,
   TIBO_RECENT_SELECT_FIELDS,
@@ -265,9 +265,9 @@ test("bounded recent UI projection reduces a representative 1000-row history pay
     reply_to_handles: Array.from({ length: 12 }, (_, index) => `@user${index}`),
   });
   const legacyFields = [TIBO_HISTORY_SELECT_FIELDS, ...RECENT_UI_FIELDS].join(",");
-  const legacyRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, () =>
+  const legacyRows = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, () =>
     projectRows([row], legacyFields)[0]);
-  const boundedHistoryRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, () =>
+  const boundedHistoryRows = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, () =>
     projectRows([row], TIBO_HISTORY_SELECT_FIELDS)[0]);
   const boundedRecentRows = Array.from({ length: TIBO_RECENT_MAX_ROWS }, () =>
     projectRows([row], TIBO_RECENT_SELECT_FIELDS)[0]);
@@ -280,9 +280,8 @@ test("bounded recent UI projection reduces a representative 1000-row history pay
   assert.ok(boundedBytes < legacyBytes, `${boundedBytes} >= ${legacyBytes}`);
 });
 
-test("history read keeps one query below 1000 rows and locally derives replies", async () => {
+test("history read keeps one narrow non-reply query below the page boundary", async () => {
   const rows = [
-    resetRow("1", "teaser", { is_reply: true }),
     resetRow("2", "reset_executed"),
     resetRow("3", "official_notice", { is_reply: null }),
   ];
@@ -294,28 +293,37 @@ test("history read keeps one query below 1000 rows and locally derives replies",
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].fields, TIBO_HISTORY_SELECT_FIELDS);
-  assert.equal(calls[0].includeReplies, true);
+  assert.equal(calls[0].includeReplies, false);
   assert.deepEqual(result.withReplies.data, rows);
   assert.deepEqual(result.withoutReplies.data.map((row) => row.tweet_id), ["2", "3"]);
 });
 
-test("history read keeps the exactly-1000 formal fallback and reply-heavy completeness", async () => {
-  const unifiedRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, (_, index) =>
-    resetRow(String(index + 1), index < 900 ? "teaser" : "reset_executed", { is_reply: index < 900 }));
+test("history read paginates a full canonical page", async () => {
+  const replyRows = Array.from({ length: 900 }, (_, index) =>
+    resetRow(`reply-${index}`, "teaser", { is_reply: true }));
+  const canonicalRows = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, (_, index) =>
+    resetRow(`canonical-${index}`, "reset_executed", { is_reply: false }));
   const formalRows = [resetRow("older-formal", "reset_executed")];
+  const sourceRows = [...replyRows, ...canonicalRows, ...formalRows];
   const calls: Array<{ fields: string; includeReplies: boolean }> = [];
   const result = await readTiboHistorySignals(async (fields, includeReplies) => {
     calls.push({ fields, includeReplies });
-    return { data: includeReplies ? unifiedRows : formalRows, error: null };
+    const canonicalSourceRows = sourceRows.filter((row) => row.is_reply !== true);
+    const start = (calls.length - 1) * TIBO_HISTORY_PAGE_SIZE;
+    return {
+      data: canonicalSourceRows.slice(start, start + TIBO_HISTORY_PAGE_SIZE),
+      error: null,
+    };
   }, { state: "ok" });
 
   assert.equal(calls.length, 2);
   assert.deepEqual(calls.map((call) => [call.fields, call.includeReplies]), [
-    [TIBO_HISTORY_SELECT_FIELDS, true],
+    [TIBO_HISTORY_SELECT_FIELDS, false],
     [TIBO_HISTORY_SELECT_FIELDS, false],
   ]);
-  assert.equal(result.withReplies.data.length, TIBO_HISTORY_MAX_ROWS);
-  assert.deepEqual(result.withoutReplies.data.map((row) => row.tweet_id), ["older-formal"]);
+  assert.equal(result.withReplies.data.length, TIBO_HISTORY_PAGE_SIZE + formalRows.length);
+  assert.equal(result.withoutReplies.data.length, TIBO_HISTORY_PAGE_SIZE + formalRows.length);
+  assert.equal(result.withoutReplies.data.some((row) => row.is_reply === true), false);
 });
 
 test("separating recent UI fields does not change formal/rejected/edit/secondary/temporal/BANKED consumers or public output", () => {

@@ -53,6 +53,12 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
     ai_model: "private-model",
     ai_classification_status: "success",
     rejected_tibo_resets: [{ tweet_id: "private-id" }],
+    cacheGeneration: "deploy-private-generation",
+    canonicalTiboPageCount: 3,
+    canonicalTiboPaginationUsed: true,
+    timedTiboRowCount: 40,
+    timedTiboLimitReached: true,
+    internalQueryCount: 12,
     active_tibo_signals: [
       {
         tweet_id: "private-tweet",
@@ -75,7 +81,17 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal("ai_confidence" in publicSnapshot, false);
   assert.equal("ai_model" in publicSnapshot, false);
    assert.equal("ai_classification_status" in publicSnapshot, false);
-   assert.equal("rejected_tibo_resets" in publicSnapshot, false);
+  assert.equal("rejected_tibo_resets" in publicSnapshot, false);
+  for (const internalField of [
+    "cacheGeneration",
+    "canonicalTiboPageCount",
+    "canonicalTiboPaginationUsed",
+    "timedTiboRowCount",
+    "timedTiboLimitReached",
+    "internalQueryCount",
+  ]) {
+    assert.equal(internalField in publicSnapshot, false, internalField);
+  }
    assert.equal("reasoningSummary" in publicSnapshot.viewModel, false);
    assert.equal("action" in publicSnapshot.viewModel, false);
   assert.doesNotMatch(serialized, /private-model|private reason|private-tweet/);

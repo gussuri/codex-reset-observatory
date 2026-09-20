@@ -9,6 +9,7 @@ import {
   applyActiveTiboQueryFilters,
   applyTimedTiboQueryFilters,
   associateTiboNotices,
+  buildCanonicalTiboHistoryFilter,
   buildPublicRadarSnapshotBundle,
   getEffectiveRadarCalculationNow,
   getRadarPageCacheDimensions,
@@ -21,11 +22,12 @@ import {
   RADAR_CORE_CACHE_TTL_SECONDS,
   readTiboHistorySignals,
   splitTiboHistorySignals,
-  TIBO_HISTORY_MAX_ROWS,
+  TIBO_HISTORY_PAGE_SIZE,
   TIBO_HISTORY_SELECT_FIELDS,
   TIBO_RECENT_MAX_ROWS,
   TIMED_TIBO_SIGNAL_MAX_ROWS,
   TIMED_TIBO_SIGNAL_SELECT_FIELDS,
+  getTimedTiboLimitTelemetry,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -285,12 +287,20 @@ test("timed Tibo query stays narrow and only returns live resolved windows", () 
     "order:tweet_created_at:false",
   ]);
   assert.equal(TIMED_TIBO_SIGNAL_MAX_ROWS, 40);
+  assert.deepEqual(getTimedTiboLimitTelemetry(39), {
+    timedTiboRowCount: 39,
+    timedTiboLimitReached: false,
+  });
+  assert.deepEqual(getTimedTiboLimitTelemetry(40), {
+    timedTiboRowCount: 40,
+    timedTiboLimitReached: true,
+  });
   assert.ok(TIMED_TIBO_SIGNAL_SELECT_FIELDS.split(",").length < ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(",").length);
   assert.equal(TIBO_RECENT_MAX_ROWS, 20);
-  assert.equal(TIBO_HISTORY_MAX_ROWS, 1000);
+  assert.equal(TIBO_HISTORY_PAGE_SIZE, 1000);
 });
 
-test("one reply-inclusive history result derives the formal view without changing the recent view", () => {
+test("the legacy split helper keeps reply and canonical views distinct", () => {
   const rows: FormalTiboResetSignal[] = [
     { ...resetSignal("reply", "2026-08-03T10:00:00.000Z"), is_reply: true },
     { ...resetSignal("post", "2026-08-02T10:00:00.000Z"), is_reply: false },
@@ -304,75 +314,175 @@ test("one reply-inclusive history result derives the formal view without changin
   assert.deepEqual(split.withReplies, rows);
 });
 
-test("history read uses one unified query below the truncation boundary", async () => {
+test("history read starts with one canonical non-reply page below the pagination boundary", async () => {
   const rows: FormalTiboResetSignal[] = [
-    { ...resetSignal("reply", "2026-08-03T10:00:00.000Z"), is_reply: true },
     { ...resetSignal("post", "2026-08-02T10:00:00.000Z"), is_reply: false },
     { ...resetSignal("legacy", "2026-08-01T10:00:00.000Z"), is_reply: null },
   ];
-  const calls: Array<{ fields: string; includeReplies: boolean }> = [];
+  const calls: Array<{ fields: string; includeReplies: boolean; cursor?: unknown }> = [];
 
   const result = await readTiboHistorySignals(
-    async (fields, includeReplies) => {
-      calls.push({ fields, includeReplies });
+    async (fields, includeReplies, _limit, cursor) => {
+      calls.push({ fields, includeReplies, cursor });
       return { data: rows, error: null };
     },
     { state: "ok" },
   );
 
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], { fields: TIBO_HISTORY_SELECT_FIELDS, includeReplies: true });
+  assert.deepEqual(calls[0], {
+    fields: TIBO_HISTORY_SELECT_FIELDS,
+    includeReplies: false,
+    cursor: undefined,
+  });
   assert.deepEqual(result.withReplies.data, rows);
-  assert.deepEqual(result.withoutReplies.data, [rows[1], rows[2]]);
+  assert.deepEqual(result.withoutReplies.data, rows);
+  assert.equal(result.canonicalTiboPageCount, 1);
+  assert.equal(result.canonicalTiboPaginationUsed, false);
   assert.equal(result.withReplies.health.state, "ok");
   assert.equal(result.withoutReplies.health.state, "ok");
 });
 
-test("exactly the history row limit triggers a filtered formal-history fallback", async () => {
-  const unifiedRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, (_, index) => ({
-    ...resetSignal(`unified-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
-    is_reply: index % 2 === 0,
+test("canonical history cursor filter keeps non-reply scope and deterministic tweet ordering", () => {
+  assert.equal(buildCanonicalTiboHistoryFilter(), "is_reply.is.null,is_reply.eq.false");
+  const filter = buildCanonicalTiboHistoryFilter({
+    tweetCreatedAt: "2026-08-02T10:00:00.000Z",
+    tweetId: "123",
+  });
+  assert.match(filter, /is_reply\.is\.null/);
+  assert.match(filter, /is_reply\.eq\.false/);
+  assert.match(filter, /tweet_created_at\.lt\.2026-08-02T10:00:00\.000Z/);
+  assert.match(filter, /tweet_id\.lt\.123/);
+});
+
+test("999 canonical rows complete in one page", async () => {
+  const rows = Array.from({ length: 999 }, (_, index) => ({
+    ...resetSignal("row-" + index, "2026-08-01T00:00:00.000Z"),
+    is_reply: false,
   }));
-  const formalRows = [resetSignal("older-formal", "2020-01-01T00:00:00.000Z")];
-  const calls: Array<{ fields: string; includeReplies: boolean }> = [];
+  let calls = 0;
+  const result = await readTiboHistorySignals(async () => {
+    calls += 1;
+    return { data: rows, error: null };
+  }, { state: "ok" });
 
-  const result = await readTiboHistorySignals(
-    async (fields, includeReplies) => {
-      calls.push({ fields, includeReplies });
-      return { data: includeReplies ? unifiedRows : formalRows, error: null };
-    },
-    { state: "ok" },
-  );
-
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].includeReplies, true);
-  assert.equal(calls[1].includeReplies, false);
-  assert.deepEqual(result.withReplies.data, unifiedRows);
-  assert.deepEqual(result.withoutReplies.data, formalRows);
+  assert.equal(calls, 1);
+  assert.equal(result.withoutReplies.data.length, 999);
+  assert.equal(result.canonicalTiboPageCount, 1);
+  assert.equal(result.canonicalTiboPaginationUsed, false);
   assert.equal(result.withoutReplies.health.state, "ok");
 });
 
-test("a reply-heavy newest history page does not hide older formal rows", async () => {
-  const unifiedRows = Array.from({ length: TIBO_HISTORY_MAX_ROWS }, (_, index) => ({
-    ...resetSignal(`recent-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
-    is_reply: index < 900,
+test("1001 canonical rows are returned without duplicate tweet ids", async () => {
+  const firstPage = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, (_, index) => ({
+    ...resetSignal("row-" + index, "2026-08-01T00:00:00.000Z"),
+    is_reply: false,
   }));
-  const formalRows = [
-    resetSignal("older-formal", "2020-01-01T00:00:00.000Z"),
-    resetSignal("formal-2", "2020-01-02T00:00:00.000Z"),
-  ];
-
+  const secondPage = [{
+    ...resetSignal("row-1000", "2026-07-31T23:00:00.000Z"),
+    is_reply: null,
+  }];
   const result = await readTiboHistorySignals(
-    async (_fields, includeReplies) => ({
-      data: includeReplies ? unifiedRows : formalRows,
+    async (_fields, _includeReplies, _limit, cursor) => ({
+      data: cursor ? secondPage : firstPage,
       error: null,
     }),
     { state: "ok" },
   );
 
-  assert.deepEqual(result.withReplies.data, unifiedRows);
-  assert.deepEqual(result.withoutReplies.data, formalRows);
-  assert.equal(result.withoutReplies.data[0].tweet_id, "older-formal");
+  const ids = result.withoutReplies.data.map((row) => row.tweet_id);
+  assert.equal(ids.length, 1001);
+  assert.equal(new Set(ids).size, 1001);
+  assert.equal(result.canonicalTiboPageCount, 2);
+  assert.equal(result.canonicalTiboPaginationUsed, true);
+});
+
+test("a failed second canonical page degrades the partial result", async () => {
+  const firstPage = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, (_, index) => ({
+    ...resetSignal("row-" + index, "2026-08-01T00:00:00.000Z"),
+    is_reply: false,
+  }));
+  const result = await readTiboHistorySignals(
+    async (_fields, _includeReplies, _limit, cursor) => cursor
+      ? { data: null, error: new Error("second page unavailable") }
+      : { data: firstPage, error: null },
+    { state: "ok" },
+  );
+
+  assert.equal(result.withoutReplies.data.length, TIBO_HISTORY_PAGE_SIZE);
+  assert.equal(result.withoutReplies.health.state, "degraded");
+  assert.equal(result.canonicalTiboPageCount, 2);
+  assert.equal(result.canonicalTiboPaginationUsed, true);
+});
+
+test("exactly one full canonical page fetches the next page instead of silently truncating", async () => {
+  const replyRows = Array.from({ length: 900 }, (_, index) => ({
+    ...resetSignal(`reply-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: true,
+  }));
+  const canonicalRows = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, (_, index) => ({
+    ...resetSignal(`canonical-${index}`, `2026-07-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: false,
+  }));
+  const formalRows = [resetSignal("older-formal", "2020-01-01T00:00:00.000Z")];
+  const sourceRows = [...replyRows, ...canonicalRows, ...formalRows];
+  const calls: Array<{ fields: string; includeReplies: boolean }> = [];
+
+  const result = await readTiboHistorySignals(
+    async (fields, includeReplies) => {
+      calls.push({ fields, includeReplies });
+      const canonicalSourceRows = sourceRows.filter((row) => row.is_reply !== true);
+      const start = (calls.length - 1) * TIBO_HISTORY_PAGE_SIZE;
+      return { data: canonicalSourceRows.slice(start, start + TIBO_HISTORY_PAGE_SIZE), error: null };
+    },
+    { state: "ok" },
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].includeReplies, false);
+  assert.equal(calls[1].includeReplies, false);
+  assert.equal(result.withReplies.data.length, TIBO_HISTORY_PAGE_SIZE + formalRows.length);
+  assert.equal(result.withoutReplies.data.length, TIBO_HISTORY_PAGE_SIZE + formalRows.length);
+  assert.equal(result.withoutReplies.data.some((row) => row.is_reply === true), false);
+  assert.equal(result.canonicalTiboPageCount, 2);
+  assert.equal(result.canonicalTiboPaginationUsed, true);
+  assert.equal(result.withoutReplies.health.state, "ok");
+});
+
+test("reply-heavy history still returns all canonical rows without truncation", async () => {
+  const replyRows = Array.from({ length: 900 }, (_, index) => ({
+    ...resetSignal(`reply-${index}`, `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: true,
+  }));
+  const canonicalRows = Array.from({ length: TIBO_HISTORY_PAGE_SIZE }, (_, index) => ({
+    ...resetSignal(`canonical-${index}`, `2026-07-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`),
+    is_reply: false,
+  }));
+  const formalRows = [
+    resetSignal("older-formal", "2020-01-01T00:00:00.000Z"),
+    resetSignal("formal-2", "2020-01-02T00:00:00.000Z"),
+  ];
+  const sourceRows = [...replyRows, ...canonicalRows, ...formalRows];
+  let calls = 0;
+
+  const result = await readTiboHistorySignals(
+    async (_fields, includeReplies) => {
+      calls += 1;
+      assert.equal(includeReplies, false);
+      const canonicalSourceRows = sourceRows.filter((row) => row.is_reply !== true);
+      const start = (calls - 1) * TIBO_HISTORY_PAGE_SIZE;
+      return {
+        data: canonicalSourceRows.slice(start, start + TIBO_HISTORY_PAGE_SIZE),
+        error: null,
+      };
+    },
+    { state: "ok" },
+  );
+
+  assert.equal(result.withoutReplies.data.length, TIBO_HISTORY_PAGE_SIZE + formalRows.length);
+  assert.equal(result.withoutReplies.data.at(-2)?.tweet_id, "older-formal");
+  assert.equal(result.withoutReplies.data.some((row) => row.is_reply === true), false);
+  assert.equal(result.canonicalTiboPageCount, 2);
 });
 
 test("history schema fallback preserves data health and local reply derivation", async () => {
@@ -391,14 +501,14 @@ test("history schema fallback preserves data health and local reply derivation",
           error: { code: "PGRST204", message: "column logical_post_id does not exist" },
         };
       }
-      return { data: includeReplies ? rows : [], error: null };
+      return { data: rows, error: null };
     },
     { state: "ok" },
   );
 
   assert.equal(calls, 2);
   assert.deepEqual(result.withReplies.data, rows);
-  assert.deepEqual(result.withoutReplies.data, [rows[1]]);
+  assert.deepEqual(result.withoutReplies.data, rows);
   assert.equal(result.withReplies.health.state, "ok");
   assert.equal(result.withoutReplies.health.state, "ok");
 });
@@ -418,14 +528,14 @@ test("Tibo radar queries use explicit field lists instead of wildcard reads", ()
 
 test("Tibo history keeps canonical rows narrow and bounds the wider recent read", () => {
   const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
-  assert.match(source, /\["tibo-history-signals-cache-v4"\]/);
+  assert.match(source, /getRadarCacheKeyParts\("tibo-history-signals-cache-v4"\)/);
   assert.match(source, /TIBO_HISTORY_SELECT_FIELDS/);
   assert.match(source, /TIBO_RECENT_SELECT_FIELDS/);
   assert.match(source, /TIBO_RECENT_MAX_ROWS/);
   assert.match(source, /TIBO_HISTORY_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS/);
   assert.match(source, /isMissingTiboOptionalColumnError\(result\.error\)/);
-  assert.match(source, /TIBO_HISTORY_MAX_ROWS/);
+  assert.match(source, /TIBO_HISTORY_PAGE_SIZE/);
   assert.doesNotMatch(source, /getCachedTiboRecentSignals/);
 
   const bundleSource = source.slice(

@@ -62,6 +62,9 @@ import {
 import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
 import {
+  getRadarCacheKeyParts,
+} from "@/lib/radar/cacheGeneration";
+import {
   hasFutureBankedDistributionIntent,
   isRecurringConditionalBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
@@ -212,7 +215,9 @@ const TIBO_HISTORY_FALLBACK_SELECT_FIELDS = [
   "is_reply",
 ].join(",");
 
-export const TIBO_HISTORY_MAX_ROWS = 1000;
+// This is a page size, not a total history cap. Canonical history is fetched
+// across every page using a stable keyset cursor.
+export const TIBO_HISTORY_PAGE_SIZE = 1000;
 export const TIBO_RECENT_MAX_ROWS = 20;
 export const TIBO_RECENT_SELECT_FIELDS = ACTIVE_TIBO_SIGNAL_SELECT_FIELDS;
 export const TIMED_TIBO_SIGNAL_MAX_ROWS = 40;
@@ -286,10 +291,16 @@ type TiboHistoryQueryResult = {
   error: unknown | null;
 };
 
+export type TiboHistoryCursor = {
+  tweetCreatedAt: string;
+  tweetId: string;
+};
+
 type TiboHistoryQueryRunner = (
   fields: string,
   includeReplies: boolean,
   limit?: number,
+  cursor?: TiboHistoryCursor,
 ) => Promise<TiboHistoryQueryResult>;
 
 type TiboHistoryQueryBuilder = {
@@ -302,6 +313,8 @@ export type TiboHistoryReadResult = {
   withReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
   withoutReplies: DataFetchResult<Array<FormalTiboResetSignal>>;
   recent?: DataFetchResult<Array<FormalTiboResetSignal>>;
+  canonicalTiboPageCount: number;
+  canonicalTiboPaginationUsed: boolean;
 };
 
 type ActiveTiboQueryBuilder = {
@@ -334,6 +347,13 @@ export function applyTimedTiboQueryFilters(
     .lte("tweet_created_at", nowIso)
     .or("verification_status.is.null,verification_status.neq.rejected")
     .order("tweet_created_at", { ascending: false });
+}
+
+export function getTimedTiboLimitTelemetry(rowCount: number) {
+  return {
+    timedTiboRowCount: rowCount,
+    timedTiboLimitReached: rowCount >= TIMED_TIBO_SIGNAL_MAX_ROWS,
+  };
 }
 
 export function applyActiveTiboQueryFilters(
@@ -409,7 +429,7 @@ async function fetchRawTiboSignals(expiryBoundaryIso: string): Promise<DataFetch
 // 2. Module-scoped unstable_cache wrapper (60s TTL, tagged "radar-data")
 const getCachedTiboSignals = unstable_cache(
   fetchRawTiboSignals,
-  ["tibo-signals-cache-v2"],
+  getRadarCacheKeyParts("tibo-signals-cache-v2"),
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -458,6 +478,12 @@ async function fetchRawTimedTiboSignals(
           teaser_strength: getEffectiveTeaserStrength(signal),
         }))
       : [];
+    const timedTelemetry = getTimedTiboLimitTelemetry(signals.length);
+    console.info(JSON.stringify({
+      event: "tibo_timed_signal_fetch",
+      ...timedTelemetry,
+      dataHealth: health.state,
+    }));
     return { data: signals, health };
   } catch (error) {
     console.error("Failed to load timed Tibo signals", error);
@@ -467,7 +493,7 @@ async function fetchRawTimedTiboSignals(
 
 const getCachedTimedTiboSignals = unstable_cache(
   fetchRawTimedTiboSignals,
-  ["tibo-timed-signals-cache-v1"],
+  getRadarCacheKeyParts("tibo-timed-signals-cache-v1"),
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -505,50 +531,124 @@ async function executeTiboHistoryQuery(
   queryTiboHistory: TiboHistoryQueryRunner,
   fields: string,
   includeReplies: boolean,
-  limit = TIBO_HISTORY_MAX_ROWS,
+  limit = TIBO_HISTORY_PAGE_SIZE,
   fallbackFields = TIBO_HISTORY_FALLBACK_SELECT_FIELDS,
+  cursor?: TiboHistoryCursor,
 ): Promise<TiboHistoryQueryResult> {
-  let result = await queryTiboHistory(fields, includeReplies, limit);
+  let result = await queryTiboHistory(fields, includeReplies, limit, cursor);
   if (result.error && isMissingTiboOptionalColumnError(result.error)) {
-    result = await queryTiboHistory(fallbackFields, includeReplies, limit);
+    result = await queryTiboHistory(fallbackFields, includeReplies, limit, cursor);
   }
   return result;
+}
+
+function getTiboHistoryCursor(row: FormalTiboResetSignal | undefined): TiboHistoryCursor | null {
+  if (
+    !row ||
+    typeof row.tweet_created_at !== "string" ||
+    !row.tweet_created_at ||
+    typeof row.tweet_id !== "string" ||
+    !row.tweet_id
+  ) {
+    return null;
+  }
+  return {
+    tweetCreatedAt: row.tweet_created_at,
+    tweetId: row.tweet_id,
+  };
+}
+
+function getTiboHistoryCursorKey(cursor: TiboHistoryCursor) {
+  return cursor.tweetCreatedAt + "\u0000" + cursor.tweetId;
+}
+
+export function buildCanonicalTiboHistoryFilter(cursor?: TiboHistoryCursor) {
+  if (!cursor) return "is_reply.is.null,is_reply.eq.false";
+
+  const olderThan = "tweet_created_at.lt." + cursor.tweetCreatedAt;
+  const sameTimestampBefore = "tweet_created_at.eq." + cursor.tweetCreatedAt +
+    ",tweet_id.lt." + cursor.tweetId;
+  return [
+    "and(is_reply.is.null," + olderThan + ")",
+    "and(is_reply.eq.false," + olderThan + ")",
+    "and(is_reply.is.null," + sameTimestampBefore + ")",
+    "and(is_reply.eq.false," + sameTimestampBefore + ")",
+  ].join(",");
 }
 
 export async function readTiboHistorySignals(
   queryTiboHistory: TiboHistoryQueryRunner,
   configuration: DataSourceHealth,
 ): Promise<TiboHistoryReadResult> {
-  const unifiedResult = await executeTiboHistoryQuery(
-    queryTiboHistory,
-    TIBO_HISTORY_SELECT_FIELDS,
-    true,
-  );
-  const withReplies = toTiboHistoryFetchResult(configuration, unifiedResult);
+  const canonicalRows: Array<FormalTiboResetSignal> = [];
+  const seenTweetIds = new Set<string>();
+  let cursor: TiboHistoryCursor | undefined;
+  let previousCursorKey: string | null = null;
+  let pageCount = 0;
+  let paginationUsed = false;
+  let paginationError: unknown | null = null;
 
-  if (unifiedResult.error) {
-    console.error("Tibo reset history query failed", unifiedResult.error);
-  }
-
-  if (unifiedResult.error || withReplies.data.length === TIBO_HISTORY_MAX_ROWS) {
-    const formalResult = await executeTiboHistoryQuery(
-      queryTiboHistory,
-      TIBO_HISTORY_SELECT_FIELDS,
-      false,
-    );
-    const withoutReplies = toTiboHistoryFetchResult(configuration, formalResult);
-    if (formalResult.error) {
-      console.error("Tibo formal history query failed", formalResult.error);
+  while (true) {
+    pageCount += 1;
+    let pageResult: TiboHistoryQueryResult;
+    try {
+      pageResult = await executeTiboHistoryQuery(
+        queryTiboHistory,
+        TIBO_HISTORY_SELECT_FIELDS,
+        false,
+        TIBO_HISTORY_PAGE_SIZE,
+        TIBO_HISTORY_FALLBACK_SELECT_FIELDS,
+        cursor,
+      );
+    } catch (error) {
+      pageResult = { data: null, error };
     }
-    return { withReplies, withoutReplies };
+
+    if (pageResult.error || pageResult.data === null) {
+      paginationError = pageResult.error ?? new Error("canonical_history_invalid_page");
+      console.error("Tibo canonical history page failed", paginationError);
+      break;
+    }
+
+    for (const row of pageResult.data) {
+      if (!seenTweetIds.has(row.tweet_id)) {
+        seenTweetIds.add(row.tweet_id);
+        canonicalRows.push(row);
+      }
+    }
+
+    if (pageResult.data.length < TIBO_HISTORY_PAGE_SIZE) break;
+
+    paginationUsed = true;
+    const nextCursor = getTiboHistoryCursor(pageResult.data.at(-1));
+    if (!nextCursor) {
+      paginationError = new Error("canonical_history_missing_cursor");
+      console.error("Tibo canonical history page had no stable cursor");
+      break;
+    }
+
+    const nextCursorKey = getTiboHistoryCursorKey(nextCursor);
+    if (nextCursorKey === previousCursorKey) {
+      paginationError = new Error("canonical_history_cursor_stalled");
+      console.error("Tibo canonical history pagination cursor stalled");
+      break;
+    }
+    previousCursorKey = nextCursorKey;
+    cursor = nextCursor;
   }
+
+  const canonicalResult = toTiboHistoryFetchResult(configuration, {
+    data: canonicalRows,
+    error: paginationError,
+  });
 
   return {
-    withReplies,
-    withoutReplies: {
-      data: splitTiboHistorySignals(withReplies.data).withoutReplies,
-      health: withReplies.health,
-    },
+    // This compatibility slot now contains the complete canonical projection,
+    // not a reply-inclusive first page. Recent reply/UI data remains separate.
+    withReplies: canonicalResult,
+    withoutReplies: canonicalResult,
+    canonicalTiboPageCount: pageCount,
+    canonicalTiboPaginationUsed: paginationUsed,
   };
 }
 
@@ -565,6 +665,8 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
       withReplies: { data: [], health: configuration },
       withoutReplies: { data: [], health: configuration },
       recent: { data: [], health: configuration },
+      canonicalTiboPageCount: 0,
+      canonicalTiboPaginationUsed: false,
     };
   }
 
@@ -572,18 +674,31 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
-    const queryTiboHistory: TiboHistoryQueryRunner = async (fields, includeReplies, limit = TIBO_HISTORY_MAX_ROWS) => {
+    const queryTiboHistory: TiboHistoryQueryRunner = async (
+      fields,
+      includeReplies,
+      limit = TIBO_HISTORY_PAGE_SIZE,
+      cursor,
+    ) => {
       const query = supabase
         .from("tibo_signals")
         .select(fields) as unknown as TiboHistoryQueryBuilder;
       const filteredQuery = includeReplies
         ? query
-        : query.or("is_reply.is.null,is_reply.eq.false");
+        : query.or(buildCanonicalTiboHistoryFilter(cursor));
       return await filteredQuery
         .order("tweet_created_at", { ascending: false })
+        .order("tweet_id", { ascending: false })
         .limit(limit);
     };
     const history = await readTiboHistorySignals(queryTiboHistory, configuration);
+    console.info(JSON.stringify({
+      event: "tibo_canonical_history_fetch",
+      canonicalTiboRowCount: history.withoutReplies.data.length,
+      canonicalTiboPageCount: history.canonicalTiboPageCount,
+      canonicalTiboPaginationUsed: history.canonicalTiboPaginationUsed,
+      dataHealth: history.withoutReplies.health.state,
+    }));
     const recentResult = await executeTiboHistoryQuery(
       queryTiboHistory,
       TIBO_RECENT_SELECT_FIELDS,
@@ -605,6 +720,8 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
       withReplies: { data: [], health },
       withoutReplies: { data: [], health },
       recent: { data: [], health },
+      canonicalTiboPageCount: 0,
+      canonicalTiboPaginationUsed: false,
     };
   }
 }
@@ -755,7 +872,7 @@ export async function fetchResetDisplayNameCandidateNoticeSignals(
 
 const getCachedTiboHistorySignals = unstable_cache(
   () => fetchRawTiboHistorySignals(),
-  ["tibo-history-signals-cache-v4"],
+  getRadarCacheKeyParts("tibo-history-signals-cache-v4"),
   {
     revalidate: 60,
     tags: ["radar-data"],
@@ -1496,7 +1613,7 @@ const getCachedRadarCore = unstable_cache(
       }));
     }
   },
-  ["radar-core-cache-v6"],
+  getRadarCacheKeyParts("radar-core-cache-v6"),
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],
@@ -1526,7 +1643,7 @@ const getCachedPublicRadarSnapshotBundle = unstable_cache(
       }));
     }
   },
-  ["radar-public-snapshot-bundle-cache-v5"],
+  getRadarCacheKeyParts("radar-public-snapshot-bundle-cache-v5"),
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
     tags: ["radar-data"],
@@ -1544,7 +1661,7 @@ const getCachedRandomResetHeatmapEventTimes = unstable_cache(
       calculationContext.canonicalHistoryContext,
     );
   },
-  ["radar-random-reset-heatmap-cache-v1"],
+  getRadarCacheKeyParts("radar-random-reset-heatmap-cache-v1"),
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
     tags: ["radar-data"],
@@ -1614,7 +1731,7 @@ const getCachedRadarPageData = unstable_cache(
       }));
     }
   },
-  ["radar-page-cache-v1"],
+  getRadarCacheKeyParts("radar-page-cache-v1"),
   {
     revalidate: RADAR_PAGE_CACHE_TTL_SECONDS,
     tags: ["radar-data"],

@@ -48,6 +48,7 @@ export type ResetTeaserSignal = {
   ai_teaser_strength?: TeaserStrength | null;
   signal_type?: string | null;
   confidence?: number | null;
+  classification_source?: string | null;
   verification_status?: string | null;
   is_reply?: boolean | null;
   reply_context_text?: string | null;
@@ -128,6 +129,13 @@ function hasResolvedFutureWindow(signal: ResetTeaserSignal, now: Date) {
     endTime !== null &&
     endTime >= startTime &&
     endTime > nowTime;
+}
+
+function hasValidatedDirectStrongConfidence(signal: ResetTeaserSignal) {
+  if (signal.classification_source === "manual") return true;
+  return typeof signal.confidence === "number" &&
+    Number.isFinite(signal.confidence) &&
+    signal.confidence >= 0.8;
 }
 
 function hasResetContext(signal: ResetTeaserSignal) {
@@ -242,6 +250,7 @@ export function interpretTiboSignal(
     signal.is_reply !== true &&
     signal.is_quote !== true &&
     effectiveStrength === "strong" &&
+    hasValidatedDirectStrongConfidence(signal) &&
     hasResolvedFutureWindow(signal, now);
   const timedProbabilityEligible = !rejected &&
     !officialNoticeEligible &&

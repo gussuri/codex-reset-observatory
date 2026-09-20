@@ -476,3 +476,37 @@ test("direct strong timed teasers use one reallocation policy without ordinary d
   assert.equal(directResult.survival.timedTeaserReallocation?.timedEvidenceClass, "strong_direct");
   assert.equal(directResult.survival.timedTeaserReallocation?.reallocationWeight, 0.5);
 });
+
+test("direct strong timed teasers require confidence at the automatic 0.80 boundary", () => {
+  const direct = (confidence: number | null, strength: "strong" | "weak" = "strong") =>
+    contextualSignal({
+      signal_type: "teaser",
+      is_reply: false,
+      is_quote: false,
+      reply_context_text: null,
+      teaser_strength: strength,
+      confidence: confidence ?? undefined,
+      text: "The reset is coming Tuesday.",
+    });
+
+  assert.equal(interpretTiboSignal(direct(0.95), NOW).timedProbabilityEligible, true);
+  assert.equal(interpretTiboSignal(direct(0.8), NOW).timedProbabilityEligible, true);
+  assert.equal(interpretTiboSignal(direct(0.79), NOW).timedProbabilityEligible, false);
+  assert.equal(interpretTiboSignal(direct(null), NOW).timedProbabilityEligible, false);
+  assert.equal(interpretTiboSignal(direct(0.95, "weak"), NOW).timedProbabilityEligible, false);
+});
+
+test("validated manual direct strong override is not rejected solely for missing source confidence", () => {
+  const signal = contextualSignal({
+    signal_type: "teaser",
+    is_reply: false,
+    is_quote: false,
+    reply_context_text: null,
+    teaser_strength: "strong",
+    confidence: undefined,
+    classification_source: "manual",
+    text: "The reset is coming Tuesday.",
+  });
+
+  assert.equal(interpretTiboSignal(signal, NOW).timedProbabilityEligible, true);
+});
