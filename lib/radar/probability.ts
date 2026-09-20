@@ -25,7 +25,6 @@ import {
   getExpectationKey,
   formatElapsedResetDuration,
   formatElapsedResetDurationPrecise,
-  formatDateTime,
   type ExpectationKey,
 } from "./helpers";
 import {
@@ -1956,10 +1955,6 @@ function getRelativeHazardLevelText(
   );
 }
 
-function replaceTeaserWindowPlaceholders(text: string, start: string, end: string) {
-  return text.replace("{start}", start).replace("{end}", end);
-}
-
 function getTimedTeaserForOutlook(
   data: RadarData,
   latestResetAt: string | null,
@@ -1999,19 +1994,15 @@ function getTimedTeaserOutlookText(
   if (!signal?.expected_start_at || !signal.expected_end_at) return null;
   const endTime = Date.parse(signal.expected_end_at);
   const isGracePeriod = Number.isFinite(endTime) && endTime < now.getTime();
-  return replaceTeaserWindowPlaceholders(
-    translateUI(
-      isGracePeriod
-        ? strength === "strong"
-          ? "outlookStrongTimedTeaserGrace"
-          : "outlookWeakTimedTeaserGrace"
-        : strength === "strong"
-          ? "outlookStrongTimedTeaser"
-          : "outlookWeakTimedTeaser",
-      locale,
-    ),
-    formatDateTime(signal.expected_start_at, locale),
-    formatDateTime(signal.expected_end_at, locale),
+  return translateUI(
+    isGracePeriod
+      ? strength === "strong"
+        ? "outlookStrongTimedTeaserGraceSemantic"
+        : "outlookWeakTimedTeaserGraceSemantic"
+      : strength === "strong"
+        ? "outlookStrongTimedTeaserSemantic"
+        : "outlookWeakTimedTeaserSemantic",
+    locale,
   );
 }
 

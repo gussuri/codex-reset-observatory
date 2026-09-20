@@ -177,6 +177,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "The window Tibo hinted at ({start}–{end}) has passed, but it ended recently, so the chance of a reset is still higher than usual.",
     zh: "Tibo 暗示的时间窗口（{start}至{end}）已经结束，但由于刚刚结束，重置的可能性目前仍高于平时。",
   },
+  outlookStrongTimedTeaserSemantic: {
+    ja: "Tiboがリセットを強く示唆しています。通常よりリセットの可能性が高まっています。",
+    en: "Tibo is strongly hinting at a reset, so the chance of a reset is higher than usual.",
+    zh: "Tibo 正在强烈暗示可能会重置，因此重置的可能性高于平时。",
+  },
+  outlookStrongTimedTeaserGraceSemantic: {
+    ja: "Tiboがリセットを強く示唆していた時間帯は過ぎましたが、直後のためリセットの可能性はまだ通常より高めです。",
+    en: "The window Tibo strongly hinted at has passed, but the chance of a reset is still higher than usual because it ended recently.",
+    zh: "Tibo 强烈暗示的时间窗口已经结束，但由于刚刚结束，重置的可能性目前仍高于平时。",
+  },
   outlookActiveIncident: {
     ja: "Codex関連の障害が確認されています。復旧対応などに伴うリセットの可能性も含めて注視しています。",
     en: "A Codex-related incident has been confirmed. We are watching for a possible reset connected with recovery work.",
@@ -196,6 +206,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     ja: "Tiboがほのめかした時間帯（{start}〜{end}）は過ぎましたが、直後のためリセットの見込みはまだ少し高めです。",
     en: "The window Tibo hinted at ({start}–{end}) has passed, but it ended recently, so the chance of a reset is still slightly higher than usual.",
     zh: "Tibo 暗示的时间窗口（{start}至{end}）已经结束，但由于刚刚结束，重置的可能性目前仍略高于平时。",
+  },
+  outlookWeakTimedTeaserSemantic: {
+    ja: "Tiboがリセットの可能性をほのめかしています。通常よりリセットの可能性がやや高まっています。",
+    en: "Tibo may be hinting at a reset, so the chance of a reset is slightly higher than usual.",
+    zh: "Tibo 可能在暗示会有重置，因此重置的可能性略高于平时。",
+  },
+  outlookWeakTimedTeaserGraceSemantic: {
+    ja: "Tiboがリセットをほのめかしていた時間帯は過ぎましたが、直後のためリセットの可能性はまだ少し高めです。",
+    en: "The window Tibo hinted at has passed, but the chance of a reset is still slightly higher than usual because it ended recently.",
+    zh: "Tibo 暗示的时间窗口已经结束，但由于刚刚结束，重置的可能性目前仍略高于平时。",
   },
   outlookUsageAnomaly: {
     ja: "利用上限まわりの異常が確認されており、リセットの可能性がやや高まっています。",

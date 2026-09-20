@@ -588,7 +588,7 @@ test("display reasoning does not change public probabilities", () => {
 });
 
 
-test("current outlook includes a localized resolved teaser window in all supported locales", () => {
+test("timed teaser reasoning keeps its semantic meaning without server-formatted timestamps", () => {
   const now = new Date("2026-08-27T07:21:00.000Z");
   const timedSignal = {
     tweet_id: "timed-outlook-teaser",
@@ -617,14 +617,16 @@ test("current outlook includes a localized resolved teaser window in all support
   const zh = getDisplayProbabilityReason(data, 0.54, 0.79, "zh", evaluation, null, now);
 
   assert.match(ja ?? "", /Tiboがリセットを強く示唆/);
-  assert.match(ja ?? "", /示唆された時間帯/);
-  assert.match(ja ?? "", /2026\/08\/27/);
+  assert.match(ja ?? "", /通常よりリセットの可能性が高まっています/);
   assert.match(en ?? "", /Tibo is strongly hinting at a reset/);
-  assert.match(en ?? "", /hinted window/);
-  assert.match(en ?? "", /08\/27\/2026/);
+  assert.match(en ?? "", /chance of a reset is higher than usual/);
   assert.match(zh ?? "", /Tibo 正在强烈暗示/);
-  assert.match(zh ?? "", /时间窗口/);
-  assert.match(zh ?? "", /2026\/08\/27/);
+  assert.match(zh ?? "", /重置的可能性高于平时/);
+
+  for (const reason of [ja, en, zh]) {
+    assert.doesNotMatch(reason ?? "", /JST|Asia\/Tokyo/);
+    assert.doesNotMatch(reason ?? "", /2026[年\/]08[月\/]27|08\/27\/2026/);
+  }
 });
 
 
@@ -660,6 +662,48 @@ test("current outlook explains the gradual fade during a timed teaser grace peri
   assert.match(ja ?? "", /まだ通常より高め/);
   assert.match(en ?? "", /still higher than usual/);
   assert.match(zh ?? "", /仍高于平时/);
+
+  for (const reason of [ja, en, zh]) {
+    assert.doesNotMatch(reason ?? "", /JST|Asia\/Tokyo/);
+    assert.doesNotMatch(reason ?? "", /2026[年\/]08[月\/]28|08\/28\/2026/);
+  }
+});
+
+
+test("weak timed teaser reasoning keeps weak semantics without a timestamp", () => {
+  const now = new Date("2026-08-27T08:30:00.000Z");
+  const timedSignal = {
+    tweet_id: "weak-timed-outlook",
+    signal_type: "teaser" as const,
+    text: "Reset button tomorrow.",
+    tweet_created_at: "2026-08-27T06:31:31.000Z",
+    teaser_strength: "weak" as const,
+    confidence: 0.75,
+    verification_status: "confirmed" as const,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_confidence: 0.9,
+    expected_start_at: "2026-08-27T07:00:00.000Z",
+    expected_end_at: "2026-08-28T07:00:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [timedSignal],
+    recentTiboSignals: [timedSignal],
+  });
+  const evaluation = getLocalSignalEvaluation(data, now);
+
+  const ja = getDisplayProbabilityReason(data, 0.3, 0.5, "ja", evaluation, null, now);
+  const en = getDisplayProbabilityReason(data, 0.3, 0.5, "en", evaluation, null, now);
+  const zh = getDisplayProbabilityReason(data, 0.3, 0.5, "zh", evaluation, null, now);
+
+  assert.match(ja ?? "", /リセットの可能性をほのめかしています/);
+  assert.match(en ?? "", /may be hinting at a reset/);
+  assert.match(zh ?? "", /可能在暗示会有重置/);
+  for (const reason of [ja, en, zh]) {
+    assert.doesNotMatch(reason ?? "", /JST|Asia\/Tokyo|2026[年\/]08[月\/]27|08\/27\/2026/);
+  }
 });
 
 
