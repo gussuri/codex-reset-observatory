@@ -570,6 +570,33 @@ test("public Tibo activity uses stored translations and keeps the full post text
   assert.equal(en.latestTiboActivity?.text?.includes("\n\n"), true);
 });
 
+test("public Japanese and Chinese views do not trust stored English source copies", () => {
+  const source = "You can just ask Codex with GPT-5.6 Sol the wildest things and it will just do it.";
+  const internal = getLocalRadarData({
+    calculationNow: new Date("2026-08-07T00:00:00.000Z"),
+    recentTiboSignals: [
+      {
+        tweet_id: "invalid-stored-translation",
+        signal_type: "official_notice",
+        text: source,
+        translated_text_ja: source,
+        translated_text_zh: source,
+        tweet_url: "https://x.com/thsottiaux/status/invalid-stored-translation",
+        tweet_created_at: "2026-08-06T23:00:00.000Z",
+        verification_status: "auto_unverified",
+      },
+    ],
+  });
+
+  const ja = toPublicRadarSnapshot(internal, "ja", { calculationNow: new Date("2026-08-07T00:00:00.000Z") });
+  const zh = toPublicRadarSnapshot(internal, "zh", { calculationNow: new Date("2026-08-07T00:00:00.000Z") });
+
+  assert.match(ja.latestTiboActivity?.text ?? "", /GPT-5\.6 Sol搭載のCodexなら/);
+  assert.match(zh.latestTiboActivity?.text ?? "", /使用 GPT-5\.6 Sol 的 Codex/);
+  assert.notEqual(ja.latestTiboActivity?.text, source);
+  assert.notEqual(zh.latestTiboActivity?.text, source);
+});
+
 test("SSR datetime renders deterministic JST text before browser timezone hydration", () => {
   const props = {
     value: "2026-08-04T00:00:00.000Z",

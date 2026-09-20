@@ -5,6 +5,9 @@ import {
   type GeminiTranslationOutput,
   type GeminiTranslationRetryOptions,
 } from "./geminiTranslation";
+import {
+  isTiboTranslationValid,
+} from "./tiboTranslationValidation";
 
 export const TIBO_TRANSLATION_REPAIR_SIGNAL_TYPES = [
   "official_notice",
@@ -80,7 +83,7 @@ function nonEmptyString(value: unknown) {
 }
 
 function nullableString(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === "string" ? value : null;
 }
 
 function isRepairSignalType(
@@ -100,7 +103,10 @@ function toMissingTranslationRow(value: unknown): MissingTiboTranslationRow | nu
 
   const translatedTextJa = nullableString(value.translated_text_ja);
   const translatedTextZh = nullableString(value.translated_text_zh);
-  if (translatedTextJa && translatedTextZh) return null;
+  if (
+    isTiboTranslationValid(text, translatedTextJa, "ja") &&
+    isTiboTranslationValid(text, translatedTextZh, "zh")
+  ) return null;
 
   return {
     tweetId,
@@ -124,7 +130,6 @@ export async function listMissingTiboTranslations(
     .from("tibo_signals")
     .select(TIBO_TRANSLATION_COLUMNS)
     .in("signal_type", [...TIBO_TRANSLATION_REPAIR_SIGNAL_TYPES])
-    .or("translated_text_ja.is.null,translated_text_ja.eq.,translated_text_zh.is.null,translated_text_zh.eq.")
     .order("tweet_created_at", { ascending: false })
     .limit(boundedLimit);
 
@@ -146,25 +151,30 @@ export function getTiboTranslationServiceClient(): TiboTranslationStoreClient {
   }) as unknown as TiboTranslationStoreClient;
 }
 
-function missingLocales(row: MissingTiboTranslationRow) {
+export function getTiboTranslationRepairLocales(row: MissingTiboTranslationRow) {
   return [
-    row.translatedTextJa ? null : "ja",
-    row.translatedTextZh ? null : "zh",
+    isTiboTranslationValid(row.text, row.translatedTextJa, "ja") ? null : "ja",
+    isTiboTranslationValid(row.text, row.translatedTextZh, "zh") ? null : "zh",
   ].filter((locale): locale is string => Boolean(locale));
 }
 
-async function updateMissingTranslation(
+async function updateTiboTranslation(
   store: TiboTranslationStoreClient,
-  tweetId: string,
+  row: MissingTiboTranslationRow,
   column: "translated_text_ja" | "translated_text_zh",
   value: string,
 ) {
-  const result = await store
+  const currentValue = column === "translated_text_ja"
+    ? row.translatedTextJa
+    : row.translatedTextZh;
+  let query = store
     .from("tibo_signals")
     .update({ [column]: value })
-    .eq("tweet_id", tweetId)
-    .or(`${column}.is.null,${column}.eq.`)
-    .select("tweet_id");
+    .eq("tweet_id", row.tweetId);
+  query = currentValue === null
+    ? query.or(`${column}.is.null,${column}.eq.`)
+    : query.eq(column, currentValue);
+  const result = await query.select("tweet_id");
   if (result.error) throw new Error("Tibo translation update failed");
   return Array.isArray(result.data) && result.data.length > 0;
 }
@@ -180,7 +190,7 @@ export async function reconcileMissingTiboTranslations(
     TIBO_TRANSLATION_REPAIR_BATCH_SIZE,
     Math.max(1, Math.floor(options.maxRows ?? TIBO_TRANSLATION_REPAIR_BATCH_SIZE)),
   );
-  const candidates = rows.filter((row) => missingLocales(row).length > 0).slice(0, maxRows);
+  const candidates = rows.filter((row) => getTiboTranslationRepairLocales(row).length > 0).slice(0, maxRows);
   const translate = options.translate ?? translateWithGeminiWithRetry;
   const outcomes: TiboTranslationRepairOutcome[] = [];
   let attempted = 0;
@@ -189,7 +199,7 @@ export async function reconcileMissingTiboTranslations(
   let rateLimited = false;
 
   for (const row of candidates) {
-    const locales = missingLocales(row);
+    const locales = getTiboTranslationRepairLocales(row);
     attempted += 1;
     geminiRequests += 1;
     const result = await translate(
@@ -226,16 +236,32 @@ export async function reconcileMissingTiboTranslations(
       continue;
     }
 
+    const validResults = locales.every((locale) =>
+      locale === "ja"
+        ? isTiboTranslationValid(row.text, result.textJa, "ja")
+        : isTiboTranslationValid(row.text, result.textZh, "zh"),
+    );
+    if (!validResults) {
+      outcomes.push({
+        tweetId: row.tweetId,
+        signalType: row.signalType,
+        missingLocales: locales,
+        writtenLocales: [],
+        status: "translation_invalid_translation",
+      });
+      continue;
+    }
+
     const writtenLocales: string[] = [];
     try {
-      if (!row.translatedTextJa && result.textJa) {
-        if (await updateMissingTranslation(options.store, row.tweetId, "translated_text_ja", result.textJa)) {
+      if (locales.includes("ja") && result.textJa) {
+        if (await updateTiboTranslation(options.store, row, "translated_text_ja", result.textJa)) {
           writtenLocales.push("ja");
           writes += 1;
         }
       }
-      if (!row.translatedTextZh && result.textZh) {
-        if (await updateMissingTranslation(options.store, row.tweetId, "translated_text_zh", result.textZh)) {
+      if (locales.includes("zh") && result.textZh) {
+        if (await updateTiboTranslation(options.store, row, "translated_text_zh", result.textZh)) {
           writtenLocales.push("zh");
           writes += 1;
         }

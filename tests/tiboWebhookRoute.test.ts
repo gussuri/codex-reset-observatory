@@ -1548,12 +1548,15 @@ test("persists the source event after the bounded translation retry is exhausted
   process.env.GEMINI_API_KEY = "test-gemini-key";
   process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
   process.env.GEMINI_TRANSLATION_MODE = "on";
+  const sourceText = "Just saying hello.";
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     const method = init?.method ?? "GET";
     if (url.includes("generativelanguage.googleapis.com")) {
       translationCalls += 1;
-      return new Response("temporary provider failure", { status: 503 });
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: sourceText, zh: sourceText }) }] } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (method === "POST" && url.includes("/tibo_signals")) {
       upserts.push(JSON.parse(String(init?.body)));
@@ -1577,7 +1580,7 @@ test("persists the source event after the bounded translation retry is exhausted
   try {
     const response = await POST(buildRequest({
       tweetId: "2084000000000000203",
-      text: "Just saying hello.",
+      text: sourceText,
     }));
 
     assert.equal(response.status, 200);

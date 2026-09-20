@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { isBearerAuthorizationValid } from "../security/bearerAuth";
 import {
   getTiboTranslationServiceClient,
+  getTiboTranslationRepairLocales,
   listMissingTiboTranslations,
   reconcileMissingTiboTranslations,
   TIBO_TRANSLATION_REPAIR_AUDIT_LIMIT,
@@ -82,10 +83,7 @@ export function createTiboTranslationReconciliationHandler(
           candidates: rows.map((row) => ({
             tweetId: row.tweetId,
             signalType: row.signalType,
-            missingLocales: [
-              row.translatedTextJa ? null : "ja",
-              row.translatedTextZh ? null : "zh",
-            ].filter((locale): locale is string => Boolean(locale)),
+            missingLocales: getTiboTranslationRepairLocales(row),
           })),
         }, 200);
       }

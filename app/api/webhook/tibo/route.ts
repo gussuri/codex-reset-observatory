@@ -36,6 +36,10 @@ import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
 import {
+  isTiboTranslationValid,
+  normalizeTiboTranslationValue,
+} from "@/lib/radar/tiboTranslationValidation";
+import {
   ensureResetDisplayNameForEvent,
 } from "@/lib/radar/resetDisplayNameStore";
 import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
@@ -99,10 +103,15 @@ import {
 // 2,000-character ceiling rejected fully expanded posts before classification.
 const MAX_TIBO_SOURCE_TEXT_LENGTH = 25_000;
 
-function normalizeStoredTranslation(value: unknown) {
-  if (typeof value !== "string") return null;
-  const normalized = value.replace(/\r\n?/g, "\n").trim();
-  return normalized && normalized.length <= 6000 ? normalized : null;
+function normalizeStoredTranslation(
+  value: unknown,
+  sourceText: string,
+  locale: "ja" | "zh",
+) {
+  const normalized = normalizeTiboTranslationValue(value);
+  return normalized && isTiboTranslationValid(sourceText, normalized, locale)
+    ? normalized
+    : null;
 }
 
 const FORMAL_FLOW_STATUSES = new Set(["claimed_new", "existing", "reconciled"]);
@@ -729,8 +738,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja);
-    const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh);
+    const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja, text, "ja");
+    const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh, text, "zh");
     let translationResult: Awaited<ReturnType<typeof translateWithGeminiWithRetry>> | null = null;
 
     if (!existingTranslationJa || !existingTranslationZh) {

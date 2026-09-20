@@ -112,6 +112,75 @@ test("stops retrying at the bounded attempt count for rate limits", async () => 
   assert.equal(result.status, "rate_limited");
 });
 
+test("rejects a Gemini response that copies the natural-language source", async () => {
+  const source = "OK fine. But it’s also still coming in Tuesday";
+  const result = await translateWithGemini(
+    { text: source },
+    {
+      apiKey: "test-key",
+      model: "gemini-3.5-flash-lite",
+      fetchImpl: async () => new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: source, zh: source }) }] } }],
+      }), { status: 200 }),
+    },
+  );
+
+  assert.equal(result.status, "invalid_translation");
+  assert.equal(result.textJa, null);
+  assert.equal(result.textZh, null);
+});
+
+test("retries one invalid translation response and stores the later valid response", async () => {
+  let calls = 0;
+  const source = "A reset is coming tomorrow.";
+  const result = await translateWithGeminiWithRetry(
+    { text: source },
+    {
+      apiKey: "test-key",
+      model: "gemini-3.5-flash-lite",
+      retryDelayMs: 0,
+      fetchImpl: async () => {
+        calls += 1;
+        const translation = calls === 1
+          ? { ja: source, zh: source }
+          : { ja: "明日、リセットが実施されます。", zh: "明天会进行重置。" };
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(translation) }] } }],
+        }), { status: 200 });
+      },
+    },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "success");
+  assert.equal(result.textJa, "明日、リセットが実施されます。");
+  assert.equal(result.textZh, "明天会进行重置。");
+});
+
+test("stops invalid-translation retry at the bounded attempt count", async () => {
+  let calls = 0;
+  const source = "A reset is coming tomorrow.";
+  const result = await translateWithGeminiWithRetry(
+    { text: source },
+    {
+      apiKey: "test-key",
+      model: "gemini-3.5-flash-lite",
+      retryDelayMs: 0,
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: source, zh: source }) }] } }],
+        }), { status: 200 });
+      },
+    },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "invalid_translation");
+  assert.equal(result.textJa, null);
+  assert.equal(result.textZh, null);
+});
+
 test("skips translation without making an API request when disabled", async () => {
   let called = false;
   const result = await translateWithGemini(

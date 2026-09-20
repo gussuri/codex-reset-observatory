@@ -25,6 +25,8 @@ function makeStore(initialRows: FakeRow[]) {
         selected?: boolean;
         signalTypes?: string[];
         limit?: number;
+        expectedValues?: Record<string, string>;
+        allowEmpty?: boolean;
       } = {};
       const query: any = {
         select() {
@@ -36,6 +38,7 @@ function makeStore(initialRows: FakeRow[]) {
           return query;
         },
         or() {
+          state.allowEmpty = true;
           return query;
         },
         order() {
@@ -49,8 +52,12 @@ function makeStore(initialRows: FakeRow[]) {
           state.update = values;
           return query;
         },
-        eq(_column: string, value: string) {
-          state.tweetId = value;
+        eq(column: string, value: string) {
+          if (column === "tweet_id") state.tweetId = value;
+          else {
+            state.expectedValues ??= {};
+            state.expectedValues[column] = value;
+          }
           return query;
         },
         then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
@@ -62,7 +69,11 @@ function makeStore(initialRows: FakeRow[]) {
               const current = column === "translated_text_ja"
                 ? row.translatedTextJa
                 : row.translatedTextZh;
-              if (current) return resolve({ data: [], error: null });
+              const expected = state.expectedValues?.[column];
+              const matches = expected === undefined
+                ? state.allowEmpty && !current
+                : current === expected;
+              if (!matches) return resolve({ data: [], error: null });
               if (column === "translated_text_ja") row.translatedTextJa = String(value);
               if (column === "translated_text_zh") row.translatedTextZh = String(value);
               return resolve({ data: [{ tweet_id: row.tweetId }], error: null });
@@ -70,7 +81,6 @@ function makeStore(initialRows: FakeRow[]) {
 
             const data = rows
               .filter((row) => !state.signalTypes || state.signalTypes.includes(row.signalType))
-              .filter((row) => !row.translatedTextJa || !row.translatedTextZh)
               .slice(0, state.limit ?? rows.length)
               .map((row) => ({
                 tweet_id: row.tweetId,
@@ -126,6 +136,27 @@ test("lists only relevant rows with at least one missing translation", async () 
 
   const rows = await listMissingTiboTranslations(store);
   assert.deepEqual(rows.map((item) => item.tweetId), ["2090000000000000001"]);
+});
+
+test("lists a non-null source copy as a repair candidate while keeping valid locales", async () => {
+  const source = "A reset is coming tomorrow.";
+  const rows = await listMissingTiboTranslations(makeStore([
+    row({
+      text: source,
+      translatedTextJa: source,
+      translatedTextZh: "明天会进行重置。",
+    }),
+    row({
+      tweetId: "2090000000000000004",
+      text: source,
+      translatedTextJa: "明日、リセットが実施されます。",
+      translatedTextZh: "明天会进行重置。",
+    }),
+  ]));
+
+  assert.deepEqual(rows.map((item) => item.tweetId), ["2090000000000000001"]);
+  assert.equal(rows[0]?.translatedTextJa, source);
+  assert.equal(rows[0]?.translatedTextZh, "明天会进行重置。");
 });
 
 test("repairs both locales and preserves existing partial translations and semantic fields", async () => {
@@ -192,6 +223,61 @@ test("rate limits stop the bounded batch without attempting later rows", async (
   assert.equal(result.rateLimited, true);
   assert.equal(result.writes, 0);
   assert.equal(result.outcomes[0]?.status, "rate_limited");
+});
+
+test("repairs only the invalid locale and uses the observed invalid value as a CAS", async () => {
+  const source = "A reset is coming tomorrow.";
+  const store = makeStore([row({ text: source, translatedTextJa: source, translatedTextZh: "已有中文" })]);
+  const result = await reconcileMissingTiboTranslations({
+    store,
+    translate: success("明日、リセットが実施されます。", "新的中文"),
+  });
+
+  assert.equal(result.writes, 1);
+  assert.equal(store.rows[0]?.translatedTextJa, "明日、リセットが実施されます。");
+  assert.equal(store.rows[0]?.translatedTextZh, "已有中文");
+});
+
+test("uses the observed whitespace-only value as the empty-translation CAS", async () => {
+  const source = "A reset is coming tomorrow.";
+  const store = makeStore([row({ text: source, translatedTextJa: "  \n", translatedTextZh: "已有中文" })]);
+  const result = await reconcileMissingTiboTranslations({
+    store,
+    translate: success("明日、リセットが実施されます。", "新的中文"),
+  });
+
+  assert.equal(result.writes, 1);
+  assert.equal(store.rows[0]?.translatedTextJa, "明日、リセットが実施されます。");
+  assert.equal(store.rows[0]?.translatedTextZh, "已有中文");
+});
+
+test("does not overwrite a valid translation written after candidate audit", async () => {
+  const source = "A reset is coming tomorrow.";
+  const store = makeStore([row({ text: source, translatedTextJa: source, translatedTextZh: "已有中文" })]);
+  const auditedRow = row({
+    text: source,
+    translatedTextJa: source,
+    translatedTextZh: "已有中文",
+    signalType: "official_notice",
+  }) as MissingTiboTranslationRow;
+  const result = await reconcileMissingTiboTranslations({
+    store,
+    rows: [auditedRow],
+    translate: async () => {
+      store.rows[0]!.translatedTextJa = "別の正常な日本語";
+      return {
+        textJa: "新しい日本語",
+        textZh: "新的中文",
+        model: "test-model",
+        status: "success" as const,
+        translatedAt: "2026-09-20T00:01:00.000Z",
+      };
+    },
+  });
+
+  assert.equal(result.writes, 0);
+  assert.equal(store.rows[0]?.translatedTextJa, "別の正常な日本語");
+  assert.equal(store.rows[0]?.translatedTextZh, "已有中文");
 });
 
 test("a second reconciliation sees no duplicate candidate after a successful repair", async () => {

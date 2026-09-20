@@ -31,6 +31,10 @@ import { isSupersededBankedNotice } from "./bankedReset";
 import { expandTiboSignalVariants } from "./tiboSecondarySignal";
 import { getTiboReadSideSignals } from "./tiboLogicalProjection";
 import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
+import {
+  isTiboTranslationValid,
+  normalizeTiboTranslationValue,
+} from "./tiboTranslationValidation";
 import type {
   Locale,
   PublicDataHealth,
@@ -99,8 +103,13 @@ function getLocalizedTiboPostText(
 ) {
   const storedTranslation =
     locale === "ja" ? signal.translated_text_ja : locale === "zh" ? signal.translated_text_zh : null;
-  if (typeof storedTranslation === "string" && storedTranslation.trim()) {
-    return storedTranslation;
+  const normalizedTranslation = normalizeTiboTranslationValue(storedTranslation);
+  if (
+    normalizedTranslation &&
+    (locale === "ja" || locale === "zh") &&
+    isTiboTranslationValid(signal.text, normalizedTranslation, locale)
+  ) {
+    return normalizedTranslation;
   }
 
   return translateTiboPostText(signal.text, locale);
