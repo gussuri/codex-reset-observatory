@@ -259,9 +259,6 @@ export const TIMED_TIBO_SIGNAL_SELECT_FIELDS = [
   "temporal_resolution_source",
   "rule_signal_type",
   "ai_signal_type",
-  "is_secondary_future_signal",
-  "parent_tweet_id",
-  "primary_event_at",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
 const TIMED_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = [

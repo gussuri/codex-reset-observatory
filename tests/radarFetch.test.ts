@@ -406,11 +406,14 @@ test("history schema fallback preserves data health and local reply derivation",
 test("Tibo radar queries use explicit field lists instead of wildcard reads", () => {
   assert.notEqual(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, "*");
   assert.notEqual(TIBO_HISTORY_SELECT_FIELDS, "*");
+  assert.notEqual(TIMED_TIBO_SIGNAL_SELECT_FIELDS, "*");
   assert.ok(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(",").length > 1);
   assert.ok(TIBO_HISTORY_SELECT_FIELDS.split(",").length > 1);
+  assert.ok(TIMED_TIBO_SIGNAL_SELECT_FIELDS.split(",").length > 1);
   assert.doesNotMatch(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)id(,|$)/);
   assert.match(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)tweet_id(,|$)/);
   assert.match(TIBO_HISTORY_SELECT_FIELDS, /(^|,)is_reply(,|$)/);
+  assert.doesNotMatch(TIMED_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)(is_secondary_future_signal|parent_tweet_id|primary_event_at)(,|$)/);
 });
 
 test("Tibo history keeps canonical rows narrow and bounds the wider recent read", () => {
