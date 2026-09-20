@@ -159,6 +159,25 @@ test("lists a non-null source copy as a repair candidate while keeping valid loc
   assert.equal(rows[0]?.translatedTextZh, "明天会进行重置。");
 });
 
+test("scans the bounded audit window before applying the repair limit", async () => {
+  const source = "A reset is coming tomorrow.";
+  const rows = await listMissingTiboTranslations(makeStore([
+    row({
+      text: source,
+      translatedTextJa: "明日、リセットが実施されます。",
+      translatedTextZh: "明天会进行重置。",
+    }),
+    row({
+      tweetId: "2090000000000000005",
+      text: source,
+      translatedTextJa: source,
+      translatedTextZh: source,
+    }),
+  ]), 1);
+
+  assert.deepEqual(rows.map((item) => item.tweetId), ["2090000000000000005"]);
+});
+
 test("repairs both locales and preserves existing partial translations and semantic fields", async () => {
   const store = makeStore([
     row(),

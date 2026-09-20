@@ -131,13 +131,14 @@ export async function listMissingTiboTranslations(
     .select(TIBO_TRANSLATION_COLUMNS)
     .in("signal_type", [...TIBO_TRANSLATION_REPAIR_SIGNAL_TYPES])
     .order("tweet_created_at", { ascending: false })
-    .limit(boundedLimit);
+    .limit(TIBO_TRANSLATION_REPAIR_AUDIT_LIMIT);
 
   if (result.error) throw new Error("Tibo translation candidate lookup failed");
   const rows: unknown[] = Array.isArray(result.data) ? result.data : [];
   return rows
     .map(toMissingTranslationRow)
-    .filter((row): row is MissingTiboTranslationRow => Boolean(row));
+    .filter((row): row is MissingTiboTranslationRow => Boolean(row))
+    .slice(0, boundedLimit);
 }
 
 export function getTiboTranslationServiceClient(): TiboTranslationStoreClient {
