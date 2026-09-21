@@ -2513,6 +2513,134 @@ test("joins display outlook sentences without locale-specific spacing errors", (
 });
 
 
+function renderTimedTeaserOutlookForTest({
+  locale,
+  strength,
+  startAt,
+  endAt,
+  calculationNow,
+  temporalPrecision = "exact_time",
+}: {
+  locale: "ja" | "en" | "zh";
+  strength: "strong" | "weak";
+  startAt: string;
+  endAt: string;
+  calculationNow: Date;
+  temporalPrecision?: "exact_time" | "day" | "daypart" | "range";
+}) {
+  const signal = {
+    tweet_id: `timed-point-${strength}-${startAt}`,
+    signal_type: "teaser" as const,
+    text: "Reset button at the hinted time.",
+    tweet_url: `https://x.com/thsottiaux/status/timed-point-${strength}`,
+    tweet_created_at: new Date(calculationNow.getTime() - 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(calculationNow.getTime() + 60 * 60 * 1000).toISOString(),
+    confidence: 0.9,
+    verification_status: "confirmed" as const,
+    teaser_strength: strength,
+    is_reply: false,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: temporalPrecision,
+    temporal_confidence: 0.95,
+    expected_start_at: startAt,
+    expected_end_at: endAt,
+  };
+  const internal = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [signal],
+    recentTiboSignals: [signal],
+  });
+  const snapshot = toPublicRadarSnapshot(internal, locale, { calculationNow });
+
+  return renderToStaticMarkup(
+    React.createElement(RadarDashboard, {
+      initialData: snapshot,
+      initialFetchedAt: calculationNow.toISOString(),
+      locale,
+    }),
+  );
+}
+
+test("renders point-time strong and weak teasers once in every locale", () => {
+  const startAt = "2026-09-22T10:00:00.000Z";
+  const calculationNow = new Date("2026-09-22T09:30:00.000Z");
+  const phrases = {
+    ja: ["示唆された時刻は", "その時刻付近では"],
+    en: ["The hinted time is", "around then"],
+    zh: ["暗示的时刻是", "前后发生重置"],
+  } as const;
+
+  for (const strength of ["strong", "weak"] as const) {
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const html = renderTimedTeaserOutlookForTest({
+        locale,
+        strength,
+        startAt,
+        endAt: startAt,
+        calculationNow,
+      });
+
+      assert.equal(
+        (html.match(/dateTime="2026-09-22T10:00:00\.000Z"/g) ?? []).length,
+        1,
+        strength + "/" + locale + " should render the point time once",
+      );
+      assert.match(html, new RegExp(phrases[locale][0]));
+      assert.match(html, new RegExp(phrases[locale][1]));
+      assert.doesNotMatch(html, /示唆された時間帯|The hinted window is|时间窗口为/);
+      if (locale === "ja") {
+        assert.match(html, /<time[^>]*dateTime="2026-09-22T10:00:00\.000Z"[^>]*>2026年9月22日 19:00 JST<\/time>/);
+      }
+    }
+  }
+});
+
+test("renders point-time grace teasers with a single time in every locale", () => {
+  const startAt = "2026-09-22T10:00:00.000Z";
+  const calculationNow = new Date("2026-09-22T10:30:00.000Z");
+  const gracePhrases = {
+    ja: "時刻（",
+    en: "time Tibo hinted at (",
+    zh: "时刻（",
+  } as const;
+
+  for (const strength of ["strong", "weak"] as const) {
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const html = renderTimedTeaserOutlookForTest({
+        locale,
+        strength,
+        startAt,
+        endAt: startAt,
+        calculationNow,
+      });
+
+      assert.equal(
+        (html.match(/dateTime="2026-09-22T10:00:00\.000Z"/g) ?? []).length,
+        1,
+        strength + "/" + locale + " grace should render the point time once",
+      );
+      assert.ok(html.includes(gracePhrases[locale]));
+    }
+  }
+});
+
+test("keeps a range when exact_time has distinct start and end instants", () => {
+  const startAt = "2026-09-22T10:00:00.000Z";
+  const endAt = "2026-09-22T11:00:00.000Z";
+  const html = renderTimedTeaserOutlookForTest({
+    locale: "ja",
+    strength: "strong",
+    startAt,
+    endAt,
+    calculationNow: new Date("2026-09-22T09:30:00.000Z"),
+    temporalPrecision: "exact_time",
+  });
+
+  assert.match(html, /示唆された時間帯は/);
+  assert.equal((html.match(/dateTime="2026-09-22T10:00:00\.000Z"/g) ?? []).length, 1);
+  assert.equal((html.match(/dateTime="2026-09-22T11:00:00\.000Z"/g) ?? []).length, 1);
+});
+
 test("timed teaser outlook renders crawlable JST on SSR before browser-local hydration", () => {
   const calculationNow = new Date("2026-08-27T08:30:00.000Z");
   const internal = getLocalRadarData({

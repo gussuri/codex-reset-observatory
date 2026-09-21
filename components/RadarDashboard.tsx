@@ -368,19 +368,29 @@ function getTimedTeaserOutlookTemplate(
     return null;
   }
 
+  const isPointTime = start === end;
   const isGracePeriod = Number.isFinite(observedAt) && observedAt > end;
   const key = isGracePeriod
     ? resetTeaserStatus === "strong"
-      ? "outlookStrongTimedTeaserGrace"
-      : "outlookWeakTimedTeaserGrace"
+      ? isPointTime
+        ? "outlookStrongTimedTeaserExactGrace"
+        : "outlookStrongTimedTeaserGrace"
+      : isPointTime
+        ? "outlookWeakTimedTeaserExactGrace"
+        : "outlookWeakTimedTeaserGrace"
     : resetTeaserStatus === "strong"
-      ? "outlookStrongTimedTeaser"
-      : "outlookWeakTimedTeaser";
+      ? isPointTime
+        ? "outlookStrongTimedTeaserExact"
+        : "outlookStrongTimedTeaser"
+      : isPointTime
+        ? "outlookWeakTimedTeaserExact"
+        : "outlookWeakTimedTeaser";
 
   return {
     template: translateUI(key, locale),
     startAt: activity.expectedStartAt,
     endAt: activity.expectedEndAt,
+    isPointTime,
   };
 }
 
@@ -388,13 +398,27 @@ function TimedTeaserOutlook({
   template,
   startAt,
   endAt,
+  isPointTime,
   locale,
 }: {
   template: string;
   startAt: string;
   endAt: string;
+  isPointTime: boolean;
   locale: Locale;
 }) {
+  if (isPointTime) {
+    const [beforeTime, afterTime = ""] = template.split("{time}", 2);
+
+    return (
+      <>
+        {beforeTime}
+        <LocalizedDateTime value={startAt} locale={locale} timeClassName="font-normal text-slate-700" />
+        {afterTime}
+      </>
+    );
+  }
+
   const [beforeStart, afterStart = ""] = template.split("{start}", 2);
   const [between, afterEnd = ""] = afterStart.split("{end}", 2);
 
@@ -1136,6 +1160,7 @@ export function RadarDashboard({
                         template={timedTeaserOutlook.template}
                         startAt={timedTeaserOutlook.startAt}
                         endAt={timedTeaserOutlook.endAt}
+                        isPointTime={timedTeaserOutlook.isPointTime}
                         locale={locale}
                       />
                     ) : (
@@ -1153,6 +1178,7 @@ export function RadarDashboard({
                                   template={timedTeaserOutlook.template}
                                   startAt={timedTeaserOutlook.startAt}
                                   endAt={timedTeaserOutlook.endAt}
+                                  isPointTime={timedTeaserOutlook.isPointTime}
                                   locale={locale}
                                 />
                               ) : compactOutlookReason
