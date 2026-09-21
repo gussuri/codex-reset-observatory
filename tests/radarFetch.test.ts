@@ -548,6 +548,18 @@ test("Tibo history keeps canonical rows narrow and bounds the wider recent read"
   assert.doesNotMatch(bundleSource, /fetchRawTiboHistorySignals\(false\)|fetchRawTiboHistorySignals\(true\)/);
 });
 
+test("recent Tibo projections preserve reply safety metadata", () => {
+  const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
+  const bundleSource = source.slice(
+    source.indexOf("async function getTiboSignalBundle"),
+    source.indexOf("export async function fetchFormalTiboResetSignals"),
+  );
+
+  assert.match(bundleSource, /classification_source: signal\.classification_source/);
+  assert.match(bundleSource, /is_quote: signal\.is_quote/);
+  assert.match(source, /const ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = \[[\s\S]*?"classification_source"/);
+});
+
 test("Tibo reset notice association scans resets chronologically and preserves display order", () => {
   const resets = [
     resetSignal("reset-2", "2026-08-02T10:00:00.000Z"),
