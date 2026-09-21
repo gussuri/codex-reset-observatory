@@ -142,6 +142,19 @@ function hasValidatedDirectStrongConfidence(signal: ResetTeaserSignal) {
     signal.confidence >= 0.8;
 }
 
+function hasValidatedManualStrongReplyTimedTeaserEvidence(
+  signal: ResetTeaserSignal,
+  now: Date,
+) {
+  return signal.signal_type === "teaser" &&
+    signal.is_reply === true &&
+    signal.is_quote !== true &&
+    signal.verification_status === "confirmed" &&
+    signal.classification_source === "manual" &&
+    getEffectiveTeaserStrength(signal) === "strong" &&
+    hasResolvedFutureWindow(signal, now);
+}
+
 function hasExplicitAutomaticOfficialReplyEvidence(signal: ResetTeaserSignal) {
   const authorText = signal.text ?? "";
   if (!EXPLICIT_RESET_OR_LIMIT_PATTERN.test(authorText)) return false;
@@ -285,10 +298,12 @@ export function interpretTiboSignal(
     effectiveStrength === "strong" &&
     hasValidatedDirectStrongConfidence(signal) &&
     hasResolvedFutureWindow(signal, now);
+  const manualStrongReplyTimedTeaser = !rejected &&
+    hasValidatedManualStrongReplyTimedTeaserEvidence(signal, now);
   const timedProbabilityEligible = !rejected &&
     !officialNoticeEligible &&
     !historyEligible &&
-    (strongContextualTimedTeaser || directStrongTimedTeaser);
+    (strongContextualTimedTeaser || directStrongTimedTeaser || manualStrongReplyTimedTeaser);
 
   if (rejected) {
     return {
