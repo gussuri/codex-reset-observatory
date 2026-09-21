@@ -346,6 +346,30 @@ test("verified manual replies can be official even when the author text is crypt
   assert.equal(interpretation.officialNoticeEligible, true);
 });
 
+test("manual confirmed strong reply teasers remain teasers with timed eligibility", () => {
+  const manualReply = signal("manual-strong-reply-teaser", "2026-08-03T23:00:00.000Z", "strong", {
+    signal_type: "teaser",
+    confidence: 1,
+    classification_source: "manual",
+    verification_status: "confirmed",
+    is_reply: true,
+    is_quote: false,
+    text: "3am on a Tuesday",
+    reply_context_text: "When is the next reset?",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-08-05T00:00:00.000Z",
+    expected_end_at: "2026-08-05T00:00:00.000Z",
+  });
+
+  const interpretation = interpretTiboSignal(manualReply, NOW);
+  assert.equal(interpretation.presentationDisposition, "strong_teaser");
+  assert.equal(interpretation.officialNoticeEligible, false);
+  assert.equal(interpretation.probabilityTeaserEligible, false);
+  assert.equal(interpretation.timedProbabilityEligible, true);
+  assert.equal(interpretation.historyEligible, false);
+});
+
 test("automatic official replies require explicit reset evidence in the author text", () => {
   const explicitReply = signal("explicit-official-reply", "2026-08-03T23:00:00.000Z", null, {
     signal_type: "official_notice",

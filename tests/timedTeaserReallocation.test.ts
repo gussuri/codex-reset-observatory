@@ -74,6 +74,44 @@ test("contextual timed replies become strong presentation evidence without becom
   assert.equal(contextualSignal().signal_type, "official_notice");
 });
 
+test("manual confirmed cryptic reply teasers keep their resolved timed policy", () => {
+  const signal = contextualSignal({
+    tweet_id: "manual-cryptic-reply",
+    text: "3am on a tuesday",
+    signal_type: "teaser",
+    confidence: 1,
+    classification_source: "manual",
+    verification_status: "confirmed",
+    teaser_strength: "strong",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-09-22T10:00:00.000Z",
+    expected_end_at: "2026-09-22T10:00:00.000Z",
+  });
+  const interpretation = interpretTiboSignal(signal, NOW);
+
+  assert.equal(interpretation.presentationDisposition, "strong_teaser");
+  assert.equal(interpretation.officialNoticeEligible, false);
+  assert.equal(interpretation.probabilityTeaserEligible, false);
+  assert.equal(interpretation.timedProbabilityEligible, true);
+  assert.equal(interpretation.historyEligible, false);
+  assert.equal(interpretation.contextDependence, "reply_context");
+  assert.deepEqual(getTimedTeaserReallocationWeight(interpretation), {
+    timedEvidenceClass: "strong_contextual",
+    reallocationWeight: 0.4,
+  });
+
+  const snapshot = toPublicRadarSnapshot(survivalData([signal]), "ja", {
+    calculationNow: NOW,
+  });
+  assert.equal(snapshot.resetTeaserStatus, "strong");
+  assert.equal(snapshot.latestTiboActivity?.classification, "teaser");
+  assert.equal(snapshot.latestTiboActivity?.teaserStrength, "strong");
+  assert.equal(snapshot.latestTiboActivity?.isReply, true);
+  assert.equal(snapshot.latestTiboActivity?.temporalResolutionStatus, "resolved");
+  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, "2026-09-22T10:00:00.000Z");
+  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-09-22T10:00:00.000Z");
+});
+
 test("stored strong contextual replies remain eligible for the timed policy", () => {
   const signal = contextualSignal({ teaser_strength: "strong" });
   const interpretation = interpretTiboSignal(signal, NOW);
