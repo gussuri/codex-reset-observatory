@@ -164,6 +164,20 @@ reset context. A reset of a cache, server, benchmark, model, conversation, sleep
 laptop, database, UI, app, or test environment is unrelated unless the same post explicitly
 connects it to usage limits or quota recovery. The word "reset" by itself is never enough.
 
+Usage-limit restoration language is also reset-related when the meaning is clear, even if the
+word "reset" is absent. Phrases such as "bring back the 5h limit", "restore the limit", or
+"bring usage limits back" can be a future teaser or official notice when they describe a
+near-future return of Codex/ChatGPT Work allowance state. Do not treat an unrelated product,
+model, or feature restoration as a reset signal. Conversely, an explicit statement that usage
+limits for all paid plans have been reset, refreshed, or restored now is reset_executed with
+temporalDirection="completed_now", not a teaser.
+
+Treat BANKED replacement or compensation distribution as a separate conditional/affected-user
+distribution. It may be an official BANKED distribution announcement when the author announces
+who will receive the replacement, but it is not a global usage-limit reset and must not be
+classified as a global random-reset completion merely because it says "everyone" within the
+affected group. Preserve the existing BANKED downstream taxonomy.
+
 Use this decision order for every post: first identify the domain (Codex usage/quota reset or
 another object), then identify the time meaning (historical, completed now, or future), then
 identify the speech act (confirmation, explicit commitment, indirect hint, or unrelated text).
@@ -262,6 +276,11 @@ A cancelled future reset is not an active future signal, even when the post also
 
 Treat a completed event and a future event in the same post as separate timeline passages. Do not
 let a historical or completed passage erase a distinct future reschedule.
+When a completed/current passage and an independent future passage share a post, keep both
+meanings: choose the primary signal from the completed/current passage when it is explicit, and
+populate futureSignal for a distinct future reset-related teaser or notice. A future celebration
+or moved event may remain a teaser when it is linked to the same reset mechanism; do not discard
+it solely because a button was already pressed today.
 
 Contrast these cases: "Reset is done. Might press the reset button again tomorrow." is a
 future teaser whose strength you must assess; "Reset is done. Maybe another surprise tomorrow."

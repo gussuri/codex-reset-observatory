@@ -8,10 +8,15 @@ import {
   type TiboScenario,
   type TiboScenarioFixture,
 } from "./tiboScenarioSupport";
-import { buildGeminiPrompt } from "../lib/radar/geminiClassification";
+import { buildGeminiPrompt, TIBO_GEMINI_SYSTEM_PROMPT } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
 import { selectTiboClassification } from "../lib/radar/tiboClassificationMode";
 import { aggregateResetTeaserStatus } from "../lib/radar/teaserStrength";
+import {
+  isBankedDistributionNotice,
+  isBroadBankedDistributionNotice,
+  isConditionalBankedDistributionNotice,
+} from "../lib/radar/bankedReset";
 import {
   combineResetHistory,
   type FormalTiboResetSignal,
@@ -405,4 +410,73 @@ test("fixture includes regression groups for the known temporal and context fail
   for (const group of ["next-hour-or-so", "natural-language-number", "formal-reset", "teaser-strength"]) {
     assert.ok(groups.has(group), group);
   }
+});
+
+test("A1-A4 fixtures record the reviewed baseline misses and the fixed downstream expectations", () => {
+  const expected = [
+    ["prod-a1-limit-restoration", "teaser", "strong"],
+    ["prod-a2-moved-celebration", "teaser", "strong"],
+    ["prod-a3-global-completion", "reset_executed", "none"],
+    ["prod-a4-banked-compensation", "official_notice", "none"],
+  ] as const;
+
+  for (const [id, signalType, teaserStrength] of expected) {
+    const scenario = scenarioById.get(id);
+    assert.ok(scenario, id);
+    assert.deepEqual(scenario.baseline, {
+      ruleSignalType: "irrelevant",
+      geminiSignalType: "irrelevant",
+      manualSignalType: signalType === "official_notice" ? "official_notice" : signalType,
+      manualTeaserStrength: teaserStrength,
+    }, id);
+
+    const run = runTiboScenario(scenario);
+    assert.equal(run.selected.signalType, signalType, id);
+    assert.equal(run.teaserStatus, teaserStrength === "none" ? "none" : teaserStrength, id);
+  }
+});
+
+test("A2 retains a distinct future teaser from its mixed timeline", () => {
+  const run = runTiboScenario(scenarioById.get("prod-a2-moved-celebration")!);
+  assert.equal(run.selected.signalType, "teaser");
+  assert.equal(run.geminiResult?.temporalDirection, "future");
+  assert.equal(run.geminiResult?.futureSignal?.signalType, "teaser");
+  assert.equal(run.geminiResult?.futureSignal?.teaserStrength, "strong");
+  assert.equal(run.formalAccepted, false);
+  assert.equal(run.historyEvent, null);
+});
+
+test("A3 is a completed global usage-limit reset, not a teaser", () => {
+  const run = runTiboScenario(scenarioById.get("prod-a3-global-completion")!);
+  assert.equal(run.selected.signalType, "reset_executed");
+  assert.equal(run.geminiResult?.temporalDirection, "completed_now");
+  assert.equal(run.teaserStatus, "none");
+  assert.equal(run.formalAccepted, true);
+  assert.equal(run.historyEvent?.recordKind, "confirmed_global");
+});
+
+test("A4 remains a conditional BANKED distribution and never a global random-reset target", () => {
+  const scenario = scenarioById.get("prod-a4-banked-compensation")!;
+  const run = runTiboScenario(scenario);
+  assert.equal(run.selected.signalType, "official_notice");
+  assert.equal(run.publicSnapshot.viewModel.activeWindow.active, true);
+  assert.equal(run.formalAccepted, false);
+  assert.equal(run.historyEvent, null);
+  assert.equal(isBankedDistributionNotice(scenario.tweetText), true);
+  assert.equal(isConditionalBankedDistributionNotice(scenario.tweetText), true);
+  assert.equal(isBroadBankedDistributionNotice(scenario.tweetText), true);
+});
+
+test("A1-A4 prompt additions are explicit without weakening author/context ownership", () => {
+  const prompt = `${TIBO_GEMINI_SYSTEM_PROMPT}\n${buildGeminiPrompt({
+    text: "Tomorrow we will bring back the 5h limit for Plus accounts.",
+    isReply: false,
+    replyContextText: "Parent text is context only.",
+    isQuote: true,
+    quoteContextText: "The quoted post is not Tibo's assertion.",
+  })}`;
+  assert.match(prompt, /usage-limit restoration|bringing limits back/i);
+  assert.match(prompt, /completed.*future.*passage|future.*completed.*passage/i);
+  assert.match(prompt, /BANKED.*(?:replacement|compensation)|(?:replacement|compensation).*BANKED/i);
+  assert.match(prompt, /not Tibo's own text/i);
 });

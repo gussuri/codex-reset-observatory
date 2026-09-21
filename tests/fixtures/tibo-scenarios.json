@@ -1296,6 +1296,59 @@
     },
 
     {
+      "id": "prod-a1-limit-restoration",
+      "category": "false_negative_a",
+      "description": "Usage-limit restoration is a future reset signal without the word reset",
+      "tweetText": "Tomorrow we will bring back the 5h limit for Plus accounts across ChatGPT Work and Codex.",
+      "tweetCreatedAt": "2026-08-25T00:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2092058556707344708",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldAffectProbability": true },
+      "pipeline": true,
+      "regressionGroup": "false-negative-a",
+      "baseline": { "ruleSignalType": "irrelevant", "geminiSignalType": "irrelevant", "manualSignalType": "teaser", "manualTeaserStrength": "strong" },
+      "mockGeminiOutput": { "signalType": "teaser", "confidence": 0.98, "temporalDirection": "future", "evidenceQuote": "bring back the 5h limit", "teaserStrength": "strong", "teaserStrengthConfidence": 0.95, "teaserStrengthEvidenceQuote": "bring back the 5h limit" }
+    },
+    {
+      "id": "prod-a2-moved-celebration",
+      "category": "false_negative_a",
+      "description": "A completed button press and a moved celebration remain separate timeline passages",
+      "tweetText": "This celebration is moved to tomorrow as the button was already pressed today.",
+      "tweetCreatedAt": "2026-08-29T00:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2093811840258293947",
+      "expected": { "signalType": "teaser", "temporalDirection": "future", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldAffectProbability": true },
+      "pipeline": true,
+      "regressionGroup": "false-negative-a",
+      "baseline": { "ruleSignalType": "irrelevant", "geminiSignalType": "irrelevant", "manualSignalType": "teaser", "manualTeaserStrength": "strong" },
+      "mockGeminiOutput": { "signalType": "irrelevant", "confidence": 0.98, "temporalDirection": "historical", "evidenceQuote": "the button was already pressed today", "teaserStrength": "none", "teaserStrengthConfidence": 0.95, "teaserStrengthEvidenceQuote": "the button was already pressed today" }
+    },
+    {
+      "id": "prod-a3-global-completion",
+      "category": "false_negative_a",
+      "description": "Explicit global usage-limit completion is reset execution",
+      "tweetText": "What I wanted to say yesterday is that we hit 25M active users and to celebrate we have now reset usage for all paid subscriptions for ChatGPT Work and Codex.",
+      "tweetCreatedAt": "2026-08-31T00:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2094251180121854309",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": true, "shouldAffectProbability": false },
+      "pipeline": true,
+      "regressionGroup": "false-negative-a",
+      "baseline": { "ruleSignalType": "irrelevant", "geminiSignalType": "irrelevant", "manualSignalType": "reset_executed", "manualTeaserStrength": "none" },
+      "mockGeminiOutput": { "signalType": "reset_executed", "confidence": 1, "temporalDirection": "completed_now", "evidenceQuote": "we have now reset usage for all paid subscriptions for ChatGPT Work and Codex", "teaserStrength": "none" }
+    },
+    {
+      "id": "prod-a4-banked-compensation",
+      "category": "false_negative_a",
+      "description": "Affected users receive replacement BANKED resets after a failed distribution",
+      "tweetText": "There was a bit of a kerfuffle this morning with some banked resets not fully applying when used in ChatGPT Work and Codex. Everyone who used one in the affected time window is getting another one and an email to apologize.",
+      "tweetCreatedAt": "2026-09-09T18:23:34.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2097752790177370535",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "teaserStrength": "none", "shouldCreateActiveNotice": true, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldAffectProbability": false },
+      "pipeline": true,
+      "regressionGroup": "false-negative-a",
+      "baseline": { "ruleSignalType": "irrelevant", "geminiSignalType": "irrelevant", "manualSignalType": "official_notice", "manualTeaserStrength": "none" },
+      "mockGeminiOutput": { "signalType": "official_notice", "confidence": 0.98, "temporalDirection": "future", "evidenceQuote": "Everyone who used one in the affected time window is getting another one" }
+    },
+
+    {
       "id": "noise-01",
       "category": "noise_normalization",
       "description": "Lowercase equivalent",

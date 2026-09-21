@@ -61,10 +61,15 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
   existing: ExistingTiboWebhookState | null | undefined,
   receivedAt: string,
 ): T {
+  // The webhook lookup is keyed by tweet_id. Keep the guard explicit so a
+  // reviewed decision cannot accidentally bleed into a distinct edit version
+  // if this helper is ever called with a mismatched row.
+  const sameTweetId = !existing?.tweet_id || !payload.tweet_id || existing.tweet_id === payload.tweet_id;
+  const existingState = sameTweetId ? existing : undefined;
   const preserved = {
     ...payload,
-    detected_at: existing?.detected_at ?? receivedAt,
-    verification_status: existing?.verification_status ?? "auto_unverified",
+    detected_at: existingState?.detected_at ?? receivedAt,
+    verification_status: existingState?.verification_status ?? "auto_unverified",
   } as TiboWebhookPayload;
 
   const hasEditIdentity = [
@@ -72,14 +77,14 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
     payload.edit_history_tweet_ids,
     payload.edit_version,
     payload.edit_metadata_source,
-    existing?.logical_post_id,
-    existing?.edit_history_tweet_ids,
-    existing?.edit_version,
-    existing?.edit_metadata_source,
+    existingState?.logical_post_id,
+    existingState?.edit_history_tweet_ids,
+    existingState?.edit_version,
+    existingState?.edit_metadata_source,
   ].some((value) => value !== undefined);
   if (hasEditIdentity) {
     const identity = mergeTiboEditIdentity(
-      existing,
+      existingState,
       {
         logical_post_id: payload.logical_post_id,
         edit_history_tweet_ids: payload.edit_history_tweet_ids,
@@ -91,26 +96,28 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
     Object.assign(preserved, identity.identity);
   }
 
-  if (payload.secondary_signal !== undefined || existing?.secondary_signal !== undefined) {
+  if (payload.secondary_signal !== undefined || existingState?.secondary_signal !== undefined) {
     preserved.secondary_signal = preserveSecondaryManualOverride(
       payload.secondary_signal,
-      existing?.secondary_signal,
+      existingState?.secondary_signal,
     );
   }
 
-  if (existing?.classification_source === "manual") {
+  const isReviewed = existingState?.verification_status === "confirmed" ||
+    existingState?.verification_status === "rejected";
+  if (isReviewed || existingState?.classification_source === "manual") {
     return {
       ...preserved,
-      signal_type: keepExisting(existing.signal_type, preserved.signal_type),
-      confidence: keepExisting(existing.confidence, preserved.confidence),
-      classification_reason: keepExisting(existing.classification_reason, preserved.classification_reason),
-      classification_source: "manual",
-      teaser_strength: keepExisting(existing.teaser_strength, preserved.teaser_strength),
+      signal_type: keepExisting(existingState?.signal_type, preserved.signal_type),
+      confidence: keepExisting(existingState?.confidence, preserved.confidence),
+      classification_reason: keepExisting(existingState?.classification_reason, preserved.classification_reason),
+      classification_source: keepExisting(existingState?.classification_source, preserved.classification_source),
+      teaser_strength: keepExisting(existingState?.teaser_strength, preserved.teaser_strength),
       secondary_signal: preserved.secondary_signal,
-      is_reply: keepExisting(existing.is_reply, preserved.is_reply),
-      reply_to_handles: keepExisting(existing.reply_to_handles, preserved.reply_to_handles),
-      reply_context_text: keepExisting(existing.reply_context_text, preserved.reply_context_text),
-      source_timeline: keepExisting(existing.source_timeline, preserved.source_timeline),
+      is_reply: keepExisting(existingState?.is_reply, preserved.is_reply),
+      reply_to_handles: keepExisting(existingState?.reply_to_handles, preserved.reply_to_handles),
+      reply_context_text: keepExisting(existingState?.reply_context_text, preserved.reply_context_text),
+      source_timeline: keepExisting(existingState?.source_timeline, preserved.source_timeline),
     } as T;
   }
 

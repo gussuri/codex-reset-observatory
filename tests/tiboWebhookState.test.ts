@@ -134,3 +134,62 @@ test("preserved confirmed and rejected states cannot trigger formal adoption aga
     false,
   );
 });
+
+test("confirmed and rejected rows lock automatic classification fields while audit fields refresh", () => {
+  for (const verificationStatus of ["confirmed", "rejected"] as const) {
+    const result = preserveTiboWebhookState({
+      ...payload(),
+      signal_type: "official_notice",
+      confidence: 0.51,
+      classification_reason: "new automatic result",
+      classification_source: "gemini",
+      teaser_strength: "strong",
+      ai_signal_type: "official_notice",
+    }, {
+      ...formalCandidate(verificationStatus),
+      tweet_id: payload().tweet_id,
+      signal_type: "teaser",
+      confidence: 0.95,
+      classification_reason: "reviewed decision",
+      classification_source: "manual",
+      teaser_strength: "weak",
+      detected_at: "2026-08-04T12:00:00.000Z",
+    }, receivedAt);
+
+    assert.equal(result.signal_type, "teaser");
+    assert.equal(result.confidence, 0.95);
+    assert.equal(result.classification_reason, "reviewed decision");
+    assert.equal(result.classification_source, "manual");
+    assert.equal(result.teaser_strength, "weak");
+    assert.equal(result.verification_status, verificationStatus);
+    assert.equal(result.ai_signal_type, "official_notice");
+  }
+});
+
+test("reviewed classification does not propagate to a different tweet id", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    tweet_id: "2084000000000000201",
+    signal_type: "official_notice",
+    confidence: 0.51,
+    classification_reason: "new automatic result",
+    classification_source: "gemini",
+    teaser_strength: "strong",
+  }, {
+    ...formalCandidate("confirmed"),
+    tweet_id: "2084000000000000200",
+    signal_type: "teaser",
+    confidence: 0.95,
+    classification_reason: "reviewed decision",
+    classification_source: "manual",
+    teaser_strength: "weak",
+  }, receivedAt);
+
+  assert.equal(result.tweet_id, "2084000000000000201");
+  assert.equal(result.signal_type, "official_notice");
+  assert.equal(result.confidence, 0.51);
+  assert.equal(result.classification_reason, "new automatic result");
+  assert.equal(result.classification_source, "gemini");
+  assert.equal(result.teaser_strength, "strong");
+  assert.equal(result.verification_status, "auto_unverified");
+});

@@ -52,6 +52,13 @@ export type TiboScenarioExpected = {
   shouldBeRejected?: boolean;
 };
 
+export type TiboScenarioBaseline = {
+  ruleSignalType: ClassificationSignalType;
+  geminiSignalType: ClassificationSignalType;
+  manualSignalType: ClassificationSignalType;
+  manualTeaserStrength?: "strong" | "weak" | "none";
+};
+
 export type TiboScenarioMockGeminiOutput = Partial<
   Pick<
     GeminiClassificationOutput,
@@ -101,6 +108,7 @@ export type TiboScenario = {
   pipeline?: boolean;
   metamorphicGroup?: string;
   regressionGroup?: string;
+  baseline?: TiboScenarioBaseline;
   mockGeminiOutput?: TiboScenarioMockGeminiOutput;
 };
 
