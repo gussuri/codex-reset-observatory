@@ -49,6 +49,7 @@ import {
   aggregateResetTeaserStatus,
   getEffectiveTeaserStrength,
   getTeaserStrengthSignals,
+  interpretTiboSignal,
 } from "./teaserStrength";
 import type { TemporalPrecision, TemporalResolutionStatus } from "./tiboTemporal";
 import {
@@ -1127,10 +1128,7 @@ export function getActiveOfficialNotice(
       const consumption = getOfficialNoticeConsumption(signal.tweet_id);
       const isPersistent = consumption === "persistent";
       if (
-        signal.signal_type !== "official_notice" ||
-        signal.is_reply === true ||
-        (signal.confidence ?? 0) < 0.95 ||
-        signal.verification_status === "rejected" ||
+        !interpretTiboSignal(signal, now).officialNoticeEligible ||
         (isOfficialNoticeTerminatedAt(signal.tweet_id, now) && !includeTerminatedExecutionEvidence) ||
         (!isPersistent && isSupersededBankedNotice(signal, rawSignals))
       ) {

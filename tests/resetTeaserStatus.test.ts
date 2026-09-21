@@ -330,6 +330,54 @@ test("central interpretation keeps a strict official notice from becoming a dupl
   });
 });
 
+test("verified manual replies can be official even when the author text is cryptic", () => {
+  const manualReply = signal("manual-official-reply", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "official_notice",
+    confidence: 1,
+    classification_source: "manual",
+    verification_status: "confirmed",
+    is_reply: true,
+    is_quote: false,
+    text: "3am on a Tuesday",
+  });
+
+  const interpretation = interpretTiboSignal(manualReply, NOW);
+  assert.equal(interpretation.presentationDisposition, "official");
+  assert.equal(interpretation.officialNoticeEligible, true);
+});
+
+test("automatic official replies require explicit reset evidence in the author text", () => {
+  const explicitReply = signal("explicit-official-reply", "2026-08-03T23:00:00.000Z", null, {
+    signal_type: "official_notice",
+    confidence: 0.99,
+    classification_source: "gemini",
+    verification_status: "auto_unverified",
+    is_reply: true,
+    text: "The usage reset will land Tuesday at 3am.",
+    reply_context_text: "When will the reset arrive?",
+  });
+  const scheduledReply = signal("scheduled-official-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...explicitReply,
+    tweet_id: "scheduled-official-reply",
+    text: "The usage reset is scheduled for Tuesday at 3am.",
+  });
+  const crypticReply = signal("cryptic-auto-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...explicitReply,
+    tweet_id: "cryptic-auto-reply",
+    text: "3am on a Tuesday",
+  });
+  const quotedReply = signal("quoted-official-reply", "2026-08-03T23:00:00.000Z", null, {
+    ...explicitReply,
+    tweet_id: "quoted-official-reply",
+    is_quote: true,
+  });
+
+  assert.equal(interpretTiboSignal(explicitReply, NOW).officialNoticeEligible, true);
+  assert.equal(interpretTiboSignal(scheduledReply, NOW).officialNoticeEligible, true);
+  assert.equal(interpretTiboSignal(crypticReply, NOW).officialNoticeEligible, false);
+  assert.equal(interpretTiboSignal(quotedReply, NOW).officialNoticeEligible, false);
+});
+
 test("central interpretation preserves direct teaser and history eligibility as separate axes", () => {
   const directTeaser = signal("direct-teaser", "2026-08-03T23:00:00.000Z", "strong", {
     signal_type: "teaser",

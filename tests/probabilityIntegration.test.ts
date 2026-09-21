@@ -187,6 +187,40 @@ test("an ambiguous BANKED reply stays out of active notice and probability overr
   );
 });
 
+test("a verified manual official reply enters the active notice path without becoming history", () => {
+  const now = new Date("2026-09-21T07:00:00.000Z");
+  const reply = {
+    tweet_id: "2101920928070562029",
+    text: "3am on a Tuesday",
+    tweet_url: "https://x.com/thsottiaux/status/2101920928070562029",
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    classification_source: "manual",
+    tweet_created_at: "2026-09-21T06:26:15.000Z",
+    expires_at: "2026-09-23T00:00:00.000Z",
+    verification_status: "confirmed" as const,
+    is_reply: true,
+    is_quote: false,
+    reply_to_handles: ["@My_Ai_Bi"],
+    reply_context_text: "When will the reset arrive?",
+    expected_start_at: "2026-09-22T10:00:00.000Z",
+    expected_end_at: "2026-09-22T11:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+  };
+  const baseline = getLocalRadarData({ calculationNow: now });
+  const data = getLocalRadarData({
+    activeTiboSignals: [reply],
+    recentTiboSignals: [reply],
+    calculationNow: now,
+  });
+
+  const notice = getActiveOfficialNotice(data, null, now);
+  assert.equal(notice?.id, reply.tweet_id);
+  assert.equal(getRadarViewModel(data, "ja", false, undefined, now).activeWindow.active, true);
+  assert.equal(calculateSurvivalConditionedProbability(data, { now }).survival.officialNoticeOverride, true);
+  assert.deepEqual(getRecoveryResetEvents(data, now), getRecoveryResetEvents(baseline, now));
+});
+
 test("an explicitly registered persistent BANKED policy stays active after delivery", () => {
   const now = new Date("2026-09-04T04:00:00.000Z");
   const astraNotice = {

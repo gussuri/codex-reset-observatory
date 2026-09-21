@@ -232,7 +232,8 @@ export function toPublicTiboActivity(
   const candidates = sourceSignals
     .filter((signal) => {
       if (isTiboForecastSignalTerminatedAt(signal.tweet_id, now)) return false;
-      if (signal.is_reply === true) return false;
+      if (signal.is_reply === true &&
+          !interpretTiboSignal(signal, now).officialNoticeEligible) return false;
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
         return false;
       }

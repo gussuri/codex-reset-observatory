@@ -98,6 +98,10 @@ function getTimestamp(value: string | Date | null | undefined) {
 const USAGE_RESET_CONTEXT_PATTERN = /\b(?:banked\s+reset|reset\s+button|usage\s+reset|usage\s+limit|rate\s+limit|quota|paid\s+plan|codex|chatgpt\s+work)\b/i;
 const RESET_WORD_PATTERN = /\breset(?:s|ting)?\b/i;
 const FUTURE_TIMING_PATTERN = /\b(?:today|tonight|tomorrow|soon|later|next\s+(?:week|month|year)|(?:this|next)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+const EXPLICIT_CLOCK_PATTERN = /\b(?:at|by)\s+\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/i;
+const EXPLICIT_RESET_OR_LIMIT_PATTERN = /\b(?:reset(?:s|ting)?|usage\s+limits?|rate\s+limits?|quota(?:s)?)\b/i;
+const EXPLICIT_RESET_SCHEDULE_PATTERN = /\b(?:reset(?:s|ting)?|usage\s+limits?|rate\s+limits?|quota(?:s)?)\b[\s\S]{0,100}\b(?:at|by|on)\s+(?:\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|today|tonight|tomorrow|(?:this|next)\s+\w+|\w+day)\b/i;
+const EXPLICIT_SCHEDULE_INTENT_PATTERN = /\b(?:scheduled|set|due|expected)\b[\s\S]{0,40}\b(?:for|at|by|on)\b/i;
 const EXPLICIT_NEGATION_PATTERN = /\b(?:no|nope|never|not|isn't|isnt|wasn't|wasnt|won't|wont|don't|dont|doesn't|doesnt|cannot|can't|cant|cancel(?:led|ed)?|canceled)\b[\s\S]{0,100}\b(?:reset|button|limit|quota)\b|\b(?:reset|button|limit|quota)\b[\s\S]{0,100}\b(?:no|nope|never|not|isn't|isnt|wasn't|wasnt|won't|wont|don't|dont|doesn't|doesnt|cancel(?:led|ed)?|canceled)\b/i;
 const COMPLETION_PATTERN = /\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b[\s\S]{0,100}\b(?:reset|button|limit|quota)\b|\b(?:reset|button|limit|quota)\b[\s\S]{0,100}\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b|\b(?:i|we)\s+(?:pressed|hit|used|activated)\s+(?:the\s+)?(?:reset\s+)?button\b/i;
 const AFFIRMATIVE_FUTURE_COMMITMENT_PATTERN = /\b(?:will|we['’]?ll|i['’]?ll|going\s+to|plan(?:s|ned)?\s+to|scheduled\s+to|set\s+to)\b[\s\S]{0,80}\b(?:reset|button|limit|quota|come|coming|happen|happening|land|landing|arrive|arriving)\b|\b(?:still\s+)?(?:come|coming|happen|happening|land|landing|arrive|arriving)\b/i;
@@ -136,6 +140,41 @@ function hasValidatedDirectStrongConfidence(signal: ResetTeaserSignal) {
   return typeof signal.confidence === "number" &&
     Number.isFinite(signal.confidence) &&
     signal.confidence >= 0.8;
+}
+
+function hasExplicitAutomaticOfficialReplyEvidence(signal: ResetTeaserSignal) {
+  const authorText = signal.text ?? "";
+  if (!EXPLICIT_RESET_OR_LIMIT_PATTERN.test(authorText)) return false;
+
+  const hasFutureSchedule = FUTURE_TIMING_PATTERN.test(authorText) ||
+    EXPLICIT_CLOCK_PATTERN.test(authorText);
+  if (!hasFutureSchedule) return false;
+
+  const hasCommitmentOrSchedule =
+    AFFIRMATIVE_FUTURE_COMMITMENT_PATTERN.test(authorText) ||
+    EXPLICIT_RESET_SCHEDULE_PATTERN.test(authorText) ||
+    EXPLICIT_SCHEDULE_INTENT_PATTERN.test(authorText);
+  if (!hasCommitmentOrSchedule) return false;
+
+  return !EXPLICIT_NEGATION_PATTERN.test(authorText) &&
+    !COMPLETION_PATTERN.test(authorText);
+}
+
+function isOfficialNoticeEligible(signal: ResetTeaserSignal) {
+  if (signal.signal_type !== "official_notice" ||
+      signal.verification_status === "rejected" ||
+      signal.is_quote === true ||
+      typeof signal.confidence !== "number" ||
+      !Number.isFinite(signal.confidence) ||
+      signal.confidence < 0.95) {
+    return false;
+  }
+
+  if (signal.is_reply !== true) return true;
+
+  const manuallyVerifiedReply = signal.verification_status === "confirmed" &&
+    signal.classification_source === "manual";
+  return manuallyVerifiedReply || hasExplicitAutomaticOfficialReplyEvidence(signal);
 }
 
 function hasResetContext(signal: ResetTeaserSignal) {
@@ -222,13 +261,7 @@ export function interpretTiboSignal(
 ): TiboSignalInterpretation {
   const effectiveStrength = getEffectiveTeaserStrength(signal);
   const rejected = signal.verification_status === "rejected";
-  const officialNoticeEligible = !rejected &&
-    signal.signal_type === "official_notice" &&
-    signal.is_reply !== true &&
-    signal.is_quote !== true &&
-    typeof signal.confidence === "number" &&
-    Number.isFinite(signal.confidence) &&
-    signal.confidence >= 0.95;
+  const officialNoticeEligible = isOfficialNoticeEligible(signal);
   const probabilityTeaserEligible = !rejected &&
     signal.signal_type === "teaser" &&
     signal.is_reply !== true &&

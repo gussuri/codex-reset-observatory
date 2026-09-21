@@ -382,6 +382,40 @@ test("public Tibo activity presents a resolved affirmative reset reply as a stro
   assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-08-06T00:00:00.000Z");
 });
 
+test("public Tibo activity exposes a verified manual official reply with reply metadata", () => {
+  const calculationNow = new Date("2026-09-21T07:00:00.000Z");
+  const target = {
+    tweet_id: "2101920928070562029",
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    classification_source: "manual",
+    verification_status: "confirmed" as const,
+    is_reply: true,
+    is_quote: false,
+    text: "3am on a Tuesday",
+    tweet_url: "https://x.com/thsottiaux/status/2101920928070562029",
+    tweet_created_at: "2026-09-21T06:26:15.000Z",
+    expires_at: "2026-09-23T00:00:00.000Z",
+    reply_to_handles: ["@My_Ai_Bi"],
+    reply_context_text: "When will the reset arrive?",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-09-22T10:00:00.000Z",
+    expected_end_at: "2026-09-22T11:00:00.000Z",
+  };
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow, recentTiboSignals: [target] }),
+    "en",
+    { calculationNow },
+  );
+
+  assert.equal(snapshot.latestTiboActivity?.classification, "official_notice");
+  assert.equal(snapshot.latestTiboActivity?.isReply, true);
+  assert.deepEqual(snapshot.latestTiboActivity?.replyToHandles, ["@My_Ai_Bi"]);
+  assert.equal(snapshot.latestTiboActivity?.replyContextText, "When will the reset arrive?");
+  assert.equal(snapshot.latestTiboActivity?.expectedStartAt, "2026-09-22T10:00:00.000Z");
+  assert.equal(snapshot.latestTiboActivity?.expectedEndAt, "2026-09-22T11:00:00.000Z");
+});
+
 test("missing teaser strength stays unknown instead of becoming none", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const snapshot = toPublicRadarSnapshot(
