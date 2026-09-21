@@ -23,6 +23,7 @@
     "monitored_tab_missing",
     "timeline_stalled",
     "scan_error",
+    "reply_parent_retry",
   ]);
 
   let writeQueue = Promise.resolve();
@@ -34,6 +35,11 @@
     "nonEmptyTweetTextCount",
     "matchingTiboStatusCount",
     "translatedTweetCount",
+    "replyParentFoundCount",
+    "replyParentMissingCount",
+    "replyParentExpansionRequestedCount",
+    "replyParentContextReadyCount",
+    "replyParentRetryCount",
   ];
 
   function truncate(value, maxChars) {
@@ -162,6 +168,12 @@
           : count("tweetTextCount"),
       matchingTiboStatusCount: count("matchingTiboStatusCount"),
       translatedTweetCount: count("translatedTweetCount"),
+      replyParentFoundCount: count("replyParentFoundCount"),
+      replyParentMissingCount: count("replyParentMissingCount"),
+      replyParentExpansionRequestedCount: count("replyParentExpansionRequestedCount"),
+      replyParentContextReadyCount: count("replyParentContextReadyCount"),
+      replyParentRetryCount: count("replyParentRetryCount"),
+      replyParentContextLengthMax: count("replyParentContextLengthMax"),
       tweetDatetimeCount: count("tweetDatetimeCount"),
       parseSuccessCount: count("parseSuccessCount"),
       currentUrl,
@@ -187,6 +199,19 @@
         (record) => record && record.hasMatchingTiboStatus,
       ).length,
       translatedTweetCount: list.filter((record) => record && record.isTranslated).length,
+      replyParentFoundCount: list.filter((record) => record && record.replyParentFound).length,
+      replyParentMissingCount: list.filter((record) => record && record.replyParentMissing).length,
+      replyParentExpansionRequestedCount: list.filter(
+        (record) => record && record.replyParentExpansionRequested,
+      ).length,
+      replyParentContextReadyCount: list.filter(
+        (record) => record && record.replyParentContextReady,
+      ).length,
+      replyParentRetryCount: list.filter((record) => record && record.replyParentRetry).length,
+      replyParentContextLengthMax: list.reduce(
+        (maximum, record) => Math.max(maximum, normalizeCount(record?.replyParentContextLength)),
+        0,
+      ),
       tweetDatetimeCount: list.filter((record) => record && record.hasValidDatetime).length,
       parseSuccessCount: list.filter((record) => record && record.isParseSuccess).length,
       currentUrl: sanitizeCurrentUrl(currentUrl),
@@ -205,6 +230,7 @@
     if (summary.matchingTiboStatusCount === 0) return "tibo_status_url_missing";
     if (summary.translatedTweetCount > 0) return "translated_text_detected";
     if (summary.tweetDatetimeCount === 0) return "tweet_datetime_missing";
+    if (summary.replyParentRetryCount > 0) return "reply_parent_retry";
     return "no_parse_success";
   }
 
@@ -290,6 +316,12 @@
         "nonEmptyTweetTextCount",
         "matchingTiboStatusCount",
         "translatedTweetCount",
+        "replyParentFoundCount",
+        "replyParentMissingCount",
+        "replyParentExpansionRequestedCount",
+        "replyParentContextReadyCount",
+        "replyParentRetryCount",
+        "replyParentContextLengthMax",
         "tweetDatetimeCount",
         "parseSuccessCount",
       ]) {

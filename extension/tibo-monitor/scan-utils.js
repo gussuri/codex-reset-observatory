@@ -378,7 +378,12 @@
   }
 
   function getTweetTextState(article) {
-    const textElement = getOwnedElements(article, '[data-testid="tweetText"]')[0] || null;
+    let textElement = getOwnedElements(article, '[data-testid="tweetText"]')[0] || null;
+    if (!textElement && typeof article?.querySelector === "function") {
+      const candidate = article.querySelector('[data-testid="tweetText"]');
+      const owner = candidate?.closest?.('article[data-testid="tweet"]');
+      if (!owner || owner === article) textElement = candidate;
+    }
     const text = String(textElement?.innerText || "");
     const expandControl = findTweetTextExpandControl(article);
 
@@ -389,18 +394,66 @@
     };
   }
 
-  function getOwnTweetText(article) {
-    if (!article || typeof article.querySelector !== "function") return null;
-    const candidates = typeof article.querySelectorAll === "function"
-      ? Array.from(article.querySelectorAll('[data-testid="tweetText"]'))
-      : [article.querySelector('[data-testid="tweetText"]')].filter(Boolean);
-    for (const candidate of candidates) {
-      const owner = candidate.closest?.('article[data-testid="tweet"]');
+  function getTweetId(article) {
+    if (!article || typeof article.querySelectorAll !== "function") return null;
+    const links = Array.from(article.querySelectorAll('a[href*="/status/"]'));
+    for (const link of links) {
+      const owner = link.closest?.('article[data-testid="tweet"]');
       if (owner && owner !== article) continue;
-      const text = String(candidate.innerText || "").trim();
-      if (text) return text.slice(0, 1000);
+      const href = String(link.getAttribute?.("href") || "");
+      const match = href.match(/\/status\/(\d+)(?:[/?#]|$)/i);
+      if (match) return match[1];
     }
     return null;
+  }
+
+  function getOwnTweetTextState(article) {
+    const state = getTweetTextState(article);
+    const text = state.text.trim();
+    if (state.needsExpansion) {
+      return {
+        state: "needs_expansion",
+        text: null,
+        expandControl: state.expandControl,
+      };
+    }
+    if (!text) {
+      return {
+        state: "incomplete",
+        text: null,
+        expandControl: null,
+      };
+    }
+    return {
+      state: "ready",
+      text: text.slice(0, 1000),
+      expandControl: null,
+    };
+  }
+
+  function getOwnTweetText(article) {
+    return getOwnTweetTextState(article).text;
+  }
+
+  function getReplyParentContext(parentArticle) {
+    const parentText = getOwnTweetTextState(parentArticle);
+    const parentTweetId = getTweetId(parentArticle);
+
+    if (parentText.state === "ready") {
+      return {
+        ready: true,
+        text: parentText.text,
+      };
+    }
+
+    return {
+      ready: false,
+      needsRetry: true,
+      needsExpansion: parentText.state === "needs_expansion",
+      replyContextExpandControl: parentText.expandControl,
+      replyContextExpansionKey: parentTweetId || "unknown",
+      replyContextState: parentText.state,
+    };
   }
 
   function getParentHandle(article) {
@@ -439,10 +492,24 @@
     if (!parentArticle) return { needsRetry: true };
     if (!hasOutgoingThreadConnector(parentArticle)) return { needsRetry: true };
 
+    const parentContext = getReplyParentContext(parentArticle);
+    if (!parentContext.ready) {
+      return {
+        isReply: true,
+        replyToHandles: [getParentHandle(parentArticle)].filter(Boolean),
+        replyContextText: null,
+        needsRetry: parentContext.needsRetry,
+        needsExpansion: parentContext.needsExpansion,
+        replyContextExpandControl: parentContext.replyContextExpandControl,
+        replyContextExpansionKey: parentContext.replyContextExpansionKey,
+        replyContextState: parentContext.replyContextState,
+      };
+    }
+
     return {
       isReply: true,
       replyToHandles: [getParentHandle(parentArticle)].filter(Boolean),
-      replyContextText: getOwnTweetText(parentArticle),
+      replyContextText: parentContext.text,
     };
   }
 
@@ -461,10 +528,20 @@
         const siblingMetadata = resolveSiblingReplyMetadata(article);
         if (siblingMetadata?.needsRetry) {
           return {
-            isReply: false,
-            replyToHandles: [],
+            isReply: siblingMetadata.isReply === true,
+            replyToHandles: Array.isArray(siblingMetadata.replyToHandles)
+              ? siblingMetadata.replyToHandles
+              : [],
             replyContextText: null,
             needsRetry: true,
+            ...(siblingMetadata.isReply
+              ? {
+                  needsExpansion: siblingMetadata.needsExpansion === true,
+                  replyContextExpandControl: siblingMetadata.replyContextExpandControl,
+                  replyContextExpansionKey: siblingMetadata.replyContextExpansionKey,
+                  replyContextState: siblingMetadata.replyContextState,
+                }
+              : {}),
             ...quoteMetadata,
           };
         }
@@ -502,16 +579,32 @@
     }
 
     let replyContextText = null;
+    let pendingParentContext = null;
     const nestedArticles = typeof article.querySelectorAll === "function"
       ? Array.from(article.querySelectorAll('article[data-testid="tweet"]'))
       : [];
     for (const nestedArticle of nestedArticles) {
-      const textElement = nestedArticle.querySelector?.('[data-testid="tweetText"]');
-      const text = String(textElement?.innerText || "").trim();
-      if (text) {
-        replyContextText = text.slice(0, 1000);
+      const parentContext = getReplyParentContext(nestedArticle);
+      if (parentContext.ready) {
+        replyContextText = parentContext.text;
         break;
       }
+      if (parentContext.needsExpansion) pendingParentContext = parentContext;
+      else if (!pendingParentContext && parentContext.needsRetry) pendingParentContext = parentContext;
+    }
+
+    if (replyContextText === null && pendingParentContext) {
+      return {
+        isReply: true,
+        replyToHandles: handles,
+        replyContextText: null,
+        needsRetry: true,
+        needsExpansion: pendingParentContext.needsExpansion,
+        replyContextExpandControl: pendingParentContext.replyContextExpandControl,
+        replyContextExpansionKey: pendingParentContext.replyContextExpansionKey,
+        replyContextState: pendingParentContext.replyContextState,
+        ...quoteMetadata,
+      };
     }
 
     return {

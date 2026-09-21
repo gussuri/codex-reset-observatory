@@ -17,6 +17,12 @@ type Diagnostics = {
       hasValidDatetime?: boolean;
       isTranslated?: boolean;
       isParseSuccess?: boolean;
+      replyParentFound?: boolean;
+      replyParentMissing?: boolean;
+      replyParentExpansionRequested?: boolean;
+      replyParentContextReady?: boolean;
+      replyParentRetry?: boolean;
+      replyParentContextLength?: number;
     }>,
     currentUrl: string,
     selectorVersion: string,
@@ -24,6 +30,7 @@ type Diagnostics = {
     sourceTimeline?: "profile" | "with_replies",
   ) => Record<string, unknown>;
   getScanFailureReason: (summary: Record<string, unknown>) => string | null;
+  sanitizeReasonCode: (value: unknown) => string | null;
   sanitizeDiagnosticText: (value: unknown, maxChars?: number) => string;
   sanitizeSnapshotHtml: (
     html: string,
@@ -177,6 +184,82 @@ test("does not treat an empty tweetText element as a successful parse", () => {
   assert.equal(summary.nonEmptyTweetTextCount, 0);
   assert.equal(summary.parseSuccessCount, 0);
   assert.equal(diagnostics.getScanFailureReason(summary), "tweet_text_empty");
+});
+
+test("records safe reply-parent context diagnostics without storing parent text", () => {
+  const diagnostics = loadDiagnostics();
+  const summary = diagnostics.buildScanSummary(
+    [
+      {
+        hasTime: true,
+        hasTweetText: true,
+        hasNonEmptyTweetText: true,
+        hasMatchingTiboStatus: true,
+        hasValidDatetime: true,
+        isParseSuccess: true,
+        replyParentFound: true,
+        replyParentContextReady: true,
+        replyParentContextLength: 37,
+      },
+      {
+        hasTime: true,
+        hasTweetText: true,
+        hasNonEmptyTweetText: true,
+        hasMatchingTiboStatus: true,
+        hasValidDatetime: true,
+        isParseSuccess: true,
+        replyParentRetry: true,
+        replyParentExpansionRequested: true,
+      },
+      {
+        hasTime: true,
+        hasTweetText: true,
+        hasNonEmptyTweetText: true,
+        hasMatchingTiboStatus: true,
+        hasValidDatetime: true,
+        isParseSuccess: true,
+        replyParentFound: true,
+        replyParentMissing: true,
+      },
+    ],
+    "https://x.com/thsottiaux/with_replies",
+    "v1.11-reply-context-expansion",
+    "2026-08-17T00:00:00.000Z",
+    "with_replies",
+  );
+
+  assert.equal(summary.replyParentFoundCount, 2);
+  assert.equal(summary.replyParentMissingCount, 1);
+  assert.equal(summary.replyParentExpansionRequestedCount, 1);
+  assert.equal(summary.replyParentContextReadyCount, 1);
+  assert.equal(summary.replyParentRetryCount, 1);
+  assert.equal(summary.replyParentContextLengthMax, 37);
+  assert.equal(summary.parseSuccessCount, 3);
+  assert.equal(diagnostics.getScanFailureReason(summary), null);
+});
+
+test("uses a safe reply-parent retry reason when every parsed tweet is waiting for context", () => {
+  const diagnostics = loadDiagnostics();
+  const summary = diagnostics.buildScanSummary(
+    [
+      {
+        hasTime: true,
+        hasTweetText: true,
+        hasNonEmptyTweetText: true,
+        hasMatchingTiboStatus: true,
+        hasValidDatetime: true,
+        replyParentRetry: true,
+      },
+    ],
+    "https://x.com/thsottiaux/with_replies",
+    "v1.11-reply-context-expansion",
+    "2026-08-17T00:00:00.000Z",
+    "with_replies",
+  );
+
+  assert.equal(summary.parseSuccessCount, 0);
+  assert.equal(diagnostics.getScanFailureReason(summary), "reply_parent_retry");
+  assert.equal(diagnostics.sanitizeReasonCode("reply_parent_retry"), "reply_parent_retry");
 });
 
 test("diagnostic summaries distinguish profile and with-replies timelines", () => {

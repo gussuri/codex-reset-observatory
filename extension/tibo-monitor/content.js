@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.10-text-expansion-scope";
+  const SELECTOR_VERSION = "v1.11-reply-context-expansion";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 
@@ -19,6 +19,10 @@
   // X to render the complete tweet before the next scan.
   const textExpansionRequestedTweetIds = new Set();
   const expansionRescanTimers = new Map();
+  // Reply parents have their own expansion lifecycle so a child tweet's
+  // author-text expansion cannot suppress a parent-context retry.
+  const replyContextExpansionRequestedKeys = new Set();
+  const replyContextExpansionRescanTimers = new Map();
   // A terminal payload rejection is kept out of mutation-triggered retries.
   const quarantinedTweetIds = new Set();
   const authBlockedTweetIds = new Set();
@@ -88,6 +92,8 @@
       intervalIds.forEach((intervalId) => clearInterval(intervalId));
       expansionRescanTimers.forEach((timerId) => clearTimeout(timerId));
       expansionRescanTimers.clear();
+      replyContextExpansionRescanTimers.forEach((timerId) => clearTimeout(timerId));
+      replyContextExpansionRescanTimers.clear();
       mutationObserver?.disconnect();
       return;
     }
@@ -148,6 +154,51 @@
     } catch (error) {
       textExpansionRequestedTweetIds.delete(tweetId);
       console.warn(`[Tibo Extension] Tweet text expansion failed for ${tweetId}.`, error);
+    }
+  }
+
+  function scheduleReplyContextExpansionRescan(tweetId) {
+    if (
+      replyContextExpansionRescanTimers.has(tweetId)
+      || typeof setTimeout !== "function"
+    ) return;
+
+    const timerId = setTimeout(() => {
+      replyContextExpansionRescanTimers.delete(tweetId);
+      runExtensionTask(scanTweets, "expanded reply context rescan");
+    }, 500);
+    replyContextExpansionRescanTimers.set(tweetId, timerId);
+  }
+
+  function requestReplyContextExpansion(tweetId, expansionKey, expandControl) {
+    if (!expandControl || typeof expandControl.click !== "function") return false;
+
+    const key = `${tweetId}:${expansionKey || "unknown"}`;
+    if (replyContextExpansionRequestedKeys.has(key)) return false;
+
+    replyContextExpansionRequestedKeys.add(key);
+    try {
+      expandControl.click();
+      console.log(`[Tibo Extension] Requested full reply-parent context expansion for ${tweetId}.`);
+      scheduleReplyContextExpansionRescan(tweetId);
+      return true;
+    } catch (error) {
+      replyContextExpansionRequestedKeys.delete(key);
+      console.warn(`[Tibo Extension] Reply-parent context expansion failed for ${tweetId}.`, error);
+      return false;
+    }
+  }
+
+  function clearReplyContextExpansionState(tweetId) {
+    const prefix = `${tweetId}:`;
+    for (const key of replyContextExpansionRequestedKeys) {
+      if (key.startsWith(prefix)) replyContextExpansionRequestedKeys.delete(key);
+    }
+
+    const timerId = replyContextExpansionRescanTimers.get(tweetId);
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+      replyContextExpansionRescanTimers.delete(tweetId);
     }
   }
 
@@ -215,6 +266,7 @@
             clearTimeout(expansionTimer);
             expansionRescanTimers.delete(tweetId);
           }
+          clearReplyContextExpansionState(tweetId);
           runExtensionTask(scanTweets, "explicit tweet retry");
           sendResponse({ success: true, tweetId });
           return false;
@@ -417,6 +469,7 @@
           "No new Tibo post was parsed during this scan.",
           `reason=${reasonCode}`,
           `articles=${summary.articleCount}, time=${summary.timeElementCount}, text=${summary.tweetTextCount}, matchingStatus=${summary.matchingTiboStatusCount}, translated=${summary.translatedTweetCount}`,
+          `replyParents=found:${summary.replyParentFoundCount},missing:${summary.replyParentMissingCount},retry:${summary.replyParentRetryCount},expansionRequested:${summary.replyParentExpansionRequestedCount},ready:${summary.replyParentContextReadyCount},maxContextLength:${summary.replyParentContextLengthMax}`,
           ...(messages || []),
           ...(error ? [TiboDiagnostics.sanitizeDiagnosticText(error.message || error)] : []),
         ],
@@ -511,8 +564,29 @@
         const replyMetadata = TiboMonitorScan.extractReplyMetadata(article, {
           sourceTimeline,
         });
+        if (replyMetadata?.isReply === true) {
+          record.replyParentFound = true;
+        }
         if (replyMetadata?.needsRetry === true) {
+          record.isParseSuccess = false;
+          record.replyParentRetry = true;
+          if (replyMetadata.needsExpansion) {
+            record.replyParentExpansionRequested = requestReplyContextExpansion(
+              tweetId,
+              replyMetadata.replyContextExpansionKey,
+              replyMetadata.replyContextExpandControl,
+            );
+          }
           continue;
+        }
+
+        if (replyMetadata?.isReply === true) {
+          if (typeof replyMetadata.replyContextText === "string" && replyMetadata.replyContextText.length > 0) {
+            record.replyParentContextReady = true;
+            record.replyParentContextLength = replyMetadata.replyContextText.length;
+          } else {
+            record.replyParentMissing = true;
+          }
         }
 
         // Silent skip if already processed or currently in-flight

@@ -249,14 +249,29 @@ test("content.js selects after a valid parse and before deduplication", () => {
 test("content.js resolves reply metadata before deduplication and skips pending thread captures", () => {
   const source = readContentScriptSource();
   const metadataIndex = source.indexOf("TiboMonitorScan.extractReplyMetadata(article");
+  const replyExpansionIndex = source.indexOf(
+    "record.replyParentExpansionRequested = requestReplyContextExpansion(",
+  );
   const processedCheckIndex = source.indexOf("processedTweetIds.has(tweetId)");
   const inFlightIndex = source.indexOf("inFlightTweetIds.add(tweetId)");
 
   assert.ok(metadataIndex >= 0);
+  assert.ok(replyExpansionIndex > metadataIndex);
   assert.ok(processedCheckIndex > metadataIndex);
+  assert.ok(processedCheckIndex > replyExpansionIndex);
   assert.ok(inFlightIndex > metadataIndex);
   assert.match(source, /replyMetadata\?\.needsRetry === true/);
+  assert.match(source, /replyContextExpansionRequestedKeys/);
+  assert.match(source, /expanded reply context rescan/);
   assert.match(source, /sourceTimeline/);
+});
+
+test("content.js identifies reply-context collection with a new selector version", () => {
+  const source = readContentScriptSource();
+
+  assert.match(source, /v1\.11-reply-context-expansion/);
+  assert.match(source, /replyContextExpansionRescanTimers/);
+  assert.match(source, /clearReplyContextExpansionState\(tweetId\)/);
 });
 
 test("content.js reads non-empty tweet text before marking a parse successful", () => {
@@ -306,6 +321,23 @@ test("content.js permits a later text expansion attempt after a click failure", 
   );
 });
 
+test("content.js permits a later reply-parent expansion attempt after a click failure", () => {
+  const source = readContentScriptSource();
+  const functionStart = source.indexOf("function requestReplyContextExpansion");
+  const functionEnd = source.indexOf(
+    "\n  }\n\n  function clearReplyContextExpansionState",
+    functionStart,
+  );
+  const functionBody = source.slice(functionStart, functionEnd);
+
+  assert.ok(functionStart >= 0);
+  assert.ok(functionEnd > functionStart);
+  assert.match(
+    functionBody,
+    /catch[\s\S]*replyContextExpansionRequestedKeys\.delete\(key\)/,
+  );
+});
+
 test("content.js quarantines terminal webhook failures and cools down retryable failures", () => {
   const source = readContentScriptSource();
 
@@ -324,6 +356,7 @@ test("content.js supports an explicit single-tweet retry without broad queue cle
   assert.match(source, /request\?\.action === "RETRY_TWEET"/);
   assert.match(source, /processedTweetIds\.delete\(tweetId\)/);
   assert.match(source, /textExpansionRequestedTweetIds\.delete\(tweetId\)/);
+  assert.match(source, /clearReplyContextExpansionState\(tweetId\)/);
   assert.match(source, /runExtensionTask\(scanTweets, "explicit tweet retry"\)/);
   assert.doesNotMatch(source, /processedTweetIds\.clear\(\)/);
 });

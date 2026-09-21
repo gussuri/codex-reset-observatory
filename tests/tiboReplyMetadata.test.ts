@@ -123,9 +123,10 @@ class StructuralElement {
 
   querySelectorAll(selector: string) {
     const matches: StructuralElement[] = [];
+    const selectorParts = selector.split(",").map((part) => part.trim());
     const visit = (node: StructuralElement) => {
       for (const child of node.children) {
-        if (matchesSelector(child, selector)) matches.push(child);
+        if (selectorParts.some((part) => matchesSelector(child, part))) matches.push(child);
         visit(child);
       }
     };
@@ -147,6 +148,8 @@ function matchesSelector(element: StructuralElement, selector: string) {
   if (selector === 'a[href*="/status/"]') {
     return element.tagName === "a" && (element.getAttribute("href") || "").includes("/status/");
   }
+  if (selector === "button") return element.tagName === "button";
+  if (selector === '[role="button"]') return element.getAttribute("role") === "button";
   return false;
 }
 
@@ -161,6 +164,8 @@ function makeThreadArticle(options: {
   incoming?: boolean;
   outgoing?: boolean;
   quoteText?: string;
+  expandLabel?: string | null;
+  expandInsideText?: boolean;
 }) {
   const cell = element({ attributes: { "data-testid": "cellInnerDiv" } });
   const article = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
@@ -190,10 +195,20 @@ function makeThreadArticle(options: {
     contentColumn.appendChild(quoteArticle);
   }
 
-  contentColumn.appendChild(element({
+  const tweetTextElement = element({
     attributes: { "data-testid": "tweetText" },
     text: options.text || "",
-  }));
+  });
+  contentColumn.appendChild(tweetTextElement);
+  if (options.expandLabel) {
+    const expandControl = element({
+      tagName: "button",
+      text: options.expandLabel,
+      attributes: { role: "button" },
+    });
+    if (options.expandInsideText !== false) tweetTextElement.appendChild(expandControl);
+    else contentColumn.appendChild(expandControl);
+  }
   contentColumn.appendChild(element({
     tagName: "a",
     attributes: { href: `/${options.handle || "parent"}/status/${options.id}` },
@@ -231,6 +246,10 @@ function loadScanUtils() {
         replyToHandles: string[];
         replyContextText: string | null;
         needsRetry?: boolean;
+        needsExpansion?: boolean;
+        replyContextExpandControl?: unknown;
+        replyContextExpansionKey?: string;
+        replyContextState?: string;
         isQuote: boolean;
         quoteContextText: string | null;
         quoteTweetUrl: string | null;
@@ -427,6 +446,84 @@ test("with-replies sibling connectors recover the two observed Tibo reply parent
       quoteAuthorHandle: null,
     }));
   }
+});
+
+test("collapsed sibling parent is held for expansion before webhook metadata is ready", () => {
+  const scan = loadScanUtils();
+  const parent = makeThreadArticle({
+    id: "2100000000000000001",
+    handle: "My_Ai_Bi",
+    text: "Long parent opening...",
+    expandLabel: "Show more",
+    outgoing: true,
+  });
+  const child = makeThreadArticle({
+    id: "2100000000000000002",
+    handle: "thsottiaux",
+    text: "3am on a tuesday",
+    incoming: true,
+  });
+  makeTimeline(parent.cell, child.cell);
+
+  const pending = scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" });
+  assert.equal(pending.needsRetry, true);
+  assert.equal(pending.needsExpansion, true);
+  assert.equal(pending.replyContextText, null);
+  assert.equal(pending.isReply, true);
+  assert.equal(JSON.stringify(pending.replyToHandles), JSON.stringify(["@My_Ai_Bi"]));
+  assert.ok(pending.replyContextExpandControl);
+  assert.equal(pending.replyContextExpansionKey, "2100000000000000001");
+});
+
+test("explicit Replying to markers also wait for a collapsed nested parent", () => {
+  const scan = loadScanUtils();
+  const article = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
+  const marker = element({
+    attributes: { "data-testid": "socialContext" },
+    text: "Replying to @alice",
+  });
+  marker.appendChild(element({ tagName: "a", attributes: { href: "/alice" } }));
+
+  const parent = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
+  const parentText = element({ attributes: { "data-testid": "tweetText" }, text: "Long parent opening..." });
+  parentText.appendChild(element({
+    tagName: "button",
+    text: "Show more",
+    attributes: { role: "button" },
+  }));
+  parent.appendChild(parentText);
+  article.appendChild(marker);
+  article.appendChild(parent);
+
+  const pending = scan.extractReplyMetadata(article);
+  assert.equal(pending.needsRetry, true);
+  assert.equal(pending.needsExpansion, true);
+  assert.equal(pending.isReply, true);
+  assert.equal(JSON.stringify(pending.replyToHandles), JSON.stringify(["@alice"]));
+  assert.equal(pending.replyContextText, null);
+  assert.ok(pending.replyContextExpandControl);
+});
+
+test("partial sibling parent without an expansion control is held without inventing context", () => {
+  const scan = loadScanUtils();
+  const parent = makeThreadArticle({
+    id: "2100000000000000003",
+    handle: "My_Ai_Bi",
+    text: "",
+    outgoing: true,
+  });
+  const child = makeThreadArticle({
+    id: "2100000000000000004",
+    handle: "thsottiaux",
+    text: "3am on a tuesday",
+    incoming: true,
+  });
+  makeTimeline(parent.cell, child.cell);
+
+  const pending = scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" });
+  assert.equal(pending.needsRetry, true);
+  assert.equal(pending.replyContextText, null);
+  assert.equal(pending.replyContextState, "incomplete");
 });
 
 test("adjacent ordinary posts and connector mismatches are not treated as replies", () => {
