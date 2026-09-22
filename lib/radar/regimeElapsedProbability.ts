@@ -18,6 +18,7 @@ import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import {
   getActiveOfficialNotice,
   getLocalSignalEvaluation,
+  getProbabilityEligibleOfficialNotice,
   type ActiveOfficialNotice,
   type LocalSignalEvaluation,
 } from "./probability";
@@ -539,8 +540,9 @@ export function calculateRegimeElapsedProbability(
         false,
         false,
         options.canonicalHistoryContext,
+        true,
       )
-    : options.activeOfficialNotice;
+    : getProbabilityEligibleOfficialNotice(options.activeOfficialNotice);
   const inputs = getShadowSignalInputs(
     data,
     now,

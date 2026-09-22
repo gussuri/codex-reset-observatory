@@ -5,6 +5,7 @@ import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/
 import { classifyWithGemini } from "@/lib/radar/geminiClassification";
 import {
   buildTiboClassificationResponse,
+  classifyTiboWithSingleTransientRetry,
   normalizeTiboClassificationMode,
   selectTiboClassification,
   shouldRunGeminiClassification,
@@ -485,10 +486,10 @@ export async function POST(req: NextRequest) {
     let aiResult = null;
     if (shouldRunGeminiClassification(mode)) {
       try {
-        aiResult = await classifyWithGemini(
+        aiResult = await classifyTiboWithSingleTransientRetry(() => classifyWithGemini(
           { text, tweetCreatedAt, sourceTimeZone: TIBO_SOURCE_TIME_ZONE, ...replyMetadata },
           { mode },
-        );
+        ));
       } catch {
         // Keep the webhook successful and let primary mode select the rule fallback.
         console.warn("[Webhook Warning] Gemini classification failed; using the rule fallback.");

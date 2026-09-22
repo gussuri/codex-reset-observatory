@@ -11,6 +11,7 @@ import {
 import { classifyTiboTweet } from "../lib/radar/classification";
 import {
   buildTiboClassificationResponse,
+  classifyTiboWithSingleTransientRetry,
   selectTiboClassification,
   shouldRunGeminiClassification,
 } from "../lib/radar/tiboClassificationMode";
@@ -151,6 +152,127 @@ test("4. Primary mode falls back to the rule result for every Gemini failure sta
     assert.strictEqual(selected.confidence, ruleResult.confidence, `${status} must use rule confidence`);
     assert.strictEqual(selected.classificationSource, "rule_fallback", `${status} must use rule_fallback`);
   }
+});
+
+test("transient Gemini failures retry once and use the retry result", async () => {
+  const makeResult = (status: GeminiClassificationOutput["status"]): GeminiClassificationOutput => ({
+    signalType: status === "success" ? "official_notice" : null,
+    confidence: status === "success" ? 0.96 : null,
+    temporalDirection: status === "success" ? "future" : null,
+    evidenceQuote: status === "success" ? "reset" : null,
+    reasonJa: status === "success" ? "告知です。" : null,
+    resetTypeJa: null,
+    noticeToExecution: null,
+    teaserStrength: null,
+    teaserStrengthConfidence: null,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
+    futureSignal: null,
+    temporalExpression: null,
+    temporalKind: null,
+    temporalPrecision: null,
+    weekday: null,
+    relativeDayOffset: null,
+    relativeAmount: null,
+    relativeUnit: null,
+    explicitDateParts: null,
+    explicitTimeParts: null,
+    daypart: null,
+    rangeKind: null,
+    explicitTimezone: null,
+    temporalConfidence: null,
+    model: "gemini-3.5-flash-lite",
+    status,
+    classifiedAt: new Date().toISOString(),
+  });
+
+  let attempts = 0;
+  const result = await classifyTiboWithSingleTransientRetry(async () => {
+    attempts += 1;
+    return attempts === 1 ? makeResult("timeout") : makeResult("success");
+  });
+
+  assert.equal(attempts, 2);
+  assert.equal(result.status, "success");
+  assert.equal(result.signalType, "official_notice");
+});
+
+test("transient Gemini retry is bounded and non-transient validation failures are not retried", async () => {
+  for (const status of ["timeout", "rate_limited", "api_error"] as const) {
+    let attempts = 0;
+    const result = await classifyTiboWithSingleTransientRetry(async () => {
+      attempts += 1;
+      return {
+        signalType: null,
+        confidence: null,
+        temporalDirection: null,
+        evidenceQuote: null,
+        reasonJa: null,
+        resetTypeJa: null,
+        noticeToExecution: null,
+        teaserStrength: null,
+        teaserStrengthConfidence: null,
+        teaserStrengthEvidenceQuote: null,
+        teaserStrengthReasonJa: null,
+        futureSignal: null,
+        temporalExpression: null,
+        temporalKind: null,
+        temporalPrecision: null,
+        weekday: null,
+        relativeDayOffset: null,
+        relativeAmount: null,
+        relativeUnit: null,
+        explicitDateParts: null,
+        explicitTimeParts: null,
+        daypart: null,
+        rangeKind: null,
+        explicitTimezone: null,
+        temporalConfidence: null,
+        model: "gemini-3.5-flash-lite",
+        status,
+        classifiedAt: new Date().toISOString(),
+      };
+    });
+    assert.equal(attempts, 2, `${status} is retried exactly once`);
+    assert.equal(result.status, status);
+  }
+
+  let validationAttempts = 0;
+  const validationFailure = await classifyTiboWithSingleTransientRetry(async () => {
+    validationAttempts += 1;
+    return {
+      signalType: null,
+      confidence: null,
+      temporalDirection: null,
+      evidenceQuote: null,
+      reasonJa: null,
+      resetTypeJa: null,
+      noticeToExecution: null,
+      teaserStrength: null,
+      teaserStrengthConfidence: null,
+      teaserStrengthEvidenceQuote: null,
+      teaserStrengthReasonJa: null,
+      futureSignal: null,
+      temporalExpression: null,
+      temporalKind: null,
+      temporalPrecision: null,
+      weekday: null,
+      relativeDayOffset: null,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: null,
+      model: "gemini-3.5-flash-lite",
+      status: "invalid_schema" as const,
+      classifiedAt: new Date().toISOString(),
+    };
+  });
+  assert.equal(validationAttempts, 1);
+  assert.equal(validationFailure.status, "invalid_schema");
 });
 
 test("5. A successful Gemini result with an invalid structured payload falls back to rules", () => {

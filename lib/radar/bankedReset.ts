@@ -69,6 +69,8 @@ export type BankedNoticeTiming = {
 
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
 const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
+const BROAD_ACCOUNT_LOAD_DISTRIBUTION_PATTERN =
+  /\b(?:am|is|are|'m|'re)\s+loading\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,100}\binto\s+(?:all|every)\s+accounts?\b/i;
 const COMPENSATION_DISTRIBUTION_PATTERN =
   /\b(?:get|gets|getting|receive|receives|receiving|be\s+(?:given|sent|issued|delivered))\b[\s\S]{0,60}\b(?:another\s+(?:one|banked\s+resets?|reset(?:\s+credits?)?|credits?)|(?:an?\s+)?(?:additional|replacement)\s+(?:banked\s+)?(?:resets?|credits?))\b/i;
 const NOTICE_CLAUSE_SEPARATOR = /[.!?。！？]+|\bPS\s*:\s*/i;
@@ -79,6 +81,7 @@ function hasResetCreditTerm(text: string) {
 
 function hasDistributionTerm(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => {
+    if (BROAD_ACCOUNT_LOAD_DISTRIBUTION_PATTERN.test(clause)) return true;
     const resetIndex = clause.search(BANKED_RESET_TERM_PATTERN);
     const distributionMatch = clause.match(DISTRIBUTION_TERM_PATTERN);
     if (resetIndex < 0 || !distributionMatch || distributionMatch.index === undefined) return false;
@@ -125,7 +128,7 @@ export function hasFutureBankedDistributionIntent(text: string | null | undefine
   );
 }
 
-const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:resets?|credits?)|reset\s+credits?)\b[\s\S]{0,100}\b(?:(?:has|have)\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added)|(?:is|are)\s+(?:now\s+)?available)\b/i;
+const BANKED_COMPLETION_PATTERN = /\b(?:banked\s+(?:resets?|credits?)|reset\s+credits?)\b[\s\S]{0,100}\b(?:(?:has|have)(?:\s+now)?\s+(?:been\s+)?(?:landed|arrived|distributed|credited|granted|issued|delivered|added|loaded)|(?:was|were)\s+(?:distributed|credited|granted|issued|delivered|added|loaded)|(?:is|are)\s+(?:now\s+)?available)\b/i;
 const GENERALIZED_PAID_CHATGPT_PLAN_SCOPE_PATTERN =
   /\bfor\s+(?:each|every)\s+day\s+you\s+(?:do\s+not|don't)\s+have\s+access\s+to\b[\s\S]{0,120}\bon\s+your\s+paid\s+chatgpt\s+plan\b/i;
 const PERSONAL_DIRECT_ADDRESS_PATTERN =

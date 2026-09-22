@@ -31,6 +31,7 @@ import {
   getCompletedResetTimestamp,
   getEffectiveSignalStatus,
   getActiveOfficialNotice,
+  getProbabilityEligibleOfficialNotice,
   getLocalSignalEvaluation,
   getRecent7DayResetCount,
   getRegularResetProximityBoost,
@@ -1171,7 +1172,8 @@ export function applyOfficialNoticeTimingPolicy(
   now: Date,
   legacyOfficialNoticeOverride = false,
 ) {
-  if (!notice) return null;
+  const probabilityNotice = getProbabilityEligibleOfficialNotice(notice);
+  if (!probabilityNotice) return null;
   if (legacyOfficialNoticeOverride) {
     return {
       probability12h: derive12hFrom24hProbability(0.9),
@@ -1182,13 +1184,13 @@ export function applyOfficialNoticeTimingPolicy(
   }
 
   const temporalResolution = {
-    status: notice.temporalResolutionStatus ?? "unresolved",
-    temporalPrecision: notice.temporalPrecision ?? "unknown",
-    confidence: notice.temporalConfidence ?? null,
-    expectedStartAt: notice.expectedAt,
-    expectedEndAt: notice.expectedEndAt,
-    isDeadline: notice.isDeadline,
-    temporalExpression: notice.text,
+    status: probabilityNotice.temporalResolutionStatus ?? "unresolved",
+    temporalPrecision: probabilityNotice.temporalPrecision ?? "unknown",
+    confidence: probabilityNotice.temporalConfidence ?? null,
+    expectedStartAt: probabilityNotice.expectedAt,
+    expectedEndAt: probabilityNotice.expectedEndAt,
+    isDeadline: probabilityNotice.isDeadline,
+    temporalExpression: probabilityNotice.text,
   };
 
   if (isOverdueNoticePending(temporalResolution, null, now)) {
@@ -1274,8 +1276,9 @@ export function calculateShadowProbabilityForModel(
         false,
         false,
         options.canonicalHistoryContext,
+        true,
       )
-    : options.activeOfficialNotice;
+    : getProbabilityEligibleOfficialNotice(options.activeOfficialNotice);
   const ageHours = latestResetTime === null
     ? 0
     : Math.max(0, (now.getTime() - latestResetTime) / HOUR_MS);

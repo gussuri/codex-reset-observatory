@@ -47,6 +47,21 @@ export function shouldRunGeminiClassification(value?: string) {
   return normalizeTiboClassificationMode(value) !== "off";
 }
 
+const RETRYABLE_GEMINI_FAILURES = new Set<GeminiClassificationStatus>([
+  "timeout",
+  "rate_limited",
+  "api_error",
+]);
+
+/** Retry one transient classifier failure once; validation failures remain terminal. */
+export async function classifyTiboWithSingleTransientRetry(
+  classify: () => Promise<GeminiClassificationOutput>,
+): Promise<GeminiClassificationOutput> {
+  const first = await classify();
+  if (!RETRYABLE_GEMINI_FAILURES.has(first.status)) return first;
+  return classify();
+}
+
 function isValidGeminiClassification(
   result: GeminiClassificationOutput | null | undefined,
 ): result is GeminiClassificationOutput & {

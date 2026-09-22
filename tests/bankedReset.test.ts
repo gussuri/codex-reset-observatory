@@ -117,6 +117,27 @@ test("recognizes future BANKED execution language without treating personal oper
   }
 });
 
+test("recognizes explicit BANKED loading into all paid accounts without broadening generic load language", () => {
+  const announcement = "And one more thing. We are loading a banked reset into all accounts of our Plus, Pro and Business users. Let's go!";
+  const completion = "Banked resets have now been loaded into all accounts.";
+
+  assert.equal(isBankedDistributionNotice(announcement), true);
+  assert.equal(isBroadBankedDistributionNotice(announcement), true);
+  assert.equal(isConditionalBankedDistributionNotice(announcement), false);
+  assert.equal(isRecurringConditionalBankedDistributionNotice(announcement), false);
+  assert.equal(isBankedDistributionCompletionSignal(announcement), false);
+
+  assert.equal(isBankedDistributionNotice(completion), false);
+  assert.equal(isBankedDistributionCompletionSignal(completion), true);
+
+  for (const negative of [
+    "We are loading GPT-6 models.",
+    "I loaded my banked reset.",
+  ]) {
+    assert.equal(isBankedDistributionNotice(negative), false, negative);
+  }
+});
+
 test("keeps BANKED completion detection plural-aware and clause-local", () => {
   for (const text of [
     "The banked reset has landed.",
@@ -351,6 +372,21 @@ test("falls back to the announcement matching window when the notice has no reso
 
 test("does not create a BANKED history event from a notice alone", () => {
   const history = combineResetHistory([], [], [], [], [notice], [], []);
+  assert.equal(history.some((item) => item.recordKind === "banked_distribution"), false);
+});
+
+test("the GPT-6 broad BANKED announcement cannot create history without Usage Monitor evidence", () => {
+  const announcement = {
+    ...notice,
+    tweet_id: "2102463847714247142",
+    text: "GPT-6 Sol and Luna are out. We are loading a banked reset into all accounts of our Plus, Pro and Business users. Let's go!",
+    tweet_url: "https://x.com/thsottiaux/status/2102463847714247142",
+    signal_type: "official_notice" as const,
+  };
+
+  const history = combineResetHistory([], [], [], [], [announcement], [], []);
+  assert.equal(findBankedDistributionEvents([announcement], []).length, 0);
+  assert.equal(history.some((item) => item.recordKind === "confirmed_global"), false);
   assert.equal(history.some((item) => item.recordKind === "banked_distribution"), false);
 });
 

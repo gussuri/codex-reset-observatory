@@ -81,6 +81,42 @@ function installGeminiClassificationMock(result: Record<string, unknown>) {
   };
 }
 
+function installTransientThenSuccessGeminiMock(result: Record<string, unknown>) {
+  const originalHttpsRequest = https.request;
+  let calls = 0;
+  https.request = ((...args: any[]) => {
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const request = new EventEmitter() as EventEmitter & {
+      write: (body: string) => boolean;
+      end: () => void;
+    };
+    request.write = () => true;
+    request.end = () => {
+      calls += 1;
+      const callNumber = calls;
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      response.statusCode = callNumber === 1 ? 503 : 200;
+      callback(response);
+      queueMicrotask(() => {
+        if (callNumber > 1) {
+          response.emit("data", JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
+          }));
+        }
+        response.emit("end");
+      });
+    };
+    return request;
+  }) as typeof https.request;
+
+  return {
+    restore: () => {
+      https.request = originalHttpsRequest;
+    },
+    getCalls: () => calls,
+  };
+}
+
 function installGeminiHttpErrorMock(statusCode = 503) {
   const originalHttpsRequest = https.request;
   https.request = ((...args: any[]) => {
@@ -1148,6 +1184,56 @@ test("official notice source fallback is used when Gemini is unavailable", async
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
   } finally {
     restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a transient Gemini API error is retried once and the BANKED notice is stored as an official notice", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const text = "GPT-6 Sol and Luna are out. We are loading a banked reset into all accounts of our Plus, Pro and Business users. Let's go!";
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const gemini = installTransientThenSuccessGeminiMock({
+    signalType: "official_notice",
+    confidence: 0.98,
+    temporalDirection: "future",
+    evidenceQuote: "We are loading a banked reset into all accounts",
+    reasonJa: "全有料アカウントへのBANKED配布告知です。",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2102463847714247142",
+      text,
+      tweetUrl: "https://x.com/thsottiaux/status/2102463847714247142",
+      tweetCreatedAt: "2026-09-22T18:23:37.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(gemini.getCalls(), 2);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === "2102463847714247142",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.equal(upsertBody.signal_type, "official_notice");
+    assert.equal(upsertBody.rule_signal_type, "official_notice");
+    assert.equal(upsertBody.classification_source, "gemini");
+    assert.equal(upsertBody.ai_classification_status, "success");
+    assert.equal(upsertBody.expected_start_at, null);
+    assert.equal(upsertBody.expected_end_at, null);
+  } finally {
+    gemini.restore();
     restoreFetch();
     restoreEnvironment(previous);
   }

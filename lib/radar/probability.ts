@@ -105,6 +105,17 @@ export type ActiveOfficialNotice = {
   isDeadline?: boolean;
 };
 
+export function getProbabilityEligibleOfficialNotice(
+  notice: ActiveOfficialNotice | null | undefined,
+) {
+  return notice && (
+    notice.isBankedDistribution === true ||
+    isBankedDistributionNotice(notice.text)
+  )
+    ? null
+    : notice ?? null;
+}
+
 export type ProbabilityPair = {
   probability24h: number;
   probability48h: number;
@@ -487,8 +498,9 @@ export function getLocalProbabilityCalculation(
     options.signalEvaluation ?? getLocalSignalEvaluation(data, now, LOCAL_OBSERVATION_SIGNALS, options.canonicalHistoryContext);
   const activeOfficialNotice =
     options.activeOfficialNotice === undefined
-      ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, options.canonicalHistoryContext)
+      ? getActiveOfficialNotice(data, signalEvaluation.latestResetAt, now, LOCAL_OBSERVATION_SIGNALS, null, false, false, options.canonicalHistoryContext, true)
       : options.activeOfficialNotice;
+  const probabilityOfficialNotice = getProbabilityEligibleOfficialNotice(activeOfficialNotice);
   const regularResetExpectedAt = options.regularResetExpectedAt ?? null;
   const components = getProbabilityComponents(data, signalEvaluation, now, options.canonicalHistoryContext);
   const lastResetAt = getLastGlobalResetAt(data, now, options.canonicalHistoryContext);
@@ -509,7 +521,7 @@ export function getLocalProbabilityCalculation(
     elapsedDaysSinceReset,
     recentCompletedResetCount7d,
     regularResetExpectedAt,
-    activeOfficialNotice: Boolean(activeOfficialNotice),
+    activeOfficialNotice: Boolean(probabilityOfficialNotice),
     activeTeaserCount: components.activeTeaserCount,
     weightedStatusScore: signalEvaluation.statusIncidents.weightedStatusScore,
     officialIncidentHintCount: components.officialIncidentHintCount,
@@ -526,7 +538,7 @@ export function getLocalProbabilityCalculation(
     probability24h: LOCAL_PROBABILITY_WEIGHTS.base.within24h,
     probability48h: LOCAL_PROBABILITY_WEIGHTS.base.within48h,
   };
-  if (activeOfficialNotice) {
+  if (probabilityOfficialNotice) {
     const probability24h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within24h;
     const probability48h = LOCAL_PROBABILITY_WEIGHTS.officialNotice.within48h;
     return {
@@ -1059,6 +1071,7 @@ export function getActiveOfficialNotice(
   requireExecutionWindowMatch = false,
   includeTerminatedExecutionEvidence = false,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  excludeBankedDistributionForProbability = false,
 ): ActiveOfficialNotice | null {
   // Notice consumption has a narrower meaning than the display/recovery
   // boundary: a regular-only reset must not consume an official notice.
@@ -1129,6 +1142,7 @@ export function getActiveOfficialNotice(
       const isPersistent = consumption === "persistent";
       if (
         !interpretTiboSignal(signal, now).officialNoticeEligible ||
+        (excludeBankedDistributionForProbability && isBankedDistributionNotice(signal.text)) ||
         (isOfficialNoticeTerminatedAt(signal.tweet_id, now) && !includeTerminatedExecutionEvidence) ||
         (!isPersistent && isSupersededBankedNotice(signal, rawSignals))
       ) {

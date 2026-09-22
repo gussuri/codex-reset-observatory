@@ -1,6 +1,8 @@
 import {
   hasFutureBankedDistributionIntent,
+  isBankedDistributionNotice,
   isBankedDistributionCompletionSignal,
+  isBroadBankedDistributionNotice,
 } from "./bankedReset";
 
 export type ClassificationSignalType =
@@ -26,6 +28,7 @@ export type TiboClassificationSafetyReason =
   | "non_usage_reset_object"
   | "non_usage_activation"
   | "banked_distribution_completion"
+  | "banked_distribution_notice"
   | "pure_hypothetical"
   | "explicit_negation"
   | "current_execution"
@@ -177,6 +180,19 @@ export function getTiboClassificationSafetyDecision(
         ? "完了済みのBANKED配布は全体resetとして扱わず、明示された将来のBANKED配布予告のみを採用します。"
         : "BANKEDリセット権の配布完了であり、全体の利用上限リセット実施とは別のため、正式resetには採用しません。",
       reasonCode: "banked_distribution_completion",
+      suppressTeaserStrength: true,
+    };
+  }
+
+  if (
+    candidate === "reset_executed" &&
+    isBroadBankedDistributionNotice(text) &&
+    !isBankedDistributionCompletionSignal(text)
+  ) {
+    return {
+      signalType: "official_notice",
+      reasonJa: "広範囲のBANKEDリセット配布告知であり、全体の利用上限リセット実施とは区別します。",
+      reasonCode: "banked_distribution_notice",
       suppressTeaserStrength: true,
     };
   }
@@ -354,6 +370,20 @@ export function classifyTiboTweet(
         isQuote,
       });
     }
+  }
+
+  if (
+    isBankedDistributionNotice(text) &&
+    isBroadBankedDistributionNotice(text) &&
+    !isBankedDistributionCompletionSignal(text)
+  ) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "official_notice",
+      confidence: 0.96,
+      reason: "Matched explicit broad BANKED account distribution announcement.",
+      isReply,
+      isQuote,
+    });
   }
 
   // 2. 即時実施・完了報告 (reset_executed)
