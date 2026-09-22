@@ -1,6 +1,6 @@
 import { hasHistoricalResetScopeCorrection } from "./historicalResetCorrections";
 
-export const BANKED_NOTICE_MATCH_WINDOW_MS = 90 * 60 * 1000;
+export const BANKED_NOTICE_MATCH_WINDOW_MS = 120 * 60 * 1000;
 export const BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "banked-distribution-observation-v2";
 export const LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION = "usage-execution-banked-v1";
 
@@ -263,7 +263,7 @@ function isConcreteResolvedBankedNotice(notice: BankedNoticeSupersessionInput) {
   );
 }
 
-/** Older broad BANKED notices are superseded once a newer concrete window exists. */
+/** Older broad BANKED notices are superseded once a newer concrete window exists or a newer unconditional broad BANKED announcement arrives. */
 export function isSupersededBankedNotice<T extends BankedNoticeSupersessionInput>(
   notice: T,
   notices: readonly T[],
@@ -276,7 +276,11 @@ export function isSupersededBankedNotice<T extends BankedNoticeSupersessionInput
     return candidate !== notice &&
       Number.isFinite(candidateTime) &&
       candidateTime > noticeTime &&
-      isConcreteResolvedBankedNotice(candidate);
+      (isConcreteResolvedBankedNotice(candidate) || (
+        isBroadBankedDistributionNotice(candidate.text) &&
+        !isConditionalBankedDistributionNotice(candidate.text) &&
+        !isRecurringConditionalBankedDistributionNotice(candidate.text)
+      ));
   });
 }
 

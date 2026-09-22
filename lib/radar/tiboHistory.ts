@@ -449,6 +449,7 @@ function getNoticeSpecificityRank(notice: TiboNoticeSignal) {
 
   return [
     notice.signal_type === "official_notice" ? 1 : 0,
+    getOfficialNoticeConsumption(notice.tweet_id) === "one_shot" ? 1 : 0,
     temporalRank,
     isAllPaidScope(text) ? 1 : 0,
     getTimestamp(notice.tweet_created_at) ?? 0,

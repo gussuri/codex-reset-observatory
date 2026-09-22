@@ -20,7 +20,7 @@ import {
 } from "../lib/radar/bankedReset";
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
-import { getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
+import { getActiveOfficialNotice, getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { collectBoundaryCensoredBoundaries } from "../lib/radar/boundaryCensoredProbability";
 import { selectEligibleCommunicationEvents } from "../lib/radar/communicationRegime";
@@ -35,8 +35,12 @@ import {
   findRelatedBankedDistributionNotices,
   findBankedDistributionEvents,
   getNoticeBackedHistoryInputs,
+  selectRepresentativeTiboNotice,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
+import { getOfficialNoticeConsumption } from "../lib/radar/officialNoticePolicy";
+import { resolveResetDisplayTitle } from "../lib/radar/resetDisplayNames";
+import type { ActiveTiboSignal, RadarData, ResetDisplayNameRecord } from "../lib/radar/types";
 
 const notice = {
   tweet_id: "banked-notice-1",
@@ -355,8 +359,8 @@ test("matches a credit observation to the resolved BANKED notice window", () => 
   };
 
   assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-21T12:29:00.000Z"), true);
-  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-22T08:31:00.000Z"), false);
-  assert.equal(BANKED_NOTICE_MATCH_WINDOW_MS, 90 * 60 * 1000);
+  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-22T09:01:00.000Z"), false);
+  assert.equal(BANKED_NOTICE_MATCH_WINDOW_MS, 120 * 60 * 1000);
 });
 
 test("falls back to the announcement matching window when the notice has no resolved time", () => {
@@ -366,8 +370,8 @@ test("falls back to the announcement matching window when the notice has no reso
     expectedEndAt: null,
   };
 
-  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-21T13:29:00.000Z"), true);
-  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-21T13:31:00.000Z"), false);
+  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-21T13:59:00.000Z"), true);
+  assert.equal(isBankedObservationWithinNoticeWindow(notice, "2026-08-21T14:01:00.000Z"), false);
 });
 
 test("does not create a BANKED history event from a notice alone", () => {
@@ -1181,4 +1185,161 @@ test("a confirmed BANKED distribution becomes the latest eligible random boundar
     getLastGlobalResetAt(data, new Date("2026-08-21T14:00:00.000Z"))?.toISOString(),
     estimate.displayExecutionAt,
   );
+});
+
+test("the GPT-6 Sol and Luna broad BANKED notice wins over an older persistent Astra notice for the grant", () => {
+  const astraNotice: TiboNoticeSignal = {
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today. Team is moving mountains to give access as fast as we can.\n\nFirst one will land in ~ 3 hours. There is still time to create your account if you don't have one.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    expected_start_at: "2026-09-04T02:12:09.000Z",
+    expected_end_at: "2026-09-04T02:12:09.000Z",
+    temporal_resolution_status: "resolved",
+  };
+
+  const solLunaNotice: TiboNoticeSignal = {
+    tweet_id: "2102463847714247142",
+    text: "GPT-6 Sol and Luna are out. Not only are they a very significant improvement across the board, but also in writing and general \"you know when you try it\" quality. \n\nWe are also permanently reducing the API price by 50% making both of them viable for a ton of new usecases and making your usage go further too, even on the subscriptions.\n\nAnd one more thing. We are loading a banked reset into all accounts of our Plus, Pro and Business users. Let's go!\n\n\nhttps://\nopenai.com/index/introduc\nning-gpt-6-sol-and-luna/\n…",
+    tweet_url: "https://x.com/thsottiaux/status/2102463847714247142",
+    tweet_created_at: "2026-09-22T18:23:37.000Z",
+    signal_type: "official_notice",
+    confidence: 1.0,
+    verification_status: "confirmed",
+    expires_at: "2026-09-22T20:12:50.653Z",
+  };
+
+  const tuesdayNotice: TiboNoticeSignal = {
+    tweet_id: "2102254445082116335",
+    text: "Ladies and gentlemen... start... your... ENGINES. We are almost Tuesday and I promised a reset for Tuesday. Among some other things. See you soon.",
+    tweet_url: "https://x.com/thsottiaux/status/2102254445082116335",
+    tweet_created_at: "2026-09-22T04:31:32.000Z",
+    signal_type: "official_notice",
+    confidence: 0.95,
+    verification_status: "auto_unverified",
+    expires_at: "2026-09-22T20:12:50.653Z",
+    expected_start_at: "2026-09-22T07:00:00.000Z",
+    expected_end_at: "2026-09-23T07:00:00.000Z",
+    temporal_resolution_status: "resolved",
+  };
+
+  const observedAt = "2026-09-22T20:12:50.653Z";
+
+  // Section 8 assertions:
+  // - new notice is broad BANKED
+  assert.equal(isBroadBankedDistributionNotice(solLunaNotice.text), true);
+  // - new notice is one-shot
+  assert.equal(getOfficialNoticeConsumption(solLunaNotice.tweet_id), "one_shot");
+  // - new notice is not conditional
+  assert.equal(isConditionalBankedDistributionNotice(solLunaNotice.text), false);
+  // - new notice is not recurring
+  assert.equal(isRecurringConditionalBankedDistributionNotice(solLunaNotice.text), false);
+
+  // - new notice wins over old persistent Astra notice for this grant
+  const repNotice = selectRepresentativeTiboNotice([astraNotice, solLunaNotice]);
+  assert.equal(repNotice?.tweet_id, solLunaNotice.tweet_id);
+
+  // Observation is within notice match window
+  assert.equal(isBankedObservationWithinNoticeWindow({
+    observedAt: solLunaNotice.tweet_created_at,
+    expectedAt: solLunaNotice.expected_start_at,
+    expectedEndAt: solLunaNotice.expected_end_at,
+  }, observedAt), true);
+
+  // - canonical key = banked-reset-2102463847714247142
+  const canonicalKey = getBankedDistributionEventKey({
+    noticeTweetId: solLunaNotice.tweet_id,
+    observedAt,
+    persistent: false,
+  });
+  assert.equal(canonicalKey, "banked-reset-2102463847714247142");
+
+  const solLunaEstimate = {
+    resetEventKey: canonicalKey,
+    displayExecutionAt: observedAt,
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: null,
+    executionWindowEndAt: null,
+    recoveryObservationId: null,
+    tiboAnnouncedAt: solLunaNotice.tweet_created_at,
+    tiboPrimaryTweetId: solLunaNotice.tweet_id,
+    tiboSourceTweetIds: [solLunaNotice.tweet_id],
+    officialNoticeTweetId: solLunaNotice.tweet_id,
+    officialNoticeAt: solLunaNotice.tweet_created_at,
+    estimatorVersion: "usage-execution-banked-v1",
+  };
+
+  // - execution time = 2026-09-22T20:12:50.653Z
+  assert.equal(solLunaEstimate.displayExecutionAt, observedAt);
+  // - official_notice_tweet_id = 2102463847714247142
+  assert.equal(solLunaEstimate.officialNoticeTweetId, solLunaNotice.tweet_id);
+  // - tibo_primary_tweet_id = 2102463847714247142
+  assert.equal(solLunaEstimate.tiboPrimaryTweetId, solLunaNotice.tweet_id);
+
+  // Combine into history
+  const history = combineResetHistory(
+    [],
+    [],
+    [],
+    [],
+    [astraNotice, solLunaNotice, tuesdayNotice],
+    [],
+    [solLunaEstimate],
+  );
+
+  // - exactly one banked_distribution history event
+  const bankedEvents = history.filter((item) => item.recordKind === "banked_distribution");
+  assert.equal(bankedEvents.length, 1);
+  assert.equal(bankedEvents[0].id, "banked-reset-2102463847714247142");
+  assert.equal(bankedEvents[0].completed_at, observedAt);
+
+  // - no confirmed_global duplicate
+  assert.equal(history.filter((item) => item.recordKind === "confirmed_global").length, 0);
+
+  // - notice-to-execution = approx 1h49m
+  assert.equal(bankedEvents[0].details?.noticeToExecution, "1時間49分");
+
+  // - manual display name is preserved
+  const manualRecord = {
+    event_key: "banked-reset-2102463847714247142",
+    manual_name_ja: "GPT-6 Sol・Lunaリリース記念リセット",
+    manual_name_en: "GPT-6 Sol & Luna Launch Reset",
+    manual_name_zh: "GPT-6 Sol / Luna 发布纪念重置",
+  } as unknown as ResetDisplayNameRecord;
+
+  const displayNameJa = resolveResetDisplayTitle(
+    bankedEvents[0],
+    manualRecord,
+    "ja",
+  );
+  assert.equal(displayNameJa, "GPT-6 Sol・Lunaリリース記念リセット");
+
+  const displayNameEn = resolveResetDisplayTitle(
+    bankedEvents[0],
+    manualRecord,
+    "en",
+  );
+  assert.equal(displayNameEn, "GPT-6 Sol & Luna Launch Reset");
+
+  const displayNameZh = resolveResetDisplayTitle(
+    bankedEvents[0],
+    manualRecord,
+    "zh",
+  );
+  assert.equal(displayNameZh, "GPT-6 Sol / Luna 发布纪念重置");
+
+  // - Tuesday notice is no longer active after execution
+  // - new BANKED notice is no longer active after execution
+  const afterExecutionNow = new Date("2026-09-22T20:15:00.000Z");
+  const radarData: RadarData = {
+    active_tibo_signals: [astraNotice, solLunaNotice, tuesdayNotice] as unknown as ActiveTiboSignal[],
+    formal_tibo_resets: [],
+  };
+  const activeNoticeAfter = getActiveOfficialNotice(radarData, new Date(observedAt), afterExecutionNow);
+  assert.equal(activeNoticeAfter, null);
 });
