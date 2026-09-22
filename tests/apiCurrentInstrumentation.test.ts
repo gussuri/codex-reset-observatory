@@ -67,7 +67,7 @@ test("radar cache callbacks log compute timing without changing cache identity o
   }
   assert.match(coreBlock, /getRadarCacheKeyParts\("radar-core-cache-v6"\)/);
   assert.match(coreBlock, /revalidate: RADAR_CORE_CACHE_TTL_SECONDS/);
-  assert.match(coreBlock, /tags: \["radar-data"\]/);
+  assert.match(coreBlock, /tags: \[RADAR_CACHE_TAGS\.core/);
 
   assert.match(snapshotBlock, /event: "public_snapshot_bundle_compute"/);
   assert.match(snapshotBlock, /calculationBucket/);
@@ -77,7 +77,7 @@ test("radar cache callbacks log compute timing without changing cache identity o
   assert.match(snapshotBlock, /getRadarCacheKeyParts\("radar-public-snapshot-bundle-cache-v5"\)/);
   assert.match(snapshotBlock, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
   assert.doesNotMatch(snapshotBlock, /\blocale\b/);
-  assert.match(snapshotBlock, /tags: \["radar-data"\]/);
+  assert.match(snapshotBlock, /tags: \[RADAR_CACHE_TAGS\.core\]/);
 
   assert.match(radarFetchSource, /let radarCoreInFlight: Promise<SharedRadarCoreLoad> \| null = null/);
   assert.match(radarFetchSource, /async function loadSharedRadarCore\(\)/);

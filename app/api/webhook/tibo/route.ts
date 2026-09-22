@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/classification";
@@ -15,6 +14,7 @@ import {
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "@/lib/radar/tiboHistory";
+import { invalidateRadarCache } from "@/lib/radar/cacheInvalidation";
 import {
   confirmNearestCodexRecoveryObservation,
   findNearestCodexRecoveryObservation,
@@ -874,6 +874,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
+    // Make the durable source row visible even when a later best-effort formal
+    // enrichment has to return a retryable error.
+    try {
+      await invalidateRadarCache("tibo");
+    } catch {
+      console.warn("[Webhook Warning] Tibo cache revalidation skipped", {
+        reason: "runtime_context",
+      });
+    }
+
     await seedResetDisplayNameCandidateIfEligible(
       supabase,
       formalCandidate,
@@ -1322,7 +1332,7 @@ export async function POST(req: NextRequest) {
 
     // 9. Purge Next.js Cache
     try {
-      revalidateTag("radar-data");
+      await invalidateRadarCache("tibo-event");
     } catch (e) {
       console.warn("[Webhook Warning] Cache revalidation skipped:", e);
     }

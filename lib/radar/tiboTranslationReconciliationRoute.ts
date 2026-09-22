@@ -1,6 +1,5 @@
-import { revalidateTag } from "next/cache";
-
 import { isBearerAuthorizationValid } from "../security/bearerAuth";
+import { invalidateRadarCache } from "./cacheInvalidation";
 import {
   getTiboTranslationServiceClient,
   getTiboTranslationRepairLocales,
@@ -64,7 +63,7 @@ export function createTiboTranslationReconciliationHandler(
   storeFactory: StoreFactory = getTiboTranslationServiceClient,
   auditRunner: AuditRunner = listMissingTiboTranslations,
   repairRunner: RepairRunner = reconcileMissingTiboTranslations,
-  invalidateRadarData: InvalidateRadarData = () => revalidateTag("radar-data"),
+  invalidateRadarData: InvalidateRadarData = () => invalidateRadarCache("tibo"),
 ) {
   return async function handle(request: Request) {
     const expectedSecret = process.env.CRON_SECRET?.trim();

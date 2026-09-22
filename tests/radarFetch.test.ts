@@ -28,6 +28,9 @@ import {
   TIMED_TIBO_SIGNAL_MAX_ROWS,
   TIMED_TIBO_SIGNAL_SELECT_FIELDS,
   getTimedTiboLimitTelemetry,
+  PREDICTION_HISTORY_CACHE_TTL_SECONDS,
+  RESET_DISPLAY_NAME_CACHE_TTL_SECONDS,
+  TIBO_HISTORY_CACHE_TTL_SECONDS,
 } from "../lib/radarFetch";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -62,6 +65,14 @@ test("shared Radar core uses a fifteen-minute normal cache TTL", () => {
   assert.equal(RADAR_CORE_CACHE_TTL_SECONDS, 15 * 60);
 });
 
+test("slow source caches use bounded TTLs while live signal caches stay short", () => {
+  assert.equal(TIBO_HISTORY_CACHE_TTL_SECONDS, 15 * 60);
+  assert.equal(RESET_DISPLAY_NAME_CACHE_TTL_SECONDS, 60 * 60);
+  assert.equal(PREDICTION_HISTORY_CACHE_TTL_SECONDS, 15 * 60);
+  assert.ok(TIBO_HISTORY_CACHE_TTL_SECONDS >= RADAR_CORE_CACHE_TTL_SECONDS);
+  assert.ok(RESET_DISPLAY_NAME_CACHE_TTL_SECONDS >= TIBO_HISTORY_CACHE_TTL_SECONDS);
+});
+
 test("page projections use a one-hour cache while API snapshots keep a ten-minute bucket and one-hour retention", () => {
   assert.equal(RADAR_PAGE_CACHE_TTL_SECONDS, 60 * 60);
   assert.equal(PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS, 10 * 60);
@@ -80,7 +91,7 @@ test("page projections use a one-hour cache while API snapshots keep a ten-minut
   assert.match(source, /revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS/);
   assert.doesNotMatch(source, /PUBLIC_RADAR_SNAPSHOT_CACHE_TTL_SECONDS/);
   assert.match(heatmapCacheSource, /revalidate: PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS/);
-  assert.match(source, /tags: \["radar-data"\]/);
+  assert.match(source, /tags: \[RADAR_CACHE_TAGS\.core\]/);
   assert.match(pageFetchSource, /getCachedRadarPageData/);
   assert.doesNotMatch(pageFetchSource, /fetchPublicRadarSnapshot|fetchRandomResetHeatmapEventTimes/);
 });
@@ -529,6 +540,8 @@ test("Tibo radar queries use explicit field lists instead of wildcard reads", ()
 test("Tibo history keeps canonical rows narrow and bounds the wider recent read", () => {
   const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
   assert.match(source, /getRadarCacheKeyParts\("tibo-history-signals-cache-v4"\)/);
+  assert.match(source, /RADAR_CACHE_TAGS\.tiboHistory/);
+  assert.match(source, /revalidate: TIBO_HISTORY_CACHE_TTL_SECONDS/);
   assert.match(source, /TIBO_HISTORY_SELECT_FIELDS/);
   assert.match(source, /TIBO_RECENT_SELECT_FIELDS/);
   assert.match(source, /TIBO_RECENT_MAX_ROWS/);
@@ -546,6 +559,16 @@ test("Tibo history keeps canonical rows narrow and bounds the wider recent read"
   assert.match(bundleSource, /historyResult\.withReplies\.data/);
   assert.match(bundleSource, /historyResult\.withoutReplies\.data/);
   assert.doesNotMatch(bundleSource, /fetchRawTiboHistorySignals\(false\)|fetchRawTiboHistorySignals\(true\)/);
+});
+
+test("prediction history is cached as a raw projection and parsed against each calculation time", () => {
+  const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
+  assert.match(source, /getCachedPredictionHistoryProjection/);
+  assert.match(source, /RADAR_CACHE_TAGS\.predictionHistory/);
+  assert.match(source, /revalidate: PREDICTION_HISTORY_CACHE_TTL_SECONDS/);
+  assert.match(source, /parseNextGenerationTrainingProjectionRows/);
+  assert.match(source, /calculationNow/);
+  assert.doesNotMatch(source, /getCachedPredictionHistoryProjection\([^)]*calculationNow/);
 });
 
 test("recent Tibo projections preserve reply safety metadata", () => {

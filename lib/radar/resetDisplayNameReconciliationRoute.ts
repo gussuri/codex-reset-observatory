@@ -1,6 +1,5 @@
-import { revalidateTag } from "next/cache";
-
 import { isBearerAuthorizationValid } from "../security/bearerAuth";
+import { invalidateRadarCache } from "./cacheInvalidation";
 import {
   reconcileResetDisplayNames,
   type ResetDisplayNameReconciliationOptions,
@@ -18,7 +17,7 @@ export type ResetDisplayNameReconcileRunner = (
 ) => Promise<ResetDisplayNameReconciliationResult>;
 
 export function getResetDisplayNameReconciliationOptions(
-  invalidateRadarData: InvalidateRadarData = () => revalidateTag("radar-data"),
+  invalidateRadarData: InvalidateRadarData = () => invalidateRadarCache("display-names"),
 ): ResetDisplayNameReconciliationOptions {
   return {
     dryRun: false,
@@ -63,7 +62,7 @@ function response(body: unknown, status: number) {
 
 export function createReconcileResetDisplayNamesHandler(
   runner: ResetDisplayNameReconcileRunner = reconcileResetDisplayNames,
-  invalidateRadarData: InvalidateRadarData = () => revalidateTag("radar-data"),
+  invalidateRadarData: InvalidateRadarData = () => invalidateRadarCache("display-names"),
 ) {
   return async function post(request: Request) {
     const expectedSecret = process.env.CRON_SECRET?.trim();
