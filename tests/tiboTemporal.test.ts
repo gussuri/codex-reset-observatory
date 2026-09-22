@@ -1105,3 +1105,92 @@ test("classifies reset and forecast windows by semantic relation", () => {
     "unknown",
   );
 });
+
+test("disambiguates repeated weekday occurrence using unique evidenceQuote anchor", () => {
+  const sourceText =
+    "Ladies and gentlemen... start... your... ENGINES. We are almost Tuesday and I promised a reset for Tuesday. Among some other things. See you soon.";
+  const gemini = {
+    signal_type: "official_notice",
+    confidence: 0.95,
+    temporalExpression: "Tuesday",
+    temporalKind: "weekday",
+    temporalPrecision: "day",
+    temporalConfidence: 0.95,
+    evidenceQuote: "I promised a reset for Tuesday.",
+  };
+
+  const parsed = parseTiboTemporalSemantics(gemini, sourceText);
+  assert.ok(parsed);
+  assert.equal(parsed.weekday, "tuesday");
+  assert.equal(parsed.temporalKind, "weekday");
+  assert.equal(parsed.temporalPrecision, "day");
+  assert.equal(parsed.resolutionSource, "merged");
+
+  const resolution = resolveTiboTemporalSchedule(
+    parsed,
+    "2026-09-22T04:31:32Z",
+    "America/Los_Angeles",
+  );
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.temporalKind, "weekday");
+  assert.equal(resolution.temporalPrecision, "day");
+  assert.equal(resolution.timezone, "America/Los_Angeles");
+  assert.equal(resolution.expectedStartAt, "2026-09-22T07:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-09-23T07:00:00.000Z");
+});
+
+test("leaves repeated weekday unresolved when evidenceQuote is missing or ambiguous", () => {
+  const sourceText =
+    "Ladies and gentlemen... start... your... ENGINES. We are almost Tuesday and I promised a reset for Tuesday. Among some other things. See you soon.";
+
+  // 1. Missing evidenceQuote
+  const parsedWithoutQuote = parseTiboTemporalSemantics(
+    {
+      signal_type: "official_notice",
+      confidence: 0.95,
+      temporalExpression: "Tuesday",
+      temporalKind: "weekday",
+      temporalPrecision: "day",
+      weekday: "tuesday",
+      temporalConfidence: 0.95,
+      evidenceQuote: null,
+    },
+    sourceText,
+  );
+  assert.equal(parsedWithoutQuote, null);
+
+  // 2. Ambiguous evidenceQuote matching multiple occurrences of "Tuesday"
+  const parsedWithAmbiguousQuote = parseTiboTemporalSemantics(
+    {
+      signal_type: "official_notice",
+      confidence: 0.95,
+      temporalExpression: "Tuesday",
+      temporalKind: "weekday",
+      temporalPrecision: "day",
+      weekday: "tuesday",
+      temporalConfidence: 0.95,
+      evidenceQuote: "Tuesday",
+    },
+    sourceText,
+  );
+  assert.equal(parsedWithAmbiguousQuote, null);
+});
+
+test("disambiguates repeated clock expressions using evidenceQuote", () => {
+  const sourceText =
+    "Reset at 3pm today; another reset at 3pm tomorrow.";
+  const parsed = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "3pm",
+      temporalKind: "relative_day",
+      temporalPrecision: "exact_time",
+      explicitTimeParts: { hour: 15, minute: 0 },
+      temporalConfidence: 0.95,
+      evidenceQuote: "another reset at 3pm tomorrow.",
+    },
+    sourceText,
+  );
+  assert.ok(parsed);
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 15, minute: 0 });
+  assert.equal(parsed.relativeDayOffset, 1);
+});

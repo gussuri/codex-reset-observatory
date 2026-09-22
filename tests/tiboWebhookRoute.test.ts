@@ -1594,3 +1594,67 @@ test("persists the source event after the bounded translation retry is exhausted
     restoreEnvironment(previous);
   }
 });
+
+test("resolves official notice timing for repeated weekday post anchored by evidenceQuote", async () => {
+  const previous = {
+    TIBO_WEBHOOK_SECRET: process.env.TIBO_WEBHOOK_SECRET,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    GEMINI_CLASSIFICATION_MODE: process.env.GEMINI_CLASSIFICATION_MODE,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GEMINI_MODEL: process.env.GEMINI_MODEL,
+    GEMINI_TRANSLATION_MODE: process.env.GEMINI_TRANSLATION_MODE,
+  };
+
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "http://localhost:54321";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.95,
+    temporalDirection: "future",
+    evidenceQuote: "I promised a reset for Tuesday.",
+    reasonJa: "火曜日のリセットを約束しているため、公式な事前告知（official_notice）に該当します。",
+    teaserStrength: null,
+    teaserStrengthConfidence: null,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
+    temporalExpression: "Tuesday",
+    temporalKind: "weekday",
+    temporalPrecision: "day",
+    weekday: "tuesday",
+    temporalConfidence: 0.95,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2102254445082116335",
+      text: "Ladies and gentlemen... start... your... ENGINES. We are almost Tuesday and I promised a reset for Tuesday. Among some other things. See you soon.",
+      tweetUrl: "https://x.com/thsottiaux/status/2102254445082116335",
+      tweetCreatedAt: "2026-09-22T04:31:32Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies[0] as Record<string, unknown>;
+    assert.equal(upsertBody.signal_type, "official_notice");
+    assert.equal(upsertBody.ai_signal_type, "official_notice");
+    assert.equal(upsertBody.ai_temporal_expression, "Tuesday");
+    assert.equal(upsertBody.temporal_kind, "weekday");
+    assert.equal(upsertBody.temporal_precision, "day");
+    assert.equal(upsertBody.temporal_resolution_status, "resolved");
+    assert.equal(upsertBody.temporal_timezone, "America/Los_Angeles");
+    assert.equal(upsertBody.expected_start_at, "2026-09-22T07:00:00.000Z");
+    assert.equal(upsertBody.expected_end_at, "2026-09-23T07:00:00.000Z");
+  } finally {
+    restoreFetch();
+    restoreGemini();
+    restoreEnvironment(previous);
+  }
+});

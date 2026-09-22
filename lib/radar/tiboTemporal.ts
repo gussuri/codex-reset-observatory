@@ -908,9 +908,14 @@ export function parseGeminiTemporalSemantics(value: unknown, sourceText: string)
     return null;
   }
 
-  const weekday = parsed.weekday === null || parsed.weekday === undefined
+  const rawWeekday = parsed.weekday === null || parsed.weekday === undefined
     ? null
     : isEnumValue(parsed.weekday, WEEKDAYS) ? parsed.weekday : null;
+  const weekday = rawWeekday ?? (
+    kind === "weekday" && expression && isEnumValue(expression.toLowerCase(), WEEKDAYS)
+      ? expression.toLowerCase() as TemporalWeekday
+      : null
+  );
   const daypart = parsed.daypart === null || parsed.daypart === undefined
     ? null
     : isEnumValue(parsed.daypart, DAYPART_NAMES) ? parsed.daypart : null;
@@ -994,6 +999,64 @@ export function parseGeminiTemporalSemantics(value: unknown, sourceText: string)
   };
 }
 
+function extractEvidenceQuote(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  const quote = typeof obj.evidenceQuote === "string" && obj.evidenceQuote.trim()
+    ? obj.evidenceQuote.trim()
+    : typeof obj.evidence_quote === "string" && obj.evidence_quote.trim()
+      ? obj.evidence_quote.trim()
+      : null;
+  if (quote) return quote;
+  if (obj.futureSignal && typeof obj.futureSignal === "object") {
+    const fs = obj.futureSignal as Record<string, unknown>;
+    if (typeof fs.evidenceQuote === "string" && fs.evidenceQuote.trim()) {
+      return fs.evidenceQuote.trim();
+    }
+    if (typeof fs.evidence_quote === "string" && fs.evidence_quote.trim()) {
+      return fs.evidence_quote.trim();
+    }
+  }
+  return null;
+}
+
+function getUniqueEvidenceQuoteRange(
+  quote: string,
+  sourceText: string,
+): { start: number; end: number } | null {
+  let normalizedQuote = quote.trim();
+  if (
+    normalizedQuote.length >= 2 &&
+    ((normalizedQuote.startsWith('"') && normalizedQuote.endsWith('"')) ||
+      (normalizedQuote.startsWith("'") && normalizedQuote.endsWith("'")) ||
+      (normalizedQuote.startsWith("“") && normalizedQuote.endsWith("”"))) &&
+    !sourceText.includes(normalizedQuote)
+  ) {
+    normalizedQuote = normalizedQuote.slice(1, -1).trim();
+  }
+  if (!normalizedQuote) return null;
+  const firstIndex = sourceText.indexOf(normalizedQuote);
+  if (firstIndex === -1) return null;
+  const lastIndex = sourceText.lastIndexOf(normalizedQuote);
+  if (firstIndex !== lastIndex) return null;
+  return {
+    start: firstIndex,
+    end: firstIndex + normalizedQuote.length,
+  };
+}
+
+function isCandidateWithinSpan(
+  candidate: SourceTemporalCandidate,
+  start: number,
+  end: number,
+): boolean {
+  const tokens: Array<{ index: number; end: number }> = [];
+  if (candidate.day) tokens.push(candidate.day);
+  if (candidate.clock) tokens.push(candidate.clock);
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => token.index >= start && token.end <= end);
+}
+
 /**
  * Gemini may omit the structured clock fields even when the source contains a
  * single explicit schedule. In that case, use only source tokens that can be
@@ -1063,10 +1126,19 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
     return matchesGeminiDay(candidate);
   };
 
+  const evidenceQuote = extractEvidenceQuote(value);
+  const quoteRange = evidenceQuote ? getUniqueEvidenceQuoteRange(evidenceQuote, sourceText) : null;
+
   if (geminiSemantics.explicitTimeParts) {
     const matches = candidates.filter(matchesGeminiCandidate);
-    if (matches.length === 1) {
-      const candidate = matches[0];
+    let candidate = matches.length === 1 ? matches[0] : null;
+    if (!candidate && matches.length > 1 && quoteRange) {
+      const anchored = matches.filter((c) => isCandidateWithinSpan(c, quoteRange.start, quoteRange.end));
+      if (anchored.length === 1) {
+        candidate = anchored[0];
+      }
+    }
+    if (candidate) {
       const needsSourceTimezone = !geminiSemantics.explicitTimezone && Boolean(candidate.semantics.explicitTimezone);
       const sourceDeadline = isDeadlineTimeExpression(candidate.semantics.temporalExpression ?? "");
       return {
@@ -1078,10 +1150,12 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
         temporalPrecision: sourceDeadline
           ? candidate.semantics.temporalPrecision
           : geminiSemantics.temporalPrecision,
-        weekday: sourceDeadline ? candidate.semantics.weekday : geminiSemantics.weekday,
+        weekday: sourceDeadline
+          ? candidate.semantics.weekday
+          : (geminiSemantics.weekday ?? candidate.semantics.weekday),
         relativeDayOffset: sourceDeadline
           ? candidate.semantics.relativeDayOffset
-          : geminiSemantics.relativeDayOffset,
+          : (geminiSemantics.relativeDayOffset ?? candidate.semantics.relativeDayOffset),
         explicitDateParts: sourceDeadline
           ? candidate.semantics.explicitDateParts
           : geminiSemantics.explicitDateParts,
@@ -1104,12 +1178,20 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   }
 
   const dayMatches = candidates.filter(matchesGeminiDay);
-  if (dayMatches.length !== 1) return sourceSemantics;
-  const candidate = dayMatches[0];
+  let candidate = dayMatches.length === 1 ? dayMatches[0] : null;
+  if (!candidate && dayMatches.length > 1 && quoteRange) {
+    const anchored = dayMatches.filter((c) => isCandidateWithinSpan(c, quoteRange.start, quoteRange.end));
+    if (anchored.length === 1) {
+      candidate = anchored[0];
+    }
+  }
+  if (!candidate) return sourceSemantics;
   if (!candidate.clock) {
     return {
       ...geminiSemantics,
       temporalExpression: candidate.semantics.temporalExpression,
+      weekday: geminiSemantics.weekday ?? candidate.semantics.weekday,
+      relativeDayOffset: geminiSemantics.relativeDayOffset ?? candidate.semantics.relativeDayOffset,
       resolutionSource: "merged",
     };
   }
