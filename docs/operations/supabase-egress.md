@@ -71,3 +71,48 @@ Measure the change over at least seven days after the deployment:
 Do not claim that the free tier is sufficient until the post-change measured
 rate supports that conclusion. This change adds no database migration,
 backfill, deletion, paid service, or production test write.
+
+## Production measurement baseline
+
+The cache-scope change reached the production domain at the following
+measurement boundary:
+
+- Ready at `2026-09-22T11:27:06Z` (`2026-09-22 20:27:06 JST`)
+- Main commit: `1e8a800c37b65042b884be4833753e2cb741778a`
+- Vercel deployment: `8Tp32WyFx4BNuiS4a6gwyYWzZ5Z2` (`READY`)
+- Observation captured: `2026-09-22T11:32:37Z` (`2026-09-22 20:32:37 JST`)
+
+The read-only billing snapshot at the observation time was:
+
+- Supabase organization plan: Free
+- Supabase billing period: `2026-08-28` through `2026-09-28`
+- Organization egress: `6.381 GB / 5 GB` (128%; 1.38 GB over the included amount)
+- `codex-reset-observatory` project-filtered egress: `6.381 GB`
+- Supabase cached egress: `0 GB`
+- Vercel billing period: `Sep 8, 16:00` through `Oct 8, 16:00`
+- Vercel Active CPU, Build CPU, and current amount: not available in the
+  accessible usage view at this observation time
+
+Vercel Logs showed 50 visible requests for the new deployment in the displayed
+last-30-minute window. This was dominated by deployment smoke traffic and is
+not a representative traffic baseline. The selected public-route counts were 25
+`/api/current`, 8 `/en`, 5 `/zh`, 5 `/api/reset-marker`, 4 `/`, and 1
+`/en/history`. The cache-miss events
+`radar_core_compute`, `public_snapshot_bundle_compute`, `radar_page_compute`,
+and `prediction_history_projection_fetch` did not expose aggregate counts or
+row counts in the accessible log view, so those values remain unmeasured.
+
+The next review date is `2026-09-29` JST. Compare each post-change billing
+period's increase with the observation boundary rather than expecting the
+current cumulative value to fall. If a billing period changes during the
+seven-day window, sum the per-period deltas. Include traffic volume when
+interpreting the result. The organization-wide historical target of about
+130 MB/day (about 4 GB/month) is a target for comparison, not a guarantee that
+the service is currently within the free tier.
+
+Manual backfill, evaluation, and display-name maintenance scripts can write
+source tables outside the webhook routes and do not perform Next cache
+invalidation. They are not part of the normal production request path; after
+such a script is intentionally run, allow the documented TTL to expire or
+perform an explicitly authorized cache revalidation before treating the public
+view as fresh. No such script was run for this deployment.
