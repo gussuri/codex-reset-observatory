@@ -662,6 +662,22 @@ test("Gemini safety guard applies current-event precedence", () => {
   assert.equal(guarded.teaserStrength, "none");
 });
 
+test("broad BANKED account loading is an official distribution notice, never a global reset execution", () => {
+  const announcement = "GPT-6 Sol and Luna are out. We are loading a banked reset into all accounts of our Plus, Pro and Business users. Let's go!";
+  const completion = "Banked resets have now been loaded into all accounts.";
+
+  const rule = classifyTiboTweet(announcement, url);
+  assert.equal(rule.signalType, "official_notice");
+  assert.equal(rule.confidence, 0.96);
+
+  const geminiExecutionDecision = getTiboClassificationSafetyDecision(announcement, "reset_executed");
+  assert.equal(geminiExecutionDecision.signalType, "official_notice");
+
+  const completedBankedDecision = getTiboClassificationSafetyDecision(completion, "reset_executed");
+  assert.equal(completedBankedDecision.signalType, "irrelevant");
+  assert.equal(completedBankedDecision.reasonCode, "banked_distribution_completion");
+});
+
 test("completed reset never retains teaser strength even when Gemini picked reset_executed", () => {
   const guarded = applyTiboClassificationSafetyGuard(
     "One reset now and another if needed later.",

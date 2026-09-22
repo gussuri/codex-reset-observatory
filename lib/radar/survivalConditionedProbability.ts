@@ -35,7 +35,11 @@ import {
   type ShadowProbabilityOptions,
   type ShadowSignalMultipliers,
 } from "./shadowProbability";
-import { getActiveOfficialNotice, type ActiveOfficialNotice } from "./probability";
+import {
+  getActiveOfficialNotice,
+  getProbabilityEligibleOfficialNotice,
+  type ActiveOfficialNotice,
+} from "./probability";
 import {
   getRecoveryBoundaryAudit,
   getRecoveryResetEvents,
@@ -518,7 +522,9 @@ function getNotice(
   latestRecoveryResetAt: string | null,
   now: Date,
 ): ActiveOfficialNotice | null {
-  if (options.activeOfficialNotice !== undefined) return options.activeOfficialNotice;
+  if (options.activeOfficialNotice !== undefined) {
+    return getProbabilityEligibleOfficialNotice(options.activeOfficialNotice);
+  }
   return getActiveOfficialNotice(
     data,
     latestRecoveryResetAt ? new Date(latestRecoveryResetAt) : null,
@@ -528,6 +534,7 @@ function getNotice(
     false,
     false,
     options.canonicalHistoryContext,
+    true,
   );
 }
 

@@ -102,7 +102,7 @@ test("new official_notice after reset_executed triggers Notice Mode (90%/96%)", 
   assert.strictEqual(p48, 0.96, "New notice after execution must trigger 48h 96% Notice Mode");
 });
 
-test("a BANKED official notice keeps the existing 90%/96% override and dedicated action", () => {
+test("a BANKED official notice stays visible without overriding ordinary reset probability", () => {
   const now = new Date("2026-08-21T12:00:00.000Z");
   const data = getLocalRadarData({
     activeTiboSignals: [{
@@ -120,12 +120,23 @@ test("a BANKED official notice keeps the existing 90%/96% override and dedicated
     }],
     calculationNow: now,
   });
+  const baselineData = getLocalRadarData({ calculationNow: now });
 
   const notice = getActiveOfficialNotice(data, null, now);
   assert.equal(notice?.isBankedDistribution, true);
-  assert.equal(getLocalResetProbability(data, "24h", undefined, notice, now), 0.9);
-  assert.equal(getLocalResetProbability(data, "48h", undefined, notice, now), 0.96);
+  const baselineCalculation = getLocalProbabilityCalculation(baselineData, { now });
+  const calculation = getLocalProbabilityCalculation(data, { now, activeOfficialNotice: notice });
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
+  assert.equal(calculation.probability24h, baselineCalculation.probability24h);
+  assert.equal(calculation.probability48h, baselineCalculation.probability48h);
+  assert.equal(getLocalResetProbability(data, "24h", undefined, notice, now), baselineCalculation.probability24h);
+  assert.equal(getLocalResetProbability(data, "48h", undefined, notice, now), baselineCalculation.probability48h);
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
+  const baselineViewModel = getRadarViewModel(baselineData, "ja", false, undefined, now);
+  assert.equal(viewModel.probability12h, baselineViewModel.probability12h);
+  assert.equal(viewModel.probability24h, baselineViewModel.probability24h);
+  assert.equal(viewModel.probability48h, baselineViewModel.probability48h);
+  assert.equal(viewModel.probability72h, baselineViewModel.probability72h);
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
   assert.match(viewModel.action, /無理に使い切る必要はありません/);
 });
@@ -259,6 +270,7 @@ test("an explicitly registered persistent BANKED policy stays active after deliv
 
   const activeNotice = getActiveOfficialNotice(data, null, now);
   assert.equal(activeNotice?.id, astraNotice.tweet_id);
+  assert.equal(activeNotice?.isBankedDistribution, true);
   assert.equal(activeNotice?.consumption, "persistent");
   assert.equal(activeNotice?.expectedAt, null);
   assert.equal(activeNotice?.expectedEndAt, null);
@@ -271,13 +283,17 @@ test("an explicitly registered persistent BANKED policy stays active after deliv
 
   const calculation = getLocalProbabilityCalculation(data, { now });
   const baselineCalculation = getLocalProbabilityCalculation(baselineData, { now });
-  assert.equal(calculation.breakdown.officialNoticeOverride.active, true);
-  assert.equal(calculation.probability24h, 0.9);
-  assert.equal(calculation.probability48h, 0.96);
-  assert.notEqual(calculation.probability24h, baselineCalculation.probability24h);
-  assert.notEqual(calculation.probability48h, baselineCalculation.probability48h);
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
+  assert.equal(calculation.inputSnapshot.activeOfficialNotice, false);
+  assert.equal(calculation.probability24h, baselineCalculation.probability24h);
+  assert.equal(calculation.probability48h, baselineCalculation.probability48h);
 
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
+  const baselineViewModel = getRadarViewModel(baselineData, "ja", false, undefined, now);
+  assert.equal(viewModel.probability12h, baselineViewModel.probability12h);
+  assert.equal(viewModel.probability24h, baselineViewModel.probability24h);
+  assert.equal(viewModel.probability48h, baselineViewModel.probability48h);
+  assert.equal(viewModel.probability72h, baselineViewModel.probability72h);
   assert.equal(viewModel.activeWindow.active, true);
   assert.equal(viewModel.activeWindow.kind, "official");
   assert.equal(viewModel.activeWindow.noticeKind, "banked");
@@ -450,7 +466,7 @@ test("a conditional but non-recurring BANKED notice keeps the existing one-shot 
   assert.equal(getOngoingBankedNotice(data, now), null);
   assert.equal(getActiveOfficialNotice(data, null, now)?.id, "conditional-one-shot-banked");
   const calculation = getLocalProbabilityCalculation(data, { now });
-  assert.equal(calculation.breakdown.officialNoticeOverride.active, true);
+  assert.equal(calculation.breakdown.officialNoticeOverride.active, false);
 
   const afterExpiry = getActiveOfficialNotice(data, null, new Date("2026-09-06T00:00:00.000Z"));
   assert.equal(afterExpiry, null);

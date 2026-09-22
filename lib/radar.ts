@@ -376,6 +376,17 @@ export function getRadarViewModel(
     false,
     canonicalHistoryContext,
   );
+  const probabilityOfficialNotice = getActiveOfficialNotice(
+    source,
+    signalEvaluation.latestResetAt,
+    calculationNow,
+    LOCAL_OBSERVATION_SIGNALS,
+    null,
+    false,
+    false,
+    canonicalHistoryContext,
+    true,
+  );
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(source, locale, limitHistory, canonicalHistoryContext);
   const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source, canonicalHistoryContext);
@@ -393,7 +404,7 @@ export function getRadarViewModel(
   const probabilityCalculation = calculatePublishedProbability(source, {
     now: calculationNow,
     signalEvaluation,
-    activeOfficialNotice,
+    activeOfficialNotice: probabilityOfficialNotice,
     regularResetExpectedAt: regularResetForecast.expectedAt,
     canonicalHistoryContext,
   });
@@ -457,7 +468,7 @@ export function getRadarViewModel(
       probability48h,
       locale,
       signalEvaluation,
-      activeOfficialNotice,
+      probabilityOfficialNotice,
       true,
       calculationNow,
       probability12h,

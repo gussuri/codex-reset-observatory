@@ -26,7 +26,11 @@ import type {
   LocalSignalEvaluation,
   ProbabilityCalculationAudit,
 } from "./probability";
-import { getLocalProbabilityCalculation } from "./probability";
+import {
+  getActiveOfficialNotice,
+  getLocalProbabilityCalculation,
+  getProbabilityEligibleOfficialNotice,
+} from "./probability";
 import {
   derive12hFrom24hProbability,
   derive72hFrom48hProbability,
@@ -771,9 +775,23 @@ export function calculatePublishedProbability(
   const resolvedTrainingReadStatus =
     nextGenerationBTrainingReadStatus ?? attachedTraining?.trainingReadStatus ?? "ok";
   const calculationNow = calculationOptions.now ?? new Date();
+  const probabilityOfficialNotice = calculationOptions.activeOfficialNotice === undefined
+    ? getActiveOfficialNotice(
+        data,
+        calculationOptions.signalEvaluation?.latestResetAt,
+        calculationNow,
+        undefined,
+        null,
+        false,
+        false,
+        calculationOptions.canonicalHistoryContext,
+        true,
+      )
+    : getProbabilityEligibleOfficialNotice(calculationOptions.activeOfficialNotice);
   const calculationOptionsWithNow = {
     ...calculationOptions,
     now: calculationNow,
+    activeOfficialNotice: probabilityOfficialNotice,
   };
   const primary = getLocalProbabilityCalculation(data, calculationOptionsWithNow);
   const publicModelOptions = {

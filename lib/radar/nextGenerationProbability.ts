@@ -36,7 +36,10 @@ import {
   type RandomContinuousRegimeMultiplierPolicy,
   type RandomContinuousProbabilityResult,
 } from "./randomContinuousProbability";
-import { getActiveOfficialNotice } from "./probability";
+import {
+  getActiveOfficialNotice,
+  getProbabilityEligibleOfficialNotice,
+} from "./probability";
 
 export {
   NEXT_GENERATION_A_MODEL_VERSION,
@@ -313,8 +316,9 @@ function calculateNextGenerationBProbabilityVariant<TModelVersion extends string
         false,
         false,
         options.canonicalHistoryContext,
+        true,
       )
-    : options.activeOfficialNotice;
+    : getProbabilityEligibleOfficialNotice(options.activeOfficialNotice);
   const calibratedHorizons: ShadowProbabilityHorizons = {
     probability12h: derive12hFrom24hProbability(calibrated.probability24h),
     probability24h: calibrated.probability24h,
