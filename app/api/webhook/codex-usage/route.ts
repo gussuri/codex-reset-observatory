@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
+import { invalidateRadarCache } from "@/lib/radar/cacheInvalidation";
 
 import {
   CODEX_USAGE_SOURCE_KEY,
@@ -476,7 +476,7 @@ async function processCodexUsageSnapshot(
     });
     if (bankedResult.observed) {
       try {
-        revalidateTag("radar-data");
+        await invalidateRadarCache("codex-usage");
       } catch {
         console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
       }
@@ -709,7 +709,7 @@ async function processCodexUsageSnapshot(
     estimateObserved,
   });
   try {
-    revalidateTag("radar-data");
+    await invalidateRadarCache("codex-usage");
   } catch {
     console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
   }

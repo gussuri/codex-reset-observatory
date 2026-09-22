@@ -167,7 +167,7 @@ function buildBTrainingProjectionSelectFields() {
 export const NEXT_GENERATION_TRAINING_SELECT_FIELDS = buildTrainingProjectionSelectFields();
 export const NEXT_GENERATION_B_TRAINING_SELECT_FIELDS = buildBTrainingProjectionSelectFields();
 
-function getLoggedHourQueryStart() {
+export function getLoggedHourQueryStart() {
   const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
   return new Date(Math.floor(freezeTime / HOUR_MS) * HOUR_MS).toISOString();
 }

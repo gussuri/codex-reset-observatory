@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchCurrentRadarDataWithTrainingState } from "@/lib/radarFetch";
+import { invalidateRadarCache } from "@/lib/radar/cacheInvalidation";
 import { getRadarViewModel } from "@/lib/radar";
 import {
   getActiveOfficialNotice,
@@ -164,6 +165,16 @@ async function handleLogRequest(request: NextRequest) {
     } catch (error) {
       console.error("Supabase prediction history save failed", error);
       return NextResponse.json({ error: "Database save failed" }, { status: 500 });
+    }
+
+    if (savedRecord.action === "inserted") {
+      try {
+        await invalidateRadarCache("prediction-history");
+      } catch {
+        console.warn("Prediction history cache invalidation skipped", {
+          reason: "runtime_context",
+        });
+      }
     }
 
     return NextResponse.json({

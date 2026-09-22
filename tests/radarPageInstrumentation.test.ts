@@ -39,7 +39,7 @@ test("radar page cache compute logs every phase without duplicating the work", (
   assert.equal((source.match(/toPublicRadarSnapshot\(/g) ?? []).length, 1);
   assert.equal((source.match(/getRandomResetHeatmapEventTimes\(/g) ?? []).length, 1);
   assert.match(source, /revalidate: RADAR_PAGE_CACHE_TTL_SECONDS/);
-  assert.match(source, /tags: \["radar-data"\]/);
+  assert.match(source, /tags: \[RADAR_CACHE_TAGS\.core\]/);
 });
 
 test("all six page functions log only their page-data fetch timing", () => {

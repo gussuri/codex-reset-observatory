@@ -55,13 +55,20 @@ import {
 } from "@/lib/radar/publishedProbability";
 import {
   getNextGenerationRandomTargetEvents,
+  getLoggedHourQueryStart,
   loadNextGenerationBTrainingState,
   loadNextGenerationTrainingState,
+  parseNextGenerationTrainingProjectionRows,
+  NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
+  NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+  type NextGenerationTrainingProjectionRow,
   type NextGenerationTrainingState,
 } from "@/lib/radar/nextGenerationTraining";
 import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
 import {
+  RADAR_CACHE_TAGS,
+  RADAR_CORE_DEPENDENCY_TAGS,
   getRadarCacheKeyParts,
 } from "@/lib/radar/cacheGeneration";
 import {
@@ -77,6 +84,9 @@ import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNa
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
+export const TIBO_HISTORY_CACHE_TTL_SECONDS = 15 * 60;
+export const RESET_DISPLAY_NAME_CACHE_TTL_SECONDS = 60 * 60;
+export const PREDICTION_HISTORY_CACHE_TTL_SECONDS = 15 * 60;
 export const PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS = 10 * 60;
 export const PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS = 60 * 60;
 export const RADAR_PAGE_CACHE_TTL_SECONDS = 60 * 60;
@@ -428,13 +438,13 @@ async function fetchRawTiboSignals(expiryBoundaryIso: string): Promise<DataFetch
   }
 }
 
-// 2. Module-scoped unstable_cache wrapper (60s TTL, tagged "radar-data")
+// 2. Module-scoped unstable_cache wrapper (60s TTL, scoped to active Tibo data)
 const getCachedTiboSignals = unstable_cache(
   fetchRawTiboSignals,
   getRadarCacheKeyParts("tibo-signals-cache-v2"),
   {
     revalidate: 60,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.tiboActive],
   }
 );
 
@@ -498,7 +508,7 @@ const getCachedTimedTiboSignals = unstable_cache(
   getRadarCacheKeyParts("tibo-timed-signals-cache-v1"),
   {
     revalidate: 60,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.tiboTimed],
   },
 );
 
@@ -876,8 +886,8 @@ const getCachedTiboHistorySignals = unstable_cache(
   () => fetchRawTiboHistorySignals(),
   getRadarCacheKeyParts("tibo-history-signals-cache-v4"),
   {
-    revalidate: 60,
-    tags: ["radar-data"],
+    revalidate: TIBO_HISTORY_CACHE_TTL_SECONDS,
+    tags: [RADAR_CACHE_TAGS.tiboHistory],
   },
 );
 
@@ -947,7 +957,7 @@ const getCachedRegularResetEvents = unstable_cache(
   ["regular-reset-events-cache-v1"],
   {
     revalidate: 60,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.regularResetEvents],
   },
 );
 
@@ -992,7 +1002,7 @@ const getCachedCodexRecoveryObservations = unstable_cache(
   ["codex-recovery-observations-cache-v2"],
   {
     revalidate: 30,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.recoveryObservations],
   },
 );
 
@@ -1037,7 +1047,7 @@ const getCachedResetExecutionEstimates = unstable_cache(
   ["reset-execution-estimates-cache-v2"],
   {
     revalidate: 30,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.resetExecutionEstimates],
   },
 );
 
@@ -1079,7 +1089,7 @@ const getCachedTiboFormalAdoptions = unstable_cache(
   ["tibo-formal-adoptions-cache-v1"],
   {
     revalidate: 30,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.formalAdoptions],
   },
 );
 
@@ -1087,8 +1097,8 @@ const getCachedResetDisplayNames = unstable_cache(
   () => fetchResetDisplayNamesResult("public"),
   ["reset-display-names-cache-v2"],
   {
-    revalidate: 60,
-    tags: ["radar-data"],
+    revalidate: RESET_DISPLAY_NAME_CACHE_TTL_SECONDS,
+    tags: [RADAR_CACHE_TAGS.displayNames],
   },
 );
 
@@ -1322,10 +1332,89 @@ function createEmptyNextGenerationTrainingState(
   };
 }
 
+type PredictionHistoryProjectionMode = "public" | "full";
+
+type PredictionHistoryProjectionRead = {
+  rows: Array<NextGenerationTrainingProjectionRow>;
+  status: "ok" | "error";
+  reason: string | null;
+};
+
+async function fetchRawPredictionHistoryProjection(
+  mode: PredictionHistoryProjectionMode,
+): Promise<PredictionHistoryProjectionRead> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return { rows: [], status: "error", reason: "credentials unavailable" };
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const selectFields = mode === "public"
+      ? NEXT_GENERATION_B_TRAINING_SELECT_FIELDS
+      : NEXT_GENERATION_TRAINING_SELECT_FIELDS;
+    const result = await supabase
+      .from("prediction_history")
+      .select(selectFields)
+      .gte("logged_hour", getLoggedHourQueryStart())
+      .lt("logged_hour", new Date().toISOString())
+      .order("logged_hour", { ascending: true })
+      .limit(10_000);
+    if (result?.error) {
+      return { rows: [], status: "error", reason: "prediction_history query failed" };
+    }
+    return {
+      rows: (result?.data ?? []) as unknown as Array<NextGenerationTrainingProjectionRow>,
+      status: "ok",
+      reason: null,
+    };
+  } catch {
+    return { rows: [], status: "error", reason: "prediction_history query failed" };
+  }
+}
+
+const getCachedPredictionHistoryProjection = unstable_cache(
+  async (mode: PredictionHistoryProjectionMode): Promise<PredictionHistoryProjectionRead> => {
+    const startedAt = performance.now();
+    const result = await fetchRawPredictionHistoryProjection(mode);
+    console.info(JSON.stringify({
+      event: "prediction_history_projection_fetch",
+      cachePath: "prediction-history",
+      mode,
+      rowCount: result.rows.length,
+      durationMs: performance.now() - startedAt,
+      dataHealth: result.status,
+    }));
+    return result;
+  },
+  getRadarCacheKeyParts("prediction-history-projection-cache-v1"),
+  {
+    revalidate: PREDICTION_HISTORY_CACHE_TTL_SECONDS,
+    tags: [RADAR_CACHE_TAGS.predictionHistory],
+  },
+);
+
+function filterPredictionHistoryRowsBefore(
+  rows: Array<NextGenerationTrainingProjectionRow>,
+  calculationNow: Date,
+) {
+  const asOfTime = calculationNow.getTime();
+  return rows.filter((row) => {
+    const loggedHour = typeof row.logged_hour === "string"
+      ? Date.parse(row.logged_hour)
+      : Number.NaN;
+    return Number.isFinite(asOfTime) && Number.isFinite(loggedHour) && loggedHour < asOfTime;
+  });
+}
+
 async function readNextGenerationTrainingState(
   data: RadarData,
   calculationNow: Date,
-  mode: "public" | "full" = "full",
+  mode: PredictionHistoryProjectionMode = "full",
+  bypassCache = false,
 ): Promise<NextGenerationTrainingState> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1334,6 +1423,22 @@ async function readNextGenerationTrainingState(
   }
 
   try {
+    const randomEvents = getNextGenerationRandomTargetEvents(data, calculationNow);
+    if (!bypassCache) {
+      const projection = await getCachedPredictionHistoryProjection(mode);
+      if (projection.status === "error") {
+        return createEmptyNextGenerationTrainingState("error", projection.reason);
+      }
+      const parsed = parseNextGenerationTrainingProjectionRows(
+        filterPredictionHistoryRowsBefore(projection.rows, calculationNow),
+        {
+          asOf: calculationNow,
+          randomEvents,
+        },
+      );
+      return { ...parsed, status: "ok", reason: null };
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
@@ -1342,7 +1447,7 @@ async function readNextGenerationTrainingState(
       : loadNextGenerationTrainingState;
     const trainingState = await loadTrainingState(supabase, {
       asOf: calculationNow,
-      randomEvents: getNextGenerationRandomTargetEvents(data, calculationNow),
+      randomEvents,
     });
     return trainingState;
   } catch {
@@ -1431,7 +1536,12 @@ export async function fetchCurrentRadarData(
 ): Promise<RadarData> {
   const calculationNow = options.calculationNow ?? new Date();
   const data = await fetchCurrentRadarDataBase(options, calculationNow);
-  const trainingState = await readNextGenerationTrainingState(data, calculationNow, "public");
+  const trainingState = await readNextGenerationTrainingState(
+    data,
+    calculationNow,
+    "public",
+    options.bypassCache === true,
+  );
   return attachPublicBTrainingState(data, trainingState);
 }
 
@@ -1444,7 +1554,12 @@ export async function fetchCurrentRadarDataWithTrainingState(
 ): Promise<{ data: RadarData; trainingState: NextGenerationTrainingState }> {
   const calculationNow = options.calculationNow ?? new Date();
   const data = await fetchCurrentRadarDataBase(options, calculationNow);
-  const trainingState = await readNextGenerationTrainingState(data, calculationNow);
+  const trainingState = await readNextGenerationTrainingState(
+    data,
+    calculationNow,
+    "full",
+    options.bypassCache === true,
+  );
   return {
     data: attachPublicBTrainingState(data, trainingState),
     trainingState,
@@ -1620,7 +1735,7 @@ const getCachedRadarCore = unstable_cache(
   getRadarCacheKeyParts("radar-core-cache-v6"),
   {
     revalidate: RADAR_CORE_CACHE_TTL_SECONDS,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.core, ...RADAR_CORE_DEPENDENCY_TAGS],
   },
 );
 
@@ -1650,7 +1765,7 @@ const getCachedPublicRadarSnapshotBundle = unstable_cache(
   getRadarCacheKeyParts("radar-public-snapshot-bundle-cache-v5"),
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.core],
   },
 );
 
@@ -1668,7 +1783,7 @@ const getCachedRandomResetHeatmapEventTimes = unstable_cache(
   getRadarCacheKeyParts("radar-random-reset-heatmap-cache-v1"),
   {
     revalidate: PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.core],
   },
 );
 
@@ -1738,7 +1853,7 @@ const getCachedRadarPageData = unstable_cache(
   getRadarCacheKeyParts("radar-page-cache-v1"),
   {
     revalidate: RADAR_PAGE_CACHE_TTL_SECONDS,
-    tags: ["radar-data"],
+    tags: [RADAR_CACHE_TAGS.core],
   },
 );
 

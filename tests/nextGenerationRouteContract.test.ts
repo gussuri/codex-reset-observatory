@@ -30,7 +30,8 @@ test("logging route receives one shared training state for public and shadow for
     radarFetch.indexOf("type SharedRadarCore"),
   );
   assert.equal(
-    (combinedFetchSource.match(/readNextGenerationTrainingState\(data, calculationNow\)/g) ?? []).length,
+    (combinedFetchSource.match(/readNextGenerationTrainingState\(/g) ?? []).length,
     1,
   );
+  assert.match(combinedFetchSource, /options\.bypassCache === true/);
 });
