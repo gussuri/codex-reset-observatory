@@ -121,6 +121,17 @@ pnpm dev
 
 The development server normally starts at `http://localhost:3000`. To try dynamic monitoring and classification, configure the Supabase, webhook, and Gemini environment variables outside the repository. See [Operations and recovery runbook (Japanese)](docs/operations/tibo-monitor-runbook.md) and [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md).
 
+## ビルド費用を抑える開発・公開方針
+
+通常の修正はローカルで必要なテスト・lint・型確認・ビルドを完了し、関連する変更をまとめてpushします。細かい途中経過ごとのpushや、理由のない再デプロイを避けます。障害修正・誤情報の訂正・速報対応は遅らせません。
+
+- 作業ブランチへのpushでPreview、mainへの反映でProductionのビルドが発生するため、両方を含めて公開回数を管理します。Previewは画面・連携・実行環境の確認が必要な変更で活用します。
+- README・ドキュメント・テスト・オフライン評価だけの変更では、公開成果物やビルドへの依存がないことを確認し、不要なデプロイを省く対象とします。ファイル名だけで一律に除外しません。
+- 文書のみの保存依頼では、差分確認までを行い、その保存のためだけに自動push・再デプロイしません。ユーザーがpush・公開を明示した場合はその指示を優先します。
+- 自動ビルドの除外条件やPreviewの設定は、この方針を記載しただけでは変更されません。実際に設定する際は、本番コード・依存関係・設定の変更が正しくデプロイされることを確認します。
+- コスト削減を理由に必要な品質確認を省略しません。APIのキャッシュは既存の共有処理・同時実行制御を確認し、実測した重複計算や不要なDB取得から改善します。速報の鮮度を保ちます。
+- Vercel UsageでビルドCPU時間、実行時CPU・メモリ、転送量を別々に確認します。ビルドCPU時間は経過時間と異なり、付属クレジット消費額は追加請求額とは限りません。Supabaseの転送量・料金も別途確認します。
+
 ## Detailed documentation
 
 - [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md)
