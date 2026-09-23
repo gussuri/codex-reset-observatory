@@ -32,6 +32,7 @@ import {
   shouldDeferFormalTiboReset,
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
+import { getCodexOperationalExpiryAt } from "@/lib/radar/codexOperationalStatus";
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
@@ -645,6 +646,14 @@ export async function POST(req: NextRequest) {
       ai_model: aiResult?.model || null,
       ai_classification_status: aiResult?.status || "skipped",
       ai_classified_at: aiResult?.classifiedAt || null,
+      codex_operational_status: aiResult?.codexOperationalStatus ?? null,
+      codex_operational_confidence: aiResult?.codexOperationalConfidence ?? null,
+      codex_operational_evidence_quote: aiResult?.codexOperationalEvidenceQuote ?? null,
+      codex_operational_reason_ja: aiResult?.codexOperationalReasonJa ?? null,
+      codex_operational_expires_at: getCodexOperationalExpiryAt(
+        aiResult?.codexOperationalStatus ?? null,
+        createdDate.toISOString(),
+      ),
       classification_source: selectedClassification.classificationSource,
     };
 
@@ -655,7 +664,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -853,6 +862,11 @@ export async function POST(req: NextRequest) {
         expected_end_at: _expectedEndAt,
         temporal_resolution_status: _temporalResolutionStatus,
         temporal_resolution_version: _temporalResolutionVersion,
+        codex_operational_status: _codexOperationalStatus,
+        codex_operational_confidence: _codexOperationalConfidence,
+        codex_operational_evidence_quote: _codexOperationalEvidenceQuote,
+        codex_operational_reason_ja: _codexOperationalReasonJa,
+        codex_operational_expires_at: _codexOperationalExpiresAt,
         quote_context_text: _quoteContextText,
         quote_tweet_url: _quoteTweetUrl,
         quote_author_handle: _quoteAuthorHandle,

@@ -29,6 +29,11 @@ const KNOWN_OPTIONAL_TIBO_COLUMNS = [
   "edit_history_tweet_ids",
   "edit_version",
   "edit_metadata_source",
+  "codex_operational_status",
+  "codex_operational_confidence",
+  "codex_operational_evidence_quote",
+  "codex_operational_reason_ja",
+  "codex_operational_expires_at",
 ] as const;
 
 test("accepts every known optional Tibo column family for schema-missing errors", () => {

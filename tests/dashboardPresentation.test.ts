@@ -1144,10 +1144,10 @@ test("keeps the normal dashboard focused on the current outlook", () => {
 
   const probabilityIndex = html.indexOf("24時間以内");
   const noticeIndex = html.indexOf("公式リセット予告");
-  const incidentIndex = html.indexOf("Codex関連障害");
+  const incidentIndex = html.indexOf("Codex関連状況");
   const elapsedIndex = html.indexOf(
     "前回のランダムリセットから",
-    html.indexOf("Codex関連障害"),
+    html.indexOf("Codex関連状況"),
   );
   const teaserIndex = html.indexOf("リセット匂わせ投稿");
   const outlookIndex = html.indexOf("現在の見込み");
@@ -1159,7 +1159,7 @@ test("keeps the normal dashboard focused on the current outlook", () => {
   assert.ok(teaserIndex < incidentIndex && incidentIndex < elapsedIndex && elapsedIndex < outlookIndex);
   assert.ok(outlookIndex >= 0);
   assert.match(html, /公式リセット予告[\s\S]*なし/);
-  assert.match(html, /Codex関連障害[\s\S]*なし/);
+  assert.match(html, /Codex関連状況[\s\S]*なし/);
   assert.match(html, /前回のランダムリセットから[\s\S]*2日20時間/);
   assert.match(html, /リセット匂わせ投稿[\s\S]*なし/);
   assert.match(html, /現在の見込み/);
@@ -1241,7 +1241,7 @@ test("dashboard elapsed indicator uses the latest random reset across regular bo
   ];
 
   for (const item of cases) {
-    const labelIndex = item.html.indexOf(item.label, item.html.indexOf("Codex関連障害"));
+    const labelIndex = item.html.indexOf(item.label, item.html.indexOf("Codex関連状況"));
     assert.ok(labelIndex >= 0, item.name);
     assert.match(item.html.slice(labelIndex, labelIndex + 240), new RegExp(item.elapsed), item.name);
   }
@@ -1276,7 +1276,7 @@ test("keeps probability cards compact while showing the full random reset label"
 
   const labelIndex = html.indexOf(
     "前回のランダムリセットから",
-    html.indexOf("Codex関連障害"),
+    html.indexOf("Codex関連状況"),
   );
   assert.ok(labelIndex >= 0);
   const statusLabel = html.slice(html.lastIndexOf("<dt", labelIndex), html.indexOf("</dt>", labelIndex) + 5);
@@ -1479,7 +1479,7 @@ test("observation status row reflects an active Codex incident without changing 
     React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
   );
 
-  assert.match(html, /Codex incidents[\s\S]*Active/);
+  assert.match(html, /Codex status[\s\S]*Incident active/);
   assert.match(html, /A Codex-related incident has been confirmed\. We are watching for a possible reset connected with recovery work\./);
 });
 
@@ -1508,7 +1508,36 @@ test("uses the explicit public Codex status instead of parsing localized reasoni
   );
 
   assert.equal(snapshot.viewModel.codexOperationalStatus, "active");
-  assert.match(html, /Codex incidents[\s\S]*Active/);
+  assert.match(html, /Codex status[\s\S]*Incident active/);
+});
+
+test("Tibo operational status is displayed independently from probability environment", () => {
+  const calculationNow = new Date("2026-09-23T12:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+  const baseline = toPublicRadarSnapshot(data, "en", { calculationNow });
+  data.recent_tibo_signals = [
+    {
+      tweet_id: "operational-investigating",
+      signal_type: "irrelevant",
+      text: "We are investigating worse cache hit rates.",
+      tweet_created_at: "2026-09-23T10:00:00.000Z",
+      verification_status: "auto_unverified",
+      codex_operational_status: "investigating",
+      codex_operational_confidence: 0.93,
+      codex_operational_evidence_quote: "investigating worse cache hit rates",
+      codex_operational_expires_at: "2026-09-23T22:00:00.000Z",
+    },
+  ];
+
+  const snapshot = toPublicRadarSnapshot(data, "en", { calculationNow });
+  const html = renderToStaticMarkup(
+    React.createElement(RadarDashboard, { initialData: snapshot, locale: "en" }),
+  );
+
+  assert.equal(snapshot.viewModel.codexOperationalStatus, "investigating");
+  assert.equal(snapshot.viewModel.probability24h, baseline.viewModel.probability24h);
+  assert.equal(data.codex_environment?.codex_operational_status, "none");
+  assert.match(html, /Codex status[\s\S]*Investigating/);
 });
 
 test("observation status row reflects an active reset teaser from the latest Tibo activity", () => {
@@ -1809,9 +1838,9 @@ test("prioritizes a normal official notice over an ongoing BANKED informational 
 
 test("keeps dashboard labels localized without extra direct-answer links", () => {
   const cases = [
-    { locale: "ja" as const, notice: "公式リセット予告", noticeValue: "なし", incident: "Codex関連障害", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
-    { locale: "en" as const, notice: "Official reset notice", noticeValue: "None", incident: "Codex incidents", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
-    { locale: "zh" as const, notice: "官方重置预告", noticeValue: "无", incident: "Codex 相关故障", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
+    { locale: "ja" as const, notice: "公式リセット予告", noticeValue: "なし", incident: "Codex関連状況", description: "Codexのリセット予測、最新情報、過去の履歴をまとめて確認できます。", directAnswer: "今日、全体リセットはありましたか？" },
+    { locale: "en" as const, notice: "Official reset notice", noticeValue: "None", incident: "Codex status", description: "Check Codex reset forecasts, official updates, and recent reset history in one place.", directAnswer: "Did Codex reset today?" },
+    { locale: "zh" as const, notice: "官方重置预告", noticeValue: "无", incident: "Codex 运行状态", description: "集中查看 Codex 的重置预测、最新信息和近期重置记录。", directAnswer: "今天有全局重置吗？" },
   ];
 
   for (const item of cases) {

@@ -56,6 +56,7 @@ import {
   resolveLocalizedText,
 } from "./radar/i18n";
 import { isOverdueNoticePending } from "./radar/tiboTemporal";
+import { resolveCodexOperationalStatusForDisplay } from "./radar/codexOperationalStatus";
 import {
   probabilityToPercent,
   normalizeProbability,
@@ -522,8 +523,14 @@ export function getRadarViewModel(
       displayProbabilityCalculation,
       canonicalHistoryContext,
     ),
-    codexOperationalStatus:
-      source?.codex_environment?.codex_operational_status ?? "none",
+    codexOperationalStatus: resolveCodexOperationalStatusForDisplay(
+      source?.codex_environment?.codex_operational_status,
+      [
+        ...(source?.recent_tibo_signals ?? []),
+        ...(source?.active_tibo_signals ?? []),
+      ],
+      calculationNow,
+    ),
     latestWindow: {
       kind: isRegularResetWindow(latestWindow) ? "regular" : "observed",
       recordKind: latestWindow ? getHistoryRecordKind(latestWindow) : undefined,

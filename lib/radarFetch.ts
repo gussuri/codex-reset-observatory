@@ -154,6 +154,11 @@ export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "temporal_confidence",
   "temporal_resolution_source",
   "secondary_signal",
+  "codex_operational_status",
+  "codex_operational_confidence",
+  "codex_operational_evidence_quote",
+  "codex_operational_reason_ja",
+  "codex_operational_expires_at",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
 
@@ -1245,6 +1250,11 @@ async function getTiboSignalBundle(
     expected_end_at: signal.expected_end_at ?? null,
     temporal_resolution_status: signal.temporal_resolution_status ?? null,
     temporal_resolution_version: signal.temporal_resolution_version ?? null,
+    codex_operational_status: signal.codex_operational_status ?? null,
+    codex_operational_confidence: signal.codex_operational_confidence ?? null,
+    codex_operational_evidence_quote: signal.codex_operational_evidence_quote ?? null,
+    codex_operational_reason_ja: signal.codex_operational_reason_ja ?? null,
+    codex_operational_expires_at: signal.codex_operational_expires_at ?? null,
     is_reply: signal.is_reply ?? undefined,
     reply_to_handles: signal.reply_to_handles ?? null,
     reply_context_text: signal.reply_context_text ?? null,

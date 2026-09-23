@@ -153,9 +153,7 @@ Japanese field label: `Codex関連状況`.
 
 New posts use the new Gemini fields immediately after deployment.
 
-To avoid waiting for the next Tibo post, perform a one-time reclassification/backfill only for recent Tibo rows whose `tweet_created_at` is within the previous 12 hours at rollout time. Use the same operational classifier semantics and store the same audit fields. Do not backfill older history because this feature is display-only and does not require historical training data.
-
-The current cache-hit-rate investigation post should therefore become eligible for `investigating` if it is still inside its 12-hour window when rollout occurs.
+Do not backfill historical Tibo rows. The original cache-hit-rate investigation example was posted on 2026-08-22 and its twelve-hour display window has expired before the current rollout. Only new webhook classifications become eligible after the schema migration is applied.
 
 ## Failure handling
 

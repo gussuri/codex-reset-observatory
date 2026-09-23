@@ -25,6 +25,7 @@ import {
   TIBO_HISTORY_PAGE_SIZE,
   TIBO_HISTORY_SELECT_FIELDS,
   TIBO_RECENT_MAX_ROWS,
+  TIBO_RECENT_SELECT_FIELDS,
   TIMED_TIBO_SIGNAL_MAX_ROWS,
   TIMED_TIBO_SIGNAL_SELECT_FIELDS,
   getTimedTiboLimitTelemetry,
@@ -533,6 +534,16 @@ test("Tibo radar queries use explicit field lists instead of wildcard reads", ()
   assert.ok(TIMED_TIBO_SIGNAL_SELECT_FIELDS.split(",").length > 1);
   assert.doesNotMatch(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)id(,|$)/);
   assert.match(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)tweet_id(,|$)/);
+  for (const column of [
+    "codex_operational_status",
+    "codex_operational_confidence",
+    "codex_operational_evidence_quote",
+    "codex_operational_reason_ja",
+    "codex_operational_expires_at",
+  ]) {
+    assert.match(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, new RegExp(`(^|,)${column}(,|$)`));
+    assert.match(TIBO_RECENT_SELECT_FIELDS, new RegExp(`(^|,)${column}(,|$)`));
+  }
   assert.match(TIBO_HISTORY_SELECT_FIELDS, /(^|,)is_reply(,|$)/);
   assert.doesNotMatch(TIMED_TIBO_SIGNAL_SELECT_FIELDS, /(^|,)(is_secondary_future_signal|parent_tweet_id|primary_event_at)(,|$)/);
 });

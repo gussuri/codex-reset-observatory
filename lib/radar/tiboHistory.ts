@@ -199,6 +199,11 @@ export type FormalTiboResetSignal = TiboEditIdentityFields & {
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: "profile" | "with_replies" | null;
+  codex_operational_status?: "none" | "investigating" | "active" | "recovered" | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
   related_notice?: TiboNoticeSignal | null;
   related_notices?: TiboNoticeSignal[];
 };

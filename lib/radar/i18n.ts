@@ -118,9 +118,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "无",
   },
   codexIncidentStatus: {
-    ja: "Codex関連障害",
-    en: "Codex incidents",
-    zh: "Codex 相关故障",
+    ja: "Codex関連状況",
+    en: "Codex status",
+    zh: "Codex 运行状态",
   },
   noCodexIncident: {
     ja: "なし",
@@ -128,14 +128,24 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "无",
   },
   activeCodexIncident: {
-    ja: "あり",
-    en: "Active",
-    zh: "有",
+    ja: "障害発生中",
+    en: "Incident active",
+    zh: "故障发生中",
+  },
+  investigatingCodexIncident: {
+    ja: "問題を調査中",
+    en: "Investigating",
+    zh: "正在调查问题",
   },
   recoveredCodexIncident: {
     ja: "復旧直後",
     en: "Recently recovered",
     zh: "刚刚恢复",
+  },
+  unknownCodexIncident: {
+    ja: "不明",
+    en: "Unknown",
+    zh: "未知",
   },
   outlookOfficialNotice: {
     ja: "公式のリセット予告が確認されています。予告内容を踏まえ、リセットの見込みが高まっています。",

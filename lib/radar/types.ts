@@ -25,7 +25,7 @@ import type { TiboFormalAdoptionRecord } from "./tiboFormalAdoptionStore";
 
 export type Locale = "ja" | "en" | "zh";
 
-export type CodexOperationalStatus = "active" | "recovered" | "none" | "unknown";
+export type CodexOperationalStatus = "active" | "investigating" | "recovered" | "none" | "unknown";
 
 export type LocalizedString =
   | string
@@ -237,6 +237,11 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
+  codex_operational_status?: "none" | "investigating" | "active" | "recovered" | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
   /** Read-side-only marker for an ambiguous UI teaser fallback; never persisted. */
   ui_teaser_fallback?: boolean;
 };

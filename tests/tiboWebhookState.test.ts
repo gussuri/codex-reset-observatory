@@ -193,3 +193,77 @@ test("reviewed classification does not propagate to a different tweet id", () =>
   assert.equal(result.teaser_strength, "strong");
   assert.equal(result.verification_status, "auto_unverified");
 });
+
+test("webhook retries preserve a non-none operational assessment when the retry has none", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    text: "We are investigating cache hit rates.",
+    codex_operational_status: "none" as const,
+    codex_operational_confidence: 0.92,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: null,
+    codex_operational_expires_at: null,
+  }, {
+    tweet_id: payload().tweet_id,
+    text: "We are investigating cache hit rates.",
+    verification_status: "auto_unverified",
+    codex_operational_status: "investigating",
+    codex_operational_confidence: 0.88,
+    codex_operational_evidence_quote: "investigating cache hit rates",
+    codex_operational_reason_ja: "キャッシュヒット率を調査中です。",
+    codex_operational_expires_at: "2026-09-23T12:00:00.000Z",
+  }, receivedAt);
+
+  assert.equal(result.codex_operational_status, "investigating");
+  assert.equal(result.codex_operational_confidence, 0.88);
+  assert.equal(result.codex_operational_evidence_quote, "investigating cache hit rates");
+  assert.equal(result.codex_operational_expires_at, "2026-09-23T12:00:00.000Z");
+});
+
+test("a stronger non-none operational reassessment replaces the previous same-tweet result", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    text: "The cache issue is back to normal now.",
+    codex_operational_status: "recovered" as const,
+    codex_operational_confidence: 0.96,
+    codex_operational_evidence_quote: "back to normal",
+    codex_operational_reason_ja: "復旧しました。",
+    codex_operational_expires_at: "2026-09-23T13:00:00.000Z",
+  }, {
+    tweet_id: payload().tweet_id,
+    text: "We are investigating cache hit rates.",
+    verification_status: "auto_unverified",
+    codex_operational_status: "investigating",
+    codex_operational_confidence: 0.88,
+    codex_operational_evidence_quote: "investigating cache hit rates",
+    codex_operational_reason_ja: "キャッシュヒット率を調査中です。",
+    codex_operational_expires_at: "2026-09-23T12:00:00.000Z",
+  }, receivedAt);
+
+  assert.equal(result.codex_operational_status, "recovered");
+  assert.equal(result.codex_operational_evidence_quote, "back to normal");
+});
+
+test("does not preserve operational evidence after the same tweet text changes", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    text: "The cache issue is fixed now.",
+    codex_operational_status: null,
+    codex_operational_confidence: null,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: null,
+    codex_operational_expires_at: null,
+  }, {
+    tweet_id: payload().tweet_id,
+    text: "We are investigating cache hit rates.",
+    verification_status: "auto_unverified",
+    codex_operational_status: "investigating",
+    codex_operational_confidence: 0.88,
+    codex_operational_evidence_quote: "investigating cache hit rates",
+    codex_operational_reason_ja: "キャッシュヒット率を調査中です。",
+    codex_operational_expires_at: "2026-09-23T12:00:00.000Z",
+  }, receivedAt);
+
+  assert.equal(result.codex_operational_status, null);
+  assert.equal(result.codex_operational_evidence_quote, null);
+});

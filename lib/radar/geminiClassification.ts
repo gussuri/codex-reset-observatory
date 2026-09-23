@@ -10,6 +10,7 @@ import {
   type TeaserStrength,
 } from "./teaserStrength";
 import type { TiboSecondarySignalType } from "./tiboSecondarySignal";
+import { parseCodexOperationalAssessment } from "./codexOperationalStatus";
 import {
   parseGeminiTemporalSemantics,
   parseTiboTemporalSemantics,
@@ -119,6 +120,10 @@ export type GeminiClassificationOutput = {
   rangeKind?: TiboTemporalSemantics["rangeKind"];
   explicitTimezone?: string | null;
   temporalConfidence?: number | null;
+  codexOperationalStatus?: "none" | "investigating" | "active" | "recovered" | null;
+  codexOperationalConfidence?: number | null;
+  codexOperationalEvidenceQuote?: string | null;
+  codexOperationalReasonJa?: string | null;
   model: string | null;
   status: GeminiClassificationStatus;
   classifiedAt: string | null;
@@ -312,6 +317,17 @@ resetTypeJa is a reason candidate, not a reset cycle classification. Use only
 "ご祝儀リセット" or "詫びリセット" when the post provides evidence for one of them;
 otherwise return null. Do not return "定期リセット" or "ランダムリセット" here.
 
+Also classify an independent, display-only Codex service operational status. This axis must not
+change signalType, teaserStrength, reset history, or any probability-related meaning.
+- Use "investigating" when Tibo's own text says a current Codex service problem is being investigated.
+- Use "active" only for a current user-impacting Codex outage or degradation, not merely because an issue is under investigation.
+- Use "recovered" when Tibo's own text says a current Codex service issue has been fixed or returned to normal.
+- Use "none" for product news, ordinary rate-limit discussion, historical incidents, or no current Codex service problem.
+- Use null if the status cannot be determined reliably.
+Quoted or parent text is context only and must never be treated as Tibo's assertion. For a non-none status,
+codexOperationalEvidenceQuote must be an exact contiguous substring of AUTHOR TEXT. Do not infer status from
+Codex usage-limit resets, BANKED distributions, or reset execution alone.
+
 Respond ONLY with a JSON object strictly matching this schema:
 {
   "signalType": "reset_executed" | "official_notice" | "teaser" | "irrelevant",
@@ -358,7 +374,11 @@ Respond ONLY with a JSON object strictly matching this schema:
   "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
   "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
   "explicitTimezone": string | null,
-  "temporalConfidence": number (between 0.0 and 1.0)
+  "temporalConfidence": number (between 0.0 and 1.0),
+  "codexOperationalStatus": "none" | "investigating" | "active" | "recovered" | null,
+  "codexOperationalConfidence": number | null,
+  "codexOperationalEvidenceQuote": string | null,
+  "codexOperationalReasonJa": string | null
 }
 `;
 
@@ -831,6 +851,10 @@ export async function classifyWithGemini(
     rangeKind: null,
     explicitTimezone: null,
     temporalConfidence: null,
+    codexOperationalStatus: null,
+    codexOperationalConfidence: null,
+    codexOperationalEvidenceQuote: null,
+    codexOperationalReasonJa: null,
     model: model || null,
     status,
     classifiedAt: status === "skipped" ? null : nowIso,
@@ -950,6 +974,7 @@ export async function classifyWithGemini(
     const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
     const resetTypeJa = normalizeGeminiResetType(parsed.resetTypeJa);
     const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
+    const codexOperationalAssessment = parseCodexOperationalAssessment(parsed, input.text);
     // Keep Gemini's validated fields as raw audit values. Effective temporal
     // semantics are resolved separately by the webhook route so deterministic
     // fallback data never gets written into ai_* columns.
@@ -983,6 +1008,10 @@ export async function classifyWithGemini(
       rangeKind: rawTemporalSemantics?.rangeKind ?? null,
       explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
       temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
+      codexOperationalStatus: codexOperationalAssessment.codex_operational_status,
+      codexOperationalConfidence: codexOperationalAssessment.codex_operational_confidence,
+      codexOperationalEvidenceQuote: codexOperationalAssessment.codex_operational_evidence_quote,
+      codexOperationalReasonJa: codexOperationalAssessment.codex_operational_reason_ja,
       model,
       status: "success",
       classifiedAt: nowIso,

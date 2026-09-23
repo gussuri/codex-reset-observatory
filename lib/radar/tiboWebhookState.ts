@@ -2,6 +2,7 @@ import type { TeaserStrength } from "./teaserStrength";
 import type { TiboSecondarySignal } from "./tiboSecondarySignal";
 
 import type { TiboVerificationStatus } from "./tiboHistory";
+import type { TiboCodexOperationalState } from "./codexOperationalStatus";
 import {
   mergeTiboEditIdentity,
   type TiboEditIdentityFields,
@@ -9,6 +10,7 @@ import {
 
 export type ExistingTiboWebhookState = TiboEditIdentityFields & {
   tweet_id?: string | null;
+  text?: string | null;
   detected_at?: string | null;
   verification_status?: TiboVerificationStatus | null;
   signal_type?: string | null;
@@ -21,10 +23,16 @@ export type ExistingTiboWebhookState = TiboEditIdentityFields & {
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: string | null;
+  codex_operational_status?: TiboCodexOperationalState | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
 };
 
 type TiboWebhookPayload = TiboEditIdentityFields & {
   tweet_id?: string;
+  text?: string | null;
   detected_at: string;
   verification_status: TiboVerificationStatus;
   signal_type?: string | null;
@@ -37,6 +45,11 @@ type TiboWebhookPayload = TiboEditIdentityFields & {
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_timeline?: string | null;
+  codex_operational_status?: TiboCodexOperationalState | null;
+  codex_operational_confidence?: number | null;
+  codex_operational_evidence_quote?: string | null;
+  codex_operational_reason_ja?: string | null;
+  codex_operational_expires_at?: string | null;
 };
 
 function keepExisting<T>(existing: T | undefined, incoming: T) {
@@ -54,6 +67,12 @@ function preserveSecondaryManualOverride(
   // previously reviewed secondary correction must still survive that pass.
   if (!incoming) return existing;
   return { ...incoming, manualOverride };
+}
+
+function isNonNoneOperationalStatus(
+  value: TiboCodexOperationalState | null | undefined,
+): value is Exclude<TiboCodexOperationalState, "none"> {
+  return value === "investigating" || value === "active" || value === "recovered";
 }
 
 export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
@@ -101,6 +120,24 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
       payload.secondary_signal,
       existingState?.secondary_signal,
     );
+  }
+
+  // The operational axis is independent from reset classification. Preserve a
+  // previously valid Tibo assertion when a retry has no stronger assessment.
+  if (
+    isNonNoneOperationalStatus(existingState?.codex_operational_status) &&
+    !isNonNoneOperationalStatus(preserved.codex_operational_status) &&
+    (
+      typeof preserved.text !== "string" ||
+      typeof existingState.codex_operational_evidence_quote !== "string" ||
+      preserved.text.includes(existingState.codex_operational_evidence_quote)
+    )
+  ) {
+    preserved.codex_operational_status = existingState.codex_operational_status;
+    preserved.codex_operational_confidence = existingState.codex_operational_confidence;
+    preserved.codex_operational_evidence_quote = existingState.codex_operational_evidence_quote;
+    preserved.codex_operational_reason_ja = existingState.codex_operational_reason_ja;
+    preserved.codex_operational_expires_at = existingState.codex_operational_expires_at;
   }
 
   const isReviewed = existingState?.verification_status === "confirmed" ||

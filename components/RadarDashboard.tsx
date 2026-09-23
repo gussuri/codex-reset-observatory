@@ -317,9 +317,10 @@ export function formatScheduledSourceDay(
 
 function getIncidentStatusLabel(status: CodexOperationalStatus, locale: Locale) {
   if (status === "active") return translateUI("activeCodexIncident", locale);
+  if (status === "investigating") return translateUI("investigatingCodexIncident", locale);
   if (status === "recovered") return translateUI("recoveredCodexIncident", locale);
   if (status === "none") return translateUI("noCodexIncident", locale);
-  return translateUI("unknownProbability", locale);
+  return translateUI("unknownCodexIncident", locale);
 }
 
 type ResetTeaserStatus = "strong" | "weak" | "none" | "unknown";
