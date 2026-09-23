@@ -12,11 +12,18 @@ import {
   type DisplayElapsedDiagnostics,
 } from "../lib/radar/probability";
 import { ELAPSED_RELATIVE_HAZARD_THRESHOLDS } from "../data/predictionWeights";
+import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "../lib/radar/recoveryBoundary";
+import { getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
+import { getRandomElapsedBoundaries } from "../lib/radar/randomElapsedProbability";
+import { buildRandomContinuousHazard, integrateRandomContinuousHazard } from "../lib/radar/randomContinuousProbability";
 import type { RadarData } from "../lib/radar/types";
+import { buildCanonicalResetHistoryContext } from "../lib/radar/tiboHistory";
+import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
+import { frozenSupportShapeSurvivalBoundaries } from "./fixtures/survivalConditionedHistory";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
@@ -864,6 +871,110 @@ test("formats 107h representative age matching user specification in all locales
     zh,
     "距离上次随机重置已过去4天11小时。",
   );
+});
+
+test("uses the selected Survival-Conditioned hazard for relative outlook levels", () => {
+  const boundaries = frozenSupportShapeSurvivalBoundaries();
+  const now = new Date("2026-10-10T00:00:00.000Z");
+  const latestBoundaryAt = Date.parse(boundaries.at(-1)!.resetAt);
+  const shiftMs = now.getTime() - 1.4 * 60 * 60 * 1000 - latestBoundaryAt;
+  const formalTiboResets = boundaries.map((boundary) => ({
+    tweet_id: boundary.id,
+    text: "Usage limits have been reset for all paid users.",
+    tweet_url: `https://x.com/thsottiaux/status/${boundary.id}`,
+    tweet_created_at: new Date(Date.parse(boundary.resetAt) + shiftMs).toISOString(),
+    signal_type: "reset_executed" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+  }));
+  const data = getLocalRadarData({ calculationNow: now, formalTiboResets });
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(data, {
+    defaultStaticHistory: [],
+  });
+  const calculationContext = { source: data, canonicalHistoryContext };
+  const view = getRadarViewModel(data, "ja", true, undefined, now, calculationContext);
+  const published = calculatePublishedProbability(
+    data,
+    {
+      now,
+      activeOfficialNotice: null,
+      regularResetExpectedAt: view.regularResetForecast.expectedAt,
+      canonicalHistoryContext,
+    },
+    { logFallback: false },
+  );
+
+  assert.equal(published.source, "survival-conditioned");
+  assert.ok(published.survivalConditioned);
+  const survivalResult = published.survivalConditioned;
+  const survivalRelative24 = -Math.log1p(-survivalResult.baseline.probability24h) /
+    (24 * survivalResult.hazard.longTermHazardPerHour);
+  const survivalRelative48 = -Math.log1p(-survivalResult.baseline.probability48h) /
+    (48 * survivalResult.hazard.longTermHazardPerHour);
+  const elapsedHours = survivalResult.survival.randomElapsedHours;
+  const legacyHazard = buildRandomContinuousHazard(
+    getRandomElapsedBoundaries(getRecoveryResetEvents(data, now, LOCAL_RESET_HISTORY, canonicalHistoryContext)),
+    now,
+  );
+  const legacyRelative24 = -Math.log1p(-integrateRandomContinuousHazard(legacyHazard, elapsedHours, 24)) /
+    (24 * legacyHazard.globalLambdaPerHour);
+  assert.equal(getRelativeHazardLevel(legacyRelative24), "medium");
+  assert.equal(getRelativeHazardLevel(survivalRelative24), "low");
+  const jaLevel = (relative: number) => {
+    const level = getRelativeHazardLevel(relative);
+    return level === "low" ? "低め" : level === "high" ? "高め" : "中程度";
+  };
+  const expectedTail = getRelativeHazardLevel(survivalRelative24) === getRelativeHazardLevel(survivalRelative48)
+    ? `24時間以内・48時間以内ともに${jaLevel(survivalRelative24)}です。`
+    : `24時間以内は${jaLevel(survivalRelative24)}、48時間以内は${jaLevel(survivalRelative48)}です。`;
+  assert.ok(view.displayReasoningSummary?.endsWith(expectedTail));
+  assert.equal(view.probability12h, published.probability12h);
+  assert.equal(view.probability24h, published.probability24h);
+  assert.equal(view.probability48h, published.probability48h);
+  assert.equal(view.probability72h, published.probability72h);
+});
+
+test("formats low 24h and medium 48h from the selected Survival hazard", () => {
+  const boundaries = frozenSupportShapeSurvivalBoundaries();
+  const now = new Date("2026-10-10T00:00:00.000Z");
+  const latestBoundaryAt = Date.parse(boundaries.at(-1)!.resetAt);
+  const shiftMs = now.getTime() - 26 * 60 * 60 * 1000 - latestBoundaryAt;
+  const formalTiboResets = boundaries.map((boundary) => ({
+    tweet_id: boundary.id,
+    text: "Usage limits have been reset for all paid users.",
+    tweet_url: `https://x.com/thsottiaux/status/${boundary.id}`,
+    tweet_created_at: new Date(Date.parse(boundary.resetAt) + shiftMs).toISOString(),
+    signal_type: "reset_executed" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+  }));
+  const data = getLocalRadarData({ calculationNow: now, formalTiboResets });
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(data, {
+    defaultStaticHistory: [],
+  });
+  const view = getRadarViewModel(data, "ja", true, undefined, now, {
+    source: data,
+    canonicalHistoryContext,
+  });
+  const published = calculatePublishedProbability(
+    data,
+    {
+      now,
+      activeOfficialNotice: null,
+      regularResetExpectedAt: view.regularResetForecast.expectedAt,
+      canonicalHistoryContext,
+    },
+    { logFallback: false },
+  );
+
+  assert.equal(published.source, "survival-conditioned");
+  assert.ok(published.survivalConditioned);
+  const { baseline, hazard } = published.survivalConditioned;
+  const relative24 = -Math.log1p(-baseline.probability24h) / (24 * hazard.longTermHazardPerHour);
+  const relative48 = -Math.log1p(-baseline.probability48h) / (48 * hazard.longTermHazardPerHour);
+  assert.ok(relative24 < 0.75);
+  assert.ok(relative48 >= 0.75 && relative48 <= 1.25);
+  assert.ok(view.displayReasoningSummary?.endsWith("24時間以内は低め、48時間以内は中程度です。"));
 });
 
 test("renders the neutral elapsed template across locales", () => {

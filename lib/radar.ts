@@ -107,7 +107,11 @@ import {
   integrateRandomContinuousHazard,
 } from "./radar/randomContinuousProbability";
 import { getRandomElapsedBoundaries } from "./radar/randomElapsedProbability";
-import { calculatePublishedProbability } from "./radar/publishedProbability";
+import {
+  calculatePublishedProbability,
+  type PublishedProbabilityCalculation,
+} from "./radar/publishedProbability";
+import { integrateSurvivalConditionedHazard } from "./radar/survivalConditionedProbability";
 import {
   formatOfficialNoticeSummary,
   hasResolvedOfficialNoticeSchedule,
@@ -230,7 +234,38 @@ function getRandomElapsedDisplayDiagnostics(
   source: RadarData | null,
   calculationNow: Date,
   canonicalHistoryContext: CanonicalResetHistoryContext,
+  publishedCalculation: PublishedProbabilityCalculation,
 ): DisplayElapsedDiagnostics | null {
+  if (publishedCalculation.source === "survival-conditioned") {
+    const survival = publishedCalculation.survivalConditioned;
+    const hazard = survival?.hazard;
+    const randomElapsedHours = survival?.survival.randomElapsedHours;
+    if (
+      hazard &&
+      Number.isFinite(hazard.longTermHazardPerHour) &&
+      hazard.longTermHazardPerHour > 0 &&
+      typeof randomElapsedHours === "number" &&
+      Number.isFinite(randomElapsedHours) &&
+      randomElapsedHours >= 0 &&
+      survival.survival.historySupportValid &&
+      !survival.survival.fallbackUsed
+    ) {
+      return {
+        bins: [],
+        globalLambdaPerHour: hazard.longTermHazardPerHour,
+        integrateHazard: (startHour, horizonHours) => {
+          const probability = integrateSurvivalConditionedHazard(
+            hazard,
+            startHour,
+            horizonHours,
+          );
+          if (!Number.isFinite(probability) || probability < 0 || probability >= 1) return null;
+          return -Math.log1p(-probability);
+        },
+      };
+    }
+  }
+
   const boundaries = getRecoveryResetEvents(
     source,
     calculationNow,
@@ -412,6 +447,7 @@ export function getRadarViewModel(
     source,
     calculationNow,
     canonicalHistoryContext,
+    probabilityCalculation,
   );
   const displayProbabilityCalculation = randomElapsedDiagnostics
     ? { ...probabilityCalculation, randomElapsedDiagnostics }
