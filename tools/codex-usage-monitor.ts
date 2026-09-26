@@ -12,6 +12,13 @@ import {
   parseCodexRateLimitsResponse,
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
+import {
+  createPendingMonitorPostStore,
+  deliverPendingMonitorPost,
+  getMonitorPendingPostsPath,
+  PendingMonitorPostStoreError,
+  type PendingMonitorPostStore,
+} from "./codex-usage-monitor-persistence";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
@@ -757,7 +764,11 @@ export function createJsonMonitorLogger(
             ? ["reason"]
             : event === "snapshot_rejected"
               ? ["reason"]
-              : [];
+              : event === "pending_queue_restored"
+                ? ["count"]
+                : event === "pending_queue_storage_failed"
+                  ? ["reason", "action"]
+                  : [];
 
     for (const key of allowedKeys) {
       const value = details[key];
@@ -845,8 +856,12 @@ async function runAppServerSession(
   config: CodexUsageMonitorConfig,
   logger: MonitorLogger,
   signal: AbortSignal,
+  pendingPostStore: PendingMonitorPostStore,
 ) {
   if (signal.aborted) return;
+
+  const restoredPendingPosts = pendingPostStore.load();
+  logger("pending_queue_restored", { count: restoredPendingPosts.length });
 
   let child: ChildProcessWithoutNullStreams;
   try {
@@ -870,7 +885,7 @@ async function runAppServerSession(
     let monitorSnapshotState: MonitorSnapshotState = {
       previousLocalSnapshot: null,
       lastSuccessfulPostAt: null,
-      pendingPosts: [],
+      pendingPosts: restoredPendingPosts,
     };
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     const pending = new Map<string, PendingRequest>();
@@ -958,6 +973,10 @@ async function runAppServerSession(
       }
     };
 
+    const persistPendingPosts = (pendingPosts: PendingMonitorPost[]) => {
+      pendingPostStore.save(pendingPosts);
+    };
+
     const emitResetConfirmationIfNeeded = (
       snapshot: CodexUsageSnapshot,
       reason: MonitorSnapshotPostReason,
@@ -1008,15 +1027,20 @@ async function runAppServerSession(
         const previousLocalSnapshot = monitorSnapshotState.previousLocalSnapshot;
         const pendingBefore = getPendingMonitorPosts(monitorSnapshotState);
         let pendingRetryFailed = false;
-        const pendingToRetry = retryPending ? pendingBefore[0] : undefined;
-        if (pendingToRetry) {
-          const webhookResponse = await postSnapshotSafely(pendingToRetry.snapshot, pendingToRetry.reason);
-          if (webhookResponse) {
+        if (retryPending && pendingBefore[0]) {
+          const delivery = await deliverPendingMonitorPost(
+            pendingBefore,
+            (pendingPost) => postSnapshotSafely(pendingPost.snapshot, pendingPost.reason),
+            persistPendingPosts,
+          );
+          if (delivery.accepted && delivery.response) {
             monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
+            const pendingToRetry = pendingBefore[0];
             logSnapshotSent(pendingToRetry.reason, pendingToRetry.snapshot);
-            emitResetConfirmationIfNeeded(pendingToRetry.snapshot, pendingToRetry.reason, webhookResponse);
+            emitResetConfirmationIfNeeded(pendingToRetry.snapshot, pendingToRetry.reason, delivery.response);
           } else {
             pendingRetryFailed = true;
+            if (delivery.response) logger("snapshot_rejected", { reason: "not_accepted" });
           }
         }
 
@@ -1049,6 +1073,7 @@ async function runAppServerSession(
               postReason,
               postSnapshot,
             );
+            persistPendingPosts(getPendingMonitorPosts(monitorSnapshotState));
           }
           return;
         }
@@ -1057,10 +1082,12 @@ async function runAppServerSession(
         if (postReason === "heartbeat") {
           if (getPendingMonitorPosts(monitorSnapshotState).length > 0) return;
           const webhookResponse = await postSnapshotSafely(postSnapshot, postReason);
-          if (webhookResponse) {
+          if (webhookResponse?.accepted === true) {
             monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
             logSnapshotSent(postReason, postSnapshot);
             emitResetConfirmationIfNeeded(postSnapshot, postReason, webhookResponse);
+          } else if (webhookResponse) {
+            logger("snapshot_rejected", { reason: "not_accepted" });
           }
           return;
         }
@@ -1070,17 +1097,31 @@ async function runAppServerSession(
           postReason,
           postSnapshot,
         );
+        // The observation is durable before it can be sent. A crash after the
+        // remote acceptance is recovered by replaying this unchanged queue head.
+        persistPendingPosts(getPendingMonitorPosts(monitorSnapshotState));
         const pendingPosts = getPendingMonitorPosts(monitorSnapshotState);
         if (pendingPosts.length !== 1 || !pendingPosts[0]) return;
 
         const pendingPost = pendingPosts[0];
-        const webhookResponse = await postSnapshotSafely(pendingPost.snapshot, pendingPost.reason);
-        if (webhookResponse) {
+        const delivery = await deliverPendingMonitorPost(
+          pendingPosts,
+          (post) => postSnapshotSafely(post.snapshot, post.reason),
+          persistPendingPosts,
+        );
+        if (delivery.accepted && delivery.response) {
           monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
           logSnapshotSent(pendingPost.reason, pendingPost.snapshot);
-          emitResetConfirmationIfNeeded(pendingPost.snapshot, pendingPost.reason, webhookResponse);
+          emitResetConfirmationIfNeeded(pendingPost.snapshot, pendingPost.reason, delivery.response);
+        } else if (delivery.response) {
+          logger("snapshot_rejected", { reason: "not_accepted" });
         }
       } catch (error) {
+        if (error instanceof PendingMonitorPostStoreError) {
+          try { child.kill(); } catch { /* process is already gone */ }
+          finish(error);
+          return;
+        }
         logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
         if (rpcFailed) {
           consecutiveRpcFailures += 1;
@@ -1170,15 +1211,23 @@ export async function runCodexUsageMonitor(
   options: { signal?: AbortSignal; logger?: MonitorLogger } = {},
 ) {
   const config = getMonitorConfig(env);
+  const pendingPostStore = createPendingMonitorPostStore(getMonitorPendingPostsPath(env));
   const signal = options.signal ?? new AbortController().signal;
   const logger = options.logger ?? defaultLogger;
   let restartAttempt = 0;
 
   while (!signal.aborted) {
     try {
-      await runAppServerSession(config, logger, signal);
+      await runAppServerSession(config, logger, signal, pendingPostStore);
       restartAttempt = 0;
     } catch (error) {
+      if (error instanceof PendingMonitorPostStoreError) {
+        logger("pending_queue_storage_failed", {
+          reason: error.reason,
+          action: "monitor_stopped_without_dropping_queue",
+        });
+        throw error;
+      }
       logger("session_restart", {
         reason: getSafeMonitorErrorCode(error),
         backoffMs: getRestartBackoffMs(restartAttempt),

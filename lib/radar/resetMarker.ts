@@ -13,8 +13,11 @@ export type ResetMarkerPayload = {
 
 export type ResetMarkerState = {
   initialized: boolean;
+  /** Most recent marker received from the lightweight endpoint. */
   marker: string | null;
   resetAt: string | null;
+  /** Marker whose boundary has been confirmed in the displayed snapshot. */
+  reflectedMarker: string | null;
   pending: ResetMarkerPayload | null;
   retryCount: number;
 };
@@ -58,9 +61,17 @@ export function createResetMarkerState(): ResetMarkerState {
     initialized: false,
     marker: null,
     resetAt: null,
+    reflectedMarker: null,
     pending: null,
     retryCount: 0,
   };
+}
+
+function isOlderResetMarker(state: ResetMarkerState, marker: ResetMarkerPayload) {
+  if (!state.resetAt || !marker.resetAt) return false;
+  const currentTime = Date.parse(state.resetAt);
+  const incomingTime = Date.parse(marker.resetAt);
+  return Number.isFinite(currentTime) && Number.isFinite(incomingTime) && incomingTime < currentTime;
 }
 
 export function getInitialResetMarkerPlan(
@@ -100,6 +111,7 @@ export function beginResetMarkerRefresh(
     initialized: true,
     marker: marker.marker,
     resetAt: marker.resetAt,
+    reflectedMarker: state.reflectedMarker,
     pending: marker,
     retryCount: 0,
   };
@@ -117,6 +129,7 @@ export function observeResetMarker(
         initialized: true,
         marker: incoming.marker,
         resetAt: incoming.resetAt,
+        reflectedMarker: incoming.marker,
         pending: null,
         retryCount: 0,
       },
@@ -128,8 +141,13 @@ export function observeResetMarker(
     return { action: "unchanged", marker: null, state };
   }
 
+  // A stale edge-cached response must not replace a newer event already seen.
+  if (isOlderResetMarker(state, incoming)) {
+    return { action: "unchanged", marker: null, state };
+  }
+
   if (incoming.marker === state.marker) {
-    if (state.pending?.marker === incoming.marker && state.retryCount < RESET_MARKER_MAX_CATCH_UP_RETRIES) {
+    if (state.reflectedMarker !== incoming.marker) {
       return { action: "refresh", marker: incoming, state };
     }
     return { action: "unchanged", marker: null, state };
@@ -140,6 +158,8 @@ export function observeResetMarker(
     marker: incoming,
     state: {
       ...state,
+      marker: incoming.marker,
+      resetAt: incoming.resetAt,
       pending: incoming,
       retryCount: 0,
     },
@@ -150,13 +170,16 @@ export function markResetMarkerAccepted(
   state: ResetMarkerState,
   marker: ResetMarkerPayload,
 ): ResetMarkerState {
+  const markerIsCurrent = state.marker === null || state.marker === marker.marker;
+  const pendingIsAccepted = state.pending?.marker === marker.marker;
   return {
     ...state,
     initialized: true,
-    marker: marker.marker,
-    resetAt: marker.resetAt,
-    pending: null,
-    retryCount: 0,
+    marker: markerIsCurrent ? marker.marker : state.marker,
+    resetAt: markerIsCurrent ? marker.resetAt : state.resetAt,
+    reflectedMarker: marker.marker,
+    pending: pendingIsAccepted ? null : state.pending,
+    retryCount: pendingIsAccepted ? 0 : state.retryCount,
   };
 }
 
@@ -165,9 +188,12 @@ export function markResetMarkerRetry(
   marker: ResetMarkerPayload,
   retryCount: number,
 ): ResetMarkerState {
+  if (isOlderResetMarker(state, marker)) return state;
   return {
     ...state,
     initialized: true,
+    marker: marker.marker,
+    resetAt: marker.resetAt,
     pending: marker,
     retryCount,
   };
@@ -177,11 +203,14 @@ export function deferResetMarker(
   state: ResetMarkerState,
   marker: ResetMarkerPayload,
 ): ResetMarkerState {
+  if (isOlderResetMarker(state, marker)) return state;
   return {
     ...state,
     initialized: true,
-    pending: state.pending?.marker === marker.marker ? null : state.pending,
-    retryCount: state.pending?.marker === marker.marker ? 0 : state.retryCount,
+    marker: marker.marker,
+    resetAt: marker.resetAt,
+    pending: marker,
+    retryCount: 0,
   };
 }
 
