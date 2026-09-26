@@ -9,6 +9,7 @@ import {
   getLocalRadarData,
   getRadarViewModel,
 } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { isNewFormalAdoption } from "../lib/radar/formalAdoption";
 import {
   getLastGlobalResetAt,
@@ -648,6 +649,59 @@ test("current usage-limit announcement can provide official history provenance f
   assert.equal(event.details?.noticeType, "公式告知あり");
   assert.equal(event.details?.noticeToExecution, "42分");
   assert.equal(event.details?.reasonType, "詫びリセット");
+});
+
+test("a manually corrected approximate execution linked to an official notice becomes public history without a fabricated recovery observation", () => {
+  const calculationNow = new Date("2026-09-27T02:20:00.000+09:00");
+  const executionAt = "2026-09-26T17:10:06.297Z";
+  const notice = noticeSignal({
+    tweet_id: "2103637477760311522",
+    text: "o yes… we’re back in action and we’ll reset usage limits for all paid users across codex and ChatGPT work\n\nsorry about the brief disruption!\n\n(and yes we have a special spare codex when things are down to help us out)",
+    tweet_url: "https://x.com/thsottiaux/status/2103637477760311522",
+    tweet_created_at: "2026-09-26T00:07:13.000Z",
+    confidence: 1,
+    verification_status: "confirmed",
+  });
+  const estimate = {
+    resetEventKey: "tibo-reset-2103637477760311522",
+    displayExecutionAt: executionAt,
+    executionTimeSource: "manual_override" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    executionWindowStartAt: null,
+    executionWindowEndAt: null,
+    recoveryObservationId: null,
+    tiboAnnouncedAt: notice.tweet_created_at,
+    tiboPrimaryTweetId: notice.tweet_id,
+    tiboSourceTweetIds: [notice.tweet_id],
+    officialNoticeTweetId: notice.tweet_id,
+    officialNoticeAt: notice.tweet_created_at,
+    estimatorVersion: "usage-execution-v1",
+    manualOverrideAt: "2026-09-27T02:19:00.000+09:00",
+    manualOverrideBy: "operator",
+    manualOverrideReason: "First reliable post-restart 0% observation; execution time is approximate.",
+    manualExecutionAt: executionAt,
+    manualExecutionPrecision: "approximate" as const,
+  };
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [notice as any],
+    recentTiboSignals: [notice as any],
+    canonicalTiboSignals: [notice as any],
+    resetExecutionEstimates: [estimate as any],
+  });
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  const event = snapshot.viewModel.recentHistory.find((item) => item.key === estimate.resetEventKey);
+
+  assert.equal(snapshot.lastRandomResetAt, executionAt);
+  assert.ok(event, "manual estimate should be rendered as a completed history event");
+  assert.equal(event.recordKind, "confirmed_global");
+  assert.equal(event.resetAt, executionAt);
+  assert.equal(event.executionTimePrecision, "approximate");
+  assert.equal(event.details?.reasonType, "詫びリセット");
+  assert.equal(event.source, notice.tweet_url);
+  assert.equal(data.codex_recovery_observations?.length ?? 0, 0);
 });
 
 test("the Monitor-backed current announcement is localized from the canonical event key", () => {

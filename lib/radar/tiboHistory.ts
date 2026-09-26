@@ -11,6 +11,7 @@ import type {
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 import {
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
+  RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
   isPublicRandomResetExecutionEstimate,
   type ResetExecutionEstimate,
@@ -132,11 +133,13 @@ export const NOTICE_BACKED_RECOVERY_SUMMARIES: Readonly<Record<string, string>> 
 export const NOTICE_BACKED_RECOVERY_TITLES: Readonly<Record<string, string>> = {
   "tibo-reset-2091412393368945027": "過剰消費のお詫びリセット",
   "tibo-reset-2092058556707344708": "5時間制限復活に伴うリセット",
+  "tibo-reset-2103637477760311522": "Tibo氏による詫びリセット",
 };
 export const NOTICE_BACKED_RECOVERY_REASON_TYPES: Readonly<Record<string, ResetReasonType>> = {
   "tibo-reset-2087706104814023111": "ご祝儀リセット",
   "tibo-reset-2091412393368945027": "詫びリセット",
   "tibo-reset-2092058556707344708": "詫びリセット",
+  "tibo-reset-2103637477760311522": "詫びリセット",
 };
 
 export function getNoticeBackedRecoveryHistorySummary(resetEventKey: string) {
@@ -1649,7 +1652,33 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
 }
 
 function isValidNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
-  return isPublicRandomResetExecutionEstimate(estimate);
+  return isPublicRandomResetExecutionEstimate(estimate) ||
+    isValidManualNoticeBackedEstimate(estimate);
+}
+
+function isValidManualNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
+  const displayTime = getTimestamp(estimate.displayExecutionAt);
+  const manualTime = getTimestamp(estimate.manualExecutionAt ?? null);
+  const auditedAt = getTimestamp(estimate.manualOverrideAt ?? null);
+  const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
+  const sourceTweetIds = new Set(estimate.tiboSourceTweetIds.map((tweetId) => tweetId.trim()));
+
+  return Boolean(
+    estimate.executionTimeSource === "manual_override" &&
+      estimate.executionTimeConfidence === "high" &&
+      (estimate.executionTimePrecision === "approximate" || estimate.executionTimePrecision === "exact") &&
+      estimate.manualExecutionPrecision === estimate.executionTimePrecision &&
+      displayTime !== null &&
+      manualTime === displayTime &&
+      auditedAt !== null &&
+      estimate.manualOverrideReason?.trim() &&
+      estimate.estimatorVersion === RESET_EXECUTION_ESTIMATOR_VERSION &&
+      officialNoticeTweetId &&
+      sourceTweetIds.has(officialNoticeTweetId) &&
+      !estimate.recoveryObservationId &&
+      !estimate.executionWindowStartAt &&
+      !estimate.executionWindowEndAt,
+  );
 }
 
 function isValidSupportingRecoveryObservation(
@@ -1692,7 +1721,8 @@ function buildNoticeBackedRecoveryEvent(
   if (!isValidNoticeBackedEstimate(estimate)) return null;
 
   const recoveryObservationId = estimate.recoveryObservationId;
-  if (!recoveryObservationId) return null;
+  const isManualEstimate = isValidManualNoticeBackedEstimate(estimate);
+  if (!recoveryObservationId && !isManualEstimate) return null;
 
   const recoveryObservation = recoveryObservations.find(
     (observation) => observation.id === recoveryObservationId,
@@ -1730,6 +1760,13 @@ function buildNoticeBackedRecoveryEvent(
       rawNotice &&
       isCurrentUsageResetAnnouncement(rawNotice.text ?? ""),
   );
+  if (isManualEstimate && (
+    !officialNoticeTweetId ||
+    !rawNotice ||
+    rawNotice.signal_type !== "official_notice" ||
+    rawNotice.verification_status !== "confirmed" ||
+    rawNotice.is_reply === true
+  )) return null;
   const notice: TiboNoticeSignal | null = rawNotice &&
       officialNoticeTweetId &&
       rawNotice.signal_type === "reset_executed"
@@ -1796,7 +1833,7 @@ function buildNoticeBackedRecoveryEvent(
     sourceKind: "direct_post",
     sourceTweetIds,
     ...(officialNoticeTweetId ? { officialNoticeTweetId } : {}),
-    recoveryObservationId,
+    ...(recoveryObservationId ? { recoveryObservationId } : {}),
     details: {
       cycleType: "ランダムリセット",
       reasonType,
