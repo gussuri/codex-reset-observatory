@@ -1239,9 +1239,15 @@ export async function runCodexUsageMonitor(
     if (error instanceof PendingMonitorPostLockError) {
       logger("pending_queue_lock_conflict", {
         reason: error.reason,
-        action: "monitor_exited_without_reading_or_writing_queue",
+        action: error.reason === "pending_posts_lock_recovery_orphaned" ||
+          error.reason === "pending_posts_lock_recovery_corrupt"
+          ? "manual_review_required_queue_untouched"
+          : "monitor_exited_without_reading_or_writing_queue",
       });
-      if (error.reason === "pending_posts_lock_owned") return;
+      if (
+        error.reason === "pending_posts_lock_owned" ||
+        error.reason === "pending_posts_lock_recovery_busy"
+      ) return;
     }
     throw error;
   }

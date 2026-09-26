@@ -421,8 +421,13 @@ internal sealed class MainForm : Form
         RunOnUiThread(() =>
         {
             if (_stopping) return;
+            var exitedProcess = _monitorProcess;
             _monitorProcess = null;
-            if (!_errorState) SetError("監視プロセスが終了しました");
+            if (!_errorState)
+            {
+                if (exitedProcess?.ExitCode == 0) SetStatus("○ 停止中");
+                else SetError("監視プロセスが終了しました");
+            }
             _toggleButton.Text = "監視開始";
         });
     }
@@ -448,6 +453,8 @@ internal sealed class MainForm : Form
             "monitor_secret_missing" => "監視用設定がありません",
             "codex_cli_not_found" => "Codexが見つかりません",
             "invalid_webhook_url" or "webhook_requires_https" => "監視用設定を確認してください",
+            "pending_posts_lock_recovery_orphaned" or "pending_posts_lock_recovery_corrupt" =>
+                "キュー回復ロックの手動確認が必要です",
             _ => "監視エラー",
         };
     }

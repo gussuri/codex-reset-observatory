@@ -276,6 +276,15 @@ both use the same monitor core.
 - `webhook_http_*`: check the production URL and server configuration. The
   monitor retries by restarting the app-server session; it does not log the
   response body.
+- `pending_posts_lock_recovery_orphaned` / `pending_posts_lock_recovery_corrupt`:
+  the monitor fails closed and leaves the pending queue and both lock files
+  untouched. Recovery gates are not removed automatically because a stale-PID
+  decision cannot prove that another recovery operation will not still access
+  the queue. Before manual intervention, verify that every monitor entrypoint
+  (GUI host, CLI, and monitor-host) has stopped. Preserve the pending queue;
+  address only the `.lock.recovery` gate after confirming no monitor process is
+  alive. Then start the monitor and let the normal lock logic inspect or recover
+  any canonical `.lock` file.
 
 The database migration is
 `20260811043509_add_codex_usage_recovery_observation.sql`. Both tables have RLS

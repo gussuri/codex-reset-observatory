@@ -31,7 +31,9 @@ export type PendingMonitorPostLockFailure =
   | "pending_posts_lock_corrupt"
   | "pending_posts_lock_failed"
   | "pending_posts_lock_race"
-  | "pending_posts_lock_recovery_busy";
+  | "pending_posts_lock_recovery_busy"
+  | "pending_posts_lock_recovery_orphaned"
+  | "pending_posts_lock_recovery_corrupt";
 
 export class PendingMonitorPostLockError extends Error {
   constructor(readonly reason: PendingMonitorPostLockFailure) {
@@ -82,6 +84,26 @@ function isProcessAlive(pid: number) {
   }
 }
 
+function diagnoseExistingPendingMonitorPostRecoveryGate(gatePath: string) {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(gatePath, "utf8");
+  } catch (error) {
+    // The owner may have released the gate between our exclusive-create EEXIST
+    // and this read. Do not retry or mutate anything; treat that race as busy.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "pending_posts_lock_recovery_busy" as const;
+    }
+    return "pending_posts_lock_recovery_corrupt" as const;
+  }
+
+  const owner = parsePendingMonitorPostLock(raw);
+  if (!owner) return "pending_posts_lock_recovery_corrupt" as const;
+  return isProcessAlive(owner.pid)
+    ? "pending_posts_lock_recovery_busy" as const
+    : "pending_posts_lock_recovery_orphaned" as const;
+}
+
 function acquirePendingMonitorPostRecoveryGate(gatePath: string) {
   const record: PendingMonitorPostLockRecord = {
     schemaVersion: 1,
@@ -95,9 +117,9 @@ function acquirePendingMonitorPostRecoveryGate(gatePath: string) {
     descriptor = fs.openSync(gatePath, "wx", 0o600);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      // A leftover gate may be from a crashed recovery operation. Its ownership
-      // cannot be safely reclaimed with another read/rename sequence, so fail closed.
-      throw new PendingMonitorPostLockError("pending_posts_lock_recovery_busy");
+      // Diagnose the existing owner read-only. Even a dead PID is never enough
+      // to safely reclaim a gate because recovery itself may have been mid-operation.
+      throw new PendingMonitorPostLockError(diagnoseExistingPendingMonitorPostRecoveryGate(gatePath));
     }
     throw new PendingMonitorPostLockError("pending_posts_lock_failed");
   }

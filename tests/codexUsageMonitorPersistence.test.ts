@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn as spawnProcess } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -478,8 +478,8 @@ test("a corrupt process lock is reported and never replaced", () => {
   }
 });
 
-test("an orphaned recovery gate is not reclaimed automatically", () => {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-orphaned-recovery-gate-"));
+test("existing recovery gates are diagnosed read-only and never change queue or canonical lock", async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-recovery-gate-diagnostics-"));
   try {
     const queuePath = path.join(directory, "pending-posts.json");
     const lockPath = `${queuePath}.lock`;
@@ -494,19 +494,143 @@ test("an orphaned recovery gate is not reclaimed automatically", () => {
       token: "01234567-89ab-4cde-8fab-0123456789ab",
       acquiredAt: "2026-09-27T00:00:00.000Z",
     });
-    const orphanedGate = "recovery owner exited before the gate could be released";
     writeFileSync(lockPath, originalLock, "utf8");
-    writeFileSync(recoveryGatePath, orphanedGate, "utf8");
+    const deadOwner = spawnProcess(process.execPath, ["-e", "process.exit(0)"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    const deadPid = deadOwner.pid;
+    assert.ok(deadPid);
+    await once(deadOwner, "exit");
 
+    const recordFor = (pid: number) => JSON.stringify({
+      schemaVersion: 1,
+      pid,
+      token: "11234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-09-27T00:01:00.000Z",
+    });
+    const cases = [
+      { raw: recordFor(process.pid), reason: "pending_posts_lock_recovery_busy" },
+      { raw: recordFor(deadPid), reason: "pending_posts_lock_recovery_orphaned" },
+      { raw: "partial recovery owner record", reason: "pending_posts_lock_recovery_corrupt" },
+    ] as const;
+
+    for (const scenario of cases) {
+      writeFileSync(recoveryGatePath, scenario.raw, "utf8");
+      assert.throws(
+        () => acquirePendingMonitorPostLock(queuePath),
+        (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === scenario.reason,
+      );
+      assert.equal(readFileSync(recoveryGatePath, "utf8"), scenario.raw, `${scenario.reason}: recovery gate is read-only`);
+      assert.equal(readFileSync(lockPath, "utf8"), originalLock, `${scenario.reason}: canonical lock is unchanged`);
+      assert.equal(readFileSync(queuePath, "utf8"), originalQueue, `${scenario.reason}: pending queue is unchanged`);
+    }
+
+    rmSync(recoveryGatePath);
+    mkdirSync(recoveryGatePath);
+    const unreadableGateMarker = path.join(recoveryGatePath, "marker");
+    writeFileSync(unreadableGateMarker, "preserve this directory", "utf8");
     assert.throws(
       () => acquirePendingMonitorPostLock(queuePath),
-      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_recovery_busy",
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_recovery_corrupt",
     );
-    assert.equal(readFileSync(lockPath, "utf8"), originalLock, "the canonical owner lock is never touched behind an orphaned gate");
-    assert.equal(readFileSync(recoveryGatePath, "utf8"), orphanedGate, "ambiguous recovery ownership is left for diagnosis");
-    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+    assert.equal(readFileSync(unreadableGateMarker, "utf8"), "preserve this directory");
+    assert.equal(readFileSync(lockPath, "utf8"), originalLock, "unreadable gate: canonical lock is unchanged");
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue, "unreadable gate: pending queue is unchanged");
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("monitor host exits cleanly for live recovery contention and fails closed for unsafe gates", async () => {
+  const hostPath = path.resolve("apps/codex-usage-monitor/monitor-host.ts");
+  const scenarios = [
+    { name: "live owner", pid: process.pid, rawGate: null, reason: "pending_posts_lock_recovery_busy", exitCode: 0 },
+    { name: "orphaned owner", pid: null, rawGate: null, reason: "pending_posts_lock_recovery_orphaned", exitCode: 1 },
+    { name: "corrupt gate", pid: null, rawGate: "partial recovery owner record", reason: "pending_posts_lock_recovery_corrupt", exitCode: 1 },
+  ] as const;
+  let deadPid: number | null = null;
+  const deadOwner = spawnProcess(process.execPath, ["-e", "process.exit(0)"], {
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  deadPid = deadOwner.pid ?? null;
+  assert.ok(deadPid);
+  await once(deadOwner, "exit");
+
+  for (const scenario of scenarios) {
+    const localAppData = mkdtempSync(path.join(os.tmpdir(), "codex-monitor-host-gate-diagnostic-"));
+    let host: ReturnType<typeof spawnProcess> | null = null;
+    try {
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        NODE_ENV: "test",
+        LOCALAPPDATA: localAppData,
+        CODEX_USAGE_MONITOR_SECRET: "test-only-secret",
+        CODEX_USAGE_WEBHOOK_URL: "https://example.invalid/api/webhook/codex-usage",
+        CODEX_CLI_PATH: path.join(localAppData, "codex-that-is-not-started.exe"),
+      };
+      const queuePath = getMonitorPendingPostsPath(env);
+      const store = createPendingMonitorPostStore(queuePath);
+      store.save([{ reason: "recovery_candidate", snapshot: snapshot("2026-09-27T00:10:00.000Z") }]);
+      const originalQueue = readFileSync(queuePath, "utf8");
+      const lockPath = `${queuePath}.lock`;
+      const originalLock = JSON.stringify({
+        schemaVersion: 1,
+        pid: process.pid,
+        token: "21234567-89ab-4cde-8fab-0123456789ab",
+        acquiredAt: "2026-09-27T00:00:00.000Z",
+      });
+      const ownerPid: number = scenario.name === "live owner" ? process.pid : deadPid!;
+      const gateRecord: string = JSON.stringify({
+        schemaVersion: 1,
+        pid: ownerPid,
+        token: "31234567-89ab-4cde-8fab-0123456789ab",
+        acquiredAt: "2026-09-27T00:01:00.000Z",
+      });
+      const gatePath = `${lockPath}.recovery`;
+      const gate: string = scenario.rawGate ?? gateRecord;
+      writeFileSync(lockPath, originalLock, "utf8");
+      writeFileSync(gatePath, gate, "utf8");
+
+      host = spawnProcess(process.execPath, ["--import", "tsx", hostPath], {
+        cwd: process.cwd(),
+        env,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      host.stdout?.setEncoding("utf8");
+      host.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+      host.stderr?.resume();
+      const [exitCode] = await Promise.race([
+        once(host, "close") as Promise<[number | null, NodeJS.Signals | null]>,
+        delay(5_000).then(() => { throw new Error(`monitor-host did not exit for ${scenario.name}`); }),
+      ]);
+      assert.equal(exitCode, scenario.exitCode, `${scenario.name}: monitor-host exit code`);
+      const events = stdout.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+      const conflict = events.find((event) => event.event === "pending_queue_lock_conflict");
+      assert.equal(conflict?.reason, scenario.reason, `${scenario.name}: conflict reason reaches the host log`);
+      assert.equal(
+        conflict?.action,
+        scenario.exitCode === 1 ? "manual_review_required_queue_untouched" : "monitor_exited_without_reading_or_writing_queue",
+      );
+      if (scenario.exitCode === 0) {
+        assert.ok(events.some((event) => event.event === "stopped"));
+        assert.equal(events.some((event) => event.event === "error"), false);
+      } else {
+        assert.ok(events.some((event) => event.event === "error" && event.reason === scenario.reason));
+      }
+      assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+      assert.equal(readFileSync(lockPath, "utf8"), originalLock);
+      assert.equal(readFileSync(gatePath, "utf8"), gate);
+    } finally {
+      if (host && host.exitCode === null) {
+        host.kill();
+        await once(host, "close");
+      }
+      rmSync(localAppData, { recursive: true, force: true });
+    }
   }
 });
 
