@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert";
-import { classifyTiboTweet } from "../lib/radar/classification";
+import {
+  classifyTiboTweet,
+  getTiboClassificationSafetyDecision,
+  hasCurrentResetExecution,
+} from "../lib/radar/classification";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
+
+test("the Production apology post is a future official notice, even if Gemini calls it completed", () => {
+  const ruleResult = classifyTiboTweet(TIBO_APOLOGY_RESET_NOTICE.text, TIBO_APOLOGY_RESET_NOTICE.tweetUrl);
+  const safetyResult = getTiboClassificationSafetyDecision(
+    TIBO_APOLOGY_RESET_NOTICE.text,
+    "reset_executed",
+  );
+
+  assert.equal(ruleResult.signalType, "official_notice");
+  assert.equal(safetyResult.signalType, "official_notice");
+  assert.equal(safetyResult.reasonCode, "explicit_future_notice");
+  assert.equal(hasCurrentResetExecution(TIBO_APOLOGY_RESET_NOTICE.text), false);
+});
 
 test("explicit reply metadata takes priority over legacy text heuristics", () => {
   const url = "https://x.com/thsottiaux/status/12345";

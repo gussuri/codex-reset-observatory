@@ -14,8 +14,12 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { parseTiboTemporalSemantics } from "../lib/radar/tiboTemporal";
-import { hasFutureBankedDistributionIntent } from "../lib/radar/bankedReset";
+import {
+  hasFutureBankedDistributionIntent,
+  isBankedDistributionNotice,
+} from "../lib/radar/bankedReset";
 import { TARGET_TIBO_TWEET_TEXT } from "./fixtures/tiboLongFormReset";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 
 const url = "https://x.com/thsottiaux/status/910000000000009999";
 const compositeResetText =
@@ -110,6 +114,23 @@ test("current usage-limit announcements are execution signals, while future and 
     classifyTiboTweet("We will reset usage limits tonight.", url).signalType,
     "official_notice",
   );
+});
+
+test("the real apology notice remains future/global and keeps operational recovery independent", () => {
+  const source = {
+    ...geminiResult("reset_executed"),
+    resetTypeJa: "詫びリセット" as const,
+    codexOperationalStatus: "recovered" as const,
+    codexOperationalEvidenceQuote: "we’re back in action",
+  };
+  const guarded = applyTiboClassificationSafetyGuard(TIBO_APOLOGY_RESET_NOTICE.text, source);
+
+  assert.equal(guarded.signalType, "official_notice");
+  assert.equal(guarded.temporalDirection, "future");
+  assert.equal(guarded.resetTypeJa, "詫びリセット");
+  assert.equal(guarded.codexOperationalStatus, "recovered");
+  assert.equal(guarded.codexOperationalEvidenceQuote, "we’re back in action");
+  assert.equal(isBankedDistributionNotice(TIBO_APOLOGY_RESET_NOTICE.text), false);
 });
 
 test("BANKED distribution completion is not a generic usage-limit reset", () => {
