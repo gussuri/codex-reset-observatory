@@ -218,7 +218,8 @@ test("two real processes cannot mutate one pending queue, and a killed owner loc
     const childQueuePath = JSON.stringify(queuePath);
     const ownerSource = `
       (async () => {
-        const { acquirePendingMonitorPostLock } = await import(${childModule});
+        const persistenceModule = await import(${childModule});
+        const { acquirePendingMonitorPostLock } = persistenceModule.default ?? persistenceModule;
         acquirePendingMonitorPostLock(${childLockPath});
         process.stdout.write("owner-locked\\n");
         setInterval(() => {}, 1000);
@@ -255,7 +256,8 @@ test("two real processes cannot mutate one pending queue, and a killed owner loc
 
     const contenderSource = `
       (async () => {
-        const { acquirePendingMonitorPostLock, createPendingMonitorPostStore } = await import(${childModule});
+        const persistenceModule = await import(${childModule});
+        const { acquirePendingMonitorPostLock, createPendingMonitorPostStore } = persistenceModule.default ?? persistenceModule;
         try {
           const lock = acquirePendingMonitorPostLock(${childLockPath});
           createPendingMonitorPostStore(${childQueuePath}).save([]);
@@ -334,7 +336,8 @@ test("two real processes cannot reclaim the same stale lock or displace the new 
     const staleOwnerSource = `
       (async () => {
         const fs = await import("node:fs");
-        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        const persistenceModule = await import(${moduleUrl});
+        const { acquirePendingMonitorPostLock } = persistenceModule.default ?? persistenceModule;
         acquirePendingMonitorPostLock(${encodedQueuePath});
         fs.writeFileSync(${JSON.stringify(staleOwnerReadyPath)}, "locked");
         setInterval(() => {}, 1000);
@@ -379,7 +382,8 @@ test("two real processes cannot reclaim the same stale lock or displace the new 
           }
           return originalRename(from, to);
         };
-        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        const persistenceModule = await import(${moduleUrl});
+        const { acquirePendingMonitorPostLock } = persistenceModule.default ?? persistenceModule;
         try {
           const lease = acquirePendingMonitorPostLock(${encodedQueuePath});
           fs.writeFileSync(ownerResultPath, JSON.stringify({
@@ -412,7 +416,8 @@ test("two real processes cannot reclaim the same stale lock or displace the new 
     const contenderSource = `
       (async () => {
         const fs = await import("node:fs");
-        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        const persistenceModule = await import(${moduleUrl});
+        const { acquirePendingMonitorPostLock } = persistenceModule.default ?? persistenceModule;
         const resultPath = ${JSON.stringify(contenderResultPath)};
         try {
           const lease = acquirePendingMonitorPostLock(${encodedQueuePath});
