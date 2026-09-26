@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import type { PendingMonitorPost } from "./codex-usage-monitor";
 
 const PENDING_POSTS_SCHEMA_VERSION = 1;
+export const MAX_PENDING_POST_DELIVERY_ATTEMPTS_PER_RUN = 3;
 const PENDING_POST_REASONS = new Set([
   "initial",
   "recovery_candidate",
@@ -17,6 +19,159 @@ export class PendingMonitorPostStoreError extends Error {
     super(reason);
     this.name = "PendingMonitorPostStoreError";
   }
+}
+
+export type PendingMonitorPostLockFailure =
+  | "pending_posts_lock_owned"
+  | "pending_posts_lock_corrupt"
+  | "pending_posts_lock_failed"
+  | "pending_posts_lock_race";
+
+export class PendingMonitorPostLockError extends Error {
+  constructor(readonly reason: PendingMonitorPostLockFailure) {
+    super(reason);
+    this.name = "PendingMonitorPostLockError";
+  }
+}
+
+type PendingMonitorPostLockRecord = {
+  schemaVersion: 1;
+  pid: number;
+  token: string;
+  acquiredAt: string;
+};
+
+function parsePendingMonitorPostLock(raw: string): PendingMonitorPostLockRecord | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const record = value as Record<string, unknown>;
+    if (
+      record.schemaVersion !== 1 ||
+      typeof record.pid !== "number" ||
+      !Number.isSafeInteger(record.pid) ||
+      record.pid <= 0 ||
+      typeof record.token !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(record.token) ||
+      typeof record.acquiredAt !== "string" ||
+      !Number.isFinite(Date.parse(record.acquiredAt))
+    ) {
+      return null;
+    }
+    return record as PendingMonitorPostLockRecord;
+  } catch {
+    return null;
+  }
+}
+
+function isProcessAlive(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    if (code === "EPERM") return true;
+    throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+  }
+}
+
+/**
+ * Atomically leases the monitor outbox across every entrypoint. A live or
+ * unreadable owner is never displaced. Dead-PID lock files are moved aside
+ * atomically before a new owner tries to create the canonical lock.
+ */
+export function acquirePendingMonitorPostLock(queuePath: string) {
+  const lockPath = `${queuePath}.lock`;
+  const lockDirectory = path.dirname(lockPath);
+  try {
+    fs.mkdirSync(lockDirectory, { recursive: true });
+  } catch {
+    throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+  }
+
+  const createLease = (record: PendingMonitorPostLockRecord) => ({
+    path: lockPath,
+    release() {
+      let raw: string;
+      try {
+        raw = fs.readFileSync(lockPath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      }
+      const current = parsePendingMonitorPostLock(raw);
+      if (current?.token !== record.token) return;
+      try {
+        fs.unlinkSync(lockPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+        }
+      }
+    },
+  });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const record: PendingMonitorPostLockRecord = {
+      schemaVersion: 1,
+      pid: process.pid,
+      token: randomUUID(),
+      acquiredAt: new Date().toISOString(),
+    };
+    const temporaryPath = `${lockPath}.${record.pid}.${record.token}.tmp`;
+    let descriptor: number | null = null;
+    let canonicalAlreadyExists = false;
+    try {
+      descriptor = fs.openSync(temporaryPath, "wx", 0o600);
+      fs.writeFileSync(descriptor, JSON.stringify(record), "utf8");
+      fs.fsyncSync(descriptor);
+      fs.closeSync(descriptor);
+      descriptor = null;
+      try {
+        // The complete owner record is installed with one create-if-absent
+        // hard-link operation, so a crash cannot leave a half-written owner.
+        fs.linkSync(temporaryPath, lockPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") canonicalAlreadyExists = true;
+        else throw error;
+      }
+      try { fs.unlinkSync(temporaryPath); } catch { /* a completed canonical lock remains valid */ }
+      if (!canonicalAlreadyExists) return createLease(record);
+    } catch (error) {
+      if (descriptor !== null) {
+        try { fs.closeSync(descriptor); } catch { /* best-effort close */ }
+      }
+      try { fs.unlinkSync(temporaryPath); } catch { /* no temporary lock was left behind */ }
+      if (error instanceof PendingMonitorPostLockError) throw error;
+      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+    }
+
+    let existing: PendingMonitorPostLockRecord | null;
+    try {
+      existing = parsePendingMonitorPostLock(fs.readFileSync(lockPath, "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+    }
+    if (!existing) throw new PendingMonitorPostLockError("pending_posts_lock_corrupt");
+    if (isProcessAlive(existing.pid)) throw new PendingMonitorPostLockError("pending_posts_lock_owned");
+
+    const stalePath = `${lockPath}.stale.${process.pid}.${randomUUID()}`;
+    try {
+      fs.renameSync(lockPath, stalePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+    }
+    try {
+      fs.unlinkSync(stalePath);
+    } catch {
+      // The queue remains protected by the canonical lock path on the next attempt.
+    }
+  }
+
+  throw new PendingMonitorPostLockError("pending_posts_lock_race");
 }
 
 function normalizePendingPost(value: unknown): PendingMonitorPost | null {
@@ -150,6 +305,85 @@ export function createPendingMonitorPostStore(filePath: string) {
 }
 
 export type PendingMonitorPostStore = ReturnType<typeof createPendingMonitorPostStore>;
+
+export type PendingMonitorPostQueueAccess = {
+  list: () => PendingMonitorPost[];
+  enqueue: (post: PendingMonitorPost) => boolean;
+  deliverOldest: (
+    deliver: (post: PendingMonitorPost) => Promise<{ accepted: boolean } | null>,
+  ) => Promise<Awaited<ReturnType<typeof deliverPendingMonitorPost>>>;
+};
+
+/** Serializes queue reads, new observations, sends, and acknowledgements. */
+export function createPendingMonitorPostQueue(store: PendingMonitorPostStore) {
+  let pendingPosts = store.load();
+  let operationTail: Promise<void> = Promise.resolve();
+
+  const access: PendingMonitorPostQueueAccess = {
+    list: () => [...pendingPosts],
+    enqueue(post) {
+      if (pendingPosts.some((pending) =>
+        (pending.reason === "initial" && post.reason === "initial") ||
+        (pending.reason === post.reason && pending.snapshot.observedAt === post.snapshot.observedAt)
+      )) {
+        return false;
+      }
+      const next = [...pendingPosts, post];
+      store.save(next);
+      pendingPosts = next;
+      return true;
+    },
+    async deliverOldest(deliver) {
+      const result = await deliverPendingMonitorPost(
+        pendingPosts,
+        deliver,
+        (next) => store.save(next),
+      );
+      if (result.accepted) pendingPosts = result.pendingPosts;
+      return result;
+    },
+  };
+
+  return {
+    withExclusive<T>(operation: (queue: PendingMonitorPostQueueAccess) => Promise<T> | T) {
+      const result = operationTail.then(() => operation(access));
+      operationTail = result.then(() => undefined, () => undefined);
+      return result;
+    },
+    waitForIdle() {
+      return operationTail;
+    },
+  };
+}
+
+export function createPendingPostDeliveryLimiter(
+  minimumIntervalMs: number,
+  maxAttempts = MAX_PENDING_POST_DELIVERY_ATTEMPTS_PER_RUN,
+) {
+  let currentKey: string | null = null;
+  let attempts = 0;
+  let lastAttemptAt: number | null = null;
+
+  return {
+    tryBegin(key: string, nowMs = Date.now()): "ready" | "wait" | "limit" {
+      if (currentKey !== key) {
+        currentKey = key;
+        attempts = 0;
+        lastAttemptAt = null;
+      }
+      if (attempts >= maxAttempts) return "limit";
+      if (lastAttemptAt !== null && nowMs - lastAttemptAt < minimumIntervalMs) return "wait";
+      attempts += 1;
+      lastAttemptAt = nowMs;
+      return "ready";
+    },
+    reset() {
+      currentKey = null;
+      attempts = 0;
+      lastAttemptAt = null;
+    },
+  };
+}
 
 export async function deliverPendingMonitorPost(
   pendingPosts: PendingMonitorPost[],

@@ -13,11 +13,14 @@ import {
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
 import {
+  acquirePendingMonitorPostLock,
+  createPendingMonitorPostQueue,
+  createPendingPostDeliveryLimiter,
   createPendingMonitorPostStore,
-  deliverPendingMonitorPost,
   getMonitorPendingPostsPath,
+  PendingMonitorPostLockError,
   PendingMonitorPostStoreError,
-  type PendingMonitorPostStore,
+  type PendingMonitorPostQueueAccess,
 } from "./codex-usage-monitor-persistence";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
@@ -766,8 +769,12 @@ export function createJsonMonitorLogger(
               ? ["reason"]
               : event === "pending_queue_restored"
                 ? ["count"]
-                : event === "pending_queue_storage_failed"
+              : event === "pending_queue_storage_failed"
+                ? ["reason", "action"]
+                : event === "pending_queue_lock_conflict"
                   ? ["reason", "action"]
+                  : event === "pending_queue_retry_paused"
+                    ? ["reason", "action"]
                   : [];
 
     for (const key of allowedKeys) {
@@ -846,29 +853,93 @@ async function postUsageSnapshot(
   }
 }
 
+type MonitorSnapshotSender = (
+  snapshot: CodexUsageSnapshot,
+  reason: MonitorSnapshotPostReason,
+) => Promise<MonitorWebhookResponse>;
+
+async function postSnapshotSafely(
+  logger: MonitorLogger,
+  sendSnapshot: MonitorSnapshotSender,
+  snapshot: CodexUsageSnapshot,
+  reason: MonitorSnapshotPostReason,
+): Promise<MonitorWebhookResponse | null> {
+  try {
+    return await sendSnapshot(snapshot, reason);
+  } catch (error) {
+    logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
+    return null;
+  }
+}
+
+function logSnapshotSent(
+  logger: MonitorLogger,
+  reason: MonitorSnapshotPostReason,
+  snapshot: CodexUsageSnapshot,
+  lastKnownBankedResetAvailableCount?: number | null,
+) {
+  const displayState = getMonitorBankedResetDisplayState(snapshot, lastKnownBankedResetAvailableCount);
+  logger("snapshot_sent", {
+    reason,
+    observedAt: snapshot.observedAt,
+    usedPercent: snapshot.usedPercent,
+    resetsAt: snapshot.resetsAt,
+    planType: snapshot.planType,
+    windowDurationMins: snapshot.windowDurationMins,
+    bankedResetCountChange: reason === "banked_reset_count_change",
+    ...displayState,
+  });
+}
+
+function emitResetConfirmationIfNeeded(
+  logger: MonitorLogger,
+  emittedResetConfirmationKeys: Set<string>,
+  snapshot: CodexUsageSnapshot,
+  reason: MonitorSnapshotPostReason,
+  response: MonitorWebhookResponse | null,
+) {
+  if (!response || !isMonitorResetExecutionConfirmed(response, reason)) return;
+  const resetEventKey = getMonitorResetEventKey(snapshot);
+  if (emittedResetConfirmationKeys.has(resetEventKey)) return;
+  emittedResetConfirmationKeys.add(resetEventKey);
+  logger("reset_confirmed", {
+    resetEventKey,
+    observedAt: snapshot.observedAt,
+    resetsAt: snapshot.resetsAt,
+  });
+}
+
 type PendingRequest = {
   resolve: (message: JsonObject) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 };
 
+type PendingPostAcceptedHandler = (
+  pendingPosts: PendingMonitorPost[],
+  post: PendingMonitorPost,
+  response: MonitorWebhookResponse,
+) => void;
+
+type RegisterPendingPostAcceptedHandler = (handler: PendingPostAcceptedHandler) => () => void;
+type MonitorAppServerSpawner = (config: CodexUsageMonitorConfig) => ChildProcessWithoutNullStreams;
+
 async function runAppServerSession(
   config: CodexUsageMonitorConfig,
   logger: MonitorLogger,
   signal: AbortSignal,
-  pendingPostStore: PendingMonitorPostStore,
+  pendingQueue: ReturnType<typeof createPendingMonitorPostQueue>,
+  sendSnapshot: MonitorSnapshotSender,
+  spawnAppServer: MonitorAppServerSpawner,
+  registerPendingPostAcceptedHandler: RegisterPendingPostAcceptedHandler,
+  requestPendingPostFlush: () => void,
+  emittedResetConfirmationKeys: Set<string>,
 ) {
   if (signal.aborted) return;
 
-  const restoredPendingPosts = pendingPostStore.load();
-  logger("pending_queue_restored", { count: restoredPendingPosts.length });
-
   let child: ChildProcessWithoutNullStreams;
   try {
-    child = spawn(config.codexCliPath, ["app-server"], {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    child = spawnAppServer(config);
   } catch {
     throw new Error("app_server_spawn_failed");
   }
@@ -881,12 +952,18 @@ async function runAppServerSession(
     let nextRequestId = 1;
     let refreshInFlight = false;
     let consecutiveRpcFailures = 0;
-    const emittedResetConfirmationKeys = new Set<string>();
     let monitorSnapshotState: MonitorSnapshotState = {
       previousLocalSnapshot: null,
       lastSuccessfulPostAt: null,
-      pendingPosts: restoredPendingPosts,
+      pendingPosts: [],
     };
+    const unregisterAcceptedHandler = registerPendingPostAcceptedHandler((pendingPosts) => {
+      monitorSnapshotState = {
+        ...monitorSnapshotState,
+        pendingPosts,
+        lastSuccessfulPostAt: Date.now(),
+      };
+    });
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     const pending = new Map<string, PendingRequest>();
 
@@ -895,6 +972,7 @@ async function runAppServerSession(
       settled = true;
       if (pollTimer !== null) clearInterval(pollTimer);
       notificationDebouncer.cancel();
+      unregisterAcceptedHandler();
       pending.forEach((request) => {
         clearTimeout(request.timeout);
         request.reject(error ?? new Error("app_server_stopped"));
@@ -941,59 +1019,7 @@ async function runAppServerSession(
       }
     });
 
-    const logSnapshotSent = (
-      reason: MonitorSnapshotPostReason,
-      snapshot: CodexUsageSnapshot,
-    ) => {
-      const displayState = getMonitorBankedResetDisplayState(
-        snapshot,
-        monitorSnapshotState.lastKnownBankedResetAvailableCount,
-      );
-      logger("snapshot_sent", {
-        reason,
-        observedAt: snapshot.observedAt,
-        usedPercent: snapshot.usedPercent,
-        resetsAt: snapshot.resetsAt,
-        planType: snapshot.planType,
-        windowDurationMins: snapshot.windowDurationMins,
-        bankedResetCountChange: reason === "banked_reset_count_change",
-        ...displayState,
-      });
-    };
-
-    const postSnapshotSafely = async (
-      snapshot: CodexUsageSnapshot,
-      reason: MonitorSnapshotPostReason,
-    ): Promise<MonitorWebhookResponse | null> => {
-      try {
-        return await postUsageSnapshot(config, snapshot, reason);
-      } catch (error) {
-        logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
-        return null;
-      }
-    };
-
-    const persistPendingPosts = (pendingPosts: PendingMonitorPost[]) => {
-      pendingPostStore.save(pendingPosts);
-    };
-
-    const emitResetConfirmationIfNeeded = (
-      snapshot: CodexUsageSnapshot,
-      reason: MonitorSnapshotPostReason,
-      response: MonitorWebhookResponse | null,
-    ) => {
-      if (!response || !isMonitorResetExecutionConfirmed(response, reason)) return;
-      const resetEventKey = getMonitorResetEventKey(snapshot);
-      if (emittedResetConfirmationKeys.has(resetEventKey)) return;
-      emittedResetConfirmationKeys.add(resetEventKey);
-      logger("reset_confirmed", {
-        resetEventKey,
-        observedAt: snapshot.observedAt,
-        resetsAt: snapshot.resetsAt,
-      });
-    };
-
-    const refresh = async (retryPending = true, trigger: MonitorRefreshTrigger = "poll") => {
+    const refresh = async (trigger: MonitorRefreshTrigger = "poll") => {
       if (settled || !initialized || refreshInFlight) return;
       refreshInFlight = true;
       let rpcFailed = false;
@@ -1024,98 +1050,43 @@ async function runAppServerSession(
           ),
         });
 
-        const previousLocalSnapshot = monitorSnapshotState.previousLocalSnapshot;
-        const pendingBefore = getPendingMonitorPosts(monitorSnapshotState);
-        let pendingRetryFailed = false;
-        if (retryPending && pendingBefore[0]) {
-          const delivery = await deliverPendingMonitorPost(
-            pendingBefore,
-            (pendingPost) => postSnapshotSafely(pendingPost.snapshot, pendingPost.reason),
-            persistPendingPosts,
+        const shouldFlushPendingQueue = await pendingQueue.withExclusive(async (queue) => {
+          monitorSnapshotState = {
+            ...monitorSnapshotState,
+            pendingPosts: queue.list(),
+          };
+          const nowMs = Date.now();
+          const postReason = getMonitorSnapshotPostReason(snapshot, monitorSnapshotState, nowMs, trigger);
+          const postSnapshot = getMonitorPostSnapshot(snapshot, monitorSnapshotState, postReason, nowMs, trigger);
+          monitorSnapshotState = updateMonitorSnapshotState(
+            monitorSnapshotState,
+            snapshot,
+            false,
+            nowMs,
+            { nowMs, logger, trigger },
           );
-          if (delivery.accepted && delivery.response) {
-            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState);
-            const pendingToRetry = pendingBefore[0];
-            logSnapshotSent(pendingToRetry.reason, pendingToRetry.snapshot);
-            emitResetConfirmationIfNeeded(pendingToRetry.snapshot, pendingToRetry.reason, delivery.response);
-          } else {
-            pendingRetryFailed = true;
-            if (delivery.response) logger("snapshot_rejected", { reason: "not_accepted" });
+
+          if (postReason === "heartbeat") {
+            if (queue.list().length > 0) return true;
+            const webhookResponse = await postSnapshotSafely(logger, sendSnapshot, postSnapshot, postReason);
+            if (webhookResponse?.accepted === true) {
+              monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
+              logSnapshotSent(logger, postReason, postSnapshot, monitorSnapshotState.lastKnownBankedResetAvailableCount);
+              emitResetConfirmationIfNeeded(logger, emittedResetConfirmationKeys, postSnapshot, postReason, webhookResponse);
+            } else if (webhookResponse) {
+              logger("snapshot_rejected", { reason: "not_accepted" });
+            }
+          } else if (postReason) {
+            queue.enqueue({ reason: postReason, snapshot: postSnapshot });
           }
-        }
 
-        const nowMs = Date.now();
-        const postReason = getMonitorSnapshotPostReason(
-          snapshot,
-          monitorSnapshotState,
-          nowMs,
-          trigger,
-        );
-        const postSnapshot = getMonitorPostSnapshot(
-          snapshot,
-          monitorSnapshotState,
-          postReason,
-          nowMs,
-          trigger,
-        );
-        monitorSnapshotState = updateMonitorSnapshotState(
-          monitorSnapshotState,
-          snapshot,
-          false,
-          nowMs,
-          { nowMs, logger, trigger },
-        );
-
-        if (pendingRetryFailed) {
-          if (postReason && postReason !== "heartbeat") {
-            monitorSnapshotState = enqueueMonitorSnapshotPost(
-              monitorSnapshotState,
-              postReason,
-              postSnapshot,
-            );
-            persistPendingPosts(getPendingMonitorPosts(monitorSnapshotState));
-          }
-          return;
-        }
-        if (!postReason) return;
-
-        if (postReason === "heartbeat") {
-          if (getPendingMonitorPosts(monitorSnapshotState).length > 0) return;
-          const webhookResponse = await postSnapshotSafely(postSnapshot, postReason);
-          if (webhookResponse?.accepted === true) {
-            monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
-            logSnapshotSent(postReason, postSnapshot);
-            emitResetConfirmationIfNeeded(postSnapshot, postReason, webhookResponse);
-          } else if (webhookResponse) {
-            logger("snapshot_rejected", { reason: "not_accepted" });
-          }
-          return;
-        }
-
-        monitorSnapshotState = enqueueMonitorSnapshotPost(
-          monitorSnapshotState,
-          postReason,
-          postSnapshot,
-        );
-        // The observation is durable before it can be sent. A crash after the
-        // remote acceptance is recovered by replaying this unchanged queue head.
-        persistPendingPosts(getPendingMonitorPosts(monitorSnapshotState));
-        const pendingPosts = getPendingMonitorPosts(monitorSnapshotState);
-        if (pendingPosts.length !== 1 || !pendingPosts[0]) return;
-
-        const pendingPost = pendingPosts[0];
-        const delivery = await deliverPendingMonitorPost(
-          pendingPosts,
-          (post) => postSnapshotSafely(post.snapshot, post.reason),
-          persistPendingPosts,
-        );
-        if (delivery.accepted && delivery.response) {
-          monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
-          logSnapshotSent(pendingPost.reason, pendingPost.snapshot);
-          emitResetConfirmationIfNeeded(pendingPost.snapshot, pendingPost.reason, delivery.response);
-        } else if (delivery.response) {
-          logger("snapshot_rejected", { reason: "not_accepted" });
-        }
+          monitorSnapshotState = {
+            ...monitorSnapshotState,
+            pendingPosts: queue.list(),
+          };
+          return queue.list().length > 0;
+        });
+        if (shouldFlushPendingQueue) requestPendingPostFlush();
       } catch (error) {
         if (error instanceof PendingMonitorPostStoreError) {
           try { child.kill(); } catch { /* process is already gone */ }
@@ -1135,7 +1106,7 @@ async function runAppServerSession(
     };
 
     const notificationDebouncer = createNotificationDebouncer(() => {
-      void refresh(false, "notification");
+      void refresh("notification");
     }, NOTIFICATION_DEBOUNCE_MS);
 
     const parser = createJsonLineParser(
@@ -1193,9 +1164,9 @@ async function runAppServerSession(
         if (settled) return;
         sendNotification("initialized");
         initialized = true;
-        await refresh(true, "initial");
+        await refresh("initial");
         if (settled) return;
-        pollTimer = setInterval(() => { void refresh(true, "poll"); }, config.pollIntervalMs);
+        pollTimer = setInterval(() => { void refresh("poll"); }, config.pollIntervalMs);
       } catch (error) {
         const reason = getSafeMonitorErrorCode(error);
         finish(new Error(reason === "unknown" ? "app_server_initialize_failed" : reason));
@@ -1206,34 +1177,184 @@ async function runAppServerSession(
   });
 }
 
+export type RunCodexUsageMonitorOptions = {
+  signal?: AbortSignal;
+  logger?: MonitorLogger;
+  /** Dependency seams are used by local integration tests; production uses the Codex CLI and webhook. */
+  spawnAppServer?: MonitorAppServerSpawner;
+  sendSnapshot?: MonitorSnapshotSender;
+};
+
 export async function runCodexUsageMonitor(
   env: NodeJS.ProcessEnv = process.env,
-  options: { signal?: AbortSignal; logger?: MonitorLogger } = {},
+  options: RunCodexUsageMonitorOptions = {},
 ) {
   const config = getMonitorConfig(env);
-  const pendingPostStore = createPendingMonitorPostStore(getMonitorPendingPostsPath(env));
-  const signal = options.signal ?? new AbortController().signal;
   const logger = options.logger ?? defaultLogger;
-  let restartAttempt = 0;
+  const requestedSignal = options.signal ?? new AbortController().signal;
+  if (requestedSignal.aborted) return;
 
-  while (!signal.aborted) {
-    try {
-      await runAppServerSession(config, logger, signal, pendingPostStore);
-      restartAttempt = 0;
-    } catch (error) {
+  const queuePath = getMonitorPendingPostsPath(env);
+  let lock: ReturnType<typeof acquirePendingMonitorPostLock>;
+  try {
+    // Every supported entrypoint passes through this point before any queue read.
+    lock = acquirePendingMonitorPostLock(queuePath);
+  } catch (error) {
+    if (error instanceof PendingMonitorPostLockError) {
+      logger("pending_queue_lock_conflict", {
+        reason: error.reason,
+        action: "monitor_exited_without_reading_or_writing_queue",
+      });
+      if (error.reason === "pending_posts_lock_owned") return;
+    }
+    throw error;
+  }
+
+  let pendingQueue: ReturnType<typeof createPendingMonitorPostQueue>;
+  try {
+    pendingQueue = createPendingMonitorPostQueue(createPendingMonitorPostStore(queuePath));
+  } catch (error) {
+    if (error instanceof PendingMonitorPostStoreError) {
+      logger("pending_queue_storage_failed", {
+        reason: error.reason,
+        action: "monitor_stopped_without_dropping_queue",
+      });
+    }
+    try { lock.release(); } catch { /* a dead-PID lock is recoverable on the next start */ }
+    throw error;
+  }
+
+  const monitorAbort = new AbortController();
+  const signal = monitorAbort.signal;
+  const relayRequestedStop = () => monitorAbort.abort();
+  requestedSignal.addEventListener("abort", relayRequestedStop, { once: true });
+  let fatalStorageError: PendingMonitorPostStoreError | null = null;
+  const pendingPostDeliveryLimiter = createPendingPostDeliveryLimiter(config.pollIntervalMs);
+  let retryPauseLoggedFor: string | null = null;
+  let flushInFlight: Promise<void> | null = null;
+  let pendingQueueTimer: ReturnType<typeof setInterval> | null = null;
+  let activePostAcceptedHandler: PendingPostAcceptedHandler | null = null;
+  const emittedResetConfirmationKeys = new Set<string>();
+  const sendSnapshot = options.sendSnapshot ?? ((snapshot, reason) => postUsageSnapshot(config, snapshot, reason));
+  const spawnAppServer = options.spawnAppServer ?? (() => spawn(config.codexCliPath, ["app-server"], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  }));
+  const registerPendingPostAcceptedHandler: RegisterPendingPostAcceptedHandler = (handler) => {
+    activePostAcceptedHandler = handler;
+    return () => {
+      if (activePostAcceptedHandler === handler) activePostAcceptedHandler = null;
+    };
+  };
+
+  const flushPendingPosts = () => {
+    if (flushInFlight) return flushInFlight;
+    const operation = pendingQueue.withExclusive(async (queue) => {
+      if (signal.aborted) return;
+      const head = queue.list()[0];
+      if (!head) return;
+      const headKey = `${head.reason}:${head.snapshot.observedAt}:${head.snapshot.resetsAt}`;
+      const attemptPlan = pendingPostDeliveryLimiter.tryBegin(headKey);
+      if (attemptPlan === "wait") {
+        return;
+      }
+      if (attemptPlan === "limit") {
+        if (retryPauseLoggedFor !== headKey) {
+          retryPauseLoggedFor = headKey;
+          logger("pending_queue_retry_paused", {
+            reason: "attempt_limit",
+            action: "queue_retained_until_monitor_restart",
+          });
+        }
+        return;
+      }
+      const delivery = await queue.deliverOldest((post) =>
+        postSnapshotSafely(logger, sendSnapshot, post.snapshot, post.reason)
+      );
+      if (delivery.accepted && delivery.response) {
+        pendingPostDeliveryLimiter.reset();
+        retryPauseLoggedFor = null;
+        logSnapshotSent(logger, head.reason, head.snapshot);
+        activePostAcceptedHandler?.(delivery.pendingPosts, head, delivery.response);
+        emitResetConfirmationIfNeeded(
+          logger,
+          emittedResetConfirmationKeys,
+          head.snapshot,
+          head.reason,
+          delivery.response,
+        );
+      } else if (delivery.response) {
+        logger("snapshot_rejected", { reason: "not_accepted" });
+      }
+    });
+    flushInFlight = operation.catch((error) => {
       if (error instanceof PendingMonitorPostStoreError) {
+        fatalStorageError = error;
         logger("pending_queue_storage_failed", {
           reason: error.reason,
           action: "monitor_stopped_without_dropping_queue",
         });
-        throw error;
+        monitorAbort.abort();
+        return;
       }
-      logger("session_restart", {
-        reason: getSafeMonitorErrorCode(error),
-        backoffMs: getRestartBackoffMs(restartAttempt),
+      logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
+    }).finally(() => {
+      flushInFlight = null;
+    });
+    return flushInFlight;
+  };
+
+  let restartAttempt = 0;
+  try {
+    logger("pending_queue_restored", { count: (await pendingQueue.withExclusive((queue) => queue.list())).length });
+    // Resume a saved observation immediately, independently of Codex startup or RPC.
+    void flushPendingPosts();
+    pendingQueueTimer = setInterval(() => { void flushPendingPosts(); }, config.pollIntervalMs);
+
+    while (!signal.aborted) {
+      try {
+        await runAppServerSession(
+          config,
+          logger,
+          signal,
+          pendingQueue,
+          sendSnapshot,
+          spawnAppServer,
+          registerPendingPostAcceptedHandler,
+          () => { void flushPendingPosts(); },
+          emittedResetConfirmationKeys,
+        );
+        restartAttempt = 0;
+      } catch (error) {
+        if (error instanceof PendingMonitorPostStoreError) {
+          logger("pending_queue_storage_failed", {
+            reason: error.reason,
+            action: "monitor_stopped_without_dropping_queue",
+          });
+          throw error;
+        }
+        logger("session_restart", {
+          reason: getSafeMonitorErrorCode(error),
+          backoffMs: getRestartBackoffMs(restartAttempt),
+        });
+        await waitFor(getRestartBackoffMs(restartAttempt), signal);
+        restartAttempt = Math.min(restartAttempt + 1, RESTART_BACKOFF_MS.length - 1);
+      }
+    }
+
+    if (fatalStorageError) throw fatalStorageError;
+  } finally {
+    if (pendingQueueTimer !== null) clearInterval(pendingQueueTimer);
+    monitorAbort.abort();
+    await pendingQueue.waitForIdle();
+    requestedSignal.removeEventListener("abort", relayRequestedStop);
+    try {
+      lock.release();
+    } catch {
+      logger("pending_queue_storage_failed", {
+        reason: "pending_posts_lock_release_failed",
+        action: "stopped_without_changing_queue_data",
       });
-      await waitFor(getRestartBackoffMs(restartAttempt), signal);
-      restartAttempt = Math.min(restartAttempt + 1, RESTART_BACKOFF_MS.length - 1);
     }
   }
 }
