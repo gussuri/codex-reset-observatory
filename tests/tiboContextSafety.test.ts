@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getTiboContextSafetyDecision } from "../lib/radar/tiboContextSafety";
 import { getEffectiveTeaserStrength } from "../lib/radar/teaserStrength";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 
 const baseInput = {
   authorText: "me receiving this very important item",
@@ -61,6 +62,25 @@ test("explicit reset context in a quote preserves the positive result", () => {
     }),
     null,
   );
+});
+
+test("reset wording in parent or quote alone is not attributed to Tibo", () => {
+  const authorText = "o yes… we’re back in action. sorry about the brief disruption!";
+  const resetContext = "we’ll reset usage limits for all paid users across codex and ChatGPT work";
+
+  for (const contextField of ["replyContextText", "quoteContextText"] as const) {
+    const decision = getTiboContextSafetyDecision({
+      authorText,
+      selectedSignalType: "official_notice",
+      aiTeaserStrength: "strong",
+      [contextField]: resetContext,
+    });
+
+    assert.equal(decision?.signalType, "irrelevant", contextField);
+    assert.equal(decision?.teaserStrength, "none", contextField);
+  }
+
+  assert.match(TIBO_APOLOGY_RESET_NOTICE.text, /we’ll reset usage limits/);
 });
 
 test("an irrelevant result with an AI weak strength is also suppressed", () => {

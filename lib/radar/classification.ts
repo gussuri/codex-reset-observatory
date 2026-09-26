@@ -35,6 +35,7 @@ export type TiboClassificationSafetyReason =
   | "historical_reset"
   | "historical_then_future"
   | "future_reschedule"
+  | "explicit_future_notice"
   | null;
 
 export type TiboClassificationSafetyDecision = {
@@ -51,7 +52,7 @@ const NON_USAGE_ACTIVATION_ACTION_PATTERN = /\b(?:flipped\s+the\s+switch|turned\
 const EXPLICIT_USAGE_LIMIT_RESET_PATTERN = /(?:\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b[^.!?]{0,100}\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b|\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b[^.!?]{0,100}\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b)/i;
 const PURE_HYPOTHETICAL_PATTERN = /\b(?:what\s+if|would\s+be\s+nice\s+to|imagine\s+if|i\s+wish|if\s+only)\b|\b(?:could|would)\s+use\s+(?:a\s+)?reset\b|\bworld\s+with\s+unlimited\s+resets?\b/i;
 const INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN = /\b(?:but|however|so)\b[^.!?]{0,100}\b(?:i|we)\s+(?:will|might|may|could)\b/i;
-const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
+const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in\s+(?:the\s+)?(?:day|days|week|weeks|month|months|year|years|19\d{2}|20\d{2})|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
 const UNRELATED_HISTORICAL_REFERENCE_PATTERN = /\b(?:things?|issues?|problems?|fixes?|topics?)\s+(?:mentioned|discussed|found|raised)\s+(?:yesterday|last\s+(?:week|month|night|year))\b/i;
 const FUTURE_RESET_PATTERN = /\b(?:will|going\s+to|coming|tonight|tomorrow|later|soon|next|scheduled|planned|in\s+(?:an?|one|two|half\s+an?|\d+)\s+(?:minute|minutes|hour|hours|day|days))\b/i;
 const CANCELLATION_PATTERN = /\b(?:no|not|never|cancel(?:led|ed)?|canceled|not\s+anymore|changed\s+my\s+mind|scratch\s+that)\b/i;
@@ -92,7 +93,7 @@ const CURRENT_EXECUTION_PATTERNS = [
 const CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN =
   /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
 const EXPLICIT_FUTURE_USAGE_RESET_PATTERN =
-  /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
+  /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:i|we)'ll\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
 
 function normalizedClassificationText(text: string) {
   return text.toLowerCase().replace(/[’‘]/g, "'");
@@ -248,6 +249,19 @@ export function getTiboClassificationSafetyDecision(
       reasonJa: "resetの延期・予定ではなく、取り消しまたは否定を示しているため、現在のresetシグナルにはしません。",
       reasonCode: "explicit_negation",
       suppressTeaserStrength: true,
+    };
+  }
+
+  if (
+    candidate === "reset_executed" &&
+    EXPLICIT_FUTURE_USAGE_RESET_PATTERN.test(normalizedText) &&
+    !hasCurrentResetExecution(text)
+  ) {
+    return {
+      signalType: "official_notice",
+      reasonJa: "利用上限リセットの明示的な未来形を確認したため、実施完了ではなく公式予告として扱います。",
+      reasonCode: "explicit_future_notice",
+      suppressTeaserStrength: false,
     };
   }
 

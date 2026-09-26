@@ -79,6 +79,19 @@ export function getTiboContextSafetyDecision(
 
   if (!hasResetSignal) return null;
 
+  const contextOnlyResetClaim =
+    !EXPLICIT_RESET_CONTEXT_PATTERN.test(authorText) &&
+    [input.replyContextText, input.quoteContextText].some((value) =>
+      EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(value)),
+    );
+  if (contextOnlyResetClaim && input.selectedSignalType !== "teaser") {
+    return {
+      signalType: "irrelevant",
+      teaserStrength: "none",
+      reasonJa: "Context safety guard: resetの根拠は返信元または引用文脈にのみあり、Tibo本人の本文にはないため無関係として扱います。",
+    };
+  }
+
   if (
     input.selectedSignalType === "official_notice" &&
     HISTORICAL_RESET_CONTEXT_PATTERN.test(context) &&

@@ -8,6 +8,7 @@ import {
   normalizeResetReasonType,
   RESET_REASON_TYPES,
 } from "@/lib/radar/resetReason";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 
 const calculationNow = new Date("2026-08-14T00:00:00.000Z");
 
@@ -50,6 +51,10 @@ describe("canonical reset reason taxonomy", () => {
     assert.equal(
       normalizeResetReasonType({ title: "Happy Monday reset" }),
       "ご祝儀リセット",
+    );
+    assert.equal(
+      normalizeResetReasonType({ text: TIBO_APOLOGY_RESET_NOTICE.text }),
+      "詫びリセット",
     );
   });
 

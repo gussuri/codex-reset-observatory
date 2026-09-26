@@ -147,7 +147,10 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    the Usage Monitor may confirm that execution after the post is received.
 
 2. "official_notice": An explicit announcement of an upcoming reset scheduled in the near future.
-   Examples: "We will reset limits tonight", "Reset scheduled in two hours", "Full reset coming tomorrow".
+   Examples: "We will reset limits tonight", "We'll reset usage limits for all paid users", "Reset scheduled in two hours", "Full reset coming tomorrow".
+   Contracted future forms such as "I'll reset" and "we'll reset" are future notices, not completed resets.
+   A separate statement that service is "back in action" or recovered describes operational status only;
+   it does not change a future reset commitment into a completed reset.
 
 3. "teaser": Forward-looking post suggesting a reset within 24-48 hours. Merely containing the words "reset" or "reset button" without a future-oriented indicator does NOT qualify.
    Example: "Should we press the reset button tonight?"
@@ -734,7 +737,8 @@ export function applyTiboClassificationSafetyGuard(
   const recoveredPrimaryTeaser = mixedTimelineRecovery?.primarySignalType === "teaser" &&
     futureSignal?.signalType === "teaser";
   const effectiveSignalType = recoveredPrimaryTeaser ? "teaser" : decision.signalType;
-  const rescheduledTemporal = decision.reasonCode === "future_reschedule"
+  const rescheduledTemporal = decision.reasonCode === "future_reschedule" ||
+    decision.reasonCode === "explicit_future_notice"
     ? parseTiboTemporalSemantics(result, text)
     : null;
   const effectiveTemporal = recoveredPrimaryTeaser
@@ -755,7 +759,9 @@ export function applyTiboClassificationSafetyGuard(
     evidenceQuote: recoveredPrimaryTeaser
       ? mixedTimelineRecovery?.futureEvidenceQuote ?? result.evidenceQuote
       : result.evidenceQuote,
-    temporalDirection: recoveredPrimaryTeaser || decision.reasonCode === "future_reschedule"
+    temporalDirection: recoveredPrimaryTeaser ||
+      decision.reasonCode === "future_reschedule" ||
+      decision.reasonCode === "explicit_future_notice"
       ? "future"
       : result.temporalDirection,
     temporalExpression: effectiveTemporal?.temporalExpression ?? result.temporalExpression,

@@ -31,6 +31,7 @@ import {
   TARGET_TIBO_TWEET_TEXT,
   TARGET_TIBO_TWEET_URL,
 } from "./fixtures/tiboLongFormReset";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 
 function resetSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
   return {
@@ -107,6 +108,21 @@ function noticeSignal(overrides: Partial<TiboNoticeSignal> = {}): TiboNoticeSign
 
 test("Gemini reset_executed is eligible for formal history", () => {
   assert.equal(isFormalTiboResetSignal(resetSignal()), true);
+});
+
+test("the apology notice is not a completed history or random-reset probability input", () => {
+  const notice = resetSignal({
+    tweet_id: TIBO_APOLOGY_RESET_NOTICE.tweetId,
+    text: TIBO_APOLOGY_RESET_NOTICE.text,
+    tweet_url: TIBO_APOLOGY_RESET_NOTICE.tweetUrl,
+    tweet_created_at: TIBO_APOLOGY_RESET_NOTICE.tweetCreatedAt,
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    classification_source: "manual",
+  });
+
+  assert.equal(isFormalTiboResetSignal(notice), false);
 });
 
 test("non-reset activation completions cannot enter formal history", () => {
