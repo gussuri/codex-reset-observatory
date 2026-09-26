@@ -232,10 +232,15 @@ test("two real processes cannot mutate one pending queue, and a killed owner loc
     owner = ownerProcess;
 
     let ownerOutput = "";
+    let ownerStderr = "";
     const ownerStdout = ownerProcess.stdout;
+    const ownerStderrStream = ownerProcess.stderr;
     assert.ok(ownerStdout);
+    assert.ok(ownerStderrStream);
     ownerStdout.setEncoding("utf8");
     ownerStdout.on("data", (chunk: string) => { ownerOutput += chunk; });
+    ownerStderrStream.setEncoding("utf8");
+    ownerStderrStream.on("data", (chunk: string) => { ownerStderr += chunk; });
     await Promise.race([
       new Promise<void>((resolve, reject) => {
         const check = () => {
@@ -243,7 +248,7 @@ test("two real processes cannot mutate one pending queue, and a killed owner loc
         };
         ownerStdout.on("data", check);
         ownerProcess.once("error", reject);
-        ownerProcess.once("exit", (code) => reject(new Error(`owner exited before lock: ${code}`)));
+        ownerProcess.once("exit", (code) => reject(new Error(`owner exited before lock: ${code}; stderr=${ownerStderr}`)));
       }),
       delay(5_000).then(() => { throw new Error("owner did not acquire the process lock"); }),
     ]);
@@ -338,9 +343,16 @@ test("two real processes cannot reclaim the same stale lock or displace the new 
     staleOwner = spawnProcess(process.execPath, ["--import", "tsx", "--eval", staleOwnerSource], {
       cwd: process.cwd(),
       windowsHide: true,
-      stdio: "ignore",
+      stdio: ["ignore", "ignore", "pipe"],
     });
-    await waitForFile(staleOwnerReadyPath);
+    let staleOwnerStderr = "";
+    staleOwner.stderr?.setEncoding("utf8");
+    staleOwner.stderr?.on("data", (chunk: string) => { staleOwnerStderr += chunk; });
+    try {
+      await waitForFile(staleOwnerReadyPath);
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; stale owner stderr=${staleOwnerStderr}`);
+    }
     assert.equal(existsSync(lockPath), true, "the seed process acquired the canonical lock");
     staleOwner.kill();
     await once(staleOwner, "exit");
