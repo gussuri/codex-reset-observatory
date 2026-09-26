@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn as spawnProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -295,6 +295,173 @@ test("two real processes cannot mutate one pending queue, and a killed owner loc
   }
 });
 
+test("two real processes cannot reclaim the same stale lock or displace the new owner", async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-lock-recovery-race-"));
+  let staleOwner: ReturnType<typeof spawnProcess> | null = null;
+  let recoveringOwner: ReturnType<typeof spawnProcess> | null = null;
+  let contender: ReturnType<typeof spawnProcess> | null = null;
+  const waitForFile = async (filePath: string, timeoutMs = 5_000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (existsSync(filePath)) return;
+      await delay(10);
+    }
+    throw new Error(`Timed out waiting for ${path.basename(filePath)}`);
+  };
+
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    const entry = { reason: "recovery_candidate", snapshot: snapshot("2026-09-27T00:05:00.000Z") } as const;
+    const store = createPendingMonitorPostStore(queuePath);
+    store.save([entry]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    const moduleUrl = JSON.stringify(new URL("../tools/codex-usage-monitor-persistence.ts", import.meta.url).href);
+    const encodedQueuePath = JSON.stringify(queuePath);
+    const staleOwnerReadyPath = path.join(directory, "stale-owner-ready");
+    const renameEnteredPath = path.join(directory, "rename-entered");
+    const releaseRenamePath = path.join(directory, "release-rename");
+    const ownerResultPath = path.join(directory, "owner-result.json");
+    const releaseOwnerPath = path.join(directory, "release-owner");
+    const contenderResultPath = path.join(directory, "contender-result.json");
+    const releaseContenderPath = path.join(directory, "release-contender");
+
+    const staleOwnerSource = `
+      (async () => {
+        const fs = await import("node:fs");
+        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        acquirePendingMonitorPostLock(${encodedQueuePath});
+        fs.writeFileSync(${JSON.stringify(staleOwnerReadyPath)}, "locked");
+        setInterval(() => {}, 1000);
+      })().catch((error) => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
+    `;
+    staleOwner = spawnProcess(process.execPath, ["--import", "tsx", "--eval", staleOwnerSource], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    await waitForFile(staleOwnerReadyPath);
+    assert.equal(existsSync(lockPath), true, "the seed process acquired the canonical lock");
+    staleOwner.kill();
+    await once(staleOwner, "exit");
+    staleOwner = null;
+    assert.equal(existsSync(lockPath), true, `a killed owner leaves its canonical lock for safe stale recovery; files: ${readdirSync(directory).join(",")}`);
+
+    const recoveringOwnerSource = `
+      (async () => {
+        const fs = (await import("node:fs")).default;
+        const lockPath = ${JSON.stringify(lockPath)};
+        const renameEnteredPath = ${JSON.stringify(renameEnteredPath)};
+        const releaseRenamePath = ${JSON.stringify(releaseRenamePath)};
+        const ownerResultPath = ${JSON.stringify(ownerResultPath)};
+        const releaseOwnerPath = ${JSON.stringify(releaseOwnerPath)};
+        const originalRename = fs.renameSync.bind(fs);
+        fs.renameSync = (from, to) => {
+          if (from === lockPath) {
+            fs.writeFileSync(renameEnteredPath, "entered");
+            const deadline = Date.now() + 8_000;
+            while (!fs.existsSync(releaseRenamePath) && Date.now() < deadline) {
+              Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+            }
+            if (!fs.existsSync(releaseRenamePath)) throw new Error("rename_barrier_timeout");
+          }
+          return originalRename(from, to);
+        };
+        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        try {
+          const lease = acquirePendingMonitorPostLock(${encodedQueuePath});
+          fs.writeFileSync(ownerResultPath, JSON.stringify({
+            status: "acquired",
+            pid: process.pid,
+            lock: JSON.parse(fs.readFileSync(lockPath, "utf8")),
+          }));
+          while (!fs.existsSync(releaseOwnerPath)) await new Promise((resolve) => setTimeout(resolve, 10));
+          lease.release();
+          fs.writeFileSync(ownerResultPath, JSON.stringify({ status: "released", pid: process.pid }));
+        } catch (error) {
+          fs.writeFileSync(ownerResultPath, JSON.stringify({ status: "error", reason: error.reason || error.message }));
+        }
+      })().catch((error) => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
+    `;
+    recoveringOwner = spawnProcess(process.execPath, ["--import", "tsx", "--eval", recoveringOwnerSource], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+    try {
+      await waitForFile(renameEnteredPath);
+    } catch (error) {
+      if (existsSync(ownerResultPath)) {
+        throw new Error(`Recovery process exited before the race barrier: ${readFileSync(ownerResultPath, "utf8")}`);
+      }
+      throw error;
+    }
+
+    const contenderSource = `
+      (async () => {
+        const fs = await import("node:fs");
+        const { acquirePendingMonitorPostLock } = await import(${moduleUrl});
+        const resultPath = ${JSON.stringify(contenderResultPath)};
+        try {
+          const lease = acquirePendingMonitorPostLock(${encodedQueuePath});
+          fs.writeFileSync(resultPath, JSON.stringify({ status: "acquired", pid: process.pid }));
+          while (!fs.existsSync(${JSON.stringify(releaseContenderPath)})) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          lease.release();
+        } catch (error) {
+          fs.writeFileSync(resultPath, JSON.stringify({ status: "error", reason: error.reason || error.message }));
+        }
+      })().catch((error) => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
+    `;
+    contender = spawnProcess(process.execPath, ["--import", "tsx", "--eval", contenderSource], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    await waitForFile(contenderResultPath);
+
+    const contenderResult = JSON.parse(readFileSync(contenderResultPath, "utf8")) as { status: string; reason?: string };
+    assert.deepEqual(contenderResult, {
+      status: "error",
+      reason: "pending_posts_lock_recovery_busy",
+    }, "a second process must stop while another process owns stale-lock recovery");
+    if (contender.exitCode === null) await once(contender, "exit");
+
+    writeFileSync(releaseRenamePath, "continue");
+    await waitForFile(ownerResultPath);
+    const ownerResult = JSON.parse(readFileSync(ownerResultPath, "utf8")) as {
+      status: string;
+      pid?: number;
+      lock?: { pid: number; token: string };
+    };
+    assert.equal(ownerResult.status, "acquired");
+    assert.equal(ownerResult.pid, recoveringOwner.pid);
+    assert.equal(ownerResult.lock?.pid, recoveringOwner.pid, "the canonical lock belongs to the sole successful acquirer");
+    assert.match(ownerResult.lock?.token ?? "", /^[0-9a-f-]{36}$/i);
+    assert.equal(existsSync(`${lockPath}.recovery`), false, "the short-lived recovery gate is released after acquisition");
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue, "recovery must preserve the unsent queue");
+
+    writeFileSync(releaseOwnerPath, "release");
+    await once(recoveringOwner, "exit");
+    recoveringOwner = null;
+    assert.equal(JSON.parse(readFileSync(ownerResultPath, "utf8")).status, "released");
+    assert.equal(existsSync(lockPath), false, "the successful owner's normal release removes its lock");
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+  } finally {
+    writeFileSync(path.join(directory, "release-rename"), "continue");
+    writeFileSync(path.join(directory, "release-owner"), "release");
+    writeFileSync(path.join(directory, "release-contender"), "release");
+    for (const child of [staleOwner, recoveringOwner, contender]) {
+      if (child && child.exitCode === null) {
+        child.kill();
+        await once(child, "exit");
+      }
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("a corrupt process lock is reported and never replaced", () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-corrupt-lock-"));
   try {
@@ -306,6 +473,38 @@ test("a corrupt process lock is reported and never replaced", () => {
       (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_corrupt",
     );
     assert.equal(readFileSync(lockPath, "utf8"), "partial owner record");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an orphaned recovery gate is not reclaimed automatically", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-orphaned-recovery-gate-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    const recoveryGatePath = `${lockPath}.recovery`;
+    const entry = { reason: "recovery_candidate", snapshot: snapshot("2026-09-27T00:10:00.000Z") } as const;
+    const store = createPendingMonitorPostStore(queuePath);
+    store.save([entry]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    const originalLock = JSON.stringify({
+      schemaVersion: 1,
+      pid: process.pid,
+      token: "01234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-09-27T00:00:00.000Z",
+    });
+    const orphanedGate = "recovery owner exited before the gate could be released";
+    writeFileSync(lockPath, originalLock, "utf8");
+    writeFileSync(recoveryGatePath, orphanedGate, "utf8");
+
+    assert.throws(
+      () => acquirePendingMonitorPostLock(queuePath),
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_recovery_busy",
+    );
+    assert.equal(readFileSync(lockPath, "utf8"), originalLock, "the canonical owner lock is never touched behind an orphaned gate");
+    assert.equal(readFileSync(recoveryGatePath, "utf8"), orphanedGate, "ambiguous recovery ownership is left for diagnosis");
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

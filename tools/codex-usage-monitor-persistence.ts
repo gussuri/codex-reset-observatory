@@ -30,7 +30,8 @@ export type PendingMonitorPostLockFailure =
   | "pending_posts_lock_owned"
   | "pending_posts_lock_corrupt"
   | "pending_posts_lock_failed"
-  | "pending_posts_lock_race";
+  | "pending_posts_lock_race"
+  | "pending_posts_lock_recovery_busy";
 
 export class PendingMonitorPostLockError extends Error {
   constructor(readonly reason: PendingMonitorPostLockFailure) {
@@ -81,19 +82,94 @@ function isProcessAlive(pid: number) {
   }
 }
 
+function acquirePendingMonitorPostRecoveryGate(gatePath: string) {
+  const record: PendingMonitorPostLockRecord = {
+    schemaVersion: 1,
+    pid: process.pid,
+    token: randomUUID(),
+    acquiredAt: new Date().toISOString(),
+  };
+  let descriptor: number | null = null;
+  try {
+    // Exclusive OS file creation serializes all cooperating monitor entrypoints.
+    descriptor = fs.openSync(gatePath, "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      // A leftover gate may be from a crashed recovery operation. Its ownership
+      // cannot be safely reclaimed with another read/rename sequence, so fail closed.
+      throw new PendingMonitorPostLockError("pending_posts_lock_recovery_busy");
+    }
+    throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+  }
+
+  try {
+    fs.writeFileSync(descriptor, JSON.stringify(record), "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = null;
+  } catch {
+    if (descriptor !== null) {
+      try { fs.closeSync(descriptor); } catch { /* best-effort close */ }
+    }
+    try { fs.unlinkSync(gatePath); } catch { /* leave a residue rather than touch an uncertain file */ }
+    throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+  }
+
+  let released = false;
+  return {
+    release() {
+      if (released) return;
+      let current: PendingMonitorPostLockRecord | null;
+      try {
+        current = parsePendingMonitorPostLock(fs.readFileSync(gatePath, "utf8"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          released = true;
+          return;
+        }
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      }
+      if (current?.token !== record.token) {
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      }
+      try {
+        fs.unlinkSync(gatePath);
+        released = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          released = true;
+          return;
+        }
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      }
+    },
+  };
+}
+
 /**
  * Atomically leases the monitor outbox across every entrypoint. A live or
- * unreadable owner is never displaced. Dead-PID lock files are moved aside
- * atomically before a new owner tries to create the canonical lock.
+ * unreadable owner is never displaced. Stale-lock recovery and canonical-lock
+ * creation are serialized by an exclusive OS-created gate. An orphaned gate is
+ * intentionally not reclaimed automatically because that would recreate the
+ * same check-then-rename race.
  */
 export function acquirePendingMonitorPostLock(queuePath: string) {
   const lockPath = `${queuePath}.lock`;
+  const recoveryGatePath = `${lockPath}.recovery`;
   const lockDirectory = path.dirname(lockPath);
   try {
     fs.mkdirSync(lockDirectory, { recursive: true });
   } catch {
     throw new PendingMonitorPostLockError("pending_posts_lock_failed");
   }
+
+  const recoveryGate = acquirePendingMonitorPostRecoveryGate(recoveryGatePath);
+  let recoveryGateReleased = false;
+  const releaseRecoveryGate = () => {
+    if (recoveryGateReleased) return;
+    recoveryGate.release();
+    recoveryGateReleased = true;
+  };
 
   const createLease = (record: PendingMonitorPostLockRecord) => ({
     path: lockPath,
@@ -117,66 +193,79 @@ export function acquirePendingMonitorPostLock(queuePath: string) {
     },
   });
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const record: PendingMonitorPostLockRecord = {
-      schemaVersion: 1,
-      pid: process.pid,
-      token: randomUUID(),
-      acquiredAt: new Date().toISOString(),
-    };
-    const temporaryPath = `${lockPath}.${record.pid}.${record.token}.tmp`;
-    let descriptor: number | null = null;
-    let canonicalAlreadyExists = false;
-    try {
-      descriptor = fs.openSync(temporaryPath, "wx", 0o600);
-      fs.writeFileSync(descriptor, JSON.stringify(record), "utf8");
-      fs.fsyncSync(descriptor);
-      fs.closeSync(descriptor);
-      descriptor = null;
+  try {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const record: PendingMonitorPostLockRecord = {
+        schemaVersion: 1,
+        pid: process.pid,
+        token: randomUUID(),
+        acquiredAt: new Date().toISOString(),
+      };
+      const temporaryPath = `${lockPath}.${record.pid}.${record.token}.tmp`;
+      let descriptor: number | null = null;
+      let canonicalAlreadyExists = false;
       try {
-        // The complete owner record is installed with one create-if-absent
-        // hard-link operation, so a crash cannot leave a half-written owner.
-        fs.linkSync(temporaryPath, lockPath);
+        descriptor = fs.openSync(temporaryPath, "wx", 0o600);
+        fs.writeFileSync(descriptor, JSON.stringify(record), "utf8");
+        fs.fsyncSync(descriptor);
+        fs.closeSync(descriptor);
+        descriptor = null;
+        try {
+          // The complete owner record is installed with one create-if-absent
+          // hard-link operation, so a crash cannot leave a half-written owner.
+          fs.linkSync(temporaryPath, lockPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") canonicalAlreadyExists = true;
+          else throw error;
+        }
+        try { fs.unlinkSync(temporaryPath); } catch { /* a completed canonical lock remains valid */ }
+        if (!canonicalAlreadyExists) {
+          const lease = createLease(record);
+          try {
+            releaseRecoveryGate();
+          } catch {
+            try { lease.release(); } catch { /* the live process will leave a recoverable dead-PID lock */ }
+            throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+          }
+          return lease;
+        }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") canonicalAlreadyExists = true;
-        else throw error;
+        if (descriptor !== null) {
+          try { fs.closeSync(descriptor); } catch { /* best-effort close */ }
+        }
+        try { fs.unlinkSync(temporaryPath); } catch { /* no temporary lock was left behind */ }
+        if (error instanceof PendingMonitorPostLockError) throw error;
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
       }
-      try { fs.unlinkSync(temporaryPath); } catch { /* a completed canonical lock remains valid */ }
-      if (!canonicalAlreadyExists) return createLease(record);
-    } catch (error) {
-      if (descriptor !== null) {
-        try { fs.closeSync(descriptor); } catch { /* best-effort close */ }
+
+      let existing: PendingMonitorPostLockRecord | null;
+      try {
+        existing = parsePendingMonitorPostLock(fs.readFileSync(lockPath, "utf8"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
       }
-      try { fs.unlinkSync(temporaryPath); } catch { /* no temporary lock was left behind */ }
-      if (error instanceof PendingMonitorPostLockError) throw error;
-      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      if (!existing) throw new PendingMonitorPostLockError("pending_posts_lock_corrupt");
+      if (isProcessAlive(existing.pid)) throw new PendingMonitorPostLockError("pending_posts_lock_owned");
+
+      const stalePath = `${lockPath}.stale.${process.pid}.${randomUUID()}`;
+      try {
+        fs.renameSync(lockPath, stalePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw new PendingMonitorPostLockError("pending_posts_lock_failed");
+      }
+      try {
+        fs.unlinkSync(stalePath);
+      } catch {
+        // The queue remains protected by the canonical lock path on the next attempt.
+      }
     }
 
-    let existing: PendingMonitorPostLockRecord | null;
-    try {
-      existing = parsePendingMonitorPostLock(fs.readFileSync(lockPath, "utf8"));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
-    }
-    if (!existing) throw new PendingMonitorPostLockError("pending_posts_lock_corrupt");
-    if (isProcessAlive(existing.pid)) throw new PendingMonitorPostLockError("pending_posts_lock_owned");
-
-    const stalePath = `${lockPath}.stale.${process.pid}.${randomUUID()}`;
-    try {
-      fs.renameSync(lockPath, stalePath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw new PendingMonitorPostLockError("pending_posts_lock_failed");
-    }
-    try {
-      fs.unlinkSync(stalePath);
-    } catch {
-      // The queue remains protected by the canonical lock path on the next attempt.
-    }
+    throw new PendingMonitorPostLockError("pending_posts_lock_race");
+  } finally {
+    releaseRecoveryGate();
   }
-
-  throw new PendingMonitorPostLockError("pending_posts_lock_race");
 }
 
 function normalizePendingPost(value: unknown): PendingMonitorPost | null {
