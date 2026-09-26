@@ -311,14 +311,21 @@ test("a corrupt process lock is reported and never replaced", () => {
   }
 });
 
-test("outbox delivery is bounded per queue head and never retries faster than monitor polling", () => {
+test("outbox retry resumes after three short attempts with increasing recovery delays", () => {
   const limiter = createPendingPostDeliveryLimiter(120_000);
   assert.equal(limiter.tryBegin("oldest", 10_000), "ready");
-  assert.equal(limiter.tryBegin("oldest", 10_001), "wait");
+  limiter.recordFailure("oldest", { category: "transport" }, 10_000);
+  assert.equal(limiter.tryBegin("oldest", 129_999), "wait");
   assert.equal(limiter.tryBegin("oldest", 130_000), "ready");
+  limiter.recordFailure("oldest", { category: "rate_limited", httpStatus: 429 }, 130_000);
   assert.equal(limiter.tryBegin("oldest", 250_000), "ready");
-  assert.equal(limiter.tryBegin("oldest", 370_000), "limit");
-  assert.equal(limiter.tryBegin("new-head", 370_000), "ready");
+  limiter.recordFailure("oldest", { category: "server_error", httpStatus: 503 }, 250_000);
+  assert.equal(limiter.tryBegin("oldest", 549_999), "wait");
+  assert.equal(limiter.tryBegin("oldest", 550_000), "ready");
+  limiter.recordFailure("oldest", { category: "transport" }, 550_000);
+  assert.equal(limiter.tryBegin("oldest", 1_449_999), "wait");
+  assert.equal(limiter.tryBegin("oldest", 1_450_000), "ready");
+  assert.equal(limiter.tryBegin("new-head", 1_450_000), "ready");
   limiter.reset();
   assert.equal(limiter.tryBegin("after-monitor-restart", 1), "ready");
 });
@@ -337,7 +344,9 @@ test("the shared monitor entry locks before queue restore and serializes enqueue
   const requestFlush = monitorSource.indexOf("requestPendingPostFlush()", queueEnqueue);
   assert.ok(queueExclusive > sessionStart && queueEnqueue > queueExclusive && requestFlush > queueEnqueue,
     "new observations are durably enqueued in the same serial queue used by the sender");
-  assert.match(monitorSource.slice(entryStart), /setInterval\(\(\) => \{ void flushPendingPosts\(\); \}, config\.pollIntervalMs\)/);
+  assert.match(monitorSource.slice(entryStart), /setInterval\(\(\) => \{ void flushPendingPosts\(\); \}, queueCheckIntervalMs\)/);
+  assert.match(monitorSource.slice(entryStart), /checkIntervalMs: config\.pollIntervalMs/,
+    "the production outbox retry check retains the existing observation polling cadence");
 
   const storeSource = readFileSync(path.resolve("lib/codexUsageRecoveryStore.ts"), "utf8");
   assert.match(storeSource, /onConflict:\s*"source_key,observed_at,current_resets_at"/);

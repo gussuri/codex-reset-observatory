@@ -21,6 +21,7 @@ import {
   PendingMonitorPostLockError,
   PendingMonitorPostStoreError,
   type PendingMonitorPostQueueAccess,
+  type PendingMonitorPostDeliveryFailure,
 } from "./codex-usage-monitor-persistence";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
@@ -150,7 +151,17 @@ export type PendingMonitorPost = {
 export type MonitorWebhookResponse = {
   accepted: boolean;
   recovery?: string;
+  failure?: PendingMonitorPostDeliveryFailure;
 };
+
+export function classifyMonitorWebhookStatus(status: number): PendingMonitorPostDeliveryFailure {
+  if (status === 429) return { category: "rate_limited", httpStatus: status };
+  if (status >= 500 && status <= 599) return { category: "server_error", httpStatus: status };
+  if (status === 401 || status === 403) return { category: "authentication", httpStatus: status };
+  if (status === 400 || status === 422) return { category: "invalid_request", httpStatus: status };
+  if (status >= 400 && status <= 499) return { category: "client_error", httpStatus: status };
+  return { category: "invalid_response", httpStatus: status };
+}
 
 export function isMonitorResetExecutionConfirmed(
   response: unknown,
@@ -760,7 +771,7 @@ export function createJsonMonitorLogger(
       : event === "recovery_candidate_cancelled"
         ? ["reason", "observedAt", "usedPercent", "resetsAt"]
       : event === "snapshot_failed"
-        ? ["reason"]
+        ? ["reason", "httpStatus"]
         : event === "session_restart"
           ? ["reason", "backoffMs"]
           : event === "error"
@@ -773,9 +784,11 @@ export function createJsonMonitorLogger(
                 ? ["reason", "action"]
                 : event === "pending_queue_lock_conflict"
                   ? ["reason", "action"]
-                  : event === "pending_queue_retry_paused"
-                    ? ["reason", "action"]
-                  : [];
+                  : event === "pending_queue_delivery_deferred"
+                    ? ["category", "httpStatus", "failureCount", "retryInMs", "action"]
+                    : event === "pending_queue_delivery_blocked"
+                      ? ["category", "httpStatus", "failureCount", "retryInMs", "action"]
+                      : [];
 
     for (const key of allowedKeys) {
       const value = details[key];
@@ -821,11 +834,12 @@ async function postUsageSnapshot(
   config: CodexUsageMonitorConfig,
   snapshot: CodexUsageSnapshot,
   postReason?: MonitorSnapshotPostReason,
+  fetchWebhook: typeof fetch = fetch,
 ): Promise<MonitorWebhookResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MONITOR_WEBHOOK_TIMEOUT_MS);
   try {
-    const response = await fetch(config.webhookUrl, {
+    const response = await fetchWebhook(config.webhookUrl, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${config.secret}`,
@@ -834,7 +848,9 @@ async function postUsageSnapshot(
       body: JSON.stringify(toSafeMonitorPayload(snapshot, postReason)),
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`webhook_http_${response.status}`);
+    if (!response.ok) {
+      return { accepted: false, failure: classifyMonitorWebhookStatus(response.status) };
+    }
     let body: unknown = null;
     try {
       body = await response.json();
@@ -842,10 +858,14 @@ async function postUsageSnapshot(
       // A successful webhook without a JSON status remains a successful post,
       // but it cannot confirm a reset notification.
     }
-    if (!body || typeof body !== "object") return { accepted: false };
+    if (!body || typeof body !== "object") {
+      return { accepted: false, failure: { category: "invalid_response" } };
+    }
     const candidate = body as { accepted?: unknown; recovery?: unknown };
+    const accepted = candidate.accepted === true;
     return {
-      accepted: candidate.accepted === true,
+      accepted,
+      ...(!accepted ? { failure: { category: "invalid_response" as const } } : {}),
       ...(typeof candidate.recovery === "string" ? { recovery: candidate.recovery } : {}),
     };
   } finally {
@@ -863,12 +883,12 @@ async function postSnapshotSafely(
   sendSnapshot: MonitorSnapshotSender,
   snapshot: CodexUsageSnapshot,
   reason: MonitorSnapshotPostReason,
-): Promise<MonitorWebhookResponse | null> {
+): Promise<MonitorWebhookResponse> {
   try {
     return await sendSnapshot(snapshot, reason);
   } catch (error) {
     logger("snapshot_failed", { reason: getSafeMonitorErrorCode(error) });
-    return null;
+    return { accepted: false, failure: { category: "transport" } };
   }
 }
 
@@ -1074,7 +1094,16 @@ async function runAppServerSession(
               logSnapshotSent(logger, postReason, postSnapshot, monitorSnapshotState.lastKnownBankedResetAvailableCount);
               emitResetConfirmationIfNeeded(logger, emittedResetConfirmationKeys, postSnapshot, postReason, webhookResponse);
             } else if (webhookResponse) {
-              logger("snapshot_rejected", { reason: "not_accepted" });
+              if (webhookResponse.failure) {
+                logger("snapshot_failed", {
+                  reason: webhookResponse.failure.category,
+                  ...(webhookResponse.failure.httpStatus === undefined
+                    ? {}
+                    : { httpStatus: webhookResponse.failure.httpStatus }),
+                });
+              } else {
+                logger("snapshot_rejected", { reason: "not_accepted" });
+              }
             }
           } else if (postReason) {
             queue.enqueue({ reason: postReason, snapshot: postSnapshot });
@@ -1183,6 +1212,13 @@ export type RunCodexUsageMonitorOptions = {
   /** Dependency seams are used by local integration tests; production uses the Codex CLI and webhook. */
   spawnAppServer?: MonitorAppServerSpawner;
   sendSnapshot?: MonitorSnapshotSender;
+  fetchWebhook?: typeof fetch;
+  /** Overrides queue retry timing only in local integration tests. */
+  pendingQueueRetryTiming?: {
+    checkIntervalMs: number;
+    shortRetryIntervalMs: number;
+    recoveryBackoffMs: readonly number[];
+  };
 };
 
 export async function runCodexUsageMonitor(
@@ -1229,13 +1265,27 @@ export async function runCodexUsageMonitor(
   const relayRequestedStop = () => monitorAbort.abort();
   requestedSignal.addEventListener("abort", relayRequestedStop, { once: true });
   let fatalStorageError: PendingMonitorPostStoreError | null = null;
-  const pendingPostDeliveryLimiter = createPendingPostDeliveryLimiter(config.pollIntervalMs);
-  let retryPauseLoggedFor: string | null = null;
+  const pendingQueueRetryTiming = options.pendingQueueRetryTiming ?? {
+    checkIntervalMs: config.pollIntervalMs,
+    shortRetryIntervalMs: config.pollIntervalMs,
+    recoveryBackoffMs: undefined,
+  };
+  const queueCheckIntervalMs = Number.isFinite(pendingQueueRetryTiming.checkIntervalMs) &&
+    pendingQueueRetryTiming.checkIntervalMs > 0
+    ? Math.max(1, Math.floor(pendingQueueRetryTiming.checkIntervalMs))
+    : config.pollIntervalMs;
+  const pendingPostDeliveryLimiter = createPendingPostDeliveryLimiter(
+    pendingQueueRetryTiming.shortRetryIntervalMs,
+    pendingQueueRetryTiming.recoveryBackoffMs,
+  );
   let flushInFlight: Promise<void> | null = null;
   let pendingQueueTimer: ReturnType<typeof setInterval> | null = null;
   let activePostAcceptedHandler: PendingPostAcceptedHandler | null = null;
   const emittedResetConfirmationKeys = new Set<string>();
-  const sendSnapshot = options.sendSnapshot ?? ((snapshot, reason) => postUsageSnapshot(config, snapshot, reason));
+  const fetchWebhook = options.fetchWebhook ?? fetch;
+  const sendSnapshot = options.sendSnapshot ?? ((snapshot, reason) =>
+    postUsageSnapshot(config, snapshot, reason, fetchWebhook)
+  );
   const spawnAppServer = options.spawnAppServer ?? (() => spawn(config.codexCliPath, ["app-server"], {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
@@ -1255,25 +1305,12 @@ export async function runCodexUsageMonitor(
       if (!head) return;
       const headKey = `${head.reason}:${head.snapshot.observedAt}:${head.snapshot.resetsAt}`;
       const attemptPlan = pendingPostDeliveryLimiter.tryBegin(headKey);
-      if (attemptPlan === "wait") {
-        return;
-      }
-      if (attemptPlan === "limit") {
-        if (retryPauseLoggedFor !== headKey) {
-          retryPauseLoggedFor = headKey;
-          logger("pending_queue_retry_paused", {
-            reason: "attempt_limit",
-            action: "queue_retained_until_monitor_restart",
-          });
-        }
-        return;
-      }
+      if (attemptPlan === "wait") return;
       const delivery = await queue.deliverOldest((post) =>
         postSnapshotSafely(logger, sendSnapshot, post.snapshot, post.reason)
       );
       if (delivery.accepted && delivery.response) {
         pendingPostDeliveryLimiter.reset();
-        retryPauseLoggedFor = null;
         logSnapshotSent(logger, head.reason, head.snapshot);
         activePostAcceptedHandler?.(delivery.pendingPosts, head, delivery.response);
         emitResetConfirmationIfNeeded(
@@ -1283,8 +1320,23 @@ export async function runCodexUsageMonitor(
           head.reason,
           delivery.response,
         );
-      } else if (delivery.response) {
-        logger("snapshot_rejected", { reason: "not_accepted" });
+      } else {
+        const failure = delivery.response?.failure ?? { category: "invalid_response" as const };
+        const retry = pendingPostDeliveryLimiter.recordFailure(headKey, failure);
+        const details = {
+          category: failure.category,
+          ...(failure.httpStatus === undefined ? {} : { httpStatus: failure.httpStatus }),
+          failureCount: retry.consecutiveFailures,
+          retryInMs: retry.retryInMs,
+          action: "queue_retained_and_scheduled_retry",
+        };
+        logger("pending_queue_delivery_deferred", details);
+        if (!retry.isTransient) {
+          logger("pending_queue_delivery_blocked", {
+            ...details,
+            action: "queue_retained_for_diagnosis_and_slow_retry",
+          });
+        }
       }
     });
     flushInFlight = operation.catch((error) => {
@@ -1309,7 +1361,7 @@ export async function runCodexUsageMonitor(
     logger("pending_queue_restored", { count: (await pendingQueue.withExclusive((queue) => queue.list())).length });
     // Resume a saved observation immediately, independently of Codex startup or RPC.
     void flushPendingPosts();
-    pendingQueueTimer = setInterval(() => { void flushPendingPosts(); }, config.pollIntervalMs);
+    pendingQueueTimer = setInterval(() => { void flushPendingPosts(); }, queueCheckIntervalMs);
 
     while (!signal.aborted) {
       try {

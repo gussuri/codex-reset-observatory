@@ -6,7 +6,12 @@ import { randomUUID } from "node:crypto";
 import type { PendingMonitorPost } from "./codex-usage-monitor";
 
 const PENDING_POSTS_SCHEMA_VERSION = 1;
-export const MAX_PENDING_POST_DELIVERY_ATTEMPTS_PER_RUN = 3;
+export const MAX_SHORT_PENDING_POST_FAILURES = 3;
+export const DEFAULT_PENDING_POST_RECOVERY_BACKOFF_MS = [
+  5 * 60_000,
+  15 * 60_000,
+  30 * 60_000,
+] as const;
 const PENDING_POST_REASONS = new Set([
   "initial",
   "recovery_candidate",
@@ -310,8 +315,28 @@ export type PendingMonitorPostQueueAccess = {
   list: () => PendingMonitorPost[];
   enqueue: (post: PendingMonitorPost) => boolean;
   deliverOldest: (
-    deliver: (post: PendingMonitorPost) => Promise<{ accepted: boolean } | null>,
+    deliver: (post: PendingMonitorPost) => Promise<PendingMonitorPostDeliveryResult | null>,
   ) => Promise<Awaited<ReturnType<typeof deliverPendingMonitorPost>>>;
+};
+
+export type PendingMonitorPostDeliveryFailureCategory =
+  | "transport"
+  | "rate_limited"
+  | "server_error"
+  | "authentication"
+  | "invalid_request"
+  | "client_error"
+  | "invalid_response";
+
+export type PendingMonitorPostDeliveryFailure = {
+  category: PendingMonitorPostDeliveryFailureCategory;
+  httpStatus?: number;
+};
+
+export type PendingMonitorPostDeliveryResult = {
+  accepted: boolean;
+  failure?: PendingMonitorPostDeliveryFailure;
+  recovery?: string;
 };
 
 /** Serializes queue reads, new observations, sends, and acknowledgements. */
@@ -358,36 +383,69 @@ export function createPendingMonitorPostQueue(store: PendingMonitorPostStore) {
 
 export function createPendingPostDeliveryLimiter(
   minimumIntervalMs: number,
-  maxAttempts = MAX_PENDING_POST_DELIVERY_ATTEMPTS_PER_RUN,
+  recoveryBackoffMs: readonly number[] = DEFAULT_PENDING_POST_RECOVERY_BACKOFF_MS,
 ) {
+  const shortIntervalMs = Number.isFinite(minimumIntervalMs) && minimumIntervalMs > 0
+    ? Math.max(1, Math.floor(minimumIntervalMs))
+    : 120_000;
+  let previousRecoveryDelayMs = shortIntervalMs;
+  const normalizedRecoveryBackoffMs = (recoveryBackoffMs.length > 0
+    ? recoveryBackoffMs
+    : DEFAULT_PENDING_POST_RECOVERY_BACKOFF_MS
+  ).map((delayMs) => {
+    const delay = Number.isFinite(delayMs) && delayMs > 0 ? Math.floor(delayMs) : previousRecoveryDelayMs * 2;
+    previousRecoveryDelayMs = Math.max(delay, previousRecoveryDelayMs * 2);
+    return previousRecoveryDelayMs;
+  });
+
   let currentKey: string | null = null;
-  let attempts = 0;
-  let lastAttemptAt: number | null = null;
+  let consecutiveFailures = 0;
+  let nextAttemptAt: number | null = null;
 
   return {
-    tryBegin(key: string, nowMs = Date.now()): "ready" | "wait" | "limit" {
+    tryBegin(key: string, nowMs = Date.now()): "ready" | "wait" {
       if (currentKey !== key) {
         currentKey = key;
-        attempts = 0;
-        lastAttemptAt = null;
+        consecutiveFailures = 0;
+        nextAttemptAt = null;
       }
-      if (attempts >= maxAttempts) return "limit";
-      if (lastAttemptAt !== null && nowMs - lastAttemptAt < minimumIntervalMs) return "wait";
-      attempts += 1;
-      lastAttemptAt = nowMs;
-      return "ready";
+      return nextAttemptAt !== null && nowMs < nextAttemptAt ? "wait" : "ready";
+    },
+    recordFailure(
+      key: string,
+      failure: PendingMonitorPostDeliveryFailure,
+      nowMs = Date.now(),
+    ) {
+      if (currentKey !== key) {
+        currentKey = key;
+        consecutiveFailures = 0;
+      }
+      consecutiveFailures += 1;
+
+      const isTransient = failure.category === "transport" ||
+        failure.category === "rate_limited" ||
+        failure.category === "server_error";
+      const recoveryIndex = Math.min(
+        Math.max(0, consecutiveFailures - MAX_SHORT_PENDING_POST_FAILURES),
+        normalizedRecoveryBackoffMs.length - 1,
+      );
+      const retryInMs = isTransient && consecutiveFailures < MAX_SHORT_PENDING_POST_FAILURES
+        ? shortIntervalMs
+        : normalizedRecoveryBackoffMs[recoveryIndex]!;
+      nextAttemptAt = nowMs + retryInMs;
+      return { consecutiveFailures, retryInMs, isTransient };
     },
     reset() {
       currentKey = null;
-      attempts = 0;
-      lastAttemptAt = null;
+      consecutiveFailures = 0;
+      nextAttemptAt = null;
     },
   };
 }
 
 export async function deliverPendingMonitorPost(
   pendingPosts: PendingMonitorPost[],
-  deliver: (post: PendingMonitorPost) => Promise<{ accepted: boolean } | null>,
+  deliver: (post: PendingMonitorPost) => Promise<PendingMonitorPostDeliveryResult | null>,
   persist: (pendingPosts: PendingMonitorPost[]) => void,
 ) {
   const head = pendingPosts[0];
