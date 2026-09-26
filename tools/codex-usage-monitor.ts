@@ -23,6 +23,14 @@ import {
   type PendingMonitorPostQueueAccess,
   type PendingMonitorPostDeliveryFailure,
 } from "./codex-usage-monitor-persistence";
+import {
+  createMonitorRecoveryCandidateStore,
+  getMonitorRecoveryCandidatePath,
+  MonitorRecoveryCandidateStoreError,
+  type MonitorRecoveryCandidateStore,
+  type PendingRecoveryCandidateRecord,
+  type RecoveryCandidateDiscardReason,
+} from "./codex-usage-monitor-recovery-candidate";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
@@ -186,13 +194,7 @@ export type RecoveryCandidateCancellationReason =
   | "comparison_gap"
   | "stale_observation";
 
-export type PendingRecoveryCandidate = {
-  preRecoveryBaseline: CodexUsageSnapshot;
-  firstEvidenceSnapshot: CodexUsageSnapshot;
-  candidateStartedAtMs: number;
-  lastObservation: CodexUsageSnapshot;
-  observationCount: number;
-};
+export type PendingRecoveryCandidate = PendingRecoveryCandidateRecord;
 
 export type MonitorSnapshotState = {
   baselineSnapshot?: CodexUsageSnapshot | null;
@@ -770,6 +772,14 @@ export function createJsonMonitorLogger(
         ? ["observedAt", "usedPercent", "resetsAt", "firstObservedAt", "delayMs"]
       : event === "recovery_candidate_cancelled"
         ? ["reason", "observedAt", "usedPercent", "resetsAt"]
+      : event === "recovery_candidate_persisted" || event === "recovery_candidate_restored"
+        ? ["observedAt", "candidateStartedAtMs", "resetsAt", "action"]
+      : event === "recovery_candidate_persistence_discarded"
+        ? ["reason", "action"]
+      : event === "recovery_candidate_storage_failed"
+        ? ["reason", "action"]
+      : event === "recovery_candidate_outbox_reconciled"
+        ? ["observedAt", "resetsAt", "action"]
       : event === "snapshot_failed"
         ? ["reason", "httpStatus"]
         : event === "session_restart"
@@ -949,11 +959,17 @@ async function runAppServerSession(
   logger: MonitorLogger,
   signal: AbortSignal,
   pendingQueue: ReturnType<typeof createPendingMonitorPostQueue>,
+  recoveryCandidateStore: MonitorRecoveryCandidateStore,
+  getDurableRecoveryCandidate: () => PendingRecoveryCandidate | null,
+  setDurableRecoveryCandidate: (candidate: PendingRecoveryCandidate | null) => void,
   sendSnapshot: MonitorSnapshotSender,
   spawnAppServer: MonitorAppServerSpawner,
   registerPendingPostAcceptedHandler: RegisterPendingPostAcceptedHandler,
   requestPendingPostFlush: () => void,
   emittedResetConfirmationKeys: Set<string>,
+  monitorNow: () => number,
+  pollIntervalMs: number,
+  onFatalStorageError: (error: PendingMonitorPostStoreError | MonitorRecoveryCandidateStoreError) => void,
 ) {
   if (signal.aborted) return;
 
@@ -972,16 +988,34 @@ async function runAppServerSession(
     let nextRequestId = 1;
     let refreshInFlight = false;
     let consecutiveRpcFailures = 0;
-    let monitorSnapshotState: MonitorSnapshotState = {
-      previousLocalSnapshot: null,
-      lastSuccessfulPostAt: null,
-      pendingPosts: [],
-    };
+    const restoredCandidate = getDurableRecoveryCandidate();
+    let monitorSnapshotState: MonitorSnapshotState = restoredCandidate
+      ? {
+          baselineSnapshot: restoredCandidate.preRecoveryBaseline,
+          previousLocalSnapshot: restoredCandidate.lastObservation,
+          lastSuccessfulPostAt: restoredCandidate.lastSuccessfulPostAtMs ?? restoredCandidate.candidateStartedAtMs,
+          lastKnownBankedResetAvailableCount: restoredCandidate.lastKnownBankedResetAvailableCount ?? null,
+          pendingRecoveryCandidate: restoredCandidate,
+          pendingPosts: [],
+        }
+      : {
+          previousLocalSnapshot: null,
+          lastSuccessfulPostAt: null,
+          pendingPosts: [],
+        };
+    if (restoredCandidate) {
+      logger("recovery_candidate_restored", {
+        observedAt: restoredCandidate.firstEvidenceSnapshot.observedAt,
+        candidateStartedAtMs: restoredCandidate.candidateStartedAtMs,
+        resetsAt: restoredCandidate.firstEvidenceSnapshot.resetsAt,
+        action: "resume_after_validated_restart",
+      });
+    }
     const unregisterAcceptedHandler = registerPendingPostAcceptedHandler((pendingPosts) => {
       monitorSnapshotState = {
         ...monitorSnapshotState,
         pendingPosts,
-        lastSuccessfulPostAt: Date.now(),
+        lastSuccessfulPostAt: monitorNow(),
       };
     });
     let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -1052,7 +1086,7 @@ async function runAppServerSession(
           throw error;
         }
         consecutiveRpcFailures = 0;
-        const snapshot = parseCodexRateLimitsResponse(response, new Date());
+        const snapshot = parseCodexRateLimitsResponse(response, new Date(monitorNow()));
         if (!snapshot) {
           logger("snapshot_rejected", { reason: "invalid_weekly_window" });
           return;
@@ -1075,10 +1109,11 @@ async function runAppServerSession(
             ...monitorSnapshotState,
             pendingPosts: queue.list(),
           };
-          const nowMs = Date.now();
+          const previousState = monitorSnapshotState;
+          const nowMs = monitorNow();
           const postReason = getMonitorSnapshotPostReason(snapshot, monitorSnapshotState, nowMs, trigger);
           const postSnapshot = getMonitorPostSnapshot(snapshot, monitorSnapshotState, postReason, nowMs, trigger);
-          monitorSnapshotState = updateMonitorSnapshotState(
+          const nextState = updateMonitorSnapshotState(
             monitorSnapshotState,
             snapshot,
             false,
@@ -1086,11 +1121,81 @@ async function runAppServerSession(
             { nowMs, logger, trigger },
           );
 
+          let outboxPostEnqueued = false;
+          if (postReason === "recovery_candidate" ||
+            (previousState.pendingRecoveryCandidate && postReason && postReason !== "heartbeat")) {
+            queue.enqueue({ reason: postReason, snapshot: postSnapshot });
+            outboxPostEnqueued = true;
+          }
+
+          if (postReason === "recovery_candidate") {
+            try {
+              recoveryCandidateStore.clear();
+            } catch (error) {
+              if (error instanceof MonitorRecoveryCandidateStoreError) {
+                logger("recovery_candidate_storage_failed", {
+                  reason: error.reason,
+                  action: "monitor_stopped_after_outbox_persist",
+                });
+                onFatalStorageError(error);
+              }
+              throw error;
+            }
+            setDurableRecoveryCandidate(null);
+          } else if (nextState.pendingRecoveryCandidate) {
+            const lastSuccessfulPostAtMs = previousState.lastSuccessfulPostAt;
+            if (!Number.isFinite(lastSuccessfulPostAtMs)) {
+              throw new MonitorRecoveryCandidateStoreError("recovery_candidate_write_failed");
+            }
+            const persistedCandidate: PendingRecoveryCandidate = {
+              ...nextState.pendingRecoveryCandidate,
+              lastSuccessfulPostAtMs: lastSuccessfulPostAtMs!,
+              lastKnownBankedResetAvailableCount: nextState.lastKnownBankedResetAvailableCount ?? null,
+            };
+            try {
+              recoveryCandidateStore.save(persistedCandidate, nowMs);
+            } catch (error) {
+              if (error instanceof MonitorRecoveryCandidateStoreError) {
+                logger("recovery_candidate_storage_failed", {
+                  reason: error.reason,
+                  action: "monitor_stopped_without_confirming_candidate",
+                });
+                onFatalStorageError(error);
+              }
+              throw error;
+            }
+            setDurableRecoveryCandidate(persistedCandidate);
+            if (!previousState.pendingRecoveryCandidate) {
+              logger("recovery_candidate_persisted", {
+                observedAt: persistedCandidate.firstEvidenceSnapshot.observedAt,
+                candidateStartedAtMs: persistedCandidate.candidateStartedAtMs,
+                resetsAt: persistedCandidate.firstEvidenceSnapshot.resetsAt,
+                action: "atomic_candidate_saved",
+              });
+            }
+          } else if (previousState.pendingRecoveryCandidate) {
+            try {
+              recoveryCandidateStore.clear();
+            } catch (error) {
+              if (error instanceof MonitorRecoveryCandidateStoreError) {
+                logger("recovery_candidate_storage_failed", {
+                  reason: error.reason,
+                  action: "monitor_stopped_after_candidate_cancellation",
+                });
+                onFatalStorageError(error);
+              }
+              throw error;
+            }
+            setDurableRecoveryCandidate(null);
+          }
+
+          monitorSnapshotState = nextState;
+
           if (postReason === "heartbeat") {
             if (queue.list().length > 0) return true;
             const webhookResponse = await postSnapshotSafely(logger, sendSnapshot, postSnapshot, postReason);
             if (webhookResponse?.accepted === true) {
-              monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, Date.now());
+              monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, monitorNow());
               logSnapshotSent(logger, postReason, postSnapshot, monitorSnapshotState.lastKnownBankedResetAvailableCount);
               emitResetConfirmationIfNeeded(logger, emittedResetConfirmationKeys, postSnapshot, postReason, webhookResponse);
             } else if (webhookResponse) {
@@ -1105,8 +1210,8 @@ async function runAppServerSession(
                 logger("snapshot_rejected", { reason: "not_accepted" });
               }
             }
-          } else if (postReason) {
-            queue.enqueue({ reason: postReason, snapshot: postSnapshot });
+          } else if (postReason && postReason !== "recovery_candidate") {
+            if (!outboxPostEnqueued) queue.enqueue({ reason: postReason, snapshot: postSnapshot });
           }
 
           monitorSnapshotState = {
@@ -1118,6 +1223,12 @@ async function runAppServerSession(
         if (shouldFlushPendingQueue) requestPendingPostFlush();
       } catch (error) {
         if (error instanceof PendingMonitorPostStoreError) {
+          try { child.kill(); } catch { /* process is already gone */ }
+          finish(error);
+          return;
+        }
+        if (error instanceof MonitorRecoveryCandidateStoreError) {
+          if (!signal.aborted) onFatalStorageError(error);
           try { child.kill(); } catch { /* process is already gone */ }
           finish(error);
           return;
@@ -1195,7 +1306,7 @@ async function runAppServerSession(
         initialized = true;
         await refresh("initial");
         if (settled) return;
-        pollTimer = setInterval(() => { void refresh("poll"); }, config.pollIntervalMs);
+        pollTimer = setInterval(() => { void refresh("poll"); }, pollIntervalMs);
       } catch (error) {
         const reason = getSafeMonitorErrorCode(error);
         finish(new Error(reason === "unknown" ? "app_server_initialize_failed" : reason));
@@ -1218,6 +1329,11 @@ export type RunCodexUsageMonitorOptions = {
     checkIntervalMs: number;
     shortRetryIntervalMs: number;
     recoveryBackoffMs: readonly number[];
+  };
+  /** Clock and poll interval overrides are local integration-test seams only. */
+  monitorTiming?: {
+    now: () => number;
+    pollIntervalMs: number;
   };
 };
 
@@ -1265,12 +1381,21 @@ export async function runCodexUsageMonitor(
     try { lock.release(); } catch { /* a dead-PID lock is recoverable on the next start */ }
     throw error;
   }
+  const recoveryCandidateStore = createMonitorRecoveryCandidateStore(
+    getMonitorRecoveryCandidatePath(queuePath),
+  );
+  const monitorNow = options.monitorTiming?.now ?? Date.now;
+  const testPollIntervalMs = options.monitorTiming?.pollIntervalMs;
+  const monitorPollIntervalMs = Number.isFinite(testPollIntervalMs) && (testPollIntervalMs ?? 0) > 0
+    ? Math.max(1, Math.floor(testPollIntervalMs!))
+    : config.pollIntervalMs;
+  let durableRecoveryCandidate: PendingRecoveryCandidate | null = null;
 
   const monitorAbort = new AbortController();
   const signal = monitorAbort.signal;
   const relayRequestedStop = () => monitorAbort.abort();
   requestedSignal.addEventListener("abort", relayRequestedStop, { once: true });
-  let fatalStorageError: PendingMonitorPostStoreError | null = null;
+  let fatalStorageError: PendingMonitorPostStoreError | MonitorRecoveryCandidateStoreError | null = null;
   const pendingQueueRetryTiming = options.pendingQueueRetryTiming ?? {
     checkIntervalMs: config.pollIntervalMs,
     shortRetryIntervalMs: config.pollIntervalMs,
@@ -1364,6 +1489,59 @@ export async function runCodexUsageMonitor(
 
   let restartAttempt = 0;
   try {
+    let candidateLoad: ReturnType<MonitorRecoveryCandidateStore["load"]>;
+    try {
+      candidateLoad = recoveryCandidateStore.load(monitorNow());
+    } catch (error) {
+      if (error instanceof MonitorRecoveryCandidateStoreError) {
+        logger("recovery_candidate_storage_failed", {
+          reason: error.reason,
+          action: "monitor_stopped_before_candidate_restore",
+        });
+      }
+      throw error;
+    }
+    durableRecoveryCandidate = candidateLoad.candidate;
+    if (candidateLoad.discardedReason) {
+      logger("recovery_candidate_persistence_discarded", {
+        reason: candidateLoad.discardedReason,
+        action: "discarded_without_creating_reset_execution",
+      });
+    }
+    if (durableRecoveryCandidate) {
+      const candidateAlreadyQueued = await pendingQueue.withExclusive((queue) => queue.list().some((post) => {
+        const firstEvidence = durableRecoveryCandidate?.firstEvidenceSnapshot;
+        return post.reason === "recovery_candidate" &&
+          firstEvidence !== undefined &&
+          post.snapshot.observedAt === firstEvidence.observedAt &&
+          post.snapshot.limitId === firstEvidence.limitId &&
+          post.snapshot.planType === firstEvidence.planType &&
+          post.snapshot.usedPercent === firstEvidence.usedPercent &&
+          post.snapshot.windowDurationMins === firstEvidence.windowDurationMins &&
+          post.snapshot.resetsAt === firstEvidence.resetsAt &&
+          post.snapshot.bankedResetAvailableCount === firstEvidence.bankedResetAvailableCount;
+      }));
+      if (candidateAlreadyQueued) {
+        const confirmedCandidate = durableRecoveryCandidate;
+        try {
+          recoveryCandidateStore.clear();
+        } catch (error) {
+          if (error instanceof MonitorRecoveryCandidateStoreError) {
+            logger("recovery_candidate_storage_failed", {
+              reason: error.reason,
+              action: "monitor_stopped_before_outbox_delivery",
+            });
+          }
+          throw error;
+        }
+        durableRecoveryCandidate = null;
+        logger("recovery_candidate_outbox_reconciled", {
+          observedAt: confirmedCandidate.firstEvidenceSnapshot.observedAt,
+          resetsAt: confirmedCandidate.firstEvidenceSnapshot.resetsAt,
+          action: "candidate_cleared_after_durable_enqueue",
+        });
+      }
+    }
     logger("pending_queue_restored", { count: (await pendingQueue.withExclusive((queue) => queue.list())).length });
     // Resume a saved observation immediately, independently of Codex startup or RPC.
     void flushPendingPosts();
@@ -1376,11 +1554,20 @@ export async function runCodexUsageMonitor(
           logger,
           signal,
           pendingQueue,
+          recoveryCandidateStore,
+          () => durableRecoveryCandidate,
+          (candidate) => { durableRecoveryCandidate = candidate; },
           sendSnapshot,
           spawnAppServer,
           registerPendingPostAcceptedHandler,
           () => { void flushPendingPosts(); },
           emittedResetConfirmationKeys,
+          monitorNow,
+          monitorPollIntervalMs,
+          (error) => {
+            fatalStorageError = error;
+            monitorAbort.abort();
+          },
         );
         restartAttempt = 0;
       } catch (error) {
@@ -1389,6 +1576,15 @@ export async function runCodexUsageMonitor(
             reason: error.reason,
             action: "monitor_stopped_without_dropping_queue",
           });
+          throw error;
+        }
+        if (error instanceof MonitorRecoveryCandidateStoreError) {
+          if (!signal.aborted) {
+            logger("recovery_candidate_storage_failed", {
+              reason: error.reason,
+              action: "monitor_stopped_without_dropping_candidate",
+            });
+          }
           throw error;
         }
         logger("session_restart", {
