@@ -18,10 +18,13 @@ import {
   beginResetMarkerRefresh,
   buildCurrentRadarFetchUrl,
   createResetMarkerState,
+  deferResetMarker,
   getInitialResetMarkerPlan,
   getResetMarkerCatchUpPlan,
   getResetMarkerPollPlan,
   getResetMarkerRequestUrl,
+  markResetMarkerAccepted,
+  markResetMarkerRetry,
   observeResetMarker,
   type ResetMarkerPayload,
 } from "../lib/radar/resetMarker";
@@ -111,6 +114,76 @@ test("catch-up retries are bounded and stop after the marker is reflected", () =
   );
 });
 
+test("an initial unreflected marker resumes after the bounded retry window and stops once reflected", () => {
+  const incoming = marker("m2", "2026-09-01T00:02:00.000Z");
+  const oldSnapshot = snapshot("2026-09-01T00:01:00.000Z");
+  let state = beginResetMarkerRefresh(createResetMarkerState(), incoming);
+
+  assert.deepEqual(getResetMarkerCatchUpPlan(oldSnapshot, incoming, 0), {
+    action: "retry",
+    delayMs: RESET_MARKER_CATCH_UP_RETRY_DELAY_MS,
+  });
+  state = markResetMarkerRetry(state, incoming, 1);
+  state = markResetMarkerRetry(state, incoming, RESET_MARKER_MAX_CATCH_UP_RETRIES);
+  assert.deepEqual(
+    getResetMarkerCatchUpPlan(oldSnapshot, incoming, state.retryCount),
+    { action: "defer", delayMs: RESET_MARKER_POLL_INTERVAL_MS },
+  );
+
+  state = deferResetMarker(state, incoming);
+  assert.equal(state.pending?.marker, incoming.marker, "deferral retains the received but unreflected event");
+  assert.equal(state.retryCount, 0, "the next regular check starts a fresh bounded catch-up window");
+
+  const repeated = observeResetMarker(state, incoming);
+  assert.equal(repeated.action, "refresh", "the same unreflected event resumes at the regular marker check");
+  assert.equal(repeated.marker?.marker, incoming.marker);
+  assert.deepEqual(getResetMarkerCatchUpPlan(snapshot(incoming.resetAt), incoming, 0), {
+    action: "accepted",
+    delayMs: 0,
+  });
+
+  state = markResetMarkerAccepted(repeated.state, incoming);
+  assert.equal(state.pending, null);
+  assert.equal(state.reflectedMarker, incoming.marker);
+  assert.equal(observeResetMarker(state, incoming).action, "unchanged");
+});
+
+test("a newer marker supersedes a deferred event and a late older marker cannot move tracking backward", () => {
+  const first = marker("m2", "2026-09-01T00:02:00.000Z");
+  const newer = marker("m3", "2026-09-01T00:03:00.000Z");
+  let state = deferResetMarker(beginResetMarkerRefresh(createResetMarkerState(), first), first);
+
+  const next = observeResetMarker(state, newer);
+  assert.equal(next.action, "refresh");
+  assert.equal(next.state.marker, newer.marker);
+  assert.equal(next.state.pending?.marker, newer.marker);
+
+  const lateOld = observeResetMarker(next.state, first);
+  assert.equal(lateOld.action, "unchanged");
+  assert.equal(lateOld.state.pending?.marker, newer.marker);
+});
+
+test("a transient snapshot transport failure remains pending and recovers on the next scheduled check", () => {
+  const incoming = marker("m2", "2026-09-01T00:02:00.000Z");
+  let state = beginResetMarkerRefresh(createResetMarkerState(), incoming);
+  let retryCount = 0;
+
+  while (retryCount < RESET_MARKER_MAX_CATCH_UP_RETRIES) {
+    state = markResetMarkerRetry(state, incoming, retryCount + 1);
+    retryCount += 1;
+  }
+  state = deferResetMarker(state, incoming);
+
+  const resumed = observeResetMarker(state, incoming);
+  assert.equal(resumed.action, "refresh");
+  assert.equal(resumed.state.pending?.marker, incoming.marker);
+  assert.equal(resumed.state.retryCount, 0);
+
+  const recovered = markResetMarkerAccepted(resumed.state, incoming);
+  assert.equal(recovered.reflectedMarker, incoming.marker);
+  assert.equal(observeResetMarker(recovered, incoming).action, "unchanged");
+});
+
 test("marker polling is visible-only and visibility resume is bounded by the last check", () => {
   assert.equal(RESET_MARKER_POLL_INTERVAL_MS, 5 * 60 * 1000);
   const now = Date.parse("2026-09-01T00:10:00.000Z");
@@ -144,6 +217,21 @@ test("RadarDashboard owns marker polling while retaining the existing full refre
   assert.match(source, /resetMarker/);
   assert.match(source, /getInitialRefreshPlan/);
   assert.doesNotMatch(source, /cache:\s*"no-store"/);
+
+  const initialCheck = source.indexOf("if (!markerState.initialized)");
+  const initialBegin = source.indexOf("beginResetMarkerRefresh(markerState, incoming)", initialCheck);
+  const initialCatchUp = source.indexOf("runMarkerCatchUp(incoming, 0)", initialBegin);
+  const regularObservation = source.indexOf("observeResetMarker(markerState, incoming)", initialCatchUp);
+  assert.ok(initialCheck >= 0 && initialBegin > initialCheck && initialCatchUp > initialBegin);
+  assert.ok(regularObservation > initialCatchUp, "subsequent marker checks re-enter the same observation state machine");
+  assert.match(source, /finally\s*\{[\s\S]*?scheduleMarkerCheck\(nextDelayMs\)/);
+  assert.equal(RESET_MARKER_POLL_INTERVAL_MS, 5 * 60 * 1000, "normal marker polling cadence remains unchanged");
+
+  const catchUpStart = source.indexOf("const runMarkerCatchUp = async");
+  const markerCheckStart = source.indexOf("const checkResetMarker = async", catchUpStart);
+  const catchUpSource = source.slice(catchUpStart, markerCheckStart);
+  assert.match(catchUpSource, /retryCount < RESET_MARKER_MAX_CATCH_UP_RETRIES[\s\S]*?markResetMarkerRetry/);
+  assert.match(catchUpSource, /deferResetMarker\(markerState, marker\)[\s\S]*?RESET_MARKER_POLL_INTERVAL_MS/);
 });
 
 test("reset-marker route is a lightweight endpoint and does not build Radar data", () => {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Forms;
 
@@ -15,8 +16,61 @@ internal static class Program
             if (!CheckStatusLayout(scale)) return 1;
         }
 
-        Console.WriteLine("PASS monitor controls remain visible at 140% and 150% scale");
+        if (!CheckMonitorExitPresentation()) return 1;
+
+        Console.WriteLine("PASS monitor controls remain visible and lock diagnostics are presented safely");
         return 0;
+    }
+
+    private static bool CheckMonitorExitPresentation()
+    {
+        var formType = Assembly.Load("CodexUsageMonitor").GetType("CodexUsageMonitor.MainForm")
+            ?? throw new InvalidOperationException("MainForm was not found.");
+        using var form = (Form)Activator.CreateInstance(formType)!;
+        _ = form.Handle;
+
+        using var exitedProcess = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c exit 0")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        }) ?? throw new InvalidOperationException("Could not start the clean-exit fixture process.");
+        if (!exitedProcess.WaitForExit(5_000) || exitedProcess.ExitCode != 0)
+        {
+            Console.Error.WriteLine("clean-exit fixture process did not exit successfully");
+            return false;
+        }
+
+        formType.GetField("_monitorProcess", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(form, exitedProcess);
+        formType.GetMethod("HandleProcessExited", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(form, null);
+        Application.DoEvents();
+
+        var status = GetField<Label>(form, "_statusValue");
+        var toggle = GetField<Button>(form, "_toggleButton");
+        if (status.Text != "○ 停止中" || toggle.Text != "監視開始")
+        {
+            Console.Error.WriteLine($"clean exit was not presented as stopped: status={status.Text}, toggle={toggle.Text}");
+            return false;
+        }
+
+        var readSafeErrorText = formType.GetMethod("ReadSafeErrorText", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("ReadSafeErrorText was not found.");
+        foreach (var reason in new[]
+        {
+            "pending_posts_lock_recovery_orphaned",
+            "pending_posts_lock_recovery_corrupt",
+        })
+        {
+            var message = (string?)readSafeErrorText.Invoke(null, new object?[] { reason });
+            if (message is null || !message.Contains("手動確認", StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine($"{reason} was not presented as requiring manual review");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool CheckStatusLayout(float scale)
