@@ -11,6 +11,8 @@ import {
   buildGeminiPrompt,
   TIBO_GEMINI_SYSTEM_PROMPT,
 } from "../lib/radar/geminiClassification";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
+import { TIBO_RESET_PROPAGATION_COMPLETION } from "./fixtures/tiboResetPropagationCompletion";
 
 const now = new Date("2026-09-23T12:00:00.000Z");
 
@@ -84,6 +86,202 @@ test("accepts none without an evidence quote and rejects malformed values", () =
   );
 });
 
+function rawOperationalAssessment(
+  status: "investigating" | "active" | "recovered",
+  evidenceQuote: string,
+) {
+  return {
+    codexOperationalStatus: status,
+    codexOperationalConfidence: 0.9,
+    codexOperationalEvidenceQuote: evidenceQuote,
+    codexOperationalReasonJa: "Geminiのテスト理由",
+  };
+}
+
+test("reset propagation completion cannot persist Gemini's false recovered assessment", () => {
+  const assessment = parseCodexOperationalAssessment(
+    rawOperationalAssessment("recovered", "Resets all propagated"),
+    TIBO_RESET_PROPAGATION_COMPLETION.text,
+  );
+
+  assert.deepEqual(assessment, {
+    codex_operational_status: "none",
+    codex_operational_confidence: null,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: null,
+  });
+  assert.equal(
+    getCodexOperationalExpiryAt(assessment.codex_operational_status, "2026-09-26T20:00:00.000Z"),
+    null,
+  );
+});
+
+test("quota reset and BANKED distribution alone cannot create operational recovery", () => {
+  const resetText = "Usage limits have been reset for all paid users.";
+  const bankedText = "Banked resets have been loaded into all affected accounts.";
+
+  for (const text of [resetText, bankedText]) {
+    const assessment = parseCodexOperationalAssessment(
+      rawOperationalAssessment("recovered", text),
+      text,
+    );
+    assert.equal(assessment.codex_operational_status, "none", text);
+    assert.equal(assessment.codex_operational_evidence_quote, null, text);
+    assert.equal(assessment.codex_operational_reason_ja, null, text);
+    assert.equal(getCodexOperationalExpiryAt(assessment.codex_operational_status, now.toISOString()), null, text);
+  }
+});
+
+test("reset propagation alone cannot create active or investigating operational states", () => {
+  for (const status of ["active", "investigating"] as const) {
+    const assessment = parseCodexOperationalAssessment(
+      rawOperationalAssessment(status, "Resets all propagated"),
+      TIBO_RESET_PROPAGATION_COMPLETION.text,
+    );
+    assert.equal(assessment.codex_operational_status, "none", status);
+    assert.equal(assessment.codex_operational_evidence_quote, null, status);
+  }
+});
+
+test("the real apology reset notice keeps independent Codex service recovery evidence", () => {
+  const assessment = parseCodexOperationalAssessment(
+    rawOperationalAssessment("recovered", "we’re back in action"),
+    TIBO_APOLOGY_RESET_NOTICE.text,
+  );
+
+  assert.equal(assessment.codex_operational_status, "recovered");
+  assert.equal(assessment.codex_operational_evidence_quote, "we’re back in action");
+  assert.equal(
+    getCodexOperationalExpiryAt(assessment.codex_operational_status, TIBO_APOLOGY_RESET_NOTICE.tweetCreatedAt),
+    "2026-09-26T12:07:13.000Z",
+  );
+});
+
+test("explicit Codex investigation and degradation remain operational states", () => {
+  const investigatingText = "Codex is down and we're investigating.";
+  const activeText = "Codex is currently degraded.";
+
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("investigating", investigatingText),
+      investigatingText,
+    ).codex_operational_status,
+    "investigating",
+  );
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("active", activeText),
+      activeText,
+    ).codex_operational_status,
+    "active",
+  );
+});
+
+test("negated service recovery, degradation, and investigation do not assert operational states", () => {
+  const cases = [
+    ["recovered", "Codex is not back yet."],
+    ["active", "Codex is not currently degraded."],
+    ["investigating", "We are not investigating a Codex outage."],
+  ] as const;
+
+  for (const [status, text] of cases) {
+    assert.equal(
+      parseCodexOperationalAssessment(rawOperationalAssessment(status, text), text).codex_operational_status,
+      "none",
+      text,
+    );
+  }
+});
+
+test("planned or conditional recovery language is not treated as completed recovery", () => {
+  const cases = [
+    "Codex will be back after the reset.",
+    "The service could be restored soon.",
+    "The outage might be fixed tomorrow.",
+    "We recovered from the outage last week.",
+  ];
+
+  for (const text of cases) {
+    assert.equal(
+      parseCodexOperationalAssessment(rawOperationalAssessment("recovered", text), text).codex_operational_status,
+      "none",
+      text,
+    );
+  }
+});
+
+test("a current recovery after a historical outage remains a current recovery", () => {
+  const cases = [
+    "Codex is back to normal after last week's outage.",
+    "We will reset usage limits and Codex is back in action.",
+  ];
+
+  for (const text of cases) {
+    assert.equal(
+      parseCodexOperationalAssessment(rawOperationalAssessment("recovered", text), text).codex_operational_status,
+      "recovered",
+      text,
+    );
+  }
+});
+
+test("reset propagation does not suppress an independent recovery assertion", () => {
+  const text = "Reset propagation finished and Codex is back to normal after the outage.";
+  const assessment = parseCodexOperationalAssessment(
+    rawOperationalAssessment("recovered", "Codex is back to normal after the outage"),
+    text,
+  );
+
+  assert.equal(assessment.codex_operational_status, "recovered");
+  assert.equal(assessment.codex_operational_evidence_quote, "Codex is back to normal after the outage");
+});
+
+test("generic fixed-now evidence is allowed unless reset-only context makes it ambiguous", () => {
+  const fixedNowText = "Fixed now.";
+  const resetOnlyText = "The usage limit reset is fixed now.";
+  const resolvedIssueText = "The issue is resolved.";
+  const resetIssueText = "The reset issue is resolved.";
+
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("recovered", fixedNowText),
+      fixedNowText,
+    ).codex_operational_status,
+    "recovered",
+  );
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("recovered", resolvedIssueText),
+      resolvedIssueText,
+    ).codex_operational_status,
+    "recovered",
+  );
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("recovered", resetOnlyText),
+      resetOnlyText,
+    ).codex_operational_status,
+    "none",
+  );
+  assert.equal(
+    parseCodexOperationalAssessment(
+      rawOperationalAssessment("recovered", resetIssueText),
+      resetIssueText,
+    ).codex_operational_status,
+    "none",
+  );
+});
+
+test("parent-only recovery text cannot qualify as Tibo operational evidence", () => {
+  const assessment = parseCodexOperationalAssessment(
+    rawOperationalAssessment("recovered", "Codex is back to normal"),
+    "nice",
+  );
+
+  assert.equal(assessment.codex_operational_status, null);
+  assert.equal(assessment.codex_operational_evidence_quote, null);
+});
+
 test("Gemini prompt keeps operational status independent and limits evidence to Tibo's text", () => {
   const prompt = buildGeminiPrompt({
     text: "We are investigating a Codex issue.",
@@ -94,6 +292,10 @@ test("Gemini prompt keeps operational status independent and limits evidence to 
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /independent, display-only Codex service operational status/);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /must be an exact contiguous substring of AUTHOR TEXT/);
   assert.match(prompt, /never treat it as Tibo's own assertion/);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /Resets all propagated\. That will be all\.[\s\S]*signalType="reset_executed"[\s\S]*codexOperationalStatus="none"/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /Banked resets have now been loaded into all accounts\.[\s\S]*codexOperationalStatus="none"/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /We're back in action\. Sorry about the brief disruption\.[\s\S]*codexOperationalStatus="recovered"/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /reset completion\s+and Codex service recovery are independent/i);
 });
 
 test("sets exactly twelve hours of display eligibility for non-none Tibo states", () => {

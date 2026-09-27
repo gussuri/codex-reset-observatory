@@ -329,7 +329,20 @@ change signalType, teaserStrength, reset history, or any probability-related mea
 - Use null if the status cannot be determined reliably.
 Quoted or parent text is context only and must never be treated as Tibo's assertion. For a non-none status,
 codexOperationalEvidenceQuote must be an exact contiguous substring of AUTHOR TEXT. Do not infer status from
-Codex usage-limit resets, BANKED distributions, or reset execution alone.
+Codex usage-limit resets, BANKED distributions, reset propagation, or reset execution alone. Reset completion
+and Codex service recovery are independent axes: a completed or distributed reset does not say that the
+Codex service had an incident or recovered from one. Historical incident reports (for example, a service
+that recovered last week) are not a current operational status.
+
+Operational-axis examples:
+- "Resets all propagated. That will be all." -> signalType="reset_executed";
+  codexOperationalStatus="none".
+- "Banked resets have now been loaded into all accounts." -> codexOperationalStatus="none".
+- "We're back in action. Sorry about the brief disruption." -> codexOperationalStatus="recovered".
+- "We're back in action and we'll reset usage limits for all paid users." ->
+  signalType="official_notice" and codexOperationalStatus="recovered".
+- "Codex is down and we're investigating." -> codexOperationalStatus="investigating".
+- "Codex is currently degraded." -> codexOperationalStatus="active".
 
 Respond ONLY with a JSON object strictly matching this schema:
 {
