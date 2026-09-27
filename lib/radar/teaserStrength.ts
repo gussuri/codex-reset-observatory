@@ -106,6 +106,7 @@ const EXPLICIT_NEGATION_PATTERN = /\b(?:no|nope|never|not|isn't|isnt|wasn't|wasn
 const COMPLETION_PATTERN = /\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b[\s\S]{0,100}\b(?:reset|button|limit|quota)\b|\b(?:reset|button|limit|quota)\b[\s\S]{0,100}\b(?:already|just|successfully|done|completed|complete|happened|landed|arrived|propagated|issued|distributed|available|applied|live|active)\b|\b(?:i|we)\s+(?:pressed|hit|used|activated)\s+(?:the\s+)?(?:reset\s+)?button\b/i;
 const AFFIRMATIVE_FUTURE_COMMITMENT_PATTERN = /\b(?:will|we['’]?ll|i['’]?ll|going\s+to|plan(?:s|ned)?\s+to|scheduled\s+to|set\s+to)\b[\s\S]{0,80}\b(?:reset|button|limit|quota|come|coming|happen|happening|land|landing|arrive|arriving)\b|\b(?:still\s+)?(?:come|coming|happen|happening|land|landing|arrive|arriving)\b/i;
 const UNCERTAIN_FUTURE_COMMITMENT_PATTERN = /\b(?:maybe|might|could|possibly|perhaps|who\s+knows|we['’]?ll\s+see)\b/i;
+const AUTHOR_OWNED_UNCOMMITTED_FUTURE_PATTERN = /\b(?:may|hope(?:fully)?|unclear|uncertain|not\s+sure|not\s+certain)\b/i;
 
 function getContextDependence(signal: ResetTeaserSignal): TiboSignalContextDependence {
   const hasContext = Boolean(
@@ -171,6 +172,46 @@ function hasExplicitAutomaticOfficialReplyEvidence(signal: ResetTeaserSignal) {
 
   return !EXPLICIT_NEGATION_PATTERN.test(authorText) &&
     !COMPLETION_PATTERN.test(authorText);
+}
+
+function hasAuthorOwnedExplicitFutureResetReplyEvidence(
+  signal: ResetTeaserSignal,
+  now: Date,
+) {
+  if (signal.signal_type !== "official_notice" ||
+      signal.is_reply !== true ||
+      signal.is_quote === true ||
+      signal.verification_status === "rejected" ||
+      typeof signal.confidence !== "number" ||
+      !Number.isFinite(signal.confidence) ||
+      signal.confidence < 0.8) {
+    return false;
+  }
+
+  const authorText = signal.text ?? "";
+  const createdTime = getTimestamp(signal.tweet_created_at);
+  const nowTime = now.getTime();
+  if (createdTime === null || !Number.isFinite(nowTime) || createdTime > nowTime ||
+      createdTime < nowTime - RESET_TEASER_LOOKBACK_MS) {
+    return false;
+  }
+
+  const hasFutureTiming = FUTURE_TIMING_PATTERN.test(authorText) ||
+    EXPLICIT_CLOCK_PATTERN.test(authorText);
+  const hasFutureCommitment = AFFIRMATIVE_FUTURE_COMMITMENT_PATTERN.test(authorText) ||
+    EXPLICIT_RESET_SCHEDULE_PATTERN.test(authorText) ||
+    EXPLICIT_SCHEDULE_INTENT_PATTERN.test(authorText);
+  if (!EXPLICIT_RESET_OR_LIMIT_PATTERN.test(authorText) ||
+      !hasFutureTiming ||
+      !hasFutureCommitment ||
+      UNCERTAIN_FUTURE_COMMITMENT_PATTERN.test(authorText) ||
+      AUTHOR_OWNED_UNCOMMITTED_FUTURE_PATTERN.test(authorText) ||
+      EXPLICIT_NEGATION_PATTERN.test(authorText) ||
+      COMPLETION_PATTERN.test(authorText)) {
+    return false;
+  }
+
+  return hasResolvedFutureWindow(signal, now);
 }
 
 function isOfficialNoticeEligible(signal: ResetTeaserSignal) {
@@ -300,6 +341,8 @@ export function interpretTiboSignal(
     hasResolvedFutureWindow(signal, now);
   const manualStrongReplyTimedTeaser = !rejected &&
     hasValidatedManualStrongReplyTimedTeaserEvidence(signal, now);
+  const authorOwnedExplicitFutureResetReply =
+    hasAuthorOwnedExplicitFutureResetReplyEvidence(signal, now);
   const timedProbabilityEligible = !rejected &&
     !officialNoticeEligible &&
     !historyEligible &&
@@ -368,6 +411,19 @@ export function interpretTiboSignal(
       historyEligible,
       contextDependence,
       reason: "strong_timed_context",
+      uiTeaserFallback: true,
+    };
+  }
+
+  if (authorOwnedExplicitFutureResetReply) {
+    return {
+      presentationDisposition: "strong_teaser",
+      officialNoticeEligible,
+      probabilityTeaserEligible,
+      timedProbabilityEligible,
+      historyEligible,
+      contextDependence,
+      reason: "author_owned_explicit_future_reset_reply",
       uiTeaserFallback: true,
     };
   }
