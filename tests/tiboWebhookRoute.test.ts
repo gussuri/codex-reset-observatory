@@ -7,6 +7,8 @@ import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/tibo/route";
 import { TARGET_TIBO_TWEET_CREATED_AT, TARGET_TIBO_TWEET_ID, TARGET_TIBO_TWEET_TEXT, TARGET_TIBO_TWEET_URL } from "./fixtures/tiboLongFormReset";
+import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
+import { TIBO_RESET_PROPAGATION_COMPLETION } from "./fixtures/tiboResetPropagationCompletion";
 
 const ENV_KEYS = [
   "TIBO_WEBHOOK_SECRET",
@@ -414,6 +416,109 @@ test("Tibo state SELECT failure fails closed before upsert or formal adoption", 
   } finally {
     globalThis.fetch = originalFetch;
     console.info = originalInfo;
+    restoreEnvironment(previous);
+  }
+});
+
+test("webhook persists effective operational status without changing reset classification", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+
+  try {
+    const resetCompletionRaw = {
+      signalType: "reset_executed",
+      confidence: 0.98,
+      temporalDirection: "completed_now",
+      evidenceQuote: "Resets all propagated",
+      reasonJa: "利用上限のリセットが反映されました。",
+      resetTypeJa: null,
+      teaserStrength: "none",
+      teaserStrengthConfidence: 0.95,
+      teaserStrengthEvidenceQuote: "Resets all propagated",
+      teaserStrengthReasonJa: "完了報告です。",
+      codexOperationalStatus: "recovered",
+      codexOperationalConfidence: 0.9,
+      codexOperationalEvidenceQuote: "Resets all propagated",
+      codexOperationalReasonJa: "リセットが全アカウントに反映されました。",
+    };
+    const restoreResetGemini = installGeminiClassificationMock(resetCompletionRaw);
+    try {
+      const response = await POST(buildRequest({
+        tweetId: TIBO_RESET_PROPAGATION_COMPLETION.tweetId,
+        text: TIBO_RESET_PROPAGATION_COMPLETION.text,
+        tweetUrl: TIBO_RESET_PROPAGATION_COMPLETION.tweetUrl,
+        tweetCreatedAt: "2026-09-26T20:00:00.000Z",
+      }));
+      assert.equal(response.status, 200);
+    } finally {
+      restoreResetGemini();
+    }
+
+    const apologyRaw = {
+      signalType: "reset_executed",
+      confidence: 0.98,
+      temporalDirection: "completed_now",
+      evidenceQuote: "we’ll reset usage limits for all paid users",
+      reasonJa: "全有料ユーザーの利用上限をリセットします。",
+      resetTypeJa: "詫びリセット",
+      teaserStrength: "none",
+      teaserStrengthConfidence: 0.95,
+      teaserStrengthEvidenceQuote: "we’ll reset usage limits for all paid users",
+      teaserStrengthReasonJa: "具体的な告知です。",
+      codexOperationalStatus: "recovered",
+      codexOperationalConfidence: 0.9,
+      codexOperationalEvidenceQuote: "we’re back in action",
+      codexOperationalReasonJa: "一時的なサービス障害から復旧しました。",
+    };
+    const restoreApologyGemini = installGeminiClassificationMock(apologyRaw);
+    try {
+      const response = await POST(buildRequest({
+        tweetId: TIBO_APOLOGY_RESET_NOTICE.tweetId,
+        text: TIBO_APOLOGY_RESET_NOTICE.text,
+        tweetUrl: TIBO_APOLOGY_RESET_NOTICE.tweetUrl,
+        tweetCreatedAt: TIBO_APOLOGY_RESET_NOTICE.tweetCreatedAt,
+      }));
+      assert.equal(response.status, 200);
+    } finally {
+      restoreApologyGemini();
+    }
+
+    const persisted = (tweetId: string) => requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    const resetCompletionPayload = persisted(TIBO_RESET_PROPAGATION_COMPLETION.tweetId);
+    const apologyPayload = persisted(TIBO_APOLOGY_RESET_NOTICE.tweetId);
+
+    assert.ok(resetCompletionPayload);
+    assert.equal(resetCompletionPayload.signal_type, "reset_executed");
+    assert.equal(resetCompletionPayload.ai_signal_type, "reset_executed");
+    assert.equal(resetCompletionPayload.ai_temporal_direction, "completed_now");
+    assert.equal(resetCompletionPayload.codex_operational_status, "none");
+    assert.equal(resetCompletionPayload.codex_operational_confidence, null);
+    assert.equal(resetCompletionPayload.codex_operational_evidence_quote, null);
+    assert.equal(resetCompletionPayload.codex_operational_reason_ja, null);
+    assert.equal(resetCompletionPayload.codex_operational_expires_at, null);
+
+    assert.ok(apologyPayload);
+    assert.equal(apologyPayload.signal_type, "official_notice");
+    assert.equal(apologyPayload.ai_reset_type_ja, "詫びリセット");
+    assert.equal(apologyPayload.codex_operational_status, "recovered");
+    assert.equal(apologyPayload.codex_operational_evidence_quote, "we’re back in action");
+    assert.equal(apologyPayload.codex_operational_expires_at, "2026-09-26T12:07:13.000Z");
+  } finally {
+    restoreFetch();
     restoreEnvironment(previous);
   }
 });

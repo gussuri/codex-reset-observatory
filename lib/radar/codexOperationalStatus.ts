@@ -33,8 +33,84 @@ function emptyAssessment(): ParsedCodexOperationalAssessment {
   };
 }
 
+function effectiveNoneAssessment(): ParsedCodexOperationalAssessment {
+  return {
+    codex_operational_status: "none",
+    codex_operational_confidence: null,
+    codex_operational_evidence_quote: null,
+    codex_operational_reason_ja: null,
+  };
+}
+
 function isOperationalState(value: unknown): value is TiboCodexOperationalState {
   return value === "none" || CODEX_OPERATIONAL_NON_NONE_STATES.has(value as TiboCodexOperationalState);
+}
+
+function hasRecoveredServiceEvidence(authorText: string, evidenceQuote: string): boolean {
+  if (/\b(?:not|never|no longer|not yet|isn't|aren't|wasn't|weren't|hasn't|haven't|won't|will not|can't|cannot)\b[^.!?\n]{0,45}\b(?:back|fixed|resolved|restored|recovered|normal)\b/i.test(evidenceQuote)) {
+    return false;
+  }
+  if (/\b(?:will|would|could|may|might|should)\s+(?:(?:possibly|probably|maybe)\s+)?(?:be|get)\s+(?:back|fixed|resolved|restored|recovered|normal|over)\b|\b(?:plan\w*|hope\w*|expect\w*)\s+to\s+(?:be|get)\s+(?:back|fixed|resolved|restored|recovered|normal|over)\b|\bgoing to\s+(?:be|get)\s+(?:back|fixed|resolved|restored|recovered|normal|over)\b|\b(?:may|might|could)\s+have\s+(?:already\s+)?(?:recovered|restored)\b/i.test(evidenceQuote)) {
+    return false;
+  }
+  if (/\bwe(?:['’]re| are) back in action\b/i.test(evidenceQuote)) return true;
+  const hasCurrentRecoveryAssertion = /\b(?:am|is|are|has been|have been)\s+(?:(?:now|currently|finally)\s+)?(?:back|fixed|resolved|restored|recovered)\b|\b(?:fixed|resolved|restored|recovered)\s+now\b/i.test(evidenceQuote);
+  if (
+    /\b(?:last week|last month|last year|\d+ weeks? ago|\d+ months? ago|back in 20\d{2})\b/i.test(evidenceQuote) &&
+    !hasCurrentRecoveryAssertion
+  ) {
+    return false;
+  }
+
+  const mentionsResetAxis = /\b(?:resets?|usage[- ]?limits?|quotas?|banked|distribution|propagation)\b/i.test(authorText);
+  const hasSeparateServiceCue = /\b(?:codex|service|outage|incident|disruption|degrad\w*|down|requests? (?:are )?(?:failing|slow)|cache hit rates?)\b/i.test(evidenceQuote);
+
+  if (
+    /\b(?:codex|(?:the )?service|things)\s+(?:is|are|was|were|has been|have been)\s+(?:(?:now|finally)\s+)?back(?:\s+(?:to normal|online|up|in action))?\b/i.test(evidenceQuote) ||
+    /\b(?:codex|(?:the )?service)\s+(?:is|are|was|were|has been|have been)\s+(?:(?:now|finally)\s+)?(?:fixed|resolved|restored|recovered)\b/i.test(evidenceQuote) ||
+    /\b(?:outage|incident|disruption|service issue|codex issue)\s+(?:(?:is|was)\s+|has been\s+|is now\s+|has now been\s+)?(?:fixed|resolved|restored|recovered|over)\b/i.test(evidenceQuote) ||
+    /\b(?:recovered|restored|fixed|resolved) from (?:the )?(?:codex )?(?:outage|incident|disruption|service issue)\b/i.test(evidenceQuote)
+  ) {
+    return true;
+  }
+
+  const genericIssueResolution = /\b(?:issue|problem)\b[^.!?\n]{0,60}\b(?:fixed|resolved|restored|over)\b/i.test(evidenceQuote);
+  if (genericIssueResolution && (!mentionsResetAxis || hasSeparateServiceCue)) return true;
+
+  // Generic recovery phrases are usable on their own, except when the post
+  // talks about reset/quota state; there they need a separate service cue.
+  const genericRecoveryPhrase = /\b(?:fixed now|recovered|back to normal)\b/i.test(evidenceQuote);
+  return genericRecoveryPhrase && (!mentionsResetAxis || hasSeparateServiceCue);
+}
+
+function hasActiveServiceEvidence(evidenceQuote: string): boolean {
+  if (/\b(?:not|never|no longer|not yet|isn't|aren't|wasn't|weren't|hasn't|haven't|won't|will not|can't|cannot)\b[^.!?\n]{0,45}\b(?:down|degrad\w*|unavailable|offline|fail\w*|broken|error\w*|outage)\b/i.test(evidenceQuote)) {
+    return false;
+  }
+  const serviceSubject = "(?:codex|(?:the )?service|requests?|availability)";
+  const impact = "(?:down|degrad\\w*|unavailable|offline|fail\\w*|broken|error\\w*|outage)";
+  const forward = new RegExp(`\\b${serviceSubject}\\b[^.!?\\n]{0,80}\\b${impact}\\b`, "i");
+  const reverse = new RegExp(`\\b${impact}\\b[^.!?\\n]{0,80}\\b${serviceSubject}\\b`, "i");
+  return forward.test(evidenceQuote) || reverse.test(evidenceQuote);
+}
+
+function hasInvestigationEvidence(evidenceQuote: string): boolean {
+  if (/\b(?:not|never|no longer|isn't|aren't|wasn't|weren't|hasn't|haven't|won't|will not|can't|cannot)\b[^.!?\n]{0,45}\b(?:investigat\w*|looking into|debugg\w*|diagnos\w*)\b/i.test(evidenceQuote)) {
+    return false;
+  }
+  const investigation = /\b(?:investigat\w*|looking into|debugg\w*|diagnos\w*)\b/i;
+  const operationalIssue = /\b(?:outage|disruption|incident|degrad\w*|down|unavailable|cache hit rates?|latency|availability|requests? (?:are )?(?:failing|slow|erroring)|codex service issue)\b/i;
+  return investigation.test(evidenceQuote) && operationalIssue.test(evidenceQuote);
+}
+
+function hasIndependentOperationalEvidence(
+  status: Exclude<TiboCodexOperationalState, "none">,
+  authorText: string,
+  evidenceQuote: string,
+): boolean {
+  if (status === "recovered") return hasRecoveredServiceEvidence(authorText, evidenceQuote);
+  if (status === "active") return hasActiveServiceEvidence(evidenceQuote);
+  return hasInvestigationEvidence(evidenceQuote);
 }
 
 /**
@@ -72,6 +148,9 @@ export function parseCodexOperationalAssessment(
       return emptyAssessment();
     }
     validEvidenceQuote = evidenceQuote.trim();
+    if (!hasIndependentOperationalEvidence(status, authorText, validEvidenceQuote)) {
+      return effectiveNoneAssessment();
+    }
   }
 
   const reason = parsed.codexOperationalReasonJa;
