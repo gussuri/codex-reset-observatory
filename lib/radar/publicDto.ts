@@ -232,8 +232,11 @@ export function toPublicTiboActivity(
   const candidates = sourceSignals
     .filter((signal) => {
       if (isTiboForecastSignalTerminatedAt(signal.tweet_id, now)) return false;
+      const interpretation = interpretTiboSignal(signal, now);
       if (signal.is_reply === true &&
-          !interpretTiboSignal(signal, now).officialNoticeEligible) return false;
+          !interpretation.officialNoticeEligible &&
+          interpretation.presentationDisposition !== "strong_teaser" &&
+          interpretation.presentationDisposition !== "weak_teaser") return false;
       if (!PUBLIC_TIBO_CLASSIFICATIONS.has(signal.signal_type as PublicTiboActivity["classification"])) {
         return false;
       }
@@ -318,7 +321,11 @@ export function toPublicTiboActivity(
     sourceSignals.find((signal) => signal.tweet_id === latest.tweet_id) ?? latest,
     now,
   );
-  const exposeTemporalResolution = !isUiFallback || latestInterpretation.timedProbabilityEligible;
+  const exposePresentationOnlyFutureWindow =
+    latestInterpretation.reason === "author_owned_explicit_future_reset_reply";
+  const exposeTemporalResolution = !isUiFallback ||
+    latestInterpretation.timedProbabilityEligible ||
+    exposePresentationOnlyFutureWindow;
   const exposeResolvedTemporalWindow = exposeTemporalResolution &&
     latest.temporal_resolution_status === "resolved";
 

@@ -402,6 +402,124 @@ test("automatic official replies require explicit reset evidence in the author t
   assert.equal(interpretTiboSignal(quotedReply, NOW).officialNoticeEligible, false);
 });
 
+test("author-owned explicit future reset replies are strong UI teasers without changing probability or history", () => {
+  const calculationNow = new Date("2026-09-27T01:00:00.000Z");
+  const target = activitySignal(
+    "2103963215885701493",
+    "2026-09-26T21:41:35.000Z",
+    null,
+    {
+      signal_type: "official_notice",
+      confidence: 0.9,
+      classification_source: "gemini",
+      verification_status: "auto_unverified",
+      is_reply: true,
+      is_quote: false,
+      text: "Sorry Gia. More resets coming next week",
+      reply_context_text: "The reset came right after my own reset, couldn’t be worse timing.",
+      tweet_url: "https://x.com/thsottiaux/status/2103963215885701493",
+      expires_at: "2026-09-27T23:54:06.930Z",
+      temporal_resolution_status: "resolved",
+      temporal_precision: "range",
+      expected_start_at: "2026-09-28T07:00:00.000Z",
+      expected_end_at: "2026-10-05T07:00:00.000Z",
+    },
+  );
+  const priorCompletion = activitySignal(
+    "prior-completion",
+    "2026-09-26T20:00:00.000Z",
+    null,
+    {
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      classification_source: "gemini",
+      text: "Resets all propagated. That will be all.",
+    },
+  );
+  const interpretation = interpretTiboSignal(target, calculationNow);
+  const withoutTarget = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow, recentTiboSignals: [priorCompletion] }),
+    "en",
+    { calculationNow },
+  );
+  const withTarget = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow, recentTiboSignals: [target, priorCompletion] }),
+    "en",
+    { calculationNow },
+  );
+
+  assert.equal(target.signal_type, "official_notice");
+  assert.equal(target.confidence, 0.9);
+  assert.equal(interpretation.presentationDisposition, "strong_teaser");
+  assert.equal(interpretation.officialNoticeEligible, false);
+  assert.equal(interpretation.uiTeaserFallback, true);
+  assert.equal(interpretation.timedProbabilityEligible, false);
+  assert.equal(interpretation.historyEligible, false);
+  assert.equal(withTarget.resetTeaserStatus, "strong");
+  assert.equal(withTarget.latestTiboActivity?.text, target.text);
+  assert.equal(withTarget.latestTiboActivity?.classification, "teaser");
+  assert.equal(withTarget.latestTiboActivity?.teaserStrength, "strong");
+  assert.equal(withTarget.latestTiboActivity?.isReply, true);
+  assert.equal(
+    withTarget.latestTiboActivity?.replyContextText,
+    "The reset came right after my own reset, couldn’t be worse timing.",
+  );
+  assert.equal(withTarget.latestTiboActivity?.temporalResolutionStatus, "resolved");
+  assert.equal(withTarget.latestTiboActivity?.expectedStartAt, "2026-09-28T07:00:00.000Z");
+  assert.equal(withTarget.latestTiboActivity?.expectedEndAt, "2026-10-05T07:00:00.000Z");
+  assert.equal(withTarget.viewModel.activeWindow.active, false);
+  assert.equal(withTarget.lastRandomResetAt, withoutTarget.lastRandomResetAt);
+  assert.deepEqual(withTarget.viewModel.recentHistory, withoutTarget.viewModel.recentHistory);
+  for (const horizon of ["12h", "24h", "48h", "72h"] as const) {
+    assert.equal(
+      withTarget.viewModel[`probability${horizon}`],
+      withoutTarget.viewModel[`probability${horizon}`],
+    );
+  }
+});
+
+test("author-owned future reset reply fallback rejects uncertainty, negation, completion, missing author evidence, unresolved timing, and low confidence", () => {
+  const calculationNow = new Date("2026-09-27T01:00:00.000Z");
+  const base = {
+    signal_type: "official_notice" as const,
+    confidence: 0.9,
+    classification_source: "gemini",
+    verification_status: "auto_unverified" as const,
+    is_reply: true,
+    is_quote: false,
+    reply_context_text: "The reset came right after my own reset, couldn’t be worse timing.",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-09-28T07:00:00.000Z",
+    expected_end_at: "2026-10-05T07:00:00.000Z",
+  };
+  const cases: Array<[string, Partial<TeaserSignal>]> = [
+    ["uncertain", { text: "Maybe more resets next week" }],
+    ["tentative", { text: "More resets may come next week" }],
+    ["negated", { text: "No resets next week" }],
+    ["completion-only", { text: "Resets all propagated" }],
+    ["author-missing-reset", { text: "More coming next week", reply_context_text: "Reset please?" }],
+    ["unresolved", { text: "More resets coming next week", temporal_resolution_status: "unresolved" }],
+    ["low-confidence", { text: "More resets coming next week", confidence: 0.79 }],
+    ["quoted", { text: "More resets coming next week", is_quote: true }],
+    ["past-window", {
+      text: "More resets coming next week",
+      expected_start_at: "2026-09-26T07:00:00.000Z",
+      expected_end_at: "2026-09-26T08:00:00.000Z",
+    }],
+  ];
+
+  for (const [id, overrides] of cases) {
+    const candidate = signal(id, "2026-09-26T21:41:35.000Z", null, {
+      ...base,
+      text: "More resets coming next week",
+      ...overrides,
+    });
+    const interpretation = interpretTiboSignal(candidate, calculationNow);
+    assert.notEqual(interpretation.presentationDisposition, "strong_teaser", id);
+    assert.equal(interpretation.uiTeaserFallback, false, id);
+  }
+});
+
 test("central interpretation preserves direct teaser and history eligibility as separate axes", () => {
   const directTeaser = signal("direct-teaser", "2026-08-03T23:00:00.000Z", "strong", {
     signal_type: "teaser",
@@ -481,9 +599,10 @@ test("does not derive a UI teaser from ordinary, unrelated, rejected, or context
     reply_context_text: "you owe us a banked reset",
   });
 
-  for (const candidate of [ordinaryReply, unrelatedTuesday, rejected, contextFree, explicitNo, completed, old, highConfidenceNotice]) {
+  for (const candidate of [ordinaryReply, unrelatedTuesday, rejected, explicitNo, completed, old, highConfidenceNotice]) {
     assert.equal(getFallbackUiTeaserStrength(candidate, NOW), null, candidate.tweet_id);
   }
+  assert.equal(getFallbackUiTeaserStrength(contextFree, NOW), "strong");
   assert.equal(aggregateResetTeaserStatus([ordinaryReply], null, NOW), "unknown");
 });
 

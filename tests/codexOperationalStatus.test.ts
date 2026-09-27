@@ -140,3 +140,22 @@ test("keeps unknown when OpenAI Status is unavailable and no eligible Tibo asses
   assert.equal(resolveCodexOperationalStatusForDisplay("unknown", [], now), "unknown");
   assert.equal(resolveCodexOperationalStatusForDisplay(undefined, [], now), "unknown");
 });
+
+test("a reset completion post does not imply Codex service recovery", () => {
+  const observedAt = new Date("2026-09-27T01:00:00.000Z");
+  const resetCompletion = {
+    tweet_id: "2103911959544610829",
+    tweet_created_at: "2026-09-26T20:00:00.000Z",
+    verification_status: "auto_unverified",
+    codex_operational_status: "none",
+    signal_type: "reset_executed",
+    text: "Resets all propagated. That will be all. Have a fantastic weekend.",
+  };
+
+  assert.equal(resetCompletion.signal_type, "reset_executed");
+  assert.equal(getLatestTiboCodexOperationalSignal([resetCompletion], observedAt), null);
+  assert.equal(
+    resolveCodexOperationalStatusForDisplay("unknown", [resetCompletion], observedAt),
+    "unknown",
+  );
+});
