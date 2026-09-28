@@ -1202,37 +1202,6 @@ export function RadarDashboard({
 
         </section>
 
-        <section
-          aria-labelledby="homepage-explanation-title"
-          className="rounded-lg border border-slate-200/80 bg-white/75 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5"
-        >
-          <h2
-            id="homepage-explanation-title"
-            className="text-base font-semibold leading-6 text-slate-800"
-          >
-            {homepageExplanation.title}
-          </h2>
-          <div className="mt-2 space-y-2">
-            {homepageExplanation.paragraphs.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
-          <nav
-            aria-label={homepageExplanation.title}
-            className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm"
-          >
-            {homepageExplanation.links.map((link) => (
-              <Link
-                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
-                href={link.href}
-                key={link.href}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </section>
-
         {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         {!isDataUnavailable &&
@@ -1374,6 +1343,37 @@ export function RadarDashboard({
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         <ObservationGuide locale={locale} />
+
+        <section
+          aria-labelledby="homepage-explanation-title"
+          className="rounded-lg border border-slate-200/80 bg-white/75 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5"
+        >
+          <h2
+            id="homepage-explanation-title"
+            className="text-base font-semibold leading-6 text-slate-800"
+          >
+            {homepageExplanation.title}
+          </h2>
+          <div className="mt-2 space-y-2">
+            {homepageExplanation.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          <nav
+            aria-label={homepageExplanation.title}
+            className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm"
+          >
+            {homepageExplanation.links.map((link) => (
+              <Link
+                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
+                href={link.href}
+                key={link.href}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </section>
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav

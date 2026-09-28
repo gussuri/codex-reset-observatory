@@ -467,7 +467,7 @@ test("renders the random reset time heatmap after history with a timezone-free S
   }
 });
 
-test("renders localized homepage guidance immediately after the forecast in SSR HTML", () => {
+test("renders localized homepage guidance near the bottom of SSR HTML", () => {
   const content = {
     ja: {
       heading: "この数字と観測情報の見方",
@@ -481,6 +481,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       probabilityLabel: "48時間以内",
       historyTitle: "直近のリセット履歴",
+      guideTitle: "Codexリセット観測ガイド",
     },
     en: {
       heading: "How to read the forecast and observed signals",
@@ -494,6 +495,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       probabilityLabel: "Within 48h",
       historyTitle: "Recent reset events",
+      guideTitle: "Codex Reset Observatory Guide",
     },
     zh: {
       heading: "如何理解这些数字与观测信号",
@@ -507,6 +509,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       probabilityLabel: "48小时内",
       historyTitle: "最近的重置历史",
+      guideTitle: "Codex 重置观测指南",
     },
   } as const;
 
@@ -526,11 +529,18 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
     const footerIndex = html.indexOf("<footer");
     const probabilityIndex = html.indexOf(`aria-label="${content[locale].probabilityLabel}"`);
     const historyIndex = html.indexOf(content[locale].historyTitle);
+    const guideIndex = html.indexOf(content[locale].guideTitle);
+    const guideSectionStart = html.lastIndexOf("<section", guideIndex);
+    const guideSectionEnd = html.indexOf("</section>", guideIndex);
     assert.ok(sectionStart >= 0, `${locale} explanation section should be in SSR HTML`);
     assert.ok(probabilityIndex >= 0, `${locale} 48-hour metric should be in SSR HTML`);
+    assert.ok(guideIndex >= 0, `${locale} observation guide should be in SSR HTML`);
+    assert.ok(guideSectionStart >= 0, `${locale} observation guide section should be in SSR HTML`);
+    assert.ok(guideSectionEnd > guideIndex, `${locale} observation guide section should close in SSR HTML`);
     assert.ok(sectionStart < footerIndex, `${locale} explanation should precede the footer`);
     assert.ok(probabilityIndex < sectionStart, `${locale} explanation should follow the forecast metrics`);
-    assert.ok(sectionStart < historyIndex, `${locale} explanation should precede the history section`);
+    assert.ok(historyIndex < sectionStart, `${locale} explanation should follow the history section`);
+    assert.ok(guideSectionEnd < sectionStart, `${locale} explanation should follow the whole observation guide`);
 
     const sectionEnd = html.indexOf("</section>", sectionStart);
     const sectionHtml = html.slice(sectionStart, sectionEnd);
