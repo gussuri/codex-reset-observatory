@@ -244,39 +244,36 @@ function getHistoryDisplayTitle(
 
 const HOMEPAGE_EXPLANATION_CONTENT = {
   ja: {
-    title: "Codexリセット観測所について",
+    title: "この数字と観測情報の見方",
     paragraphs: [
-      "Codexリセット観測所は、Codexの利用上限リセットに関する公開情報を整理する非公式サイトです。過去に確認された全体リセットや任意リセット配布、公式・開発関係者による予告、OpenAI Statusなどをもとに、現在の状況をまとめています。",
-      "24時間・48時間以内のリセット期待度は、過去のランダムリセット間隔と現在の観測シグナルから算出した統計的な参考値です。OpenAIによる公式な確率ではありません。確定済みの事例はリセット履歴で、予測方法や用語についてはFAQで確認できます。",
+      "24時間・48時間の値は、過去のランダムリセット間隔と現在の観測シグナルに基づく非公式の統計的な見込みです。OpenAIが公表する確率でも、リセットの確定予告でもありません。",
+      "公式予告、Tiboなど開発関係者の予告・匂わせ、OpenAI Statusなどの公開シグナル、実施が確認されたリセット履歴は区別して整理しています。確認済みの履歴を蓄積し、現在の状況と比較します。",
     ],
     links: [
-      { href: "/history", label: "リセット履歴" },
-      { href: "/faq", label: "FAQ" },
-      { href: "/about", label: "このサイトについて" },
+      { href: "/faq", label: "予測方法と数値の見方を詳しく見る" },
+      { href: "/history", label: "実際に確認されたリセット履歴を見る" },
     ],
   },
   en: {
-    title: "About Codex Reset Observatory",
+    title: "How to read the forecast and observed signals",
     paragraphs: [
-      "Codex Reset Observatory is an unofficial site that organizes public information about Codex usage-limit resets. It summarizes the current situation using confirmed global resets and account-specific reset grants, official notices from OpenAI and people involved in development, and OpenAI Status.",
-      "The 24-hour and 48-hour reset likelihoods are statistical reference values calculated from past random reset intervals and current observed signals. They are not official probabilities from OpenAI. Confirmed cases are listed in the reset history, while the FAQ explains how the forecast is calculated and how the site's terms are used.",
+      "The 24-hour and 48-hour values are unofficial statistical estimates based on past random-reset intervals and current observed signals. They are not probabilities published by OpenAI or a confirmed reset schedule.",
+      "We keep official notices, hints from Tibo and other people involved in development, public signals such as OpenAI Status, and resets confirmed as having happened distinct. Confirmed reset history is accumulated and compared with current conditions.",
     ],
     links: [
-      { href: "/en/history", label: "Reset history" },
-      { href: "/en/faq", label: "FAQ" },
-      { href: "/en/about", label: "About this site" },
+      { href: "/en/faq", label: "Learn how the forecast and numbers are read" },
+      { href: "/en/history", label: "See the history of confirmed reset events" },
     ],
   },
   zh: {
-    title: "关于 Codex 重置观测站",
+    title: "如何理解这些数字与观测信号",
     paragraphs: [
-      "Codex 重置观测站是一个整理 Codex 使用上限重置公开信息的非官方网站。本站参考过去确认的全局重置和按需发放的重置、OpenAI 及开发相关人员发布的官方预告，以及 OpenAI Status，汇总当前状况。",
-      "未来24小时和48小时内的重置期望度，是根据过去的随机重置间隔和当前观测信号计算的统计参考值，并非 OpenAI 官方概率。已确认的事件会记录在重置历史中；预测方法和相关术语可在常见问题中查看。",
+      "未来24小时和48小时的数值，是根据过去的随机重置间隔和当前观测信号得出的非官方统计估算。它们不是 OpenAI 公布的概率，也不代表重置已经确定。",
+      "本站将官方预告、Tibo 等开发相关人士的预告或暗示、OpenAI Status 等公开信号，以及已确认发生的重置分别记录。我们持续积累已确认的重置历史，并与当前情况进行比较。",
     ],
     links: [
-      { href: "/zh/history", label: "重置历史" },
-      { href: "/zh/faq", label: "常见问题" },
-      { href: "/zh/about", label: "关于本网站" },
+      { href: "/zh/faq", label: "了解预测方法与数值含义" },
+      { href: "/zh/history", label: "查看已确认的重置历史" },
     ],
   },
 } as const;
@@ -1205,6 +1202,37 @@ export function RadarDashboard({
 
         </section>
 
+        <section
+          aria-labelledby="homepage-explanation-title"
+          className="rounded-lg border border-slate-200/80 bg-white/75 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5"
+        >
+          <h2
+            id="homepage-explanation-title"
+            className="text-base font-semibold leading-6 text-slate-800"
+          >
+            {homepageExplanation.title}
+          </h2>
+          <div className="mt-2 space-y-2">
+            {homepageExplanation.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          <nav
+            aria-label={homepageExplanation.title}
+            className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm"
+          >
+            {homepageExplanation.links.map((link) => (
+              <Link
+                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
+                href={link.href}
+                key={link.href}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </section>
+
         {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         {!isDataUnavailable &&
@@ -1344,37 +1372,6 @@ export function RadarDashboard({
         />
 
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
-
-        <section
-          aria-labelledby="homepage-explanation-title"
-          className="border-t border-slate-200/80 pt-5 text-sm leading-6 text-slate-600"
-        >
-          <h2
-            id="homepage-explanation-title"
-            className="text-base font-semibold leading-6 text-slate-800"
-          >
-            {homepageExplanation.title}
-          </h2>
-          <div className="mt-2 space-y-3">
-            {homepageExplanation.paragraphs.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
-          <nav
-            aria-label={homepageExplanation.title}
-            className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm"
-          >
-            {homepageExplanation.links.map((link) => (
-              <Link
-                className="font-semibold text-teal-700 underline-offset-4 hover:underline"
-                href={link.href}
-                key={link.href}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </section>
 
         <ObservationGuide locale={locale} />
 
