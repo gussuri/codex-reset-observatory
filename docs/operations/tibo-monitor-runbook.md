@@ -19,15 +19,18 @@ Chromeの通知ページは投稿スキャンの対象になり得ます。通�
 
 ## 2. 通常の自動処理
 
-1. Service WorkerのChrome Alarmが約10分ごとに動きます。
-2. プロフィールと返信の各URLについて、見つかったタブを最大1つずつ再読み込みします。タブを自動で新規作成・閉鎖することはありません。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
-3. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
-4. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信先を復元します。後者では、親cell自身の本文とauthorだけを親文脈として保存します。
-5. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
-6. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
-7. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
-8. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。返信は収集・保存・分類の対象ですが、返信であること自体はシグナルを強めず、正式リセット履歴・公開確率へは自動反映しません。
-9. 返信でない投稿のうち、条件を満たす `reset_executed` は次回のレーダーデータ取得で正式リセット履歴へ自動統合されます。正式採用は `confirmed` へ自動変更する処理ではなく、`auto_unverified` のままでも採用条件を満たせば反映されます。
+1. Chromeプロファイルの起動時は、すでに開いているプロフィールと返信の監視タブを最大1つずつすぐに再読み込みします。Service Workerが通常の理由で起動しただけでは再読み込みしません。
+2. Service WorkerのChrome Alarmは約10分ごとに動きます。起動時再読み込みの直後にalarmも動いた場合、同じtimeline/tabが直前60秒以内に正常再読み込み済みなら二重再読み込みを省きます。
+3. 起動時・alarmのどちらも、プロフィールと返信の各URLについて既存タブを最大1つずつ扱います。タブを自動で新規作成・閉鎖することはありません。タブがなければ従来の `monitored_tab_missing` 診断を記録します。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
+4. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
+5. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信先を復元します。後者では、親cell自身の本文とauthorだけを親文脈として保存します。
+6. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
+7. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
+8. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
+9. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。返信は収集・保存・分類の対象ですが、返信であること自体はシグナルを強めず、正式リセット履歴・公開確率へは自動反映しません。
+10. 返信でない投稿のうち、条件を満たす `reset_executed` は次回のレーダーデータ取得で正式リセット履歴へ自動統合されます。正式採用は `confirmed` へ自動変更する処理ではなく、`auto_unverified` のままでも採用条件を満たせば反映されます。
+
+Chrome起動時の再読み込みは通常のContent Script初回DOMスキャンを早く始めるだけです。自動スクロール、X API、ページに読み込まれていない投稿の過去取得は行わず、true backfillではありません。
 
 正式履歴の採用条件は、返信でないこと、`signal_type=reset_executed`、confidence 0.95以上、`verification_status` が `rejected` ではないことに加え、`classification_source` が `gemini`、`rule`、`shadow`、または `rule_fallback` のいずれかであることです。`verification_status=confirmed` の行でも返信は採用されません。`expires_at` は正式履歴の判定には使いません。
 
