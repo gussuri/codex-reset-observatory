@@ -1,7 +1,7 @@
 import Link from "next/link";
 import React from "react";
 import type { Locale } from "@/lib/radar/types";
-import { ChevronDown, HelpCircle, Info } from "lucide-react";
+import { ChevronDown, HelpCircle } from "lucide-react";
 
 type ObservationGuideProps = {
   locale: Locale;
@@ -15,8 +15,6 @@ type FaqItem = {
 
 type GuideContent = {
   sectionTitle: string;
-  overviewHeading: string;
-  overviewParagraphs: string[];
   faqHeading: string;
   faqSubheading: string;
   viewMoreFaq: string;
@@ -25,14 +23,9 @@ type GuideContent = {
 
 const GUIDE_CONTENT: Record<Locale, GuideContent> = {
   ja: {
-    sectionTitle: "Codexリセット観測ガイド & FAQ",
-    overviewHeading: "利用枠上限への備えと予測シグナルの読み解き方",
-    overviewParagraphs: [
-      "CodexはAI支援コーディングの中核ツールですが、週次制限やレート制限の上限に達すると作業が一時停止します。本観測所では、過去の全体リセット実績、公式アナウンス、障害対応に伴う臨時リセット（詫びリセット・ご祝儀リセット）の動向をリアルタイムに集約し、開発作業の停滞を防ぐための判断材料を提供しています。",
-      "「リセット期待度（24時間・48時間以内）」は、過去の発生間隔データをもとにした統計モデルに、OpenAI Status（API・Codex障害の発生と復旧）、開発関係者による予告や匂わせ投稿（示唆された時間窓や強さの解析）、コミュニティからの報告を機械的に統合して算出しています。OpenAI公式の保証値ではありませんが、計画的な利用や任意リセット（Banked Reset）の使用タイミング判断にお役立ていただけます。",
-    ],
+    sectionTitle: "Codexリセット観測ガイド",
     faqHeading: "よくある質問（FAQ）",
-    faqSubheading: "Codex・ChatGPT Workのリセットに関する要点をまとめています。",
+    faqSubheading: "Codex・ChatGPT Workの利用枠とリセットに関する回答です。",
     viewMoreFaq: "すべてのFAQを見る（全16問） →",
     faqs: [
       {
@@ -68,14 +61,9 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
     ],
   },
   en: {
-    sectionTitle: "Codex Reset Observatory Guide & FAQ",
-    overviewHeading: "Preparing for usage limits and reading forecast signals",
-    overviewParagraphs: [
-      "Codex is an essential agentic coding companion, but hitting weekly allowance limits or rate caps halts productive development. This observatory aggregates confirmed global reset events, official notices, and incident-driven compensation resets (wabi-resets) in real time to help developers plan ahead and prevent costly downtime.",
-      "The 24-hour and 48-hour reset likelihoods combine an empirical baseline derived from historical event cadence with real-time indicators: OpenAI Status incidents, developer teaser posts (evaluating hinted time windows and confidence levels), and community signals. These statistical reference values serve as practical guidance for pacing tasks or deciding when to redeem a Banked Reset.",
-    ],
+    sectionTitle: "Codex Reset Observatory Guide",
     faqHeading: "Frequently Asked Questions",
-    faqSubheading: "Key points regarding Codex and ChatGPT Work usage limit resets.",
+    faqSubheading: "Answers about Codex and ChatGPT Work usage limits and resets.",
     viewMoreFaq: "View all FAQs (16 questions) →",
     faqs: [
       {
@@ -111,14 +99,9 @@ const GUIDE_CONTENT: Record<Locale, GuideContent> = {
     ],
   },
   zh: {
-    sectionTitle: "Codex 重置观测指南与 FAQ",
-    overviewHeading: "应对使用额度上限与理解预测信号",
-    overviewParagraphs: [
-      "Codex 是不可或缺的开发助手，但遇到周期限额或速率上限时会导致开发流程中断。本站实时汇总全局重置历史、官方公告以及因故障引发的补偿重置（赔偿重置/庆祝重置），协助开发者合理规划工作、减少等待时间。",
-      "24小时及48小时重置可能性基于历史重置周期数据建立的基准模型，并结合 OpenAI Status 故障状态、开发团队成员的暗示发帖（解析提及的时间窗口与暗示强度）及社区反馈综合计算得出。该数值为统计参考指标，可作为日常调度或使用手动重置（Banked Reset）时的决策参考。",
-    ],
+    sectionTitle: "Codex 重置观测指南",
     faqHeading: "常见问题解答（FAQ）",
-    faqSubheading: "汇总有关 Codex 与 ChatGPT Work 重置机制的关键信息。",
+    faqSubheading: "汇总 Codex 与 ChatGPT Work 使用额度及重置相关问题。",
     viewMoreFaq: "查看全部常见问题（共16问） →",
     faqs: [
       {
@@ -175,36 +158,24 @@ export function ObservationGuide({ locale }: ObservationGuideProps) {
   return (
     <section
       aria-labelledby="observation-guide-title"
-      className="space-y-6 rounded-lg border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur sm:p-6"
+      className="space-y-4 rounded-lg border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur sm:p-6"
     >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
 
-      {/* Guide Overview */}
       <div>
-        <div className="flex items-center gap-2 text-teal-700">
-          <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <h2
-            id="observation-guide-title"
-            className="text-xs font-semibold uppercase tracking-wider text-teal-700"
-          >
-            {content.sectionTitle}
-          </h2>
-        </div>
-        <h3 className="mt-1 text-lg font-semibold text-slate-900">
-          {content.overviewHeading}
-        </h3>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate-600">
-          {content.overviewParagraphs.map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-        </div>
+        <h2
+          id="observation-guide-title"
+          className="text-xs font-semibold uppercase tracking-wider text-teal-700"
+        >
+          {content.sectionTitle}
+        </h2>
       </div>
 
       {/* Accordion FAQ */}
-      <div className="border-t border-slate-200/80 pt-5">
+      <div>
         <div className="flex items-center gap-2 text-teal-700">
           <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <h3 className="text-base font-semibold text-slate-900">

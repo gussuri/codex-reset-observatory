@@ -79,6 +79,24 @@ test("Japanese home renders the dashboard without browser errors", async ({ page
   await expect(page.getByText("現在の状況", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^ランダムリセット/ }).first()).toBeVisible();
   await expect(page.getByText("24時間以内", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "よくある質問（FAQ）" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "この数字と観測情報の見方" })).toBeVisible();
+  await expect(
+    page.getByText("利用枠上限への備えと予測シグナルの読み解き方", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "予測方法と数値の見方を詳しく見る", exact: true }),
+  ).toHaveAttribute("href", "/faq");
+  await expect(
+    page.getByRole("link", { name: "過去のリセット履歴を見る", exact: true }),
+  ).toHaveAttribute("href", "/history");
+
+  const forecastFaq = page.locator("details").filter({
+    hasText: "リセット期待度とは何ですか？どのように計算されますか？",
+  });
+  await forecastFaq.locator("summary").click();
+  await expect(forecastFaq).toHaveAttribute("open", "");
+  await expect(forecastFaq.getByText(/統計的な目安です/)).toBeVisible();
   await expectNoBrowserErrors(errors);
 });
 
