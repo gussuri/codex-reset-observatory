@@ -477,7 +477,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       links: [
         ["/faq", "予測方法と数値の見方を詳しく見る"],
-        ["/history", "実際に確認されたリセット履歴を見る"],
+        ["/history", "過去のリセット履歴を見る"],
       ],
       probabilityLabel: "48時間以内",
       historyTitle: "直近のリセット履歴",
@@ -490,7 +490,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       links: [
         ["/en/faq", "Learn how the forecast and numbers are read"],
-        ["/en/history", "See the history of confirmed reset events"],
+        ["/en/history", "Browse past reset history"],
       ],
       probabilityLabel: "Within 48h",
       historyTitle: "Recent reset events",
@@ -503,7 +503,7 @@ test("renders localized homepage guidance immediately after the forecast in SSR 
       ],
       links: [
         ["/zh/faq", "了解预测方法与数值含义"],
-        ["/zh/history", "查看已确认的重置历史"],
+        ["/zh/history", "查看过去的重置历史"],
       ],
       probabilityLabel: "48小时内",
       historyTitle: "最近的重置历史",

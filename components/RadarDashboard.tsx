@@ -251,7 +251,7 @@ const HOMEPAGE_EXPLANATION_CONTENT = {
     ],
     links: [
       { href: "/faq", label: "予測方法と数値の見方を詳しく見る" },
-      { href: "/history", label: "実際に確認されたリセット履歴を見る" },
+      { href: "/history", label: "過去のリセット履歴を見る" },
     ],
   },
   en: {
@@ -262,7 +262,7 @@ const HOMEPAGE_EXPLANATION_CONTENT = {
     ],
     links: [
       { href: "/en/faq", label: "Learn how the forecast and numbers are read" },
-      { href: "/en/history", label: "See the history of confirmed reset events" },
+      { href: "/en/history", label: "Browse past reset history" },
     ],
   },
   zh: {
@@ -273,7 +273,7 @@ const HOMEPAGE_EXPLANATION_CONTENT = {
     ],
     links: [
       { href: "/zh/faq", label: "了解预测方法与数值含义" },
-      { href: "/zh/history", label: "查看已确认的重置历史" },
+      { href: "/zh/history", label: "查看过去的重置历史" },
     ],
   },
 } as const;
