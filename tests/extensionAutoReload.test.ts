@@ -41,6 +41,7 @@ function setupServiceWorkerContext(
   let extensionVersion = opts.extensionVersion || "1.0.1";
   const alarmsCreated: Array<{ name: string; alarmInfo: any }> = [];
   const reloadedTabIds: number[] = [];
+  const reloadAttemptedTabIds: number[] = [];
   const updatedTabs: Array<{ tabId: number; updateProperties: any }> = [];
   const contentMessages: Array<{ tabId: number; message: any }> = [];
   const openedTabs: Array<{ url: string }> = [];
@@ -48,6 +49,7 @@ function setupServiceWorkerContext(
   const activeNotificationIds: Record<string, boolean> = {};
   let notificationCreateCalls = 0;
   let alarmListener: ((alarm: { name: string }) => void) | null = null;
+  let startupListener: (() => void | Promise<void>) | null = null;
   let messageListener: Function | null = null;
   let notificationClickListener: ((notificationId: string) => void) | null = null;
   let storageLocalAccessLevel: string | null = null;
@@ -101,6 +103,7 @@ function setupServiceWorkerContext(
         );
       },
       reload: async (tabId: number) => {
+        reloadAttemptedTabIds.push(tabId);
         if (opts.failReloadTabId === tabId) {
           throw new Error("Simulated tab reload failure");
         }
@@ -170,7 +173,11 @@ function setupServiceWorkerContext(
       getManifest: () => ({ version: extensionVersion }),
       getURL: (fileName: string) => `chrome-extension://test/${fileName}`,
       onInstalled: { addListener: () => {} },
-      onStartup: { addListener: () => {} },
+      onStartup: {
+        addListener: (fn: () => void | Promise<void>) => {
+          startupListener = fn;
+        },
+      },
       onMessage: {
         addListener: (fn: Function) => {
           messageListener = fn;
@@ -251,6 +258,7 @@ function setupServiceWorkerContext(
     },
     alarmsCreated,
     reloadedTabIds,
+    reloadAttemptedTabIds,
     updatedTabs,
     contentMessages,
     openedTabs,
@@ -261,6 +269,9 @@ function setupServiceWorkerContext(
       if (alarmListener) {
         await alarmListener({ name });
       }
+    },
+    fireStartup: async () => {
+      if (startupListener) await startupListener();
     },
     sendMessage: (msg: any, sender: any = {}): Promise<any> => {
       return new Promise((resolve) => {
@@ -309,6 +320,122 @@ test("REQUIREMENT 3: Extension setup registers a 10-minute page reload alarm", (
   assert.strictEqual(alarmsCreated.length, 1, "Exactly one alarm should be created at setup");
   assert.strictEqual(alarmsCreated[0].name, "tibo_page_reload_alarm");
   assert.strictEqual(alarmsCreated[0].alarmInfo.periodInMinutes, 10, "Alarm must run every 10 minutes");
+});
+
+test("browser startup reloads one existing profile and replies tab without using a new collection path", async () => {
+  const tabs = [
+    { id: 701, url: "https://x.com/thsottiaux" },
+    { id: 702, url: "https://twitter.com/thsottiaux/" },
+    { id: 703, url: "https://x.com/thsottiaux/with_replies" },
+    { id: 704, url: "https://twitter.com/thsottiaux/with_replies/" },
+    { id: 705, url: "https://x.com/thsottiaux/status/1234567890123456789" },
+  ];
+  const { fireStartup, localStore, reloadedTabIds, openedTabs, mockFetchCalls } =
+    setupServiceWorkerContext(tabs);
+
+  await fireStartup();
+
+  assert.deepEqual(reloadedTabIds, [701, 703]);
+  assert.equal(localStore.tibo_last_profile_reload_status, "success");
+  assert.equal(localStore.tibo_last_with_replies_reload_status, "success");
+  assert.equal(localStore.tibo_last_page_reload_status, "success");
+  assert.ok(localStore.tibo_last_page_reload_at);
+  assert.equal(localStore.tibo_last_profile_reload_tab_id, 701);
+  assert.equal(localStore.tibo_last_with_replies_reload_tab_id, 703);
+  assert.equal(localStore.tibo_reloaded_tab_id, 701);
+  assert.deepEqual(openedTabs, []);
+  assert.deepEqual(mockFetchCalls, []);
+});
+
+test("browser startup with no monitoring tabs records missing diagnostics without opening tabs or retrying pending posts", async () => {
+  const pendingTweet = {
+    tweetId: "2088501704849534995",
+    payload: {
+      tweetId: "2088501704849534995",
+      text: "A previously observed tweet",
+      tweetUrl: "https://x.com/thsottiaux/status/2088501704849534995",
+      tweetCreatedAt: "2026-08-15T05:43:00.000Z",
+    },
+    attempts: 1,
+    nextAttemptAt: 0,
+    retryExhausted: false,
+  };
+  const { fireStartup, localStore, reloadedTabIds, openedTabs, mockFetchCalls } =
+    setupServiceWorkerContext([], {
+      initialLocalStore: {
+        webhook_secret: "test-secret",
+        tibo_last_page_reload_at: "2026-09-27T00:00:00.000Z",
+        tibo_pending_tweet_payloads: [pendingTweet],
+      },
+    });
+
+  await fireStartup();
+
+  assert.deepEqual(reloadedTabIds, []);
+  assert.deepEqual(openedTabs, []);
+  assert.deepEqual(mockFetchCalls, []);
+  assert.equal(localStore.tibo_last_profile_reload_status, "monitored_tab_missing");
+  assert.equal(localStore.tibo_last_with_replies_reload_status, "monitored_tab_missing");
+  assert.equal(localStore.tibo_last_page_reload_status, "monitored_tab_missing");
+  assert.equal(localStore.tibo_last_page_reload_at, "2026-09-27T00:00:00.000Z");
+  assert.deepEqual(localStore.tibo_pending_tweet_payloads, [pendingTweet]);
+});
+
+test("service worker initialization alone does not trigger a startup reload", async () => {
+  const tabs = [{ id: 706, url: "https://x.com/thsottiaux" }];
+  const { waitForStartup, reloadedTabIds, openedTabs } = setupServiceWorkerContext(tabs);
+
+  await waitForStartup();
+
+  assert.deepEqual(reloadedTabIds, []);
+  assert.deepEqual(openedTabs, []);
+});
+
+test("a nearby alarm does not reload a tab again after startup already reloaded it", async () => {
+  const tabs = [{ id: 707, url: "https://x.com/thsottiaux" }];
+  const { fireStartup, fireAlarm, localStore, reloadedTabIds } =
+    setupServiceWorkerContext(tabs);
+
+  await fireStartup();
+  const startupReloadAt = localStore.tibo_last_page_reload_at;
+  assert.deepEqual(reloadedTabIds, [707]);
+
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.deepEqual(reloadedTabIds, [707]);
+  assert.equal(localStore.tibo_last_page_reload_at, startupReloadAt);
+  assert.equal(localStore.tibo_last_page_reload_status, "success");
+});
+
+test("simultaneous startup and alarm events share an in-flight tab reload", async () => {
+  const tabs = [{ id: 709, url: "https://x.com/thsottiaux" }];
+  const { fireStartup, fireAlarm, reloadedTabIds } = setupServiceWorkerContext(tabs);
+
+  await Promise.all([
+    fireStartup(),
+    fireAlarm("tibo_page_reload_alarm"),
+  ]);
+
+  assert.deepEqual(reloadedTabIds, [709]);
+});
+
+test("a failed recent startup reload does not suppress the next alarm attempt", async () => {
+  const tabs = [{ id: 708, url: "https://x.com/thsottiaux" }];
+  const { fireStartup, fireAlarm, localStore, reloadAttemptedTabIds } =
+    setupServiceWorkerContext(tabs, {
+      failReloadTabId: 708,
+      initialLocalStore: {
+        tibo_last_profile_reload_at: new Date().toISOString(),
+        tibo_last_profile_reload_status: "error",
+        tibo_last_profile_reload_tab_id: 708,
+      },
+    });
+
+  await fireStartup();
+  await fireAlarm("tibo_page_reload_alarm");
+
+  assert.deepEqual(reloadAttemptedTabIds, [708, 708]);
+  assert.equal(localStore.tibo_last_profile_reload_status, "error");
 });
 
 test("service worker migrates only legacy or missing observatory domains", async () => {

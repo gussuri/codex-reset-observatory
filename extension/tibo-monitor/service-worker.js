@@ -24,6 +24,7 @@ const FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_notification
 const TEST_FORMAL_ADOPTION_NOTIFICATION_URLS_KEY = "tibo_formal_adoption_test_notification_urls";
 const ALARM_NAME = "tibo_page_reload_alarm";
 const RELOAD_INTERVAL_MINUTES = 10;
+const RELOAD_DEDUPE_WINDOW_MS = 60 * 1000;
 const HISTORY_PATH = "/history";
 const DEFAULT_OBSERVATORY_DOMAIN = "https://codex.gussuriworks.com";
 const LEGACY_OBSERVATORY_DOMAIN = "https://codex-reset-observatory.vercel.app";
@@ -45,6 +46,7 @@ let notificationIconDiagnosticsUrl = null;
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
 let pendingQueueStorage = Promise.resolve();
+let monitoredTabReloadPromise = null;
 
 function restrictLocalStorageToTrustedContexts() {
   if (typeof chrome === "undefined" || !chrome.storage?.local?.setAccessLevel) return;
@@ -470,6 +472,7 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
       setupReloadAlarm();
       restrictLocalStorageToTrustedContexts();
       scheduleObservatoryDomainMigration();
+      return handleReloadAlarm({ retryPendingTweets: false });
     });
   }
 }
@@ -585,6 +588,28 @@ async function restoreStoredDriftedTimeline(timeline, candidateTabs, now) {
   }
 }
 
+async function wasRecentlyReloaded(timeline, tabId, now) {
+  const key = getTimelineReloadKey(timeline);
+  try {
+    const state = await chrome.storage.local.get([
+      `${key}_at`,
+      `${key}_status`,
+      `${key}_tab_id`,
+    ]);
+    const lastReloadAt = Date.parse(state[`${key}_at`]);
+    const age = new Date(now).getTime() - lastReloadAt;
+    return (
+      state[`${key}_status`] === "success" &&
+      state[`${key}_tab_id`] === tabId &&
+      Number.isFinite(lastReloadAt) &&
+      age >= 0 &&
+      age < RELOAD_DEDUPE_WINDOW_MS
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function reloadTimeline(timeline, tabs, now) {
   const key = getTimelineReloadKey(timeline);
   const tab = tabs[0];
@@ -600,6 +625,16 @@ async function reloadTimeline(timeline, tabs, now) {
       messages: [`The ${timeline} monitoring tab is not open.`],
     });
     return { timeline, status: "monitored_tab_missing", success: false, tabId: null };
+  }
+
+  if (await wasRecentlyReloaded(timeline, tab.id, now)) {
+    return {
+      timeline,
+      status: "recently_reloaded",
+      success: true,
+      skipped: true,
+      tabId: tab.id,
+    };
   }
 
   try {
@@ -627,19 +662,37 @@ async function reloadTimeline(timeline, tabs, now) {
   }
 }
 
-async function handleReloadAlarm() {
+function handleReloadAlarm(options = {}) {
+  if (options.retryPendingTweets !== false) {
+    return retryPendingTweet()
+      .catch(async (error) => {
+        await saveServiceDiagnostic({
+          reasonCode: "pending_retry_error",
+          messages: ["The pending tweet retry could not be completed."],
+          error: error?.message || String(error),
+        });
+      })
+      .then(() => handleMonitoredTabReload());
+  }
+  return handleMonitoredTabReload();
+}
+
+function handleMonitoredTabReload() {
+  if (monitoredTabReloadPromise) return monitoredTabReloadPromise;
+
+  const currentReload = runMonitoredTabReload();
+  const sharedReload = currentReload.finally(() => {
+    if (monitoredTabReloadPromise === sharedReload) {
+      monitoredTabReloadPromise = null;
+    }
+  });
+  monitoredTabReloadPromise = sharedReload;
+  return sharedReload;
+}
+
+async function runMonitoredTabReload() {
   const now = new Date().toISOString();
   try {
-    try {
-      await retryPendingTweet();
-    } catch (error) {
-      await saveServiceDiagnostic({
-        reasonCode: "pending_retry_error",
-        messages: ["The pending tweet retry could not be completed."],
-        error: error?.message || String(error),
-      });
-    }
-
     if (typeof chrome === "undefined" || !chrome.tabs) {
       return { success: false, error: "chrome.tabs is unavailable" };
     }
@@ -667,8 +720,13 @@ async function handleReloadAlarm() {
         ? await restoreStoredDriftedTimeline("with_replies", candidateTabs, now)
         : null) || await reloadTimeline("with_replies", repliesTabs, now),
     ];
-    const successful = results.find((result) => result.success);
+    const successful = results.find((result) => result.success && !result.skipped);
     const hasError = results.some((result) => result.status === "error");
+    const alreadyReloaded = results.some((result) => result.skipped);
+
+    if (!successful && alreadyReloaded && !hasError) {
+      return { success: true, status: "recently_reloaded", results };
+    }
 
     if (!successful && !hasError) {
       console.log("[Service Worker] Monitored profile and replies tabs are missing. Preserving last_page_reload_at.");
