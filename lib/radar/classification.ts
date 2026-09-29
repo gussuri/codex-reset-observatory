@@ -45,7 +45,7 @@ export type TiboClassificationSafetyDecision = {
   suppressTeaserStrength: boolean;
 };
 
-const NON_USAGE_RESET_OBJECT_PATTERN = /(?:\b(?:reset|resetting|restart|restarting|reboot|rebooting)\s+(?:the|my|our|a|an)?\s*(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\b|\b(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\s+(?:reset|restart|reboot)\b)/i;
+const NON_USAGE_RESET_OBJECT_PATTERN = /(?:\b(?:reset|resetting|restart|restarting|reboot|rebooting)\s+(?:the|my|our|a|an)?\s*(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|(?:test\s+)?database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\b|\b(?:cache(?:s)?|server(?:s)?|benchmark(?:s)?|model(?:s)?(?:'s)?|conversation(?:s)?|chat(?:s)?|thread(?:s)?|sleep\s+schedule|laptop(?:s)?|(?:test\s+)?database(?:s)?|db|ui|interface|test\s+(?:environment|suite)|app(?:s)?|application(?:s)?)\s+(?:reset|restart|reboot)\b)/i;
 const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|capacity|paid\s+users?|all\s+users?|everyone(?:'s)?\s+limits?|fresh\s+limits?|topped\s+up|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)\b/i;
 const NON_USAGE_ACTIVATION_OBJECT_PATTERN = /\b(?:context\s+windows?|features?|models?(?:\s+availability)?|api\s+keys?|chatgpt\s+accounts?|account\s+support|rollouts?|deployments?|availability|products?|settings?|switch)\b/i;
 const NON_USAGE_ACTIVATION_ACTION_PATTERN = /\b(?:flipped\s+the\s+switch|turned\s+(?:it|that|this|the)\s+on|enabled|activated|now\s+live|is\s+live|are\s+live|works?\s+(?:through|for|with)|support(?:s|ed)?|rolled\s+out|deployed|released|expanded|extended)\b/i;
@@ -297,7 +297,11 @@ export function getTiboClassificationSafetyDecision(
   }
 
   const normalized = normalizedText;
-  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized);
+  // Words such as "yesterday" can refer to an unrelated event in a post that
+  // contains a separate current teaser. Only apply the historical reset guard
+  // when the author text actually names a reset/usage-limit subject.
+  const hasResetSubject = /\b(?:reset(?:s|ting)?|usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?)\b/i.test(normalized);
+  const hasHistoricalReset = HISTORICAL_RESET_PATTERN.test(normalized) && hasResetSubject;
   if (hasHistoricalReset && candidate !== "irrelevant") {
     const hasFutureEvent = FUTURE_RESET_PATTERN.test(normalized);
     const isCancelled = CANCELLATION_PATTERN.test(normalized);
