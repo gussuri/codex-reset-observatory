@@ -36,6 +36,8 @@ export type TiboSignalInterpretation = {
 export type TiboSignalInterpretationOptions = {
   /** Timed policy may use a still-live resolved window beyond post age 48h. */
   ignoreCreatedAtLookback?: boolean;
+  /** UI presentation may keep a strong teaser while its resolved window is live. */
+  allowResolvedStrongUiTeaserBeyondLookback?: boolean;
 };
 
 const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
@@ -177,6 +179,7 @@ function hasExplicitAutomaticOfficialReplyEvidence(signal: ResetTeaserSignal) {
 function hasAuthorOwnedExplicitFutureResetReplyEvidence(
   signal: ResetTeaserSignal,
   now: Date,
+  options: TiboSignalInterpretationOptions = {},
 ) {
   if (signal.signal_type !== "official_notice" ||
       signal.is_reply !== true ||
@@ -192,7 +195,8 @@ function hasAuthorOwnedExplicitFutureResetReplyEvidence(
   const createdTime = getTimestamp(signal.tweet_created_at);
   const nowTime = now.getTime();
   if (createdTime === null || !Number.isFinite(nowTime) || createdTime > nowTime ||
-      createdTime < nowTime - RESET_TEASER_LOOKBACK_MS) {
+      (createdTime < nowTime - RESET_TEASER_LOOKBACK_MS &&
+        !(options.allowResolvedStrongUiTeaserBeyondLookback && hasResolvedFutureWindow(signal, now)))) {
     return false;
   }
 
@@ -255,7 +259,9 @@ function hasStrongContextualTimedTeaserEvidence(
   const createdTime = getTimestamp(signal.tweet_created_at);
   const nowTime = now.getTime();
   if (createdTime === null || !Number.isFinite(nowTime) || createdTime > nowTime ||
-      (!options.ignoreCreatedAtLookback && createdTime < nowTime - RESET_TEASER_LOOKBACK_MS)) {
+      (!options.ignoreCreatedAtLookback &&
+        !(options.allowResolvedStrongUiTeaserBeyondLookback && hasResolvedFutureWindow(signal, now)) &&
+        createdTime < nowTime - RESET_TEASER_LOOKBACK_MS)) {
     return false;
   }
   if (!hasResetContext(signal) || !FUTURE_TIMING_PATTERN.test(authorText)) return false;
@@ -342,7 +348,7 @@ export function interpretTiboSignal(
   const manualStrongReplyTimedTeaser = !rejected &&
     hasValidatedManualStrongReplyTimedTeaserEvidence(signal, now);
   const authorOwnedExplicitFutureResetReply =
-    hasAuthorOwnedExplicitFutureResetReplyEvidence(signal, now);
+    hasAuthorOwnedExplicitFutureResetReplyEvidence(signal, now, options);
   const timedProbabilityEligible = !rejected &&
     !officialNoticeEligible &&
     !historyEligible &&
@@ -454,6 +460,43 @@ export function interpretTiboSignal(
 }
 
 /**
+ * Applies the live-window lifetime exception only to presentation fields.
+ * Probability and history eligibility remain the values from the normal
+ * interpretation, whose 48-hour policy is unchanged.
+ */
+export function interpretTiboSignalForUi(
+  signal: ResetTeaserSignal,
+  now: Date = new Date(),
+): TiboSignalInterpretation {
+  const normal = interpretTiboSignal(signal, now);
+  if (normal.presentationDisposition === "strong_teaser") {
+    return normal;
+  }
+
+  const createdTime = getTimestamp(signal.tweet_created_at);
+  const nowTime = now.getTime();
+  if (createdTime === null || !Number.isFinite(nowTime) ||
+      createdTime >= nowTime - RESET_TEASER_LOOKBACK_MS ||
+      !hasResolvedFutureWindow(signal, now)) {
+    return normal;
+  }
+
+  const withLiveWindow = interpretTiboSignal(signal, now, {
+    allowResolvedStrongUiTeaserBeyondLookback: true,
+  });
+  if (withLiveWindow.presentationDisposition !== "strong_teaser" || !withLiveWindow.uiTeaserFallback) {
+    return normal;
+  }
+
+  return {
+    ...normal,
+    presentationDisposition: withLiveWindow.presentationDisposition,
+    reason: withLiveWindow.reason,
+    uiTeaserFallback: true,
+  };
+}
+
+/**
  * Returns a presentation-only fallback for an ambiguous reply or quote that the
  * classifier related to a reset but did not safely admit as an official notice.
  * The fallback can be weak or a bounded strong-timed disposition; it is not an
@@ -463,13 +506,15 @@ export function getFallbackUiTeaserStrength(
   signal: ResetTeaserSignal,
   now: Date = new Date(),
 ): Extract<TeaserStrength, "weak" | "strong"> | null {
-  const interpretation = interpretTiboSignal(signal, now);
+  const interpretation = interpretTiboSignalForUi(signal, now);
   if (!interpretation.uiTeaserFallback) return null;
   return interpretation.presentationDisposition === "strong_teaser" ? "strong" : "weak";
 }
 
 /**
- * Returns posts eligible for a 48-hour teaser-strength window.
+ * Returns posts eligible for the standard 48-hour teaser-strength window.
+ * The UI caller may retain a strong teaser with a live resolved window beyond
+ * that age; probability callers keep the original 48-hour rule.
  * Expiration is intentionally not part of this filter; callers can choose
  * whether replies belong to their own use of the shared time window.
  */
@@ -496,7 +541,7 @@ export function getTeaserStrengthSignals(
 
   return expandedSignals
     .map((signal) => {
-      const interpretation = includeUiFallback ? interpretTiboSignal(signal, now) : null;
+      const interpretation = includeUiFallback ? interpretTiboSignalForUi(signal, now) : null;
       if (interpretation?.uiTeaserFallback &&
           (interpretation.presentationDisposition === "weak_teaser" ||
             interpretation.presentationDisposition === "strong_teaser")) {
@@ -512,6 +557,9 @@ export function getTeaserStrengthSignals(
     })
     .filter((signal) => {
     const isUiFallback = signal.ui_teaser_fallback === true;
+    const isStrongResolvedWindowUiTeaser = includeUiFallback &&
+      getEffectiveTeaserStrength(signal) === "strong" &&
+      hasResolvedFutureWindow(signal, now);
     const createdTime = getTimestamp(signal.tweet_created_at);
     const primaryEventTime = signal.is_secondary_future_signal === true
       ? getTimestamp(signal.primary_event_at)
@@ -534,7 +582,7 @@ export function getTeaserStrengthSignals(
     return Boolean(
       createdTime !== null &&
         createdTime <= nowTime &&
-        createdTime >= cutoffTime &&
+        (createdTime >= cutoffTime || isStrongResolvedWindowUiTeaser) &&
         isSemanticallyAfterBoundary &&
         signal.verification_status !== "rejected" &&
         (isUiFallback || signal.signal_type !== "official_notice") &&
