@@ -153,6 +153,44 @@ test("timed evidence weight is derived from the shared interpretation", () => {
   assert.equal(getTimedTeaserReallocationWeight(weak), null);
 });
 
+test("a resolved direct teaser uses the existing strong-direct weight and lifts 24h versus the same unresolved baseline", () => {
+  const unresolved = contextualSignal({
+    tweet_id: "concealed-reveal-today",
+    tweet_created_at: "2026-09-19T21:00:00.000Z",
+    text: "Big Codex reveal today. We've kept it secret.",
+    signal_type: "teaser",
+    confidence: 0.85,
+    verification_status: "confirmed",
+    classification_source: "manual",
+    is_reply: false,
+    reply_context_text: null,
+    teaser_strength: "strong",
+    temporal_resolution_status: "unresolved",
+    temporal_precision: null,
+    expected_start_at: null,
+    expected_end_at: null,
+  });
+  const resolved = {
+    ...unresolved,
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "day" as const,
+    temporal_timezone: "America/Los_Angeles",
+    expected_start_at: "2026-09-19T07:00:00.000Z",
+    expected_end_at: "2026-09-20T07:00:00.000Z",
+  };
+
+  const before = calculate([unresolved]);
+  const after = calculate([resolved]);
+  const audit = after.survival.timedTeaserReallocation;
+
+  assert.equal(before.survival.timedTeaserReallocation?.applied ?? false, false);
+  assert.equal(audit?.applied, true);
+  assert.equal(audit?.timedEvidenceClass, "strong_direct");
+  assert.equal(audit?.reallocationWeight, 0.5);
+  assert.equal(audit?.cdf?.probability24h, 1);
+  assert.ok(after.predictions.probability24h > before.predictions.probability24h);
+});
+
 test("the public timed teaser card shares the interpretation and keeps its resolved window", () => {
   const snapshot = toPublicRadarSnapshot(survivalData([contextualSignal()]), "en", {
     calculationNow: NOW,

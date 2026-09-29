@@ -284,7 +284,7 @@ export function runTiboScenario(scenario: TiboScenario, now = getScenarioNow(sce
     : null;
   const selected = selectTiboClassification(scenario.pipeline ? "primary" : "off", ruleResult, geminiResult);
   const semantics = geminiResult ? parseTiboTemporalSemantics(geminiResult, scenario.tweetText) : null;
-  const temporalResolution = selected.signalType === "official_notice" && semantics
+  const temporalResolution = (selected.signalType === "official_notice" || selected.signalType === "teaser") && semantics
     ? resolveTiboTemporalSchedule(semantics, scenario.tweetCreatedAt, TIBO_SOURCE_TIME_ZONE)
     : null;
   const activeSignal = buildActiveSignal(scenario, selected, geminiResult, temporalResolution);

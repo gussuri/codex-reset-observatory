@@ -1198,7 +1198,74 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v6");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v7");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("accepted concealed teaser persists its own today window without becoming an official notice", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "teaser",
+    confidence: 0.85,
+    temporalDirection: "unclear",
+    evidenceQuote: "all good news",
+    reasonJa: "近いイベントと秘匿された発表を合わせた匂わせです。",
+    teaserStrength: "strong",
+    teaserStrengthConfidence: 0.85,
+    teaserStrengthEvidenceQuote: "kept it all under wraps",
+    teaserStrengthReasonJa: "発表を意図的に秘匿しています。",
+    temporalExpression: "today",
+    temporalKind: "relative_day",
+    temporalPrecision: "day",
+    relativeDayOffset: 0,
+    temporalConfidence: 0.9,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2104838506363408740",
+      text: "That was yesterday, today is DevDay. And it's all good news. I'm surprised we've kept it all under wraps.",
+      tweetUrl: "https://x.com/thsottiaux/status/2104838506363408740",
+      tweetCreatedAt: "2026-09-29T07:39:40.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === "2104838506363408740",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.equal(upsertBody.signal_type, "teaser");
+    assert.equal(upsertBody.ai_teaser_strength, "strong");
+    assert.equal(upsertBody.ai_temporal_direction, "unclear");
+    assert.equal(upsertBody.ai_temporal_expression, "today");
+    assert.equal(upsertBody.ai_temporal_kind, "relative_day");
+    assert.equal(upsertBody.ai_temporal_precision, "day");
+    assert.equal(upsertBody.temporal_expression, "today");
+    assert.equal(upsertBody.temporal_kind, "relative_day");
+    assert.equal(upsertBody.temporal_precision, "day");
+    assert.equal(upsertBody.temporal_timezone, "America/Los_Angeles");
+    assert.equal(upsertBody.temporal_resolution_source, "gemini");
+    assert.equal(upsertBody.expected_start_at, "2026-09-29T07:00:00.000Z");
+    assert.equal(upsertBody.expected_end_at, "2026-09-30T07:00:00.000Z");
+    assert.equal(upsertBody.temporal_resolution_status, "resolved");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v7");
+    assert.equal(upsertBody.codex_operational_status, null);
   } finally {
     restoreGemini();
     restoreFetch();
