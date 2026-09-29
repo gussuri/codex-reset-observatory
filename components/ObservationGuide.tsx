@@ -204,13 +204,27 @@ export function ObservationGuide({ locale }: ObservationGuideProps) {
           ))}
         </div>
 
-        <div className="mt-4 text-right">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs font-semibold text-teal-700">
           <Link
             href={faqUrl}
-            className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline"
+            className="underline-offset-4 hover:underline"
           >
             {content.viewMoreFaq}
           </Link>
+          <div className="flex flex-wrap gap-4">
+            <Link
+              href={locale === "ja" ? "/history" : `/${locale}/history`}
+              className="underline-offset-4 hover:underline"
+            >
+              {locale === "ja" ? "全リセット履歴を見る →" : locale === "en" ? "View full history →" : "查看完整历史 →"}
+            </Link>
+            <Link
+              href={locale === "ja" ? "/about" : `/${locale}/about`}
+              className="underline-offset-4 hover:underline"
+            >
+              {locale === "ja" ? "観測所の仕様について →" : locale === "en" ? "About observatory →" : "关于本站说明 →"}
+            </Link>
+          </div>
         </div>
       </div>
     </section>
