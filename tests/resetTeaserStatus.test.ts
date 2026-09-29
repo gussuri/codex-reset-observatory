@@ -9,6 +9,7 @@ import {
   getEffectiveTeaserStrength,
   getFallbackUiTeaserStrength,
   interpretTiboSignal,
+  interpretTiboSignalForUi,
 } from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
@@ -478,6 +479,144 @@ test("author-owned explicit future reset replies are strong UI teasers without c
   }
 });
 
+test("keeps a strong resolved-window UI teaser through its expected end without changing forecast inputs", () => {
+  const createdAt = "2026-09-26T21:41:35.000Z";
+  const target = activitySignal(
+    "2103963215885701493",
+    createdAt,
+    null,
+    {
+      signal_type: "official_notice",
+      confidence: 0.9,
+      classification_source: "gemini",
+      verification_status: "auto_unverified",
+      is_reply: true,
+      is_quote: false,
+      text: "Sorry Gia. More resets coming next week",
+      reply_context_text: "The reset came right after my own reset, couldn’t be worse timing.",
+      tweet_url: "https://x.com/thsottiaux/status/2103963215885701493",
+      expires_at: "2026-09-27T23:54:06.930Z",
+      temporal_resolution_status: "resolved",
+      temporal_precision: "range",
+      expected_start_at: "2026-09-28T07:00:00.000Z",
+      expected_end_at: "2026-10-05T07:00:00.000Z",
+    },
+  );
+  const priorCompletion = activitySignal(
+    "prior-completion",
+    "2026-09-26T20:00:00.000Z",
+    null,
+    {
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      classification_source: "gemini",
+      text: "Resets all propagated. That will be all.",
+    },
+  );
+  const snapshotAt = (time: string, includeTarget = true) => {
+    const calculationNow = new Date(time);
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow,
+        recentTiboSignals: includeTarget ? [target, priorCompletion] : [priorCompletion],
+      }),
+      "en",
+      { calculationNow },
+    );
+    return snapshot;
+  };
+
+  const recent = snapshotAt("2026-09-27T01:00:00.000Z");
+  const beyondLookback = snapshotAt("2026-09-29T06:00:00.000Z");
+  const beforeWindowEnd = snapshotAt("2026-10-05T06:59:59.999Z");
+  const atWindowEnd = snapshotAt("2026-10-05T07:00:00.000Z");
+  const beyondLookbackNow = new Date("2026-09-29T06:00:00.000Z");
+  const normalInterpretation = interpretTiboSignal(target, beyondLookbackNow);
+  const uiInterpretation = interpretTiboSignalForUi(target, beyondLookbackNow);
+
+  assert.equal(normalInterpretation.presentationDisposition, "none");
+  assert.equal(normalInterpretation.timedProbabilityEligible, false);
+  assert.equal(normalInterpretation.historyEligible, false);
+  assert.equal(uiInterpretation.presentationDisposition, "strong_teaser");
+  assert.equal(uiInterpretation.officialNoticeEligible, false);
+  assert.equal(uiInterpretation.timedProbabilityEligible, false);
+  assert.equal(uiInterpretation.historyEligible, false);
+  assert.equal(recent.resetTeaserStatus, "strong");
+  assert.equal(beyondLookback.resetTeaserStatus, "strong");
+  assert.equal(beforeWindowEnd.resetTeaserStatus, "strong");
+  assert.equal(atWindowEnd.resetTeaserStatus, "none");
+  assert.equal(beyondLookback.latestTiboActivity?.text, target.text);
+  assert.equal(beyondLookback.latestTiboActivity?.classification, "teaser");
+  assert.equal(beyondLookback.latestTiboActivity?.teaserStrength, "strong");
+  assert.equal(beyondLookback.latestTiboActivity?.expectedEndAt, target.expected_end_at);
+  assert.equal(beyondLookback.viewModel.activeWindow.active, false);
+
+  const withoutTarget = snapshotAt("2026-09-29T06:00:00.000Z", false);
+  assert.equal(beyondLookback.lastRandomResetAt, withoutTarget.lastRandomResetAt);
+  assert.deepEqual(beyondLookback.viewModel.recentHistory, withoutTarget.viewModel.recentHistory);
+  assert.deepEqual(beyondLookback.viewModel.activeWindow, withoutTarget.viewModel.activeWindow);
+  for (const horizon of ["12h", "24h", "48h", "72h"] as const) {
+    assert.equal(
+      beyondLookback.viewModel[`probability${horizon}`],
+      withoutTarget.viewModel[`probability${horizon}`],
+    );
+  }
+});
+
+test("keeps the 48-hour cutoff for weak, unresolved, rejected, terminated, and consumed teasers", () => {
+  const createdAt = "2026-09-26T21:41:35.000Z";
+  const now = new Date("2026-09-29T06:00:00.000Z");
+  const base = {
+    signal_type: "official_notice" as const,
+    confidence: 0.9,
+    classification_source: "gemini",
+    verification_status: "auto_unverified" as const,
+    is_reply: true,
+    is_quote: false,
+    text: "Sorry Gia. More resets coming next week",
+    reply_context_text: "The reset came right after my own reset, couldn’t be worse timing.",
+    temporal_resolution_status: "resolved" as const,
+    temporal_precision: "range" as const,
+    expected_start_at: "2026-09-28T07:00:00.000Z",
+    expected_end_at: "2026-10-05T07:00:00.000Z",
+  };
+  const weak = activitySignal("weak-live-window", createdAt, "weak", base);
+  const unresolved = activitySignal("unresolved-live-window", createdAt, null, {
+    ...base,
+    temporal_resolution_status: "unresolved",
+  });
+  const unresolvedStrong = activitySignal("unresolved-strong-live-window", createdAt, "strong", {
+    signal_type: "teaser",
+    temporal_resolution_status: "unresolved",
+    expected_start_at: "2026-09-28T07:00:00.000Z",
+    expected_end_at: "2026-10-05T07:00:00.000Z",
+  });
+  const malformedStrong = activitySignal("malformed-strong-live-window", createdAt, "strong", {
+    signal_type: "teaser",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "not-a-timestamp",
+    expected_end_at: "2026-10-05T07:00:00.000Z",
+  });
+  const rejected = activitySignal("rejected-live-window", createdAt, null, {
+    ...base,
+    verification_status: "rejected",
+  });
+  const terminated = activitySignal("2097043464538264003", createdAt, null, base);
+  const noWindow = activitySignal("strong-without-window", createdAt, "strong", {
+    signal_type: "teaser",
+  });
+
+  for (const candidate of [weak, unresolved, unresolvedStrong, malformedStrong, rejected, terminated, noWindow]) {
+    assert.equal(aggregateResetTeaserStatus([candidate], null, now), "none", candidate.tweet_id);
+  }
+  assert.equal(
+    aggregateResetTeaserStatus([activitySignal("consumed-live-window", createdAt, null, base)],
+      "2026-09-30T12:00:00.000Z",
+      new Date("2026-09-30T12:00:00.001Z")),
+    "none",
+  );
+});
+
 test("author-owned future reset reply fallback rejects uncertainty, negation, completion, missing author evidence, unresolved timing, and low confidence", () => {
   const calculationNow = new Date("2026-09-27T01:00:00.000Z");
   const base = {
@@ -590,6 +729,7 @@ test("does not derive a UI teaser from ordinary, unrelated, rejected, or context
     ...base,
     text: "It is still coming Tuesday",
     reply_context_text: "you owe us a banked reset",
+    temporal_resolution_status: "unresolved",
   });
   const highConfidenceNotice = signal("high-confidence-notice", "2026-08-03T23:00:00.000Z", null, {
     ...base,

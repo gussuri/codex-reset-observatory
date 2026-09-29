@@ -19,6 +19,7 @@ import {
   getEffectiveTeaserStrength,
   getUiResetTeaserSignals,
   interpretTiboSignal,
+  interpretTiboSignalForUi,
   isTeaserStrength,
 } from "./teaserStrength";
 import {
@@ -232,7 +233,7 @@ export function toPublicTiboActivity(
   const candidates = sourceSignals
     .filter((signal) => {
       if (isTiboForecastSignalTerminatedAt(signal.tweet_id, now)) return false;
-      const interpretation = interpretTiboSignal(signal, now);
+      const interpretation = interpretTiboSignalForUi(signal, now);
       if (signal.is_reply === true &&
           !interpretation.officialNoticeEligible &&
           interpretation.presentationDisposition !== "strong_teaser" &&
@@ -317,7 +318,7 @@ export function toPublicTiboActivity(
   const latest = relatedOfficialNotices[0] ?? relatedCandidates[0] ?? candidates[0];
   if (!latest) return null;
   const isUiFallback = latest.ui_teaser_fallback === true;
-  const latestInterpretation = interpretTiboSignal(
+  const latestInterpretation = interpretTiboSignalForUi(
     sourceSignals.find((signal) => signal.tweet_id === latest.tweet_id) ?? latest,
     now,
   );
