@@ -1052,9 +1052,10 @@ function getHistoryDetails(
       : null;
     const scope = normalizeResetScope(item.details.scope ?? item.scope);
     const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
+    const noticeType = historyCorrection?.displayNoticeType ?? item.details.noticeType;
     const noticePresentation = historyCorrection?.hideAnnouncementTiming
       ? "none"
-      : getHistoryNoticePresentation(item.details.noticeType);
+      : getHistoryNoticePresentation(noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
@@ -1470,7 +1471,11 @@ function getRecentHistory(
       const stableKey = item.id?.trim() ? item.id : item.guid?.trim() ? item.guid : null;
       const key = stableKey ?? `history-fallback:${rawIndex}`;
       const historyCorrection = getHistoricalBankedHistoryCorrection(item);
-      const source = historyCorrection?.hideSource ? null : getEventSource(item);
+      const source = historyCorrection?.hideSource
+        ? null
+        : historyCorrection?.sourceTweetId
+          ? `https://x.com/thsottiaux/status/${historyCorrection.sourceTweetId}`
+          : getEventSource(item);
       const recordKind = getHistoryRecordKind(item);
       const sourceKind = historyCorrection?.hideSource ? "none" : getHistorySourceKind(item);
       const resetMethod = isRegular ? getRegularResetMethod(item) : null;
@@ -1482,9 +1487,10 @@ function getRecentHistory(
         ? [translateDynamic("定期更新", locale)]
         : getResetTypes(data, item, locale);
       const details = getHistoryDetails(data, item, locale);
+      const noticeType = historyCorrection?.displayNoticeType ?? item.details?.noticeType;
       const noticePresentation = historyCorrection?.hideAnnouncementTiming
         ? "none"
-        : getHistoryNoticePresentation(item.details?.noticeType);
+        : getHistoryNoticePresentation(noticeType);
       const signalTime = item.opened_at ? new Date(item.opened_at).getTime() : Number.NaN;
       const resetTime = resetAt ? new Date(resetAt).getTime() : Number.NaN;
       const hasPriorNotice = !isRegular &&

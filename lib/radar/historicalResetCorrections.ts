@@ -2,6 +2,7 @@ export const ASTRA_BANKED_HISTORY_EVENT_KEY = "banked-reset-2095651088502591861"
 export const ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260904T234601897Z`;
 export const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
 export const GPT61_BANKED_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260929T184159778Z`;
+export const GPT61_BANKED_HISTORY_TEASER_TWEET_ID = "2104838506363408740";
 
 type HistoricalResetTitleTranslationKey =
   | "astraBankedHistoryTitle"
@@ -26,6 +27,8 @@ type HistoricalResetCorrection = {
     reasonType: "ご祝儀リセット";
     noteTranslationKey: HistoricalResetNoteTranslationKey;
     displayScope?: "全有料プラン";
+    displayNoticeType?: "匂わせ投稿あり";
+    sourceTweetId?: string;
     hideAnnouncementTiming?: boolean;
     hideSource?: boolean;
   };
@@ -65,11 +68,11 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
   },
   {
     correctionId: "gpt61-banked-history-observation",
-    // Correct this single observed entry at presentation time only. It is
-    // deliberately absent from scopeCorrectionEventKeys so canonical
-    // conditional eligibility and probability semantics stay unchanged.
-    scopeCorrectionEventKeys: [],
+    // The observed GPT-6.1 distribution reached all paid plans and is the
+    // completed boundary for its associated teaser.
+    scopeCorrectionEventKeys: [GPT61_BANKED_HISTORY_EVENT_KEY],
     presentationEventKeys: [GPT61_BANKED_HISTORY_EVENT_KEY],
+    sourceTweetId: GPT61_BANKED_HISTORY_TEASER_TWEET_ID,
     presentation: {
       defaultTitleTranslationKey: "gpt61BankedHistoryTitle",
       titleTranslationKeysByEventKey: [
@@ -80,9 +83,7 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
       ],
       reasonType: "ご祝儀リセット",
       noteTranslationKey: "gpt61BankedHistoryNote",
-      displayScope: "全有料プラン",
-      hideAnnouncementTiming: true,
-      hideSource: true,
+      displayNoticeType: "匂わせ投稿あり",
     },
   },
 ];
@@ -100,6 +101,8 @@ export type HistoricalResetPresentationCorrection = {
   reasonType: "ご祝儀リセット";
   noteTranslationKey: HistoricalResetNoteTranslationKey;
   displayScope?: "全有料プラン";
+  displayNoticeType?: "匂わせ投稿あり";
+  sourceTweetId?: string;
   hideAnnouncementTiming?: boolean;
   hideSource?: boolean;
 };
@@ -141,6 +144,8 @@ export function getHistoricalResetPresentationCorrection(
     reasonType: correction.presentation.reasonType,
     noteTranslationKey: correction.presentation.noteTranslationKey,
     displayScope: correction.presentation.displayScope,
+    displayNoticeType: correction.presentation.displayNoticeType,
+    sourceTweetId: correction.sourceTweetId,
     hideAnnouncementTiming: correction.presentation.hideAnnouncementTiming,
     hideSource: correction.presentation.hideSource,
   };

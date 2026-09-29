@@ -525,7 +525,7 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
   }
 });
 
-test("presents the Sep 29 GPT-6.1 BANKED observation without inheriting the old Astra notice", () => {
+test("links the Sep 29 GPT-6.1 BANKED observation to its teaser", () => {
   const astraNotice = {
     ...notice,
     tweet_id: "2095651088502591861",
@@ -534,36 +534,53 @@ test("presents the Sep 29 GPT-6.1 BANKED observation without inheriting the old 
     tweet_created_at: "2026-09-03T23:12:09.000Z",
     confidence: 0.98,
   };
+  const gpt61Teaser = {
+    ...notice,
+    tweet_id: "2104838506363408740",
+    text: "That was yesterday and today is DevDay. And everything is good news. I'm surprised we kept this secret so well.",
+    tweet_url: "https://x.com/thsottiaux/status/2104838506363408740",
+    tweet_created_at: "2026-09-29T07:39:40.000Z",
+    signal_type: "teaser" as const,
+    teaser_strength: "strong" as const,
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-09-29T07:00:00.000Z",
+    expected_end_at: "2026-09-30T07:00:00.000Z",
+  };
   const eventKey = "banked-reset-2095651088502591861-observation-20260929T184159778Z";
   const observedAt = "2026-09-29T18:41:59.778Z";
   const gpt61Estimate = {
     ...estimate,
     resetEventKey: eventKey,
     displayExecutionAt: observedAt,
-    tiboAnnouncedAt: astraNotice.tweet_created_at,
-    tiboPrimaryTweetId: astraNotice.tweet_id,
-    tiboSourceTweetIds: [astraNotice.tweet_id],
+    tiboAnnouncedAt: gpt61Teaser.tweet_created_at,
+    tiboPrimaryTweetId: gpt61Teaser.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id, gpt61Teaser.tweet_id],
     officialNoticeTweetId: astraNotice.tweet_id,
     officialNoticeAt: astraNotice.tweet_created_at,
   };
-  const canonicalHistory = combineResetHistory([], [], [], [], [astraNotice], [], [gpt61Estimate]);
+  const canonicalHistory = combineResetHistory([], [], [], [], [astraNotice, gpt61Teaser], [], [gpt61Estimate]);
   assert.equal(canonicalHistory.filter((item) => item.recordKind === "banked_distribution").length, 1);
   const canonicalEvent = canonicalHistory.find((item) => item.id === eventKey);
 
   assert.ok(canonicalEvent);
   assert.equal(canonicalEvent.recordKind, "banked_distribution");
-  assert.equal(canonicalEvent.randomResetTargetScope, "conditional");
+  assert.equal(canonicalEvent.scope, "全有料プラン");
+  assert.equal(canonicalEvent.randomResetTargetScope, undefined);
   assert.equal(isEligibleRandomResetEvent(
     canonicalEvent,
     Date.parse(observedAt),
     Date.parse("2026-09-30T00:00:00.000Z"),
-  ), false);
+  ), true);
 
   const data = getLocalRadarData({
     calculationNow: new Date("2026-09-30T00:00:00.000Z"),
-    recentTiboSignals: [astraNotice],
+    recentTiboSignals: [astraNotice, gpt61Teaser],
     resetExecutionEstimates: [gpt61Estimate],
   });
+  assert.equal(
+    getLastRandomRecoveryResetAt(data, new Date("2026-09-30T00:00:00.000Z"), []),
+    observedAt,
+  );
   const expected = {
     ja: {
       title: "GPT-6.1リリース記念BANKEDリセット権配布",
@@ -599,13 +616,15 @@ test("presents the Sep 29 GPT-6.1 BANKED observation without inheriting the old 
     assert.equal(event.details?.resetMethod, locale === "ja" ? "任意リセット権配布" : locale === "en" ? "Banked Reset distribution" : "BANKED 重置发放");
     assert.equal(event.details?.scope, expected[locale].scope);
     assert.equal(event.scope, expected[locale].scope);
-    assert.equal(event.details?.noticeToExecution, "");
-    assert.equal(event.details?.noticeType, undefined);
-    assert.equal(event.signalAt, null);
-    assert.equal(event.signalLabel, "");
-    assert.equal(event.source, null);
-    assert.equal(event.sourceKind, "none");
+    assert.equal(event.details?.noticeToExecution, locale === "ja" ? "11時間2分" : locale === "en" ? "11 hours 2 minutes" : "11 小时 2 分钟");
+    assert.equal(event.details?.noticeType, locale === "ja" ? "匂わせあり" : locale === "en" ? "Teaser hint" : "有预告提示");
+    assert.equal(event.signalAt, gpt61Teaser.tweet_created_at);
+    assert.notEqual(event.signalLabel, "");
+    assert.equal(event.windowLength, locale === "ja" ? "11時間2分" : locale === "en" ? "11h 2m" : "11小时2分钟");
+    assert.equal(event.source, gpt61Teaser.tweet_url);
+    assert.equal(event.sourceKind, "direct_post");
     assert.equal(event.details?.note, expected[locale].note);
+    assert.equal(snapshot.resetTeaserStatus, "none");
   }
 });
 
