@@ -1418,6 +1418,141 @@
       "tweetUrl": "https://x.com/thsottiaux/status/910000000000001057",
       "expected": { "signalType": "irrelevant", "temporalDirection": "unclear" },
       "ambiguous": true
+    },
+    {
+      "id": "prod-concealed-devday-teaser",
+      "category": "indirect_release_teaser",
+      "description": "Real production author text; fixture timestamp is synthetic for offline scenario execution.",
+      "tweetText": "That was yesterday, today is DevDay. And it's all good news. I'm surprised we've kept it all under wraps.",
+      "tweetCreatedAt": "2026-09-29T00:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2104838506363408740",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser",
+      "mockGeminiOutput": { "confidence": 0.85, "reasonJa": "A near-term OpenAI event and deliberate concealed good-news reveal make a reset a plausible teaser, not a commitment.", "evidenceQuote": "all good news", "teaserStrength": "strong", "teaserStrengthConfidence": 0.85, "teaserStrengthEvidenceQuote": "kept it all under wraps", "teaserStrengthReasonJa": "近いイベントと意図的な未公開発表を組み合わせた強い匂わせです。" }
+    },
+    {
+      "id": "codex-concealed-launch-teaser",
+      "category": "indirect_release_teaser",
+      "description": "Near-term Codex launch plus an explicitly concealed reveal and celebratory framing is a strong indirect teaser.",
+      "tweetText": "Big launch tomorrow for Codex. We've somehow kept the best part secret until now. Lots of good news coming.",
+      "tweetCreatedAt": "2026-09-29T00:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001101",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser",
+      "mockGeminiOutput": { "confidence": 0.85, "reasonJa": "A near-term Codex launch and deliberately concealed good-news reveal jointly make a reset plausible, without announcing one.", "evidenceQuote": "Big launch tomorrow for Codex", "teaserStrength": "strong", "teaserStrengthConfidence": 0.85, "teaserStrengthEvidenceQuote": "kept the best part secret until now", "teaserStrengthReasonJa": "製品文脈・近い時期・意図的な秘匿を組み合わせた強い匂わせです。" }
+    },
+    {
+      "id": "weekday-alone-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "A weekday without product-event context or reveal framing is not a reset teaser.",
+      "tweetText": "Tuesday will be fun.",
+      "tweetCreatedAt": "2026-09-29T00:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001102",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "devday-excitement-weak-boundary",
+      "category": "indirect_release_teaser",
+      "description": "Near-term OpenAI event context and general excitement can support only a weak, not strong, hint without deliberate concealment.",
+      "tweetText": "Can't wait for DevDay next Tuesday. Lots of exciting things coming.",
+      "tweetCreatedAt": "2026-09-29T00:30:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001103",
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "weak", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser",
+      "mockGeminiOutput": { "confidence": 0.8, "reasonJa": "The upcoming OpenAI event and excitement form a mild indirect hint, without evidence strong enough for a strong teaser.", "evidenceQuote": "DevDay next Tuesday", "teaserStrength": "weak", "teaserStrengthConfidence": 0.8, "teaserStrengthEvidenceQuote": "Lots of exciting things coming", "teaserStrengthReasonJa": "近いイベントと期待感はあるものの、強い秘匿表現はありません。" }
+    },
+    {
+      "id": "codex-editor-release-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "A routine feature launch in the product ecosystem is not a reset teaser without concealed-reveal framing.",
+      "tweetText": "We launched a new editor in Codex today.",
+      "tweetCreatedAt": "2026-09-29T00:40:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001104",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "docs-update-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "A routine documentation update has no concealed reset implication.",
+      "tweetText": "Docs update tomorrow.",
+      "tweetCreatedAt": "2026-09-29T00:50:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001105",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "devday-attendance-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "Event attendance with no announcement or reveal is not a reset teaser.",
+      "tweetText": "See you at DevDay tomorrow.",
+      "tweetCreatedAt": "2026-09-29T01:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001106",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "devday-past-event-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "A past event recap is not a current or near-future reset teaser.",
+      "tweetText": "DevDay was great yesterday.",
+      "tweetCreatedAt": "2026-09-29T01:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001107",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "negated-reset-devday-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "An explicit reset denial stays negative even when paired with an upcoming product event.",
+      "tweetText": "No reset tomorrow, but DevDay will be fun.",
+      "tweetCreatedAt": "2026-09-29T01:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001108",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "historical", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "test-database-reset-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "A technical database reset remains outside the usage-reset taxonomy.",
+      "tweetText": "Reset the test database before tomorrow's launch.",
+      "tweetCreatedAt": "2026-09-29T01:30:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001109",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "future", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "generic-good-news-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "Generic positive sentiment without near-term product context is not a teaser.",
+      "tweetText": "It's all good news.",
+      "tweetCreatedAt": "2026-09-29T01:40:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001110",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "concealed-project-alone-not-teaser",
+      "category": "indirect_release_teaser",
+      "description": "Concealment without a near-term relevant product-event context is not a teaser.",
+      "tweetText": "I've kept the project details under wraps.",
+      "tweetCreatedAt": "2026-09-29T01:50:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000001111",
+      "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
+      "pipeline": true,
+      "regressionGroup": "concealed-imminent-release-teaser"
     }
   ]
 }

@@ -152,8 +152,16 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    A separate statement that service is "back in action" or recovered describes operational status only;
    it does not change a future reset commitment into a completed reset.
 
-3. "teaser": Forward-looking post suggesting a reset within 24-48 hours. Merely containing the words "reset" or "reset button" without a future-oriented indicator does NOT qualify.
-   Example: "Should we press the reset button tonight?"
+3. "teaser": A forward-looking signal that Tibo may perform a Codex/ChatGPT Work usage-limit reset. It can be direct (for example, "Should we press the reset button tonight?") or, in the narrow case below, indirect without using the word "reset".
+
+   Concealed imminent-reveal teasers may qualify only when the WHOLE AUTHOR TEXT combines all of these:
+   - a clearly near-term event, announcement, or reveal by Tibo;
+   - natural OpenAI/Codex product, subscription, or usage-ecosystem context;
+   - deliberate concealment, surprise, or unusually emphatic celebratory/good-news framing; and
+   - enough intentional teaser quality that a human could reasonably consider a usage reset one possible reveal.
+   Do not require an explicit usage-reset word for this narrow indirect teaser case. The combined evidence must support the possibility of a reset; a near-term OpenAI/Codex event, product, subscription, or usage announcement must be part of the context, and the post must be deliberately concealed or unusually emphatic. Good news alone is not enough. For implicit teasers, keep confidence moderate (0.80-0.90), not at the level of an explicit official notice.
+   Strong requires clear imminence plus emphatic concealment/surprise/reveal framing. Relevant event context with mild hype or a much weaker reset implication can be weak; a date or event mention alone is not a signal.
+   This exception never establishes that a reset is promised, scheduled, happening, or completed. Do not infer reset timing from the event date; only direct reset assertions can be "official_notice" or "reset_executed".
 
 A narrow exception applies to a recent first-person acquisition of the reset mechanism:
 when Tibo clearly says that he has recently been gifted, received, or obtained a new reset
@@ -163,14 +171,15 @@ completed reset, so this is neither "reset_executed" nor an official scheduled n
 apply this exception to "years ago" or other historical memories, UI/product-feature mentions,
 device or third-party buttons, or unrelated technical resets.
 
-4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), feature releases, or ambiguous chatter.
+4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), ordinary feature/release announcements, or ambiguous chatter. The concealed imminent-reveal exception above is narrow; ordinary feature news remains irrelevant. Ordinary feature or release announcements alone remain irrelevant.
    Examples: "I reset everyone yesterday" (historical -> irrelevant), "One day we created the reset button and the rest is history" (historical memory -> irrelevant), "No reset tonight" (negative -> irrelevant).
 
-Domain scope is essential: a reset-related category is valid only when the post refers to
-Codex/ChatGPT Work usage limits, quotas, allowances, or an unmistakable Tibo usage-limit
-reset context. A reset of a cache, server, benchmark, model, conversation, sleep schedule,
-laptop, database, UI, app, or test environment is unrelated unless the same post explicitly
-connects it to usage limits or quota recovery. The word "reset" by itself is never enough.
+Domain scope is essential: "official_notice" and "reset_executed" require an explicit reset or
+restoration assertion about Codex/ChatGPT Work usage limits, quotas, or allowances. A reset of a
+cache, server, benchmark, model, conversation, sleep schedule, laptop, database, UI, app, or test
+environment is unrelated unless explicitly connected to usage limits or quota recovery. The word
+"reset" by itself is never enough. A teaser normally needs reset-related context, with only the
+narrow indirect concealed-imminent-reveal exception defined above.
 
 Usage-limit restoration language is also reset-related when the meaning is clear, even if the
 word "reset" is absent. Phrases such as "bring back the 5h limit", "restore the limit", or
@@ -191,9 +200,12 @@ another object), then identify the time meaning (historical, completed now, or f
 identify the speech act (confirmation, explicit commitment, indirect hint, or unrelated text).
 Read the whole AUTHOR TEXT before using reply or quoted context. Parent and quoted text can
 clarify a Tibo statement, but they are not Tibo's own assertion and must not supply a reset
-claim that is absent from the author text. Generic words such as "cooking something",
-"capacity boost", "resets", or "getting faster" are not evidence by themselves; judge their
-meaning from the usage domain, temporal relation, and Tibo's apparent intent.
+claim that is absent from the author text. Generic words such as "cooking something", "capacity
+boost", "resets", or "getting faster" are not evidence by themselves; judge their meaning from
+the usage domain, temporal relation, and Tibo's apparent intent. Event names/dates, product hype,
+"good news", concealment, or surprise are likewise not evidence by themselves; judge the combined
+evidence. A routine feature launch, version release, docs update, or event attendance remains
+irrelevant even when imminent.
 
 Do not classify a pure hypothetical, wish, counterfactual, or thought experiment as "teaser".
 Examples that remain "irrelevant": "What if I reset everyone?", "Would be nice to reset everyone",
@@ -230,18 +242,22 @@ A post may be too ambiguous to qualify as a formal teaser signal while still car
 When signalType is uncertain or irrelevant but the visible text or visible conversational context contains a genuine,
 intentional-looking reset implication, teaserStrength may be "weak". Do not force teaserStrength to "none" merely because
 signalType is "irrelevant".
-- "strong": Tibo's present-tense statement gives a concrete near-future indication of a reset,
-  or clearly indicates that he has just obtained a reset mechanism that he may use. The recent
-  first-person acquisition exception above is strong only when that meaning is clear.
+- "strong": Tibo gives a concrete near-future reset indication, clearly indicates that he has
+  just obtained a reset mechanism that he may use, or satisfies every condition of the narrow
+  concealed imminent-reveal teaser exception with emphatic surprise/concealment framing. An
+  implicit concealed reveal remains only a teaser and must not become an official notice or
+  completed reset.
 - "weak": This label is high-recall but semantic, not keyword-only. Use it when the whole post
   gives a slight, indirect, playful, joking, metaphorical, vague, cryptic, or context-dependent
   suggestion that Tibo might perform a usage-limit reset. A weak teaser does not require explicit
   future tense, a concrete schedule, a direct statement of intent, or a clear conditional
   commitment, but it does require a genuine reset-related implication that a human reader could
-  reasonably regard as intentional. Very indirect jokes, wordplay, and short replies may be weak
+  reasonably regard as intentional. A near-term relevant product/event announcement with only
+  mild excitement and a slight plausible reset implication may be weak; event/date/hype alone is
+  none. Very indirect jokes, wordplay, and short replies may be weak
   when visible reply context makes a possible usage-limit reset reasonable. Historical wording alone remains none; historical wording
   followed by a future action that plausibly reuses the same reset mechanism may be weak.
-- Do not use weak for mere keyword occurrence, historical memories, ordinary UI/product features, unrelated technical resets, third-party discussion with no implication that Tibo may reset usage limits, or explicit denial/cancellation.
+- Do not use weak for mere keyword occurrence, historical memories, ordinary UI/product features, unrelated technical resets, third-party discussion with no implication that Tibo may reset usage limits, or explicit denial/cancellation. A normal feature/release announcement, event attendance, "good news" alone, concealment alone, or a date alone is none.
 - "none": no current personal willingness or near-future indication, including completed, historical, negative, UI, general, or unrelated posts.
 If the auxiliary signal cannot be determined, use null rather than guessing "none".
 
