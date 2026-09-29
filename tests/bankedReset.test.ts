@@ -525,6 +525,90 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
   }
 });
 
+test("presents the Sep 29 GPT-6.1 BANKED observation without inheriting the old Astra notice", () => {
+  const astraNotice = {
+    ...notice,
+    tweet_id: "2095651088502591861",
+    text: "We will give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan, starting today.",
+    tweet_url: "https://x.com/thsottiaux/status/2095651088502591861",
+    tweet_created_at: "2026-09-03T23:12:09.000Z",
+    confidence: 0.98,
+  };
+  const eventKey = "banked-reset-2095651088502591861-observation-20260929T184159778Z";
+  const observedAt = "2026-09-29T18:41:59.778Z";
+  const gpt61Estimate = {
+    ...estimate,
+    resetEventKey: eventKey,
+    displayExecutionAt: observedAt,
+    tiboAnnouncedAt: astraNotice.tweet_created_at,
+    tiboPrimaryTweetId: astraNotice.tweet_id,
+    tiboSourceTweetIds: [astraNotice.tweet_id],
+    officialNoticeTweetId: astraNotice.tweet_id,
+    officialNoticeAt: astraNotice.tweet_created_at,
+  };
+  const canonicalHistory = combineResetHistory([], [], [], [], [astraNotice], [], [gpt61Estimate]);
+  assert.equal(canonicalHistory.filter((item) => item.recordKind === "banked_distribution").length, 1);
+  const canonicalEvent = canonicalHistory.find((item) => item.id === eventKey);
+
+  assert.ok(canonicalEvent);
+  assert.equal(canonicalEvent.recordKind, "banked_distribution");
+  assert.equal(canonicalEvent.randomResetTargetScope, "conditional");
+  assert.equal(isEligibleRandomResetEvent(
+    canonicalEvent,
+    Date.parse(observedAt),
+    Date.parse("2026-09-30T00:00:00.000Z"),
+  ), false);
+
+  const data = getLocalRadarData({
+    calculationNow: new Date("2026-09-30T00:00:00.000Z"),
+    recentTiboSignals: [astraNotice],
+    resetExecutionEstimates: [gpt61Estimate],
+  });
+  const expected = {
+    ja: {
+      title: "GPT-6.1リリース記念BANKEDリセット権配布",
+      scope: "全有料プラン",
+      note: "GPT-6.1のリリースを記念したBANKEDリセット権の配布を確認しました。",
+    },
+    en: {
+      title: "GPT-6.1 Launch BANKED Reset Distribution",
+      scope: "All paid plans",
+      note: "A BANKED Reset distribution marking the GPT-6.1 release was observed.",
+    },
+    zh: {
+      title: "GPT-6.1 发布纪念 BANKED 重置权发放",
+      scope: "所有付费套餐",
+      note: "已确认一项纪念 GPT-6.1 发布的 BANKED 重置发放。",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow: new Date("2026-09-30T00:00:00.000Z"),
+      limitHistory: false,
+    });
+    const event = snapshot.viewModel.recentHistory.find((item) => item.key === eventKey);
+
+    assert.ok(event, `${locale} GPT-6.1 BANKED history should be present`);
+    assert.equal(event.recordKind, "banked_distribution");
+    assert.equal(event.title, expected[locale].title);
+    assert.equal(event.resetAt, observedAt);
+    assert.equal(event.executionTimePrecision, "approximate");
+    assert.equal(event.details?.cycleType, locale === "ja" ? "ランダムリセット" : locale === "en" ? "Random reset" : "随机重置");
+    assert.equal(event.details?.reasonType, locale === "ja" ? "ご祝儀リセット" : locale === "en" ? "Celebration reset" : "庆祝重置");
+    assert.equal(event.details?.resetMethod, locale === "ja" ? "任意リセット権配布" : locale === "en" ? "Banked Reset distribution" : "BANKED 重置发放");
+    assert.equal(event.details?.scope, expected[locale].scope);
+    assert.equal(event.scope, expected[locale].scope);
+    assert.equal(event.details?.noticeToExecution, "");
+    assert.equal(event.details?.noticeType, undefined);
+    assert.equal(event.signalAt, null);
+    assert.equal(event.signalLabel, "");
+    assert.equal(event.source, null);
+    assert.equal(event.sourceKind, "none");
+    assert.equal(event.details?.note, expected[locale].note);
+  }
+});
+
 test("applies the corrected all-paid scope to both observed Astra BANKED events", () => {
   const astraNotice = {
     ...notice,

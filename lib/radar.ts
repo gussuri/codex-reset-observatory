@@ -987,7 +987,7 @@ function getHistoryResetMethod(item: WindowLike & { kind?: string }, locale: Loc
   return translateDynamic("不明", locale);
 }
 
-function getAstraBankedHistoryCorrection(item: WindowLike) {
+function getHistoricalBankedHistoryCorrection(item: WindowLike) {
   return getHistoricalResetPresentationCorrection({
     recordKind: getHistoryRecordKind(item),
     eventKey: getResetDisplayNameEventKey(item),
@@ -1043,7 +1043,7 @@ function getHistoryDetails(
   }
 
   if (item.details) {
-    const astraCorrection = getAstraBankedHistoryCorrection(item);
+    const historyCorrection = getHistoricalBankedHistoryCorrection(item);
     const reason = getHistoryReasonTypeValue(item);
     const eventMetadata = getSafeEventMetadataRecord(data, item);
     const metadataReason = eventMetadata?.event_reason_type === "詫びリセット" ||
@@ -1052,15 +1052,19 @@ function getHistoryDetails(
       : null;
     const scope = normalizeResetScope(item.details.scope ?? item.scope);
     const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
-    const noticePresentation = getHistoryNoticePresentation(item.details.noticeType);
+    const noticePresentation = historyCorrection?.hideAnnouncementTiming
+      ? "none"
+      : getHistoryNoticePresentation(item.details.noticeType);
     const storedNoticeToExecution = item.details.noticeToExecution?.trim();
     return {
       cycleType: translateDynamic(item.details.cycleType, locale),
-      reasonType: astraCorrection
-        ? translateDynamic(astraCorrection.reasonType, locale)
+      reasonType: historyCorrection
+        ? translateDynamic(historyCorrection.reasonType, locale)
         : translateDynamic(metadataReason ?? reason ?? "", locale),
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: metadataScope
+      scope: historyCorrection?.displayScope
+        ? translateDynamic(historyCorrection.displayScope, locale)
+        : metadataScope
         ? translateDynamic(metadataScope, locale)
         : scope ? translateDynamic(scope, locale) : "",
       noticeToExecution: noticePresentation === "none" ||
@@ -1073,8 +1077,8 @@ function getHistoryDetails(
         : noticePresentation === "teaser"
           ? translateUI("historyNoticeTeaserValue", locale)
           : undefined,
-      note: astraCorrection
-        ? translateUI(astraCorrection.noteTranslationKey, locale)
+      note: historyCorrection
+        ? translateUI(historyCorrection.noteTranslationKey, locale)
         : getLocalizedEventMetadataText(eventMetadata, "note", locale) ??
           (item.details.note
           ? resolveLocalizedText(item.details.note, locale)
@@ -1082,7 +1086,7 @@ function getHistoryDetails(
     };
   }
 
-  const astraCorrection = getAstraBankedHistoryCorrection(item);
+  const historyCorrection = getHistoricalBankedHistoryCorrection(item);
   const eventMetadata = getSafeEventMetadataRecord(data, item);
   const normalizedScope = normalizeResetScope(item.scope);
   const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
@@ -1090,15 +1094,17 @@ function getHistoryDetails(
 
   return {
     cycleType: getHistoryCycleType(item, locale),
-    reasonType: astraCorrection
-      ? translateDynamic(astraCorrection.reasonType, locale)
+    reasonType: historyCorrection
+      ? translateDynamic(historyCorrection.reasonType, locale)
       : getHistoryReasonType(item, locale),
     resetMethod: getHistoryResetMethod(item, locale),
-    scope: metadataScope ? translateDynamic(metadataScope, locale) : scope,
+    scope: historyCorrection?.displayScope
+      ? translateDynamic(historyCorrection.displayScope, locale)
+      : metadataScope ? translateDynamic(metadataScope, locale) : scope,
     noticeToExecution: "",
     noticeType: undefined,
-    note: astraCorrection
-      ? translateUI(astraCorrection.noteTranslationKey, locale)
+    note: historyCorrection
+      ? translateUI(historyCorrection.noteTranslationKey, locale)
       : getLocalizedEventMetadataText(eventMetadata, "note", locale) ??
         getLocalizedEventMetadataText(eventMetadata, "summary", locale) ??
         (item.summary ? resolveLocalizedText(item.summary, locale) : null),
@@ -1354,9 +1360,9 @@ function getHistoryDisplayTitle(
     }
   }
 
-  const astraCorrection = getAstraBankedHistoryCorrection(item);
-  if (astraCorrection) {
-    return translateUI(astraCorrection.titleTranslationKey, locale);
+  const historyCorrection = getHistoricalBankedHistoryCorrection(item);
+  if (historyCorrection) {
+    return translateUI(historyCorrection.titleTranslationKey, locale);
   }
 
   if (typeof item.title === "object" && item.title !== null) {
@@ -1463,9 +1469,10 @@ function getRecentHistory(
       const resetAt = executionPresentation.resetAt;
       const stableKey = item.id?.trim() ? item.id : item.guid?.trim() ? item.guid : null;
       const key = stableKey ?? `history-fallback:${rawIndex}`;
-      const source = getEventSource(item);
+      const historyCorrection = getHistoricalBankedHistoryCorrection(item);
+      const source = historyCorrection?.hideSource ? null : getEventSource(item);
       const recordKind = getHistoryRecordKind(item);
-      const sourceKind = getHistorySourceKind(item);
+      const sourceKind = historyCorrection?.hideSource ? "none" : getHistorySourceKind(item);
       const resetMethod = isRegular ? getRegularResetMethod(item) : null;
       const regularSummary = isRegular
         ? getRegularResetSummary(item, resetMethod ?? "強制リセット")
@@ -1475,11 +1482,14 @@ function getRecentHistory(
         ? [translateDynamic("定期更新", locale)]
         : getResetTypes(data, item, locale);
       const details = getHistoryDetails(data, item, locale);
-      const noticePresentation = getHistoryNoticePresentation(item.details?.noticeType);
+      const noticePresentation = historyCorrection?.hideAnnouncementTiming
+        ? "none"
+        : getHistoryNoticePresentation(item.details?.noticeType);
       const signalTime = item.opened_at ? new Date(item.opened_at).getTime() : Number.NaN;
       const resetTime = resetAt ? new Date(resetAt).getTime() : Number.NaN;
       const hasPriorNotice = !isRegular &&
         !monitorOnly &&
+        !historyCorrection?.hideAnnouncementTiming &&
         noticePresentation !== "none" &&
         Number.isFinite(signalTime) &&
         Number.isFinite(resetTime) &&
