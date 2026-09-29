@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v6";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v7";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 3 * 60 * 60 * 1000;
 
@@ -1371,7 +1371,7 @@ function resolveDay(
   const lower = expression.toLowerCase();
   if (lower.includes("tomorrow")) return addLocalDays(createdLocal, 1);
   if (lower.includes("today")) return createdLocal;
-  if (semantics.daypart === "day") return createdLocal;
+  if (semantics.daypart === "day" || semantics.daypart === "tonight") return createdLocal;
   if (semantics.weekday) {
     return resolveWeekdayDate(
       createdLocal,

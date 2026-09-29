@@ -318,7 +318,9 @@ completed event to a future event. For futureSignal, type="official_notice" requ
 teaserStrength=null, type="teaser" requires teaserStrength="strong" or "weak", and type="none"
 requires teaserStrength=null.
 
-Also extract the semantic meaning of any forward-looking time expression for an official_notice.
+For an accepted teaser, also extract the semantic meaning of a forward-looking time expression. For an official_notice, continue extracting its announced time as before.
+For a teaser, extract timing only when the expression is semantically attached to the hinted or concealed event that the teaser refers to. The resulting window is a teaser probability window, not a reset commitment, schedule, or claim that a reset will occur on that date. Do not infer reset timing from an event date alone.
+Bind each time expression to its own clause and event. Do not select the first time expression in the post when a later passage contains the accepted hinted or concealed event. Do not let an unrelated historical passage set that teaser's temporalDirection to "historical". For an indirect teaser whose reset timing is not asserted, keep temporalDirection="unclear".
 For phrases such as "during the day" or "sometime during the day", use
 temporalKind="daypart", temporalPrecision="daypart", and daypart="day". This means
 the source-local day in which the post was made; do not generate a timestamp.

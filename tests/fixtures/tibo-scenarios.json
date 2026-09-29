@@ -1422,14 +1422,14 @@
     {
       "id": "prod-concealed-devday-teaser",
       "category": "indirect_release_teaser",
-      "description": "Real production author text; fixture timestamp is synthetic for offline scenario execution.",
+      "description": "Real production author text and source timestamp; its concealed reveal is today in Tibo's local calendar.",
       "tweetText": "That was yesterday, today is DevDay. And it's all good news. I'm surprised we've kept it all under wraps.",
-      "tweetCreatedAt": "2026-09-29T00:00:00.000Z",
+      "tweetCreatedAt": "2026-09-29T07:39:40.000Z",
       "tweetUrl": "https://x.com/thsottiaux/status/2104838506363408740",
-      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
+      "expected": { "signalType": "teaser", "temporalDirection": "unclear", "teaserStrength": "strong", "temporalResolutionStatus": "resolved", "temporalPrecision": "day", "expectedStartAt": "2026-09-29T07:00:00.000Z", "expectedEndAt": "2026-09-30T07:00:00.000Z", "shouldCreateActiveNotice": false, "shouldCreateTeaser": true, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": true },
       "pipeline": true,
       "regressionGroup": "concealed-imminent-release-teaser",
-      "mockGeminiOutput": { "confidence": 0.85, "reasonJa": "A near-term OpenAI event and deliberate concealed good-news reveal make a reset a plausible teaser, not a commitment.", "evidenceQuote": "all good news", "teaserStrength": "strong", "teaserStrengthConfidence": 0.85, "teaserStrengthEvidenceQuote": "kept it all under wraps", "teaserStrengthReasonJa": "近いイベントと意図的な未公開発表を組み合わせた強い匂わせです。" }
+      "mockGeminiOutput": { "confidence": 0.85, "reasonJa": "A near-term OpenAI event and deliberate concealed good-news reveal make a reset a plausible teaser, not a commitment.", "evidenceQuote": "all good news", "teaserStrength": "strong", "teaserStrengthConfidence": 0.85, "teaserStrengthEvidenceQuote": "kept it all under wraps", "teaserStrengthReasonJa": "近いイベントと意図的な未公開発表を組み合わせた強い匂わせです。", "temporalDirection": "unclear", "temporalExpression": "today", "temporalKind": "relative_day", "temporalPrecision": "day", "relativeDayOffset": 0, "temporalConfidence": 0.9 }
     },
     {
       "id": "codex-concealed-launch-teaser",

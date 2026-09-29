@@ -37,7 +37,7 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v6");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v7");
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {
