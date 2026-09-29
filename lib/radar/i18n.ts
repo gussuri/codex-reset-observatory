@@ -717,6 +717,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "To mark the GPT-6 Astra launch, a BANKED Reset was distributed. Distribution may take place progressively rather than all at once.",
     zh: "配合 GPT-6 Astra 发布，已发放 BANKED 重置。发放可能会分批进行，而不是一次性全部到账。",
   },
+  gpt61BankedHistoryTitle: {
+    ja: "GPT-6.1リリース記念BANKEDリセット権配布",
+    en: "GPT-6.1 Launch BANKED Reset Distribution",
+    zh: "GPT-6.1 发布纪念 BANKED 重置权发放",
+  },
+  gpt61BankedHistoryNote: {
+    ja: "GPT-6.1のリリースを記念したBANKEDリセット権の配布を確認しました。",
+    en: "A BANKED Reset distribution marking the GPT-6.1 release was observed.",
+    zh: "已确认一项纪念 GPT-6.1 发布的 BANKED 重置发放。",
+  },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
     en: "Time from notice to reset",

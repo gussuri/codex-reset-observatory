@@ -1,16 +1,22 @@
 export const ASTRA_BANKED_HISTORY_EVENT_KEY = "banked-reset-2095651088502591861";
 export const ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260904T234601897Z`;
 export const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
+export const GPT61_BANKED_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260929T184159778Z`;
 
 type HistoricalResetTitleTranslationKey =
   | "astraBankedHistoryTitle"
-  | "astraBankedHistorySecondTitle";
+  | "astraBankedHistorySecondTitle"
+  | "gpt61BankedHistoryTitle";
+
+type HistoricalResetNoteTranslationKey =
+  | "astraBankedHistoryNote"
+  | "gpt61BankedHistoryNote";
 
 type HistoricalResetCorrection = {
-  correctionId: "astra-banked-history";
+  correctionId: string;
   scopeCorrectionEventKeys: readonly string[];
   presentationEventKeys: readonly string[];
-  sourceTweetId: string;
+  sourceTweetId?: string;
   presentation: {
     defaultTitleTranslationKey: HistoricalResetTitleTranslationKey;
     titleTranslationKeysByEventKey: ReadonlyArray<{
@@ -18,7 +24,10 @@ type HistoricalResetCorrection = {
       translationKey: HistoricalResetTitleTranslationKey;
     }>;
     reasonType: "ご祝儀リセット";
-    noteTranslationKey: "astraBankedHistoryNote";
+    noteTranslationKey: HistoricalResetNoteTranslationKey;
+    displayScope?: "全有料プラン";
+    hideAnnouncementTiming?: boolean;
+    hideSource?: boolean;
   };
 };
 
@@ -54,6 +63,28 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
       noteTranslationKey: "astraBankedHistoryNote",
     },
   },
+  {
+    correctionId: "gpt61-banked-history-observation",
+    // Correct this single observed entry at presentation time only. It is
+    // deliberately absent from scopeCorrectionEventKeys so canonical
+    // conditional eligibility and probability semantics stay unchanged.
+    scopeCorrectionEventKeys: [],
+    presentationEventKeys: [GPT61_BANKED_HISTORY_EVENT_KEY],
+    presentation: {
+      defaultTitleTranslationKey: "gpt61BankedHistoryTitle",
+      titleTranslationKeysByEventKey: [
+        {
+          eventKey: GPT61_BANKED_HISTORY_EVENT_KEY,
+          translationKey: "gpt61BankedHistoryTitle",
+        },
+      ],
+      reasonType: "ご祝儀リセット",
+      noteTranslationKey: "gpt61BankedHistoryNote",
+      displayScope: "全有料プラン",
+      hideAnnouncementTiming: true,
+      hideSource: true,
+    },
+  },
 ];
 
 export type HistoricalResetPresentationLookup = {
@@ -65,10 +96,12 @@ export type HistoricalResetPresentationLookup = {
 
 export type HistoricalResetPresentationCorrection = {
   correctionId: string;
-  sourceTweetId: string;
   titleTranslationKey: HistoricalResetTitleTranslationKey;
   reasonType: "ご祝儀リセット";
-  noteTranslationKey: "astraBankedHistoryNote";
+  noteTranslationKey: HistoricalResetNoteTranslationKey;
+  displayScope?: "全有料プラン";
+  hideAnnouncementTiming?: boolean;
+  hideSource?: boolean;
 };
 
 export function hasHistoricalResetScopeCorrection(eventKey: string | null | undefined) {
@@ -82,24 +115,33 @@ export function getHistoricalResetPresentationCorrection(
 ): HistoricalResetPresentationCorrection | null {
   if (input.recordKind !== "banked_distribution") return null;
 
+  const eventKey = input.eventKey ?? null;
   const officialNoticeTweetId = input.officialNoticeTweetId?.trim();
-  const correction = HISTORICAL_RESET_CORRECTIONS.find((candidate) =>
-    (input.eventKey !== null && input.eventKey !== undefined &&
-      candidate.presentationEventKeys.includes(input.eventKey)) ||
-    officialNoticeTweetId === candidate.sourceTweetId ||
-    (input.sourceTweetIds?.includes(candidate.sourceTweetId) ?? false),
+  const exactEventCorrection = eventKey
+    ? HISTORICAL_RESET_CORRECTIONS.find((candidate) =>
+      candidate.presentationEventKeys.includes(eventKey),
+    )
+    : undefined;
+  const sourceCorrection = HISTORICAL_RESET_CORRECTIONS.find((candidate) =>
+    candidate.sourceTweetId !== undefined && (
+      officialNoticeTweetId === candidate.sourceTweetId ||
+      (input.sourceTweetIds?.includes(candidate.sourceTweetId) ?? false)
+    ),
   );
+  const correction = exactEventCorrection ?? sourceCorrection;
   if (!correction) return null;
 
-  const exactTitle = input.eventKey !== null && input.eventKey !== undefined
-    ? correction.presentation.titleTranslationKeysByEventKey.find((entry) => entry.eventKey === input.eventKey)
+  const exactTitle = eventKey !== null
+    ? correction.presentation.titleTranslationKeysByEventKey.find((entry) => entry.eventKey === eventKey)
     : undefined;
 
   return {
     correctionId: correction.correctionId,
-    sourceTweetId: correction.sourceTweetId,
     titleTranslationKey: exactTitle?.translationKey ?? correction.presentation.defaultTitleTranslationKey,
     reasonType: correction.presentation.reasonType,
     noteTranslationKey: correction.presentation.noteTranslationKey,
+    displayScope: correction.presentation.displayScope,
+    hideAnnouncementTiming: correction.presentation.hideAnnouncementTiming,
+    hideSource: correction.presentation.hideSource,
   };
 }
