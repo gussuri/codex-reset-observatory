@@ -19,6 +19,7 @@ import {
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
+import { resolveUniqueBankedTeaserLinks } from "../lib/radar/bankedTeaserLink";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { getActiveOfficialNotice, getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
@@ -404,6 +405,498 @@ test("creates one eligible banked_distribution from corroborated observation evi
   assert.equal(banked[0].details?.resetMethod, "任意リセット権配布");
   assert.equal(banked[0].completed_at, estimate.displayExecutionAt);
   assert.equal(banked[0].officialNoticeTweetId, notice.tweet_id);
+});
+
+test("links a unique manually confirmed strong teaser only when its resolved window contains the BANKED execution", () => {
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const teaser = {
+    ...notice,
+    tweet_id: "banked-teaser-semantic-fixture",
+    text: "A surprise for paid Codex users is coming later today.",
+    tweet_url: "https://x.com/thsottiaux/status/banked-teaser-semantic-fixture",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+    verification_status: "confirmed" as const,
+    classification_source: "manual",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const observedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+
+  const [event] = findBankedDistributionEvents([teaser, eventNotice], [observedEstimate]);
+
+  assert.ok(event);
+  assert.equal(event.recordKind, "banked_distribution");
+  assert.equal(event.id, observedEstimate.resetEventKey);
+  assert.equal(event.opened_at, teaser.tweet_created_at);
+  assert.equal(event.source_url, teaser.tweet_url);
+  assert.equal(event.officialNoticeTweetId, eventNotice.tweet_id);
+  assert.deepEqual(event.sourceTweetIds, [teaser.tweet_id, eventNotice.tweet_id]);
+  assert.equal(event.details?.noticeToExecution, "4時間");
+  assert.equal(event.details?.noticeType, "匂わせ投稿あり");
+  assert.equal(event.scope, "全有料プラン");
+});
+
+test("auto-links a strong explicit reset-button teaser through the canonical signal pipeline", () => {
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const teaser = {
+    ...notice,
+    tweet_id: "explicit-timed-reset-button-teaser",
+    text: "Everyone gets another reset button in a few hours.",
+    tweet_url: "https://x.com/thsottiaux/status/explicit-timed-reset-button-teaser",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+    confidence: 0.97,
+    classification_source: "rule",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const observedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: [eventNotice, teaser],
+    active_tibo_signals: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [observedEstimate],
+  });
+  const collectedTeaser = inputs.bankedSignals.find((signal) => signal.tweet_id === teaser.tweet_id);
+  assert.equal(collectedTeaser?.signal_type, "teaser");
+  assert.equal(collectedTeaser?.teaser_strength, "strong");
+  assert.equal(collectedTeaser?.expected_start_at, teaser.expected_start_at);
+  assert.equal(collectedTeaser?.confidence, teaser.confidence);
+  assert.equal(collectedTeaser?.expires_at, teaser.expires_at);
+  assert.equal(resolveUniqueBankedTeaserLinks({
+    candidates: collectedTeaser ? [collectedTeaser] : [],
+    events: [{
+      eventKey: observedEstimate.resetEventKey,
+      executionAt: observedEstimate.displayExecutionAt,
+      scopeText: eventNotice.text,
+    }],
+  }).has(observedEstimate.resetEventKey), true);
+
+  const [event] = findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates);
+
+  assert.ok(event);
+  assert.equal(event.recordKind, "banked_distribution");
+  assert.equal(event.id, observedEstimate.resetEventKey);
+  assert.equal(event.opened_at, teaser.tweet_created_at);
+  assert.equal(event.completed_at, observedEstimate.displayExecutionAt);
+  assert.equal(event.details?.cycleType, "ランダムリセット");
+  assert.equal(event.details?.resetMethod, "任意リセット権配布");
+  assert.equal(event.details?.noticeToExecution, "4時間");
+  assert.equal(event.details?.noticeType, "匂わせ投稿あり");
+  assert.equal(event.officialNoticeTweetId, eventNotice.tweet_id);
+  assert.deepEqual(event.sourceTweetIds, [teaser.tweet_id, eventNotice.tweet_id]);
+
+  const tomorrowNotice = {
+    ...eventNotice,
+    tweet_id: "banked-notice-tomorrow-event",
+    tweet_url: "https://x.com/thsottiaux/status/banked-notice-tomorrow-event",
+    tweet_created_at: "2026-08-22T11:00:00.000Z",
+  };
+  const tomorrowTeaser = {
+    ...teaser,
+    tweet_id: "explicit-tomorrow-reset-button-teaser",
+    text: "Tomorrow everyone gets another reset button.",
+    tweet_url: "https://x.com/thsottiaux/status/explicit-tomorrow-reset-button-teaser",
+    expires_at: "2026-08-23T08:00:00.000Z",
+    expected_start_at: "2026-08-22T10:00:00.000Z",
+    expected_end_at: "2026-08-22T14:00:00.000Z",
+  };
+  const tomorrowEstimate = {
+    ...observedEstimate,
+    resetEventKey: "banked-reset-tomorrow-event",
+    displayExecutionAt: "2026-08-22T12:00:00.000Z",
+    tiboAnnouncedAt: tomorrowNotice.tweet_created_at,
+    tiboPrimaryTweetId: tomorrowNotice.tweet_id,
+    tiboSourceTweetIds: [tomorrowNotice.tweet_id],
+    officialNoticeTweetId: tomorrowNotice.tweet_id,
+    officialNoticeAt: tomorrowNotice.tweet_created_at,
+  };
+  const [tomorrowEvent] = findBankedDistributionEvents(
+    [tomorrowTeaser, tomorrowNotice],
+    [tomorrowEstimate],
+  );
+  assert.ok(tomorrowEvent);
+  assert.equal(tomorrowEvent.opened_at, tomorrowTeaser.tweet_created_at);
+  assert.equal(tomorrowEvent.details?.noticeToExecution, "28時間");
+});
+
+test("keeps an automatic teaser link idempotent without changing the BANKED event boundary", () => {
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const teaser = {
+    ...notice,
+    tweet_id: "idempotent-banked-teaser",
+    text: "Everyone gets another reset button in a few hours.",
+    tweet_url: "https://x.com/thsottiaux/status/idempotent-banked-teaser",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+    confidence: 0.97,
+    classification_source: "rule",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const observedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+
+  const baseline = combineResetHistory(
+    [], [], [], [], [eventNotice], [], [observedEstimate], [eventNotice],
+  ).filter((item) => item.recordKind === "banked_distribution");
+  const linked = combineResetHistory(
+    [], [], [], [], [eventNotice, teaser], [], [observedEstimate, observedEstimate],
+    [teaser, eventNotice, teaser],
+  ).filter((item) => item.recordKind === "banked_distribution");
+
+  assert.equal(baseline.length, 1);
+  assert.equal(linked.length, 1);
+  assert.equal(linked[0]?.id, baseline[0]?.id);
+  assert.equal(linked[0]?.completed_at, baseline[0]?.completed_at);
+  assert.equal(linked[0]?.closed_at, baseline[0]?.closed_at);
+  assert.equal(linked[0]?.details?.cycleType, baseline[0]?.details?.cycleType);
+  assert.equal(linked[0]?.details?.resetMethod, baseline[0]?.details?.resetMethod);
+  assert.equal(linked[0]?.details?.scope, baseline[0]?.details?.scope);
+  assert.equal(linked[0]?.officialNoticeTweetId, eventNotice.tweet_id);
+  assert.deepEqual(linked[0]?.sourceTweetIds, [teaser.tweet_id, eventNotice.tweet_id]);
+  assert.equal(new Set(linked[0]?.sourceTweetIds).size, linked[0]?.sourceTweetIds?.length);
+});
+
+test("uses the real parent tweet identity for a secondary teaser association", () => {
+  const parentId = "banked-secondary-teaser-parent";
+  const parent = {
+    ...notice,
+    tweet_id: parentId,
+    text: "The reset is done. Everyone gets another reset button tomorrow.",
+    tweet_url: `https://x.com/thsottiaux/status/${parentId}`,
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "reset_executed" as const,
+    secondary_signal: {
+      signalType: "teaser" as const,
+      teaserStrength: "strong" as const,
+      confidence: 0.97,
+      evidenceQuote: "Everyone gets another reset button tomorrow.",
+      reasonJa: "同一投稿内の将来reset teaser",
+      expiresAt: "2026-08-23T08:00:00.000Z",
+      temporal: {
+        status: "resolved" as const,
+        version: "v1",
+        temporalExpression: "tomorrow",
+        temporalKind: "relative_day" as const,
+        temporalPrecision: "day" as const,
+        timezone: "UTC",
+        confidence: 0.97,
+        expectedStartAt: "2026-08-22T00:00:00.000Z",
+        expectedEndAt: "2026-08-22T23:59:59.000Z",
+        resolutionSource: "deterministic" as const,
+      },
+    },
+  };
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const observedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-22T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+  const inputs = getNoticeBackedHistoryInputs({
+    recent_tibo_signals: [parent, eventNotice],
+    active_tibo_signals: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [observedEstimate],
+  });
+  const candidate = inputs.bankedSignals.find((signal) => signal.signal_type === "teaser");
+  assert.equal(candidate?.tweet_id, parentId);
+  assert.equal(candidate?.tweet_id.includes("#secondary"), false);
+
+  const [event] = findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates);
+  assert.ok(event);
+  assert.equal(event.source_url, parent.tweet_url);
+  assert.equal(event.sourceTweetIds?.includes(parentId), true);
+  assert.equal(event.sourceTweetIds?.some((tweetId) => tweetId.includes("#secondary")), false);
+});
+
+test("leaves BANKED teaser associations unlinked when semantics, scope, timing, or uniqueness is unsafe", () => {
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const observedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+  const baseTeaser: TiboNoticeSignal = {
+    ...notice,
+    tweet_id: "banked-teaser-candidate",
+    text: "A surprise for paid Codex users is coming later today.",
+    tweet_url: "https://x.com/thsottiaux/status/banked-teaser-candidate",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+    verification_status: "confirmed" as const,
+    classification_source: "manual",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const assertUnlinked = (candidate: TiboNoticeSignal) => {
+    const [event] = findBankedDistributionEvents([candidate, eventNotice], [observedEstimate]);
+    assert.ok(event);
+    assert.equal(event.opened_at, eventNotice.tweet_created_at);
+    assert.equal(event.source_url, eventNotice.tweet_url);
+    assert.deepEqual(event.sourceTweetIds, [eventNotice.tweet_id]);
+  };
+
+  assertUnlinked({
+    ...baseTeaser,
+    text: "A new model launch tomorrow will be fun.",
+    classification_source: "gemini",
+    verification_status: "auto_unverified",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    text: "Everyone's usage limits will be refreshed tomorrow.",
+    classification_source: "rule",
+    verification_status: "auto_unverified",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    text: "We will reset usage limits globally for every account tonight.",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    text: "We will reset everyone’s usage limits tomorrow.",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    text: "This is a test database reset button demo for all paid users tomorrow.",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    text: "A Pro-only reset button is coming tonight.",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    is_reply: true,
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    is_quote: true,
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    expires_at: "2026-08-21T11:59:59.000Z",
+  });
+  assertUnlinked({
+    ...baseTeaser,
+    tweet_created_at: "2026-08-21T12:01:00.000Z",
+  });
+
+  const secondTeaser = {
+    ...baseTeaser,
+    tweet_id: "banked-teaser-competing-candidate",
+    tweet_url: "https://x.com/thsottiaux/status/banked-teaser-competing-candidate",
+  };
+  const [ambiguousEvent] = findBankedDistributionEvents(
+    [baseTeaser, secondTeaser, eventNotice],
+    [observedEstimate],
+  );
+  assert.ok(ambiguousEvent);
+  assert.equal(ambiguousEvent.opened_at, eventNotice.tweet_created_at);
+  assert.deepEqual(ambiguousEvent.sourceTweetIds, [eventNotice.tweet_id]);
+});
+
+test("does not replace existing BANKED source provenance with an automatic teaser", () => {
+  const eventNotice = {
+    ...notice,
+    tweet_created_at: "2026-08-21T11:00:00.000Z",
+  };
+  const manualTeaser = {
+    ...notice,
+    tweet_id: "manually-linked-teaser",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+  };
+  const automaticTeaser = {
+    ...manualTeaser,
+    tweet_id: "automatic-teaser-candidate",
+    text: "A surprise for paid Codex users is coming later today.",
+    tweet_url: "https://x.com/thsottiaux/status/automatic-teaser-candidate",
+    verification_status: "confirmed" as const,
+    classification_source: "manual",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const manuallyLinkedEstimate = {
+    ...estimate,
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: eventNotice.tweet_created_at,
+    tiboPrimaryTweetId: eventNotice.tweet_id,
+    tiboSourceTweetIds: [eventNotice.tweet_id, manualTeaser.tweet_id],
+    officialNoticeTweetId: eventNotice.tweet_id,
+    officialNoticeAt: eventNotice.tweet_created_at,
+  };
+
+  const [event] = findBankedDistributionEvents(
+    [manualTeaser, automaticTeaser, eventNotice],
+    [manuallyLinkedEstimate],
+  );
+
+  assert.ok(event);
+  assert.equal(event.opened_at, eventNotice.tweet_created_at);
+  assert.equal(event.source_url, eventNotice.tweet_url);
+  assert.deepEqual(event.sourceTweetIds, [manualTeaser.tweet_id, eventNotice.tweet_id]);
+  assert.equal(event.officialNoticeTweetId, eventNotice.tweet_id);
+
+  const estimateWithoutTeaserSource = {
+    ...manuallyLinkedEstimate,
+    tiboSourceTweetIds: [eventNotice.tweet_id],
+  };
+  const [adoptionProtectedEvent] = findBankedDistributionEvents(
+    [automaticTeaser, eventNotice],
+    [estimateWithoutTeaserSource],
+    [],
+    {
+      adoptionLedgers: [{
+        logicalPostId: "existing-bank-event-post",
+        logicalPostTweetIds: ["existing-manual-source"],
+        resetEventKey: estimateWithoutTeaserSource.resetEventKey,
+        representativeTweetId: "existing-manual-source",
+        sourceTweetIds: ["existing-manual-source"],
+        claimSource: "existing_history",
+      }],
+    },
+  );
+  assert.ok(adoptionProtectedEvent);
+  assert.equal(adoptionProtectedEvent.source_url, eventNotice.tweet_url);
+  assert.deepEqual(adoptionProtectedEvent.sourceTweetIds, [eventNotice.tweet_id]);
+});
+
+test("does not attach one teaser to competing BANKED events or over an intervening global reset", () => {
+  const firstNotice = { ...notice, tweet_created_at: "2026-08-21T11:00:00.000Z" };
+  const secondNotice = {
+    ...notice,
+    tweet_id: "banked-notice-competing-event",
+    tweet_url: "https://x.com/thsottiaux/status/banked-notice-competing-event",
+    tweet_created_at: "2026-08-21T11:30:00.000Z",
+  };
+  const teaser = {
+    ...notice,
+    tweet_id: "banked-teaser-matching-two-events",
+    text: "A surprise for paid Codex users is coming later today.",
+    tweet_url: "https://x.com/thsottiaux/status/banked-teaser-matching-two-events",
+    tweet_created_at: "2026-08-21T08:00:00.000Z",
+    signal_type: "teaser" as const,
+    verification_status: "confirmed" as const,
+    classification_source: "manual",
+    teaser_strength: "strong" as const,
+    expires_at: "2026-08-22T08:00:00.000Z",
+    temporal_resolution_status: "resolved" as const,
+    expected_start_at: "2026-08-21T10:00:00.000Z",
+    expected_end_at: "2026-08-21T14:00:00.000Z",
+  };
+  const firstEstimate = {
+    ...estimate,
+    resetEventKey: "banked-reset-first-competing-event",
+    displayExecutionAt: "2026-08-21T12:00:00.000Z",
+    tiboAnnouncedAt: firstNotice.tweet_created_at,
+    tiboPrimaryTweetId: firstNotice.tweet_id,
+    tiboSourceTweetIds: [firstNotice.tweet_id],
+    officialNoticeTweetId: firstNotice.tweet_id,
+    officialNoticeAt: firstNotice.tweet_created_at,
+  };
+  const secondEstimate = {
+    ...firstEstimate,
+    resetEventKey: "banked-reset-second-competing-event",
+    displayExecutionAt: "2026-08-21T12:30:00.000Z",
+    tiboAnnouncedAt: secondNotice.tweet_created_at,
+    tiboPrimaryTweetId: secondNotice.tweet_id,
+    tiboSourceTweetIds: [secondNotice.tweet_id],
+    officialNoticeTweetId: secondNotice.tweet_id,
+    officialNoticeAt: secondNotice.tweet_created_at,
+  };
+
+  const ambiguous = findBankedDistributionEvents(
+    [teaser, firstNotice, secondNotice],
+    [firstEstimate, secondEstimate],
+  );
+  assert.equal(ambiguous.length, 2);
+  assert.deepEqual(ambiguous[0]?.sourceTweetIds, [firstNotice.tweet_id]);
+  assert.deepEqual(ambiguous[1]?.sourceTweetIds, [secondNotice.tweet_id]);
+
+  const competingGlobalReset = {
+    ...firstEstimate,
+    resetEventKey: "observed-global-reset-inside-teaser-window",
+    displayExecutionAt: "2026-08-21T12:30:00.000Z",
+    executionWindowStartAt: "2026-08-21T12:00:00.000Z",
+    executionWindowEndAt: "2026-08-21T12:30:00.000Z",
+    recoveryObservationId: "global-reset-observation",
+    estimatorVersion: "usage-execution-v1",
+    officialNoticeTweetId: "global-reset-notice",
+    tiboPrimaryTweetId: "global-reset-notice",
+    tiboSourceTweetIds: ["global-reset-notice"],
+  };
+  const [withInterveningGlobalReset] = findBankedDistributionEvents(
+    [teaser, firstNotice],
+    [firstEstimate, competingGlobalReset],
+  );
+  assert.ok(withInterveningGlobalReset);
+  assert.deepEqual(withInterveningGlobalReset.sourceTweetIds, [firstNotice.tweet_id]);
 });
 
 test("restores BANKED history from canonical evidence outside the bounded recent UI window", () => {

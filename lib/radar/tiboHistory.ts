@@ -59,6 +59,7 @@ import {
   isBroadBankedDistributionNotice,
   isManualBroadBankedScopeCorrection,
 } from "./bankedReset";
+import { resolveUniqueBankedTeaserLinks } from "./bankedTeaserLink";
 import { getOfficialNoticeConsumption } from "./officialNoticePolicy";
 
 export type TiboSignalType =
@@ -85,6 +86,8 @@ export type TiboNoticeSignal = TiboEditIdentityFields & {
   signal_type: "official_notice" | "teaser";
   confidence: number | null;
   verification_status: TiboVerificationStatus;
+  classification_source?: TiboClassificationSource | null;
+  teaser_strength?: TeaserStrength | null;
   expires_at?: string | null;
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
@@ -100,6 +103,7 @@ export type TiboNoticeSignal = TiboEditIdentityFields & {
   expected_end_at?: string | null;
   temporal_resolution_status?: TemporalResolutionStatus | null;
   is_reply?: boolean | null;
+  is_quote?: boolean | null;
 };
 
 export type BankedDistributionCompletionSignal = TiboEditIdentityFields & {
@@ -1496,6 +1500,8 @@ export function collectOfficialTiboNoticeSignals(
       signal_type: "official_notice",
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
+      classification_source: signal.classification_source ?? null,
+      teaser_strength: signal.teaser_strength ?? null,
       expires_at: signal.expires_at ?? null,
       ai_temporal_expression: signal.ai_temporal_expression ?? null,
       ai_temporal_kind: signal.ai_temporal_kind ?? null,
@@ -1511,6 +1517,7 @@ export function collectOfficialTiboNoticeSignals(
       expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
       is_reply: signal.is_reply ?? null,
+      is_quote: signal.is_quote ?? null,
       logical_post_id: signal.logical_post_id ?? null,
       edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
       edit_version: signal.edit_version ?? null,
@@ -1571,9 +1578,55 @@ export function collectBankedDistributionSignals(
 ): BankedDistributionSignal[] {
   const officialNotices = collectOfficialTiboNoticeSignals(recentSignals, activeSignals);
   const seen = new Set(officialNotices.map((signal) => signal.tweet_id));
+  const teasers: TiboNoticeSignal[] = [];
   const completions: BankedDistributionCompletionSignal[] = [];
+  const expandedSignals = expandTiboSignalVariants([...recentSignals, ...activeSignals]);
 
-  for (const signal of [...recentSignals, ...activeSignals]) {
+  for (const signal of expandedSignals) {
+    const tweetId = signal.is_secondary_future_signal && signal.parent_tweet_id
+      ? signal.parent_tweet_id
+      : signal.tweet_id;
+    if (
+      signal.signal_type !== "teaser" ||
+      signal.is_reply === true ||
+      signal.is_quote === true ||
+      signal.verification_status === "rejected" ||
+      seen.has(tweetId)
+    ) {
+      continue;
+    }
+
+    seen.add(tweetId);
+    teasers.push({
+      tweet_id: tweetId,
+      text: signal.text ?? "",
+      tweet_url: signal.tweet_url ?? "",
+      tweet_created_at: signal.tweet_created_at,
+      signal_type: "teaser",
+      confidence: signal.confidence ?? null,
+      verification_status: signal.verification_status ?? "auto_unverified",
+      classification_source: signal.classification_source ?? null,
+      teaser_strength: signal.teaser_strength ?? null,
+      expires_at: signal.expires_at ?? null,
+      temporal_expression: signal.temporal_expression ?? null,
+      temporal_kind: signal.temporal_kind ?? null,
+      temporal_precision: signal.temporal_precision ?? null,
+      temporal_timezone: signal.temporal_timezone ?? null,
+      temporal_confidence: signal.temporal_confidence ?? null,
+      temporal_resolution_source: signal.temporal_resolution_source ?? null,
+      expected_start_at: signal.expected_start_at ?? null,
+      expected_end_at: signal.expected_end_at ?? null,
+      temporal_resolution_status: signal.temporal_resolution_status ?? null,
+      is_reply: signal.is_reply ?? null,
+      is_quote: signal.is_quote ?? null,
+      logical_post_id: signal.logical_post_id ?? null,
+      edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
+      edit_version: signal.edit_version ?? null,
+      edit_metadata_source: signal.edit_metadata_source ?? null,
+    });
+  }
+
+  for (const signal of expandedSignals) {
     if (
       seen.has(signal.tweet_id) ||
       signal.is_reply === true ||
@@ -1600,7 +1653,7 @@ export function collectBankedDistributionSignals(
     });
   }
 
-  return [...officialNotices, ...completions].sort((left, right) => {
+  return [...officialNotices, ...teasers, ...completions].sort((left, right) => {
     const timeDifference =
       (getTimestamp(left.tweet_created_at) ?? 0) - (getTimestamp(right.tweet_created_at) ?? 0);
     return timeDifference || left.tweet_id.localeCompare(right.tweet_id);
@@ -1967,9 +2020,11 @@ function buildBankedDistributionEvent(
 export function findBankedDistributionEvents(
   noticeSignals: ReadonlyArray<BankedDistributionSignal>,
   estimates: ReadonlyArray<ResetExecutionEstimate> = [],
+  knownHistoryEvents: ReadonlyArray<WindowEventLike> = [],
+  identityContext?: TiboHistoryIdentityContext,
 ): Array<WindowEventLike> {
   const seen = new Set<string>();
-  return estimates.flatMap((estimate) => {
+  const rows = estimates.flatMap((estimate) => {
     if (!isBankedDistributionEstimatorVersion(estimate.estimatorVersion)) return [];
     if (seen.has(estimate.resetEventKey)) return [];
     seen.add(estimate.resetEventKey);
@@ -1982,7 +2037,117 @@ export function findBankedDistributionEvents(
       signal.tweet_id === estimate.officialNoticeTweetId,
     );
     const event = notice ? buildBankedDistributionEvent(estimate, notice, relatedNotices) : null;
-    return event ? [event] : [];
+    return event && notice ? [{ estimate, notice, relatedNotices, event }] : [];
+  });
+
+  const bankedEventKeys = new Set(rows.map(({ estimate }) => estimate.resetEventKey));
+  const competingExecutionTimes = [
+    ...estimates
+      .filter((estimate) =>
+        !isBankedDistributionEstimatorVersion(estimate.estimatorVersion) &&
+        isPublicRandomResetExecutionEstimate(estimate),
+      )
+      .map((estimate) => estimate.displayExecutionAt),
+    ...knownHistoryEvents
+      .filter((item) => !item.id || !bankedEventKeys.has(item.id))
+      .map(getCompletedAt)
+      .filter((value): value is string => Boolean(value)),
+  ];
+  const eligibleForAutomaticLink = new Set(rows
+    .filter(({ estimate, notice }) => {
+      const sourceIds = estimate.tiboSourceTweetIds.map((tweetId) => tweetId.trim()).filter(Boolean);
+      const hasAdditionalSource = sourceIds.some((tweetId) => tweetId !== notice.tweet_id);
+      const primaryTweetId = estimate.tiboPrimaryTweetId?.trim();
+      const announcedAt = getTimestamp(estimate.tiboAnnouncedAt);
+      const officialAt = getTimestamp(estimate.officialNoticeAt) ?? getTimestamp(notice.tweet_created_at);
+      const hasExistingLeadTime = announcedAt !== null && officialAt !== null && announcedAt !== officialAt;
+      const hasAdoptionSource = identityContext?.adoptionLedgers?.some((ledger) =>
+        ledger.resetEventKey === estimate.resetEventKey &&
+        ledger.sourceTweetIds.some((tweetId) => tweetId.trim() !== notice.tweet_id),
+      ) ?? false;
+      const hasDynamicSource = identityContext?.dynamicEvents?.some((item) =>
+        getHistoryEventKey(item) === estimate.resetEventKey &&
+        getHistorySourceTweetIds(item).some((tweetId) => tweetId !== notice.tweet_id),
+      ) ?? false;
+      return !hasAdditionalSource &&
+        !hasAdoptionSource &&
+        !hasDynamicSource &&
+        (!primaryTweetId || primaryTweetId === notice.tweet_id) &&
+        !hasExistingLeadTime;
+    })
+    .map(({ estimate }) => estimate.resetEventKey));
+  const officialLogicalPostAliases = rows.map(({ notice }) => new Set([
+    notice.tweet_id,
+    notice.logical_post_id?.trim(),
+    ...(notice.edit_history_tweet_ids ?? []),
+  ].filter((value): value is string => Boolean(value))));
+  const hasExistingLogicalRelation = (candidate: TiboNoticeSignal) => {
+    const aliases = new Set([
+      candidate.tweet_id,
+      candidate.logical_post_id?.trim(),
+      ...(candidate.edit_history_tweet_ids ?? []),
+    ].filter((value): value is string => Boolean(value)));
+    return officialLogicalPostAliases.some((officialAliases) =>
+      Array.from(aliases).some((alias) => officialAliases.has(alias)),
+    );
+  };
+  const protectedEventKeys = new Set(rows
+    .filter(({ estimate }) => !eligibleForAutomaticLink.has(estimate.resetEventKey))
+    .map(({ estimate }) => estimate.resetEventKey));
+  const teaserLinks = resolveUniqueBankedTeaserLinks({
+    candidates: noticeSignals.filter((signal): signal is TiboNoticeSignal =>
+      signal.signal_type === "teaser",
+    ).filter((signal) => !hasExistingLogicalRelation(signal)),
+    events: rows.map(({ estimate, notice }) => ({
+      eventKey: estimate.resetEventKey,
+      executionAt: estimate.displayExecutionAt,
+      scopeText: notice.text,
+    })),
+    competingExecutionTimes,
+    protectedEventKeys,
+  });
+
+  return rows.map(({ estimate, relatedNotices, event }) => {
+    if (!eligibleForAutomaticLink.has(estimate.resetEventKey)) return event;
+    const teaser = teaserLinks.get(estimate.resetEventKey);
+    const teaserTime = teaser ? getTimestamp(teaser.tweet_created_at) : null;
+    const completedTime = getTimestamp(event.completed_at ?? null);
+    if (!teaser || teaserTime === null || completedTime === null || teaserTime > completedTime) return event;
+    const details = event.details;
+    if (!details) return event;
+
+    const linkedNotice: TiboNoticeSignal = {
+      tweet_id: teaser.tweet_id,
+      text: teaser.text ?? "",
+      tweet_url: teaser.tweet_url ?? "",
+      tweet_created_at: teaser.tweet_created_at,
+      signal_type: "teaser",
+      confidence: typeof teaser.confidence === "number" ? teaser.confidence : null,
+      verification_status: teaser.verification_status === "confirmed"
+        ? "confirmed"
+        : "auto_unverified",
+      classification_source: teaser.classification_source ?? null,
+      teaser_strength: teaser.teaser_strength === "strong" || teaser.teaser_strength === "weak"
+        ? teaser.teaser_strength
+        : null,
+    };
+    const noticeMinutes = Math.max(0, Math.round((completedTime - teaserTime) / 60000));
+    const linkedEvent: WindowEventLike = {
+      ...event,
+      opened_at: new Date(teaserTime).toISOString(),
+      window_minutes: noticeMinutes,
+      source_url: teaser.tweet_url || event.source_url,
+      sourceTweetIds: sortTweetIdsChronologically(
+        [...(event.sourceTweetIds ?? []), teaser.tweet_id],
+        [...relatedNotices, linkedNotice],
+      ),
+      details: {
+        ...details,
+        noticeToExecution: formatNoticeToExecution(noticeMinutes),
+        noticeType: "匂わせ投稿あり",
+      },
+    };
+    return linkedEvent;
   });
 }
 
@@ -2040,6 +2205,8 @@ function buildCanonicalResetHistoryParts(
   const bankedDistributionEvents = findBankedDistributionEvents(
     bankedSignals.length > 0 ? bankedSignals : fallbackBankedSignals,
     estimates,
+    staticHistory,
+    identityContext,
   );
 
   const dynamicItems: Array<WindowEventLike> = [];
