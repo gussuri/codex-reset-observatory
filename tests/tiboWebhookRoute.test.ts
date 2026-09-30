@@ -516,7 +516,7 @@ test("webhook persists effective operational status without changing reset class
     assert.equal(apologyPayload.ai_reset_type_ja, "詫びリセット");
     assert.equal(apologyPayload.codex_operational_status, "recovered");
     assert.equal(apologyPayload.codex_operational_evidence_quote, "we’re back in action");
-    assert.equal(apologyPayload.codex_operational_expires_at, "2026-09-26T12:07:13.000Z");
+    assert.equal(apologyPayload.codex_operational_expires_at, "2026-09-26T02:07:13.000Z");
   } finally {
     restoreFetch();
     restoreEnvironment(previous);

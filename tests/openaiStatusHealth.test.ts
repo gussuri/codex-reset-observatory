@@ -95,8 +95,8 @@ test("treats a non-operational Codex component as an active display condition", 
   assert.equal(result.data.codexOperationalStatus, "active");
 });
 
-test("marks a Codex incident resolved within twelve hours as recovered", async () => {
-  const resolvedAt = relativeIso(6);
+test("marks a Codex incident resolved within two hours as recovered", async () => {
+  const resolvedAt = relativeIso(1.5);
   const result = await fetchOpenAIStatusSignals(
     {},
     statusFixtureFetch(
@@ -111,8 +111,8 @@ test("marks a Codex incident resolved within twelve hours as recovered", async (
   assert.equal(result.data.codexOperationalStatus, "recovered");
 });
 
-test("does not keep an older resolved Codex mention active or recovered", async () => {
-  const resolvedAt = relativeIso(13);
+test("stops showing a resolved Codex incident as recovered after two hours", async () => {
+  const resolvedAt = relativeIso(2.1);
   const result = await fetchOpenAIStatusSignals(
     {},
     statusFixtureFetch(

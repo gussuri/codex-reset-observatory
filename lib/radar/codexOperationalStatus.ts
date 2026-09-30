@@ -23,6 +23,13 @@ const CODEX_OPERATIONAL_NON_NONE_STATES = new Set<TiboCodexOperationalState>([
   "recovered",
 ]);
 const CODEX_OPERATIONAL_TTL_MS = 12 * 60 * 60 * 1000;
+const CODEX_RECOVERED_DISPLAY_TTL_MS = 2 * 60 * 60 * 1000;
+
+function getOperationalTtlMs(status: Exclude<TiboCodexOperationalState, "none">): number {
+  return status === "recovered"
+    ? CODEX_RECOVERED_DISPLAY_TTL_MS
+    : CODEX_OPERATIONAL_TTL_MS;
+}
 
 function emptyAssessment(): ParsedCodexOperationalAssessment {
   return {
@@ -171,7 +178,7 @@ export function getCodexOperationalExpiryAt(
   if (!status || status === "none") return null;
   const createdAt = Date.parse(tweetCreatedAt);
   return Number.isFinite(createdAt)
-    ? new Date(createdAt + CODEX_OPERATIONAL_TTL_MS).toISOString()
+    ? new Date(createdAt + getOperationalTtlMs(status)).toISOString()
     : null;
 }
 
@@ -187,7 +194,7 @@ export function getLatestTiboCodexOperationalSignal<T extends TiboCodexOperation
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return null;
 
-  return signals
+  const latestSignal = signals
     .filter((signal) => {
       if (signal.verification_status === "rejected") return false;
       if (!isNonNoneOperationalState(signal.codex_operational_status)) return false;
@@ -196,11 +203,7 @@ export function getLatestTiboCodexOperationalSignal<T extends TiboCodexOperation
       const persistedExpiry = Date.parse(signal.codex_operational_expires_at ?? "");
       if (!Number.isFinite(createdAt) || !Number.isFinite(persistedExpiry)) return false;
       if (createdAt > nowTime) return false;
-
-      // Cap eligibility at twelve hours from the source post even if a stored
-      // timestamp is malformed or was written with a longer lifetime.
-      const effectiveExpiry = Math.min(persistedExpiry, createdAt + CODEX_OPERATIONAL_TTL_MS);
-      return nowTime < effectiveExpiry;
+      return true;
     })
     .slice()
     .sort((left, right) => {
@@ -208,6 +211,19 @@ export function getLatestTiboCodexOperationalSignal<T extends TiboCodexOperation
       if (timeDifference !== 0) return timeDifference;
       return (right.tweet_id ?? "").localeCompare(left.tweet_id ?? "");
     })[0] ?? null;
+
+  if (!latestSignal) return null;
+  if (!isNonNoneOperationalState(latestSignal.codex_operational_status)) return null;
+
+  const createdAt = Date.parse(latestSignal.tweet_created_at ?? "");
+  const persistedExpiry = Date.parse(latestSignal.codex_operational_expires_at ?? "");
+  // A newer expired update supersedes older signals; it must not revive an
+  // older active state when its own display window ends.
+  const effectiveExpiry = Math.min(
+    persistedExpiry,
+    createdAt + getOperationalTtlMs(latestSignal.codex_operational_status),
+  );
+  return nowTime < effectiveExpiry ? latestSignal : null;
 }
 
 export function resolveCodexOperationalStatusForDisplay(

@@ -12,7 +12,7 @@ const OPENAI_STATUS_INCIDENTS_URL =
 
 const FETCH_TIMEOUT_MS = 8000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const CODEX_RECOVERY_WINDOW_MS = 12 * 60 * 60 * 1000;
+const CODEX_RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
 const STATUS_INCIDENT_URL_BASE = "https://status.openai.com/incidents";
 
 type StatuspageComponent = {

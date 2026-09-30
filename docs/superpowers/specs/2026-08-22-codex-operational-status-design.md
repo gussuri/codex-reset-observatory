@@ -67,7 +67,7 @@ Add nullable audit columns to `tibo_signals`:
 - `codex_operational_reason_ja`
 - `codex_operational_expires_at`
 
-For `investigating`, `active`, and `recovered`, set `codex_operational_expires_at` to exactly 12 hours after `tweet_created_at`.
+For `investigating` and `active`, set `codex_operational_expires_at` to exactly 12 hours after `tweet_created_at`. For `recovered`, set it to exactly 2 hours after `tweet_created_at`.
 
 For `none` or `null`, `codex_operational_expires_at` is null.
 
@@ -98,7 +98,7 @@ An ordinary newer Tibo post with operational `none` does NOT cancel an earlier s
 The display-only path should inspect raw Codex Status information separately from the probability-model suppression policy.
 
 - Any current non-operational Codex component or unresolved Codex incident -> `active`.
-- If no current active issue exists but a Codex incident resolved within the previous 12 hours -> `recovered`.
+- If no current active issue exists but a Codex incident resolved within the previous 2 hours -> `recovered`.
 - Otherwise -> `none`.
 - Source fetch failure with no trustworthy usable data -> `unknown`.
 
@@ -170,10 +170,10 @@ Add coverage for:
 2. Independence: an `irrelevant` reset classification can simultaneously be `investigating` operationally.
 3. Context safety: quoted/parent text cannot create an operational assertion absent Tibo-owned evidence.
 4. Webhook persistence and optional-column compatibility.
-5. Exact 12-hour expiry for Tibo investigating/active/recovered.
+5. Exact 12-hour expiry for Tibo investigating/active and 2-hour expiry for recovered.
 6. Newer non-none Tibo operational update supersedes an older one; unrelated `none` does not clear it.
 7. OpenAI Status active -> `active`.
-8. Status resolved less than 12h -> `recovered`; 12h or older -> `none`.
+8. Status resolved less than 2h -> `recovered`; 2h or older -> `none`.
 9. Tibo investigating remains visible even when all official Codex components are operational.
 10. Precedence: active > investigating > recovered > none.
 11. Status unavailable + no eligible Tibo state -> `unknown`.
@@ -184,8 +184,8 @@ Add coverage for:
 
 - The dashboard shows `Codex関連状況` with the five display states above.
 - The 2026-08-22 cache-hit-rate investigation pattern is classified as `investigating`, not a reset signal.
-- Every Tibo-derived non-none operational state expires after 12 hours unless superseded by a newer non-none operational update.
+- Tibo-derived `investigating` and `active` states expire after 12 hours; `recovered` expires after 2 hours unless superseded by a newer non-none operational update.
 - Expired Tibo operational states automatically fall back without a cron cleanup.
 - OpenAI Status active incidents still produce `障害発生中`.
-- Recent recovery produces `復旧直後` for 12 hours on the display-only path.
+- Recent recovery produces `復旧直後` for 2 hours on the display-only path.
 - No probability model, probability input, reset classification, or shadow model behavior changes.
