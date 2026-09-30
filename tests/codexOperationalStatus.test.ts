@@ -153,7 +153,7 @@ test("the real apology reset notice keeps independent Codex service recovery evi
   assert.equal(assessment.codex_operational_evidence_quote, "we’re back in action");
   assert.equal(
     getCodexOperationalExpiryAt(assessment.codex_operational_status, TIBO_APOLOGY_RESET_NOTICE.tweetCreatedAt),
-    "2026-09-26T12:07:13.000Z",
+    "2026-09-26T02:07:13.000Z",
   );
 });
 
@@ -298,11 +298,19 @@ test("Gemini prompt keeps operational status independent and limits evidence to 
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /reset completion\s+and Codex service recovery are independent/i);
 });
 
-test("sets exactly twelve hours of display eligibility for non-none Tibo states", () => {
+test("uses a two-hour display window for recovered and twelve hours for ongoing Tibo states", () => {
   const createdAt = "2026-09-23T00:00:00.000Z";
   assert.equal(
     getCodexOperationalExpiryAt("investigating", createdAt),
     "2026-09-23T12:00:00.000Z",
+  );
+  assert.equal(
+    getCodexOperationalExpiryAt("active", createdAt),
+    "2026-09-23T12:00:00.000Z",
+  );
+  assert.equal(
+    getCodexOperationalExpiryAt("recovered", createdAt),
+    "2026-09-23T02:00:00.000Z",
   );
   assert.equal(getCodexOperationalExpiryAt("none", createdAt), null);
   assert.equal(getCodexOperationalExpiryAt(null, createdAt), null);
@@ -312,9 +320,24 @@ test("uses the newest eligible non-none Tibo update while an unrelated none does
   const rows = [
     operationalSignal("investigating", "2026-09-23T01:00:00.000Z"),
     operationalSignal("none", "2026-09-23T11:00:00.000Z"),
-    operationalSignal("recovered", "2026-09-23T10:00:00.000Z"),
+    operationalSignal("recovered", "2026-09-23T11:00:00.000Z"),
   ];
   assert.equal(getLatestTiboCodexOperationalSignal(rows, now)?.codex_operational_status, "recovered");
+});
+
+test("caps a recovered Tibo signal at two hours even if its stored expiry is later", () => {
+  const recovered = operationalSignal("recovered", "2026-09-23T10:00:00.000Z", {
+    codex_operational_expires_at: "2026-09-23T22:00:00.000Z",
+  });
+
+  assert.equal(getLatestTiboCodexOperationalSignal([recovered], now), null);
+});
+
+test("an expired recovered update does not resurrect an older active Tibo signal", () => {
+  const active = operationalSignal("active", "2026-09-23T05:00:00.000Z");
+  const recovered = operationalSignal("recovered", "2026-09-23T10:00:00.000Z");
+
+  assert.equal(getLatestTiboCodexOperationalSignal([active, recovered], now), null);
 });
 
 test("ignores rejected and expired Tibo operational assessments at the exact expiry boundary", () => {
