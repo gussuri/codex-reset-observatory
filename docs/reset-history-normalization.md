@@ -159,6 +159,8 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - account-specific reset、補償 credit、BANKED の配布は、通常の全体 forced reset の `scope` や `resetMethod` へ昇格しない。
 - BANKED distribution と同じ notice を引用する global forced reset があっても、`isSameReset()` は BANKED record を別 event として保持する。
 
+先行する Tibo teaser を既存の BANKED execution に表示上関連付ける場合は、非reply/非quote、strong なreset関連性、投稿時点で解決済みの時間窓、実測時刻が窓と有効期限内にあること、scope 矛盾がないことをすべて要求します。複数teaser/複数eventが候補になる場合、既存のmanual provenanceがある場合、または窓内に競合するexecutionがある場合は自動追加しません。自動関連付けは既存source tweet IDを含むcanonical history projectionで決定的に導出し、`recordKind`、execution時刻、`officialNoticeTweetId`、scope、reset method、確率境界は変更しません。曖昧な場合は未関連のままにします。
+
 ## 9. Worked examples
 
 次の例は static data または既存 test fixture に基づきます。各例を `source facts -> canonical fields -> public presentation` の順に読むことができます。
