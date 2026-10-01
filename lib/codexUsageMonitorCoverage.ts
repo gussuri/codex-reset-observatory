@@ -138,6 +138,19 @@ export function getNextUsageMonitorCoverageStartedAt(
   const previousCoverageStart = parseDate(previous.coverageStartedAt);
   if (!previousDate || !previousCoverageStart) return currentDate.toISOString();
 
+  // An `initial` snapshot is the new monitor process's local comparison
+  // baseline. The monitor has no evidence for continuity across that restart,
+  // even when the last server snapshot was only a few minutes earlier.
+  if (
+    current.postReason === "initial" ||
+    current.postReason === "structure_change" ||
+    previous.limitId !== current.limitId ||
+    previous.planType !== current.planType ||
+    previous.windowDurationMins !== current.windowDurationMins
+  ) {
+    return currentDate.toISOString();
+  }
+
   const elapsed = currentDate.getTime() - previousDate.getTime();
   if (elapsed <= 0 || elapsed > MAX_USAGE_COMPARISON_GAP_MS) {
     return currentDate.toISOString();

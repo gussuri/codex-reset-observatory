@@ -9,7 +9,7 @@ import {
   type CodexUsageSnapshot,
 } from "../lib/codexUsageRecovery";
 
-export const MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION = 1;
+export const MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION = 2;
 export const MONITOR_RECOVERY_CANDIDATE_TTL_MS = MAX_USAGE_COMPARISON_GAP_MS;
 export const MONITOR_RECOVERY_CANDIDATE_SOURCE = CODEX_USAGE_SOURCE_KEY;
 const RESET_AT_JITTER_TOLERANCE_SEC = 30;
@@ -22,12 +22,12 @@ export type PendingRecoveryCandidateRecord = {
   candidateStartedAtMs: number;
   lastObservation: CodexUsageSnapshot;
   observationCount: number;
-  lastSuccessfulPostAtMs?: number;
+  lastSuccessfulPostAtMs?: number | null;
   lastKnownBankedResetAvailableCount?: number | null;
 };
 
 export type RestoredMonitorRecoveryCandidate = PendingRecoveryCandidateRecord & {
-  lastSuccessfulPostAtMs: number;
+  lastSuccessfulPostAtMs: number | null;
   lastKnownBankedResetAvailableCount: number | null;
 };
 
@@ -122,9 +122,11 @@ function normalizeCandidate(value: unknown, nowMs: number): {
     typeof observationCount !== "number" ||
     !Number.isSafeInteger(observationCount) ||
     observationCount < 1 ||
-    typeof lastSuccessfulPostAtMs !== "number" ||
-    !Number.isSafeInteger(lastSuccessfulPostAtMs) ||
-    lastSuccessfulPostAtMs <= 0 ||
+    lastSuccessfulPostAtMs !== null && (
+      typeof lastSuccessfulPostAtMs !== "number" ||
+      !Number.isSafeInteger(lastSuccessfulPostAtMs) ||
+      lastSuccessfulPostAtMs <= 0
+    ) ||
     typeof lastKnownBankedResetAvailableCount !== "number" && lastKnownBankedResetAvailableCount !== null ||
     typeof lastKnownBankedResetAvailableCount === "number" && (
       !Number.isSafeInteger(lastKnownBankedResetAvailableCount) ||
@@ -155,7 +157,7 @@ function normalizeCandidate(value: unknown, nowMs: number): {
   const resetsAtAdvance = firstEvidence.resetsAt - baseline.resetsAt;
   if (
     startToEvidenceMs > MAX_CLOCK_SKEW_MS ||
-    lastSuccessfulPostAtMs > nowMs + MAX_CLOCK_SKEW_MS ||
+    lastSuccessfulPostAtMs !== null && lastSuccessfulPostAtMs > nowMs + MAX_CLOCK_SKEW_MS ||
     baselineToEvidenceMs <= 0 ||
     evidenceToLastMs < 0 ||
     evidenceToLastMs > MONITOR_RECOVERY_CANDIDATE_TTL_MS ||
@@ -212,7 +214,7 @@ export function createMonitorRecoveryCandidateStore(filePath: string) {
         return { candidate: null, discardedReason: "corrupt" };
       }
 
-      if (!isRecord(envelope) || envelope.schemaVersion !== MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION) {
+      if (!isRecord(envelope) || ![1, MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION].includes(envelope.schemaVersion as number)) {
         discardFile();
         return { candidate: null, discardedReason: "corrupt" };
       }
@@ -248,7 +250,7 @@ export function createMonitorRecoveryCandidateStore(filePath: string) {
       candidate: PendingRecoveryCandidateRecord,
       nowMs = Date.now(),
       runtimeState?: {
-        lastSuccessfulPostAtMs: number;
+        lastSuccessfulPostAtMs: number | null;
         lastKnownBankedResetAvailableCount: number | null;
       },
     ) {

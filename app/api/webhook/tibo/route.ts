@@ -1064,6 +1064,8 @@ export async function POST(req: NextRequest) {
                       resetEventKey: estimate.resetEventKey,
                       recoveryObservationId: estimate.recoveryObservationId ?? null,
                       tiboSourceTweetIds: estimate.tiboSourceTweetIds,
+                      executionTimeSource: estimate.executionTimeSource,
+                      estimatorVersion: estimate.estimatorVersion,
                     })),
                     staticHistory: getStaticHistoryEvidence(),
                     dynamicEvents,
@@ -1112,28 +1114,42 @@ export async function POST(req: NextRequest) {
                     const resolvedClassification = logicalPost.effectiveClassification.status === "resolved"
                       ? logicalPost.effectiveClassification
                       : null;
-                    const representativeTweetId = matchedLedger?.representativeTweetId ??
+                    const validRepresentativeIds = new Set(adoptionResolution.logicalPostTweetIds);
+                    const representativeCandidates = [
+                      matchedLedger?.representativeTweetId,
                       matchedEstimate?.tiboPrimaryTweetId ??
-                      matchedStaticHistory.flatMap((item) => item.sourceTweetIds)[0] ??
-                      matchedDynamicEvents.flatMap((item) => item.sourceTweetIds ?? [])[0] ??
-                      resolvedClassification?.representativeTweetId ??
-                      logicalPost.effectiveContent?.tweet_id ??
-                      tweetId;
-                    adoptionClaim = await claimTiboFormalAdoption(supabase, {
-                      logicalPostId: adoptionResolution.logicalPostId,
-                      logicalPostTweetIds: adoptionResolution.logicalPostTweetIds,
-                      resetEventKey: resolvedResetEventKey,
-                      representativeTweetId,
-                      sourceTweetIds: formalFlowSourceTweetIds,
-                      claimSource: getClaimSource(adoptionResolution, matchedLedger),
-                      identitySource: adoptionResolution.authoritative ? "x_api" : "none",
-                      adoptedAt: getClaimSource(adoptionResolution, matchedLedger) === "new_adoption"
-                        ? receivedAt
-                        : null,
-                      claimedAt: receivedAt,
-                    });
-                    if (adoptionClaim.status === "error") {
-                      formalFlowError = adoptionClaim.error ?? new Error("Formal adoption claim failed");
+                        null,
+                      ...matchedStaticHistory.flatMap((item) => item.sourceTweetIds),
+                      ...matchedDynamicEvents.flatMap((item) => item.sourceTweetIds ?? []),
+                      resolvedClassification?.representativeTweetId,
+                      logicalPost.effectiveContent?.tweet_id,
+                      tweetId,
+                      adoptionResolution.logicalPostTweetIds[0],
+                    ];
+                    const representativeTweetId = representativeCandidates.find(
+                      (candidate): candidate is string =>
+                        typeof candidate === "string" && validRepresentativeIds.has(candidate),
+                    );
+                    if (!representativeTweetId) {
+                      formalFlowError = new Error("Tibo formal adoption has no in-chain representative");
+                    }
+                    if (representativeTweetId) {
+                      adoptionClaim = await claimTiboFormalAdoption(supabase, {
+                        logicalPostId: adoptionResolution.logicalPostId,
+                        logicalPostTweetIds: adoptionResolution.logicalPostTweetIds,
+                        resetEventKey: resolvedResetEventKey,
+                        representativeTweetId,
+                        sourceTweetIds: formalFlowSourceTweetIds,
+                        claimSource: getClaimSource(adoptionResolution, matchedLedger),
+                        identitySource: adoptionResolution.authoritative ? "x_api" : "none",
+                        adoptedAt: getClaimSource(adoptionResolution, matchedLedger) === "new_adoption"
+                          ? receivedAt
+                          : null,
+                        claimedAt: receivedAt,
+                      });
+                      if (adoptionClaim.status === "error") {
+                        formalFlowError = adoptionClaim.error ?? new Error("Formal adoption claim failed");
+                      }
                     }
                   }
                 }

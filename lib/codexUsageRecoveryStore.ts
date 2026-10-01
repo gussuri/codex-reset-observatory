@@ -955,6 +955,7 @@ export async function upsertBankedDistributionEstimate(
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
+      .in("estimator_version", [...BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS])
       .limit(1)
       .maybeSingle();
     if (existingResult.error) return { estimate: null, error: existingResult.error, inserted: false };

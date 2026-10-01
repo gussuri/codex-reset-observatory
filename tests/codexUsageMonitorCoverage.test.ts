@@ -184,6 +184,100 @@ test("a gap starts a new coverage interval instead of inferring continuity", () 
   assert.equal(next, "2026-08-17T00:26:00.000Z");
 });
 
+test("an initial snapshot after monitor restart starts coverage at the new local baseline", () => {
+  const next = getNextUsageMonitorCoverageStartedAt(
+    state({
+      observedAt: "2026-08-17T00:58:00.000Z",
+      coverageStartedAt: "2026-08-16T23:59:00.000Z",
+      usedPercent: 100,
+    }),
+    {
+      observedAt: "2026-08-17T00:59:50.000Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1787803170,
+      postReason: "initial",
+      monitorProtocolVersion: 2,
+    },
+  );
+
+  assert.equal(next, "2026-08-17T00:59:50.000Z");
+});
+
+test("structure changes restart coverage while regular continuous polls preserve it", () => {
+  const previous = state({
+    observedAt: "2026-08-17T00:58:00.000Z",
+    coverageStartedAt: "2026-08-17T00:50:00.000Z",
+  });
+  const at = (overrides: Record<string, unknown> = {}) => ({
+    observedAt: "2026-08-17T00:59:00.000Z",
+    limitId: "codex" as const,
+    planType: "plus",
+    usedPercent: 32,
+    windowDurationMins: 10080 as const,
+    resetsAt: 1787198370,
+    ...overrides,
+  });
+
+  assert.equal(
+    getNextUsageMonitorCoverageStartedAt(previous, at({ postReason: "heartbeat" })),
+    "2026-08-17T00:50:00.000Z",
+  );
+  assert.equal(
+    getNextUsageMonitorCoverageStartedAt(previous, at({ postReason: "structure_change" })),
+    "2026-08-17T00:59:00.000Z",
+  );
+  assert.equal(
+    getNextUsageMonitorCoverageStartedAt(previous, at({ planType: "pro" })),
+    "2026-08-17T00:59:00.000Z",
+  );
+});
+
+test("coverage after restart cannot treat a pre-baseline Tibo event as observed continuously", () => {
+  const currentSnapshot = {
+    observedAt: "2026-08-17T00:59:50.000Z",
+    limitId: "codex" as const,
+    planType: "plus",
+    usedPercent: 0,
+    windowDurationMins: 10080 as const,
+    resetsAt: 1787803170,
+    postReason: "initial" as const,
+    monitorProtocolVersion: 2,
+  };
+  const coverageStartedAt = getNextUsageMonitorCoverageStartedAt(
+    state({
+      observedAt: "2026-08-17T00:58:00.000Z",
+      coverageStartedAt: "2026-08-16T23:59:00.000Z",
+      usedPercent: 100,
+    }),
+    currentSnapshot,
+  );
+  const restartedState = state({
+    observedAt: "2026-08-17T00:59:50.000Z",
+    receivedAt: "2026-08-17T00:59:51.000Z",
+    usedPercent: 0,
+    resetsAt: 1787803170,
+    coverageStartedAt,
+  });
+
+  const eventCoverage = getUsageMonitorCoverageAtEvent(
+    restartedState,
+    "2026-08-17T00:59:30.000Z",
+    now,
+  );
+  assert.deepEqual(eventCoverage, { state: "unavailable" });
+  assert.equal(
+    shouldDeferFormalTiboReset(
+      resetSignal({ tweet_created_at: "2026-08-17T00:59:30.000Z" }),
+      eventCoverage,
+      { available: true, matched: false },
+    ),
+    false,
+  );
+});
+
 test("a manually confirmed Tibo reset remains eligible even without monitor recovery", () => {
   const coverage = getUsageMonitorCoverage(state(), now);
 

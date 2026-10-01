@@ -1518,6 +1518,7 @@ async function fetchCurrentRadarDataBase(
         regularResetEvents.health,
         codexRecovery.health,
         resetExecutionEstimates.health,
+        tiboFormalAdoptions.health,
       ),
       openAIStatus.health,
     ),

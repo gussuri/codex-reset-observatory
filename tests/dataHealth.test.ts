@@ -71,3 +71,21 @@ test("marks radar health degraded when either required source is not ok", () => 
     "degraded",
   );
 });
+
+test("formal adoption ledger failure degrades radar health even when all other sources are healthy", () => {
+  const checkedAt = "2026-08-01T00:00:00.000Z";
+  const onlyLedgerFailed = combineDataSourceHealth(
+    OK_DATA_SOURCE,
+    OK_DATA_SOURCE,
+    OK_DATA_SOURCE,
+    OK_DATA_SOURCE,
+    { state: "degraded", detail: "database_error" },
+  );
+
+  const health = createRadarDataHealth(checkedAt, onlyLedgerFailed, OK_DATA_SOURCE);
+  assert.equal(health.overall, "degraded");
+  assert.deepEqual(health.sources.supabaseSignals, {
+    state: "degraded",
+    detail: "database_error",
+  });
+});

@@ -582,6 +582,27 @@ test("prediction history is cached as a raw projection and parsed against each c
   assert.doesNotMatch(source, /getCachedPredictionHistoryProjection\([^)]*calculationNow/);
 });
 
+test("formal adoption ledger read failures degrade the shared radar core and retain last-good cache semantics", () => {
+  const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
+  const currentDataSource = source.slice(
+    source.indexOf("async function fetchCurrentRadarDataBase"),
+    source.indexOf("export async function fetchCurrentRadarData("),
+  );
+  const coreCacheSource = source.slice(
+    source.indexOf("const getCachedRadarCore = unstable_cache("),
+    source.indexOf("const getCachedPublicRadarSnapshotBundle = unstable_cache("),
+  );
+  const requiredSupabaseHealth = currentDataSource.slice(
+    currentDataSource.indexOf("combineDataSourceHealth("),
+    currentDataSource.indexOf("openAIStatus.health"),
+  );
+
+  assert.match(currentDataSource, /tiboFormalAdoptions\.health/);
+  assert.match(requiredSupabaseHealth, /tiboFormalAdoptions\.health/);
+  assert.match(coreCacheSource, /dataHealth === "degraded"/);
+  assert.match(coreCacheSource, /required_source_degraded/);
+});
+
 test("recent Tibo projections preserve reply safety metadata", () => {
   const source = readFileSync(resolve("lib/radarFetch.ts"), "utf8");
   const bundleSource = source.slice(

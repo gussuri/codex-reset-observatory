@@ -220,7 +220,11 @@ test("RadarDashboard owns marker polling while retaining the existing full refre
   assert.match(source, /getResetMarkerPollPlan/);
   assert.match(source, /resetMarker/);
   assert.match(source, /getInitialRefreshPlan/);
-  assert.doesNotMatch(source, /cache:\s*"no-store"/);
+  const markerNetworkCheckStart = source.indexOf("const checkResetMarker = async");
+  const markerNetworkCheckEnd = source.indexOf("const resumeMarkerLifecycle", markerNetworkCheckStart);
+  const markerNetworkCheckSource = source.slice(markerNetworkCheckStart, markerNetworkCheckEnd);
+  assert.match(markerNetworkCheckSource, /fetch\(getResetMarkerRequestUrl\(\)\)/);
+  assert.doesNotMatch(markerNetworkCheckSource, /cache:\s*"no-store"/);
 
   const initialCheck = source.indexOf("if (!markerState.initialized)");
   const initialBegin = source.indexOf("beginResetMarkerRefresh(markerState, incoming)", initialCheck);

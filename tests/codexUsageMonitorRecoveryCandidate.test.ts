@@ -138,6 +138,30 @@ test("recovery candidate is atomically persisted separately and restored after a
   }
 });
 
+test("candidate persistence keeps an absent initial post distinct from a successful post baseline", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-no-post-"));
+  try {
+    const candidatePath = getMonitorRecoveryCandidatePath(path.join(directory, "pending-posts.json"));
+    const store = createMonitorRecoveryCandidateStore(candidatePath);
+    const pending = {
+      ...candidate(),
+      lastSuccessfulPostAtMs: null as never,
+    };
+
+    store.save(pending, STARTED_AT + 180_000, {
+      lastSuccessfulPostAtMs: null as never,
+      lastKnownBankedResetAvailableCount: 3,
+    });
+
+    const restored = store.load(STARTED_AT + 180_000).candidate;
+    assert.equal(restored?.lastSuccessfulPostAtMs, null,
+      "candidate restore must not invent a successful-post timestamp from local observations");
+    assert.equal(restored?.preRecoveryBaseline.observedAt, candidate().preRecoveryBaseline.observedAt);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("stale and corrupt persisted candidates are diagnosed and discarded safely", () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-invalid-"));
   try {

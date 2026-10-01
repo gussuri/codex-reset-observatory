@@ -318,7 +318,8 @@ export function evaluateMonitorRecoveryCandidate(
   nowMs = Date.now(),
   trigger: MonitorRefreshTrigger = "poll",
 ): MonitorRecoveryEvaluation {
-  if (state.lastSuccessfulPostAt === null) {
+  const baseline = state.baselineSnapshot ?? state.previousLocalSnapshot;
+  if (state.lastSuccessfulPostAt === null && !baseline) {
     return {
       status: "none",
       postReason: "initial",
@@ -460,7 +461,6 @@ export function evaluateMonitorRecoveryCandidate(
     };
   }
 
-  const baseline = state.baselineSnapshot ?? state.previousLocalSnapshot;
   if (!baseline) {
     return {
       status: "none",
@@ -537,11 +537,26 @@ export function evaluateMonitorRecoveryCandidate(
     };
   }
 
+  // Keep retrying the first accepted baseline when nothing higher priority
+  // was found. Recovery detection above still runs from local snapshots while
+  // that initial webhook is pending.
+  if (state.lastSuccessfulPostAt === null && !state.pendingRecoveryCandidate) {
+    return {
+      status: "none",
+      postReason: "initial",
+      postSnapshot: snapshot,
+      nextPendingRecoveryCandidate: null,
+      nextBaselineSnapshot: snapshot,
+    };
+  }
+
   // Heartbeat check
+  const lastSuccessfulPostAt = state.lastSuccessfulPostAt;
   if (
     Number.isFinite(nowMs) &&
-    Number.isFinite(state.lastSuccessfulPostAt) &&
-    nowMs - state.lastSuccessfulPostAt >= MONITOR_HEARTBEAT_INTERVAL_MS
+    typeof lastSuccessfulPostAt === "number" &&
+    Number.isFinite(lastSuccessfulPostAt) &&
+    nowMs - lastSuccessfulPostAt >= MONITOR_HEARTBEAT_INTERVAL_MS
   ) {
     return {
       status: "none",
@@ -996,7 +1011,7 @@ async function runAppServerSession(
       ? {
           baselineSnapshot: restoredCandidate.preRecoveryBaseline,
           previousLocalSnapshot: restoredCandidate.lastObservation,
-          lastSuccessfulPostAt: restoredCandidate.lastSuccessfulPostAtMs ?? restoredCandidate.candidateStartedAtMs,
+          lastSuccessfulPostAt: restoredCandidate.lastSuccessfulPostAtMs ?? null,
           lastKnownBankedResetAvailableCount: restoredCandidate.lastKnownBankedResetAvailableCount ?? null,
           pendingRecoveryCandidate: restoredCandidate,
           pendingPosts: [],
@@ -1177,12 +1192,9 @@ async function runAppServerSession(
             setDurableRecoveryCandidate(null);
           } else if (nextState.pendingRecoveryCandidate) {
             const lastSuccessfulPostAtMs = previousState.lastSuccessfulPostAt;
-            if (!Number.isFinite(lastSuccessfulPostAtMs)) {
-              throw new MonitorRecoveryCandidateStoreError("recovery_candidate_write_failed");
-            }
             const persistedCandidate: PendingRecoveryCandidate = {
               ...nextState.pendingRecoveryCandidate,
-              lastSuccessfulPostAtMs: lastSuccessfulPostAtMs!,
+              lastSuccessfulPostAtMs,
               lastKnownBankedResetAvailableCount: nextState.lastKnownBankedResetAvailableCount ?? null,
             };
             try {

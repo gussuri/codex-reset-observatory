@@ -18,9 +18,23 @@ import type { UsageMonitorState } from "../../lib/codexUsageMonitorCoverage";
 const localUrl = process.env.SUPABASE_LOCAL_URL;
 const localServiceRoleKey = process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY;
 const isConfigured = Boolean(localUrl && localServiceRoleKey);
+function isLoopbackSupabaseUrl(value: string | undefined) {
+  if (!value) return false;
+  try {
+    return ["localhost", "127.0.0.1", "::1"].includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+if (isConfigured && !isLoopbackSupabaseUrl(localUrl)) {
+  throw new Error("SUPABASE_LOCAL_URL must target a loopback host because this suite deletes webhook rows");
+}
+const isSafeLocalDatabaseConfigured = isConfigured && isLoopbackSupabaseUrl(localUrl);
 
 function clientOrThrow() {
-  if (!localUrl || !localServiceRoleKey) throw new Error("Local Supabase credentials are not configured");
+    if (!isSafeLocalDatabaseConfigured || !localUrl || !localServiceRoleKey) {
+      throw new Error("A loopback-only local Supabase database is not configured");
+    }
   return createClient(localUrl, localServiceRoleKey, { auth: { persistSession: false } });
 }
 
@@ -167,7 +181,7 @@ async function seedBaseline(client: SupabaseClient<any>) {
   }));
 }
 
-test("atomic webhook success commits observation, regular event, estimate, promotion, and state", { skip: !isConfigured }, async () => {
+test("atomic webhook success commits observation, regular event, estimate, promotion, and state", { skip: !isSafeLocalDatabaseConfigured }, async () => {
   const client = clientOrThrow();
   await clearLocalWebhookData(client);
   try {
@@ -204,7 +218,7 @@ test("atomic webhook success commits observation, regular event, estimate, promo
     await clearLocalWebhookData(client);
   }
 });
-test("a later write failure rolls back observation, regular event, estimate, and state", { skip: !isConfigured }, async () => {
+test("a later write failure rolls back observation, regular event, estimate, and state", { skip: !isSafeLocalDatabaseConfigured }, async () => {
   const client = clientOrThrow();
   await clearLocalWebhookData(client);
   try {
@@ -233,7 +247,7 @@ test("a later write failure rolls back observation, regular event, estimate, and
   }
 });
 
-test("resending one plan is idempotent and does not duplicate rows", { skip: !isConfigured }, async () => {
+test("resending one plan is idempotent and does not duplicate rows", { skip: !isSafeLocalDatabaseConfigured }, async () => {
   const client = clientOrThrow();
   await clearLocalWebhookData(client);
   try {
@@ -257,7 +271,74 @@ test("resending one plan is idempotent and does not duplicate rows", { skip: !is
   }
 });
 
-test("a stale compare-and-swap plan performs no side writes or state regression", { skip: !isConfigured }, async () => {
+test("shared Tibo provenance keeps a recovery execution separate from an idempotent BANKED distribution", { skip: !isSafeLocalDatabaseConfigured }, async () => {
+  const client = clientOrThrow();
+  await clearLocalWebhookData(client);
+  try {
+    await seedBaseline(client);
+    const sourceTweetIds = ["atomic-shared-reset-notice"];
+    const snapshot = recoverySnapshot({ bankedResetAvailableCount: 1 });
+    const observation = recoveryObservation(snapshot);
+    const forcedEstimate = {
+      ...estimateWrite(snapshot, observation, "atomic-forced-reset-shared-source"),
+      tibo_primary_tweet_id: sourceTweetIds[0],
+      tibo_source_tweet_ids: sourceTweetIds,
+      official_notice_tweet_id: sourceTweetIds[0],
+      official_notice_at: "2026-08-29T23:00:00.000Z",
+    };
+    const banked = {
+      resetEventKey: "atomic-banked-shared-source",
+      displayExecutionAt: snapshot.observedAt,
+      tiboAnnouncedAt: "2026-08-29T23:00:00.000Z",
+      tiboPrimaryTweetId: sourceTweetIds[0]!,
+      tiboSourceTweetIds: sourceTweetIds,
+      officialNoticeTweetId: sourceTweetIds[0]!,
+      officialNoticeAt: "2026-08-29T23:00:00.000Z",
+    };
+    const first = await apply(client, recoveryPlan(snapshot, baselineSnapshot(), {
+      observation,
+      estimate: forcedEstimate,
+      banked,
+    }));
+    assert.equal(first.status, "applied");
+    assert.ok(first.observation_id);
+
+    const forcedKey = `usage-reset-${first.observation_id}`;
+    const firstRows = await client
+      .from("reset_execution_estimates")
+      .select("reset_event_key,recovery_observation_id,estimator_version,tibo_source_tweet_ids")
+      .in("reset_event_key", [forcedKey, banked.resetEventKey]);
+    assert.equal(firstRows.error, null, firstRows.error?.message);
+    assert.equal(firstRows.data?.length, 2);
+    const forcedRow = firstRows.data?.find((row) => row.reset_event_key === forcedKey);
+    const bankedRow = firstRows.data?.find((row) => row.reset_event_key === banked.resetEventKey);
+    assert.equal(forcedRow?.recovery_observation_id, first.observation_id);
+    assert.equal(forcedRow?.estimator_version, "usage-execution-monitor-v1");
+    assert.deepEqual(forcedRow?.tibo_source_tweet_ids, sourceTweetIds);
+    assert.equal(bankedRow?.recovery_observation_id, null);
+    assert.equal(bankedRow?.estimator_version, "banked-distribution-observation-v2");
+    assert.deepEqual(bankedRow?.tibo_source_tweet_ids, sourceTweetIds);
+
+    const nextSnapshot = recoverySnapshot({
+      observedAt: "2026-08-30T00:05:00.000Z",
+      bankedResetAvailableCount: 1,
+    });
+    const second = await apply(client, recoveryPlan(nextSnapshot, snapshot, { banked }));
+    assert.equal(second.status, "applied");
+    assert.equal(await count(client, "reset_execution_estimates", "tibo_primary_tweet_id", sourceTweetIds[0]!), 2);
+    const preservedForced = await client
+      .from("reset_execution_estimates")
+      .select("reset_event_key,recovery_observation_id,estimator_version")
+      .eq("reset_event_key", forcedKey)
+      .single();
+    assert.equal(preservedForced.data?.recovery_observation_id, first.observation_id);
+    assert.equal(preservedForced.data?.estimator_version, "usage-execution-monitor-v1");
+  } finally {
+    await clearLocalWebhookData(client);
+  }
+});
+
+test("a stale compare-and-swap plan performs no side writes or state regression", { skip: !isSafeLocalDatabaseConfigured }, async () => {
   const client = clientOrThrow();
   await clearLocalWebhookData(client);
   try {
@@ -283,7 +364,7 @@ test("a stale compare-and-swap plan performs no side writes or state regression"
   }
 });
 
-test("BANKED estimate and state roll back together when the later state write fails", { skip: !isConfigured }, async () => {
+test("BANKED estimate and state roll back together when the later state write fails", { skip: !isSafeLocalDatabaseConfigured }, async () => {
   const client = clientOrThrow();
   await clearLocalWebhookData(client);
   try {

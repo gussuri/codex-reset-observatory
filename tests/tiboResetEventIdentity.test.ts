@@ -263,6 +263,25 @@ test("existing estimate is reused by recovery observation before alias matching"
   assert.equal(result.matchedEvidence?.kind, "existing_estimate");
 });
 
+test("monitor-backed estimate identity beats a self-key only when its estimator metadata is present", () => {
+  const result = resolveTiboResetEventIdentity(post([row(A)]), {
+    estimates: [{
+      resetEventKey: "usage-reset-observation-1",
+      recoveryObservationId: "observation-1",
+      tiboSourceTweetIds: [A],
+      executionTimeSource: "usage_observation",
+      estimatorVersion: "usage-execution-monitor-v1",
+    }],
+    dynamicEvents: [{
+      eventKey: `tibo-reset-${A}`,
+      sourceTweetIds: [A],
+    }],
+  });
+
+  assert.equal(result.status, "existing");
+  assert.equal(result.resetEventKey, "usage-reset-observation-1");
+});
+
 test("estimate, static history, and dynamic history can reuse a chain alias", () => {
   const result = resolveTiboResetEventIdentity(post([trustedRow([A, B], B)]), {
     estimates: [{

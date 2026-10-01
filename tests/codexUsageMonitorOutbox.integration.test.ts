@@ -71,6 +71,42 @@ function createFakeAppServer(mode: "rpc_failure" | "invalid_snapshot") {
   return child;
 }
 
+function createFakeRateLimitAppServer(onRead: () => unknown) {
+  const emitter = new EventEmitter();
+  const child = emitter as unknown as ChildProcessWithoutNullStreams;
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  let closed = false;
+  Object.assign(child, {
+    stdin,
+    stdout,
+    stderr,
+    exitCode: null,
+    signalCode: null,
+    kill: () => {
+      if (!closed) {
+        closed = true;
+        setImmediate(() => {
+          Object.assign(child, { signalCode: "SIGTERM" });
+          emitter.emit("close", null, "SIGTERM");
+        });
+      }
+      return true;
+    },
+  });
+
+  stdin.on("data", (chunk: Buffer) => {
+    for (const line of chunk.toString("utf8").split("\n").filter(Boolean)) {
+      const request = JSON.parse(line) as { id?: string; method?: string };
+      if (!request.id) continue;
+      const result = request.method === "initialize" ? {} : onRead();
+      setImmediate(() => stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`));
+    }
+  });
+  return child;
+}
+
 type TrackedFakeAppServer = {
   child: ChildProcessWithoutNullStreams;
   stdout: PassThrough;
@@ -299,6 +335,89 @@ for (const scenario of [
     }
   });
 }
+
+test("local recovery polls confirm and enqueue while the initial webhook post is still failing", async () => {
+  const localAppData = mkdtempSync(path.join(os.tmpdir(), "codex-outbox-initial-failure-recovery-"));
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    LOCALAPPDATA: localAppData,
+    CODEX_USAGE_MONITOR_SECRET: "test-only-secret",
+    CODEX_USAGE_WEBHOOK_URL: "https://example.invalid/api/webhook/codex-usage",
+    CODEX_USAGE_POLL_INTERVAL_MS: "60000",
+    CODEX_CLI_PATH: "test-codex",
+  };
+  const store = createPendingMonitorPostStore(getMonitorPendingPostsPath(env));
+  const startAt = Date.parse("2026-10-01T00:00:00.000Z");
+  const snapshots = [
+    { observedAt: new Date(startAt).toISOString(), usedPercent: 80, resetsAt: 1_790_064_000 },
+    { observedAt: new Date(startAt + 120_000).toISOString(), usedPercent: 0, resetsAt: 1_790_067_600 },
+    { observedAt: new Date(startAt + 240_000).toISOString(), usedPercent: 0, resetsAt: 1_790_067_600 },
+    { observedAt: new Date(startAt + 360_000).toISOString(), usedPercent: 0, resetsAt: 1_790_067_600 },
+  ];
+  let reads = 0;
+  let nowMs = startAt;
+  let acceptedRecovery = false;
+  const attempts: string[] = [];
+  const events: Array<Record<string, unknown>> = [];
+  const controller = new AbortController();
+  const monitor = runCodexUsageMonitor(env, {
+    signal: controller.signal,
+    logger: createJsonMonitorLogger((line) => events.push(JSON.parse(line) as Record<string, unknown>)),
+    monitorTiming: { now: () => nowMs, pollIntervalMs: 5 },
+    pendingQueueRetryTiming: { checkIntervalMs: 2, shortRetryIntervalMs: 10, recoveryBackoffMs: [20] },
+    spawnAppServer: () => createFakeRateLimitAppServer(() => {
+      const snapshot = snapshots[Math.min(reads, snapshots.length - 1)]!;
+      reads += 1;
+      nowMs = Date.parse(snapshot.observedAt);
+      return {
+        rateLimits: {
+          limitId: "codex",
+          planType: "plus",
+          primary: {
+            usedPercent: snapshot.usedPercent,
+            windowDurationMins: 10080,
+            resetsAt: snapshot.resetsAt,
+          },
+        },
+      };
+    }),
+    sendSnapshot: async (_snapshot, reason) => {
+      attempts.push(reason);
+      if (reads < snapshots.length) {
+        return { accepted: false, failure: { category: "server_error", httpStatus: 503 } };
+      }
+      if (reason === "recovery_candidate") acceptedRecovery = true;
+      return { accepted: true, ...(reason === "recovery_candidate" ? { recovery: "confirmed" } : {}) };
+    },
+  });
+
+  let completed = false;
+  try {
+    completed = await waitForCondition(
+      () => acceptedRecovery && store.load().length === 0,
+      "the confirmed recovery post after initial delivery recovery",
+    ).then(() => true, () => false);
+    controller.abort();
+    await monitor;
+
+    assert.equal(completed, true,
+      `the independently observed recovery is eventually accepted (${JSON.stringify({
+        reads,
+        attempts,
+        events: events.map((event) => `${String(event.event)}:${String(event.reason ?? "")}`),
+        pending: store.load().map((post) => post.reason),
+      })})`);
+    assert.ok(reads >= 3, "multiple independent snapshots were read while initial delivery was failing");
+    assert.equal(attempts.filter((reason) => reason === "recovery_candidate").length, 1);
+    assert.ok(events.some((event) => event.event === "recovery_candidate_confirmed"));
+    assert.deepEqual(store.load(), [], "initial and confirmed recovery posts are durably drained in FIFO order");
+  } finally {
+    controller.abort();
+    await monitor;
+    rmSync(localAppData, { recursive: true, force: true });
+  }
+});
 
 test("outbox retries after three transient failures and drains FIFO after recovery without restarting", async () => {
   const localAppData = mkdtempSync(path.join(os.tmpdir(), "codex-outbox-recovery-"));

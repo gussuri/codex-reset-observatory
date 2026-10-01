@@ -9,6 +9,7 @@ import {
   confirmNearestCodexRecoveryObservation,
   findLatestBankedGrant,
   getNextUsageMonitorLastBankedGrantAt,
+  upsertBankedDistributionEstimate,
   upsertResetExecutionEstimate,
 } from "../lib/codexUsageRecoveryStore";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
@@ -463,6 +464,100 @@ test("an existing execution estimate keeps its event and primary provenance duri
   assert.equal(persistedUpdatePayload?.display_execution_at, "2026-08-31T00:10:00.000Z");
   assert.equal(persistedUpdatePayload?.official_notice_tweet_id, "notice-old");
   assert.deepEqual(persistedUpdatePayload?.tibo_source_tweet_ids, ["tweet-A", "tweet-B", "notice-old"]);
+});
+
+test("BANKED estimate source overlap never overwrites a forced reset and retry stays idempotent", async () => {
+  const forcedReset = {
+    id: "forced-reset-row",
+    reset_event_key: "usage-reset-recovery-A",
+    display_execution_at: "2026-09-30T12:00:00.000Z",
+    execution_time_source: "usage_observation",
+    execution_time_confidence: "high",
+    execution_time_precision: "approximate",
+    execution_window_start_at: "2026-09-30T11:59:00.000Z",
+    execution_window_end_at: "2026-09-30T12:00:00.000Z",
+    recovery_observation_id: "recovery-A",
+    recovery_previous_observed_at: "2026-09-30T11:59:00.000Z",
+    recovery_observed_at: "2026-09-30T12:00:00.000Z",
+    tibo_announced_at: "2026-09-30T10:00:00.000Z",
+    tibo_primary_tweet_id: "shared-notice",
+    tibo_source_tweet_ids: ["shared-notice", "completion-A"],
+    official_notice_tweet_id: "shared-notice",
+    official_notice_at: "2026-09-30T10:00:00.000Z",
+    estimator_version: "usage-execution-monitor-v1",
+  };
+  const rows: Array<Record<string, unknown>> = [{ ...forcedReset }];
+
+  const client = {
+    from(table: string) {
+      assert.equal(table, "reset_execution_estimates");
+      const filters = new Map<string, unknown>();
+      let mutation: { kind: "update" | "upsert"; values: Record<string, unknown>; ignoreDuplicates?: boolean } | null = null;
+      const builder: Record<string, any> = {};
+      const matchingRows = () => rows.filter((row) => {
+        for (const [column, value] of Array.from(filters.entries())) {
+          if (column === "overlaps" && Array.isArray(row.tibo_source_tweet_ids) && Array.isArray(value)) {
+            if (!row.tibo_source_tweet_ids.some((sourceId) => value.includes(sourceId))) return false;
+          } else if (column === "in" && Array.isArray(value)) {
+            if (!value.includes(row["estimator_version"])) return false;
+          } else if (row[column] !== value) {
+            return false;
+          }
+        }
+        return true;
+      });
+      builder.select = () => builder;
+      builder.eq = (column: string, value: unknown) => { filters.set(column, value); return builder; };
+      builder.overlaps = (_column: string, value: unknown) => { filters.set("overlaps", value); return builder; };
+      builder.in = (column: string, value: unknown) => { assert.equal(column, "estimator_version"); filters.set("in", value); return builder; };
+      builder.limit = () => builder;
+      builder.update = (values: Record<string, unknown>) => { mutation = { kind: "update", values }; return builder; };
+      builder.upsert = (values: Record<string, unknown>, options: { ignoreDuplicates?: boolean }) => {
+        mutation = { kind: "upsert", values, ignoreDuplicates: options.ignoreDuplicates };
+        return builder;
+      };
+      builder.maybeSingle = async () => {
+        if (mutation?.kind === "update") {
+          const row = matchingRows()[0];
+          if (row) Object.assign(row, mutation.values);
+          return { data: row ?? null, error: null };
+        }
+        if (mutation?.kind === "upsert") {
+          const existing = rows.find((row) => row.reset_event_key === mutation!.values.reset_event_key);
+          if (existing) {
+            return { data: mutation.ignoreDuplicates ? null : Object.assign(existing, mutation.values), error: null };
+          }
+          const inserted = { id: `row-${rows.length + 1}`, ...mutation.values };
+          rows.push(inserted);
+          return { data: inserted, error: null };
+        }
+        return { data: matchingRows()[0] ?? null, error: null };
+      };
+      return builder;
+    },
+  };
+
+  const input = {
+    resetEventKey: "banked-reset-shared-notice",
+    displayExecutionAt: "2026-09-30T12:01:00.000Z",
+    tiboAnnouncedAt: "2026-09-30T10:00:00.000Z",
+    tiboPrimaryTweetId: "shared-notice",
+    tiboSourceTweetIds: ["shared-notice", "banked-grant-B"],
+    officialNoticeTweetId: "shared-notice",
+    officialNoticeAt: "2026-09-30T10:00:00.000Z",
+  };
+
+  const first = await upsertBankedDistributionEstimate(client as never, input);
+  const second = await upsertBankedDistributionEstimate(client as never, input);
+
+  assert.equal(first.error, null);
+  assert.equal(second.error, null);
+  assert.equal(rows.length, 2, "forced reset and BANKED distribution remain separate estimate rows");
+  assert.deepEqual(rows[0], forcedReset, "forced estimate identity and execution evidence remain unchanged");
+  const bankedRows = rows.filter((row) => row.reset_event_key === input.resetEventKey);
+  assert.equal(bankedRows.length, 1, "resending the same BANKED event does not create another row");
+  assert.equal(bankedRows[0]?.estimator_version, "banked-distribution-observation-v2");
+  assert.equal(bankedRows[0]?.recovery_observation_id, null);
 });
 
 test("findLatestBankedGrant includes the legacy Production BANKED estimator version", async () => {

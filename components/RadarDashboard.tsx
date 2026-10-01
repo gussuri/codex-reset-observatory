@@ -242,6 +242,25 @@ function getHistoryDisplayTitle(
       : `${title}（参考記録）`;
 }
 
+function isNewerResetBoundary(
+  candidate: string | null | undefined,
+  current: string | null | undefined,
+) {
+  if (!candidate || candidate === current) return false;
+  const candidateTime = Date.parse(candidate);
+  const currentTime = current ? Date.parse(current) : Number.NEGATIVE_INFINITY;
+  return Number.isFinite(candidateTime) && candidateTime > currentTime;
+}
+
+function isHeatmapPayload(value: unknown): value is { eventTimes: string[] } {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { eventTimes?: unknown }).eventTimes)) {
+    return false;
+  }
+  return (value as { eventTimes: unknown[] }).eventTimes.every((eventTime) =>
+    typeof eventTime === "string" && Number.isFinite(Date.parse(eventTime)),
+  );
+}
+
 const HOMEPAGE_EXPLANATION_CONTENT = {
   ja: {
     title: "この数字と観測情報の見方",
@@ -469,6 +488,8 @@ export function RadarDashboard({
     isStale: initialData?.dataHealth.stale ?? false,
     refreshError: null,
   }));
+  const [currentHeatmapEventTimes, setCurrentHeatmapEventTimes] = useState(randomResetHeatmapEventTimes);
+  const heatmapLastRandomResetAtRef = useRef(initialData?.lastRandomResetAt ?? null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const lifecycleIdRef = useRef(0);
@@ -553,6 +574,29 @@ export function RadarDashboard({
         );
       } catch {
         // Cache persistence is best-effort; the successful live response remains current.
+      }
+
+      if (isNewerResetBoundary(data.lastRandomResetAt, heatmapLastRandomResetAtRef.current)) {
+        try {
+          const heatmapUrl = new URL("/api/current/heatmap", window.location.origin);
+          heatmapUrl.searchParams.set("calculationAt", data.checkedAt);
+          const heatmapResponse = await fetch(heatmapUrl, { cache: "no-store" });
+          if (!heatmapResponse.ok) throw new Error("Failed to refresh reset heatmap");
+          const heatmapPayload: unknown = await heatmapResponse.json();
+          if (
+            isCurrentLifecycle() &&
+            isHeatmapPayload(heatmapPayload) &&
+            heatmapPayload.eventTimes.some((eventTime) =>
+              Date.parse(eventTime) === Date.parse(data.lastRandomResetAt ?? ""),
+            )
+          ) {
+            setCurrentHeatmapEventTimes(heatmapPayload.eventTimes);
+            heatmapLastRandomResetAtRef.current = data.lastRandomResetAt;
+          }
+        } catch {
+          // Keep the last valid chart. The next successful snapshot retries
+          // because the displayed boundary has not advanced yet.
+        }
       }
       return { kind: "success" as const, data, fetchedAt };
     } catch {
@@ -1336,7 +1380,7 @@ export function RadarDashboard({
         </section>
 
         <RandomResetTimeHeatmap
-          eventTimes={randomResetHeatmapEventTimes}
+          eventTimes={currentHeatmapEventTimes}
           locale={locale}
         />
 

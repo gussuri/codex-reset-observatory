@@ -810,6 +810,96 @@ test("related notice provenance is reconciled without a second new adoption", as
   assert.deepEqual(state.estimates[0]?.tibo_source_tweet_ids, [A, noticeId]);
 });
 
+test("a completion claim uses a representative inside its logical post while retaining notice provenance", async () => {
+  const completionId = B;
+  const noticeId = "2094999999999999999";
+  const recoveryId = "recovery-completion-with-notice";
+  const state = createState({
+    signals: new Map([[noticeId, signal(noticeId, {
+      text: "A reset is planned for everyone tomorrow.",
+      tweet_created_at: "2026-08-30T23:00:00.000Z",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      classification_source: "manual",
+      verification_status: "confirmed",
+    })]]),
+    recoveries: [recovery(recoveryId)],
+    estimates: [{
+      id: "estimate-completion-with-notice",
+      reset_event_key: "usage-reset-monitor-completion-with-notice",
+      display_execution_at: "2026-08-31T00:01:30.000Z",
+      execution_time_source: "usage_observation",
+      execution_time_confidence: "high",
+      execution_time_precision: "approximate",
+      recovery_observation_id: recoveryId,
+      tibo_primary_tweet_id: noticeId,
+      tibo_source_tweet_ids: [noticeId],
+      estimator_version: "usage-execution-monitor-v1",
+    }],
+  });
+
+  const response = await runWebhook(state, {
+    tweetId: completionId,
+    text: "We reset usage limits for all paid users.",
+    tweetUrl: `https://x.com/thsottiaux/status/${completionId}`,
+    tweetCreatedAt: "2026-08-31T00:00:00.000Z",
+  });
+  const claim = state.calls.find((call) => call.url.includes("/rpc/claim_tibo_formal_adoption"));
+
+  assert.equal(response.status, 200);
+  assert.equal(claim?.body?.p_representative_tweet_id, completionId);
+  assert.ok((claim?.body?.p_logical_post_tweet_ids as string[]).includes(completionId));
+  assert.ok((claim?.body?.p_source_tweet_ids as string[]).includes(noticeId));
+  assert.ok((claim?.body?.p_source_tweet_ids as string[]).includes(completionId));
+  assert.equal(claim?.body?.p_reset_event_key, "usage-reset-monitor-completion-with-notice");
+});
+
+test("retry after raw completion save preserves monitor estimate identity and completes adoption once", async () => {
+  const completionId = B;
+  const recoveryId = "recovery-retry-monitor-estimate";
+  const completion = signal(completionId, {
+    text: "We reset usage limits for all paid users.",
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    classification_source: "manual",
+    verification_status: "confirmed",
+  });
+  const state = createState({
+    signals: new Map([[completionId, completion]]),
+    recoveries: [recovery(recoveryId)],
+    estimates: [{
+      id: "estimate-retry-monitor",
+      reset_event_key: "usage-reset-observation-retry",
+      display_execution_at: "2026-08-31T00:01:30.000Z",
+      execution_time_source: "usage_observation",
+      execution_time_confidence: "high",
+      execution_time_precision: "approximate",
+      recovery_observation_id: recoveryId,
+      tibo_primary_tweet_id: completionId,
+      tibo_source_tweet_ids: [completionId],
+      estimator_version: "usage-execution-monitor-v1",
+    }],
+  });
+
+  const response = await runWebhook(state, {
+    tweetId: completionId,
+    text: completion.text,
+    tweetUrl: completion.tweet_url,
+    tweetCreatedAt: completion.tweet_created_at,
+  });
+  const body = await response.json();
+  const claims = state.calls.filter((call) => call.url.includes("/rpc/claim_tibo_formal_adoption"));
+
+  assert.equal(response.status, 200);
+  assert.equal(body.formalAdoption.newlyAdopted, false);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0]?.body?.p_reset_event_key, "usage-reset-observation-retry");
+  assert.equal(state.ledgers.length, 1);
+  assert.equal(state.ledgers[0]?.reset_event_key, "usage-reset-observation-retry");
+  assert.equal(state.estimates[0]?.reset_event_key, "usage-reset-observation-retry");
+  assert.equal(state.estimates[0]?.tibo_primary_tweet_id, completionId);
+});
+
 test("Monitor-first formal adoption names one canonical event from its Tibo provenance", async () => {
   const contextId = A;
   const formalId = B;
