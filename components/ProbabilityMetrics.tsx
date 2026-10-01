@@ -1,5 +1,8 @@
 import React from "react";
-import { normalizeProbability } from "@/lib/radar/helpers";
+import {
+  getProbabilityDisplayLevel,
+  normalizeProbability,
+} from "@/lib/radar/helpers";
 import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 
@@ -93,43 +96,42 @@ function Metric({
   );
 }
 
-function getProbabilityTone(
+export function getProbabilityTone(
   probability: number | undefined,
-  horizon: "12h" | "24h" | "48h" | "72h",
+  _horizon?: "12h" | "24h" | "48h" | "72h",
 ) {
-  if (typeof probability !== "number" || Number.isNaN(probability)) {
-    return {
-      bar: "bg-slate-400",
-      card: "border-slate-200 bg-slate-50",
-      label: "text-slate-500",
-      value: "text-slate-950",
-    };
+  const level = getProbabilityDisplayLevel(probability);
+  switch (level) {
+    case "low":
+      return {
+        bar: "bg-sky-500",
+        card: "border-sky-200 bg-sky-50",
+        label: "text-sky-700",
+        value: "text-sky-950",
+      };
+    case "medium":
+      return {
+        bar: "bg-orange-500",
+        card: "border-orange-200 bg-orange-50",
+        label: "text-orange-700",
+        value: "text-orange-950",
+      };
+    case "high":
+      return {
+        bar: "bg-rose-500",
+        card: "border-rose-200 bg-rose-50",
+        label: "text-rose-700",
+        value: "text-rose-950",
+      };
+    case "unknown":
+    default:
+      return {
+        bar: "bg-slate-400",
+        card: "border-slate-200 bg-slate-50",
+        label: "text-slate-500",
+        value: "text-slate-950",
+      };
   }
-
-  if (probability <= 0.33) {
-    return {
-      bar: "bg-sky-500",
-      card: "border-sky-200 bg-sky-50",
-      label: "text-sky-700",
-      value: "text-sky-950",
-    };
-  }
-
-  if (probability <= 0.66) {
-    return {
-      bar: "bg-orange-500",
-      card: "border-orange-200 bg-orange-50",
-      label: "text-orange-700",
-      value: "text-orange-950",
-    };
-  }
-
-  return {
-    bar: "bg-rose-500",
-    card: "border-rose-200 bg-rose-50",
-    label: "text-rose-700",
-    value: "text-rose-950",
-  };
 }
 
 function getProbabilityPercent(probability: number | undefined) {

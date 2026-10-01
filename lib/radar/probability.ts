@@ -25,7 +25,10 @@ import {
   getExpectationKey,
   formatElapsedResetDuration,
   formatElapsedResetDurationPrecise,
+  getProbabilityDisplayLevel,
+  getProbabilityDisplayLevelText,
   type ExpectationKey,
+  type ProbabilityDisplayLevel,
 } from "./helpers";
 import {
   compareTiboNoticeSpecificity,
@@ -2121,23 +2124,15 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookNeutral", locale);
   }
 
-  const elapsedHours = elapsedMs / (60 * 60 * 1000);
-  const randomElapsedDiagnostics = publishedCalculation?.randomElapsedDiagnostics ?? null;
-  const relative24 = getRelativeDisplayHazard(randomElapsedDiagnostics, elapsedHours, 24);
-  const relative48 = getRelativeDisplayHazard(randomElapsedDiagnostics, elapsedHours, 48);
-  if (relative24 === null || relative48 === null) {
+  const displayLevel24 = getProbabilityDisplayLevel(probability24h);
+  const displayLevel48 = getProbabilityDisplayLevel(probability48h);
+  if (displayLevel24 === "unknown" || displayLevel48 === "unknown") {
     return replaceElapsedPlaceholder(translateUI("outlookElapsedNeutral", locale), elapsed);
   }
 
-  const level24 = getRelativeHazardLevelText(
-    getRelativeHazardLevel(relative24),
-    locale,
-  );
-  const level48 = getRelativeHazardLevelText(
-    getRelativeHazardLevel(relative48),
-    locale,
-  );
-  const key = level24 === level48
+  const level24 = getProbabilityDisplayLevelText(displayLevel24, locale);
+  const level48 = getProbabilityDisplayLevelText(displayLevel48, locale);
+  const key = displayLevel24 === displayLevel48
     ? "outlookRelativeHazardSame"
     : "outlookRelativeHazardDifferent";
   return replaceRelativeHazardPlaceholders(
@@ -2155,3 +2150,10 @@ function clampCount(value: number | undefined, min: number, max: number) {
 
   return Math.min(max, Math.max(min, value));
 }
+
+export {
+  getProbabilityDisplayLevel,
+  getProbabilityDisplayLevelText,
+  type ProbabilityDisplayLevel,
+};
+

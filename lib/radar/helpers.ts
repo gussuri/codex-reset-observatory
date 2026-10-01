@@ -87,6 +87,42 @@ export function normalizeProbability(value: number) {
   return value;
 }
 
+export type ProbabilityDisplayLevel = "low" | "medium" | "high" | "unknown";
+
+export function getProbabilityDisplayLevel(
+  probability: number | null | undefined,
+): ProbabilityDisplayLevel {
+  if (typeof probability !== "number" || !Number.isFinite(probability)) {
+    return "unknown";
+  }
+
+  const normalized = normalizeProbability(probability);
+  if (normalized <= 0.33) {
+    return "low";
+  }
+  if (normalized <= 0.66) {
+    return "medium";
+  }
+  return "high";
+}
+
+export function getProbabilityDisplayLevelText(
+  level: ProbabilityDisplayLevel,
+  locale: Locale = "ja",
+): string {
+  switch (level) {
+    case "low":
+      return translateUI("outlookRelativeHazardLevelLow", locale);
+    case "medium":
+      return translateUI("outlookRelativeHazardLevelMedium", locale);
+    case "high":
+      return translateUI("outlookRelativeHazardLevelHigh", locale);
+    case "unknown":
+    default:
+      return translateUI("unknownProbability", locale);
+  }
+}
+
 export type ExpectationInput =
   | number
   | string
