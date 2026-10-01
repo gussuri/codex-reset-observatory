@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace CodexUsageMonitorLayoutSmoke;
@@ -17,9 +18,84 @@ internal static class Program
         }
 
         if (!CheckMonitorExitPresentation()) return 1;
+        if (!CheckWebhookDeliveryPresentation()) return 1;
 
-        Console.WriteLine("PASS monitor controls remain visible and lock diagnostics are presented safely");
+        Console.WriteLine("PASS monitor controls remain visible and delivery diagnostics are presented safely");
         return 0;
+    }
+
+    private static bool CheckWebhookDeliveryPresentation()
+    {
+        var formType = Assembly.Load("CodexUsageMonitor").GetType("CodexUsageMonitor.MainForm")
+            ?? throw new InvalidOperationException("MainForm was not found.");
+        using var form = (Form)Activator.CreateInstance(formType)!;
+        _ = form.Handle;
+        var handleEvent = formType.GetMethod("HandleMonitorEvent", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("HandleMonitorEvent was not found.");
+        var webhook = GetField<Label>(form, "_webhookValue");
+
+        SendMonitorEvent(handleEvent, form, "snapshot_sent", "{}");
+        if (webhook.Text != "正常")
+        {
+            Console.Error.WriteLine("accepted webhook delivery was not presented as healthy");
+            return false;
+        }
+
+        SendMonitorEvent(handleEvent, form, "pending_queue_delivery_deferred", """
+            {"category":"rate_limited","httpStatus":429,"failureCount":1,"retryInMs":1000,
+             "authorization":"do-not-display","responseBody":"private diagnostic body"}
+            """);
+        if (webhook.Text != "再試行中")
+        {
+            Console.Error.WriteLine("deferred queue delivery was not presented as retrying");
+            return false;
+        }
+
+        SendMonitorEvent(handleEvent, form, "snapshot_observed", """
+            {"observedAt":"2026-10-01T00:00:00.000Z","usedPercent":42,"resetsAt":1791047405}
+            """);
+        if (webhook.Text != "再試行中")
+        {
+            Console.Error.WriteLine("local observation incorrectly cleared a webhook retry status");
+            return false;
+        }
+
+        SendMonitorEvent(handleEvent, form, "snapshot_sent", "{}");
+        if (webhook.Text != "正常")
+        {
+            Console.Error.WriteLine("accepted delivery did not restore a healthy webhook status");
+            return false;
+        }
+
+        SendMonitorEvent(handleEvent, form, "pending_queue_delivery_blocked", """
+            {"category":"authentication","httpStatus":401,"failureCount":1,"retryInMs":60000,
+             "authorization":"do-not-display","responseBody":"private diagnostic body"}
+            """);
+        if (webhook.Text != "送信保留（要確認）" ||
+            webhook.Text.Contains("do-not-display", StringComparison.Ordinal) ||
+            webhook.Text.Contains("private diagnostic body", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine("blocked queue delivery was not shown safely");
+            return false;
+        }
+
+        SendMonitorEvent(handleEvent, form, "snapshot_observed", """
+            {"observedAt":"2026-10-01T00:01:00.000Z","usedPercent":43,"resetsAt":1791047405}
+            """);
+        if (webhook.Text != "送信保留（要確認）")
+        {
+            Console.Error.WriteLine("local observation incorrectly cleared a blocked webhook status");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void SendMonitorEvent(MethodInfo handleEvent, Form form, string eventName, string payload)
+    {
+        using var document = JsonDocument.Parse(payload);
+        handleEvent.Invoke(form, new object?[] { eventName, document.RootElement, "2026-10-01T00:00:00.000Z" });
+        Application.DoEvents();
     }
 
     private static bool CheckMonitorExitPresentation()

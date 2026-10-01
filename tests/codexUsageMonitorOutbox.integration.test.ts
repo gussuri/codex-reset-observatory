@@ -71,6 +71,76 @@ function createFakeAppServer(mode: "rpc_failure" | "invalid_snapshot") {
   return child;
 }
 
+type TrackedFakeAppServer = {
+  child: ChildProcessWithoutNullStreams;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  get killCount(): number;
+  get closed(): boolean;
+  closeForCleanup(): void;
+};
+
+function createTrackedFakeAppServer(mode: "initialize_error" | "rpc_failure" | "pending_initialize" | "child_error"):
+  TrackedFakeAppServer {
+  const emitter = new EventEmitter();
+  const child = emitter as unknown as ChildProcessWithoutNullStreams;
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  let killCount = 0;
+  let closed = false;
+  let closeScheduled = false;
+  Object.assign(child, {
+    stdin,
+    stdout,
+    stderr,
+    exitCode: null,
+    signalCode: null,
+    kill: () => {
+      killCount += 1;
+      if (!closed && !closeScheduled) {
+        closeScheduled = true;
+        setImmediate(() => {
+          closed = true;
+          Object.assign(child, { signalCode: "SIGTERM" });
+          stdout.end();
+          stderr.end();
+          emitter.emit("close", null, "SIGTERM");
+        });
+      }
+      return true;
+    },
+  });
+
+  stdin.on("data", (chunk: Buffer) => {
+    for (const line of chunk.toString("utf8").split("\n").filter(Boolean)) {
+      const request = JSON.parse(line) as { id?: string; method?: string };
+      if (!request.id || (mode === "pending_initialize" && request.method === "initialize")) continue;
+      const failed = (request.method === "initialize" && mode === "initialize_error") ||
+        (request.method === "account/rateLimits/read" && mode === "rpc_failure");
+      const response = failed
+        ? { jsonrpc: "2.0", id: request.id, error: { code: -32_000 } }
+        : { jsonrpc: "2.0", id: request.id, result: {} };
+      setImmediate(() => stdout.write(`${JSON.stringify(response)}\n`));
+    }
+  });
+
+  if (mode === "child_error") {
+    setImmediate(() => emitter.emit("error", Object.assign(new Error("private child error"), { code: "EIO" })));
+  }
+
+  return {
+    child,
+    stdout,
+    stderr,
+    get killCount() { return killCount; },
+    get closed() { return closed; },
+    closeForCleanup() {
+      if (!closed) child.kill();
+    },
+  };
+}
+
 function waitForEvent(events: string[], expected: string) {
   if (events.includes(expected)) return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
@@ -158,6 +228,73 @@ for (const scenario of [
       assert.ok(spawnCount >= 1);
     } finally {
       controller.abort();
+      rmSync(localAppData, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const scenario of [
+  { name: "initialization failure", mode: "initialize_error" as const, expectedSpawns: 2 },
+  { name: "three consecutive RPC failures", mode: "rpc_failure" as const, expectedSpawns: 2 },
+  { name: "monitor stop", mode: "pending_initialize" as const, expectedSpawns: 1 },
+  { name: "child error racing with monitor stop", mode: "child_error" as const, expectedSpawns: 1 },
+]) {
+  test(`app-server session cleanup terminates children and releases listeners after ${scenario.name}`, async () => {
+    const localAppData = mkdtempSync(path.join(os.tmpdir(), `codex-session-cleanup-${scenario.mode}-`));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      NODE_ENV: "test",
+      LOCALAPPDATA: localAppData,
+      CODEX_USAGE_MONITOR_SECRET: "test-only-secret",
+      CODEX_USAGE_WEBHOOK_URL: "https://example.invalid/api/webhook/codex-usage",
+      CODEX_CLI_PATH: "test-codex",
+    };
+    const controller = new AbortController();
+    const sessions: TrackedFakeAppServer[] = [];
+    const events: Array<Record<string, unknown>> = [];
+    const logger: MonitorLogger = createJsonMonitorLogger((line) => {
+      events.push(JSON.parse(line) as Record<string, unknown>);
+    });
+    let priorSessionClosedBeforeReconnect = scenario.expectedSpawns === 1;
+    const monitor = runCodexUsageMonitor(env, {
+      signal: controller.signal,
+      logger,
+      spawnAppServer: () => {
+        if (sessions.length > 0) priorSessionClosedBeforeReconnect = sessions.at(-1)!.closed;
+        const session = createTrackedFakeAppServer(scenario.mode);
+        sessions.push(session);
+        if ((scenario.mode === "pending_initialize" && sessions.length === 1) ||
+          (scenario.mode === "child_error" && sessions.length === 1) || sessions.length === 2) {
+          setImmediate(() => controller.abort());
+        }
+        return session.child;
+      },
+      monitorTiming: { now: Date.now, pollIntervalMs: 5 },
+    });
+
+    try {
+      await monitor;
+
+      assert.equal(sessions.length, scenario.expectedSpawns);
+      if (scenario.expectedSpawns === 2) {
+        assert.equal(priorSessionClosedBeforeReconnect, true, "the old child is closed before reconnect spawn");
+      }
+      if (scenario.mode === "rpc_failure") {
+        assert.ok(events.some((event) =>
+          event.event === "session_restart" && event.reason === "app_server_rpc_unhealthy"));
+      }
+      for (const session of sessions) {
+        assert.equal(session.killCount, 1, "finish sends one termination request per live child");
+        assert.equal(session.closed, true);
+        assert.equal(session.child.listenerCount("error"), 0);
+        assert.equal(session.child.listenerCount("close"), 0);
+        assert.equal(session.stdout.listenerCount("data"), 0);
+        assert.equal(session.stderr.listenerCount("data"), 0);
+      }
+    } finally {
+      controller.abort();
+      await monitor;
+      for (const session of sessions) session.closeForCleanup();
       rmSync(localAppData, { recursive: true, force: true });
     }
   });

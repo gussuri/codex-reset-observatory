@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
+import {
+  MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS,
+  MANUAL_EXCLUDED_RESET_EVENT_KEYS,
+} from "../data/resetHistory";
 import type { PublicRadarSnapshot } from "../lib/radar/types";
 import { GET } from "../app/api/reset-marker/route";
 import { RESET_MARKER_CACHE_CONTROL } from "../lib/resetMarkerStore";
@@ -293,7 +297,10 @@ test("reset-marker route performs one bounded estimate query and returns the pub
     assert.match(requests[0], /execution_window_start_at=not\.is\.null/);
     assert.match(requests[0], /execution_window_end_at=not\.is\.null/);
     assert.match(requests[0], /recovery_observation_id=not\.is\.null/);
-    assert.match(requests[0], /limit=1/);
+    assert.equal(
+      new URL(requests[0]!).searchParams.get("limit"),
+      String(MANUAL_EXCLUDED_RESET_EVENT_KEYS.length + MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS.length + 1),
+    );
   } finally {
     globalThis.fetch = originalFetch;
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;
@@ -301,6 +308,117 @@ test("reset-marker route performs one bounded estimate query and returns the pub
     if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
   }
+});
+
+type ResetMarkerDatabaseRow = {
+  reset_event_key: string;
+  display_execution_at: string;
+  execution_time_source: string;
+  execution_time_confidence: string;
+  execution_time_precision: string;
+  execution_window_start_at: string;
+  execution_window_end_at: string;
+  recovery_observation_id: string;
+  tibo_primary_tweet_id: null;
+  tibo_source_tweet_ids: string[];
+  official_notice_tweet_id: null;
+  estimator_version: string;
+};
+
+function resetMarkerDatabaseRow(
+  resetEventKey: string,
+  displayExecutionAt: string,
+  recoveryObservationId: string,
+): ResetMarkerDatabaseRow {
+  return {
+    reset_event_key: resetEventKey,
+    display_execution_at: displayExecutionAt,
+    execution_time_source: "usage_observation",
+    execution_time_confidence: "high",
+    execution_time_precision: "approximate",
+    execution_window_start_at: new Date(Date.parse(displayExecutionAt) - 60_000).toISOString(),
+    execution_window_end_at: displayExecutionAt,
+    recovery_observation_id: recoveryObservationId,
+    tibo_primary_tweet_id: null,
+    tibo_source_tweet_ids: [],
+    official_notice_tweet_id: null,
+    estimator_version: "usage-execution-monitor-v1",
+  };
+}
+
+async function readResetMarkerForRows(rows: ResetMarkerDatabaseRow[]) {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-value";
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return new Response(JSON.stringify(rows), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await GET();
+    return { response, payload: await response.json(), requests };
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+}
+
+test("reset-marker skips an excluded event key and selects the latest older eligible estimate", async () => {
+  const excludedKey = MANUAL_EXCLUDED_RESET_EVENT_KEYS[0]!;
+  const { response, payload, requests } = await readResetMarkerForRows([
+    resetMarkerDatabaseRow(excludedKey, "2026-09-02T00:02:00.000Z", "valid-newest-observation"),
+    resetMarkerDatabaseRow("valid-older-reset", "2026-09-01T00:02:00.000Z", "valid-older-observation"),
+  ]);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload, {
+    schemaVersion: "reset-marker-v1",
+    marker: "valid-older-reset:2026-09-01T00:02:00.000Z",
+    resetAt: "2026-09-01T00:02:00.000Z",
+  });
+  assert.equal(
+    new URL(requests[0]!).searchParams.get("limit"),
+    String(MANUAL_EXCLUDED_RESET_EVENT_KEYS.length + MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS.length + 1),
+  );
+});
+
+test("reset-marker skips an excluded recovery observation ID independently", async () => {
+  const excludedObservationId = MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS[0]!;
+  const { payload } = await readResetMarkerForRows([
+    resetMarkerDatabaseRow("valid-newest-reset", "2026-09-02T00:02:00.000Z", excludedObservationId),
+    resetMarkerDatabaseRow("valid-older-reset", "2026-09-01T00:02:00.000Z", "valid-older-observation"),
+  ]);
+
+  assert.deepEqual(payload, {
+    schemaVersion: "reset-marker-v1",
+    marker: "valid-older-reset:2026-09-01T00:02:00.000Z",
+    resetAt: "2026-09-01T00:02:00.000Z",
+  });
+});
+
+test("reset-marker returns a null contract when every bounded candidate is excluded", async () => {
+  const excludedKey = MANUAL_EXCLUDED_RESET_EVENT_KEYS[0]!;
+  const excludedObservationId = MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS[0]!;
+  const { payload } = await readResetMarkerForRows([
+    resetMarkerDatabaseRow(excludedKey, "2026-09-02T00:02:00.000Z", "other-observation"),
+    resetMarkerDatabaseRow("other-reset", "2026-09-01T00:02:00.000Z", excludedObservationId),
+  ]);
+
+  assert.deepEqual(payload, {
+    schemaVersion: "reset-marker-v1",
+    marker: null,
+    resetAt: null,
+  });
 });
 
 function validMarkerEstimate(

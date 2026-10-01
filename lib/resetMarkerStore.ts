@@ -4,12 +4,22 @@ import {
   type ResetExecutionEstimate,
 } from "@/lib/radar/resetExecution";
 import {
+  MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS,
+  MANUAL_EXCLUDED_RESET_EVENT_KEYS,
+  isExcludedRecoveryObservationId,
+  isExcludedResetEventKey,
+} from "@/data/resetHistory";
+import {
   RESET_MARKER_SCHEMA_VERSION,
   type ResetMarkerPayload,
 } from "@/lib/radar/resetMarker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const RESET_MARKER_CACHE_CONTROL = "public, max-age=0, s-maxage=300";
+const RESET_MARKER_QUERY_LIMIT = Math.max(
+  1,
+  MANUAL_EXCLUDED_RESET_EVENT_KEYS.length + MANUAL_EXCLUDED_RECOVERY_OBSERVATION_IDS.length + 1,
+);
 const RESET_MARKER_COLUMNS = "reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,estimator_version";
 
 type ResetMarkerRow = {
@@ -84,12 +94,23 @@ export async function readLatestUsageObservationResetMarker(
     .not("recovery_observation_id", "is", null)
     .lte("display_execution_at", nowIso)
     .order("display_execution_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(RESET_MARKER_QUERY_LIMIT);
 
   if (result.error) {
     return { marker: null, error: result.error };
   }
 
-  return { marker: toResetMarker(result.data as ResetMarkerRow | null), error: null };
+  const rows = Array.isArray(result.data)
+    ? result.data as ResetMarkerRow[]
+    : result.data
+      ? [result.data as ResetMarkerRow]
+      : [];
+  const latestNonExcludedRow = rows.find((row) =>
+    !isExcludedResetEventKey(typeof row.reset_event_key === "string" ? row.reset_event_key : null) &&
+    !isExcludedRecoveryObservationId(
+      typeof row.recovery_observation_id === "string" ? row.recovery_observation_id : null,
+    )
+  );
+
+  return { marker: toResetMarker(latestNonExcludedRow), error: null };
 }

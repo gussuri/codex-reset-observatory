@@ -983,7 +983,10 @@ async function runAppServerSession(
   logger("app_server_started");
 
   return new Promise<void>((resolve, reject) => {
-    let settled = false;
+    let finishing = false;
+    let finalized = false;
+    let childClosed = child.exitCode != null || child.signalCode != null;
+    let finishError: Error | undefined;
     let initialized = false;
     let nextRequestId = 1;
     let refreshInFlight = false;
@@ -1019,13 +1022,26 @@ async function runAppServerSession(
       };
     });
     let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let notificationDebouncer: ReturnType<typeof createNotificationDebouncer> | null = null;
     const pending = new Map<string, PendingRequest>();
 
+    const finalize = () => {
+      if (finalized) return;
+      finalized = true;
+      child.stdout.removeListener("data", onStdoutData);
+      child.stderr.removeListener("data", onStderrData);
+      child.removeListener("error", onChildError);
+      child.removeListener("close", onChildClose);
+      if (finishError) reject(finishError);
+      else resolve();
+    };
+
     const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
+      if (finishing) return;
+      finishing = true;
+      finishError = error;
       if (pollTimer !== null) clearInterval(pollTimer);
-      notificationDebouncer.cancel();
+      notificationDebouncer?.cancel();
       unregisterAcceptedHandler();
       pending.forEach((request) => {
         clearTimeout(request.timeout);
@@ -1033,18 +1049,31 @@ async function runAppServerSession(
       });
       pending.clear();
       signal.removeEventListener("abort", abort);
-      if (error) reject(error);
-      else resolve();
+      child.stdout.removeListener("data", onStdoutData);
+      child.stderr.removeListener("data", onStderrData);
+
+      childClosed = childClosed || child.exitCode != null || child.signalCode != null;
+      if (childClosed) {
+        finalize();
+        return;
+      }
+
+      try {
+        child.kill();
+      } catch {
+        // Keep the close listener until the process has actually exited.
+      }
+      childClosed = childClosed || child.exitCode != null || child.signalCode != null;
+      if (childClosed) finalize();
     };
 
     const abort = () => {
-      try { child.kill(); } catch { /* process is already gone */ }
       finish();
     };
     signal.addEventListener("abort", abort, { once: true });
 
     const sendNotification = (method: string, params: JsonObject = {}) => {
-      if (settled || !child.stdin.writable) return;
+      if (finishing || !child.stdin.writable) return;
       const message = {
         jsonrpc: "2.0",
         method,
@@ -1054,6 +1083,10 @@ async function runAppServerSession(
     };
 
     const sendRequest = (method: string, params?: JsonObject) => new Promise<JsonObject>((resolveRequest, rejectRequest) => {
+      if (finishing) {
+        rejectRequest(new Error("app_server_stopped"));
+        return;
+      }
       const id = String(nextRequestId++);
       const timeout = setTimeout(() => {
         pending.delete(id);
@@ -1074,7 +1107,7 @@ async function runAppServerSession(
     });
 
     const refresh = async (trigger: MonitorRefreshTrigger = "poll") => {
-      if (settled || !initialized || refreshInFlight) return;
+      if (finishing || !initialized || refreshInFlight) return;
       refreshInFlight = true;
       let rpcFailed = false;
       try {
@@ -1223,13 +1256,11 @@ async function runAppServerSession(
         if (shouldFlushPendingQueue) requestPendingPostFlush();
       } catch (error) {
         if (error instanceof PendingMonitorPostStoreError) {
-          try { child.kill(); } catch { /* process is already gone */ }
           finish(error);
           return;
         }
         if (error instanceof MonitorRecoveryCandidateStoreError) {
           if (!signal.aborted) onFatalStorageError(error);
-          try { child.kill(); } catch { /* process is already gone */ }
           finish(error);
           return;
         }
@@ -1245,12 +1276,13 @@ async function runAppServerSession(
       }
     };
 
-    const notificationDebouncer = createNotificationDebouncer(() => {
+    notificationDebouncer = createNotificationDebouncer(() => {
       void refresh("notification");
     }, NOTIFICATION_DEBOUNCE_MS);
 
     const parser = createJsonLineParser(
       (message) => {
+        if (finishing) return;
         const messageId = message.id;
         if (typeof messageId === "string" || typeof messageId === "number") {
           const id = String(messageId);
@@ -1273,23 +1305,34 @@ async function runAppServerSession(
       },
       () => {
         logger("malformed_json", { action: "restart" });
-        try { child.kill(); } catch { /* process is already gone */ }
+        finish(new Error("app_server_exited"));
       },
     );
 
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => parser.push(chunk));
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", () => {
+    const onStdoutData = (chunk: string) => parser.push(chunk);
+    const onStderrData = () => {
       // Never forward app-server stderr: it may contain private diagnostics.
-    });
-    child.once("error", (error: NodeJS.ErrnoException) => finish(
+    };
+    const onChildError = (error: NodeJS.ErrnoException) => finish(
       new Error(error.code === "ENOENT" ? "codex_cli_not_found" : "app_server_process_error"),
-    ));
-    child.once("close", () => {
-      if (signal.aborted) finish();
-      else finish(new Error("app_server_exited"));
-    });
+    );
+    const onChildClose = () => {
+      childClosed = true;
+      if (finishing) {
+        finalize();
+      } else if (signal.aborted) {
+        finish();
+      } else {
+        finish(new Error("app_server_exited"));
+      }
+    };
+
+    child.stdout.on("data", onStdoutData);
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", onStderrData);
+    child.on("error", onChildError);
+    child.on("close", onChildClose);
 
     const initialize = async () => {
       try {
@@ -1301,11 +1344,11 @@ async function runAppServerSession(
           },
           capabilities: { experimentalApi: false },
         });
-        if (settled) return;
+        if (finishing) return;
         sendNotification("initialized");
         initialized = true;
         await refresh("initial");
-        if (settled) return;
+        if (finishing) return;
         pollTimer = setInterval(() => { void refresh("poll"); }, pollIntervalMs);
       } catch (error) {
         const reason = getSafeMonitorErrorCode(error);
@@ -1313,6 +1356,7 @@ async function runAppServerSession(
       }
     };
 
+    if (signal.aborted) abort();
     void initialize();
   });
 }

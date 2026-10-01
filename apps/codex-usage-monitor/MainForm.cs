@@ -6,6 +6,14 @@ namespace CodexUsageMonitor;
 
 internal sealed class MainForm : Form
 {
+    private enum WebhookDeliveryState
+    {
+        Unknown,
+        Healthy,
+        Retrying,
+        Blocked,
+    }
+
     private const int MaxNotifiedResetEvents = 256;
     private const string NotificationTitle = "Codexリセットを確認";
     private const string NotificationBody = "MonitorがCodex利用上限のリセットを確認しました。";
@@ -26,6 +34,7 @@ internal sealed class MainForm : Form
     private string? _repositoryRoot;
     private bool _stopping;
     private bool _errorState;
+    private WebhookDeliveryState _webhookDeliveryState;
 
     public MainForm()
     {
@@ -272,7 +281,7 @@ internal sealed class MainForm : Form
                 break;
             case "snapshot_sent":
                 SetStatus("● 監視中");
-                _webhookValue.Text = "正常";
+                SetWebhookDeliveryState(WebhookDeliveryState.Healthy);
                 _lastSuccessValue.Text = FormatLocalClock(at);
                 UpdateSnapshotValues(root);
                 break;
@@ -286,7 +295,13 @@ internal sealed class MainForm : Form
                 break;
             case "snapshot_failed":
                 SetStatus("△ 一時取得不能");
-                _webhookValue.Text = "再試行中";
+                SetWebhookDeliveryState(WebhookDeliveryState.Retrying, preserveBlocked: true);
+                break;
+            case "pending_queue_delivery_deferred":
+                SetWebhookDeliveryState(WebhookDeliveryState.Retrying, preserveBlocked: true);
+                break;
+            case "pending_queue_delivery_blocked":
+                SetWebhookDeliveryState(WebhookDeliveryState.Blocked);
                 break;
             case "session_restart":
                 var reason = ReadString(root, "reason");
@@ -297,7 +312,7 @@ internal sealed class MainForm : Form
                 else
                 {
                     SetStatus("△ 再接続中");
-                    _webhookValue.Text = "再試行中";
+                    SetWebhookDeliveryState(WebhookDeliveryState.Retrying, preserveBlocked: true);
                 }
                 break;
             case "error":
@@ -438,11 +453,24 @@ internal sealed class MainForm : Form
         _errorState = false;
     }
 
+    private void SetWebhookDeliveryState(WebhookDeliveryState state, bool preserveBlocked = false)
+    {
+        if (preserveBlocked && _webhookDeliveryState == WebhookDeliveryState.Blocked) return;
+        _webhookDeliveryState = state;
+        _webhookValue.Text = state switch
+        {
+            WebhookDeliveryState.Healthy => "正常",
+            WebhookDeliveryState.Retrying => "再試行中",
+            WebhookDeliveryState.Blocked => "送信保留（要確認）",
+            _ => "未送信",
+        };
+    }
+
     private void SetError(string text)
     {
         _errorState = true;
         _statusValue.Text = $"× {text}";
-        _webhookValue.Text = "未送信";
+        SetWebhookDeliveryState(WebhookDeliveryState.Unknown, preserveBlocked: true);
         _toggleButton.Text = "監視開始";
     }
 
