@@ -278,15 +278,15 @@ test("uses random-only relative hazard levels when display diagnostics are avail
 
   assert.equal(
     ja,
-    "前回のランダムリセットから2日が経過しています。過去の傾向では、24時間以内は低め、48時間以内は中程度です。",
+    "前回のランダムリセットから2日が経過しています。リセット期待度は、24時間以内で低め、48時間以内で中程度です。",
   );
   assert.equal(
     en,
-    "It has been 2 days since the last random reset. Based on historical patterns, the relative reset tendency is low within 24 hours and moderate within 48 hours.",
+    "It has been 2 days since the last random reset. The reset expectation is low within 24 hours and moderate within 48 hours.",
   );
   assert.equal(
     zh,
-    "距离上次随机重置已过去2天。根据历史趋势，未来24小时的相对重置倾向为较低，未来48小时为处于中等水平。",
+    "距离上次随机重置已过去2天。重置期待度为24小时内较低，48小时内处于中等水平。",
   );
 });
 
@@ -298,9 +298,9 @@ test("uses concise same-level timing wording in all supported locales", () => {
     integrateHazard: (_startHour: number, horizonHours: number) => horizonHours * 0.001,
   };
   const expected = {
-    ja: "前回のランダムリセットから2日が経過しています。過去の傾向では、24時間以内・48時間以内ともに中程度です。",
-    en: "It has been 2 days since the last random reset. Based on historical patterns, the relative reset tendency is moderate within both 24 and 48 hours.",
-    zh: "距离上次随机重置已过去2天。根据历史趋势，未来24小时和48小时的相对重置倾向均为处于中等水平。",
+    ja: "前回のランダムリセットから2日が経過しています。リセット期待度は、24時間以内・48時間以内ともに中程度です。",
+    en: "It has been 2 days since the last random reset. The reset expectation is moderate within both 24 and 48 hours.",
+    zh: "距离上次随机重置已过去2天。重置期待度在24小时内和48小时内均为处于中等水平。",
   };
 
   for (const locale of ["ja", "en", "zh"] as const) {
@@ -348,7 +348,7 @@ test("Radar view uses the random reset clock even when a regular boundary is new
 
   assert.equal(getLastRandomRecoveryResetAt(withRegularData, now), randomAt);
   assert.equal(getLastRecoveryResetAt(withRegularData, now), regularAt);
-  assert.match(withoutRegular.displayReasoningSummary ?? "", /過去の傾向では/);
+  assert.match(withoutRegular.displayReasoningSummary ?? "", /リセット期待度は/);
   assert.equal(withRegular.displayReasoningSummary, withoutRegular.displayReasoningSummary);
   assert.match(withRegular.displayReasoningSummary ?? "", /前回のランダムリセットから8日/);
 });
@@ -926,7 +926,7 @@ test("uses the selected Survival-Conditioned hazard for relative outlook levels"
   };
   const expectedTail = getRelativeHazardLevel(survivalRelative24) === getRelativeHazardLevel(survivalRelative48)
     ? `24時間以内・48時間以内ともに${jaLevel(survivalRelative24)}です。`
-    : `24時間以内は${jaLevel(survivalRelative24)}、48時間以内は${jaLevel(survivalRelative48)}です。`;
+    : `24時間以内で${jaLevel(survivalRelative24)}、48時間以内で${jaLevel(survivalRelative48)}です。`;
   assert.ok(view.displayReasoningSummary?.endsWith(expectedTail));
   assert.equal(view.probability12h, published.probability12h);
   assert.equal(view.probability24h, published.probability24h);
@@ -974,7 +974,7 @@ test("formats low 24h and medium 48h from the selected Survival hazard", () => {
   const relative48 = -Math.log1p(-baseline.probability48h) / (48 * hazard.longTermHazardPerHour);
   assert.ok(relative24 < 0.75);
   assert.ok(relative48 >= 0.75 && relative48 <= 1.25);
-  assert.ok(view.displayReasoningSummary?.endsWith("24時間以内は低め、48時間以内は中程度です。"));
+  assert.ok(view.displayReasoningSummary?.endsWith("24時間以内で低め、48時間以内で中程度です。"));
 });
 
 test("renders the neutral elapsed template across locales", () => {

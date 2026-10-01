@@ -253,14 +253,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "已发现使用上限相关异常，重置的可能性略有上升。",
   },
   outlookRelativeHazardDifferent: {
-    ja: "前回のランダムリセットから{elapsed}が経過しています。過去の傾向では、24時間以内は{level24}、48時間以内は{level48}です。",
-    en: "It has been {elapsed} since the last random reset. Based on historical patterns, the relative reset tendency is {level24} within 24 hours and {level48} within 48 hours.",
-    zh: "距离上次随机重置已过去{elapsed}。根据历史趋势，未来24小时的相对重置倾向为{level24}，未来48小时为{level48}。",
+    ja: "前回のランダムリセットから{elapsed}が経過しています。リセット期待度は、24時間以内で{level24}、48時間以内で{level48}です。",
+    en: "It has been {elapsed} since the last random reset. The reset expectation is {level24} within 24 hours and {level48} within 48 hours.",
+    zh: "距离上次随机重置已过去{elapsed}。重置期待度为24小时内{level24}，48小时内{level48}。",
   },
   outlookRelativeHazardSame: {
-    ja: "前回のランダムリセットから{elapsed}が経過しています。過去の傾向では、24時間以内・48時間以内ともに{level}です。",
-    en: "It has been {elapsed} since the last random reset. Based on historical patterns, the relative reset tendency is {level} within both 24 and 48 hours.",
-    zh: "距离上次随机重置已过去{elapsed}。根据历史趋势，未来24小时和48小时的相对重置倾向均为{level}。",
+    ja: "前回のランダムリセットから{elapsed}が経過しています。リセット期待度は、24時間以内・48時間以内ともに{level}です。",
+    en: "It has been {elapsed} since the last random reset. The reset expectation is {level} within both 24 and 48 hours.",
+    zh: "距离上次随机重置已过去{elapsed}。重置期待度在24小时内和48小时内均为{level}。",
   },
   outlookElapsedNeutral: {
     ja: "前回のランダムリセットから{elapsed}が経過しています。",
