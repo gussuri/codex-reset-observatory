@@ -1068,8 +1068,8 @@ test("teaser timing follows the hinted window and fades smoothly after it ends",
     expectedEndAt: "2026-08-11T07:00:00.000Z",
   };
   assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-10T12:00:00.000Z"), 24), 0.8);
-  assert.ok(Math.abs((getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T08:30:00.000Z"), 24) ?? 0) - 0.4) < 1e-12);
-  assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T10:00:00.000Z"), 24), 0);
+  assert.ok(Math.abs((getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T11:00:00.000Z"), 24) ?? 0) - 0.4) < 1e-12);
+  assert.equal(getTemporalTeaserCoverage(dayWindow, new Date("2026-08-11T15:00:00.000Z"), 24), 0);
 });
 
 test("classifies reset and forecast windows by semantic relation", () => {

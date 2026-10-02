@@ -1312,7 +1312,7 @@ test("official notice deadline resolves source midnight and expires after the de
     assert.equal(upsertBody.expected_start_at, "2026-09-12T03:20:36.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-09-12T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.expires_at, "2026-09-12T10:00:00.000Z");
+    assert.equal(upsertBody.expires_at, "2026-09-12T15:00:00.000Z");
   } finally {
     restoreGemini();
     restoreFetch();

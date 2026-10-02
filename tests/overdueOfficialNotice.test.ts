@@ -38,31 +38,31 @@ test("B. exact_time exactly due has full notice support (1.0)", () => {
   assert.equal(coverage24, 1);
 });
 
-test("C. exact_time 45m overdue has 0.75 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 45 * 60 * 1000);
+test("C. exact_time 120m overdue has 0.75 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 120 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.75);
 });
 
-test("D. exact_time 90m overdue has 0.50 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 90 * 60 * 1000);
+test("D. exact_time 240m overdue has 0.50 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 240 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.5);
 });
 
-test("E. exact_time 135m overdue has 0.25 grace factor", () => {
-  const now = new Date(EXPECTED_TIME + 135 * 60 * 1000);
+test("E. exact_time 360m overdue has 0.25 grace factor", () => {
+  const now = new Date(EXPECTED_TIME + 360 * 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0.25);
 });
 
-test("F. exact_time at grace expiry (180m) has 0.0 support", () => {
+test("F. exact_time at grace expiry (480m) has 0.0 support", () => {
   const now = new Date(EXPECTED_TIME + TIBO_NOTICE_GRACE_MS);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0);
 });
 
-test("G. exact_time after grace expiry (>180m) has 0.0 support", () => {
+test("G. exact_time after grace expiry (>480m) has 0.0 support", () => {
   const now = new Date(EXPECTED_TIME + TIBO_NOTICE_GRACE_MS + 60 * 1000);
   const coverage24 = getTemporalNoticeCoverage(exactNoticeResolution, now, 24);
   assert.equal(coverage24, 0);
@@ -239,7 +239,7 @@ test("Real August 13 sample overdue behavior", () => {
 test("Real September 12 sample (tweet 2098612714704891959 'by midnight today')", () => {
   const tweetCreatedAt = "2026-09-12T03:20:36.000Z";
   const deadlineAt = "2026-09-12T07:00:00.000Z"; // midnight PT
-  const expiresAt = "2026-09-12T10:00:00.000Z"; // deadline + 3h grace
+  const expiresAt = "2026-09-12T15:00:00.000Z"; // deadline + 8h grace
 
   const deadlineResolution = {
     status: "resolved" as const,
@@ -302,8 +302,8 @@ test("Real September 12 sample (tweet 2098612714704891959 'by midnight today')",
   assert.equal(overdueOverride.probability12h, derive12hFrom24hProbability(0.90));
   assert.equal(overdueOverride.probability72h, derive72hFrom48hProbability(0.96));
 
-  // 3. Overdue pending near end of grace: 2026-09-12T09:59Z (unconfirmed reset)
-  const overdueNow2 = new Date("2026-09-12T09:59:00.000Z");
+  // 3. Overdue pending near end of grace: 2026-09-12T14:59Z (unconfirmed reset)
+  const overdueNow2 = new Date("2026-09-12T14:59:00.000Z");
   assert.equal(isOverdueNoticePending(deadlineResolution, null, overdueNow2), true);
   const overdueCoverage24_2 = getTemporalNoticeCoverage(deadlineResolution, overdueNow2, 24);
   const overdueCoverage48_2 = getTemporalNoticeCoverage(deadlineResolution, overdueNow2, 48);
@@ -320,8 +320,8 @@ test("Real September 12 sample (tweet 2098612714704891959 'by midnight today')",
   assert.equal(isOverdueNoticePending(deadlineResolution, resetConfirmedAt, overdueNow1), false);
   assert.equal(getTemporalNoticeCoverage(deadlineResolution, overdueNow1, 24, { latestResetAt: resetConfirmedAt }), 0);
 
-  // 5. Grace period expired: 2026-09-12T10:01Z (unconfirmed reset)
-  const afterGraceNow = new Date("2026-09-12T10:01:00.000Z");
+  // 5. Grace period expired: 2026-09-12T15:01Z (unconfirmed reset)
+  const afterGraceNow = new Date("2026-09-12T15:01:00.000Z");
   assert.equal(isOverdueNoticePending(deadlineResolution, null, afterGraceNow), false);
   assert.equal(getTemporalNoticeCoverage(deadlineResolution, afterGraceNow, 24), 0);
 
@@ -372,7 +372,7 @@ test("Real September 12 sample (tweet 2098612714704891959 'by midnight today')",
   assert.equal(vmZh.activeWindow.isOverduePending, true);
   assert.equal(vmZh.activeWindow.overdueText, "预计时间已过，正在等待重置确认。");
 
-  // After grace at 10:01Z: activeWindow inactive / overdue pending false
+  // After grace at 15:01Z: activeWindow inactive / overdue pending false
   const vmAfter = getRadarViewModel(mockRadarData, "ja", false, undefined, afterGraceNow);
   assert.equal(vmAfter.activeWindow.active, false);
   assert.equal(vmAfter.activeWindow.isOverduePending, false);

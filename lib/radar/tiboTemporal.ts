@@ -7,7 +7,8 @@
 
 export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v7";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
-export const TIBO_NOTICE_GRACE_MS = 3 * 60 * 60 * 1000;
+export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
+export const TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS = 3 * 60 * 60 * 1000;
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -1777,7 +1778,7 @@ export function getTemporalTeaserCdf(
 /**
  * Timing weight for teaser signals. A resolved teaser follows the hinted
  * window instead of aging out from the post timestamp. After the window ends,
- * the effect fades through the existing three-hour grace period.
+ * the effect fades through the existing eight-hour grace period.
  */
 export function getTemporalTeaserCoverage(
   resolution: Pick<TiboTemporalResolution, "status" | "temporalPrecision" | "confidence" | "expectedStartAt" | "expectedEndAt"> | null | undefined,
@@ -1879,8 +1880,11 @@ export function isTemporalNoticeConsumedAtReset(
     return resetTime <= expectedEnd + TIBO_NOTICE_GRACE_MS;
   }
   if (resolution.temporalPrecision === "exact_time") {
-    return Math.abs(resetTime - expectedStart) <= TIBO_NOTICE_GRACE_MS;
+    if (resetTime < expectedStart) {
+      return expectedStart - resetTime <= TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS;
+    }
+    return resetTime - expectedStart <= TIBO_NOTICE_GRACE_MS;
   }
-  if (resetTime < expectedStart - TIBO_NOTICE_GRACE_MS) return false;
-  return resetTime <= expectedEnd;
+  if (resetTime < expectedStart - TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS) return false;
+  return resetTime <= expectedEnd + TIBO_NOTICE_GRACE_MS;
 }

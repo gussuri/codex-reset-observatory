@@ -762,8 +762,8 @@ test("resolved timed teasers do not decay just because the post gets older insid
   }
 });
 
-test("resolved timed teaser weight fades through the three-hour grace instead of falling off a cliff", () => {
-  const now = new Date("2026-08-06T01:30:00.000Z");
+test("resolved timed teaser weight fades through the eight-hour grace instead of falling off a cliff", () => {
+  const now = new Date("2026-08-06T04:00:00.000Z");
   const data = getLocalRadarData({
     calculationNow: now,
     activeTiboSignals: [{
@@ -772,7 +772,7 @@ test("resolved timed teaser weight fades through the three-hour grace instead of
       text: "Reset button tomorrow.",
       tweet_url: "https://x.com/thsottiaux/status/timed-grace",
       tweet_created_at: "2026-08-04T00:00:00.000Z",
-      expires_at: "2026-08-06T03:00:00.000Z",
+      expires_at: "2026-08-06T08:00:00.000Z",
       confidence: 0.9,
       verification_status: "confirmed",
       is_reply: false,
