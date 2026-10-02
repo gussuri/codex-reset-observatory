@@ -490,7 +490,7 @@ test("recurring wording alone does not make an unregistered notice persistent", 
 });
 
 test("a concrete BANKED deadline is an active range and supersedes its older broad notice", () => {
-  const now = new Date("2026-08-22T07:00:00.000Z");
+  const now = new Date("2026-08-22T13:00:00.000Z");
   const data = getLocalRadarData({
     calculationNow: now,
     activeTiboSignals: [

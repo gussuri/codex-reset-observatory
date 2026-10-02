@@ -75,11 +75,9 @@ import {
   hasFutureBankedDistributionIntent,
   isRecurringConditionalBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
-import {
-  isExecutionBearingResetDisplayNameNotice,
-  type ResetDisplayNameCandidateActivation,
-} from "@/lib/radar/resetDisplayNameCandidateTypes";
+import { isExecutionBearingResetDisplayNameNotice, type ResetDisplayNameCandidateActivation } from "@/lib/radar/resetDisplayNameCandidateTypes";
 import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNameReconciliation";
+import { TIBO_NOTICE_GRACE_MS } from "@/lib/radar/tiboTemporal";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
@@ -1203,30 +1201,42 @@ async function getTiboSignalBundle(
       ? fetchRawTimedTiboSignals(tiboCacheBoundary)
       : getCachedTimedTiboSignals(tiboCacheBoundary),
   ]);
-  const activeSignals = activeResult.data.filter((signal) => {
-    if (signal.verification_status === "rejected") return false;
-    if (!signal.expires_at) return false;
-    const expiresTime = new Date(signal.expires_at).getTime();
-    return !isNaN(expiresTime) && expiresTime > now.getTime();
-  });
-  const signals = historyResult.withoutReplies.data;
-  const recentSignalsSource = historyResult.recent && historyResult.recent.health.state !== "degraded"
-    ? historyResult.recent.data
-    : historyResult.withReplies.data;
-  const acceptedResets = signals.filter(isFormalTiboResetSignal);
-  const notices = expandTiboSignalVariants(signals)
-    .map(toNoticeSignal)
-    .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
+  const getEffectiveSignalExpiryMs = (signal: {
+    expires_at?: string | null;
+    expected_end_at?: string | null;
+    expected_start_at?: string | null;
+    temporal_resolution_status?: string | null;
+  }) => {
+    const rawExpiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
+    if (signal.temporal_resolution_status === "resolved") {
+      const end = signal.expected_end_at
+        ? Date.parse(signal.expected_end_at)
+        : signal.expected_start_at
+          ? Date.parse(signal.expected_start_at)
+          : Number.NaN;
+      if (Number.isFinite(end)) {
+        return Math.max(
+          Number.isFinite(rawExpiresTime) ? rawExpiresTime : Number.NEGATIVE_INFINITY,
+          end + TIBO_NOTICE_GRACE_MS,
+        );
+      }
+    }
+    return rawExpiresTime;
+  };
 
-  const formalResets = associateTiboNotices(acceptedResets, notices);
-  const recentSignals = recentSignalsSource.map((signal) => ({
+  const formatAsActiveSignal = (
+    signal: FormalTiboResetSignal | ActiveTiboSignal,
+    effectiveExpiresMs: number,
+  ): ActiveTiboSignal => ({
     tweet_id: signal.tweet_id,
     signal_type: signal.signal_type,
     text: signal.text,
     tweet_url: signal.tweet_url,
     tweet_created_at: signal.tweet_created_at,
     detected_at: signal.detected_at ?? undefined,
-    expires_at: signal.expires_at ?? undefined,
+    expires_at: Number.isFinite(effectiveExpiresMs)
+      ? new Date(effectiveExpiresMs).toISOString()
+      : signal.expires_at ?? undefined,
     confidence: signal.confidence ?? undefined,
     classification_source: signal.classification_source ?? undefined,
     verification_status: signal.verification_status,
@@ -1262,7 +1272,38 @@ async function getTiboSignalBundle(
     edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
     edit_version: signal.edit_version ?? null,
     edit_metadata_source: signal.edit_metadata_source ?? null,
-  }));
+  });
+
+  const signals = historyResult.withoutReplies.data;
+  const activeSignals = activeResult.data.filter((signal) => {
+    if (signal.verification_status === "rejected") return false;
+    const expiresTime = getEffectiveSignalExpiryMs(signal);
+    return !isNaN(expiresTime) && expiresTime > now.getTime();
+  });
+  const activeIds = new Set(activeSignals.map((s) => s.tweet_id));
+  for (const candidate of signals) {
+    if (activeIds.has(candidate.tweet_id)) continue;
+    if (candidate.verification_status === "rejected") continue;
+    if (candidate.signal_type !== "official_notice" && candidate.signal_type !== "teaser") continue;
+    const expiresTime = getEffectiveSignalExpiryMs(candidate);
+    if (!isNaN(expiresTime) && expiresTime > now.getTime()) {
+      activeSignals.push(formatAsActiveSignal(candidate, expiresTime));
+      activeIds.add(candidate.tweet_id);
+    }
+  }
+
+  const recentSignalsSource = historyResult.recent && historyResult.recent.health.state !== "degraded"
+    ? historyResult.recent.data
+    : historyResult.withReplies.data;
+  const acceptedResets = signals.filter(isFormalTiboResetSignal);
+  const notices = expandTiboSignalVariants(signals)
+    .map(toNoticeSignal)
+    .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
+
+  const formalResets = associateTiboNotices(acceptedResets, notices);
+  const recentSignals = recentSignalsSource.map((signal) =>
+    formatAsActiveSignal(signal, getEffectiveSignalExpiryMs(signal))
+  );
   const rejectedResets = signals
     .filter(
       (signal) =>

@@ -231,6 +231,18 @@ function toDynamicOfficialNotice(
         },
         signal.text,
       );
+  const resolvedEnd = signal.expected_end_at
+    ? Date.parse(signal.expected_end_at)
+    : signal.expected_start_at
+      ? Date.parse(signal.expected_start_at)
+      : Number.NaN;
+  const effectiveExpiresAt = Number.isFinite(resolvedEnd)
+    ? new Date(Math.max(
+        signal.expires_at ? Date.parse(signal.expires_at) : Number.NEGATIVE_INFINITY,
+        resolvedEnd + TIBO_NOTICE_GRACE_MS,
+      )).toISOString()
+    : signal.expires_at ?? null;
+
   return {
     origin: "dynamic",
     id: signal.tweet_id,
@@ -239,7 +251,7 @@ function toDynamicOfficialNotice(
     observedAt: signal.tweet_created_at,
     expectedAt: hideInitialSchedule ? null : signal.expected_start_at ?? null,
     expectedEndAt: hideInitialSchedule ? null : signal.expected_end_at ?? null,
-    expiresAt: signal.expires_at ?? null,
+    expiresAt: effectiveExpiresAt,
     source: signal.tweet_url ?? null,
     sourceLabel: getTiboDisplayLabel(signal.tweet_url),
     text: signal.text ?? null,
@@ -1153,8 +1165,19 @@ export function getActiveOfficialNotice(
       }
 
       const observedTime = new Date(signal.tweet_created_at).getTime();
-      const expiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
-      const initialWindowEnd = [signal.expected_end_at, signal.expires_at]
+      const rawExpiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
+      const resolvedEnd = signal.expected_end_at
+        ? Date.parse(signal.expected_end_at)
+        : signal.expected_start_at
+          ? Date.parse(signal.expected_start_at)
+          : Number.NaN;
+      const expiresTime = Number.isFinite(resolvedEnd)
+        ? Math.max(
+            Number.isFinite(rawExpiresTime) ? rawExpiresTime : Number.NEGATIVE_INFINITY,
+            resolvedEnd + TIBO_NOTICE_GRACE_MS,
+          )
+        : rawExpiresTime;
+      const initialWindowEnd = [signal.expected_end_at, Number.isFinite(expiresTime) ? new Date(expiresTime).toISOString() : signal.expires_at]
         .map((value) => typeof value === "string" ? Date.parse(value) : Number.NaN)
         .filter((value) => Number.isFinite(value))
         .sort((left, right) => left - right)[0];
