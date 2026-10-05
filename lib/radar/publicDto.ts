@@ -527,16 +527,16 @@ export function toPublicRadarSnapshot(
     calculationNow,
     latestTeaserExecutionWindow,
   );
-  // Temporary presentation-only override for the manually confirmed weak teaser from tweet 2106845241357824205.
+  // Temporary presentation-only override for Tibo tweet 2106845241357824205.
   // Remove after the root-cause fix; this override expires automatically at 2026-10-05T20:33:43Z.
   const teaserOverrideNow = calculationNow.getTime();
-  const isWithinTemporaryWeakTeaserWindow =
+  const isWithinTemporaryTeaserWindow =
     teaserOverrideNow >= Date.parse("2026-10-04T20:33:43.000Z") &&
     teaserOverrideNow < Date.parse("2026-10-05T20:33:43.000Z");
-  const isTemporaryWeakTeaserOverrideActive =
-    calculatedResetTeaserStatus === "none" && isWithinTemporaryWeakTeaserWindow;
-  const resetTeaserStatus = isTemporaryWeakTeaserOverrideActive
-    ? "weak"
+  const isTemporaryStrongTeaserOverrideActive =
+    calculatedResetTeaserStatus === "none" && isWithinTemporaryTeaserWindow;
+  const resetTeaserStatus = isTemporaryStrongTeaserOverrideActive
+    ? "strong"
     : calculatedResetTeaserStatus;
   const latestTiboActivity = toPublicTiboActivity(
     internal,
@@ -547,20 +547,26 @@ export function toPublicRadarSnapshot(
     latestTeaserExecutionWindow,
     calculationContext.canonicalHistoryContext,
   );
-  const temporaryWeakTeaserActivitySource =
+  const temporaryStrongTeaserActivitySource =
     "https://x.com/thsottiaux/status/2106845241357824205";
-  const publicLatestTiboActivity = isTemporaryWeakTeaserOverrideActive &&
-      latestTiboActivity?.sourceUrl !== temporaryWeakTeaserActivitySource
-    ? {
-        classification: "teaser" as const,
-        teaserStrength: "weak" as const,
-        text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
-        createdAt: "2026-10-04T20:33:43.000Z",
-        sourceUrl: temporaryWeakTeaserActivitySource,
-        isReply: false,
-        replyContextText: null,
-        replyToHandles: [],
-      }
+  const temporaryStrongTeaserActivity = {
+    classification: "teaser" as const,
+    teaserStrength: "strong" as const,
+    text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+    createdAt: "2026-10-04T20:33:43.000Z",
+    sourceUrl: temporaryStrongTeaserActivitySource,
+    isReply: false,
+    replyContextText: null,
+    replyToHandles: [],
+  };
+  const publicLatestTiboActivity = isTemporaryStrongTeaserOverrideActive
+    ? latestTiboActivity?.sourceUrl === temporaryStrongTeaserActivitySource
+      ? {
+          ...latestTiboActivity,
+          classification: "teaser" as const,
+          teaserStrength: "strong" as const,
+        }
+      : temporaryStrongTeaserActivity
     : latestTiboActivity;
 
   return {
