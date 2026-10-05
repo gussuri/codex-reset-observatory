@@ -125,15 +125,17 @@ export async function fetchOpenAIStatusSignals(
   const codexComponents =
     summary.data?.components?.filter((component) => isCodexText(component.name)) ??
     [];
-  const hasCodexComponentData = codexComponents.length > 0;
-  const affectedCodexComponents = codexComponents.filter(
+  const coreCodexComponents = codexComponents.filter((component) =>
+    isCoreCodexComponent(component.name),
+  );
+  const hostIntegrationComponents = codexComponents.filter((component) =>
+    isHostIntegrationComponent(component.name),
+  );
+
+  const affectedCoreCodexComponents = coreCodexComponents.filter(
     (component) =>
       component.status && component.status !== "operational",
   ).length;
-  // Codex コンポーネント（Codex Web / Codex API 等）がすべて operational の場合は
-  // インシデント文言による誤検知を防ぐためインシデント警告を抑制する
-  const allCodexComponentsOperational =
-    hasCodexComponentData && affectedCodexComponents === 0;
 
   const codexIncidents =
     incidents.data?.incidents?.filter((incident) => isCodexIncident(incident)) ?? [];
@@ -143,6 +145,25 @@ export async function fetchOpenAIStatusSignals(
   const recentCodexIncidents = codexIncidents.filter((incident) =>
     isRecentIncident(incident),
   );
+
+  const hasCoreComponentData = coreCodexComponents.length > 0;
+  const affectedIntegrationComponents = hostIntegrationComponents.filter(
+    (component) =>
+      component.status && component.status !== "operational",
+  ).length;
+
+  // An integration component (e.g. Codex in ChatGPT Desktop) only counts as an
+  // affected Codex component if there is an active Codex incident.
+  const affectedCodexComponents =
+    affectedCoreCodexComponents +
+    (activeCodexIncidents.length > 0 ? affectedIntegrationComponents : 0);
+
+  // Codex コアコンポーネント（Codex Web / Codex API 等）がすべて operational の場合は
+  // インシデント文言による誤検知を防ぐためインシデント警告を抑制する
+  const allCodexComponentsOperational = hasCoreComponentData
+    ? affectedCoreCodexComponents === 0
+    : affectedCodexComponents === 0;
+
   const codexOperationalStatus = getCodexOperationalStatus({
     codexComponents,
     codexIncidents,
@@ -323,32 +344,98 @@ function isStatusIncident(value: unknown): value is StatuspageIncident {
   );
 }
 
-function isCodexIncident(incident: StatuspageIncident) {
-  const text = [
-    incident.name,
+export function isHostIntegrationComponent(name: string | null | undefined): boolean {
+  return Boolean(name && /\bin\s+chatgpt\b/i.test(name));
+}
+
+export function isCoreCodexComponent(name: string | null | undefined): boolean {
+  return isCodexText(name) && !isHostIntegrationComponent(name);
+}
+
+export function hasAffirmativeCodexImpact(text: string): boolean {
+  if (!isCodexText(text)) return false;
+
+  const isExplicitlyNegated =
+    /\bcodex\b[^.!?\n]{0,60}\b(?:is\s+not\s+(?:affected|impacted)|remains\s+operational|operating\s+normally|is\s+unaffected|not\s+impacted)\b/i.test(text) ||
+    /\b(?:does\s+not|not)\s+(?:affect|impact)\s+codex\b/i.test(text) ||
+    /\b(?:no|without)\s+impact\s+(?:to|on)\s+codex\b/i.test(text) ||
+    /\bcodex\b[^.!?\n]{0,40}\b(?:is\s+operational|unaffected)\b/i.test(text);
+
+  if (isExplicitlyNegated) {
+    const sentences = text.split(/(?<=[.!?\n])\s+/);
+    return sentences.some((sentence) => {
+      const sentenceNegated =
+        /\bcodex\b[^.!?\n]{0,60}\b(?:is\s+not\s+(?:affected|impacted)|remains\s+operational|operating\s+normally|is\s+unaffected|not\s+impacted)\b/i.test(sentence) ||
+        /\b(?:does\s+not|not)\s+(?:affect|impact)\s+codex\b/i.test(sentence) ||
+        /\b(?:no|without)\s+impact\s+(?:to|on)\s+codex\b/i.test(sentence) ||
+        /\bcodex\b[^.!?\n]{0,40}\b(?:is\s+operational|unaffected)\b/i.test(sentence);
+      if (sentenceNegated) return false;
+
+      return (
+        /\bcodex\b[^.!?\n]{0,80}\b(?:users?\s+(?:are|may\s+be)\s+experiencing|is\s+(?:experiencing|down|degraded|disrupted|failing|unresponsive)|errors?|issues?|outage|disruption|latency)\b/i.test(sentence) ||
+        /\b(?:elevated|increased|higher)\s+(?:error\s+rates?|errors?|latency)\b[^.!?\n]{0,80}\b(?:in|on|with|for)\s+codex\b/i.test(sentence) ||
+        /\b(?:affecting|affects?|impacts?|impacting)\s+codex\b/i.test(sentence) ||
+        /\bissues?\s+with\s+codex\b/i.test(sentence)
+      );
+    });
+  }
+
+  return (
+    /\bcodex\b[^.!?\n]{0,80}\b(?:users?\s+(?:are|may\s+be)\s+experiencing|is\s+(?:experiencing|down|degraded|disrupted|failing|unresponsive)|errors?|issues?|outage|disruption|latency)\b/i.test(text) ||
+    /\b(?:elevated|increased|higher)\s+(?:error\s+rates?|errors?|latency)\b[^.!?\n]{0,80}\b(?:in|on|with|for)\s+codex\b/i.test(text) ||
+    /\b(?:affecting|affects?|impacts?|impacting)\s+codex\b/i.test(text) ||
+    /\bissues?\s+with\s+codex\b/i.test(text)
+  );
+}
+
+export function isCodexIncident(incident: StatuspageIncident): boolean {
+  const name = incident.name ?? "";
+  const updateBodies = (incident.incident_updates ?? [])
+    .map((update) => update.body ?? "")
+    .filter(Boolean);
+  const fullText = [
+    name,
     incident.impact,
     incident.status,
-    ...(incident.incident_updates ?? []).flatMap((update) => [
-      update.body,
-      update.status,
-    ]),
+    ...updateBodies,
+    ...(incident.incident_updates ?? []).map((update) => update.status ?? ""),
   ]
     .filter(Boolean)
     .join(" ");
 
-  if (!isCodexText(text)) return false;
+  if (!isCodexText(fullText)) return false;
 
   // FedRAMP ワークスペース限定の障害は一般ユーザー向け Codex に影響しないため除外する
-  const isFedRAMPOnly = /\bFedRAMP\b/i.test(text) && (
-    /\bin FedRAMP workspaces?\b/i.test(text) ||
-    /\bFedRAMP (environment|workspace|tenant)/i.test(text)
+  const isFedRAMPOnly = /\bFedRAMP\b/i.test(fullText) && (
+    /\bin FedRAMP workspaces?\b/i.test(fullText) ||
+    /\bFedRAMP (environment|workspace|tenant)/i.test(fullText)
   );
   if (isFedRAMPOnly) return false;
 
-  return true;
+  // Work-only or non-Codex product incident
+  const isWorkOrNonCodexName =
+    /\b(?:chatgpt\s+work|work\s+mode|scheduled\s+tasks?)\b/i.test(name) &&
+    !isCodexText(name);
+
+  if (isWorkOrNonCodexName) {
+    // If the incident is explicitly scoped to Work / Work Mode, only consider it a Codex incident
+    // if updates affirmatively state that Codex service itself is experiencing issues.
+    return updateBodies.some((body) => hasAffirmativeCodexImpact(body));
+  }
+
+  // If incident title explicitly mentions Codex, confirm it is not an explicit exclusion
+  if (isCodexText(name)) {
+    const isExplicitlyNegated =
+      /\b(?:does\s+not|not)\s+(?:affect|impact)\s+codex\b/i.test(name) ||
+      /\bcodex\s+unaffected\b/i.test(name);
+    return !isExplicitlyNegated;
+  }
+
+  // General or other incident without Codex in title: require affirmative Codex impact in updates
+  return updateBodies.some((body) => hasAffirmativeCodexImpact(body));
 }
 
-function getCodexOperationalStatus({
+export function getCodexOperationalStatus({
   codexComponents,
   codexIncidents,
   incidentsAvailable,
@@ -361,14 +448,45 @@ function getCodexOperationalStatus({
   summaryAvailable: boolean;
   now?: Date;
 }): CodexOperationalStatus {
-  const hasAffectedComponent = codexComponents.some(
+  const activeIncidents = codexIncidents.filter(
+    (incident) => !isResolvedIncident(incident),
+  );
+  const hasActiveIncident = activeIncidents.length > 0;
+
+  const coreComponents = codexComponents.filter((component) =>
+    isCoreCodexComponent(component.name),
+  );
+  const hasAffectedCoreComponent = coreComponents.some(
     (component) => component.status && component.status !== "operational",
   );
-  if (hasAffectedComponent) {
+  if (hasAffectedCoreComponent) {
     return "active";
   }
 
-  if (codexIncidents.some((incident) => !isResolvedIncident(incident))) {
+  // If no explicitly recognized core components are present, check if any
+  // non-host-integration Codex component is degraded
+  const nonIntegrationComponents = codexComponents.filter(
+    (component) => !isHostIntegrationComponent(component.name),
+  );
+  if (nonIntegrationComponents.some((c) => c.status && c.status !== "operational")) {
+    return "active";
+  }
+
+  // An active, verified Codex incident means active status
+  if (hasActiveIncident) {
+    return "active";
+  }
+
+  // Host integration components (e.g. Codex in ChatGPT Desktop):
+  // When core components are operational and there is no active Codex incident,
+  // host client degradation (such as ChatGPT Desktop Work Mode errors) does not constitute a Codex service outage.
+  const hasAffectedIntegrationComponent = codexComponents.some(
+    (component) =>
+      isHostIntegrationComponent(component.name) &&
+      component.status &&
+      component.status !== "operational",
+  );
+  if (hasAffectedIntegrationComponent && hasActiveIncident) {
     return "active";
   }
 
