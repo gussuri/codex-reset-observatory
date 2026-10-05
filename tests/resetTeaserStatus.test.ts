@@ -544,7 +544,8 @@ test("keeps a strong resolved-window UI teaser through its expected end without 
   assert.equal(recent.resetTeaserStatus, "strong");
   assert.equal(beyondLookback.resetTeaserStatus, "strong");
   assert.equal(beforeWindowEnd.resetTeaserStatus, "strong");
-  assert.equal(atWindowEnd.resetTeaserStatus, "none");
+  // The temporary presentation-only override remains active after this resolved window ends.
+  assert.equal(atWindowEnd.resetTeaserStatus, "weak");
   assert.equal(beyondLookback.latestTiboActivity?.text, target.text);
   assert.equal(beyondLookback.latestTiboActivity?.classification, "teaser");
   assert.equal(beyondLookback.latestTiboActivity?.teaserStrength, "strong");
