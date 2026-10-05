@@ -516,6 +516,27 @@ export function toPublicRadarSnapshot(
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
   );
+  const calculatedResetTeaserStatus = aggregateResetTeaserStatus(
+    getTiboReadSideSignals(
+      internal,
+      "recent",
+      false,
+      calculationContext.canonicalHistoryContext.readSideProjection,
+    ),
+    latestTeaserConsumingResetAt,
+    calculationNow,
+    latestTeaserExecutionWindow,
+  );
+  // Temporary presentation-only override for the manually confirmed weak teaser from tweet 2106845241357824205.
+  // Remove after the root-cause fix; this override expires automatically at 2026-10-05T20:33:43Z.
+  const teaserOverrideNow = calculationNow.getTime();
+  const isWithinTemporaryWeakTeaserWindow =
+    teaserOverrideNow >= Date.parse("2026-10-04T20:33:43.000Z") &&
+    teaserOverrideNow < Date.parse("2026-10-05T20:33:43.000Z");
+  const resetTeaserStatus =
+    calculatedResetTeaserStatus === "none" && isWithinTemporaryWeakTeaserWindow
+      ? "weak"
+      : calculatedResetTeaserStatus;
 
   return {
     schemaVersion: "public-v1",
@@ -524,17 +545,7 @@ export function toPublicRadarSnapshot(
     lastRandomResetAt: latestTeaserConsumingResetAt,
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
-    resetTeaserStatus: aggregateResetTeaserStatus(
-      getTiboReadSideSignals(
-        internal,
-        "recent",
-        false,
-        calculationContext.canonicalHistoryContext.readSideProjection,
-      ),
-      latestTeaserConsumingResetAt,
-      calculationNow,
-      latestTeaserExecutionWindow,
-    ),
+    resetTeaserStatus,
     latestTiboActivity: toPublicTiboActivity(
       internal,
       calculationNow,

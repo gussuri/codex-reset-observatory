@@ -1640,6 +1640,51 @@ test("the existing reset teaser status row displays weak and none without adding
   assert.doesNotMatch(noneHtml, /リセットへの前向き発言/);
 });
 
+test("temporary Tibo teaser presentation override only fills none during its active window", () => {
+  const calculationNow = new Date("2026-10-04T20:33:43.000Z");
+  const data = getLocalRadarData({ calculationNow });
+  const baselineViewModel = getRadarViewModel(data, "ja", true, undefined, calculationNow);
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+
+  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.equal(snapshot.viewModel.probability24h, baselineViewModel.probability24h);
+  assert.equal(snapshot.viewModel.probability48h, baselineViewModel.probability48h);
+});
+
+test("temporary Tibo teaser presentation override preserves existing strong and weak states", () => {
+  const calculationNow = new Date("2026-10-04T20:33:43.000Z");
+
+  for (const strength of ["strong", "weak"] as const) {
+    const data = getLocalRadarData({
+      calculationNow,
+      recentTiboSignals: [
+        {
+          tweet_id: `emergency-override-${strength}`,
+          signal_type: strength === "strong" ? "teaser" : "irrelevant",
+          text: strength === "strong" ? "There will be signs... Resets" : "I occasionally do oblige for solid feedback.",
+          tweet_url: `https://x.com/thsottiaux/status/emergency-override-${strength}`,
+          tweet_created_at: "2026-10-04T19:00:00.000Z",
+          expires_at: "2026-10-06T19:00:00.000Z",
+          verification_status: "auto_unverified",
+          teaser_strength: strength,
+        },
+      ],
+    });
+
+    assert.equal(
+      toPublicRadarSnapshot(data, "ja", { calculationNow }).resetTeaserStatus,
+      strength,
+    );
+  }
+});
+
+test("temporary Tibo teaser presentation override expires back to the ordinary result", () => {
+  const calculationNow = new Date("2026-10-05T20:33:43.000Z");
+  const data = getLocalRadarData({ calculationNow });
+
+  assert.equal(toPublicRadarSnapshot(data, "ja", { calculationNow }).resetTeaserStatus, "none");
+});
+
 test("teaser strength labels stay natural in English and Simplified Chinese", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const internal = getLocalRadarData({
