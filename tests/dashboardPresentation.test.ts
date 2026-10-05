@@ -20,7 +20,7 @@ import {
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
-import { translateDynamic } from "../lib/radar/i18n";
+import { translateDynamic, translateUI } from "../lib/radar/i18n";
 import { getHistoricalResetPresentationCorrection } from "../lib/radar/historicalResetCorrections";
 import { formatOfficialNoticeSummary } from "../lib/radar/officialNoticePresentation";
 import { normalizeResetScope } from "../lib/radar/resetScope";
@@ -1649,6 +1649,7 @@ test("temporary Tibo teaser presentation override promotes none to strong during
   assert.equal(snapshot.resetTeaserStatus, "strong");
   assert.equal(snapshot.viewModel.probability24h, baselineViewModel.probability24h);
   assert.equal(snapshot.viewModel.probability48h, baselineViewModel.probability48h);
+  assert.equal(snapshot.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", "ja"));
 });
 
 test("temporary strong Tibo teaser activity links the confirmed source post in every locale", () => {
@@ -1658,6 +1659,7 @@ test("temporary strong Tibo teaser activity links the confirmed source post in e
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
     assert.equal(snapshot.resetTeaserStatus, "strong");
+    assert.equal(snapshot.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", locale));
     assert.deepEqual(snapshot.latestTiboActivity, {
       classification: "teaser",
       teaserStrength: "strong",
@@ -1673,6 +1675,7 @@ test("temporary strong Tibo teaser activity links the confirmed source post in e
     );
     assert.ok(html.includes("2106845241357824205"));
     assert.ok(html.includes("Over the next 28 days"));
+    assert.ok(html.includes(translateUI("outlookStrongTeaser", locale)));
   }
 });
 

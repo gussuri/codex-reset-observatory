@@ -1,7 +1,7 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { createRadarCalculationContext } from "@/lib/radar";
 import type { RadarCalculationContext } from "@/lib/radar";
-import { translateTiboPostText } from "./i18n";
+import { translateTiboPostText, translateUI } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
 import {
   getLastRandomRecoveryResetAt,
@@ -569,13 +569,22 @@ export function toPublicRadarSnapshot(
       : temporaryStrongTeaserActivity
     : latestTiboActivity;
 
+  const publicViewModel = toPublicViewModel(
+    isTemporaryStrongTeaserOverrideActive && !viewModel.activeWindow.active
+      ? {
+          ...viewModel,
+          displayReasoningSummary: translateUI("outlookStrongTeaser", locale),
+        }
+      : viewModel,
+  );
+
   return {
     schemaVersion: "public-v1",
     checkedAt,
     updatedAt: internal.updated_at ?? null,
     lastRandomResetAt: latestTeaserConsumingResetAt,
     dataHealth: toPublicHealth(internal, options, checkedAt),
-    viewModel: toPublicViewModel(viewModel),
+    viewModel: publicViewModel,
     resetTeaserStatus,
     latestTiboActivity: publicLatestTiboActivity,
     recoveryObservation: getPublicRecoveryObservation(
