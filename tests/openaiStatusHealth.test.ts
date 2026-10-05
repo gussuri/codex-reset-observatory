@@ -178,6 +178,129 @@ test("excludes a FedRAMP-only Codex incident from the general display status", a
   );
 });
 
+test("treats a Work-only active incident as none when Codex is operational", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch({
+      id: "work-mode-status-fixture",
+      name: "Elevated Work Mode errors",
+      status: "monitoring",
+      impact: "minor",
+      created_at: relativeIso(1),
+      updated_at: relativeIso(1),
+      resolved_at: null,
+      incident_updates: [
+        {
+          body: "We are observing elevated Work Mode errors. Scheduled tasks may also be impacted.",
+          status: "monitoring",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+  assert.equal(result.data.activeCodexIncidents, 0);
+  assert.equal(
+    result.data.history.some((item) => item.id === "work-mode-status-fixture"),
+    false,
+  );
+});
+
+test("does not classify a Work-only incident as Codex when update body contains an incidental Codex mention", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch({
+      id: "work-mode-with-incidental-codex-fixture",
+      name: "Elevated Work Mode errors",
+      status: "monitoring",
+      impact: "minor",
+      created_at: relativeIso(1),
+      updated_at: relativeIso(1),
+      resolved_at: null,
+      incident_updates: [
+        {
+          body: "Scheduled tasks and Work Mode are experiencing elevated error rates. Note: Codex usage pools are shared with ChatGPT Work, but Codex service itself is not affected.",
+          status: "monitoring",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+  assert.equal(result.data.activeCodexIncidents, 0);
+  assert.equal(
+    result.data.history.some(
+      (item) => item.id === "work-mode-with-incidental-codex-fixture",
+    ),
+    false,
+  );
+});
+
+test("does not treat host integration degradation alone as an active Codex outage when no Codex incident exists", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(
+      {
+        id: "work-mode-monitoring-fixture",
+        name: "Elevated Work Mode errors",
+        status: "monitoring",
+        impact: "minor",
+        created_at: relativeIso(1),
+        updated_at: relativeIso(1),
+        resolved_at: null,
+        incident_updates: [
+          {
+            body: "We have mitigated the issue, and are monitoring recovery.",
+            status: "monitoring",
+          },
+        ],
+      },
+      [
+        { name: "Codex in ChatGPT Desktop", status: "degraded_performance" },
+        { name: "Codex Web", status: "operational" },
+        { name: "Codex API", status: "operational" },
+      ],
+    ),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "none");
+  assert.equal(result.data.affectedCodexComponents, 0);
+  assert.equal(result.data.statusIncidents24h, 0);
+  assert.equal(result.data.activeCodexIncidents, 0);
+});
+
+test("treats host integration degradation as active when accompanied by an explicit Codex incident", async () => {
+  const result = await fetchOpenAIStatusSignals(
+    {},
+    statusFixtureFetch(
+      {
+        id: "codex-desktop-incident-fixture",
+        name: "Issues with Codex in ChatGPT Desktop",
+        status: "investigating",
+        impact: "minor",
+        created_at: relativeIso(1),
+        updated_at: relativeIso(1),
+        resolved_at: null,
+        incident_updates: [
+          {
+            body: "Some Codex desktop users may experience unexpected errors.",
+            status: "investigating",
+          },
+        ],
+      },
+      [
+        { name: "Codex in ChatGPT Desktop", status: "degraded_performance" },
+        { name: "Codex Web", status: "operational" },
+        { name: "Codex API", status: "operational" },
+      ],
+    ),
+  );
+
+  assert.equal(result.data.codexOperationalStatus, "active");
+  assert.equal(result.data.affectedCodexComponents, 1);
+  assert.equal(result.data.activeCodexIncidents, 0); // suppressed count due to core operational, but status is active
+});
+
 test("classifies two non-JSON status responses as invalid", async () => {
   const result = await fetchOpenAIStatusSignals({}, async () =>
     new Response("not json", {
