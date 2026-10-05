@@ -1651,6 +1651,31 @@ test("temporary Tibo teaser presentation override only fills none during its act
   assert.equal(snapshot.viewModel.probability48h, baselineViewModel.probability48h);
 });
 
+test("temporary weak Tibo teaser activity links the confirmed source post in every locale", () => {
+  const calculationNow = new Date("2026-10-05T03:38:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+    assert.equal(snapshot.resetTeaserStatus, "weak");
+    assert.deepEqual(snapshot.latestTiboActivity, {
+      classification: "teaser",
+      teaserStrength: "weak",
+      text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+      createdAt: "2026-10-04T20:33:43.000Z",
+      sourceUrl: "https://x.com/thsottiaux/status/2106845241357824205",
+      isReply: false,
+      replyContextText: null,
+      replyToHandles: [],
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale }),
+    );
+    assert.ok(html.includes("2106845241357824205"));
+    assert.ok(html.includes("Over the next 28 days"));
+  }
+});
+
 test("temporary Tibo teaser presentation override preserves existing strong and weak states", () => {
   const calculationNow = new Date("2026-10-04T20:33:43.000Z");
 
@@ -1682,7 +1707,9 @@ test("temporary Tibo teaser presentation override expires back to the ordinary r
   const calculationNow = new Date("2026-10-05T20:33:43.000Z");
   const data = getLocalRadarData({ calculationNow });
 
-  assert.equal(toPublicRadarSnapshot(data, "ja", { calculationNow }).resetTeaserStatus, "none");
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  assert.equal(snapshot.resetTeaserStatus, "none");
+  assert.equal(snapshot.latestTiboActivity, null);
 });
 
 test("teaser strength labels stay natural in English and Simplified Chinese", () => {

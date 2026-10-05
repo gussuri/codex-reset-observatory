@@ -533,10 +533,35 @@ export function toPublicRadarSnapshot(
   const isWithinTemporaryWeakTeaserWindow =
     teaserOverrideNow >= Date.parse("2026-10-04T20:33:43.000Z") &&
     teaserOverrideNow < Date.parse("2026-10-05T20:33:43.000Z");
-  const resetTeaserStatus =
-    calculatedResetTeaserStatus === "none" && isWithinTemporaryWeakTeaserWindow
-      ? "weak"
-      : calculatedResetTeaserStatus;
+  const isTemporaryWeakTeaserOverrideActive =
+    calculatedResetTeaserStatus === "none" && isWithinTemporaryWeakTeaserWindow;
+  const resetTeaserStatus = isTemporaryWeakTeaserOverrideActive
+    ? "weak"
+    : calculatedResetTeaserStatus;
+  const latestTiboActivity = toPublicTiboActivity(
+    internal,
+    calculationNow,
+    locale,
+    latestResetAt,
+    latestTeaserConsumingResetAt,
+    latestTeaserExecutionWindow,
+    calculationContext.canonicalHistoryContext,
+  );
+  const temporaryWeakTeaserActivitySource =
+    "https://x.com/thsottiaux/status/2106845241357824205";
+  const publicLatestTiboActivity = isTemporaryWeakTeaserOverrideActive &&
+      latestTiboActivity?.sourceUrl !== temporaryWeakTeaserActivitySource
+    ? {
+        classification: "teaser" as const,
+        teaserStrength: "weak" as const,
+        text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+        createdAt: "2026-10-04T20:33:43.000Z",
+        sourceUrl: temporaryWeakTeaserActivitySource,
+        isReply: false,
+        replyContextText: null,
+        replyToHandles: [],
+      }
+    : latestTiboActivity;
 
   return {
     schemaVersion: "public-v1",
@@ -546,15 +571,7 @@ export function toPublicRadarSnapshot(
     dataHealth: toPublicHealth(internal, options, checkedAt),
     viewModel: toPublicViewModel(viewModel),
     resetTeaserStatus,
-    latestTiboActivity: toPublicTiboActivity(
-      internal,
-      calculationNow,
-      locale,
-      latestResetAt,
-      latestTeaserConsumingResetAt,
-      latestTeaserExecutionWindow,
-      calculationContext.canonicalHistoryContext,
-    ),
+    latestTiboActivity: publicLatestTiboActivity,
     recoveryObservation: getPublicRecoveryObservation(
       internal.codex_usage_recovery,
       calculationNow,
