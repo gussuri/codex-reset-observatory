@@ -1640,27 +1640,27 @@ test("the existing reset teaser status row displays weak and none without adding
   assert.doesNotMatch(noneHtml, /リセットへの前向き発言/);
 });
 
-test("temporary Tibo teaser presentation override only fills none during its active window", () => {
+test("temporary Tibo teaser presentation override promotes none to strong during its active window", () => {
   const calculationNow = new Date("2026-10-04T20:33:43.000Z");
   const data = getLocalRadarData({ calculationNow });
   const baselineViewModel = getRadarViewModel(data, "ja", true, undefined, calculationNow);
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
 
-  assert.equal(snapshot.resetTeaserStatus, "weak");
+  assert.equal(snapshot.resetTeaserStatus, "strong");
   assert.equal(snapshot.viewModel.probability24h, baselineViewModel.probability24h);
   assert.equal(snapshot.viewModel.probability48h, baselineViewModel.probability48h);
 });
 
-test("temporary weak Tibo teaser activity links the confirmed source post in every locale", () => {
+test("temporary strong Tibo teaser activity links the confirmed source post in every locale", () => {
   const calculationNow = new Date("2026-10-05T03:38:00.000Z");
   const data = getLocalRadarData({ calculationNow });
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
-    assert.equal(snapshot.resetTeaserStatus, "weak");
+    assert.equal(snapshot.resetTeaserStatus, "strong");
     assert.deepEqual(snapshot.latestTiboActivity, {
       classification: "teaser",
-      teaserStrength: "weak",
+      teaserStrength: "strong",
       text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
       createdAt: "2026-10-04T20:33:43.000Z",
       sourceUrl: "https://x.com/thsottiaux/status/2106845241357824205",
