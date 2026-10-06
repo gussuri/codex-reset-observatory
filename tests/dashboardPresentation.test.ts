@@ -1706,8 +1706,18 @@ test("temporary Tibo teaser presentation override preserves existing strong and 
   }
 });
 
-test("temporary Tibo teaser presentation override expires back to the ordinary result", () => {
-  const calculationNow = new Date("2026-10-05T20:33:43.000Z");
+test("temporary Tibo teaser presentation override remains active throughout the 28-day campaign", () => {
+  const calculationNow = new Date("2026-10-06T04:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  assert.equal(snapshot.resetTeaserStatus, "strong");
+  assert.equal(snapshot.latestTiboActivity?.sourceUrl, "https://x.com/thsottiaux/status/2106845241357824205");
+  assert.equal(snapshot.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", "ja"));
+});
+
+test("temporary Tibo teaser presentation override expires back to the ordinary result after 28 days", () => {
+  const calculationNow = new Date("2026-11-01T20:33:43.000Z");
   const data = getLocalRadarData({ calculationNow });
 
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
