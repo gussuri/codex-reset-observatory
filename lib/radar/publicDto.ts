@@ -528,11 +528,12 @@ export function toPublicRadarSnapshot(
     latestTeaserExecutionWindow,
   );
   // Temporary presentation-only override for Tibo tweet 2106845241357824205.
-  // Remove after the root-cause fix; this override expires automatically at 2026-10-05T20:33:43Z.
+  // The tweet announces a 28-day campaign ("Over the next 28 days...").
+  // Remove after the root-cause fix; this override expires automatically at 2026-11-01T20:33:43Z.
   const teaserOverrideNow = calculationNow.getTime();
   const isWithinTemporaryTeaserWindow =
     teaserOverrideNow >= Date.parse("2026-10-04T20:33:43.000Z") &&
-    teaserOverrideNow < Date.parse("2026-10-05T20:33:43.000Z");
+    teaserOverrideNow < Date.parse("2026-11-01T20:33:43.000Z");
   const isTemporaryStrongTeaserOverrideActive =
     calculatedResetTeaserStatus === "none" && isWithinTemporaryTeaserWindow;
   const resetTeaserStatus = isTemporaryStrongTeaserOverrideActive
@@ -559,7 +560,8 @@ export function toPublicRadarSnapshot(
     replyContextText: null,
     replyToHandles: [],
   };
-  const publicLatestTiboActivity = isTemporaryStrongTeaserOverrideActive
+  const publicLatestTiboActivity = isTemporaryStrongTeaserOverrideActive &&
+      latestTiboActivity?.classification !== "official_notice"
     ? latestTiboActivity?.sourceUrl === temporaryStrongTeaserActivitySource
       ? {
           ...latestTiboActivity,
