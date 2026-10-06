@@ -2251,10 +2251,16 @@ const TIBO_POST_TRANSLATIONS: Array<{
     ja: "GPT-5.6 Sol搭載のCodexなら、どんな無茶なことでも頼めます。何週間もかかりそうな作業でも、5分間話すだけで進めてくれます。冷蔵庫から何か取ってきたり、犬を撫でたりして戻ってくると…",
     zh: "使用 GPT-5.6 Sol 的 Codex，你可以让它完成各种疯狂的事情。只需和它连续交流5分钟，那些看起来需要几周才能完成的工作也能推进；你去冰箱拿点东西、摸摸狗，再回来时，它已经……",
   },
+  {
+    sourcePrefix:
+      "Over the next 28 days",
+    ja: "これからの28日間、毎日、大半のCodex / Workユーザーにとって明確な改善となるものを1つ提供するか、あるいはフルリセットを実施します。改善を始めましょう。",
+    zh: "在接下来的28天里，我们每天要么推出一项对大多数 Codex / Work 用户有明确提升的内容，要么执行一次完全重置。让改进开始吧。",
+  },
 ];
 
 export function translateTiboPostText(
-  value: string | undefined,
+  value: string | null | undefined,
   locale: Locale,
 ): string {
   if (!value) return "";

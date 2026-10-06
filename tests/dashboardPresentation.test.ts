@@ -18,6 +18,7 @@ import {
   getRandomResetHeatmapEventTimes,
 } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import type { Locale } from "../lib/radar/types";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
@@ -1652,9 +1653,15 @@ test("temporary Tibo teaser presentation override promotes none to strong during
   assert.equal(snapshot.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", "ja"));
 });
 
-test("temporary strong Tibo teaser activity links the confirmed source post in every locale", () => {
+test("temporary strong Tibo teaser activity links the confirmed source post and translates text in every locale", () => {
   const calculationNow = new Date("2026-10-05T03:38:00.000Z");
   const data = getLocalRadarData({ calculationNow });
+
+  const expectedTexts: Record<Locale, string> = {
+    ja: "これからの28日間、毎日、大半のCodex / Workユーザーにとって明確な改善となるものを1つ提供するか、あるいはフルリセットを実施します。改善を始めましょう。",
+    zh: "在接下来的28天里，我们每天要么推出一项对大多数 Codex / Work 用户有明确提升的内容，要么执行一次完全重置。让改进开始吧。",
+    en: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+  };
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
@@ -1663,7 +1670,7 @@ test("temporary strong Tibo teaser activity links the confirmed source post in e
     assert.deepEqual(snapshot.latestTiboActivity, {
       classification: "teaser",
       teaserStrength: "strong",
-      text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+      text: expectedTexts[locale],
       createdAt: "2026-10-04T20:33:43.000Z",
       sourceUrl: "https://x.com/thsottiaux/status/2106845241357824205",
       isReply: false,
@@ -1674,7 +1681,7 @@ test("temporary strong Tibo teaser activity links the confirmed source post in e
       React.createElement(RadarDashboard, { initialData: snapshot, locale }),
     );
     assert.ok(html.includes("2106845241357824205"));
-    assert.ok(html.includes("Over the next 28 days"));
+    assert.ok(html.includes(expectedTexts[locale]));
     assert.ok(html.includes(translateUI("outlookStrongTeaser", locale)));
   }
 });
@@ -1710,10 +1717,20 @@ test("temporary Tibo teaser presentation override remains active throughout the 
   const calculationNow = new Date("2026-10-06T04:00:00.000Z");
   const data = getLocalRadarData({ calculationNow });
 
-  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
-  assert.equal(snapshot.resetTeaserStatus, "strong");
-  assert.equal(snapshot.latestTiboActivity?.sourceUrl, "https://x.com/thsottiaux/status/2106845241357824205");
-  assert.equal(snapshot.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", "ja"));
+  const snapshotJa = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  assert.equal(snapshotJa.resetTeaserStatus, "strong");
+  assert.equal(snapshotJa.latestTiboActivity?.sourceUrl, "https://x.com/thsottiaux/status/2106845241357824205");
+  assert.equal(
+    snapshotJa.latestTiboActivity?.text,
+    "これからの28日間、毎日、大半のCodex / Workユーザーにとって明確な改善となるものを1つ提供するか、あるいはフルリセットを実施します。改善を始めましょう。",
+  );
+  assert.equal(snapshotJa.viewModel.displayReasoningSummary, translateUI("outlookStrongTeaser", "ja"));
+
+  const snapshotZh = toPublicRadarSnapshot(data, "zh", { calculationNow });
+  assert.equal(
+    snapshotZh.latestTiboActivity?.text,
+    "在接下来的28天里，我们每天要么推出一项对大多数 Codex / Work 用户有明确提升的内容，要么执行一次完全重置。让改进开始吧。",
+  );
 });
 
 test("temporary Tibo teaser presentation override expires back to the ordinary result after 28 days", () => {

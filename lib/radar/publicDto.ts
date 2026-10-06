@@ -550,10 +550,12 @@ export function toPublicRadarSnapshot(
   );
   const temporaryStrongTeaserActivitySource =
     "https://x.com/thsottiaux/status/2106845241357824205";
+  const temporaryStrongTeaserRawText =
+    "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.";
   const temporaryStrongTeaserActivity = {
     classification: "teaser" as const,
     teaserStrength: "strong" as const,
-    text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+    text: translateTiboPostText(temporaryStrongTeaserRawText, locale),
     createdAt: "2026-10-04T20:33:43.000Z",
     sourceUrl: temporaryStrongTeaserActivitySource,
     isReply: false,
@@ -567,6 +569,7 @@ export function toPublicRadarSnapshot(
           ...latestTiboActivity,
           classification: "teaser" as const,
           teaserStrength: "strong" as const,
+          text: translateTiboPostText(latestTiboActivity.text, locale),
         }
       : temporaryStrongTeaserActivity
     : latestTiboActivity;
