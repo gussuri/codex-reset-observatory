@@ -790,8 +790,10 @@ function candidateNoticeRow(value: unknown): ResetDisplayNameCandidateNotice | n
     : [row.tweet_id];
   const isHistoricalOnly = row.temporal_kind === "historical" || row.ai_temporal_kind === "historical";
   const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(row.text);
+  const isFutureBankedDistribution = hasFutureBankedDistributionIntent(row.text);
 
   return {
+    candidateEventKind: isFutureBankedDistribution ? "banked_distribution" : "reset_execution",
     officialNoticeTweetId: row.tweet_id,
     logicalPostId: trusted ? (row.logical_post_id as string) : null,
     noticeTweetIds,
@@ -813,7 +815,7 @@ function candidateNoticeRow(value: unknown): ResetDisplayNameCandidateNotice | n
       isReply: row.is_reply === true,
       isHistoricalOnly,
       isPresentationOnlyOngoingBanked,
-      hasFutureBankedDistributionIntent: hasFutureBankedDistributionIntent(row.text),
+      hasFutureBankedDistributionIntent: isFutureBankedDistribution,
     }),
   };
 }

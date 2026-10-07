@@ -50,6 +50,7 @@ test("a resolver-created key without persisted execution evidence is not promota
     isCandidatePromotionAuthorized(
       { status: "new", resetEventKey: "tibo-reset-new", matchedEvidenceEventKey: null },
       [],
+      { candidateEventKind: "reset_execution", officialNoticeTweetId: "notice-1" },
     ),
     false,
   );
@@ -61,17 +62,62 @@ test("promotion requires matching persisted authoritative execution evidence", (
     resetEventKey: "tibo-reset-existing",
     matchedEvidenceEventKey: "tibo-reset-existing",
   };
-  assert.equal(isCandidatePromotionAuthorized(resolution, []), false);
+  const target = { candidateEventKind: "reset_execution" as const, officialNoticeTweetId: "notice-1" };
+  assert.equal(isCandidatePromotionAuthorized(resolution, [], target), false);
   assert.equal(
     isCandidatePromotionAuthorized(resolution, [
       { resetEventKey: "tibo-reset-other", kind: "formal_adoption" },
-    ]),
+    ], target),
     false,
   );
   assert.equal(
     isCandidatePromotionAuthorized(resolution, [
       { resetEventKey: "tibo-reset-existing", kind: "formal_adoption" },
-    ]),
+    ], target),
+    true,
+  );
+});
+
+test("BANKED estimate promotion evidence must name the exact candidate notice", () => {
+  const resolution = {
+    status: "existing" as const,
+    resetEventKey: "banked-reset-notice-1",
+    matchedEvidenceEventKey: "banked-reset-notice-1",
+  };
+  const evidence = [{
+    resetEventKey: "banked-reset-notice-1",
+    kind: "banked_distribution_estimate" as const,
+    officialNoticeTweetId: "notice-1",
+  }];
+
+  assert.equal(isCandidatePromotionAuthorized(resolution, evidence, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-1",
+  }), true);
+  assert.equal(isCandidatePromotionAuthorized(resolution, evidence, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-2",
+  }), false);
+  assert.equal(isCandidatePromotionAuthorized(resolution, evidence, {
+    candidateEventKind: "reset_execution",
+    officialNoticeTweetId: "notice-1",
+  }), false);
+  assert.equal(isCandidatePromotionAuthorized({ ...resolution, status: "conflict" }, evidence, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-1",
+  }), false);
+});
+
+test("a confirmed official notice promising broad BANKED delivery can seed a provisional name candidate", () => {
+  assert.equal(
+    isExecutionBearingResetDisplayNameNotice({
+      signalType: "official_notice",
+      verificationStatus: "confirmed",
+      isReply: false,
+      isHistoricalOnly: false,
+      isPresentationOnlyOngoingBanked: false,
+      hasFutureBankedDistributionIntent: true,
+    }),
     true,
   );
 });

@@ -15,6 +15,7 @@ import type { RandomResetNameGenerationResult } from "../lib/radar/randomResetNa
 
 type DatabaseCandidate = {
   candidate_id: string;
+  candidate_event_kind: ResetDisplayNameCandidateRecord["candidateEventKind"];
   notice_dedupe_key: string;
   official_notice_tweet_id: string;
   logical_post_id: string | null;
@@ -58,6 +59,7 @@ function candidate(
 ): ResetDisplayNameCandidateRecord {
   return {
     candidateId: id,
+    candidateEventKind: "reset_execution",
     noticeDedupeKey: `official-notice:${id}`,
     officialNoticeTweetId: id,
     logicalPostId: null,
@@ -91,6 +93,7 @@ function candidate(
 function databaseCandidate(value: ResetDisplayNameCandidateRecord): DatabaseCandidate {
   return {
     candidate_id: value.candidateId,
+    candidate_event_kind: value.candidateEventKind,
     notice_dedupe_key: value.noticeDedupeKey,
     official_notice_tweet_id: value.officialNoticeTweetId,
     logical_post_id: value.logicalPostId,
@@ -123,6 +126,7 @@ function databaseCandidate(value: ResetDisplayNameCandidateRecord): DatabaseCand
 function fromDatabaseCandidate(value: DatabaseCandidate): ResetDisplayNameCandidateRecord {
   return {
     candidateId: value.candidate_id,
+    candidateEventKind: value.candidate_event_kind,
     noticeDedupeKey: value.notice_dedupe_key,
     officialNoticeTweetId: value.official_notice_tweet_id,
     logicalPostId: value.logical_post_id,
@@ -173,6 +177,7 @@ function fakeCandidateClient(): FakeCandidateClient {
       }
       seedWrites.push(args);
       const seed = args.p_seed as {
+        candidate_event_kind: ResetDisplayNameCandidateRecord["candidateEventKind"];
         official_notice_tweet_id: string;
         logical_post_id: string | null;
         notice_tweet_ids: string[];
@@ -201,6 +206,7 @@ function fakeCandidateClient(): FakeCandidateClient {
       if (!existing) {
         const id = `candidate-${rows.size + 1}`;
         const record = databaseCandidate(candidate(id, {
+          candidateEventKind: seed.candidate_event_kind,
           noticeDedupeKey: seed.logical_post_id
             ? `logical-post:${seed.logical_post_id}`
             : `official-notice:${seed.official_notice_tweet_id}`,
@@ -217,6 +223,9 @@ function fakeCandidateClient(): FakeCandidateClient {
         ? `logical-post:${effectiveLogicalPostId}`
         : `official-notice:${seed.official_notice_tweet_id}`;
       existing.logical_post_id = seed.logical_post_id ?? existing.logical_post_id;
+      if (existing.lifecycle_status === "provisional") {
+        existing.candidate_event_kind = seed.candidate_event_kind;
+      }
       existing.notice_tweet_ids = unique([...existing.notice_tweet_ids, ...seed.notice_tweet_ids]);
       existing.source_tweet_ids = unique([...existing.source_tweet_ids, ...seed.source_tweet_ids]);
       return Promise.resolve({ data: existing, error: null });
@@ -328,6 +337,69 @@ test("seed has no hashes or AI result and is unprocessed", async () => {
   assert.equal(record.sourceSnapshotHash, null);
   assert.equal(record.inputHash, null);
   assert.equal(record.promotedEventKey, null);
+});
+
+test("BANKED seed kind is serialized and round-tripped from the candidate store", async () => {
+  const client = fakeCandidateClient();
+  const record = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "banked-notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["banked-notice-1"],
+    sourceTweetIds: ["banked-notice-1"],
+  });
+
+  assert.equal(record.candidateEventKind, "banked_distribution");
+  assert.deepEqual(client.seedWrites[0]?.p_seed, {
+    candidate_event_kind: "banked_distribution",
+    official_notice_tweet_id: "banked-notice-1",
+    logical_post_id: null,
+    notice_tweet_ids: ["banked-notice-1"],
+    source_tweet_ids: ["banked-notice-1"],
+  });
+});
+
+test("a provisional candidate can be reclassified as BANKED without changing its notice identity", async () => {
+  const client = fakeCandidateClient();
+  const original = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  const updated = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  assert.equal(updated.candidateId, original.candidateId);
+  assert.equal(updated.officialNoticeTweetId, "notice-1");
+  assert.equal(updated.candidateEventKind, "banked_distribution");
+});
+
+test("seed retry cannot change the event kind after candidate promotion", async () => {
+  const client = fakeCandidateClient();
+  const promoted = candidate("promoted-notice", {
+    candidateEventKind: "reset_execution",
+    lifecycleStatus: "promoted",
+    promotedEventKey: "tibo-reset-promoted",
+  });
+  client.rows.set(promoted.candidateId, databaseCandidate(promoted));
+
+  const retried = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: promoted.officialNoticeTweetId,
+    logicalPostId: promoted.logicalPostId,
+    noticeTweetIds: promoted.noticeTweetIds,
+    sourceTweetIds: promoted.sourceTweetIds,
+  });
+
+  assert.equal(retried.lifecycleStatus, "promoted");
+  assert.equal(retried.promotedEventKey, "tibo-reset-promoted");
+  assert.equal(retried.candidateEventKind, "reset_execution");
 });
 
 test("trusted logical identity upgrades the same fallback row and unions provenance", async () => {

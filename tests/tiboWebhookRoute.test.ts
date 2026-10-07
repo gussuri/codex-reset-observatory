@@ -297,11 +297,13 @@ test("official notice webhook writes an identity-only candidate seed without AI 
     );
     assert.ok(seedBody);
     assert.deepEqual(Object.keys(seedBody.p_seed).sort(), [
+      "candidate_event_kind",
       "logical_post_id",
       "notice_tweet_ids",
       "official_notice_tweet_id",
       "source_tweet_ids",
     ]);
+    assert.equal(seedBody.p_seed.candidate_event_kind, "reset_execution");
     assert.equal("expected_end_at" in seedBody.p_seed, false);
     assert.equal("scope" in seedBody.p_seed, false);
   } finally {

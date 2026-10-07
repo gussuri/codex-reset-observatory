@@ -143,6 +143,10 @@ function isPromotionReady(
   const evidence = collectPersistedAuthoritativeCandidateExecutionEvidence(
     data.tibo_formal_adoptions ?? [],
     data.reset_execution_estimates ?? [],
+    {
+      candidateEventKind: candidate.candidateEventKind,
+      officialNoticeTweetId: candidate.officialNoticeTweetId,
+    },
   );
 
   return isCandidatePromotionAuthorized(
@@ -152,6 +156,10 @@ function isPromotionReady(
       matchedEvidenceEventKey: resolution.matchedEvidence?.resetEventKey ?? null,
     },
     evidence,
+    {
+      candidateEventKind: candidate.candidateEventKind,
+      officialNoticeTweetId: candidate.officialNoticeTweetId,
+    },
   );
 }
 

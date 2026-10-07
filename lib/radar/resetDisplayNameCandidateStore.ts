@@ -2,6 +2,7 @@ import type { RandomResetNameGenerationResult } from "./randomResetNaming";
 import type {
   ResetDisplayNameCandidateAiStatus,
   ResetDisplayNameCandidateExecutionEvidence,
+  ResetDisplayNameCandidatePromotionTarget,
   ResetDisplayNameCandidatePromotionResolution,
   ResetDisplayNameCandidateRecord,
   ResetDisplayNameCandidateSeed,
@@ -10,6 +11,7 @@ import { isCandidatePromotionAuthorized } from "./resetDisplayNameCandidateTypes
 
 export const RESET_DISPLAY_NAME_CANDIDATE_COLUMNS = [
   "candidate_id",
+  "candidate_event_kind",
   "notice_dedupe_key",
   "official_notice_tweet_id",
   "logical_post_id",
@@ -80,6 +82,7 @@ function toResetDisplayNameCandidateRecord(value: unknown): ResetDisplayNameCand
   if (!isObject(value)) return null;
 
   const candidateId = stringValue(value.candidate_id);
+  const candidateEventKind = value.candidate_event_kind;
   const noticeDedupeKey = stringValue(value.notice_dedupe_key);
   const officialNoticeTweetId = stringValue(value.official_notice_tweet_id);
   const logicalPostId = nullableStringValue(value.logical_post_id);
@@ -109,6 +112,7 @@ function toResetDisplayNameCandidateRecord(value: unknown): ResetDisplayNameCand
 
   if (
     !candidateId ||
+    (candidateEventKind !== "reset_execution" && candidateEventKind !== "banked_distribution") ||
     !noticeDedupeKey ||
     !officialNoticeTweetId ||
     logicalPostId === undefined ||
@@ -146,6 +150,7 @@ function toResetDisplayNameCandidateRecord(value: unknown): ResetDisplayNameCand
 
   return {
     candidateId,
+    candidateEventKind,
     noticeDedupeKey,
     officialNoticeTweetId,
     logicalPostId,
@@ -177,6 +182,7 @@ function toResetDisplayNameCandidateRecord(value: unknown): ResetDisplayNameCand
 
 function seedPayload(seed: ResetDisplayNameCandidateSeed) {
   return {
+    candidate_event_kind: seed.candidateEventKind ?? "reset_execution",
     official_notice_tweet_id: seed.officialNoticeTweetId,
     logical_post_id: seed.logicalPostId,
     notice_tweet_ids: [...seed.noticeTweetIds],
@@ -231,6 +237,7 @@ type ResetDisplayNameCandidateResultAiStatus = Exclude<
 
 export type PromoteResetDisplayNameCandidateInput = {
   candidateId: string;
+  candidateTarget: ResetDisplayNameCandidatePromotionTarget;
   canonicalEventKey: string;
   canonicalSourceTweetId: string | null;
   promotedAt: string;
@@ -400,10 +407,15 @@ export async function promoteResetDisplayNameCandidate(
 ): Promise<PromoteResetDisplayNameCandidateResult> {
   if (
     !nonEmpty(input.candidateId) ||
+    !nonEmpty(input.candidateTarget.officialNoticeTweetId) ||
     !nonEmpty(input.canonicalEventKey) ||
     !nonEmpty(input.promotedAt) ||
     input.identityResolution.resetEventKey !== input.canonicalEventKey ||
-    !isCandidatePromotionAuthorized(input.identityResolution, input.authoritativeEvidence)
+    !isCandidatePromotionAuthorized(
+      input.identityResolution,
+      input.authoritativeEvidence,
+      input.candidateTarget,
+    )
   ) {
     return notAuthoritativePromotionResult();
   }

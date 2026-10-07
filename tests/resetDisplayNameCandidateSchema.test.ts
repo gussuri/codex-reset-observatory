@@ -108,6 +108,40 @@ test("candidate promotion RPC mirrors public-valid execution estimate semantics"
   assert.match(sql, /official_notice_tweet_id\s*=\s*any\s*\((?:e\.)?tibo_source_tweet_ids\)/i);
 });
 
+test("current RPC migration allows only exact notice-linked v2 BANKED observation evidence", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const bankedEvidence = sql.match(
+    /e\.estimator_version\s*=\s*'banked-distribution-observation-v2'[\s\S]*?\n\s+\) into v_has_authoritative_evidence/i,
+  )?.[0];
+
+  assert.ok(bankedEvidence, "new RPC must contain the BANKED-specific evidence branch");
+  assert.match(bankedEvidence, /execution_time_source\s*=\s*'usage_observation'/i);
+  assert.match(bankedEvidence, /execution_time_confidence\s*=\s*'high'/i);
+  assert.match(bankedEvidence, /execution_time_precision\s*=\s*'approximate'/i);
+  assert.match(bankedEvidence, /recovery_observation_id\s+is\s+null/i);
+  assert.match(bankedEvidence, /execution_window_start_at\s+is\s+null/i);
+  assert.match(bankedEvidence, /execution_window_end_at\s+is\s+null/i);
+  assert.match(bankedEvidence, /display_execution_at\s*>=\s*e\.official_notice_at/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*v_candidate\.official_notice_tweet_id/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*any\s*\(v_candidate\.notice_tweet_ids\)/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*any\s*\(e\.tibo_source_tweet_ids\)/i);
+  assert.doesNotMatch(bankedEvidence, /usage-execution-banked-v1/i);
+  assert.match(sql, /candidate_event_kind\s+text\s+not null\s+default\s+'reset_execution'/i);
+  assert.match(sql, /candidate_event_kind\s+in\s*\('reset_execution',\s*'banked_distribution'\)/i);
+  assert.match(sql, /p_seed\s*->>\s*'candidate_event_kind'/i);
+  assert.match(sql, /candidate_event_kind\s*=\s*case\s+when\s+v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
+  assert.match(sql, /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then/i);
+  assert.match(sql, /else\s+select\s+exists\s*\([\s\S]*?from\s+public\.tibo_formal_adoptions/i);
+  const bankedBranch = sql.match(
+    /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then([\s\S]*?)\n\s+else\s+select/i,
+  )?.[1];
+  assert.ok(bankedBranch, "BANKED candidates need an isolated promotion gate");
+  assert.doesNotMatch(bankedBranch, /tibo_formal_adoptions|usage-execution-(?:v1|teaser-v1|monitor-v1)/i);
+});
+
 test("candidate promotion replaces nonaccepted canonical AI fields consistently", () => {
   const sql = readFileSync(
     "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",

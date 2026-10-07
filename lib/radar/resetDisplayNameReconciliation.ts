@@ -61,6 +61,7 @@ import {
   isPublicRandomResetExecutionEstimate,
   type ResetExecutionEstimate,
 } from "./resetExecution";
+import { BANKED_DISTRIBUTION_ESTIMATOR_VERSION } from "./bankedReset";
 import type { RadarData, ResetDisplayNameRecord, WindowEventLike } from "./types";
 
 export { isAutoNameableCanonicalEvent } from "./resetDisplayNameEligibility";
@@ -69,6 +70,7 @@ const DEFAULT_MAX_GEMINI_REQUESTS = 3;
 const RESET_DISPLAY_NAME_CANDIDATE_STALE_PENDING_MS = 15 * 60 * 1000;
 
 export type ResetDisplayNameCandidateNotice = {
+  candidateEventKind: "reset_execution" | "banked_distribution";
   officialNoticeTweetId: string;
   logicalPostId: string | null;
   noticeTweetIds: string[];
@@ -262,13 +264,15 @@ function candidateSeedNeedsRefresh(
 ) {
   const candidateNoticeIds = new Set(candidate.noticeTweetIds);
   const candidateSourceIds = new Set(candidate.sourceTweetIds);
-  return (notice.logicalPostId !== null && candidate.logicalPostId === null) ||
+  return candidate.candidateEventKind !== notice.candidateEventKind ||
+    (notice.logicalPostId !== null && candidate.logicalPostId === null) ||
     notice.noticeTweetIds.some((id) => !candidateNoticeIds.has(id)) ||
     notice.sourceTweetIds.some((id) => !candidateSourceIds.has(id));
 }
 
 function candidateSeedFromNotice(notice: ResetDisplayNameCandidateNotice): ResetDisplayNameCandidateSeed {
   return {
+    candidateEventKind: notice.candidateEventKind,
     officialNoticeTweetId: notice.officialNoticeTweetId,
     logicalPostId: notice.logicalPostId,
     noticeTweetIds: [...notice.noticeTweetIds],
@@ -299,24 +303,71 @@ export function discoverMissingResetDisplayNameCandidateSeeds(
 export function collectPersistedAuthoritativeCandidateExecutionEvidence(
   adoptionLedgers: readonly TiboFormalAdoptionRecord[],
   estimates: readonly ResetExecutionEstimate[],
+  candidateTarget: Pick<ResetDisplayNameCandidateNotice, "candidateEventKind" | "officialNoticeTweetId">,
 ): ResetDisplayNameCandidateExecutionEvidence[] {
-  const formalEvidence = adoptionLedgers.map((ledger) => ({
-    resetEventKey: ledger.resetEventKey,
-    kind: "formal_adoption" as const,
-  }));
-  const monitorEvidence = estimates
-    .filter((estimate) => isPublicRandomResetExecutionEstimate(estimate))
-    .map((estimate) => ({
-      resetEventKey: estimate.resetEventKey,
-      kind: "monitor_usage_estimate" as const,
-    }));
+  const formalEvidence = candidateTarget.candidateEventKind === "banked_distribution"
+    ? []
+    : adoptionLedgers.map((ledger) => ({
+        resetEventKey: ledger.resetEventKey,
+        kind: "formal_adoption" as const,
+      }));
+  const monitorEvidence = candidateTarget.candidateEventKind === "banked_distribution"
+    ? []
+    : estimates
+        .filter((estimate) => isPublicRandomResetExecutionEstimate(estimate))
+        .map((estimate) => ({
+          resetEventKey: estimate.resetEventKey,
+          kind: "monitor_usage_estimate" as const,
+        }));
+  const bankedEvidence = candidateTarget.candidateEventKind === "banked_distribution"
+    ? estimates
+        .filter((estimate) => isValidBankedDistributionCandidateEstimate(
+          candidateTarget.officialNoticeTweetId,
+          estimate,
+        ))
+        .map((estimate) => ({
+          resetEventKey: estimate.resetEventKey,
+          kind: "banked_distribution_estimate" as const,
+          officialNoticeTweetId: estimate.officialNoticeTweetId!.trim(),
+        }))
+    : [];
   const seen = new Set<string>();
-  return [...formalEvidence, ...monitorEvidence].filter((evidence) => {
+  return [...formalEvidence, ...monitorEvidence, ...bankedEvidence].filter((evidence) => {
     const key = `${evidence.kind}:${evidence.resetEventKey}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function isValidBankedDistributionCandidateEstimate(
+  candidateOfficialNoticeTweetId: string | null | undefined,
+  estimate: ResetExecutionEstimate,
+) {
+  const noticeTweetId = candidateOfficialNoticeTweetId?.trim() ?? "";
+  const estimateNoticeTweetId = estimate.officialNoticeTweetId?.trim() ?? "";
+  const sourceTweetIds = new Set(
+    estimate.tiboSourceTweetIds.map((tweetId) => tweetId.trim()).filter(Boolean),
+  );
+  const displayExecutionTime = Date.parse(estimate.displayExecutionAt);
+  const officialNoticeTime = Date.parse(estimate.officialNoticeAt ?? "");
+
+  return Boolean(
+    noticeTweetId &&
+      estimate.resetEventKey.trim() &&
+      estimate.estimatorVersion === BANKED_DISTRIBUTION_ESTIMATOR_VERSION &&
+      estimate.executionTimeSource === "usage_observation" &&
+      estimate.executionTimeConfidence === "high" &&
+      estimate.executionTimePrecision === "approximate" &&
+      !estimate.recoveryObservationId?.trim() &&
+      estimate.executionWindowStartAt == null &&
+      estimate.executionWindowEndAt == null &&
+      estimateNoticeTweetId === noticeTweetId &&
+      sourceTweetIds.has(noticeTweetId) &&
+      Number.isFinite(displayExecutionTime) &&
+      Number.isFinite(officialNoticeTime) &&
+      displayExecutionTime >= officialNoticeTime,
+  );
 }
 
 function hasExactIdentityOverlap(left: readonly string[], right: readonly string[]) {
@@ -326,9 +377,17 @@ function hasExactIdentityOverlap(left: readonly string[], right: readonly string
 
 function hasPersistedAuthoritativeExecutionForCandidate(
   candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
   adoptionLedgers: readonly TiboFormalAdoptionRecord[],
   estimates: readonly ResetExecutionEstimate[],
 ) {
+  if (candidate.candidateEventKind !== notice.candidateEventKind) return false;
+  if (notice.candidateEventKind === "banked_distribution") {
+    return estimates.some((estimate) =>
+      isValidBankedDistributionCandidateEstimate(candidate.officialNoticeTweetId, estimate),
+    );
+  }
+
   const candidateIds = candidateIdentityIds(candidate);
   const hasFormalAdoption = adoptionLedgers.some((ledger) =>
     (candidate.logicalPostId !== null && ledger.logicalPostId === candidate.logicalPostId) ||
@@ -342,8 +401,11 @@ function hasPersistedAuthoritativeExecutionForCandidate(
   const candidateNoticeIds = new Set(candidate.noticeTweetIds.map((id) => id.trim()));
   const candidateSourceIds = new Set(candidateIds.map((id) => id.trim()));
   return estimates
-    .filter((estimate) => isPublicRandomResetExecutionEstimate(estimate))
     .some((estimate) => {
+      if (isValidBankedDistributionCandidateEstimate(candidate.officialNoticeTweetId, estimate)) {
+        return true;
+      }
+      if (!isPublicRandomResetExecutionEstimate(estimate)) return false;
       const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
       if (officialNoticeTweetId) return candidateNoticeIds.has(officialNoticeTweetId);
       return estimate.tiboSourceTweetIds.some((tweetId) => candidateSourceIds.has(tweetId.trim()));
@@ -432,12 +494,17 @@ function findCandidateLogicalPost(
 
 function getCandidatePromotionContext(
   candidate: ResetDisplayNameCandidateRecord,
+  notice: ResetDisplayNameCandidateNotice,
   data: RadarData,
   history: readonly WindowEventLike[],
 ): {
   identityResolution: ResetDisplayNameCandidatePromotionResolution;
   authoritativeEvidence: readonly ResetDisplayNameCandidateExecutionEvidence[];
   canonicalSourceTweetId: string | null;
+  candidateTarget: {
+    candidateEventKind: ResetDisplayNameCandidateNotice["candidateEventKind"];
+    officialNoticeTweetId: string;
+  };
 } | null {
   const logicalPost = findCandidateLogicalPost(candidate, data);
   if (!logicalPost) return null;
@@ -459,8 +526,13 @@ function getCandidatePromotionContext(
     authoritativeEvidence: collectPersistedAuthoritativeCandidateExecutionEvidence(
       data.tibo_formal_adoptions ?? [],
       data.reset_execution_estimates ?? [],
+      notice,
     ),
     canonicalSourceTweetId: resolution.sourceTweetIds[0] ?? candidate.officialNoticeTweetId,
+    candidateTarget: {
+      candidateEventKind: candidate.candidateEventKind,
+      officialNoticeTweetId: candidate.officialNoticeTweetId,
+    },
   };
 }
 
@@ -668,17 +740,19 @@ export async function reconcileResetDisplayNames(
       if (candidate.lifecycleStatus !== "provisional" || candidate.aiStatus !== "accepted") continue;
       const notice = candidateNoticeForRecord(candidate, candidateNotices);
       if (!notice || !notice.isExecutionBearing) continue;
+      if (candidate.candidateEventKind !== notice.candidateEventKind) continue;
       if (!candidateActivation.adoptionAt || !isResetDisplayNameCandidateNoticeAfterAdoption(
         notice.tweetCreatedAt,
         candidateActivation.adoptionAt,
       )) continue;
 
-      const context = getCandidatePromotionContext(candidate, data, history);
+      const context = getCandidatePromotionContext(candidate, notice, data, history);
       if (!context) continue;
 
       try {
         const promotion = await promoteResetDisplayNameCandidate(candidateStore, {
           candidateId: candidate.candidateId,
+          candidateTarget: context.candidateTarget,
           canonicalEventKey: context.identityResolution.resetEventKey ?? "",
           canonicalSourceTweetId: context.canonicalSourceTweetId,
           promotedAt: now.toISOString(),
@@ -895,6 +969,7 @@ export async function reconcileResetDisplayNames(
 
       if (hasPersistedAuthoritativeExecutionForCandidate(
         candidate,
+        notice,
         data.tibo_formal_adoptions ?? [],
         data.reset_execution_estimates ?? [],
       )) {
@@ -914,7 +989,10 @@ export async function reconcileResetDisplayNames(
         notice,
         sourcePostText,
       });
-      const inputHash = hashCandidateValue(namingInput);
+      const inputHash = hashCandidateValue({
+        candidateEventKind: candidate.candidateEventKind,
+        namingInput,
+      });
 
       if (shouldReuseCandidateResult(candidate, inputHash, model)) continue;
       if (isWithinCandidateRetryCooldown(candidate, now)) continue;
