@@ -15,6 +15,7 @@ export type ResetDisplayNameCandidateAiStatus =
   | "invalid_response";
 
 export type ResetDisplayNameCandidateActivationMode = "off" | "seed" | "full";
+export type ResetDisplayNameCandidateEventKind = "reset_execution" | "banked_distribution";
 
 export type ResetDisplayNameCandidateActivation = {
   mode: ResetDisplayNameCandidateActivationMode;
@@ -36,6 +37,7 @@ export type ResetDisplayNameCandidateIdentityInput = {
 };
 
 export type ResetDisplayNameCandidateSeed = {
+  candidateEventKind?: ResetDisplayNameCandidateEventKind;
   officialNoticeTweetId: string;
   logicalPostId: string | null;
   noticeTweetIds: string[];
@@ -44,6 +46,7 @@ export type ResetDisplayNameCandidateSeed = {
 
 export type ResetDisplayNameCandidateRecord = {
   candidateId: string;
+  candidateEventKind: ResetDisplayNameCandidateEventKind;
   noticeDedupeKey: string;
   officialNoticeTweetId: string;
   logicalPostId: string | null;
@@ -110,16 +113,32 @@ export type ResetDisplayNameCandidatePromotionResolution = {
 
 export type ResetDisplayNameCandidateExecutionEvidence = {
   resetEventKey: string;
-  kind: "formal_adoption" | "monitor_usage_estimate";
+  kind: "formal_adoption" | "monitor_usage_estimate" | "banked_distribution_estimate";
+  officialNoticeTweetId?: string;
+};
+
+export type ResetDisplayNameCandidatePromotionTarget = {
+  candidateEventKind: ResetDisplayNameCandidateEventKind;
+  officialNoticeTweetId: string;
 };
 
 export function isCandidatePromotionAuthorized(
   resolution: ResetDisplayNameCandidatePromotionResolution,
   evidence: readonly ResetDisplayNameCandidateExecutionEvidence[],
+  candidateTarget: ResetDisplayNameCandidatePromotionTarget,
 ): boolean {
   if (resolution.status !== "existing" || !resolution.resetEventKey ||
       resolution.matchedEvidenceEventKey !== resolution.resetEventKey) {
     return false;
+  }
+
+  if (candidateTarget.candidateEventKind === "banked_distribution") {
+    const candidateOfficialNoticeTweetId = candidateTarget.officialNoticeTweetId.trim();
+    return Boolean(candidateOfficialNoticeTweetId) && evidence.some((entry) =>
+      entry.resetEventKey === resolution.resetEventKey &&
+      entry.kind === "banked_distribution_estimate" &&
+      entry.officialNoticeTweetId?.trim() === candidateOfficialNoticeTweetId,
+    );
   }
 
   return evidence.some((entry) =>

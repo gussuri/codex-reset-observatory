@@ -17,6 +17,7 @@ function acceptedCandidate(
 ): ResetDisplayNameCandidateRecord {
   return {
     candidateId: CANDIDATE_ID,
+    candidateEventKind: "reset_execution",
     noticeDedupeKey: "official-notice:notice-1",
     officialNoticeTweetId: "notice-1",
     logicalPostId: "logical-1",
@@ -50,6 +51,10 @@ function acceptedCandidate(
 function promotionInput(canonicalEventKey: string): PromoteResetDisplayNameCandidateInput {
   return {
     candidateId: CANDIDATE_ID,
+    candidateTarget: {
+      candidateEventKind: "reset_execution",
+      officialNoticeTweetId: "notice-1",
+    },
     canonicalEventKey,
     canonicalSourceTweetId: "notice-1",
     promotedAt: "2026-09-09T00:00:00.000Z",
@@ -211,6 +216,35 @@ test("an existing key with persisted formal adoption evidence is promotable", as
   const result = await promoteResetDisplayNameCandidate(client, promotionInput("canonical-event-1"));
   assert.equal(result.status, "promoted");
   assert.equal(client.rpcCalls, 1);
+});
+
+test("BANKED candidate reaches the atomic promotion RPC only with its exact notice evidence", async () => {
+  const client = fakePromotionClient(acceptedCandidate(), { canonicalNameState: "missing" });
+  const input = promotionInput("banked-reset-notice-1");
+  input.candidateTarget = {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-1",
+  };
+  input.authoritativeEvidence = [{
+    resetEventKey: "banked-reset-notice-1",
+    kind: "banked_distribution_estimate",
+    officialNoticeTweetId: "notice-1",
+  }];
+
+  const promoted = await promoteResetDisplayNameCandidate(client, input);
+  assert.equal(promoted.status, "promoted");
+  assert.equal(client.rpcCalls, 1);
+
+  const mismatchClient = fakePromotionClient(acceptedCandidate(), { canonicalNameState: "missing" });
+  const mismatch = await promoteResetDisplayNameCandidate(mismatchClient, {
+    ...input,
+    candidateTarget: {
+      candidateEventKind: "banked_distribution",
+      officialNoticeTweetId: "different-notice",
+    },
+  });
+  assert.equal(mismatch.status, "not_authoritative");
+  assert.equal(mismatchClient.rpcCalls, 0);
 });
 
 test("a candidate without accepted names is not promoted", async () => {

@@ -108,6 +108,40 @@ test("candidate promotion RPC mirrors public-valid execution estimate semantics"
   assert.match(sql, /official_notice_tweet_id\s*=\s*any\s*\((?:e\.)?tibo_source_tweet_ids\)/i);
 });
 
+test("current RPC migration allows only exact notice-linked v2 BANKED observation evidence", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const bankedEvidence = sql.match(
+    /e\.estimator_version\s*=\s*'banked-distribution-observation-v2'[\s\S]*?\n\s+\) into v_has_authoritative_evidence/i,
+  )?.[0];
+
+  assert.ok(bankedEvidence, "new RPC must contain the BANKED-specific evidence branch");
+  assert.match(bankedEvidence, /execution_time_source\s*=\s*'usage_observation'/i);
+  assert.match(bankedEvidence, /execution_time_confidence\s*=\s*'high'/i);
+  assert.match(bankedEvidence, /execution_time_precision\s*=\s*'approximate'/i);
+  assert.match(bankedEvidence, /recovery_observation_id\s+is\s+null/i);
+  assert.match(bankedEvidence, /execution_window_start_at\s+is\s+null/i);
+  assert.match(bankedEvidence, /execution_window_end_at\s+is\s+null/i);
+  assert.match(bankedEvidence, /display_execution_at\s*>=\s*e\.official_notice_at/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*v_candidate\.official_notice_tweet_id/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*any\s*\(v_candidate\.notice_tweet_ids\)/i);
+  assert.match(bankedEvidence, /official_notice_tweet_id\s*=\s*any\s*\(e\.tibo_source_tweet_ids\)/i);
+  assert.doesNotMatch(bankedEvidence, /usage-execution-banked-v1/i);
+  assert.match(sql, /candidate_event_kind\s+text\s+not null\s+default\s+'reset_execution'/i);
+  assert.match(sql, /candidate_event_kind\s+in\s*\('reset_execution',\s*'banked_distribution'\)/i);
+  assert.match(sql, /p_seed\s*->>\s*'candidate_event_kind'/i);
+  assert.match(sql, /candidate_event_kind\s*=\s*case\s+when\s+v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
+  assert.match(sql, /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then/i);
+  assert.match(sql, /else\s+select\s+exists\s*\([\s\S]*?from\s+public\.tibo_formal_adoptions/i);
+  const bankedBranch = sql.match(
+    /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then([\s\S]*?)\n\s+else\s+select/i,
+  )?.[1];
+  assert.ok(bankedBranch, "BANKED candidates need an isolated promotion gate");
+  assert.doesNotMatch(bankedBranch, /tibo_formal_adoptions|usage-execution-(?:v1|teaser-v1|monitor-v1)/i);
+});
+
 test("candidate promotion replaces nonaccepted canonical AI fields consistently", () => {
   const sql = readFileSync(
     "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
@@ -121,4 +155,60 @@ test("candidate promotion replaces nonaccepted canonical AI fields consistently"
   assert.doesNotMatch(sql, /ai_name_ja\s*=\s*coalesce\s*\(v_existing_name\.ai_name_ja/i);
   assert.doesNotMatch(sql, /ai_name_en\s*=\s*coalesce\s*\(v_existing_name\.ai_name_en/i);
   assert.doesNotMatch(sql, /ai_name_zh\s*=\s*coalesce\s*\(v_existing_name\.ai_name_zh/i);
+});
+
+test("candidate event-kind changes invalidate generation state without changing candidate identity", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const seedRpc = sql.match(
+    /create or replace function public\.upsert_reset_display_name_candidate_seed\(p_seed jsonb\)([\s\S]*?)\n\$function\$;/i,
+  )?.[1];
+  assert.ok(seedRpc, "candidate seed RPC must be present");
+
+  assert.match(seedRpc, /candidate_event_kind\s+is distinct from\s+v_candidate_event_kind/i);
+  assert.match(seedRpc, /v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
+  for (const clearedField of [
+    "source_snapshot_hash",
+    "input_hash",
+    "next_retry_at",
+    "ai_name_ja",
+    "ai_name_en",
+    "ai_name_zh",
+    "ai_confidence",
+    "ai_evidence",
+    "ai_reason",
+    "ai_flags",
+    "ai_model",
+    "ai_prompt_version",
+    "ai_input_mode",
+    "last_generated_at",
+  ]) {
+    assert.match(seedRpc, new RegExp(`${clearedField}\\s*=\\s*case\\s+when\\s+v_kind_changed\\s+then`, "i"));
+  }
+  assert.match(seedRpc, /ai_status\s*=\s*case\s+when\s+v_kind_changed\s+then\s+'unprocessed'/i);
+  assert.match(seedRpc, /generation_attempts\s*=\s*case\s+when\s+v_kind_changed\s+then\s+0/i);
+  assert.match(seedRpc, /where\s+candidate_id\s*=\s*v_candidate\.candidate_id/i);
+  assert.match(seedRpc, /notice_tweet_ids\s*\|\|\s*v_notice_tweet_ids/i);
+  assert.match(seedRpc, /source_tweet_ids\s*\|\|\s*v_source_tweet_ids/i);
+});
+
+test("candidate promotion and reclassification serialize on the same row lock", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const seedRpc = sql.match(
+    /create or replace function public\.upsert_reset_display_name_candidate_seed\(p_seed jsonb\)([\s\S]*?)\n\$function\$;/i,
+  )?.[1];
+  const promotionRpc = sql.match(
+    /create or replace function public\.promote_reset_display_name_candidate\([\s\S]*?\n\$function\$;/i,
+  )?.[0];
+  assert.ok(seedRpc);
+  assert.ok(promotionRpc);
+  assert.match(seedRpc, /from\s+public\.reset_display_name_candidates[\s\S]*?for update/i);
+  assert.match(promotionRpc, /from\s+public\.reset_display_name_candidates[\s\S]*?for update/i);
+  assert.match(promotionRpc, /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then/i);
+  assert.match(seedRpc, /candidate_event_kind\s*=\s*case[\s\S]*?when\s+v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
 });

@@ -15,6 +15,7 @@ import type { RandomResetNameGenerationResult } from "../lib/radar/randomResetNa
 
 type DatabaseCandidate = {
   candidate_id: string;
+  candidate_event_kind: ResetDisplayNameCandidateRecord["candidateEventKind"];
   notice_dedupe_key: string;
   official_notice_tweet_id: string;
   logical_post_id: string | null;
@@ -58,6 +59,7 @@ function candidate(
 ): ResetDisplayNameCandidateRecord {
   return {
     candidateId: id,
+    candidateEventKind: "reset_execution",
     noticeDedupeKey: `official-notice:${id}`,
     officialNoticeTweetId: id,
     logicalPostId: null,
@@ -91,6 +93,7 @@ function candidate(
 function databaseCandidate(value: ResetDisplayNameCandidateRecord): DatabaseCandidate {
   return {
     candidate_id: value.candidateId,
+    candidate_event_kind: value.candidateEventKind,
     notice_dedupe_key: value.noticeDedupeKey,
     official_notice_tweet_id: value.officialNoticeTweetId,
     logical_post_id: value.logicalPostId,
@@ -123,6 +126,7 @@ function databaseCandidate(value: ResetDisplayNameCandidateRecord): DatabaseCand
 function fromDatabaseCandidate(value: DatabaseCandidate): ResetDisplayNameCandidateRecord {
   return {
     candidateId: value.candidate_id,
+    candidateEventKind: value.candidate_event_kind,
     noticeDedupeKey: value.notice_dedupe_key,
     officialNoticeTweetId: value.official_notice_tweet_id,
     logicalPostId: value.logical_post_id,
@@ -173,6 +177,7 @@ function fakeCandidateClient(): FakeCandidateClient {
       }
       seedWrites.push(args);
       const seed = args.p_seed as {
+        candidate_event_kind: ResetDisplayNameCandidateRecord["candidateEventKind"];
         official_notice_tweet_id: string;
         logical_post_id: string | null;
         notice_tweet_ids: string[];
@@ -201,6 +206,7 @@ function fakeCandidateClient(): FakeCandidateClient {
       if (!existing) {
         const id = `candidate-${rows.size + 1}`;
         const record = databaseCandidate(candidate(id, {
+          candidateEventKind: seed.candidate_event_kind,
           noticeDedupeKey: seed.logical_post_id
             ? `logical-post:${seed.logical_post_id}`
             : `official-notice:${seed.official_notice_tweet_id}`,
@@ -217,6 +223,30 @@ function fakeCandidateClient(): FakeCandidateClient {
         ? `logical-post:${effectiveLogicalPostId}`
         : `official-notice:${seed.official_notice_tweet_id}`;
       existing.logical_post_id = seed.logical_post_id ?? existing.logical_post_id;
+      if (existing.lifecycle_status === "provisional") {
+        if (existing.candidate_event_kind !== seed.candidate_event_kind) {
+          Object.assign(existing, {
+            candidate_event_kind: seed.candidate_event_kind,
+            source_snapshot_hash: null,
+            input_hash: null,
+            next_retry_at: null,
+            ai_name_ja: null,
+            ai_name_en: null,
+            ai_name_zh: null,
+            ai_confidence: null,
+            ai_evidence: null,
+            ai_reason: null,
+            ai_flags: [],
+            ai_model: null,
+            ai_prompt_version: null,
+            ai_input_mode: null,
+            ai_status: "unprocessed",
+            generation_attempts: 0,
+            last_generated_at: null,
+            updated_at: "2026-09-08T00:30:00.000Z",
+          });
+        }
+      }
       existing.notice_tweet_ids = unique([...existing.notice_tweet_ids, ...seed.notice_tweet_ids]);
       existing.source_tweet_ids = unique([...existing.source_tweet_ids, ...seed.source_tweet_ids]);
       return Promise.resolve({ data: existing, error: null });
@@ -284,9 +314,11 @@ async function claimCandidate(
   sourceSnapshotHash: string,
   inputHash: string,
   now: string,
+  candidateEventKind: ResetDisplayNameCandidateRecord["candidateEventKind"] = "reset_execution",
 ) {
   const claimed = await claimResetDisplayNameCandidateGeneration(client, {
     candidateId,
+    candidateEventKind,
     sourceSnapshotHash,
     inputHash,
     now,
@@ -328,6 +360,151 @@ test("seed has no hashes or AI result and is unprocessed", async () => {
   assert.equal(record.sourceSnapshotHash, null);
   assert.equal(record.inputHash, null);
   assert.equal(record.promotedEventKey, null);
+});
+
+test("BANKED seed kind is serialized and round-tripped from the candidate store", async () => {
+  const client = fakeCandidateClient();
+  const record = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "banked-notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["banked-notice-1"],
+    sourceTweetIds: ["banked-notice-1"],
+  });
+
+  assert.equal(record.candidateEventKind, "banked_distribution");
+  assert.deepEqual(client.seedWrites[0]?.p_seed, {
+    candidate_event_kind: "banked_distribution",
+    official_notice_tweet_id: "banked-notice-1",
+    logical_post_id: null,
+    notice_tweet_ids: ["banked-notice-1"],
+    source_tweet_ids: ["banked-notice-1"],
+  });
+});
+
+test("a provisional candidate can be reclassified as BANKED without changing its notice identity", async () => {
+  const client = fakeCandidateClient();
+  const original = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+  Object.assign(client.rows.get(original.candidateId)!, {
+    source_snapshot_hash: "old-reset-source",
+    input_hash: "old-reset-input",
+    next_retry_at: "2026-09-09T00:00:00.000Z",
+    ai_name_ja: "旧強制リセット名",
+    ai_name_en: "Old Forced Reset Name",
+    ai_name_zh: "旧强制重置名称",
+    ai_confidence: 0.99,
+    ai_evidence: "old reset evidence",
+    ai_reason: "old reset reason",
+    ai_flags: ["old_flag"],
+    ai_model: "old-model",
+    ai_prompt_version: "old-prompt",
+    ai_input_mode: "notice-precompute-v1",
+    ai_status: "accepted",
+    generation_attempts: 3,
+    last_generated_at: "2026-09-08T00:00:00.000Z",
+  });
+  const updated = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-1",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-1"],
+    sourceTweetIds: ["notice-1"],
+  });
+
+  assert.equal(updated.candidateId, original.candidateId);
+  assert.equal(updated.officialNoticeTweetId, "notice-1");
+  assert.equal(updated.candidateEventKind, "banked_distribution");
+  assert.equal(updated.aiStatus, "unprocessed");
+  assert.equal(updated.sourceSnapshotHash, null);
+  assert.equal(updated.inputHash, null);
+  assert.equal(updated.nextRetryAt, null);
+  assert.equal(updated.aiNameJa, null);
+  assert.equal(updated.aiNameEn, null);
+  assert.equal(updated.aiNameZh, null);
+  assert.equal(updated.aiConfidence, null);
+  assert.equal(updated.aiEvidence, null);
+  assert.equal(updated.aiReason, null);
+  assert.deepEqual(updated.aiFlags, []);
+  assert.equal(updated.aiModel, null);
+  assert.equal(updated.aiPromptVersion, null);
+  assert.equal(updated.aiInputMode, null);
+  assert.equal(updated.generationAttempts, 0);
+  assert.equal(updated.lastGeneratedAt, null);
+  assert.deepEqual(updated.noticeTweetIds, ["notice-1"]);
+  assert.deepEqual(updated.sourceTweetIds, ["notice-1"]);
+});
+
+test("same-kind provisional retry preserves an accepted candidate result and retry state", async () => {
+  const client = fakeCandidateClient();
+  const original = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "banked-notice-accepted",
+    logicalPostId: null,
+    noticeTweetIds: ["banked-notice-accepted"],
+    sourceTweetIds: ["banked-notice-accepted"],
+  });
+  Object.assign(client.rows.get(original.candidateId)!, {
+    source_snapshot_hash: "banked-source",
+    input_hash: "banked-input",
+    next_retry_at: "2026-09-10T00:00:00.000Z",
+    ai_name_ja: "承認済みBANKED配布名",
+    ai_name_en: "Accepted BANKED Distribution Name",
+    ai_name_zh: "已接受的BANKED发放名称",
+    ai_status: "accepted",
+    generation_attempts: 2,
+    last_generated_at: "2026-09-08T00:00:00.000Z",
+  });
+
+  const retried = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "banked-notice-accepted",
+    logicalPostId: null,
+    noticeTweetIds: ["banked-notice-accepted"],
+    sourceTweetIds: ["banked-notice-accepted"],
+  });
+
+  assert.equal(retried.candidateEventKind, "banked_distribution");
+  assert.equal(retried.aiStatus, "accepted");
+  assert.equal(retried.aiNameJa, "承認済みBANKED配布名");
+  assert.equal(retried.inputHash, "banked-input");
+  assert.equal(retried.sourceSnapshotHash, "banked-source");
+  assert.equal(retried.generationAttempts, 2);
+  assert.equal(retried.nextRetryAt, "2026-09-10T00:00:00.000Z");
+});
+
+test("seed retry cannot change the event kind after candidate promotion", async () => {
+  const client = fakeCandidateClient();
+  const promoted = candidate("promoted-notice", {
+    candidateEventKind: "reset_execution",
+    aiStatus: "accepted",
+    aiNameJa: "承認済み強制リセット名",
+    aiNameEn: "Accepted Forced Reset Name",
+    aiNameZh: "已接受的强制重置名称",
+    inputHash: "promoted-input",
+    lifecycleStatus: "promoted",
+    promotedEventKey: "tibo-reset-promoted",
+  });
+  client.rows.set(promoted.candidateId, databaseCandidate(promoted));
+
+  const retried = await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: promoted.officialNoticeTweetId,
+    logicalPostId: promoted.logicalPostId,
+    noticeTweetIds: promoted.noticeTweetIds,
+    sourceTweetIds: promoted.sourceTweetIds,
+  });
+
+  assert.equal(retried.lifecycleStatus, "promoted");
+  assert.equal(retried.promotedEventKey, "tibo-reset-promoted");
+  assert.equal(retried.candidateEventKind, "reset_execution");
+  assert.equal(retried.aiStatus, "accepted");
+  assert.equal(retried.aiNameJa, "承認済み強制リセット名");
+  assert.equal(retried.inputHash, "promoted-input");
 });
 
 test("trusted logical identity upgrades the same fallback row and unions provenance", async () => {
@@ -485,6 +662,7 @@ test("claim rejects blank hashes and cooldown rows", async () => {
 
   assert.equal(await claimResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution",
     sourceSnapshotHash: "",
     inputHash: "input-hash",
     now: "2026-09-08T01:00:00.000Z",
@@ -492,6 +670,7 @@ test("claim rejects blank hashes and cooldown rows", async () => {
   }), null);
   assert.equal(await claimResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution",
     sourceSnapshotHash: "source-hash",
     inputHash: "input-hash",
     now: "2026-09-08T01:00:00.000Z",
@@ -514,6 +693,7 @@ test("claim stores hashes and reclaims a stale pending candidate", async () => {
 
   const claimed = await claimResetDisplayNameCandidateGeneration(client, {
     candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution",
     sourceSnapshotHash: "source-hash",
     inputHash: "input-hash",
     now: "2026-09-08T01:00:00.000Z",
@@ -750,6 +930,7 @@ test("a stale worker cannot overwrite a reclaimed candidate result", async () =>
   const freshClaimedAt = await (async () => {
     const claimed = await claimResetDisplayNameCandidateGeneration(client, {
       candidateId: seeded.candidateId,
+      candidateEventKind: "reset_execution",
       sourceSnapshotHash: "source-hash",
       inputHash: "input-hash",
       now: "2026-09-08T01:00:00.000Z",
@@ -784,4 +965,88 @@ test("a stale worker cannot overwrite a reclaimed candidate result", async () =>
 
   assert.equal(client.resultWrites.length, 1);
   assert.deepEqual(client.rows.get(seeded.candidateId)?.ai_flags, ["provider_rate_limited"]);
+});
+
+test("a result from the old kind claim cannot write after candidate reclassification", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-reclassified",
+    logicalPostId: "logical-reclassified",
+    noticeTweetIds: ["notice-reclassified"],
+    sourceTweetIds: ["notice-reclassified"],
+  });
+  const oldClaimedAt = await claimCandidate(
+    client,
+    seeded.candidateId,
+    "reset-source-hash",
+    "reset-input-hash",
+    "2026-09-08T00:00:00.000Z",
+  );
+
+  await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-reclassified",
+    logicalPostId: "logical-reclassified",
+    noticeTweetIds: ["notice-reclassified"],
+    sourceTweetIds: ["notice-reclassified"],
+  });
+
+  await assert.rejects(() => writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "reset-source-hash",
+    inputHash: "reset-input-hash",
+    aiStatus: "accepted",
+    aiInputMode: "notice-precompute-v1",
+    result: {
+      ...rateLimitedResult(null),
+      status: "success",
+      name: "旧強制リセット名",
+      nameEn: "Old Forced Reset Name",
+      nameZh: "旧强制重置名称",
+      flags: [],
+    },
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T00:01:00.000Z",
+    claimedAt: oldClaimedAt,
+  }), /did not find the candidate/);
+
+  const current = client.rows.get(seeded.candidateId);
+  assert.equal(current?.candidate_event_kind, "banked_distribution");
+  assert.equal(current?.ai_status, "unprocessed");
+  assert.equal(current?.input_hash, null);
+  assert.equal(current?.source_snapshot_hash, null);
+  assert.equal(current?.ai_name_ja, null);
+  assert.equal(client.resultWrites.length, 0);
+});
+
+test("a stale reset snapshot cannot claim generation after BANKED reclassification", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-stale-snapshot",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-stale-snapshot"],
+    sourceTweetIds: ["notice-stale-snapshot"],
+  });
+  await upsertResetDisplayNameCandidateSeed(client, {
+    candidateEventKind: "banked_distribution",
+    officialNoticeTweetId: "notice-stale-snapshot",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-stale-snapshot"],
+    sourceTweetIds: ["notice-stale-snapshot"],
+  });
+
+  const staleReadClaim = {
+    candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution" as const,
+    sourceSnapshotHash: "stale-reset-source",
+    inputHash: "stale-reset-input",
+    now: "2026-09-08T01:00:00.000Z",
+    stalePendingBefore: "2026-09-08T00:30:00.000Z",
+  };
+  const claimed = await claimResetDisplayNameCandidateGeneration(client, staleReadClaim);
+
+  assert.equal(claimed, null);
+  assert.equal(client.rows.get(seeded.candidateId)?.candidate_event_kind, "banked_distribution");
+  assert.equal(client.rows.get(seeded.candidateId)?.ai_status, "unprocessed");
+  assert.equal(client.claimWrites.length, 0);
 });

@@ -15,6 +15,7 @@ const NOW = new Date("2026-09-09T00:00:00.000Z");
 function candidate(): ResetDisplayNameCandidateRecord {
   return {
     candidateId: "candidate-private-1",
+    candidateEventKind: "reset_execution",
     noticeDedupeKey: "logical-post:2090000000000000001",
     officialNoticeTweetId: "2090000000000000002",
     logicalPostId: "2090000000000000001",
@@ -46,6 +47,7 @@ function candidate(): ResetDisplayNameCandidateRecord {
 
 function notice(): ResetDisplayNameCandidateNotice {
   return {
+    candidateEventKind: "reset_execution",
     officialNoticeTweetId: "2090000000000000002",
     logicalPostId: "2090000000000000001",
     noticeTweetIds: ["2090000000000000002"],

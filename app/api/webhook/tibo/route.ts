@@ -98,6 +98,7 @@ import {
 } from "@/lib/radar/resetDisplayNameCandidateStore";
 import {
   hasFutureBankedDistributionIntent,
+  isBankedDistributionNotice,
   isRecurringConditionalBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
 
@@ -376,13 +377,15 @@ async function seedResetDisplayNameCandidateIfEligible(
   const isHistoricalOnly = (candidate.temporal_kind as unknown) === "historical" ||
     (candidate.ai_temporal_kind as unknown) === "historical";
   const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(candidate.text);
+  const hasFutureBankedDistribution = hasFutureBankedDistributionIntent(candidate.text);
+  const isBankedDistribution = isBankedDistributionNotice(candidate.text);
   if (!isExecutionBearingResetDisplayNameNotice({
     signalType: candidate.signal_type,
     verificationStatus: candidate.verification_status,
     isReply: candidate.is_reply === true,
     isHistoricalOnly,
     isPresentationOnlyOngoingBanked,
-    hasFutureBankedDistributionIntent: hasFutureBankedDistributionIntent(candidate.text),
+    hasFutureBankedDistributionIntent: hasFutureBankedDistribution,
   })) {
     return;
   }
@@ -391,6 +394,7 @@ async function seedResetDisplayNameCandidateIfEligible(
     ? editHistoryMetadata.editHistoryTweetIds
     : [candidate.tweet_id];
   const seed: ResetDisplayNameCandidateSeed = {
+    candidateEventKind: isBankedDistribution ? "banked_distribution" : "reset_execution",
     officialNoticeTweetId: candidate.tweet_id,
     logicalPostId: editHistoryMetadata.trusted ? editHistoryMetadata.logicalPostId : null,
     noticeTweetIds: uniqueNonEmptyTweetIds([candidate.tweet_id, ...trustedNoticeIds]),

@@ -161,6 +161,14 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 先行する Tibo teaser を既存の BANKED execution に表示上関連付ける場合は、非reply/非quote、strong なreset関連性、投稿時点で解決済みの時間窓、実測時刻が窓と有効期限内にあること、scope 矛盾がないことをすべて要求します。複数teaser/複数eventが候補になる場合、既存のmanual provenanceがある場合、または窓内に競合するexecutionがある場合は自動追加しません。自動関連付けは既存source tweet IDを含むcanonical history projectionで決定的に導出し、`recordKind`、execution時刻、`officialNoticeTweetId`、scope、reset method、確率境界は変更しません。曖昧な場合は未関連のままにします。
 
+### BANKED公式告知の表示名候補
+
+将来の BANKED 配布を明示する公式告知は、実際の配布観測より前に表示名候補を告知の正確な tweet ID（trusted edit chain があればその logical post identity）へ結び付けて生成できます。候補は `candidate_event_kind = banked_distribution` として保存し、provisional のまま保持します。告知だけでは履歴イベントを作成せず、canonical display name にも昇格しません。
+
+モニターが BANKED 利用可能数の持続的な増加を確認し、正規の `banked-distribution-observation-v2` estimate を保存した後に限り候補を昇格できます。昇格には、identity resolver が既存の canonical BANKED event key と同じ authoritative estimate を返すことに加え、estimate の `officialNoticeTweetId` が候補の official notice ID と完全一致し、同じ ID が estimate の `tiboSourceTweetIds` に存在することを要求します。通常の近接時刻、同じ論理投稿の別イベント、似た本文だけでは結び付けません。BANKED候補はこのestimate以外のformal adoption/forced-reset evidenceでは昇格できません。current/legacy の forced-reset estimate、別 BANKED notice の estimate はこの条件を満たしません。
+
+昇格するのは localized display name だけです。event key、`recordKind = banked_distribution`、`resetMethod = 任意リセット権配布`、scope、実測時刻、BANKED identity、global random reset clock、probability input は変更しません。manual または既に accepted の canonical display name は既存の保護規則どおり保持します。候補と estimate のIDが一致しない、resolver が conflict/blocked/new を返す、または estimate が不正・legacy/別種別の場合は候補を昇格せず保留します。
+
 ## 9. Worked examples
 
 次の例は static data または既存 test fixture に基づきます。各例を `source facts -> canonical fields -> public presentation` の順に読むことができます。

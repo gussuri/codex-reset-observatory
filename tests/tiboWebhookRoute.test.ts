@@ -188,10 +188,14 @@ function installSupabaseWebhookMock(requestBodies: unknown[]) {
   };
 }
 
-function candidateSeedRecord(tweetId: string) {
+function candidateSeedRecord(
+  tweetId: string,
+  candidateEventKind: "reset_execution" | "banked_distribution" = "reset_execution",
+) {
   const now = "2026-09-08T00:00:00.000Z";
   return {
     candidate_id: "00000000-0000-0000-0000-000000000010",
+    candidate_event_kind: candidateEventKind,
     notice_dedupe_key: `official-notice:${tweetId}`,
     official_notice_tweet_id: tweetId,
     logical_post_id: null,
@@ -241,9 +245,15 @@ function installCandidateSeedWebhookMock(
           headers: { "content-type": "application/json" },
         });
       }
-      const body = init?.body ? JSON.parse(String(init.body)) as { p_seed?: { official_notice_tweet_id?: string } } : {};
+      const body = init?.body ? JSON.parse(String(init.body)) as {
+        p_seed?: {
+          candidate_event_kind?: "reset_execution" | "banked_distribution";
+          official_notice_tweet_id?: string;
+        };
+      } : {};
       const tweetId = body.p_seed?.official_notice_tweet_id ?? "2084000000000000200";
-      return new Response(JSON.stringify(candidateSeedRecord(tweetId)), {
+      const eventKind = body.p_seed?.candidate_event_kind ?? "reset_execution";
+      return new Response(JSON.stringify(candidateSeedRecord(tweetId, eventKind)), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -297,11 +307,13 @@ test("official notice webhook writes an identity-only candidate seed without AI 
     );
     assert.ok(seedBody);
     assert.deepEqual(Object.keys(seedBody.p_seed).sort(), [
+      "candidate_event_kind",
       "logical_post_id",
       "notice_tweet_ids",
       "official_notice_tweet_id",
       "source_tweet_ids",
     ]);
+    assert.equal(seedBody.p_seed.candidate_event_kind, "reset_execution");
     assert.equal("expected_end_at" in seedBody.p_seed, false);
     assert.equal("scope" in seedBody.p_seed, false);
   } finally {
@@ -1913,6 +1925,62 @@ test("resolves official notice timing for repeated weekday post anchored by evid
   } finally {
     restoreFetch();
     restoreGemini();
+    restoreEnvironment(previous);
+  }
+});
+
+test("future and loading-form BANKED notices seed and retry with the BANKED candidate kind", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "off";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "seed";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT = "2026-08-01T00:00:00.000Z";
+  const mock = installCandidateSeedWebhookMock(requestBodies);
+
+  try {
+    const posts = [
+      {
+        tweetId: "2107913674593644711",
+        text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
+      },
+      {
+        tweetId: "2107913674593644712",
+        text: "We are loading a banked reset into all accounts of our Plus, Pro and Business users.",
+      },
+    ].map((post) => ({
+      ...post,
+      tweetUrl: `https://x.com/thsottiaux/status/${post.tweetId}`,
+      tweetCreatedAt: "2026-10-07T16:00:00.000Z",
+    }));
+    for (const post of posts) {
+      const firstResponse = await POST(buildRequest(post));
+      const retryResponse = await POST(buildRequest(post));
+      assert.equal(firstResponse.status, 200);
+      assert.equal(retryResponse.status, 200);
+    }
+
+    assert.equal(mock.seedWrites, 4);
+    const seedPayloads = requestBodies.flatMap((body) =>
+      typeof body === "object" && body !== null && "p_seed" in body
+        ? [(body as { p_seed: Record<string, unknown> }).p_seed]
+        : [],
+    );
+    assert.equal(seedPayloads.length, 4);
+    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(4).fill("banked_distribution"));
+    assert.deepEqual(seedPayloads.map((seed) => seed.official_notice_tweet_id), [
+      "2107913674593644711",
+      "2107913674593644711",
+      "2107913674593644712",
+      "2107913674593644712",
+    ]);
+  } finally {
+    mock.restore();
     restoreEnvironment(previous);
   }
 });
