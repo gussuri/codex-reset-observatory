@@ -110,7 +110,7 @@ test("candidate promotion RPC mirrors public-valid execution estimate semantics"
 
 test("current RPC migration allows only exact notice-linked v2 BANKED observation evidence", () => {
   const sql = readFileSync(
-    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
     "utf8",
   );
   const bankedEvidence = sql.match(
@@ -159,7 +159,7 @@ test("candidate promotion replaces nonaccepted canonical AI fields consistently"
 
 test("candidate event-kind changes invalidate generation state without changing candidate identity", () => {
   const sql = readFileSync(
-    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
     "utf8",
   );
   const seedRpc = sql.match(
@@ -196,7 +196,7 @@ test("candidate event-kind changes invalidate generation state without changing 
 
 test("candidate promotion and reclassification serialize on the same row lock", () => {
   const sql = readFileSync(
-    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "supabase/migrations/20261007212345_allow_banked_notice_name_candidate_promotion.sql",
     "utf8",
   );
   const seedRpc = sql.match(
