@@ -27,6 +27,7 @@ declare
   v_official_notice_tweet_id text;
   v_logical_post_id text;
   v_candidate_event_kind text;
+  v_kind_changed boolean := false;
   v_notice_tweet_ids text[];
   v_source_tweet_ids text[];
   v_effective_logical_post_id text;
@@ -162,6 +163,10 @@ begin
       'official-notice:' || v_official_notice_tweet_id
     );
 
+    v_kind_changed :=
+      v_candidate.lifecycle_status = 'provisional'
+      and v_candidate.candidate_event_kind is distinct from v_candidate_event_kind;
+
     update public.reset_display_name_candidates
        set notice_dedupe_key = v_notice_dedupe_key,
            official_notice_tweet_id = v_candidate.official_notice_tweet_id,
@@ -169,6 +174,22 @@ begin
              when v_candidate.lifecycle_status = 'provisional' then v_candidate_event_kind
              else v_candidate.candidate_event_kind
            end,
+           source_snapshot_hash = case when v_kind_changed then null else v_candidate.source_snapshot_hash end,
+           input_hash = case when v_kind_changed then null else v_candidate.input_hash end,
+           next_retry_at = case when v_kind_changed then null else v_candidate.next_retry_at end,
+           ai_name_ja = case when v_kind_changed then null else v_candidate.ai_name_ja end,
+           ai_name_en = case when v_kind_changed then null else v_candidate.ai_name_en end,
+           ai_name_zh = case when v_kind_changed then null else v_candidate.ai_name_zh end,
+           ai_confidence = case when v_kind_changed then null else v_candidate.ai_confidence end,
+           ai_evidence = case when v_kind_changed then null else v_candidate.ai_evidence end,
+           ai_reason = case when v_kind_changed then null else v_candidate.ai_reason end,
+           ai_flags = case when v_kind_changed then '{}'::text[] else v_candidate.ai_flags end,
+           ai_model = case when v_kind_changed then null else v_candidate.ai_model end,
+           ai_prompt_version = case when v_kind_changed then null else v_candidate.ai_prompt_version end,
+           ai_input_mode = case when v_kind_changed then null else v_candidate.ai_input_mode end,
+           ai_status = case when v_kind_changed then 'unprocessed' else v_candidate.ai_status end,
+           generation_attempts = case when v_kind_changed then 0 else v_candidate.generation_attempts end,
+           last_generated_at = case when v_kind_changed then null else v_candidate.last_generated_at end,
            logical_post_id = v_effective_logical_post_id,
            notice_tweet_ids = (
              select coalesce(array_agg(distinct item order by item), '{}'::text[])

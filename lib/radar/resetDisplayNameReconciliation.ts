@@ -1003,6 +1003,7 @@ export async function reconcileResetDisplayNames(
       try {
         claimed = await claimResetDisplayNameCandidateGeneration(candidateStore, {
           candidateId: candidate.candidateId,
+          candidateEventKind: candidate.candidateEventKind,
           sourceSnapshotHash,
           inputHash,
           now: now.toISOString(),

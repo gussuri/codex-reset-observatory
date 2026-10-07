@@ -2,6 +2,7 @@ import type { RandomResetNameGenerationResult } from "./randomResetNaming";
 import type {
   ResetDisplayNameCandidateAiStatus,
   ResetDisplayNameCandidateExecutionEvidence,
+  ResetDisplayNameCandidateEventKind,
   ResetDisplayNameCandidatePromotionTarget,
   ResetDisplayNameCandidatePromotionResolution,
   ResetDisplayNameCandidateRecord,
@@ -266,6 +267,7 @@ export async function claimResetDisplayNameCandidateGeneration(
   client: ResetDisplayNameCandidateStoreClient,
   input: {
     candidateId: string;
+    candidateEventKind: ResetDisplayNameCandidateEventKind;
     sourceSnapshotHash: string;
     inputHash: string;
     now: string;
@@ -285,6 +287,7 @@ export async function claimResetDisplayNameCandidateGeneration(
       updated_at: input.now,
     })
     .eq("candidate_id", input.candidateId)
+    .eq("candidate_event_kind", input.candidateEventKind)
     .eq("lifecycle_status", "provisional")
     .or(`next_retry_at.is.null,next_retry_at.lte.${input.now}`)
     .or(`ai_status.neq.pending,updated_at.lt.${input.stalePendingBefore}`)

@@ -156,3 +156,59 @@ test("candidate promotion replaces nonaccepted canonical AI fields consistently"
   assert.doesNotMatch(sql, /ai_name_en\s*=\s*coalesce\s*\(v_existing_name\.ai_name_en/i);
   assert.doesNotMatch(sql, /ai_name_zh\s*=\s*coalesce\s*\(v_existing_name\.ai_name_zh/i);
 });
+
+test("candidate event-kind changes invalidate generation state without changing candidate identity", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const seedRpc = sql.match(
+    /create or replace function public\.upsert_reset_display_name_candidate_seed\(p_seed jsonb\)([\s\S]*?)\n\$function\$;/i,
+  )?.[1];
+  assert.ok(seedRpc, "candidate seed RPC must be present");
+
+  assert.match(seedRpc, /candidate_event_kind\s+is distinct from\s+v_candidate_event_kind/i);
+  assert.match(seedRpc, /v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
+  for (const clearedField of [
+    "source_snapshot_hash",
+    "input_hash",
+    "next_retry_at",
+    "ai_name_ja",
+    "ai_name_en",
+    "ai_name_zh",
+    "ai_confidence",
+    "ai_evidence",
+    "ai_reason",
+    "ai_flags",
+    "ai_model",
+    "ai_prompt_version",
+    "ai_input_mode",
+    "last_generated_at",
+  ]) {
+    assert.match(seedRpc, new RegExp(`${clearedField}\\s*=\\s*case\\s+when\\s+v_kind_changed\\s+then`, "i"));
+  }
+  assert.match(seedRpc, /ai_status\s*=\s*case\s+when\s+v_kind_changed\s+then\s+'unprocessed'/i);
+  assert.match(seedRpc, /generation_attempts\s*=\s*case\s+when\s+v_kind_changed\s+then\s+0/i);
+  assert.match(seedRpc, /where\s+candidate_id\s*=\s*v_candidate\.candidate_id/i);
+  assert.match(seedRpc, /notice_tweet_ids\s*\|\|\s*v_notice_tweet_ids/i);
+  assert.match(seedRpc, /source_tweet_ids\s*\|\|\s*v_source_tweet_ids/i);
+});
+
+test("candidate promotion and reclassification serialize on the same row lock", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261008120000_allow_banked_notice_name_candidate_promotion.sql",
+    "utf8",
+  );
+  const seedRpc = sql.match(
+    /create or replace function public\.upsert_reset_display_name_candidate_seed\(p_seed jsonb\)([\s\S]*?)\n\$function\$;/i,
+  )?.[1];
+  const promotionRpc = sql.match(
+    /create or replace function public\.promote_reset_display_name_candidate\([\s\S]*?\n\$function\$;/i,
+  )?.[0];
+  assert.ok(seedRpc);
+  assert.ok(promotionRpc);
+  assert.match(seedRpc, /from\s+public\.reset_display_name_candidates[\s\S]*?for update/i);
+  assert.match(promotionRpc, /from\s+public\.reset_display_name_candidates[\s\S]*?for update/i);
+  assert.match(promotionRpc, /if\s+v_candidate\.candidate_event_kind\s*=\s*'banked_distribution'\s+then/i);
+  assert.match(seedRpc, /candidate_event_kind\s*=\s*case[\s\S]*?when\s+v_candidate\.lifecycle_status\s*=\s*'provisional'/i);
+});

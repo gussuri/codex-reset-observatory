@@ -222,7 +222,29 @@ function fakeCandidateStore(
       }
       existing.logical_post_id ??= seed.logical_post_id;
       if (existing.lifecycle_status === "provisional") {
-        existing.candidate_event_kind = seed.candidate_event_kind ?? "reset_execution";
+        const nextKind = seed.candidate_event_kind ?? "reset_execution";
+        if (existing.candidate_event_kind !== nextKind) {
+          Object.assign(existing, {
+            candidate_event_kind: nextKind,
+            source_snapshot_hash: null,
+            input_hash: null,
+            next_retry_at: null,
+            ai_name_ja: null,
+            ai_name_en: null,
+            ai_name_zh: null,
+            ai_confidence: null,
+            ai_evidence: null,
+            ai_reason: null,
+            ai_flags: [],
+            ai_model: null,
+            ai_prompt_version: null,
+            ai_input_mode: null,
+            ai_status: "unprocessed",
+            generation_attempts: 0,
+            last_generated_at: null,
+            updated_at: NOW.toISOString(),
+          });
+        }
       }
       existing.notice_dedupe_key = existing.logical_post_id
         ? `logical-post:${existing.logical_post_id}`
@@ -1333,4 +1355,155 @@ test("non-public execution estimates are not authoritative candidate evidence", 
       officialNoticeTweetId: "notice-1",
     }), []);
   }
+});
+
+test("reclassifying an accepted reset candidate as BANKED cannot promote its old reset name", async () => {
+  const officialNoticeTweetId = "2107913674593644711";
+  const canonicalEventKey = `banked-reset-${officialNoticeTweetId}`;
+  const candidateStorage = fakeCandidateStore([candidate("candidate-reclassified-to-banked", {
+    officialNoticeTweetId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    sourceSnapshotHash: "reset-snapshot",
+    inputHash: "reset-input",
+    aiNameJa: "旧分類の強制リセット名",
+    aiNameEn: "Old Forced Reset Name",
+    aiNameZh: "旧强制重置名称",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const text = "Loading a banked reset in everyone's paid accounts.";
+  const announcement = {
+    ...sourceRow(officialNoticeTweetId),
+    text,
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    classification_source: "manual",
+    verification_status: "confirmed" as const,
+    expires_at: "2026-09-10T00:00:00.000Z",
+    is_reply: false,
+    is_quote: false,
+    logical_post_id: null,
+    edit_history_tweet_ids: null,
+    edit_version: null,
+    edit_metadata_source: null,
+  };
+  const estimate = bankedEstimate(canonicalEventKey, officialNoticeTweetId);
+  const result = await reconcileResetDisplayNames({
+    data: {
+      active_tibo_signals: [announcement],
+      recent_tibo_signals: [announcement],
+      reset_execution_estimates: [estimate],
+      tibo_formal_adoptions: [],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [{
+      ...bankedDistributionEvent(canonicalEventKey),
+      completed_at: estimate.displayExecutionAt,
+      closed_at: estimate.displayExecutionAt,
+      sourceTweetIds: [officialNoticeTweetId],
+      officialNoticeTweetId,
+    }],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: { mode: "full", adoptionAt: "2026-09-01T00:00:00.000Z" },
+    candidateNotices: [notice(officialNoticeTweetId, {
+      candidateEventKind: "banked_distribution",
+      sourceContext: text,
+    })],
+    candidateStore: candidateStorage.client,
+  });
+
+  const current = candidateStorage.rows[0];
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(candidateStorage.promotionWrites, 0);
+  assert.equal(current?.candidateEventKind, "banked_distribution");
+  assert.equal(current?.candidateId, "candidate-reclassified-to-banked");
+  assert.equal(current?.officialNoticeTweetId, officialNoticeTweetId);
+  assert.equal(current?.aiStatus, "unprocessed");
+  assert.equal(current?.aiNameJa, null);
+  assert.equal(current?.inputHash, null);
+  assert.deepEqual(current?.noticeTweetIds, [officialNoticeTweetId]);
+});
+
+test("reclassifying an accepted BANKED candidate as reset cannot promote its old BANKED name", async () => {
+  const officialNoticeTweetId = "2090000000000000001";
+  const logicalPostId = "2090000000000000100";
+  const canonicalEventKey = "canonical-forced-reset-after-reclassification";
+  const candidateStorage = fakeCandidateStore([candidate("candidate-reclassified-to-reset", {
+    candidateEventKind: "banked_distribution",
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    sourceSnapshotHash: "banked-snapshot",
+    inputHash: "banked-input",
+    aiNameJa: "旧BANKED配布名",
+    aiNameEn: "Old BANKED Distribution Name",
+    aiNameZh: "旧BANKED发放名称",
+    aiModel: "gemini-3.5-flash-lite",
+    aiPromptVersion: "random-reset-name-v3",
+    aiInputMode: "notice-precompute-v1",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const formalNotice = {
+    ...sourceRow(officialNoticeTweetId),
+    text: "A recorded reset announcement.",
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 1,
+    verification_status: "confirmed" as const,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const adoption: TiboFormalAdoptionRecord = {
+    id: "adoption-reclassified-to-reset",
+    logicalPostId,
+    logicalPostTweetIds: [officialNoticeTweetId],
+    resetEventKey: canonicalEventKey,
+    representativeTweetId: officialNoticeTweetId,
+    sourceTweetIds: [officialNoticeTweetId],
+    claimSource: "new_adoption",
+    adoptedAt: CANDIDATE_TIMESTAMP,
+    claimedAt: CANDIDATE_TIMESTAMP,
+    createdAt: CANDIDATE_TIMESTAMP,
+    updatedAt: CANDIDATE_TIMESTAMP,
+  };
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [formalNotice],
+      tibo_formal_adoptions: [adoption],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [resetEvent(canonicalEventKey)],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: { mode: "full", adoptionAt: "2026-09-01T00:00:00.000Z" },
+    candidateNotices: [notice(officialNoticeTweetId, { logicalPostId })],
+    candidateStore: candidateStorage.client,
+  });
+
+  const current = candidateStorage.rows[0];
+  assert.equal(result.candidatePromotions, 0);
+  assert.equal(candidateStorage.promotionWrites, 0);
+  assert.equal(current?.candidateEventKind, "reset_execution");
+  assert.equal(current?.candidateId, "candidate-reclassified-to-reset");
+  assert.equal(current?.officialNoticeTweetId, officialNoticeTweetId);
+  assert.equal(current?.logicalPostId, logicalPostId);
+  assert.equal(current?.aiStatus, "unprocessed");
+  assert.equal(current?.aiNameJa, null);
+  assert.equal(current?.inputHash, null);
+  assert.deepEqual(current?.sourceTweetIds, [officialNoticeTweetId]);
 });
