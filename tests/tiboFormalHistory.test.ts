@@ -211,6 +211,57 @@ test("official notice is preferred over a teaser and only a prior post is linked
   assert.equal(findRelatedTiboNotice(reset, [noticeSignal({ tweet_created_at: "2026-07-29T00:00:00.000Z" })]), null);
 });
 
+test("a confirmed Tibo teaser up to 72 hours old links while rejected, weak, stale-boundary, and older teasers do not", () => {
+  const reset = resetSignal({
+    tweet_id: "2107676072871600470",
+    tweet_url: "https://x.com/thsottiaux/status/2107676072871600470",
+    tweet_created_at: "2026-10-07T03:33:43.000Z",
+  });
+  const teaser = (overrides: Partial<TiboNoticeSignal> = {}) => noticeSignal({
+    tweet_id: "2106845241357824205",
+    tweet_url: "https://x.com/thsottiaux/status/2106845241357824205",
+    text: "Feeling generous about the 28-day improvement challenge.",
+    tweet_created_at: "2026-10-04T20:33:43.000Z",
+    signal_type: "teaser",
+    confidence: 0.95,
+    verification_status: "confirmed",
+    ...overrides,
+  });
+
+  const related55HourTeaser = findRelatedTiboNotices(reset, [teaser()], "2026-10-01T00:00:00.000Z");
+  assert.deepEqual(related55HourTeaser.map((signal) => signal.tweet_id), ["2106845241357824205"]);
+
+  const event = convertTiboResetSignalToHistoryEvent(
+    reset,
+    selectRepresentativeTiboNotice(related55HourTeaser),
+    undefined,
+    related55HourTeaser,
+  );
+  assert.equal(event.details?.noticeType, "匂わせ投稿あり");
+  assert.equal(event.details?.noticeToExecution, "55時間");
+  assert.deepEqual(event.sourceTweetIds, ["2106845241357824205", "2107676072871600470"]);
+
+  const exactly72HoursOld = teaser({ tweet_created_at: "2026-10-04T03:33:43.000Z" });
+  assert.equal(findRelatedTiboNotice(reset, [exactly72HoursOld])?.tweet_id, exactly72HoursOld.tweet_id);
+
+  assert.equal(
+    findRelatedTiboNotice(reset, [teaser({ tweet_created_at: "2026-10-04T03:33:42.999Z" })]),
+    null,
+  );
+  assert.equal(
+    findRelatedTiboNotice(reset, [teaser()], "2026-10-05T00:00:00.000Z"),
+    null,
+  );
+  assert.equal(
+    findRelatedTiboNotice(reset, [teaser({ verification_status: "rejected" })]),
+    null,
+  );
+  assert.equal(
+    findRelatedTiboNotice(reset, [teaser({ confidence: 0.79 })]),
+    null,
+  );
+});
+
 test("history separates the first announcement from the most specific representative notice", () => {
   const reset = resetSignal({
     tweet_created_at: "2026-08-01T09:00:00.000Z",

@@ -140,6 +140,42 @@ test("generator parses Gemini JSON and never needs to infer scope from product n
   }
 });
 
+test("Gemini request separates short public event notes from the internal audit rationale", async () => {
+  const originalFetch = globalThis.fetch;
+  let systemPrompt = "";
+  globalThis.fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as {
+      contents?: Array<{ parts?: Array<{ text?: string }> }>;
+    };
+    systemPrompt = request.contents?.[0]?.parts?.[0]?.text ?? "";
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify(validPayload) }] } }],
+    }), { status: 200 });
+  };
+
+  try {
+    const result = await generateResetEventMetadata(
+      {
+        completedAt: "2026-09-12T15:00:00.000Z",
+        sourceContext,
+        fallbackReasonType: "詫びリセット",
+        fallbackScope: "全有料プラン",
+      },
+      { apiKey: "test-key", model: "test-model", timeoutMs: 1000 },
+    );
+
+    assert.equal(result.status, "success");
+    assert.match(systemPrompt, /public note[s]? (?:should|must) (?:only )?(?:add|describe).*event/i);
+    assert.match(systemPrompt, /one (?:short|concise) (?:factual )?sentence/i);
+    assert.match(systemPrompt, /Do not.*(?:reasonType|classification rationale)/i);
+    assert.match(systemPrompt, /Do not.*(?:classified|processed|explain scope|system interpretation)/i);
+    assert.match(systemPrompt, /reasonJa.*internal audit.*reasonType.*scope/i);
+    assert.equal(result.reasonJa, validPayload.reasonJa);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("generator returns a safe failure result instead of throwing on upstream errors", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response("upstream failed", { status: 503 });
