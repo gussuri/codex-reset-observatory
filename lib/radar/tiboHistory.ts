@@ -303,7 +303,8 @@ export function rematerializeCanonicalResetHistoryContext(
 const FORMAL_RESET_CONFIDENCE = 0.95;
 const OFFICIAL_NOTICE_CONFIDENCE = 0.95;
 const TEASER_CONFIDENCE = 0.8;
-export const NOTICE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+export const NOTICE_LOOKBACK_MS = 72 * 60 * 60 * 1000;
+const BANKED_DISTRIBUTION_NOTICE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const DUPLICATE_RESET_WINDOW_MS = 5 * 60 * 1000;
 const RULE_BACKED_CLASSIFICATION_SOURCES = new Set<TiboClassificationSource>([
   "rule",
@@ -608,7 +609,7 @@ export function findRelatedBankedDistributionNotices(
     return completionTime !== null &&
       completionTime >= firstAnnouncementTime &&
       completionTime <= observedTime &&
-      completionTime - firstAnnouncementTime <= NOTICE_LOOKBACK_MS;
+      completionTime - firstAnnouncementTime <= BANKED_DISTRIBUTION_NOTICE_LOOKBACK_MS;
   });
 
   return [...officialCluster, ...completionSignals].sort((left, right) => {
@@ -1027,6 +1028,7 @@ function getCanonicalFormalHistoryEvent(
   estimates: ReadonlyArray<ResetExecutionEstimate>,
   adoptionLedgers: ReadonlyArray<TiboFormalAdoptionLedgerLike>,
   dynamicEvents: ReadonlyArray<WindowEventLike>,
+  persistedRelatedNotices: ReadonlyArray<TiboNoticeSignal>,
   allowEffectiveContent: boolean,
 ) {
   const effectiveRow = allowEffectiveContent
@@ -1037,7 +1039,7 @@ function getCanonicalFormalHistoryEvent(
     .sort(compareRepresentativeSignals)[0];
   if (!representativeRow) return null;
 
-  const relatedNotices = logicalPost.rawVersions
+  const relatedNotices = [...logicalPost.rawVersions
     .flatMap((row) => {
       const source = row as TiboLogicalPostRow & {
         related_notice?: TiboNoticeSignal | null;
@@ -1047,7 +1049,7 @@ function getCanonicalFormalHistoryEvent(
         ...(source.related_notices ?? []),
         ...(source.related_notice ? [source.related_notice] : []),
       ];
-    })
+    }), ...persistedRelatedNotices]
     .filter((notice, index, all) =>
       all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
     );
@@ -1087,6 +1089,7 @@ function buildCanonicalFormalHistory(
   staticHistory: ReadonlyArray<WindowEventLike>,
   estimates: ReadonlyArray<ResetExecutionEstimate>,
   context: TiboHistoryIdentityContext,
+  noticeSignals: ReadonlyArray<TiboNoticeSignal | FormalTiboResetSignal>,
   projection: TiboReadSideProjection = buildTiboReadSideProjection(
     getHistoryIdentityProjectionInput(formalSignals, context),
   ),
@@ -1183,6 +1186,33 @@ function buildCanonicalFormalHistory(
     const canonicalEventKey = resolution.resetEventKey ??
       `tibo-reset-${logicalPost.logicalPostId}`;
     const canonicalSourceTweetIds = sourceTweetIdsByEventKey.get(canonicalEventKey) ?? sourceTweetIds;
+    const logicalPostTweetIds = new Set(logicalPost.sourceTweetIds);
+    const persistedNoticeTweetIds = new Set(
+      matchedReferencesSourceIds.filter((tweetId) => !logicalPostTweetIds.has(tweetId)),
+    );
+    const persistedLinkReference = (resolution.canRunFormalEnrichments
+      ? toEffectiveTiboLogicalPostRow(logicalPost)
+      : null) ?? (formalRows as FormalTiboResetSignal[])
+      .slice()
+      .sort(compareRepresentativeSignals)[0];
+    const resetTime = getTimestamp(persistedLinkReference?.tweet_created_at);
+    const persistedRelatedNotices = noticeSignals.filter((signal): signal is TiboNoticeSignal => {
+      if (
+        !persistedNoticeTweetIds.has(signal.tweet_id) ||
+        logicalPostTweetIds.has(signal.tweet_id) ||
+        (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") ||
+        signal.is_reply === true ||
+        signal.verification_status === "rejected"
+      ) {
+        return false;
+      }
+      const signalTime = getTimestamp(signal.tweet_created_at);
+      if (signalTime === null || resetTime === null || signalTime >= resetTime) return false;
+      const confidenceThreshold = signal.signal_type === "official_notice"
+        ? OFFICIAL_NOTICE_CONFIDENCE
+        : TEASER_CONFIDENCE;
+      return (signal.confidence ?? 0) >= confidenceThreshold;
+    });
     if (!resolution.canRunFormalEnrichments) {
       // A persisted formal reset is already historical evidence. Preserve its
       // boundary when a later edit is blocked, but let an existing event
@@ -1209,6 +1239,7 @@ function buildCanonicalFormalHistory(
         estimates,
         adoptionLedgers,
         dynamicEvents,
+        persistedRelatedNotices,
         false,
       );
       if (fallbackEvent) generatedEvents.push(fallbackEvent);
@@ -1224,6 +1255,7 @@ function buildCanonicalFormalHistory(
       estimates,
       adoptionLedgers,
       dynamicEvents,
+      persistedRelatedNotices,
       true,
     );
     if (canonicalEvent) generatedEvents.push(canonicalEvent);
@@ -2188,7 +2220,14 @@ function buildCanonicalResetHistoryParts(
   const formalSignals = formalTiboResets
     .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
   const canonicalFormalHistory = identityContext
-    ? buildCanonicalFormalHistory(formalSignals, staticHistory, estimates, identityContext, projection)
+    ? buildCanonicalFormalHistory(
+        formalSignals,
+        staticHistory,
+        estimates,
+        identityContext,
+        noticeSignals,
+        projection,
+      )
     : {
         events: clusterFormalTiboResetSignals(formalSignals),
         sourceTweetIdsByEventKey: new Map<string, string[]>(),

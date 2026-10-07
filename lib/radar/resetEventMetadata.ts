@@ -1,7 +1,7 @@
 import { RANDOM_RESET_NAME_MODEL } from "./randomResetNameConfig";
 import type { ResetReasonType, ResetScopeType } from "./types";
 
-export const RESET_EVENT_METADATA_PROMPT_VERSION = "reset-event-metadata-v1";
+export const RESET_EVENT_METADATA_PROMPT_VERSION = "reset-event-metadata-v2";
 export const RESET_EVENT_METADATA_MODEL = RANDOM_RESET_NAME_MODEL;
 export const RESET_EVENT_METADATA_TEMPERATURE = 0.15;
 
@@ -72,8 +72,9 @@ Rules:
 - If scope is not null, scopeEvidence MUST be a short exact substring of the supplied source context that contains both reset/credit applicability and the stated audience. A greeting alone is not evidence.
 - If scope is null, scopeEvidence MUST be null.
 - summaryJa, summaryEn, and summaryZh must concisely describe the same event-specific fact in Japanese, English, and Simplified Chinese.
-- noteJa, noteEn, and noteZh should briefly explain the evidence/context behind the event metadata in the corresponding language.
-- reasonJa must be a short Japanese audit explanation of why reasonType and scope were chosen.
+- Public notes must only add short factual context about the event that is not already stated by its summary, title, reasonType, or scope. Write each noteJa, noteEn, and noteZh as one short factual sentence in its corresponding language.
+- Do not use a public note to explain reasonType, provide classification rationale, negate another reason type, explain scope, describe internal classification or processing, or state an AI/system interpretation.
+- reasonJa must be a short Japanese internal audit explanation of why reasonType and scope were chosen.
 - Keep wording factual and neutral. Do not invent an official event name.
 
 Return only this JSON object:

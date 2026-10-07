@@ -7,6 +7,7 @@ import {
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
+import type { TiboFormalAdoptionLedgerLike } from "../lib/radar/tiboResetEventIdentity";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 import type { WindowEventLike } from "../lib/radar/types";
 
@@ -16,7 +17,7 @@ const EDITED_TWEET_ID = "2094252447271366730";
 type HistoryIdentityContext = {
   rawTiboSignals?: readonly (FormalTiboResetSignal | TiboNoticeSignal)[];
   recoveryObservations?: readonly CodexRecoveryObservationInput[];
-  adoptionLedgers?: readonly unknown[];
+  adoptionLedgers?: readonly TiboFormalAdoptionLedgerLike[];
   dynamicEvents?: readonly WindowEventLike[];
   adoptionLedgerReadError?: boolean;
 };
@@ -26,7 +27,7 @@ const combineWithIdentityContext = combineResetHistory as unknown as (
   formalTiboResets: FormalTiboResetSignal[],
   rejectedTiboResets?: never[],
   regularResetRows?: never[],
-  noticeSignals?: never[],
+  noticeSignals?: Array<TiboNoticeSignal | FormalTiboResetSignal>,
   recoveryObservations?: CodexRecoveryObservationInput[],
   estimates?: ResetExecutionEstimate[],
   bankedSignals?: never[],
@@ -596,4 +597,58 @@ test("canonical history identity does not mutate raw inputs", () => {
     { rawTiboSignals: [root, edited] },
   );
   assert.deepEqual([root, edited], before);
+});
+
+test("persisted teaser provenance remains attached to its canonical reset event", () => {
+  const resetId = "2107676072871600470";
+  const teaserId = "2106845241357824205";
+  const reset = tiboSignal(resetId, "2026-10-07T03:33:43.000Z", {
+    logical_post_id: resetId,
+    edit_history_tweet_ids: [resetId],
+    edit_version: 1,
+    edit_metadata_source: "x_api",
+  });
+  const teaser: TiboNoticeSignal = {
+    tweet_id: teaserId,
+    text: "Feeling generous about the 28-day improvement challenge.",
+    tweet_url: `https://x.com/thsottiaux/status/${teaserId}`,
+    tweet_created_at: "2026-10-04T20:33:43.000Z",
+    signal_type: "teaser",
+    confidence: 0.95,
+    verification_status: "confirmed",
+    classification_source: "manual",
+    teaser_strength: "weak",
+  };
+  const ledger: TiboFormalAdoptionLedgerLike = {
+    logicalPostId: resetId,
+    logicalPostTweetIds: [resetId],
+    resetEventKey: `tibo-reset-${resetId}`,
+    representativeTweetId: resetId,
+    sourceTweetIds: [teaserId, resetId],
+    claimSource: "new_adoption",
+    adoptedAt: "2026-10-07T03:34:00.000Z",
+  };
+
+  const history = combineWithIdentityContext(
+    [],
+    [reset],
+    [],
+    [],
+    [teaser],
+    [],
+    [],
+    [],
+    {
+      rawTiboSignals: [teaser, reset],
+      adoptionLedgers: [ledger],
+    },
+  );
+
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, `tibo-reset-${resetId}`);
+  assert.deepEqual([...history[0].sourceTweetIds ?? []].sort(), [teaserId, resetId].sort());
+  assert.equal(history[0].officialNoticeTweetId, teaserId);
+  assert.equal(history[0].details?.noticeType, "匂わせ投稿あり");
+  assert.equal(history[0].details?.noticeToExecution, "55時間");
+  assert.equal(teaser.signal_type, "teaser");
 });
