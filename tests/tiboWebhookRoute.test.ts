@@ -1929,7 +1929,7 @@ test("resolves official notice timing for repeated weekday post anchored by evid
   }
 });
 
-test("BANKED official notice seeds and retries retain the BANKED candidate kind", async () => {
+test("future and loading-form BANKED notices seed and retry with the BANKED candidate kind", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -1944,31 +1944,40 @@ test("BANKED official notice seeds and retries retain the BANKED candidate kind"
   const mock = installCandidateSeedWebhookMock(requestBodies);
 
   try {
-    const post = {
-      tweetId: "2107913674593644711",
-      text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
-      tweetUrl: "https://x.com/thsottiaux/status/2107913674593644711",
+    const posts = [
+      {
+        tweetId: "2107913674593644711",
+        text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
+      },
+      {
+        tweetId: "2107913674593644712",
+        text: "We are loading a banked reset into all accounts of our Plus, Pro and Business users.",
+      },
+    ].map((post) => ({
+      ...post,
+      tweetUrl: `https://x.com/thsottiaux/status/${post.tweetId}`,
       tweetCreatedAt: "2026-10-07T16:00:00.000Z",
-    };
-    const firstResponse = await POST(buildRequest(post));
-    const retryResponse = await POST(buildRequest(post));
+    }));
+    for (const post of posts) {
+      const firstResponse = await POST(buildRequest(post));
+      const retryResponse = await POST(buildRequest(post));
+      assert.equal(firstResponse.status, 200);
+      assert.equal(retryResponse.status, 200);
+    }
 
-    assert.equal(firstResponse.status, 200);
-    assert.equal(retryResponse.status, 200);
-    assert.equal(mock.seedWrites, 2);
+    assert.equal(mock.seedWrites, 4);
     const seedPayloads = requestBodies.flatMap((body) =>
       typeof body === "object" && body !== null && "p_seed" in body
         ? [(body as { p_seed: Record<string, unknown> }).p_seed]
         : [],
     );
-    assert.equal(seedPayloads.length, 2);
-    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), [
-      "banked_distribution",
-      "banked_distribution",
-    ]);
+    assert.equal(seedPayloads.length, 4);
+    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(4).fill("banked_distribution"));
     assert.deepEqual(seedPayloads.map((seed) => seed.official_notice_tweet_id), [
       "2107913674593644711",
       "2107913674593644711",
+      "2107913674593644712",
+      "2107913674593644712",
     ]);
   } finally {
     mock.restore();

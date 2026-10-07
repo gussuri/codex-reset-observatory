@@ -16,6 +16,7 @@ import {
   getRandomResetHeatmapCacheDimensions,
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
+  fetchResetDisplayNameCandidateNoticeSignals,
   RADAR_PAGE_CACHE_TTL_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
@@ -72,6 +73,85 @@ test("slow source caches use bounded TTLs while live signal caches stay short", 
   assert.equal(PREDICTION_HISTORY_CACHE_TTL_SECONDS, 15 * 60);
   assert.ok(TIBO_HISTORY_CACHE_TTL_SECONDS >= RADAR_CORE_CACHE_TTL_SECONDS);
   assert.ok(RESET_DISPLAY_NAME_CACHE_TTL_SECONDS >= TIBO_HISTORY_CACHE_TTL_SECONDS);
+});
+
+test("candidate notice fetch classifies loading-form BANKED announcement as BANKED without broadening eligibility", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  const announcementText = "We are loading a banked reset into all accounts of our Plus, Pro and Business users.";
+  const recurringConditionalText = "We give one banked reset for every day you don't have access to Astra on your paid ChatGPT plan.";
+  globalThis.fetch = async () => new Response(JSON.stringify([{
+    tweet_id: "banked-loading-notice",
+    text: announcementText,
+    tweet_url: "https://x.com/thsottiaux/status/banked-loading-notice",
+    tweet_created_at: "2026-10-07T16:00:00.000Z",
+    detected_at: "2026-10-07T16:01:00.000Z",
+    signal_type: "official_notice",
+    verification_status: "confirmed",
+    is_reply: false,
+    logical_post_id: null,
+    edit_history_tweet_ids: null,
+    edit_metadata_source: null,
+    ai_temporal_kind: "none",
+    ai_temporal_precision: "unknown",
+    temporal_kind: "none",
+    temporal_precision: "unknown",
+    expected_start_at: null,
+    expected_end_at: null,
+    ai_reset_type_ja: "任意リセット権配布",
+    scope: "全有料プラン",
+  }, {
+    tweet_id: "banked-recurring-conditional-notice",
+    text: recurringConditionalText,
+    tweet_url: "https://x.com/thsottiaux/status/banked-recurring-conditional-notice",
+    tweet_created_at: "2026-10-07T16:00:00.000Z",
+    detected_at: "2026-10-07T16:01:00.000Z",
+    signal_type: "official_notice",
+    verification_status: "confirmed",
+    is_reply: false,
+    logical_post_id: null,
+    edit_history_tweet_ids: null,
+    edit_metadata_source: null,
+    ai_temporal_kind: "none",
+    ai_temporal_precision: "unknown",
+    temporal_kind: "none",
+    temporal_precision: "unknown",
+    expected_start_at: null,
+    expected_end_at: null,
+    ai_reset_type_ja: "任意リセット権配布",
+    scope: "一部ユーザー",
+  }]), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+
+  try {
+    const notices = await fetchResetDisplayNameCandidateNoticeSignals({
+      mode: "seed",
+      adoptionAt: "2026-08-01T00:00:00.000Z",
+    });
+    const notice = notices.find((candidate) => candidate.officialNoticeTweetId === "banked-loading-notice");
+    const recurringNotice = notices.find((candidate) => candidate.officialNoticeTweetId === "banked-recurring-conditional-notice");
+
+    assert.ok(notice);
+    assert.equal(notice.candidateEventKind, "banked_distribution");
+    assert.equal(notice.isExecutionBearing, true);
+    assert.equal(notice.sourceContext, announcementText);
+    assert.ok(recurringNotice);
+    assert.equal(recurringNotice.candidateEventKind, "banked_distribution");
+    assert.equal(recurringNotice.isExecutionBearing, false);
+    assert.equal(recurringNotice.sourceContext, recurringConditionalText);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousServiceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+  }
 });
 
 test("page projections use a one-hour cache while API snapshots keep a ten-minute bucket and one-hour retention", () => {

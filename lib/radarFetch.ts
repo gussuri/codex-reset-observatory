@@ -73,6 +73,7 @@ import {
 } from "@/lib/radar/cacheGeneration";
 import {
   hasFutureBankedDistributionIntent,
+  isBankedDistributionNotice,
   isRecurringConditionalBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
 import { isExecutionBearingResetDisplayNameNotice, type ResetDisplayNameCandidateActivation } from "@/lib/radar/resetDisplayNameCandidateTypes";
@@ -791,9 +792,10 @@ function candidateNoticeRow(value: unknown): ResetDisplayNameCandidateNotice | n
   const isHistoricalOnly = row.temporal_kind === "historical" || row.ai_temporal_kind === "historical";
   const isPresentationOnlyOngoingBanked = isRecurringConditionalBankedDistributionNotice(row.text);
   const isFutureBankedDistribution = hasFutureBankedDistributionIntent(row.text);
+  const isBankedDistribution = isBankedDistributionNotice(row.text);
 
   return {
-    candidateEventKind: isFutureBankedDistribution ? "banked_distribution" : "reset_execution",
+    candidateEventKind: isBankedDistribution ? "banked_distribution" : "reset_execution",
     officialNoticeTweetId: row.tweet_id,
     logicalPostId: trusted ? (row.logical_post_id as string) : null,
     noticeTweetIds,
