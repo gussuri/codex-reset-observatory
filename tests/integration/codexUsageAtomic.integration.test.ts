@@ -48,46 +48,31 @@ if (hasAnyLocalConfiguration && (
 const isConfigured = localIntegrationMarker && Boolean(localUrl && localServiceRoleKey);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-function clearLocalBankedAssociationDecisions() {
-  // The decision ledger is intentionally not DELETE-granted to service_role.
-  // Use the Supabase CLI's local postgres connection for isolated test cleanup.
-  const sql = "delete from public.codex_banked_post_association_decisions";
+function clearLocalWebhookData() {
+  // These internal tables intentionally do not grant DELETE to service_role.
+  // Use an explicit local-only cleanup script so test setup preserves production privileges.
+  const cleanupFile = "tests/integration/codexUsageAtomic.cleanup.sql";
   try {
     if (process.platform === "win32") {
-      const command = `pnpm exec supabase db query --local \"${sql}\"`;
+      const command = `pnpm exec supabase db query --local --file \"${cleanupFile}\"`;
       execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command], {
         cwd: repositoryRoot,
         stdio: "ignore",
       });
     } else {
-      execFileSync("pnpm", ["exec", "supabase", "db", "query", "--local", sql], {
+      execFileSync("pnpm", ["exec", "supabase", "db", "query", "--local", "--file", cleanupFile], {
         cwd: repositoryRoot,
         stdio: "ignore",
       });
     }
   } catch {
-    throw new Error("Failed to clear local BANKED association test rows through the local Supabase CLI");
+    throw new Error("Failed to clear local Codex usage integration test rows through the local Supabase CLI");
   }
 }
 
 function clientOrThrow() {
   if (!localUrl || !localServiceRoleKey) throw new Error("Local Supabase credentials are not configured");
   return createClient(localUrl, localServiceRoleKey, { auth: { persistSession: false } });
-}
-
-async function clearLocalWebhookData(client: SupabaseClient<any>) {
-  // Delete FK dependents before their recovery observations; requests must also be
-  // sequential because each PostgREST request commits independently.
-  clearLocalBankedAssociationDecisions();
-  const deletes = [
-    await client.from("codex_banked_grant_observations").delete().neq("observation_key", "__atomic_test_keep__"),
-    await client.from("reset_execution_estimates").delete().neq("reset_event_key", "__atomic_test_keep__"),
-    await client.from("codex_recovery_observations").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
-    await client.from("regular_reset_events").delete().neq("schedule_key", "__atomic_test_keep__"),
-    await client.from("codex_usage_monitor_state").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
-    await client.from("tibo_signals").delete().neq("tweet_id", "__atomic_test_keep__"),
-  ];
-  for (const result of deletes) assert.equal(result.error, null, result.error?.message);
 }
 
 function assertTimestampEqual(actual: string | null | undefined, expected: string) {
@@ -298,7 +283,7 @@ async function applyBankedAssociation(client: SupabaseClient<any>, fact: NonNull
 
 test("atomic webhook success commits observation, regular event, estimate, promotion, and state", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const snapshot = recoverySnapshot();
@@ -330,12 +315,12 @@ test("atomic webhook success commits observation, regular event, estimate, promo
     const promoted = await client.from("tibo_signals").select("signal_type").eq("tweet_id", "atomic-deferred-reset").single();
     assert.equal(promoted.data?.signal_type, "reset_executed");
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 test("a later write failure rolls back observation, regular event, estimate, and state", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const snapshot = recoverySnapshot();
@@ -358,13 +343,13 @@ test("a later write failure rolls back observation, regular event, estimate, and
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
     assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("resending one plan is idempotent and does not duplicate rows", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const snapshot = recoverySnapshot();
@@ -382,13 +367,13 @@ test("resending one plan is idempotent and does not duplicate rows", { skip: !is
     assert.ok(first.observation_id);
     assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", `usage-reset-${first.observation_id}`), 1);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("a stale compare-and-swap plan performs no side writes or state regression", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const snapshot = recoverySnapshot({ observedAt: "2026-08-30T00:05:00.000Z" });
@@ -408,13 +393,13 @@ test("a stale compare-and-swap plan performs no side writes or state regression"
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
     assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("BANKED estimate and state roll back together when the later state write fails", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const snapshot = recoverySnapshot({ usedPercent: 100, bankedResetAvailableCount: 1 });
@@ -438,13 +423,13 @@ test("BANKED estimate and state roll back together when the later state write fa
     assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
     assert.equal(state.data?.used_percent, 100);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("v2 persists a notice-free BANKED fact atomically, exact retry is idempotent, and conflicting retry fails closed", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const scenario = bankedObservationPlan(baselineSnapshot(), "2026-08-30T00:04:00.000Z", 1);
@@ -508,13 +493,13 @@ test("v2 persists a notice-free BANKED fact atomically, exact retry is idempoten
     const state = await client.from("codex_usage_monitor_state").select("observed_at").eq("source_key", CODEX_USAGE_SOURCE_KEY).single();
     assertTimestampEqual(state.data?.observed_at, scenario.snapshot.observedAt);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("BANKED estimates cannot link a recovery observation on insert or update", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     const invalidInsert = await client.from("reset_execution_estimates").insert({
       reset_event_key: "banked-with-recovery-insert",
@@ -550,13 +535,13 @@ test("BANKED estimates cannot link a recovery observation on insert or update", 
     assert.equal(persisted.error, null, persisted.error?.message);
     assert.equal(persisted.data?.recovery_observation_id, null);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("accepted association publishes once; CAS loser is inert; accepted-to-pending hides the v2 projection", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const scenario = bankedObservationPlan(
@@ -610,13 +595,13 @@ test("accepted association publishes once; CAS loser is inert; accepted-to-pendi
     assert.deepEqual(hidden.data, [{ reset_event_key: scenario.fact.reset_event_key, published: false }]);
     assert.equal(await count(client, "reset_execution_estimates", "reset_event_key", scenario.fact.reset_event_key), 1);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("separate recurring observations supported by the same notice retain distinct BANKED event keys", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const first = bankedObservationPlan(
@@ -642,13 +627,13 @@ test("separate recurring observations supported by the same notice retain distin
     assert.equal(await count(client, "codex_banked_grant_observations", "source_key", CODEX_USAGE_SOURCE_KEY), 2);
     assert.equal(await count(client, "reset_execution_estimates", "estimator_version", "banked-distribution-observation-v2"), 2);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("concurrent identical v2 submissions create one durable BANKED observation", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const scenario = bankedObservationPlan(baselineSnapshot(), "2026-08-30T00:04:00.000Z", 1);
@@ -656,13 +641,13 @@ test("concurrent identical v2 submissions create one durable BANKED observation"
     assert.deepEqual(results.map((result) => result.status).sort(), ["applied", "stale"]);
     assert.equal(await count(client, "codex_banked_grant_observations", "observation_key", scenario.fact.observation_key), 1);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
 
 test("v2 fact and state roll back together when the monitor write is invalid", { skip: !isConfigured }, async () => {
   const client = clientOrThrow();
-  await clearLocalWebhookData(client);
+  await clearLocalWebhookData();
   try {
     await seedBaseline(client);
     const scenario = bankedObservationPlan(baselineSnapshot(), "2026-08-30T00:04:00.000Z", 1);
@@ -677,6 +662,6 @@ test("v2 fact and state roll back together when the monitor write is invalid", {
     assertTimestampEqual(state.data?.observed_at, baselineSnapshot().observedAt);
     assert.equal(state.data?.used_percent, 100);
   } finally {
-    await clearLocalWebhookData(client);
+    await clearLocalWebhookData();
   }
 });
