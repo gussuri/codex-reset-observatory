@@ -15,7 +15,7 @@ import type {
   ResetDisplayNameCandidateSeed,
 } from "../lib/radar/resetDisplayNameCandidateTypes";
 import type { RandomResetNameGenerationResult } from "../lib/radar/randomResetNaming";
-import type { RadarData, WindowEventLike } from "../lib/radar/types";
+import type { RadarData, ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 import type { TiboFormalAdoptionRecord } from "../lib/radar/tiboFormalAdoptionStore";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 
@@ -158,7 +158,7 @@ function fromDatabase(value: DatabaseCandidate): ResetDisplayNameCandidateRecord
 
 function fakeCandidateStore(
   initial: ResetDisplayNameCandidateRecord[] = [],
-  options: { failPromotion?: boolean } = {},
+  options: { failPromotion?: boolean; reuseCanonicalOnPromotion?: boolean } = {},
 ) {
   const rows = new Map(initial.map((value) => [value.candidateId, toDatabase(value)]));
   let seedWrites = 0;
@@ -185,6 +185,15 @@ function fakeCandidateStore(
           });
         }
         promotionWrites += 1;
+        if (options.reuseCanonicalOnPromotion) {
+          row.lifecycle_status = "promoted";
+          row.promoted_event_key = canonicalEventKey;
+          row.promoted_at = String(args.p_promoted_at ?? "");
+          return Promise.resolve({
+            data: { status: "reused", canonicalWrite: false, canonicalEventKey },
+            error: null,
+          });
+        }
         row.lifecycle_status = "promoted";
         row.promoted_event_key = canonicalEventKey;
         row.promoted_at = String(args.p_promoted_at ?? "");
@@ -981,6 +990,210 @@ test("an accepted name precomputed from a BANKED notice promotes only onto that 
   assert.equal(candidateStorage.rows[0]?.candidateEventKind, "banked_distribution");
   assert.equal(result.writes, 1);
   assert.equal(result.invalidated, true);
+});
+
+test("a forced candidate reuses its forced key when a BANKED occurrence shares the same notice", async () => {
+  const officialNoticeTweetId = "2107913674593644711";
+  const logicalPostId = "2107913674593644800";
+  const forcedEventKey = "forced-reset-for-shared-notice";
+  const bankedEventKey = `banked-reset-${officialNoticeTweetId}`;
+  const candidateStorage = fakeCandidateStore([candidate("candidate-forced-with-banked", {
+    noticeDedupeKey: `logical-post:${logicalPostId}`,
+    officialNoticeTweetId,
+    logicalPostId,
+    noticeTweetIds: [officialNoticeTweetId],
+    sourceTweetIds: [officialNoticeTweetId],
+    aiNameJa: "強制リセットの名前",
+    aiNameEn: "Forced Reset Name",
+    aiNameZh: "强制重置名称",
+    aiStatus: "accepted",
+    generationAttempts: 1,
+    lastGeneratedAt: CANDIDATE_TIMESTAMP,
+  })]);
+  const text = "A confirmed global reset for all paid users.";
+  const announcement = {
+    ...sourceRow(officialNoticeTweetId),
+    text,
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    classification_source: "manual",
+    verification_status: "confirmed" as const,
+    expires_at: "2026-09-10T00:00:00.000Z",
+    is_reply: false,
+    is_quote: false,
+    logical_post_id: logicalPostId,
+    edit_history_tweet_ids: [logicalPostId, officialNoticeTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api" as const,
+  };
+  const adoption: TiboFormalAdoptionRecord = {
+    id: "adoption-forced-shared-notice",
+    logicalPostId,
+    logicalPostTweetIds: [logicalPostId, officialNoticeTweetId],
+    resetEventKey: forcedEventKey,
+    representativeTweetId: officialNoticeTweetId,
+    sourceTweetIds: [officialNoticeTweetId],
+    claimSource: "new_adoption",
+    adoptedAt: CANDIDATE_TIMESTAMP,
+    claimedAt: CANDIDATE_TIMESTAMP,
+    createdAt: CANDIDATE_TIMESTAMP,
+    updatedAt: CANDIDATE_TIMESTAMP,
+  };
+  const banked = bankedEstimate(bankedEventKey, officialNoticeTweetId);
+  const result = await reconcileResetDisplayNames({
+    data: {
+      active_tibo_signals: [announcement],
+      recent_tibo_signals: [announcement],
+      formal_tibo_resets: [announcement],
+      tibo_formal_adoptions: [adoption],
+      reset_execution_estimates: [banked],
+      reset_display_names: [],
+    } as unknown as RadarData,
+    canonicalHistory: [
+      {
+        ...resetEvent(forcedEventKey),
+        sourceTweetIds: [officialNoticeTweetId],
+        source_url: `https://x.test/${officialNoticeTweetId}`,
+        officialNoticeTweetId,
+      },
+      {
+        ...bankedDistributionEvent(bankedEventKey),
+        sourceTweetIds: [officialNoticeTweetId],
+        source_url: `https://x.test/${officialNoticeTweetId}`,
+        officialNoticeTweetId,
+      },
+    ],
+    now: NOW,
+    apiKey: null,
+    maxGeminiRequests: 0,
+    candidateActivation: { mode: "full", adoptionAt: "2026-09-01T00:00:00.000Z" },
+    candidateNotices: [notice(officialNoticeTweetId, {
+      logicalPostId,
+      sourceContext: text,
+    })],
+    candidateStore: candidateStorage.client,
+  });
+
+  assert.equal(result.candidatePromotions, 1);
+  assert.equal(candidateStorage.promotionWrites, 1);
+  assert.equal(candidateStorage.rows[0]?.promotedEventKey, forcedEventKey);
+  assert.notEqual(candidateStorage.rows[0]?.promotedEventKey, bankedEventKey);
+});
+
+test("full reconciliation keeps pending BANKED candidates and protected manual or accepted names", async () => {
+  const officialNoticeTweetId = "2107913674593644711";
+  const bankedEventKey = `banked-reset-${officialNoticeTweetId}`;
+  const text = "Loading a banked reset in everyone's paid accounts.";
+  const announcement = {
+    ...sourceRow(officialNoticeTweetId),
+    text,
+    tweet_url: `https://x.test/${officialNoticeTweetId}`,
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    classification_source: "manual",
+    verification_status: "confirmed" as const,
+    expires_at: "2026-09-10T00:00:00.000Z",
+    is_reply: false,
+    is_quote: false,
+    logical_post_id: null,
+    edit_history_tweet_ids: null,
+    edit_version: null,
+    edit_metadata_source: null,
+  };
+  const estimate = bankedEstimate(bankedEventKey, officialNoticeTweetId);
+  const historyItem = {
+    ...bankedDistributionEvent(bankedEventKey),
+    completed_at: estimate.displayExecutionAt,
+    closed_at: estimate.displayExecutionAt,
+    sourceTweetIds: [officialNoticeTweetId],
+    officialNoticeTweetId,
+  };
+  const protectedName = (kind: "manual" | "accepted"): ResetDisplayNameRecord => ({
+    event_key: bankedEventKey,
+    source_tweet_id: officialNoticeTweetId,
+    manual_name_ja: kind === "manual" ? "手動で確定した配布名" : null,
+    manual_name_en: kind === "manual" ? "Manual distribution name" : null,
+    manual_name_zh: kind === "manual" ? "手动确认的发放名称" : null,
+    ai_name_ja: kind === "accepted" ? "既存の承認済み配布名" : null,
+    ai_name_en: kind === "accepted" ? "Existing accepted distribution name" : null,
+    ai_name_zh: kind === "accepted" ? "现有已接受的发放名称" : null,
+    ai_confidence: kind === "accepted" ? 0.98 : null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: kind === "accepted" ? "accepted" : null,
+    ai_flags: [],
+    ai_generated_at: null,
+    input_hash: null,
+  });
+
+  for (const kind of ["manual", "accepted"] as const) {
+    const existingName = protectedName(kind);
+    const candidateStorage = fakeCandidateStore([candidate(`candidate-protected-${kind}`, {
+      candidateEventKind: "banked_distribution",
+      officialNoticeTweetId,
+      noticeTweetIds: [officialNoticeTweetId],
+      sourceTweetIds: [officialNoticeTweetId],
+      aiNameJa: "新しい候補名",
+      aiNameEn: "New candidate name",
+      aiNameZh: "新的候选名称",
+      aiStatus: kind === "manual" ? "pending" : "accepted",
+      generationAttempts: 1,
+      lastGeneratedAt: CANDIDATE_TIMESTAMP,
+    })], { reuseCanonicalOnPromotion: kind === "accepted" });
+    let ensureCalls = 0;
+    let candidateGenerateCalls = 0;
+    const result = await reconcileResetDisplayNames({
+      data: {
+        active_tibo_signals: [announcement],
+        recent_tibo_signals: [announcement],
+        reset_execution_estimates: [estimate],
+        tibo_formal_adoptions: [],
+        reset_display_names: [existingName],
+      } as unknown as RadarData,
+      canonicalHistory: [historyItem],
+      now: NOW,
+      apiKey: "test-key",
+      maxGeminiRequests: 1,
+      candidateActivation: { mode: "full", adoptionAt: "2026-09-01T00:00:00.000Z" },
+      candidateNotices: [notice(officialNoticeTweetId, {
+        candidateEventKind: "banked_distribution",
+        sourceContext: text,
+      })],
+      candidateStore: candidateStorage.client,
+      candidateGenerate: async () => {
+        candidateGenerateCalls += 1;
+        return successResult();
+      },
+      ensure: async () => {
+        ensureCalls += 1;
+        return {
+          eventKey: bankedEventKey,
+          status: "accepted",
+          displayName: "Unexpected overwrite",
+          inputMode: "metadata+source",
+          skipped: false,
+        };
+      },
+    });
+
+    assert.equal(result.candidatePromotions, 0);
+    assert.equal(result.writes, 0);
+    assert.equal(ensureCalls, 0);
+    assert.equal(candidateGenerateCalls, 0);
+    assert.equal(candidateStorage.rows[0]?.aiStatus, kind === "manual" ? "pending" : "accepted");
+    assert.equal(candidateStorage.rows[0]?.promotedEventKey, kind === "manual" ? null : bankedEventKey);
+    assert.equal(candidateStorage.promotionWrites, kind === "manual" ? 0 : 1);
+    assert.equal(existingName.manual_name_ja, kind === "manual" ? "手動で確定した配布名" : null);
+    assert.equal(existingName.ai_name_ja, kind === "accepted" ? "既存の承認済み配布名" : null);
+    assert.equal(
+      result.outcomes.some((outcome) => outcome.status === (kind === "manual" ? "manual" : "preserved_precomputed")),
+      true,
+    );
+  }
 });
 
 test("an estimate for an unrelated official notice cannot promote this candidate", async () => {

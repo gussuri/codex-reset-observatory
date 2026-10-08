@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
-import { getCanonicalResetHistoryForDisplayNameReconciliation } from "../radar";
+import {
+  getCanonicalResetHistoryForDisplayNameReconciliation,
+  getHistoryRecordKind,
+} from "../radar";
 import { fetchCurrentRadarData } from "../radarFetch";
 import { fetchResetDisplayNameCandidateNoticeSignals } from "../radarFetch";
 import {
@@ -469,11 +472,25 @@ function buildCandidateNamingInput(
 function toResetEventReference(item: WindowEventLike): TiboResetEventReference | null {
   const eventKey = typeof item.id === "string" ? item.id.trim() : "";
   if (!eventKey) return null;
+  const recordKind = getHistoryRecordKind(item);
   return {
     eventKey,
     sourceTweetIds: item.sourceTweetIds ?? [],
     sourceUrl: item.source_url ?? null,
+    eventKind: recordKind === "banked_distribution"
+      ? "banked_distribution"
+      : recordKind === "confirmed_global"
+        ? "forced_reset"
+        : "unknown",
   };
+}
+
+function historyEventReferencesNotice(item: WindowEventLike, noticeTweetId: string) {
+  if (getHistoryRecordKind(item) !== "banked_distribution") return false;
+  if (item.officialNoticeTweetId === noticeTweetId) return true;
+  if (item.sourceTweetIds?.includes(noticeTweetId)) return true;
+  const sourceTweetId = item.source_url?.match(/\/status\/(\d+)/)?.[1];
+  return sourceTweetId === noticeTweetId;
 }
 
 function findCandidateLogicalPost(
@@ -509,25 +526,57 @@ function getCandidatePromotionContext(
   const logicalPost = findCandidateLogicalPost(candidate, data);
   if (!logicalPost) return null;
 
-  const resolution = resolveTiboResetEventIdentity(logicalPost, {
-    adoptionLedgers: data.tibo_formal_adoptions ?? [],
-    estimates: data.reset_execution_estimates ?? [],
-    staticHistory: history
-      .map(toResetEventReference)
-      .filter((reference): reference is TiboResetEventReference => Boolean(reference)),
-    sourceTweetIds: candidateIdentityIds(candidate),
-  });
+  const authoritativeEvidence = collectPersistedAuthoritativeCandidateExecutionEvidence(
+    data.tibo_formal_adoptions ?? [],
+    data.reset_execution_estimates ?? [],
+    notice,
+  );
+  let resolution: {
+    status: "new" | "existing" | "conflict" | "blocked";
+    resetEventKey: string | null;
+    matchedEvidence: { resetEventKey: string } | null;
+    sourceTweetIds: string[];
+  };
+
+  if (candidate.candidateEventKind === "banked_distribution") {
+    const noticeTweetId = candidate.officialNoticeTweetId.trim();
+    const estimatedBankedKeys = new Set(authoritativeEvidence
+      .filter((evidence) =>
+        evidence.kind === "banked_distribution_estimate" &&
+        evidence.officialNoticeTweetId?.trim() === noticeTweetId,
+      )
+      .map((evidence) => evidence.resetEventKey));
+    const canonicalBankedHistoryKeys = new Set(history
+      .filter((item) => historyEventReferencesNotice(item, noticeTweetId))
+      .map((item) => typeof item.id === "string" ? item.id.trim() : "")
+      .filter(Boolean));
+    const matchingKeys = Array.from(estimatedBankedKeys)
+      .filter((eventKey) => canonicalBankedHistoryKeys.has(eventKey));
+    const resetEventKey = matchingKeys.length === 1 ? matchingKeys[0] : null;
+    resolution = {
+      status: matchingKeys.length === 1 ? "existing" : matchingKeys.length > 1 ? "conflict" : "blocked",
+      resetEventKey,
+      matchedEvidence: resetEventKey ? { resetEventKey } : null,
+      sourceTweetIds: [noticeTweetId],
+    };
+  } else {
+    resolution = resolveTiboResetEventIdentity(logicalPost, {
+      adoptionLedgers: data.tibo_formal_adoptions ?? [],
+      estimates: data.reset_execution_estimates ?? [],
+      staticHistory: history
+        .map(toResetEventReference)
+        .filter((reference): reference is TiboResetEventReference => Boolean(reference)),
+      sourceTweetIds: candidateIdentityIds(candidate),
+    });
+  }
+
   return {
     identityResolution: {
       status: resolution.status,
       resetEventKey: resolution.resetEventKey,
       matchedEvidenceEventKey: resolution.matchedEvidence?.resetEventKey ?? null,
     },
-    authoritativeEvidence: collectPersistedAuthoritativeCandidateExecutionEvidence(
-      data.tibo_formal_adoptions ?? [],
-      data.reset_execution_estimates ?? [],
-      notice,
-    ),
+    authoritativeEvidence,
     canonicalSourceTweetId: resolution.sourceTweetIds[0] ?? candidate.officialNoticeTweetId,
     candidateTarget: {
       candidateEventKind: candidate.candidateEventKind,
