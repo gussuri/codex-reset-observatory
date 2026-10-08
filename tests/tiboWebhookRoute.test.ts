@@ -953,6 +953,74 @@ test("composite completion is saved as reset_executed with independent weak teas
   }
 });
 
+test("generic account-wide completion cannot create a formal reset from a Gemini execution result", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2108040921044639779";
+  const text = "Confirmed landed across all accounts. How are we doing so far?";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const baseFetch = globalThis.fetch;
+  const fetchUrls: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    fetchUrls.push(input instanceof Request ? input.url : String(input));
+    return baseFetch(input, init);
+  };
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Confirmed landed across all accounts",
+    reasonJa: "全アカウントへの適用が完了しました。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.98,
+    teaserStrengthEvidenceQuote: null,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-10-07T23:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(payload);
+    assert.equal(payload.signal_type, "irrelevant");
+    assert.equal(payload.ai_signal_type, "reset_executed");
+    assert.equal(payload.ai_confidence, 0.98);
+    assert.equal(payload.ai_temporal_direction, "completed_now");
+    assert.equal(payload.expected_start_at, null);
+    assert.equal(payload.expected_end_at, null);
+    assert.equal(payload.temporal_resolution_status, null);
+    assert.equal(fetchUrls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+    assert.equal(fetchUrls.some((url) => url.includes("reset_execution_estimates")), false);
+
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "irrelevant");
+    assert.equal(responseBody.formalAdoption?.newlyAdopted, false);
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("explicit secondary none is stored as raw AI provenance for later manual review", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
@@ -1946,17 +2014,29 @@ test("future and loading-form BANKED notices seed and retry with the BANKED cand
   try {
     const posts = [
       {
-        tweetId: "2107913674593644711",
+        tweetId: "2107913674593644710",
         text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
       },
       {
         tweetId: "2107913674593644712",
         text: "We are loading a banked reset into all accounts of our Plus, Pro and Business users.",
       },
+      {
+        tweetId: "2107913674593644711",
+        text: [
+          "Day 3/",
+          "",
+          "The big one is GPT-6 in Chat, but today is also a little celebration day with a new high of 40M active users across Codex and ChatGPT Work.",
+          "",
+          "Loading a banked reset in everyone's paid accounts. See you again tomorrow!",
+        ].join("\n"),
+      },
     ].map((post) => ({
       ...post,
       tweetUrl: `https://x.com/thsottiaux/status/${post.tweetId}`,
-      tweetCreatedAt: "2026-10-07T16:00:00.000Z",
+      tweetCreatedAt: post.tweetId === "2107913674593644711"
+        ? "2026-10-07T19:19:17.000Z"
+        : "2026-10-07T16:00:00.000Z",
     }));
     for (const post of posts) {
       const firstResponse = await POST(buildRequest(post));
@@ -1965,20 +2045,29 @@ test("future and loading-form BANKED notices seed and retry with the BANKED cand
       assert.equal(retryResponse.status, 200);
     }
 
-    assert.equal(mock.seedWrites, 4);
+    assert.equal(mock.seedWrites, 6);
     const seedPayloads = requestBodies.flatMap((body) =>
       typeof body === "object" && body !== null && "p_seed" in body
         ? [(body as { p_seed: Record<string, unknown> }).p_seed]
         : [],
     );
-    assert.equal(seedPayloads.length, 4);
-    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(4).fill("banked_distribution"));
+    assert.equal(seedPayloads.length, 6);
+    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(6).fill("banked_distribution"));
     assert.deepEqual(seedPayloads.map((seed) => seed.official_notice_tweet_id), [
-      "2107913674593644711",
-      "2107913674593644711",
+      "2107913674593644710",
+      "2107913674593644710",
       "2107913674593644712",
       "2107913674593644712",
+      "2107913674593644711",
+      "2107913674593644711",
     ]);
+    const targetSignalWrite = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === "2107913674593644711",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(targetSignalWrite);
+    assert.equal(targetSignalWrite.signal_type, "official_notice");
+    assert.equal(targetSignalWrite.rule_signal_type, "official_notice");
   } finally {
     mock.restore();
     restoreEnvironment(previous);

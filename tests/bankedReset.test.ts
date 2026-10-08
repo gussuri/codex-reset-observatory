@@ -40,6 +40,7 @@ import {
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
 import { getOfficialNoticeConsumption } from "../lib/radar/officialNoticePolicy";
+import { classifyTiboTweet } from "../lib/radar/classification";
 import { resolveResetDisplayTitle } from "../lib/radar/resetDisplayNames";
 import type { ActiveTiboSignal, RadarData, ResetDisplayNameRecord } from "../lib/radar/types";
 
@@ -141,6 +142,16 @@ test("recognizes explicit BANKED loading into all paid accounts without broadeni
   ]) {
     assert.equal(isBankedDistributionNotice(negative), false, negative);
   }
+});
+
+test("recognizes loading a BANKED reset in everyone's paid accounts as a broad distribution", () => {
+  const announcement = "Loading a banked reset in everyone's paid accounts.";
+
+  assert.equal(isBankedDistributionNotice(announcement), true);
+  assert.equal(isBroadBankedDistributionNotice(announcement), true);
+  assert.equal(isConditionalBankedDistributionNotice(announcement), false);
+  assert.equal(isRecurringConditionalBankedDistributionNotice(announcement), false);
+  assert.equal(isBankedDistributionCompletionSignal(announcement), false);
 });
 
 test("keeps BANKED completion detection plural-aware and clause-local", () => {
@@ -1015,6 +1026,121 @@ test("creates the observed Astra BANKED event without promoting it to generic gl
     assert.equal(publicBanked.details?.noticeType, expected[locale].noticeType);
     assert.equal(publicBanked.details?.noticeToExecution, expected[locale].noticeToExecution);
     assert.equal(publicBanked.details?.note, expected[locale].note);
+  }
+});
+
+test("links the 40M BANKED observation to its all-paid notice and localized manual title", () => {
+  const tweetId = "2107913674593644711";
+  const eventKey = "banked-reset-2095651088502591861-observation-20261007T231228952Z";
+  const text = [
+    "Day 3/",
+    "",
+    "The big one is GPT-6 in Chat, but today is also a little celebration day with a new high of 40M active users across Codex and ChatGPT Work.",
+    "",
+    "Loading a banked reset in everyone's paid accounts. See you again tomorrow!",
+  ].join("\n");
+  const createdAt = "2026-10-07T19:19:17.000Z";
+  const classification = classifyTiboTweet(text, `https://x.com/thsottiaux/status/${tweetId}`);
+  assert.equal(classification.signalType, "official_notice");
+
+  const currentNotice = {
+    ...notice,
+    tweet_id: tweetId,
+    text,
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: createdAt,
+    signal_type: classification.signalType,
+    confidence: classification.confidence,
+    verification_status: "confirmed" as const,
+    classification_source: "manual",
+  };
+  const correctedEstimate = {
+    ...estimate,
+    resetEventKey: eventKey,
+    displayExecutionAt: "2026-10-07T23:12:28.952Z",
+    tiboAnnouncedAt: createdAt,
+    tiboPrimaryTweetId: tweetId,
+    tiboSourceTweetIds: [tweetId],
+    officialNoticeTweetId: tweetId,
+    officialNoticeAt: createdAt,
+  };
+  const event = findBankedDistributionEvents([currentNotice], [correctedEstimate])[0];
+  assert.ok(event);
+  assert.equal(event.id, eventKey);
+  assert.equal(event.recordKind, "banked_distribution");
+  assert.equal(event.officialNoticeTweetId, tweetId);
+  assert.deepEqual(event.sourceTweetIds, [tweetId]);
+  assert.equal(event.completed_at, correctedEstimate.displayExecutionAt);
+  assert.equal(event.details?.reasonType, "ご祝儀リセット");
+  assert.equal(event.details?.resetMethod, "任意リセット権配布");
+  assert.equal(event.details?.scope, "全有料プラン");
+  assert.equal(event.details?.noticeToExecution, "3時間53分");
+
+  const resetDisplayNames: ResetDisplayNameRecord[] = [{
+    event_key: eventKey,
+    source_tweet_id: tweetId,
+    manual_name_ja: "4,000万人達成記念BANKEDリセット権配布",
+    manual_name_en: "40M Active Users Milestone BANKED Reset Distribution",
+    manual_name_zh: "活跃用户达4000万纪念 BANKED 重置权发放",
+    ai_name_ja: null,
+    ai_name_en: null,
+    ai_name_zh: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: null,
+    ai_flags: [],
+    ai_generated_at: null,
+    input_hash: null,
+  }];
+  const now = new Date("2026-10-08T00:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow: now,
+    recentTiboSignals: [currentNotice],
+    resetExecutionEstimates: [correctedEstimate],
+    resetDisplayNames,
+  });
+  const expected = {
+    ja: {
+      title: "4,000万人達成記念BANKEDリセット権配布",
+      reason: "ご祝儀リセット",
+      method: "任意リセット権配布",
+      scope: "全有料プラン",
+      noticeToExecution: "3時間53分",
+    },
+    en: {
+      title: "40M Active Users Milestone BANKED Reset Distribution",
+      reason: "Celebration reset",
+      method: "Banked Reset distribution",
+      scope: "All paid plans",
+      noticeToExecution: "3 hours 53 minutes",
+    },
+    zh: {
+      title: "活跃用户达4000万纪念 BANKED 重置权发放",
+      reason: "庆祝重置",
+      method: "BANKED 重置发放",
+      scope: "所有付费套餐",
+      noticeToExecution: "3 小时 53 分钟",
+    },
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow: now,
+      limitHistory: false,
+    });
+    const publicEvent = snapshot.viewModel.recentHistory.find((item) => item.key === eventKey);
+    assert.ok(publicEvent, `${locale} BANKED history should be present`);
+    assert.equal(publicEvent.resetAt, correctedEstimate.displayExecutionAt);
+    assert.equal(publicEvent.title, expected[locale].title);
+    assert.equal(publicEvent.details?.reasonType, expected[locale].reason);
+    assert.equal(publicEvent.details?.resetMethod, expected[locale].method);
+    assert.equal(publicEvent.details?.scope, expected[locale].scope);
+    assert.equal(publicEvent.details?.noticeToExecution, expected[locale].noticeToExecution);
+    assert.notEqual(publicEvent.details?.scope, locale === "ja" ? "一部ユーザー" : "Some users");
   }
 });
 

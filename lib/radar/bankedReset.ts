@@ -70,7 +70,7 @@ export type BankedNoticeTiming = {
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
 const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
 const BROAD_ACCOUNT_LOAD_DISTRIBUTION_PATTERN =
-  /\b(?:am|is|are|'m|'re)\s+loading\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,100}\binto\s+(?:all|every)\s+accounts?\b/i;
+  /\b(?:(?:am|is|are|'m|'re)\s+)?loading\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,100}\b(?:into\s+(?:all|every)\s+accounts?|in\s+everyone['’]s\s+(?:paid\s+)?accounts?)\b/i;
 const COMPENSATION_DISTRIBUTION_PATTERN =
   /\b(?:get|gets|getting|receive|receives|receiving|be\s+(?:given|sent|issued|delivered))\b[\s\S]{0,60}\b(?:another\s+(?:one|banked\s+resets?|reset(?:\s+credits?)?|credits?)|(?:an?\s+)?(?:additional|replacement)\s+(?:banked\s+)?(?:resets?|credits?))\b/i;
 const NOTICE_CLAUSE_SEPARATOR = /[.!?。！？]+|\bPS\s*:\s*/i;
