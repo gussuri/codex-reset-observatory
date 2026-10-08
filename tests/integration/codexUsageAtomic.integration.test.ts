@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -43,6 +46,29 @@ if (hasAnyLocalConfiguration && (
   throw new Error("Atomic database tests require an explicit local integration marker and loopback Supabase URL");
 }
 const isConfigured = localIntegrationMarker && Boolean(localUrl && localServiceRoleKey);
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+function clearLocalBankedAssociationDecisions() {
+  // The decision ledger is intentionally not DELETE-granted to service_role.
+  // Use the Supabase CLI's local postgres connection for isolated test cleanup.
+  const sql = "delete from public.codex_banked_post_association_decisions";
+  try {
+    if (process.platform === "win32") {
+      const command = `pnpm exec supabase db query --local \"${sql}\"`;
+      execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command], {
+        cwd: repositoryRoot,
+        stdio: "ignore",
+      });
+    } else {
+      execFileSync("pnpm", ["exec", "supabase", "db", "query", "--local", sql], {
+        cwd: repositoryRoot,
+        stdio: "ignore",
+      });
+    }
+  } catch {
+    throw new Error("Failed to clear local BANKED association test rows through the local Supabase CLI");
+  }
+}
 
 function clientOrThrow() {
   if (!localUrl || !localServiceRoleKey) throw new Error("Local Supabase credentials are not configured");
@@ -52,8 +78,8 @@ function clientOrThrow() {
 async function clearLocalWebhookData(client: SupabaseClient<any>) {
   // Delete FK dependents before their recovery observations; requests must also be
   // sequential because each PostgREST request commits independently.
+  clearLocalBankedAssociationDecisions();
   const deletes = [
-    await client.from("codex_banked_post_association_decisions").delete().not("id", "is", null),
     await client.from("codex_banked_grant_observations").delete().neq("observation_key", "__atomic_test_keep__"),
     await client.from("reset_execution_estimates").delete().neq("reset_event_key", "__atomic_test_keep__"),
     await client.from("codex_recovery_observations").delete().eq("source_key", CODEX_USAGE_SOURCE_KEY),
