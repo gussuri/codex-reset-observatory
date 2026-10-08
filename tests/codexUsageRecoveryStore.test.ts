@@ -7,8 +7,10 @@ import {
 } from "../lib/codexUsageRecovery";
 import {
   confirmNearestCodexRecoveryObservation,
+  findBankedEstimateByExactObservation,
   findLatestBankedGrant,
   getNextUsageMonitorLastBankedGrantAt,
+  readResetExecutionEstimates,
   upsertResetExecutionEstimate,
 } from "../lib/codexUsageRecoveryStore";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
@@ -506,4 +508,183 @@ test("findLatestBankedGrant includes the legacy Production BANKED estimator vers
     resetEventKey: "banked-reset-legacy-production",
     observedAt: "2026-09-04T03:34:46.386Z",
   });
+});
+
+test("findBankedEstimateByExactObservation only reuses one kind-compatible exact-time BANKED key", async () => {
+  const calls: Array<[string, unknown]> = [];
+  const client = {
+    from(table: string) {
+      assert.equal(table, "reset_execution_estimates");
+      const builder: Record<string, any> = {};
+      builder.select = (columns: string) => { calls.push(["select", columns]); return builder; };
+      builder.in = (column: string, values: string[]) => { calls.push(["in", [column, values]]); return builder; };
+      builder.eq = (column: string, value: string) => { calls.push(["eq", [column, value]]); return builder; };
+      builder.limit = async (count: number) => {
+        calls.push(["limit", count]);
+        return {
+          data: [{
+            reset_event_key: "banked-reset-legacy-exact",
+            estimator_version: "usage-execution-banked-v1",
+            recovery_observation_id: null,
+            execution_time_source: "usage_observation",
+            execution_time_precision: "approximate",
+            manual_override_at: null,
+            manual_execution_at: null,
+          }],
+          error: null,
+        };
+      };
+      return builder;
+    },
+  };
+  const observedAt = "2026-10-07T23:12:28.952Z";
+  const result = await findBankedEstimateByExactObservation(client as never, observedAt);
+
+  assert.deepEqual(result, {
+    estimate: {
+      resetEventKey: "banked-reset-legacy-exact",
+      estimatorVersion: "usage-execution-banked-v1",
+    },
+    error: null,
+  });
+  assert.deepEqual(calls.find(([name]) => name === "eq")?.[1], ["display_execution_at", observedAt]);
+});
+
+test("readResetExecutionEstimates gates current and legacy BANKED rows linked by exact legacy identity", async () => {
+  const requestedKeys: string[] = [];
+  const rows = [
+    estimateRow("current-published", "banked-current", "banked-distribution-observation-v2"),
+    estimateRow("legacy-linked-pending", "banked-legacy-exact", "usage-execution-banked-v1"),
+    estimateRow("legacy-unrelated", "old-verified-banked", "usage-execution-banked-v1"),
+  ];
+  const client = {
+    from(table: string) {
+      assert.equal(table, "reset_execution_estimates");
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({ data: rows, error: null });
+      return builder;
+    },
+    async rpc(name: string, args: { p_reset_event_keys: string[] }) {
+      assert.equal(name, "read_banked_reset_publication_state");
+      requestedKeys.push(...args.p_reset_event_keys);
+      return {
+        data: [
+          { reset_event_key: "banked-current", published: true },
+          { reset_event_key: "banked-legacy-exact", published: false },
+        ],
+        error: null,
+      };
+    },
+  };
+
+  const result = await readResetExecutionEstimates(client as never);
+  assert.deepEqual(requestedKeys, ["banked-current", "banked-legacy-exact", "old-verified-banked"]);
+  assert.deepEqual(result.rows.map((row) => row.resetEventKey), ["banked-current", "old-verified-banked"]);
+  assert.equal(result.error, null);
+});
+
+test("publication-state fallback resolves current and legacy keys without hiding unrelated old BANKED history", async () => {
+  const estimates = [
+    estimateRow("legacy-linked", "banked-legacy-exact", "usage-execution-banked-v1"),
+    estimateRow("legacy-unrelated", "old-verified-banked", "usage-execution-banked-v1"),
+  ];
+  const tableCalls: string[] = [];
+  let fallbackFilter = "";
+  const client = {
+    from(table: string) {
+      tableCalls.push(table);
+      const filters: Record<string, unknown> = {};
+      const builder: Record<string, any> = {};
+      for (const method of ["select", "order", "limit", "eq"]) {
+        builder[method] = (...args: unknown[]) => {
+          if (method === "eq") filters[String(args[0])] = args[1];
+          return builder;
+        };
+      }
+      builder.or = (value: string) => { fallbackFilter = value; return builder; };
+      builder.in = (column: string, values: string[]) => { filters[column] = values; return builder; };
+      builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+        const data = table === "reset_execution_estimates"
+          ? estimates
+          : table === "codex_banked_grant_observations"
+            ? [{ id: "observation-1", reset_event_key: "new-fact-key", legacy_reset_event_key: "banked-legacy-exact" }]
+            : [{ observation_id: "observation-1", status: "pending", publication_status: "withheld", is_current: true }];
+        return Promise.resolve({ data, error: null }).then(resolve, reject);
+      };
+      return builder;
+    },
+    async rpc() {
+      return { data: null, error: { message: "rpc unavailable" } };
+    },
+  };
+
+  const result = await readResetExecutionEstimates(client as never);
+  assert.match(fallbackFilter, /reset_event_key\.in\./);
+  assert.match(fallbackFilter, /legacy_reset_event_key\.in\./);
+  assert.deepEqual(tableCalls, [
+    "reset_execution_estimates",
+    "codex_banked_grant_observations",
+    "codex_banked_post_association_decisions",
+  ]);
+  assert.deepEqual(result.rows.map((row) => row.resetEventKey), ["old-verified-banked"]);
+  assert.ok(result.error);
+});
+
+function estimateRow(id: string, resetEventKey: string, estimatorVersion: string) {
+  return {
+    id,
+    reset_event_key: resetEventKey,
+    display_execution_at: "2026-10-07T23:12:28.952Z",
+    execution_time_source: "usage_observation",
+    execution_time_confidence: "high",
+    execution_time_precision: "approximate",
+    execution_window_start_at: null,
+    execution_window_end_at: null,
+    recovery_observation_id: null,
+    recovery_previous_observed_at: null,
+    recovery_observed_at: null,
+    tibo_announced_at: null,
+    tibo_primary_tweet_id: null,
+    tibo_source_tweet_ids: [],
+    official_notice_tweet_id: null,
+    official_notice_at: null,
+    estimator_version: estimatorVersion,
+    manual_override_at: null,
+    manual_override_by: null,
+    manual_override_reason: null,
+    manual_execution_at: null,
+    manual_execution_precision: null,
+    created_at: "2026-10-07T23:12:28.952Z",
+    updated_at: "2026-10-07T23:12:28.952Z",
+  };
+}
+
+test("does not reuse an exact-time manual BANKED estimate as monitor-observation identity", async () => {
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.in = () => builder;
+      builder.eq = () => builder;
+      builder.limit = async () => ({
+        data: [{
+          reset_event_key: "manual-banked-event",
+          estimator_version: "banked-distribution-observation-v2",
+          recovery_observation_id: null,
+          execution_time_source: "manual_correction",
+          execution_time_precision: "approximate",
+          manual_override_at: "2026-10-01T00:00:00.000Z",
+          manual_execution_at: "2026-10-07T23:12:28.952Z",
+        }],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findBankedEstimateByExactObservation(client as never, "2026-10-07T23:12:28.952Z");
+  assert.equal(result.estimate, null);
+  assert.ok(result.error);
 });

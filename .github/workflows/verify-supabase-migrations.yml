@@ -9,6 +9,20 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'tests/supabaseFoundation.test.ts'
+      - 'tests/integration/codexUsageAtomic.integration.test.ts'
+      - 'tests/resetPostAssociation.test.ts'
+      - 'tests/codexUsageBankedGrant.test.ts'
+      - '.github/workflows/verify-supabase-migrations.yml'
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'lib/codexUsageAtomic.ts'
+      - 'lib/codexUsageBankedGrant.ts'
+      - 'lib/radar/resetPostAssociation.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tests/supabaseFoundation.test.ts'
+      - 'tests/integration/codexUsageAtomic.integration.test.ts'
       - '.github/workflows/verify-supabase-migrations.yml'
   workflow_dispatch:
 
@@ -92,18 +106,24 @@ jobs:
           "SUPABASE_LOCAL_SERVICE_ROLE_KEY=$serviceRoleKey" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Atomic webhook database integration tests
+        env:
+          SUPABASE_LOCAL_INTEGRATION: '1'
         run: corepack pnpm exec tsx --test tests/integration/codexUsageAtomic.integration.test.ts
 
       - name: Full test suite
+        if: github.event_name != 'pull_request'
         run: corepack pnpm test
 
       - name: Lint
+        if: github.event_name != 'pull_request'
         run: corepack pnpm run lint
 
       - name: Typecheck
+        if: github.event_name != 'pull_request'
         run: corepack pnpm run typecheck
 
       - name: Production build
+        if: github.event_name != 'pull_request'
         run: corepack pnpm run build
 
       - name: Check migration verification diff

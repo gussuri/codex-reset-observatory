@@ -54,6 +54,7 @@ import {
 } from "./tiboLogicalPost";
 import {
   isBankedDistributionCompletionSignal,
+  isBankedDistributionNotice,
   isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
   isBroadBankedDistributionNotice,
@@ -554,7 +555,11 @@ export function findRelatedTiboNoticeCluster(
 ) {
   const completedTime = getTimestamp(completedAt);
   const representative = noticeSignals.find((notice) => notice.tweet_id === representativeTweetId) ?? null;
-  if (!representative || completedTime === null) return [];
+  if (
+    !representative ||
+    completedTime === null ||
+    isBankedDistributionNotice(representative.text)
+  ) return [];
 
   const candidates = noticeSignals.filter((notice) => {
     const time = getTimestamp(notice.tweet_created_at);
@@ -564,6 +569,7 @@ export function findRelatedTiboNoticeCluster(
         completedTime - time <= NOTICE_LOOKBACK_MS &&
         notice.signal_type === "official_notice" &&
         notice.verification_status !== "rejected" &&
+        !isBankedDistributionNotice(notice.text) &&
         (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE,
     );
   });
@@ -678,6 +684,7 @@ export function findRelatedTiboNotices(
         (matchesResolvedSchedule || (!hasResolvedSchedule && matchesLookback)) &&
         (previousResetTime === null || previousResetTime === undefined || signalTime > previousResetTime) &&
         signal.verification_status !== "rejected" &&
+        !isBankedDistributionNotice(signal.text) &&
         (signal.confidence ?? 0) >= confidenceThreshold,
     );
   });
@@ -707,9 +714,12 @@ export function convertTiboResetSignalToHistoryEvent(
     ...(signal.related_notices ?? []),
     ...(relatedNotice ? [relatedNotice] : []),
   ].filter((notice, index, all) =>
+    !isBankedDistributionNotice(notice.text) &&
     all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
   ));
-  const representative = relatedNotice ?? selectRepresentativeTiboNotice(notices);
+  const representative = relatedNotice && !isBankedDistributionNotice(relatedNotice.text)
+    ? relatedNotice
+    : selectRepresentativeTiboNotice(notices);
   const firstAnnouncement = notices[0] ?? null;
   const noticeAt = firstAnnouncement
     ? new Date(firstAnnouncement.tweet_created_at).toISOString()
@@ -911,6 +921,11 @@ function toHistoryEventReference(item: WindowEventLike) {
         eventKey,
         sourceTweetIds: item.sourceTweetIds ?? [],
         sourceUrl: getHistorySourceUrl(item),
+        eventKind: item.recordKind === "banked_distribution"
+          ? "banked_distribution" as const
+          : item.recordKind === "confirmed_global"
+            ? "forced_reset" as const
+            : "unknown" as const,
       }
     : null;
 }

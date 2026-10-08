@@ -91,6 +91,52 @@ test("brand-new trusted post gets a new root event key", () => {
   assert.equal(result.canCreateNewSideEffects, true);
 });
 
+test("current and legacy BANKED estimates are not forced-reset identity evidence", () => {
+  for (const estimatorVersion of ["banked-distribution-observation-v2", "usage-execution-banked-v1"]) {
+    const result = resolveTiboResetEventIdentity(post([trustedRow([A], A)]), {
+      estimates: [{
+        resetEventKey: `banked-reset-${A}`,
+        recoveryObservationId: null,
+        tiboSourceTweetIds: [A],
+        executionTimeSource: "usage_observation",
+        estimatorVersion,
+      }],
+    });
+    assert.equal(result.status, "new");
+    assert.equal(result.resetEventKey, `tibo-reset-${A}`);
+  }
+});
+
+test("a formal ledger colliding with a known BANKED key fails closed", () => {
+  const bankedKey = `banked-reset-${A}`;
+  const result = resolveTiboResetEventIdentity(post([trustedRow([A], A)]), {
+    adoptionLedgers: [ledger({ resetEventKey: bankedKey })],
+    estimates: [{
+      resetEventKey: bankedKey,
+      tiboSourceTweetIds: [A],
+      executionTimeSource: "usage_observation",
+      estimatorVersion: "usage-execution-banked-v1",
+    }],
+  });
+  assert.equal(result.status, "conflict");
+  assert.equal(result.resetEventKey, null);
+  assert.equal(result.reason, "conflicting_event_keys");
+});
+
+test("a BANKED estimate occupying the generated forced key blocks an exact-key conversion", () => {
+  const result = resolveTiboResetEventIdentity(post([trustedRow([A], A)]), {
+    estimates: [{
+      resetEventKey: `tibo-reset-${A}`,
+      tiboSourceTweetIds: [A],
+      executionTimeSource: "usage_observation",
+      estimatorVersion: "usage-execution-banked-v1",
+    }],
+  });
+  assert.equal(result.status, "conflict");
+  assert.equal(result.resetEventKey, null);
+  assert.equal(result.reason, "conflicting_event_keys");
+});
+
 test("the same logical post reuses an existing adoption ledger", () => {
   const result = resolveTiboResetEventIdentity(post([trustedRow([A], A)]), {
     adoptionLedgers: [ledger()],

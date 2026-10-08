@@ -18,6 +18,7 @@ import {
 import {
   combineResetHistory,
   convertTiboResetSignalToHistoryEvent,
+  findRelatedTiboNoticeCluster,
   findRelatedTiboNotices,
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
@@ -209,6 +210,61 @@ test("official notice is preferred over a teaser and only a prior post is linked
 
   assert.equal(related?.tweet_id, "notice-2");
   assert.equal(findRelatedTiboNotice(reset, [noticeSignal({ tweet_created_at: "2026-07-29T00:00:00.000Z" })]), null);
+});
+
+test("BANKED distribution claims are not related to forced-reset history", () => {
+  const reset = resetSignal({
+    tweet_id: "forced-reset-after-banked-post",
+    tweet_created_at: "2026-08-01T09:00:00.000Z",
+  });
+  const bankedNotice = noticeSignal({
+    tweet_id: "banked-distribution-notice",
+    text: "We will distribute banked resets to all paid users tomorrow.",
+    tweet_created_at: "2026-08-01T07:00:00.000Z",
+  });
+  const forcedNotice = noticeSignal({
+    tweet_id: "forced-reset-notice",
+    text: "We will reset usage limits for all paid users tomorrow.",
+    tweet_created_at: "2026-08-01T07:30:00.000Z",
+  });
+
+  assert.deepEqual(findRelatedTiboNotices(reset, [bankedNotice]), []);
+  const unlinkedEvent = convertTiboResetSignalToHistoryEvent(
+    reset,
+    bankedNotice,
+    undefined,
+    [bankedNotice],
+  );
+  assert.equal(unlinkedEvent.officialNoticeTweetId, undefined);
+  assert.deepEqual(unlinkedEvent.sourceTweetIds, [reset.tweet_id]);
+  assert.deepEqual(
+    findRelatedTiboNotices(reset, [bankedNotice, forcedNotice]).map((notice) => notice.tweet_id),
+    [forcedNotice.tweet_id],
+  );
+});
+
+test("forced recovery notice clusters exclude BANKED claims and reject a BANKED representative", () => {
+  const bankedNotice = noticeSignal({
+    tweet_id: "cluster-banked-notice",
+    text: "We will distribute banked resets to all paid users tomorrow.",
+    tweet_created_at: "2026-08-01T07:00:00.000Z",
+  });
+  const forcedNotice = noticeSignal({
+    tweet_id: "cluster-forced-notice",
+    text: "We will reset usage limits for all paid users tomorrow.",
+    tweet_created_at: "2026-08-01T07:30:00.000Z",
+  });
+  const notices = [bankedNotice, forcedNotice];
+
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(notices, forcedNotice.tweet_id, "2026-08-01T09:00:00.000Z")
+      .map((notice) => notice.tweet_id),
+    [forcedNotice.tweet_id],
+  );
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(notices, bankedNotice.tweet_id, "2026-08-01T09:00:00.000Z"),
+    [],
+  );
 });
 
 test("a confirmed Tibo teaser up to 72 hours old links while rejected, weak, stale-boundary, and older teasers do not", () => {

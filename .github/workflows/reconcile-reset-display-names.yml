@@ -14,7 +14,7 @@ concurrency:
 jobs:
   reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - name: Reconcile production reset display names
         env:
@@ -52,3 +52,37 @@ jobs:
             (.statusSummary | type) == "object"
           ' "$RESPONSE_FILE" > /dev/null
           jq -c '{status, scanned, candidates, attempted, geminiRequests, writes, invalidated, statusSummary}' "$RESPONSE_FILE"
+
+          BANKED_RESPONSE_FILE="$(mktemp)"
+          trap 'rm -f "$RESPONSE_FILE" "$BANKED_RESPONSE_FILE"' EXIT
+          BANKED_HTTP_STATUS="$(curl --silent --show-error --max-time 90 --output "$BANKED_RESPONSE_FILE" --write-out "%{http_code}" --request POST --header "Authorization: Bearer ${CRON_SECRET}" "https://codex.gussuriworks.com/api/internal/reconcile-banked-grant-associations")"
+          echo "banked_http_status=$BANKED_HTTP_STATUS"
+
+          if [ "$BANKED_HTTP_STATUS" != "200" ]; then
+            BANKED_ERROR_CODE="$(jq -r 'if (.error | type) == "string" then .error else "unknown" end' "$BANKED_RESPONSE_FILE" 2>/dev/null || echo "invalid_response")"
+            case "$BANKED_ERROR_CODE" in
+              configuration_unavailable|Unauthorized|reconciliation_failed) ;;
+              *) BANKED_ERROR_CODE="unknown" ;;
+            esac
+            echo "banked_error=$BANKED_ERROR_CODE"
+            jq -c '{status, scanned, accepted, pending, conflict, stale, failed, invalidated, hasMore}' "$BANKED_RESPONSE_FILE" 2>/dev/null || true
+            exit 1
+          fi
+
+          jq -e '
+            .status == "completed" and
+            (.scanned | type) == "number" and
+            (.accepted | type) == "number" and
+            (.pending | type) == "number" and
+            (.conflict | type) == "number" and
+            (.stale | type) == "number" and
+            (.failed | type) == "number" and
+            .failed == 0 and
+            (.invalidated | type) == "boolean" and
+            (.hasMore | type) == "boolean"
+          ' "$BANKED_RESPONSE_FILE" > /dev/null || {
+            echo "banked_reconciliation_incomplete"
+            jq -c '{status, scanned, accepted, pending, conflict, stale, failed, invalidated, hasMore}' "$BANKED_RESPONSE_FILE" 2>/dev/null || true
+            exit 1
+          }
+          jq -c '{status, scanned, accepted, pending, conflict, stale, failed, invalidated, hasMore}' "$BANKED_RESPONSE_FILE"

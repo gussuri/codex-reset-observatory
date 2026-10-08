@@ -255,6 +255,47 @@ export type LatestBankedGrant = {
   observedAt: string | null;
 };
 
+export type ExactBankedEstimateLookup = {
+  resetEventKey: string | null;
+  estimatorVersion: string | null;
+};
+
+/** Reuse a legacy key only when an existing BANKED estimate is at this exact occurrence instant. */
+export async function findBankedEstimateByExactObservation(
+  client: SupabaseClient<any>,
+  observedAt: string,
+): Promise<{ estimate: ExactBankedEstimateLookup | null; error: unknown | null }> {
+  const result = await client
+    .from("reset_execution_estimates")
+    .select("reset_event_key,estimator_version,recovery_observation_id,execution_time_source,execution_time_precision,manual_override_at,manual_execution_at")
+    .in("estimator_version", [...BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS])
+    .eq("display_execution_at", observedAt)
+    .limit(2);
+  if (result.error) return { estimate: null, error: result.error };
+  const rows = Array.isArray(result.data) ? result.data : [];
+  if (rows.length > 1) {
+    return { estimate: null, error: new Error("Multiple BANKED estimates share the exact observation time") };
+  }
+  const row = rows[0] as Record<string, unknown> | undefined;
+  if (!row) return { estimate: null, error: null };
+  if (
+    (row.recovery_observation_id !== null && row.recovery_observation_id !== undefined) ||
+    row.execution_time_source !== "usage_observation" ||
+    row.execution_time_precision !== "approximate" ||
+    row.manual_override_at !== null ||
+    row.manual_execution_at !== null
+  ) {
+    return { estimate: null, error: new Error("Exact-time BANKED row is not a reusable monitor observation") };
+  }
+  return {
+    estimate: {
+      resetEventKey: typeof row.reset_event_key === "string" ? row.reset_event_key : null,
+      estimatorVersion: typeof row.estimator_version === "string" ? row.estimator_version : null,
+    },
+    error: null,
+  };
+}
+
 export async function findLatestBankedGrant(
   client: SupabaseClient<any>,
   observedAt: string,
@@ -1065,11 +1106,100 @@ export async function readResetExecutionEstimates(client: SupabaseClient<any>) {
     .order("display_execution_at", { ascending: false })
     .limit(2000);
 
+  const rows = (result.data ?? [])
+    .map((row) => toResetExecutionEstimate(row as ResetExecutionEstimateRow))
+    .filter((row): row is ResetExecutionEstimate => Boolean(row));
+  if (result.error) return { rows, error: result.error };
+
+  // Preserve pre-migration BANKED rows, but gate both current and legacy keys
+  // when a durable grant observation now owns that identity.
+  const bankedRows = rows.filter((row) =>
+    BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS.includes(
+      row.estimatorVersion as (typeof BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS)[number],
+    ),
+  );
+  if (bankedRows.length === 0) return { rows, error: null };
+  const requestedKeys = Array.from(new Set(bankedRows.map((row) => row.resetEventKey)));
+
+  const associationsResult = await client.rpc("read_banked_reset_publication_state", {
+    p_reset_event_keys: requestedKeys,
+  });
+  if (associationsResult.error) {
+    const observations = await client
+      .from("codex_banked_grant_observations")
+      .select("id,reset_event_key,legacy_reset_event_key")
+      .or(`reset_event_key.in.(${requestedKeys.join(",")}),legacy_reset_event_key.in.(${requestedKeys.join(",")})`);
+    if (observations.error) {
+      // If neither the publication projection nor fact lookup is available,
+      // fail closed for BANKED rows while reporting degraded read health.
+      return {
+        rows: rows.filter((row) => !BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS.includes(
+          row.estimatorVersion as (typeof BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS)[number],
+        )),
+        error: associationsResult.error,
+      };
+    }
+    const facts = (observations.data ?? []) as Array<{
+      id: string;
+      reset_event_key: string;
+      legacy_reset_event_key: string | null;
+    }>;
+    const associatedKeys = new Set<string>();
+    for (const fact of facts) {
+      if (requestedKeys.includes(fact.reset_event_key)) associatedKeys.add(fact.reset_event_key);
+      if (fact.legacy_reset_event_key && requestedKeys.includes(fact.legacy_reset_event_key)) {
+        associatedKeys.add(fact.legacy_reset_event_key);
+      }
+    }
+    const currentAssociations = facts.length > 0
+      ? await client
+          .from("codex_banked_post_association_decisions")
+          .select("observation_id,status,publication_status,is_current")
+          .in("observation_id", facts.map((fact) => fact.id))
+          .eq("is_current", true)
+      : { data: [], error: null };
+    const visibleObservationIds = new Set(
+      (currentAssociations.data ?? [])
+        .filter((association: { status: string; publication_status: string }) =>
+          association.status === "accepted" && association.publication_status === "published",
+        )
+        .map((association: { observation_id: string }) => association.observation_id),
+    );
+    const visibleKeys = new Set<string>();
+    for (const fact of facts) {
+      if (!visibleObservationIds.has(fact.id)) continue;
+      if (requestedKeys.includes(fact.reset_event_key)) visibleKeys.add(fact.reset_event_key);
+      if (fact.legacy_reset_event_key && requestedKeys.includes(fact.legacy_reset_event_key)) {
+        visibleKeys.add(fact.legacy_reset_event_key);
+      }
+    }
+    return {
+      rows: rows.filter((row) =>
+        !BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS.includes(
+          row.estimatorVersion as (typeof BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS)[number],
+        ) || !associatedKeys.has(row.resetEventKey) || visibleKeys.has(row.resetEventKey),
+      ),
+      error: associationsResult.error ?? currentAssociations.error,
+    };
+  }
+
+  const publicationRows = Array.isArray(associationsResult.data)
+    ? associationsResult.data as Array<{ reset_event_key: string; published: boolean }>
+    : [];
+  const observedKeys = new Set(publicationRows.map((association) => association.reset_event_key));
+  const visibleKeys = new Set(publicationRows
+    .filter((association) => association.published === true)
+    .map((association) => association.reset_event_key));
+
   return {
-    rows: (result.data ?? [])
-      .map((row) => toResetExecutionEstimate(row as ResetExecutionEstimateRow))
-      .filter((row): row is ResetExecutionEstimate => Boolean(row)),
-    error: result.error,
+    rows: rows.filter((row) =>
+      !BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS.includes(
+        row.estimatorVersion as (typeof BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS)[number],
+      ) ||
+      !observedKeys.has(row.resetEventKey) ||
+      visibleKeys.has(row.resetEventKey),
+    ),
+    error: null,
   };
 }
 

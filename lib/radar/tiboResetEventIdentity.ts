@@ -3,6 +3,7 @@ import {
   type TiboLogicalPost,
   type TiboLogicalPostRow,
 } from "./tiboLogicalPost";
+import { isBankedDistributionEstimatorVersion } from "./bankedReset";
 
 export type TiboFormalAdoptionClaimSource =
   | "new_adoption"
@@ -36,6 +37,7 @@ export type TiboResetEventReference = {
   eventKey: string;
   sourceTweetIds?: readonly string[] | null;
   sourceUrl?: string | null;
+  eventKind?: "forced_reset" | "banked_distribution" | "unknown";
 };
 
 export type TiboResetEventIdentityEvidence = {
@@ -143,6 +145,10 @@ function isMonitorBackedEstimate(reference: TiboResetExecutionEstimateReference)
     reference.estimatorVersion === "usage-execution-monitor-v1";
 }
 
+function isBankedEstimate(reference: TiboResetExecutionEstimateReference) {
+  return isBankedDistributionEstimatorVersion(reference.estimatorVersion);
+}
+
 function isSelfLogicalEventKey(eventKey: string, logicalPostId: string) {
   return eventKey === `tibo-reset-${logicalPostId}`;
 }
@@ -166,6 +172,17 @@ function collectEvidenceMatches(
 ): EvidenceCollection {
   const matches: EvidenceMatch[] = [];
   const conflictingEventKeys: string[] = [];
+  const bankedEventKeys = new Set([
+    ...(evidence.estimates ?? [])
+      .filter(isBankedEstimate)
+      .map((estimate) => normalizedEventKey(estimate.resetEventKey)),
+    ...(evidence.staticHistory ?? [])
+      .filter((reference) => reference.eventKind === "banked_distribution")
+      .map((reference) => normalizedEventKey(reference.eventKey)),
+    ...(evidence.dynamicEvents ?? [])
+      .filter((reference) => reference.eventKind === "banked_distribution")
+      .map((reference) => normalizedEventKey(reference.eventKey)),
+  ].filter((key): key is string => Boolean(key)));
   const add = (
     kind: TiboResetEventEvidenceKind,
     resetEventKey: unknown,
@@ -181,6 +198,10 @@ function collectEvidenceMatches(
     const sameIdentity = ledger.logicalPostId === logicalPostId ||
       hasAliasOverlap(ledger.logicalPostTweetIds, logicalPostTweetIds);
     if (!sameIdentity) continue;
+    if (bankedEventKeys.has(key)) {
+      conflictingEventKeys.push(key);
+      continue;
+    }
     if (!isCompatibleLedgerChain(ledger.logicalPostTweetIds, logicalPostTweetIds)) {
       conflictingEventKeys.push(key);
       continue;
@@ -189,6 +210,7 @@ function collectEvidenceMatches(
   }
 
   for (const estimate of evidence.estimates ?? []) {
+    if (isBankedEstimate(estimate)) continue;
     if (
       evidence.recoveryObservationId &&
       estimate.recoveryObservationId === evidence.recoveryObservationId
@@ -202,16 +224,24 @@ function collectEvidenceMatches(
   }
 
   for (const reference of evidence.staticHistory ?? []) {
+    if (reference.eventKind === "banked_distribution") continue;
     if (hasAliasOverlap(logicalPostTweetIds, getReferenceTweetIds(reference))) {
       add("existing_history", reference.eventKey, 200);
     }
   }
 
   for (const reference of evidence.dynamicEvents ?? []) {
+    if (reference.eventKind === "banked_distribution") continue;
     if (hasAliasOverlap(logicalPostTweetIds, getReferenceTweetIds(reference))) {
       add("existing_dynamic", reference.eventKey, 100);
     }
   }
+
+  // A fresh self-derived forced key must not be created over a BANKED key of
+  // the same spelling. Source overlap alone remains non-identifying; this is
+  // only an exact-key collision guard.
+  const selfEventKey = `tibo-reset-${logicalPostId}`;
+  if (bankedEventKeys.has(selfEventKey)) conflictingEventKeys.push(selfEventKey);
 
   return { matches, conflictingEventKeys };
 }
