@@ -752,6 +752,19 @@ test("broad BANKED account loading is an official distribution notice, never a g
   assert.equal(completedBankedDecision.reasonCode, "banked_distribution_completion");
 });
 
+test("40M milestone BANKED distribution is an official notice even when Gemini calls it completed", () => {
+  const text = [
+    "Day 3/",
+    "",
+    "The big one is GPT-6 in Chat, but today is also a little celebration day with a new high of 40M active users across Codex and ChatGPT Work.",
+    "",
+    "Loading a banked reset in everyone's paid accounts. See you again tomorrow!",
+  ].join("\n");
+
+  assert.equal(classifyTiboTweet(text, url).signalType, "official_notice");
+  assert.equal(getTiboClassificationSafetyDecision(text, "reset_executed").signalType, "official_notice");
+});
+
 test("completed reset never retains teaser strength even when Gemini picked reset_executed", () => {
   const guarded = applyTiboClassificationSafetyGuard(
     "One reset now and another if needed later.",

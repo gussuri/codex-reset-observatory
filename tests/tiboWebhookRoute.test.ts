@@ -2014,17 +2014,29 @@ test("future and loading-form BANKED notices seed and retry with the BANKED cand
   try {
     const posts = [
       {
-        tweetId: "2107913674593644711",
+        tweetId: "2107913674593644710",
         text: "The banked reset will be there by 8pm PST. For all paid users of ChatGPT Work and Codex.",
       },
       {
         tweetId: "2107913674593644712",
         text: "We are loading a banked reset into all accounts of our Plus, Pro and Business users.",
       },
+      {
+        tweetId: "2107913674593644711",
+        text: [
+          "Day 3/",
+          "",
+          "The big one is GPT-6 in Chat, but today is also a little celebration day with a new high of 40M active users across Codex and ChatGPT Work.",
+          "",
+          "Loading a banked reset in everyone's paid accounts. See you again tomorrow!",
+        ].join("\n"),
+      },
     ].map((post) => ({
       ...post,
       tweetUrl: `https://x.com/thsottiaux/status/${post.tweetId}`,
-      tweetCreatedAt: "2026-10-07T16:00:00.000Z",
+      tweetCreatedAt: post.tweetId === "2107913674593644711"
+        ? "2026-10-07T19:19:17.000Z"
+        : "2026-10-07T16:00:00.000Z",
     }));
     for (const post of posts) {
       const firstResponse = await POST(buildRequest(post));
@@ -2033,20 +2045,29 @@ test("future and loading-form BANKED notices seed and retry with the BANKED cand
       assert.equal(retryResponse.status, 200);
     }
 
-    assert.equal(mock.seedWrites, 4);
+    assert.equal(mock.seedWrites, 6);
     const seedPayloads = requestBodies.flatMap((body) =>
       typeof body === "object" && body !== null && "p_seed" in body
         ? [(body as { p_seed: Record<string, unknown> }).p_seed]
         : [],
     );
-    assert.equal(seedPayloads.length, 4);
-    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(4).fill("banked_distribution"));
+    assert.equal(seedPayloads.length, 6);
+    assert.deepEqual(seedPayloads.map((seed) => seed.candidate_event_kind), Array(6).fill("banked_distribution"));
     assert.deepEqual(seedPayloads.map((seed) => seed.official_notice_tweet_id), [
-      "2107913674593644711",
-      "2107913674593644711",
+      "2107913674593644710",
+      "2107913674593644710",
       "2107913674593644712",
       "2107913674593644712",
+      "2107913674593644711",
+      "2107913674593644711",
     ]);
+    const targetSignalWrite = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === "2107913674593644711",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(targetSignalWrite);
+    assert.equal(targetSignalWrite.signal_type, "official_notice");
+    assert.equal(targetSignalWrite.rule_signal_type, "official_notice");
   } finally {
     mock.restore();
     restoreEnvironment(previous);
