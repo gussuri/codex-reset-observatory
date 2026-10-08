@@ -36,6 +36,7 @@ export type TiboClassificationSafetyReason =
   | "historical_then_future"
   | "future_reschedule"
   | "explicit_future_notice"
+  | "missing_reset_assertion"
   | null;
 
 export type TiboClassificationSafetyDecision = {
@@ -50,6 +51,10 @@ const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage\s+(?:limits?|allowances?)|rate\s
 const NON_USAGE_ACTIVATION_OBJECT_PATTERN = /\b(?:context\s+windows?|features?|models?(?:\s+availability)?|api\s+keys?|chatgpt\s+accounts?|account\s+support|rollouts?|deployments?|availability|products?|settings?|switch)\b/i;
 const NON_USAGE_ACTIVATION_ACTION_PATTERN = /\b(?:flipped\s+the\s+switch|turned\s+(?:it|that|this|the)\s+on|enabled|activated|now\s+live|is\s+live|are\s+live|works?\s+(?:through|for|with)|support(?:s|ed)?|rolled\s+out|deployed|released|expanded|extended)\b/i;
 const EXPLICIT_USAGE_LIMIT_RESET_PATTERN = /(?:\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b[^.!?]{0,100}\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b|\b(?:reset|refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?)\b[^.!?]{0,100}\b(?:usage\s+limits?|rate\s+limits?|quotas?|allowances?|fresh\s+limits?|everyone(?:'s)?\s+limits?)\b)/i;
+const EXPLICIT_RESET_EXECUTION_ASSERTION_PATTERN =
+  /(?:\breset(?:s)?\b[^.!?]{0,100}\b(?:refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?|propagated|applied)\b|\b(?:refreshed|topped\s+up|restored|replenished|landed|done|complete(?:d)?|propagated|applied)\b[^.!?]{0,100}\breset(?:s)?\b|\busage\b[^.!?]{0,80}\b(?:refreshed|topped\s+up|restored|replenished|reset)\b|\b(?:refreshed|topped\s+up|restored|replenished|reset)\b[^.!?]{0,80}\busage\b)/i;
+const GENERIC_ACCOUNT_WIDE_COMPLETION_PATTERN =
+  /\b(?:confirm(?:ed|ing)?|land(?:ed|ing)?|appl(?:y|ied)|complet(?:e|ed|ion)|done|propagat(?:e|ed|ion)|restor(?:e|ed|ation)|rolled\s+out)\b[^.!?]{0,120}\b(?:across|to|for)\s+(?:all|every|everyone(?:'s)?)\s+(?:paid\s+)?(?:accounts?|users?|plans?)\b/i;
 const PURE_HYPOTHETICAL_PATTERN = /\b(?:what\s+if|would\s+be\s+nice\s+to|imagine\s+if|i\s+wish|if\s+only)\b|\b(?:could|would)\s+use\s+(?:a\s+)?reset\b|\bworld\s+with\s+unlimited\s+resets?\b/i;
 const INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN = /\b(?:but|however|so)\b[^.!?]{0,100}\b(?:i|we)\s+(?:will|might|may|could)\b/i;
 const HISTORICAL_RESET_PATTERN = /\b(?:yesterday|last\s+(?:week|month|night|year)|(?:one|two|three|four|five|six|seven|ten|\d+)\s+days?\s+ago|back\s+in\s+(?:the\s+)?(?:day|days|week|weeks|month|months|year|years|19\d{2}|20\d{2})|earlier|old\s+news|previously|remember\s+when|was\s+(?:completed|planned)|the\s+reset\s+button.*history)\b/i;
@@ -321,6 +326,24 @@ export function getTiboClassificationSafetyDecision(
         suppressTeaserStrength: true,
       };
     }
+  }
+
+  // Account-wide completion wording is not a reset claim by itself. This
+  // narrowly guards a Gemini reset_executed result unless the author text
+  // asserts a reset or usage restoration. It does not constrain notices,
+  // teasers, or the dedicated BANKED distribution path above.
+  if (
+    candidate === "reset_executed" &&
+    GENERIC_ACCOUNT_WIDE_COMPLETION_PATTERN.test(normalized) &&
+    !EXPLICIT_RESET_EXECUTION_ASSERTION_PATTERN.test(normalized) &&
+    !EXPLICIT_USAGE_LIMIT_RESET_PATTERN.test(normalized)
+  ) {
+    return {
+      signalType: "irrelevant",
+      reasonJa: "全アカウントへの一般的な完了表現だけでは、resetや利用枠復旧の実施を確認できないため無関係として扱います。",
+      reasonCode: "missing_reset_assertion",
+      suppressTeaserStrength: true,
+    };
   }
 
   return {

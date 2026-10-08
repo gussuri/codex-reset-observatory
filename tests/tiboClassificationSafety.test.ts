@@ -93,6 +93,59 @@ test("usage-limit reset positive controls remain eligible", () => {
   }
 });
 
+test("generic account-wide completion language is not enough to assert a reset", () => {
+  const text = "Confirmed landed across all accounts. How are we doing so far?";
+  const decision = getTiboClassificationSafetyDecision(text, "reset_executed");
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("reset_executed"),
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Confirmed landed across all accounts",
+  });
+
+  assert.equal(decision.signalType, "irrelevant");
+  assert.equal(decision.reasonCode, "missing_reset_assertion");
+  assert.equal(guarded.signalType, "irrelevant");
+  assert.equal(guarded.teaserStrength, "none");
+
+  for (const genericCompletion of [
+    "Confirmed across all accounts.",
+    "Landed across all accounts.",
+    "Applied across all accounts.",
+    "Restored across all accounts.",
+  ]) {
+    assert.equal(
+      getTiboClassificationSafetyDecision(genericCompletion, "reset_executed").signalType,
+      "irrelevant",
+      genericCompletion,
+    );
+  }
+});
+
+test("explicit reset completion shorthand and usage restoration remain eligible", () => {
+  const cases = [
+    "Reset all propagated. Enjoy.",
+    "Resets all propagated. That will be all.",
+    "Usage restored for all paid users.",
+    "Usage restored across all accounts.",
+    "Everyone's usage limits have been restored.",
+    "We are resetting usage limits for all paid users.",
+  ];
+
+  for (const text of cases) {
+    assert.equal(
+      getTiboClassificationSafetyDecision(text, "reset_executed").signalType,
+      "reset_executed",
+      text,
+    );
+    assert.equal(
+      applyTiboClassificationSafetyGuard(text, geminiResult("reset_executed")).signalType,
+      "reset_executed",
+      text,
+    );
+  }
+});
+
 test("current usage-limit announcements are execution signals, while future and technical resets stay distinct", () => {
   const executionCases = [
     "We are resetting usage for all paid users of Codex and ChatGPT Work.",

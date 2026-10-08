@@ -953,6 +953,74 @@ test("composite completion is saved as reset_executed with independent weak teas
   }
 });
 
+test("generic account-wide completion cannot create a formal reset from a Gemini execution result", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2108040921044639779";
+  const text = "Confirmed landed across all accounts. How are we doing so far?";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const baseFetch = globalThis.fetch;
+  const fetchUrls: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    fetchUrls.push(input instanceof Request ? input.url : String(input));
+    return baseFetch(input, init);
+  };
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Confirmed landed across all accounts",
+    reasonJa: "全アカウントへの適用が完了しました。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.98,
+    teaserStrengthEvidenceQuote: null,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-10-07T23:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(payload);
+    assert.equal(payload.signal_type, "irrelevant");
+    assert.equal(payload.ai_signal_type, "reset_executed");
+    assert.equal(payload.ai_confidence, 0.98);
+    assert.equal(payload.ai_temporal_direction, "completed_now");
+    assert.equal(payload.expected_start_at, null);
+    assert.equal(payload.expected_end_at, null);
+    assert.equal(payload.temporal_resolution_status, null);
+    assert.equal(fetchUrls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+    assert.equal(fetchUrls.some((url) => url.includes("reset_execution_estimates")), false);
+
+    const responseBody = await response.json();
+    assert.equal(responseBody.signalType, "irrelevant");
+    assert.equal(responseBody.formalAdoption?.newlyAdopted, false);
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("explicit secondary none is stored as raw AI provenance for later manual review", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

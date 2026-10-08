@@ -124,6 +124,7 @@ Production の 2026-09-12 record では、notice tweet `2098612714704891959` と
 これは人間が evidence を評価するための優先概念であり、現在のコードにあるすべての処理を一つの総合順位へ置き換えるものではありません。現在実装は用途ごとの helper に委譲しています。
 
 - formal history admission は `isFormalTiboResetSignal()` が signal type、confidence、verification、reply、classification source を確認する。
+- `reset_executed` の自動分類は、投稿者本文にreset実施またはCodex/ChatGPT Workの利用枠復旧を示す根拠を必要とする。`confirmed`、`landed`、`applied across all accounts` のような一般的な完了表現だけでは、全体resetの実施として採用しない。BANKED配布完了は専用のdistribution pathで別扱いする。この要件は将来予告・teaserの分類へ一律に適用しない。
 - notice-backed recovery は public-valid execution estimate と recovery observation を確認し、notice は provenance/説明の evidence として使う。
 - `resolveTiboResetEventIdentity()` の identity evidence は、ledger、estimate、static history、dynamic event を照合する。resolver 内の match priority は概ね ledger `500`、estimate `400/300`、static history `200`、dynamic `100` であり、これは event key の関連付け用で、reason の総合証拠順位ではない。
 - AI の display name や reason-like text は canonical event key や execution time を単独で決めない。
@@ -197,9 +198,15 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `任意リセット未使用アカウント`。source/noteの「任意リセット未使用」説明と schedule target は同じ concrete scope を補強する。
 - **Public presentation**: 定期リセットとして表示し、weekly schedule の note と `任意リセット未使用アカウント` を表示する。regular reference は broad random-reset probability event として扱わない。
 
+### 5. account-wide completion without reset evidence
+
+- **Source facts**: `Confirmed landed across all accounts. How are we doing so far?` は広範囲への適用完了を述べるが、何が適用されたかを本文で特定せず、resetや利用枠復旧も主張していない。
+- **Canonical fields**: AIが `reset_executed` を返しても、source-text safety guard はこの投稿を正式なreset候補にせず `irrelevant` とする。AIの元判定は監査列に保持する。これによりformal adoption、completed history、random-reset chronology boundaryは作られない。
+- **Boundary**: `Reset all propagated. Enjoy.`、`Resets all propagated. That will be all.`、明示された利用枠の復旧、現在進行形のusage-limit resetは明示的なreset evidenceとして扱う。teaserやofficial noticeにはこの完了判定ガードを一律適用しない。BANKED distributionは専用のrecord kindとmethodを維持する。
+
 全有料プランへ明示的に適用される regular event は scope を `全有料プラン` として保持するが、default scope presentation により「対象」行は表示しない。BANKED delivery は record kind と reset method を維持し、regular scopeの扱いで global random eventへ変換しない。
 
-### 5. BANKED/個別対象の補償配布
+### 6. BANKED/個別対象の補償配布
 
 - **Source facts**: [`tests/bankedAffectedUserCompensation.test.ts`](../tests/bankedAffectedUserCompensation.test.ts) の tweet `2097752790177370535` は、影響時間帯に BANKED reset を使ったユーザーへ replacement を配布する。test fixture は official notice と banked distribution execution estimate を持つ。
 - **Canonical fields**: `recordKind = banked_distribution`、`cycleType = ランダムリセット`、`reasonType = 詫びリセット`、`resetMethod = 任意リセット権配布`、`scope = 一部ユーザー`、`randomResetTargetScope = conditional`。
@@ -222,10 +229,10 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
-今回この文書を追加しても、次は変更しません。
+今回のsource-text safety rule以外では、次は変更しません。
 
 - Production data、Supabase、DB schema、migration
-- Tibo classification、reason inference、event identity、current history event。random/Tibo scopeのlegacy label除去とregular scopeの具体値復元は、この文書のcanonical normalization規則に従う。
+- Tibo classification の他の条件、reason inference、event identity、current history event。random/Tibo scopeのlegacy label除去とregular scopeの具体値復元は、この文書のcanonical normalization規則に従う。
 - BANKED/conditional semantics、event identity、execution estimate
 - public UI の既存表示挙動
 - Gemini prompt と AI audit fields
