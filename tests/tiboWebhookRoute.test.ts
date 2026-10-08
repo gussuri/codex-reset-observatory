@@ -1021,6 +1021,66 @@ test("generic account-wide completion cannot create a formal reset from a Gemini
   }
 });
 
+test("BANKED delivery completion cannot create a second forced-reset history row", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetId = "2108080000000000001";
+  const text = "BANKED reset credits have now been distributed to all paid users.";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const baseFetch = globalThis.fetch;
+  const fetchUrls: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    fetchUrls.push(input instanceof Request ? input.url : String(input));
+    return baseFetch(input, init);
+  };
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 0.99,
+    temporalDirection: "completed_now",
+    evidenceQuote: "BANKED reset credits have now been distributed",
+    reasonJa: "BANKEDリセット権の配布完了です。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.99,
+    teaserStrengthEvidenceQuote: null,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-10-08T00:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(payload);
+    assert.equal(payload.signal_type, "irrelevant");
+    assert.equal(payload.ai_signal_type, "reset_executed");
+    assert.equal(fetchUrls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+    assert.equal(fetchUrls.some((url) => url.includes("reset_execution_estimates")), false);
+    assert.equal(fetchUrls.some((url) => url.includes("formal_tibo_adoptions")), false);
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("explicit secondary none is stored as raw AI provenance for later manual review", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

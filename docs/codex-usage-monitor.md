@@ -101,11 +101,17 @@ A positive BANKED reset-count change is sent immediately as an explicit count
 change. Weekly quota recoveries, by contrast, follow a two-step confirmation state
 machine to prevent false positives from transient app-server glitches.
 
-A BANKED history event is created only when that explicit local reset-count
-change matches an active broad Tibo BANKED notice within the existing
-time-matching window. The notice is shown and affects the official probability
-window before the distribution is observed; the random-reset history clock
-changes only after the corroborated observation is stored.
+A positive BANKED count change is first saved as a durable observation with its
+original observed time, independently of whether a Tibo notice can be found.
+The shared, versioned post-association matcher then checks the notice's BANKED
+claim, audience, lifecycle, schedule, and edit identity against that observation.
+An unresolved or conflicting match remains pending and does not create a public
+history event or execution estimate. The bounded reconciliation job retries
+pending observations when posts arrive or their classification changes. Only an
+accepted association can project the observation into BANKED history; each
+observed grant remains a distinct event even when one recurring notice supports
+more than one grant. The BANKED notice may be shown as an announcement before
+delivery, but the delivery itself is not inferred from the notice alone.
 
 The monitor sends the safe snapshot to:
 

@@ -8,19 +8,21 @@ import {
   canCorroborateTiboReset,
   evaluateCodexUsageRecovery,
   isCodexUsageAuthorizationValid,
-  isBankedResetAvailableCountGrant,
   parseCodexUsageWebhookPayload,
   shouldCreateNoticeBackedEstimate,
   type CodexUsageSnapshot,
 } from "@/lib/codexUsageRecovery";
 import {
+  type BankedDistributionEstimateInput,
   findFormalTiboResetCluster,
+  findBankedEstimateByExactObservation,
   findLatestBankedGrant,
   findRecentFormalTiboReset,
   readCodexUsageMonitorState,
 } from "@/lib/codexUsageRecoveryStore";
 import {
   applyCodexUsageAtomicWrite,
+  applyCodexUsageBankedAssociation,
   buildCodexUsageAtomicWritePlan,
   buildResetExecutionEstimateWrite,
 } from "@/lib/codexUsageAtomic";
@@ -34,25 +36,23 @@ import {
 } from "@/lib/radar/tiboTemporal";
 import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import {
-  collectBankedDistributionSignals,
   collectOfficialTiboNoticeSignals,
-  findRelatedBankedDistributionNotices,
   findRelatedTiboNoticeCluster,
   selectRepresentativeTiboNotice,
   NOTICE_LOOKBACK_MS,
-  type BankedDistributionSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
-import {
-  getBankedDistributionEventKey,
-  isBankedObservationWithinNoticeWindow,
-  isBroadBankedDistributionNotice,
-} from "@/lib/radar/bankedReset";
 import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
+import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
+import { resolveBankedAssociation as resolveSharedBankedAssociation } from "@/lib/codexUsageBankedAssociation";
+import type { BankedPostAssociationDecision } from "@/lib/radar/resetPostAssociation";
+import { getTrustedTiboEditIdentity } from "@/lib/radar/tiboEditIdentity";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,is_reply,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
+const TIBO_EDIT_CHAIN_PAGE_SIZE = 500;
+const MAX_TIBO_EDIT_CHAIN_ROWS = 5000;
 
 function getSupabaseServiceClient() {
   const url = process.env.SUPABASE_URL;
@@ -91,6 +91,7 @@ function toTiboSignal(signal: ActiveTiboSignal): TiboNoticeSignal {
     verification_status: signal.verification_status ?? "auto_unverified",
     expires_at: signal.expires_at ?? null,
     is_reply: signal.is_reply ?? null,
+    is_quote: signal.is_quote ?? null,
     logical_post_id: signal.logical_post_id ?? null,
     edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
     edit_version: signal.edit_version ?? null,
@@ -140,18 +141,69 @@ function findRecentTiboTeaser(
 type OfficialNoticeLookup = {
   active: boolean;
   noticeSignal: ActiveOfficialNotice | null;
-  bankedNoticeSignal: ActiveOfficialNotice | null;
   noticeSignals: TiboNoticeSignal[];
   teaserSignal: ActiveTiboSignal | null;
-  bankedNoticeSignals: BankedDistributionSignal[];
+  allSignals: ActiveTiboSignal[];
   error: unknown;
 };
+
+async function loadTrustedEditChainVersions(
+  client: SupabaseClient<any>,
+  seeds: ActiveTiboSignal[],
+): Promise<{ signals: ActiveTiboSignal[]; error: unknown }> {
+  const logicalPostIds = new Set<string>();
+  for (const signal of seeds) {
+    const identity = getTrustedTiboEditIdentity(signal, signal.tweet_id);
+    if (identity) logicalPostIds.add(identity.logical_post_id);
+  }
+  const ids = Array.from(logicalPostIds);
+  if (ids.length === 0) return { signals: seeds, error: null };
+  if (ids.length > MAX_TIBO_EDIT_CHAIN_ROWS) {
+    return { signals: [], error: new Error("Tibo edit-chain candidate read is incomplete") };
+  }
+
+  const rows: ActiveTiboSignal[] = [...seeds];
+  let readCount = 0;
+  for (let batchOffset = 0; batchOffset < ids.length; batchOffset += 100) {
+    const batch = ids.slice(batchOffset, batchOffset + 100);
+    for (let offset = 0; offset <= MAX_TIBO_EDIT_CHAIN_ROWS; offset += TIBO_EDIT_CHAIN_PAGE_SIZE) {
+      const response = await client
+        .from("tibo_signals")
+        .select(NOTICE_COLUMNS)
+        .in("logical_post_id", batch)
+        .order("tweet_id", { ascending: true })
+        .range(offset, offset + TIBO_EDIT_CHAIN_PAGE_SIZE - 1);
+      if (response.error) return { signals: [], error: response.error };
+      const pageRows: unknown[] = Array.isArray(response.data) ? response.data : [];
+      if (pageRows.length > 0 && offset >= MAX_TIBO_EDIT_CHAIN_ROWS) {
+        return { signals: [], error: new Error("Tibo edit-chain candidate read is incomplete") };
+      }
+      readCount += pageRows.length;
+      if (readCount > MAX_TIBO_EDIT_CHAIN_ROWS) {
+        return { signals: [], error: new Error("Tibo edit-chain candidate read is incomplete") };
+      }
+      for (const value of pageRows) {
+        if (!value || typeof value !== "object" || typeof (value as Record<string, unknown>).tweet_id !== "string") {
+          return { signals: [], error: new Error("Malformed Tibo edit-chain row") };
+        }
+        rows.push(value as ActiveTiboSignal);
+      }
+      if (pageRows.length < TIBO_EDIT_CHAIN_PAGE_SIZE) break;
+    }
+  }
+
+  return {
+    signals: Array.from(new Map(rows.map((signal) => [signal.tweet_id, signal] as const)).values()),
+    error: null,
+  };
+}
 
 async function hasActiveOfficialNotice(
   client: SupabaseClient<any>,
   observedAt: Date,
   executionWindow: ResetExecutionWindow | null = null,
   includeTerminatedExecutionEvidence = false,
+  includeTrustedEditChainVersions = false,
 ): Promise<OfficialNoticeLookup> {
   const observedAtIso = observedAt.toISOString();
   const noticeLookbackStartIso = new Date(
@@ -198,10 +250,9 @@ async function hasActiveOfficialNotice(
     return {
       active: false,
       noticeSignal: null,
-      bankedNoticeSignal: null,
       noticeSignals: [],
       teaserSignal: null,
-      bankedNoticeSignals: [],
+      allSignals: [],
       error: tiboResult.error ?? persistentTiboResult.error ?? regularResult.error,
     };
   }
@@ -212,6 +263,19 @@ async function hasActiveOfficialNotice(
       ...((persistentTiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
     ].map((signal) => [signal.tweet_id, signal] as const),
   ).values());
+  const bankedAssociationSignals = includeTrustedEditChainVersions
+    ? await loadTrustedEditChainVersions(client, signals)
+    : { signals, error: null };
+  if (bankedAssociationSignals.error) {
+    return {
+      active: false,
+      noticeSignal: null,
+      noticeSignals: [],
+      teaserSignal: null,
+      allSignals: [],
+      error: bankedAssociationSignals.error,
+    };
+  }
   const data: RadarData = {
     active_tibo_signals: signals,
     formal_tibo_resets: signals
@@ -225,6 +289,8 @@ async function hasActiveOfficialNotice(
       })),
     regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
   };
+  // A BANKED distribution is an individual grant, not evidence that global
+  // quota was reset. Keep that notice out of the forced-recovery context.
   const activeNotice = getActiveOfficialNotice(
     data,
     null,
@@ -233,98 +299,18 @@ async function hasActiveOfficialNotice(
     executionWindow,
     true,
     false,
-  );
-  // A terminated notice may remain evidence for a BANKED grant, but it must
-  // not become the active notice that corroborates an ordinary recovery.
-  const activeBankedNotice = getActiveOfficialNotice(
-    {
-      ...data,
-      active_tibo_signals: signals.filter((signal) => isBroadBankedDistributionNotice(signal.text)),
-    },
-    null,
-    observedAt,
     undefined,
-    executionWindow,
     true,
-    includeTerminatedExecutionEvidence,
   );
   const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
   const teaserSignal = findRecentTiboTeaser(signals, observedAt, executionWindow);
-  const bankedSignals = collectBankedDistributionSignals(signals, []);
-  const bankedNoticeSignals = findRelatedBankedDistributionNotices(
-    bankedSignals,
-    activeBankedNotice?.id ?? "",
-    observedAt.toISOString(),
-  );
   return {
     active: Boolean(activeNotice),
     noticeSignal: activeNotice ?? null,
-    bankedNoticeSignal: activeBankedNotice ?? null,
     noticeSignals,
     teaserSignal,
-    bankedNoticeSignals,
+    allSignals: bankedAssociationSignals.signals,
     error: null,
-  };
-}
-
-function getCorroboratedBankedDistribution(
-  snapshot: CodexUsageSnapshot,
-  lookup: OfficialNoticeLookup | null,
-  effectiveBankedResetCountChange: boolean,
-  previousBankedGrantAt: string | null = null,
-  previousBankedGrantEventKey: string | null = null,
-) {
-  const notice = lookup?.bankedNoticeSignal;
-  const relatedNotices = lookup?.bankedNoticeSignals?.length
-    ? lookup.bankedNoticeSignals
-    : notice
-      ? [toTiboNoticeSignal(notice)]
-      : [];
-  const officialNotices = relatedNotices.filter(
-    (signal): signal is TiboNoticeSignal => signal.signal_type === "official_notice",
-  );
-  const representativeNotice = selectRepresentativeTiboNotice(officialNotices) ??
-    (notice ? toTiboNoticeSignal(notice) : null);
-  const firstAnnouncement = officialNotices[0] ?? representativeNotice;
-  const isPersistentNotice = notice?.consumption === "persistent";
-  const eventNoticeTweetId = firstAnnouncement?.tweet_id ?? notice?.id ?? null;
-  if (
-    effectiveBankedResetCountChange !== true ||
-    typeof snapshot.bankedResetAvailableCount !== "number" ||
-    snapshot.bankedResetAvailableCount < 1 ||
-    !notice?.isBankedDistribution ||
-    !isBroadBankedDistributionNotice(notice.text) ||
-    (!isPersistentNotice && !isBankedObservationWithinNoticeWindow(notice, snapshot.observedAt))
-  ) {
-    return { observed: false, input: null };
-  }
-
-  const eventKey = getBankedDistributionEventKey({
-    noticeTweetId: eventNoticeTweetId ?? notice.id,
-    observedAt: snapshot.observedAt,
-    persistent: isPersistentNotice,
-    previousGrantAt: previousBankedGrantAt,
-    previousEventKey: previousBankedGrantEventKey,
-  });
-  const isSubsequentPersistentObservation = isPersistentNotice &&
-    eventKey !== `banked-reset-${eventNoticeTweetId ?? notice.id}`;
-
-  return {
-    observed: true,
-    input: {
-      resetEventKey: eventKey,
-      displayExecutionAt: snapshot.observedAt,
-      tiboAnnouncedAt: firstAnnouncement?.tweet_created_at ?? notice.observedAt,
-      tiboPrimaryTweetId: representativeNotice?.tweet_id ?? notice.id,
-      // Later persistent observations retain the official notice separately;
-      // omitting it here prevents the legacy source-overlap lookup from
-      // collapsing a new observation into the first estimate.
-      tiboSourceTweetIds: isSubsequentPersistentObservation
-        ? []
-        : relatedNotices.map((item) => item.tweet_id),
-      officialNoticeTweetId: representativeNotice?.tweet_id ?? notice.id,
-      officialNoticeAt: representativeNotice?.tweet_created_at ?? notice.observedAt,
-    },
   };
 }
 
@@ -374,6 +360,7 @@ async function applyAtomicPlanOrRetry(
   snapshot: CodexUsageSnapshot,
   now: Date,
   retryCount: number,
+  onBankedAssociation?: (status: "accepted" | "pending" | "conflict" | "stale" | "failed") => void,
 ): Promise<NextResponse | null> {
   const result = await applyCodexUsageAtomicWrite(client, plan);
   if (result.error) {
@@ -385,6 +372,19 @@ async function applyAtomicPlanOrRetry(
       return processCodexUsageSnapshot(client, snapshot, now, retryCount + 1);
     }
     return recoveryResponse("ignored_stale");
+  }
+  if (plan.banked_grant_observation && plan.banked_post_association_decision) {
+    const association = await applyCodexUsageBankedAssociation(
+      client,
+      plan.banked_post_association_decision,
+      plan.banked_distribution_estimate ?? null,
+    );
+    if (association.error || association.status === null) {
+      console.warn("[Codex usage] BANKED association deferred", { reason: "association_write_failed" });
+      onBankedAssociation?.("failed");
+    } else {
+      onBankedAssociation?.(association.status);
+    }
   }
   return null;
 }
@@ -401,40 +401,110 @@ async function processCodexUsageSnapshot(
     return NextResponse.json({ error: "Usage monitor state unavailable" }, { status: 503 });
   }
 
-  const previousBankedResetAvailableCount =
-    previousResult.row?.bankedResetAvailableCount ??
-    previousResult.state?.bankedResetAvailableCount;
-  const serverObservedBankedIncrease = isBankedResetAvailableCountGrant(
-    previousBankedResetAvailableCount,
-    snapshot.bankedResetAvailableCount,
-  );
-  const effectiveBankedResetCountChange =
-    snapshot.bankedResetCountChange === true || serverObservedBankedIncrease;
-  const bankedNotice = effectiveBankedResetCountChange
-    ? await hasActiveOfficialNotice(client, new Date(snapshot.observedAt), null, true)
-    : null;
-  if (bankedNotice?.error) {
-    console.warn("[Codex usage] BANKED notice lookup failed", { reason: "database_error" });
-    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+  const receivedAt = now.toISOString();
+  let bankedGrantObservationWrite = buildBankedGrantObservationWrite({
+    previousState: previousResult.state,
+    snapshot,
+    receivedAt,
+  });
+  let bankedAssociation: { decision: BankedPostAssociationDecision; estimate: BankedDistributionEstimateInput | null } | null = null;
+  let bankedLookupFailureReason: string | null = null;
+
+  if (bankedGrantObservationWrite) {
+    const initialObservation = bankedGrantObservationWrite;
+    const exactEstimate = await findBankedEstimateByExactObservation(client, initialObservation.observed_at);
+    if (exactEstimate.error) {
+      bankedLookupFailureReason = "exact_legacy_estimate_lookup_failed";
+      bankedGrantObservationWrite = {
+        ...initialObservation,
+        legacy_identity_status: "unresolved",
+      };
+    } else if (exactEstimate.estimate?.resetEventKey) {
+      const compatibleObservation = buildBankedGrantObservationWrite({
+        previousState: previousResult.state,
+        snapshot,
+        receivedAt,
+        compatibleResetEventKey: exactEstimate.estimate.resetEventKey,
+      });
+      if (compatibleObservation) bankedGrantObservationWrite = compatibleObservation;
+    }
+    const observationForAssociation = bankedGrantObservationWrite ?? initialObservation;
+
+    if (bankedLookupFailureReason) {
+      bankedAssociation = resolveSharedBankedAssociation(observationForAssociation, [], {
+        observedAt: observationForAssociation.observed_at,
+        lookupFailed: true,
+        lookupFailureReason: bankedLookupFailureReason,
+      });
+    } else {
+      const bankedNoticeLookup = await hasActiveOfficialNotice(
+        client,
+        new Date(snapshot.observedAt),
+        null,
+        true,
+        true,
+      );
+      bankedAssociation = resolveSharedBankedAssociation(
+        observationForAssociation,
+        bankedNoticeLookup.allSignals,
+        {
+          observedAt: observationForAssociation.observed_at,
+          lookupFailed: Boolean(bankedNoticeLookup.error),
+        },
+      );
+      if (bankedNoticeLookup.error) {
+        bankedLookupFailureReason = "candidate_lookup_failed";
+        console.warn("[Codex usage] BANKED notice lookup deferred", { reason: "database_error" });
+      }
+    }
   }
 
-  const latestBankedGrant = previousResult.row && typeof previousResult.row.bankedResetAvailableCount === "number"
-    ? await findLatestBankedGrant(
-        client,
-        snapshot.observedAt,
-        bankedNotice?.bankedNoticeSignal?.consumption === "persistent"
-          ? bankedNotice.bankedNoticeSignal.id
-          : null,
-      )
+  const previousBankedResetAvailableCount = previousResult.state?.bankedResetAvailableCount;
+  const latestBankedGrant = typeof previousBankedResetAvailableCount === "number"
+    ? await findLatestBankedGrant(client, snapshot.observedAt)
     : null;
-  const lastBankedGrantAt =
-    previousResult.row?.lastBankedGrantAt ??
+  const lastBankedGrantAt = bankedGrantObservationWrite?.observed_at ??
     previousResult.state?.lastBankedGrantAt ??
     latestBankedGrant?.observedAt ??
     null;
-  const lastBankedGrantEventKey = bankedNotice?.bankedNoticeSignal?.consumption === "persistent"
-    ? latestBankedGrant?.resetEventKey ?? null
-    : null;
+  const bankedPlanFields = bankedGrantObservationWrite && bankedAssociation
+    ? {
+        bankedGrantObservationWrite,
+        bankedPostAssociation: {
+          decision: {
+            ...bankedAssociation.decision,
+            legacy_identity_status: bankedGrantObservationWrite.legacy_identity_status ?? "resolved",
+            legacy_reset_event_key: bankedGrantObservationWrite.legacy_reset_event_key ?? null,
+          },
+          decidedAt: receivedAt,
+          expectedRevision: 0,
+        },
+        bankedDistribution: bankedAssociation.estimate,
+      }
+    : {};
+  let bankedAssociationStatus: "none" | "accepted" | "pending" | "conflict" | "stale" | "failed" = "none";
+  const applyPlan = (
+    plan: ReturnType<typeof buildCodexUsageAtomicWritePlan>,
+  ) => applyAtomicPlanOrRetry(
+    client,
+    plan,
+    snapshot,
+    now,
+    retryCount,
+    (status) => { bankedAssociationStatus = status; },
+  );
+  const hasBankedObservation = Boolean(bankedGrantObservationWrite);
+  const invalidateBankedProjection = async () => {
+    if (bankedAssociationStatus !== "accepted") return;
+    try {
+      await invalidateRadarCache("tibo-event");
+    } catch {
+      console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+    }
+  };
+  const bankedResponseStatus = () => bankedAssociationStatus === "accepted"
+    ? "banked_distribution_observed"
+    : "banked_grant_observed_pending_association";
 
   const initialDecision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
     lastBankedGrantAt,
@@ -453,36 +523,24 @@ async function processCodexUsageSnapshot(
     initialDecision.kind === "invalid" ||
     initialDecision.kind === "no_recovery"
   ) {
-    const bankedResult = getCorroboratedBankedDistribution(
-      snapshot,
-      bankedNotice,
-      effectiveBankedResetCountChange,
-      lastBankedGrantAt,
-      lastBankedGrantEventKey,
-    );
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
       snapshot,
       receivedAt: now.toISOString(),
       previousState: previousResult.state,
-      bankedDistribution: bankedResult.input,
+      ...bankedPlanFields,
     });
-    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    const atomicResponse = await applyPlan(plan);
     if (atomicResponse) return atomicResponse;
     console.info("[Codex usage] snapshot accepted", {
       source: CODEX_USAGE_SOURCE_KEY,
       recovery: isAuthorizedRecovery ? initialDecision.kind : `unauthorized_${snapshot.postReason}`,
-      bankedDistributionObserved: bankedResult.observed,
+      bankedGrantObservationPersisted: hasBankedObservation,
+      bankedAssociation: bankedAssociationStatus,
     });
-    if (bankedResult.observed) {
-      try {
-        await invalidateRadarCache("codex-usage");
-      } catch {
-        console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
-      }
-    }
-    const nonRecoveryStatus = bankedResult.observed
-      ? "banked_distribution_observed"
+    await invalidateBankedProjection();
+    const nonRecoveryStatus = hasBankedObservation
+      ? bankedResponseStatus()
       : initialDecision.kind === "recovery"
         ? (snapshot.postReason ?? "no_recovery")
         : (snapshot.postReason === "structure_change" ? "structure_change" : initialDecision.kind);
@@ -500,8 +558,39 @@ async function processCodexUsageSnapshot(
     true,
   );
   if (recoveryNotice.error) {
-    console.warn("[Codex usage] official notice lookup failed", { reason: "database_error" });
-    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+    console.warn("[Codex usage] official notice lookup deferred", { reason: "database_error" });
+    const uncorroborated = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
+      activeOfficialNotice: false,
+      activeResetEvidence: false,
+      lastBankedGrantAt,
+    });
+    const fallbackObservation = uncorroborated.kind === "recovery"
+      ? createRecoveryObservation(
+          uncorroborated,
+          { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null },
+          now,
+        )
+      : undefined;
+    const plan = buildCodexUsageAtomicWritePlan({
+      expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+      snapshot,
+      receivedAt,
+      previousState: previousResult.state,
+      observation: fallbackObservation,
+      regularReset: uncorroborated.kind === "recovery" && uncorroborated.nearRegularSchedule
+        ? {
+            scheduledAt: new Date(uncorroborated.previous.resetsAt * 1000).toISOString(),
+            completedAt: snapshot.observedAt,
+          }
+        : undefined,
+      ...bankedPlanFields,
+    });
+    const atomicResponse = await applyPlan(plan);
+    if (atomicResponse) return atomicResponse;
+    await invalidateBankedProjection();
+    return recoveryResponse(hasBankedObservation
+      ? bankedResponseStatus()
+      : fallbackObservation ? "recovery_observed_unconfirmed" : "notice_lookup_deferred");
   }
 
   const decision = evaluateCodexUsageRecovery(previousResult.row, snapshot, {
@@ -513,12 +602,14 @@ async function processCodexUsageSnapshot(
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
       snapshot,
-      receivedAt: now.toISOString(),
+      receivedAt,
       previousState: previousResult.state,
+      ...bankedPlanFields,
     });
-    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    const atomicResponse = await applyPlan(plan);
     if (atomicResponse) return atomicResponse;
-    return recoveryResponse(decision.kind);
+    await invalidateBankedProjection();
+    return recoveryResponse(hasBankedObservation ? bankedResponseStatus() : decision.kind);
   }
 
   // A recovery near the regular schedule is not Tibo evidence. This also
@@ -533,7 +624,32 @@ async function processCodexUsageSnapshot(
       );
   if (matchingTibo.error) {
     console.warn("[Codex usage] Tibo match lookup failed", { reason: "database_error" });
-    return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+    if (!hasBankedObservation) {
+      return NextResponse.json({ error: "Usage monitor corroboration unavailable" }, { status: 503 });
+    }
+    const unconfirmedObservation = createRecoveryObservation(
+      decision,
+      { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null },
+      now,
+    );
+    const plan = buildCodexUsageAtomicWritePlan({
+      expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
+      snapshot,
+      receivedAt,
+      previousState: previousResult.state,
+      observation: unconfirmedObservation,
+      regularReset: decision.nearRegularSchedule
+        ? {
+            scheduledAt: new Date(decision.previous.resetsAt * 1000).toISOString(),
+            completedAt: snapshot.observedAt,
+          }
+        : undefined,
+      ...bankedPlanFields,
+    });
+    const atomicResponse = await applyPlan(plan);
+    if (atomicResponse) return atomicResponse;
+    await invalidateBankedProjection();
+    return recoveryResponse(bankedResponseStatus());
   }
 
   const observation = createRecoveryObservation(decision, matchingTibo, now);
@@ -541,16 +657,18 @@ async function processCodexUsageSnapshot(
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
       snapshot,
-      receivedAt: now.toISOString(),
+      receivedAt,
       previousState: previousResult.state,
       observation,
+      ...bankedPlanFields,
     });
-    const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+    const atomicResponse = await applyPlan(plan);
     if (atomicResponse) return atomicResponse;
     console.info("[Codex usage] personal reset observed and suppressed from public history", {
       source: CODEX_USAGE_SOURCE_KEY,
     });
-    return recoveryResponse("personal_reset");
+    await invalidateBankedProjection();
+    return recoveryResponse(hasBankedObservation ? bankedResponseStatus() : "personal_reset");
   }
 
   const noticeSignal = recoveryNotice.noticeSignal;
@@ -670,17 +788,10 @@ async function processCodexUsageSnapshot(
     }
   }
 
-  const bankedResult = getCorroboratedBankedDistribution(
-    snapshot,
-    bankedNotice,
-    effectiveBankedResetCountChange,
-    lastBankedGrantAt,
-    lastBankedGrantEventKey,
-  );
   const plan = buildCodexUsageAtomicWritePlan({
     expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
     snapshot,
-    receivedAt: now.toISOString(),
+    receivedAt,
     previousState: previousResult.state,
     observation,
     regularReset: decision.nearRegularSchedule
@@ -690,7 +801,7 @@ async function processCodexUsageSnapshot(
         }
       : undefined,
     executionEstimate,
-    bankedDistribution: bankedResult.input,
+    ...bankedPlanFields,
     promotion: matchingTibo.tweetId && matchingTibo.needsPromotion
       ? {
           tweetId: matchingTibo.tweetId,
@@ -698,14 +809,15 @@ async function processCodexUsageSnapshot(
         }
       : undefined,
   });
-  const atomicResponse = await applyAtomicPlanOrRetry(client, plan, snapshot, now, retryCount);
+  const atomicResponse = await applyPlan(plan);
   if (atomicResponse) return atomicResponse;
 
   console.info("[Codex usage] recovery observation accepted", {
     cycleHint: decision.cycleHint,
     confidence: decision.confidence,
     matchedTibo: Boolean(matchingTibo.tweetId),
-    bankedDistributionObserved: bankedResult.observed,
+    bankedGrantObservationPersisted: hasBankedObservation,
+    bankedAssociation: bankedAssociationStatus,
     estimateObserved,
   });
   try {
@@ -713,9 +825,10 @@ async function processCodexUsageSnapshot(
   } catch {
     console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
   }
+  await invalidateBankedProjection();
   return recoveryResponse(
-    bankedResult.observed
-      ? "banked_distribution_observed"
+    hasBankedObservation
+      ? bankedResponseStatus()
     : matchingTibo.tweetId
       ? "confirmed"
       : teaserEstimateObserved

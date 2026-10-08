@@ -18,8 +18,15 @@ import {
 } from "./radar/resetExecution";
 import { getNextUsageMonitorLastBankedGrantAt } from "./codexUsageRecoveryStore";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
+import {
+  type CodexUsageAtomicBankedAssociationWrite,
+  type CodexUsageAtomicBankedObservationWrite,
+  buildBankedGrantAssociationWrite,
+  buildBankedGrantObservationWrite,
+} from "./codexUsageBankedGrant";
 
-export const CODEX_USAGE_ATOMIC_RPC = "apply_codex_usage_webhook_write";
+export const CODEX_USAGE_ATOMIC_RPC = "apply_codex_usage_webhook_write_v2";
+export const LEGACY_CODEX_USAGE_ATOMIC_RPC = "apply_codex_usage_webhook_write";
 
 export type CodexUsageAtomicStateWrite = Pick<
   CodexUsageMonitorStateRow,
@@ -102,6 +109,8 @@ export type CodexUsageAtomicWritePlan = {
   regular_reset_event?: ReturnType<typeof createObservedRegularResetEventRow>;
   execution_estimate?: CodexUsageAtomicEstimateWrite;
   banked_distribution_estimate?: CodexUsageAtomicBankedWrite;
+  banked_grant_observation?: CodexUsageAtomicBankedObservationWrite;
+  banked_post_association_decision?: CodexUsageAtomicBankedAssociationWrite;
   promotion?: CodexUsageAtomicPromotion;
 };
 
@@ -120,11 +129,16 @@ export function buildCodexUsageMonitorStateWrite(
   receivedAt: string,
   previousState: UsageMonitorState | null | undefined,
 ): CodexUsageAtomicStateWrite {
-  const bankedResetAvailableCount = snapshot.bankedResetAvailableCount !== undefined
-    ? snapshot.bankedResetAvailableCount
-    : previousState?.bankedResetAvailableCount !== undefined
-      ? previousState.bankedResetAvailableCount
-      : null;
+  const bankedResetAvailableCount = snapshot.monitorProtocolVersion === 2
+    ? snapshot.bankedResetAvailableCount ?? null
+    : snapshot.bankedResetAvailableCount !== undefined
+      ? snapshot.bankedResetAvailableCount
+      : previousState?.bankedResetAvailableCount !== undefined
+        ? previousState.bankedResetAvailableCount
+        : null;
+
+  const isExplicitBaselineOrRebase = snapshot.monitorProtocolVersion === 2 &&
+    (snapshot.postReason === "initial" || snapshot.postReason === "structure_change");
 
   return {
     source_key: CODEX_USAGE_SOURCE_KEY,
@@ -137,7 +151,9 @@ export function buildCodexUsageMonitorStateWrite(
     resets_at: snapshot.resetsAt,
     coverage_started_at: getNextUsageMonitorCoverageStartedAt(previousState, snapshot),
     banked_reset_available_count: bankedResetAvailableCount,
-    last_banked_grant_at: getNextUsageMonitorLastBankedGrantAt(previousState, snapshot),
+    last_banked_grant_at: isExplicitBaselineOrRebase
+      ? previousState?.lastBankedGrantAt ?? snapshot.lastBankedGrantAt ?? null
+      : getNextUsageMonitorLastBankedGrantAt(previousState, snapshot),
     updated_at: receivedAt,
   };
 }
@@ -217,8 +233,27 @@ export function buildCodexUsageAtomicWritePlan(input: {
   regularReset?: { scheduledAt: string; completedAt: string };
   executionEstimate?: CodexUsageAtomicEstimateWrite | null;
   bankedDistribution?: BankedDistributionEstimateInput | null;
+  bankedGrantObservation?: {
+    previousState: UsageMonitorState | null | undefined;
+    receivedAt: string;
+    compatibleResetEventKey?: string | null;
+  };
+  bankedGrantObservationWrite?: CodexUsageAtomicBankedObservationWrite | null;
+  bankedPostAssociation?: {
+    decision: import("./radar/resetPostAssociation").BankedPostAssociationDecision;
+    decidedAt: string;
+    expectedRevision?: number;
+  };
   promotion?: { tweetId: string; confidence: number; classificationReason?: string };
 }): CodexUsageAtomicWritePlan {
+  const bankedGrantObservation = input.bankedGrantObservationWrite ?? (input.bankedGrantObservation
+    ? buildBankedGrantObservationWrite({
+        previousState: input.bankedGrantObservation.previousState,
+        snapshot: input.snapshot,
+        receivedAt: input.bankedGrantObservation.receivedAt,
+        compatibleResetEventKey: input.bankedGrantObservation.compatibleResetEventKey,
+      })
+    : null);
   const plan: CodexUsageAtomicWritePlan = {
     source_key: CODEX_USAGE_SOURCE_KEY,
     expected_previous_observed_at: input.expectedPreviousObservedAt,
@@ -237,8 +272,25 @@ export function buildCodexUsageAtomicWritePlan(input: {
   if (input.executionEstimate) {
     plan.execution_estimate = input.executionEstimate;
   }
-  if (input.bankedDistribution) {
+  if (input.bankedGrantObservationWrite || input.bankedGrantObservation) {
+    if (bankedGrantObservation) plan.banked_grant_observation = bankedGrantObservation;
+    if (
+      bankedGrantObservation &&
+      input.bankedPostAssociation?.decision.status === "accepted" &&
+      input.bankedDistribution
+    ) {
+      plan.banked_distribution_estimate = buildBankedDistributionEstimateWrite(input.bankedDistribution);
+    }
+  } else if (input.bankedDistribution) {
+    // Compatibility for callers still using the legacy notice-first payload.
     plan.banked_distribution_estimate = buildBankedDistributionEstimateWrite(input.bankedDistribution);
+  }
+  if (input.bankedPostAssociation && plan.banked_grant_observation) {
+    plan.banked_post_association_decision = buildBankedGrantAssociationWrite(
+      input.bankedPostAssociation.decision,
+      input.bankedPostAssociation.decidedAt,
+      input.bankedPostAssociation.expectedRevision ?? 0,
+    );
   }
   if (input.promotion) {
     plan.promotion = {
@@ -272,4 +324,35 @@ export async function applyCodexUsageAtomicWrite(
     },
     error: null,
   };
+}
+
+export async function applyCodexUsageBankedAssociation(
+  client: SupabaseClient<any>,
+  decision: CodexUsageAtomicBankedAssociationWrite,
+  estimate: CodexUsageAtomicBankedWrite | null,
+): Promise<{
+  status: "accepted" | "pending" | "conflict" | "stale" | null;
+  publicationChanged: boolean;
+  error: unknown;
+}> {
+  const {
+    observation_key: observationKey,
+    expected_revision: expectedRevision,
+    ...decisionPayload
+  } = decision;
+  const response = await client.rpc("record_banked_grant_association_decision", {
+    p_observation_key: observationKey,
+    p_decision: decisionPayload,
+    p_estimate: estimate,
+    p_expected_revision: expectedRevision,
+  });
+  if (response.error) return { status: null, publicationChanged: false, error: response.error };
+  if (!isRecord(response.data)) {
+    return { status: null, publicationChanged: false, error: new Error("Invalid BANKED association RPC result") };
+  }
+  const status = response.data.status;
+  if (status !== "accepted" && status !== "pending" && status !== "conflict" && status !== "stale") {
+    return { status: null, publicationChanged: false, error: new Error("Invalid BANKED association status") };
+  }
+  return { status, publicationChanged: response.data.publication_changed === true, error: null };
 }

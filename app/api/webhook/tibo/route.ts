@@ -98,6 +98,7 @@ import {
 } from "@/lib/radar/resetDisplayNameCandidateStore";
 import {
   hasFutureBankedDistributionIntent,
+  isBankedDistributionCompletionSignal,
   isBankedDistributionNotice,
   isRecurringConditionalBankedDistributionNotice,
 } from "@/lib/radar/bankedReset";
@@ -185,6 +186,11 @@ function getStaticHistoryEvidence() {
       eventKey: item.id?.trim() || item.guid?.trim() || "",
       sourceTweetIds: item.sourceTweetIds ?? [],
       sourceUrl: item.source_url ?? null,
+      eventKind: item.recordKind === "banked_distribution"
+        ? "banked_distribution" as const
+        : item.recordKind === "confirmed_global"
+          ? "forced_reset" as const
+          : "unknown" as const,
     }))
     .filter((item) => item.eventKey.length > 0);
 }
@@ -192,10 +198,12 @@ function getStaticHistoryEvidence() {
 function getDynamicHistoryEvidence(rows: readonly TiboLogicalPostRow[]) {
   return rows
     .filter((row) => row.signal_type === "reset_executed")
+    .filter((row) => !isBankedDistributionCompletionSignal(row.text))
     .map((row) => ({
       eventKey: `tibo-reset-${row.tweet_id}`,
       sourceTweetIds: row.edit_history_tweet_ids ?? [row.tweet_id],
       sourceUrl: row.tweet_url ?? null,
+      eventKind: "forced_reset" as const,
     }));
 }
 
@@ -909,10 +917,12 @@ export async function POST(req: NextRequest) {
       editHistoryMetadata,
     );
 
-    const shouldResolveFormalFlow =
+    const isBankedCompletion = isBankedDistributionCompletionSignal(formalCandidate.text);
+    const shouldResolveFormalFlow = !isBankedCompletion && (
       isFormalTiboResetSignal(formalCandidate) ||
       editHistoryMetadata.trusted ||
-      existingSignal?.signal_type === "reset_executed";
+      existingSignal?.signal_type === "reset_executed"
+    );
     let logicalPost: TiboLogicalPost<TiboLogicalPostRow> | null = null;
     let effectiveFormalCandidate: FormalTiboResetSignal | null = null;
     let adoptionResolution: TiboResetEventIdentityResolution | null = null;
@@ -1022,6 +1032,7 @@ export async function POST(req: NextRequest) {
                         eventKey: `tibo-reset-${tweetId}`,
                         sourceTweetIds: [tweetId],
                         sourceUrl: tweetUrl,
+                        eventKind: "forced_reset",
                       });
                     }
                   } catch {
@@ -1068,6 +1079,8 @@ export async function POST(req: NextRequest) {
                       resetEventKey: estimate.resetEventKey,
                       recoveryObservationId: estimate.recoveryObservationId ?? null,
                       tiboSourceTweetIds: estimate.tiboSourceTweetIds,
+                      executionTimeSource: estimate.executionTimeSource,
+                      estimatorVersion: estimate.estimatorVersion,
                     })),
                     staticHistory: getStaticHistoryEvidence(),
                     dynamicEvents,

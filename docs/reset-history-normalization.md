@@ -160,6 +160,14 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - account-specific reset、補償 credit、BANKED の配布は、通常の全体 forced reset の `scope` や `resetMethod` へ昇格しない。
 - BANKED distribution と同じ notice を引用する global forced reset があっても、`isSameReset()` は BANKED record を別 event として保持する。
 
+### BANKED observation と投稿の関連付け
+
+新しい Usage Monitor 経路では、確認された BANKED count increase を、Tibo告知の有無に依存しない耐久 observation として保存します。observation identity は通知IDや投稿IDではなく、Monitor source・元の `observed_at`・BANKED kind に基づき、同一観測の再送は同じ実績になります。各観測には元の時間区間とcount transitionを保持し、同じ告知が後日の複数回配布を支えても各回は別eventです。
+
+投稿との関連付けは、Webhook取込と後続reconciliationで同じversioned matcher（`banked-post-association-v1`）を使います。matcherは投稿のBANKED distribution claim、audience/scope、claim lifecycle、投稿時点で有効なschedule、trusted edit identityを、受信時刻ではなく観測時刻に照らして評価します。候補がない、複数候補、読み取り不完全、条件不一致などはpending/conflictとして監査可能に残し、BANKED estimateや公開履歴を作りません。後日投稿の到着・分類訂正があれば、bounded reconciliationが元の観測時刻で再評価します。
+
+関連付けがacceptedになった観測だけが、正規の `banked-distribution-observation-v2` estimateおよび公開 `banked_distribution` historyへ投影されます。未解決の観測は公開履歴・実行estimate・random-reset boundaryへ影響しません。現行およびlegacy `usage-execution-banked-v1` の読み取り互換は維持します。既存の履歴やestimateはそのidentity・時刻・手動訂正を保ち、近接時刻やsource IDの重なりだけで自動backfill/再関連付けしません。
+
 先行する Tibo teaser を既存の BANKED execution に表示上関連付ける場合は、非reply/非quote、strong なreset関連性、投稿時点で解決済みの時間窓、実測時刻が窓と有効期限内にあること、scope 矛盾がないことをすべて要求します。複数teaser/複数eventが候補になる場合、既存のmanual provenanceがある場合、または窓内に競合するexecutionがある場合は自動追加しません。自動関連付けは既存source tweet IDを含むcanonical history projectionで決定的に導出し、`recordKind`、execution時刻、`officialNoticeTweetId`、scope、reset method、確率境界は変更しません。曖昧な場合は未関連のままにします。
 
 ### BANKED公式告知の表示名候補
