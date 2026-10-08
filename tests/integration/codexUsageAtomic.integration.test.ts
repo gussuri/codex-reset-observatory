@@ -65,8 +65,21 @@ function clearLocalWebhookData() {
         stdio: "ignore",
       });
     }
-  } catch {
-    throw new Error("Failed to clear local Codex usage integration test rows through the local Supabase CLI");
+  } catch (error) {
+    const failure = error as { code?: string | number; status?: number; stderr?: Buffer | string; message?: string };
+    const diagnostic = [failure.stderr?.toString(), failure.message].filter(Boolean).join(" ").toLowerCase();
+    const reason = /permission denied/.test(diagnostic)
+      ? "database_permission_denied"
+      : /syntax error|multiple commands|cannot insert multiple/.test(diagnostic)
+        ? "cleanup_sql_rejected"
+        : /no such file|enoent|failed to read.*file/.test(diagnostic)
+          ? "cleanup_file_unavailable"
+          : /connection refused|not running|could not connect/.test(diagnostic)
+            ? "local_database_unavailable"
+            : /unknown flag|unexpected argument|unknown argument/.test(diagnostic)
+              ? "cli_arguments_rejected"
+              : `local_supabase_cli_failed_${failure.status ?? failure.code ?? "unknown"}`;
+    throw new Error(`Failed to clear local Codex usage integration test rows (${reason})`);
   }
 }
 
