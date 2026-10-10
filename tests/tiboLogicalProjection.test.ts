@@ -244,6 +244,26 @@ test("non-manual semantic conflicts for the same tweet fail closed", () => {
   assert.ok((projection.conflicts[0] as { fields?: string[] }).fields?.includes("signal_type"));
 });
 
+test("a true expiry-time conflict remains fail closed after timestamp format normalization", () => {
+  const active = trustedRow([A, B], B, "official_notice", {
+    text: "same raw post",
+    expires_at: "2026-09-02T00:00:00.000Z",
+  });
+  const recent = trustedRow([A, B], B, "official_notice", {
+    text: "same raw post",
+    expires_at: "2026-09-02T00:01:00.000Z",
+  });
+  const projection = buildTiboReadSideProjection({
+    active_tibo_signals: [active],
+    recent_tibo_signals: [recent],
+  });
+
+  assert.equal(projection.effectiveSignals.length, 0);
+  assert.equal(projection.conflicts.length, 1);
+  assert.equal(projection.conflicts[0].reason, "conflicting_raw_tweet_versions");
+  assert.ok((projection.conflicts[0] as { fields?: string[] }).fields?.includes("expires_at"));
+});
+
 test("a raw-version conflict blocks the rest of its trusted logical chain", () => {
   const official = trustedRow([A, B], B, "official_notice", { text: "same raw post" });
   const teaser = trustedRow([A, B], B, "teaser", { text: "same raw post" });

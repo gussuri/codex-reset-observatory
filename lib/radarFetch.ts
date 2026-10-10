@@ -1279,10 +1279,14 @@ async function getTiboSignalBundle(
   });
 
   const signals = historyResult.withoutReplies.data;
-  const activeSignals = activeResult.data.filter((signal) => {
-    if (signal.verification_status === "rejected") return false;
+  const activeSignals = activeResult.data.flatMap((signal): ActiveTiboSignal[] => {
+    if (signal.verification_status === "rejected") return [];
     const expiresTime = getEffectiveSignalExpiryMs(signal);
-    return !isNaN(expiresTime) && expiresTime > now.getTime();
+    if (!Number.isFinite(expiresTime) || expiresTime <= now.getTime()) return [];
+
+    // Keep the active and recent copies byte-identical for shared read-side
+    // projection comparisons, including DB offsets and resolved notice grace.
+    return [{ ...signal, expires_at: new Date(expiresTime).toISOString() }];
   });
   const activeIds = new Set(activeSignals.map((s) => s.tweet_id));
   for (const candidate of signals) {
