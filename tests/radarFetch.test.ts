@@ -17,6 +17,7 @@ import {
   getPublicRadarSnapshotCacheDimensions,
   getPublicRadarSnapshotCalculationBucket,
   fetchResetDisplayNameCandidateNoticeSignals,
+  fetchCurrentRadarData,
   RADAR_PAGE_CACHE_TTL_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_BUCKET_SECONDS,
   PUBLIC_RADAR_SNAPSHOT_CACHE_RETENTION_SECONDS,
@@ -672,6 +673,146 @@ test("recent Tibo projections preserve reply safety metadata", () => {
   assert.match(bundleSource, /classification_source: signal\.classification_source/);
   assert.match(bundleSource, /is_quote: signal\.is_quote/);
   assert.match(source, /const ACTIVE_TIBO_SIGNAL_FALLBACK_SELECT_FIELDS = \[[\s\S]*?"classification_source"/);
+});
+
+test("active and recent Tibo fetches share canonical expiry values through the public snapshot", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  const calculationNow = new Date("2026-10-11T07:30:00.000Z");
+  const targetTweetId = "2109045392684032299";
+  const targetUrl = `https://x.com/thsottiaux/status/${targetTweetId}`;
+  const targetNotice = {
+    tweet_id: targetTweetId,
+    signal_type: "official_notice",
+    text: "Global reset by EOD. May the tokens do good things for you.",
+    tweet_url: targetUrl,
+    tweet_created_at: "2026-10-10T22:16:20.000Z",
+    detected_at: "2026-10-10T22:16:25.000Z",
+    expires_at: "2026-10-11T22:16:20+00:00",
+    confidence: 0.98,
+    classification_reason: "AUTHOR TEXT announces a global reset by end of day.",
+    classification_source: "gemini",
+    verification_status: "auto_unverified",
+    is_reply: false,
+    is_quote: false,
+    logical_post_id: targetTweetId,
+    edit_history_tweet_ids: [targetTweetId],
+    edit_version: 1,
+    edit_metadata_source: "none",
+    temporal_expression: "by EOD",
+    temporal_kind: "daypart",
+    temporal_precision: "daypart",
+    temporal_timezone: null,
+    temporal_resolution_status: "unresolved",
+    expected_start_at: null,
+    expected_end_at: null,
+    secondary_signal: null,
+  };
+  const resolvedNotice = {
+    ...targetNotice,
+    tweet_id: "resolved-grace-notice",
+    signal_type: "teaser",
+    tweet_url: "https://x.com/thsottiaux/status/resolved-grace-notice",
+    tweet_created_at: "2026-10-10T22:15:00.000Z",
+    expires_at: "2026-10-11T18:00:00+00:00",
+    temporal_expression: "tomorrow morning",
+    temporal_kind: "relative_day",
+    temporal_precision: "daypart",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-10-11T12:00:00.000Z",
+    expected_end_at: "2026-10-11T12:30:00.000Z",
+  };
+  const tiboRows = [targetNotice, resolvedNotice];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  globalThis.fetch = async (input) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname === "status.openai.com") {
+      return url.pathname.endsWith("summary.json")
+        ? new Response(JSON.stringify({ page: {}, status: { indicator: "none" }, components: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        : new Response(JSON.stringify({ page: {}, incidents: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    }
+
+    if (url.hostname !== "example.supabase.co") {
+      throw new Error(`Unexpected test fetch host: ${url.hostname}`);
+    }
+
+    if (url.pathname === "/rest/v1/tibo_signals") {
+      if (url.searchParams.has("expected_end_at")) return new Response("[]", { status: 200 });
+      if (url.searchParams.has("expires_at") && url.searchParams.has("signal_type")) {
+        return new Response(JSON.stringify(tiboRows), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.searchParams.get("limit") === String(TIBO_RECENT_MAX_ROWS)) {
+        return new Response(JSON.stringify(tiboRows), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+    }
+
+    return new Response("[]", {
+      status: 200,
+      headers: { "content-type": "application/json", "content-range": "*/0" },
+    });
+  };
+
+  try {
+    const data = await fetchCurrentRadarData({ calculationNow, bypassCache: true });
+    const activeTarget = data.active_tibo_signals?.find((signal) => signal.tweet_id === targetTweetId);
+    const recentTarget = data.recent_tibo_signals?.find((signal) => signal.tweet_id === targetTweetId);
+    const expectedResolvedExpiry = new Date(Date.parse(resolvedNotice.expected_end_at) + 8 * 60 * 60 * 1000).toISOString();
+    const activeResolved = data.active_tibo_signals?.find((signal) => signal.tweet_id === resolvedNotice.tweet_id);
+    const recentResolved = data.recent_tibo_signals?.find((signal) => signal.tweet_id === resolvedNotice.tweet_id);
+
+    assert.ok(activeTarget);
+    assert.ok(recentTarget);
+    assert.equal(activeTarget.expires_at, "2026-10-11T22:16:20.000Z");
+    assert.equal(recentTarget.expires_at, activeTarget.expires_at);
+    assert.ok(activeResolved);
+    assert.ok(recentResolved);
+    assert.equal(activeResolved.expires_at, expectedResolvedExpiry);
+    assert.equal(recentResolved.expires_at, expectedResolvedExpiry);
+
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const snapshot = toPublicRadarSnapshot(data, locale, { calculationNow });
+      const baseline = toPublicRadarSnapshot({
+        ...data,
+        active_tibo_signals: [],
+        recent_tibo_signals: [],
+      }, locale, { calculationNow });
+
+      assert.equal(snapshot.viewModel.activeWindow.active, true);
+      assert.equal(snapshot.viewModel.activeWindow.kind, "official");
+      assert.equal(snapshot.viewModel.activeWindow.noticeKind, "forced");
+      assert.equal(snapshot.viewModel.activeWindow.source, targetUrl);
+      assert.equal(snapshot.viewModel.activeWindow.expectedAt, null);
+      assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, null);
+      assert.ok(snapshot.viewModel.activeWindow.expectedTimeZone == null);
+      assert.equal(snapshot.latestTiboActivity?.classification, "official_notice");
+      assert.equal(snapshot.latestTiboActivity?.sourceUrl, targetUrl);
+      assert.ok(snapshot.latestTiboActivity?.expectedStartAt == null);
+      assert.ok(snapshot.latestTiboActivity?.expectedEndAt == null);
+      assert.deepEqual(snapshot.viewModel.recentHistory, baseline.viewModel.recentHistory);
+      assert.equal(snapshot.lastRandomResetAt, baseline.lastRandomResetAt);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousServiceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+  }
 });
 
 test("Tibo reset notice association scans resets chronologically and preserves display order", () => {
