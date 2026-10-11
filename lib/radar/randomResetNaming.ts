@@ -645,17 +645,45 @@ function getV4AuthorTextEvidence(sourcePostText: string) {
   });
 }
 
-function getV4NumericQuantities(text: string) {
-  const pattern = /(^|[^A-Za-z0-9])(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(million|millions|m|billion|billions|bn|b|thousand|thousands|k|万|萬|亿|億|千|百))?(?:\s+(?:(?:[A-Za-z][A-Za-z0-9-]*)\s+){0,2}(users?|people|accounts?|threads?|tokens?|人|名|用户|帳戶|账户|线程|個|个))?/gi;
+function getV4NumericQuantities(text: string, sourceEvidence = false) {
+  const pattern = /(^|[^A-Za-z0-9])(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(million|millions|m|billion|billions|bn|b|thousand|thousands|k|万|萬|亿|億|千|百))?/gi;
   const quantities = new Set<string>();
+  const cjkUnits: Array<[string, string]> = [
+    ["トークン", "tokens"], ["令牌", "tokens"], ["代币", "tokens"],
+    ["アカウント", "accounts"], ["账户", "accounts"], ["帳戶", "accounts"],
+    ["帐户", "accounts"], ["账号", "accounts"], ["帳号", "accounts"],
+    ["スレッド", "threads"], ["线程", "threads"],
+    ["使用者", "people"], ["用户", "people"], ["人", "people"], ["名", "people"],
+    ["个", "items"], ["個", "items"],
+  ];
+  const knownEnglishUnits = new Map<string, string>([
+    ["user", "people"], ["users", "people"], ["people", "people"], ["person", "people"], ["persons", "people"],
+    ["token", "tokens"], ["tokens", "tokens"],
+    ["account", "accounts"], ["accounts", "accounts"],
+    ["thread", "threads"], ["threads", "threads"],
+    ["dollar", "currency"], ["dollars", "currency"], ["usd", "currency"],
+    ["credit", "credits"], ["credits", "credits"],
+    ["request", "requests"], ["requests", "requests"],
+    ["message", "messages"], ["messages", "messages"],
+    ["view", "views"], ["views", "views"],
+    ["download", "downloads"], ["downloads", "downloads"],
+    ["seat", "seats"], ["seats", "seats"],
+    ["customer", "customers"], ["customers", "customers"],
+    ["hour", "time"], ["hours", "time"], ["day", "time"], ["days", "time"],
+    ["week", "time"], ["weeks", "time"], ["byte", "bytes"], ["bytes", "bytes"],
+    ["kb", "bytes"], ["mb", "bytes"], ["gb", "bytes"],
+  ]);
+  const nonUnitFollowingWords = new Set([
+    "reset", "resets", "thank", "thanks", "you", "wish", "wishes", "weekend",
+    "special", "milestone", "celebration", "celebrated", "today", "this", "that",
+    "new", "more", "for", "to", "of", "and", "with", "from", "luna", "codex",
+  ]);
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     const value = Number((match[2] ?? "").replace(/,/g, ""));
     if (!Number.isFinite(value)) continue;
     const previousText = text.slice(0, match.index + (match[1] ?? "").length);
-    if (/(?:gpt|chatgpt|claude|gemini|model|version)[ -]?$/i.test(previousText)) continue;
     const scaleUnit = (match[3] ?? "").toLocaleLowerCase();
-    const noun = (match[4] ?? "").toLocaleLowerCase();
     const scale = scaleUnit === "m" || scaleUnit.startsWith("million") ? 1_000_000
       : scaleUnit === "b" || scaleUnit === "bn" || scaleUnit.startsWith("billion") ? 1_000_000_000
       : scaleUnit === "k" || scaleUnit.startsWith("thousand") || scaleUnit === "千" ? 1_000
@@ -663,12 +691,21 @@ function getV4NumericQuantities(text: string) {
       : scaleUnit === "亿" || scaleUnit === "億" ? 100_000_000
       : scaleUnit === "百" ? 100
       : 1;
-    const category = /^(?:users?|people|人|名|用户)$/.test(noun) ? "people"
-      : /^(?:tokens?)$/.test(noun) ? "tokens"
-      : /^(?:accounts?|帳戶|账户)$/.test(noun) ? "accounts"
-      : /^(?:threads?|线程)$/.test(noun) ? "threads"
-      : noun ? `unit:${noun}`
-      : "unspecified";
+    const suffix = text.slice(pattern.lastIndex);
+    const cjkUnit = cjkUnits.find(([unit]) => suffix.startsWith(unit));
+    const cjkPrefix = /^[\u3040-\u30ff\u3400-\u9fff]/.test(suffix);
+    const englishWords = suffix.match(/^\s+((?:[A-Za-z][A-Za-z0-9-]*\s*){1,3})/)?.[1]
+      ?.trim().toLocaleLowerCase().split(/\s+/) ?? [];
+    const knownEnglishUnit = englishWords
+      .map((word) => knownEnglishUnits.get(word))
+      .find((category): category is string => Boolean(category));
+    const firstNonModifierWord = englishWords.find((word) =>
+      !knownEnglishUnits.has(word) && !nonUnitFollowingWords.has(word),
+    );
+    const category = cjkUnit?.[1] ?? (cjkPrefix ? "unknown_cjk_unit"
+      : knownEnglishUnit ?? (firstNonModifierWord ? `unit:${firstNonModifierWord}` : "unspecified"));
+    const isModelVersion = /(?:gpt|chatgpt|claude|gemini|model|version)[ -]?$/i.test(previousText);
+    if (isModelVersion && (sourceEvidence || !cjkUnit && !knownEnglishUnit && !firstNonModifierWord)) continue;
     quantities.add(`${Math.round(value * scale)}|${category}`);
   }
   return quantities;
@@ -685,7 +722,7 @@ function addV4SafetyFlags(
 ) {
   const flags: string[] = [];
   const source = authorTexts.join("\n").toLocaleLowerCase();
-  const sourceNumbers = getV4NumericQuantities(authorTexts.join("\n"));
+  const sourceNumbers = getV4NumericQuantities(authorTexts.join("\n"), true);
   const nameNumbers = names.map((name) => getV4NumericQuantities(name ?? ""));
 
   for (const name of names) {
@@ -713,10 +750,7 @@ function addV4SafetyFlags(
     ))) {
     flags.push("unsupported_number_format");
   }
-  const numberSets = nameNumbers.map((numbers) => Array.from(numbers)
-    .map((quantity) => quantity.split("|")[0])
-    .sort()
-    .join(","));
+  const numberSets = nameNumbers.map((numbers) => Array.from(numbers).sort().join(","));
   if (numberSets.some((values) => values !== numberSets[0])) {
     flags.push("localized_number_mismatch");
   }

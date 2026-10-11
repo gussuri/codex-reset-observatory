@@ -84,6 +84,64 @@ test("generation context does not reuse a notice consumed by the prior forced re
   assert.deepEqual(result, ["current-reset"]);
 });
 
+test("generation keeps a resolved notice through the read-side eight-hour schedule grace", () => {
+  const candidate = reset("current-reset", "2026-10-11T08:00:00Z");
+  const scheduledNotice = notice("scheduled-notice", "2026-10-10T22:16:20Z", "Global reset by EOD.");
+  Object.assign(scheduledNotice, {
+    temporal_resolution_status: "resolved",
+    temporal_precision: "day",
+    expected_start_at: "2026-10-10T22:16:20Z",
+    expected_end_at: "2026-10-11T07:00:00Z",
+    expires_at: "2026-10-11T07:00:00Z",
+  });
+
+  const result = resolveTiboResetDisplayNameSourceIds({
+    candidate,
+    canonicalSourceTweetIds: ["current-reset"],
+    acceptedResets: [],
+    notices: [scheduledNotice],
+  });
+
+  assert.deepEqual(result, ["current-reset", "scheduled-notice"]);
+});
+
+test("generation excludes a resolved notice after the full schedule grace expires", () => {
+  const candidate = reset("current-reset", "2026-10-11T16:00:00Z");
+  const scheduledNotice = notice("scheduled-notice", "2026-10-10T22:16:20Z", "Global reset by EOD.");
+  Object.assign(scheduledNotice, {
+    temporal_resolution_status: "resolved",
+    temporal_precision: "day",
+    expected_start_at: "2026-10-10T22:16:20Z",
+    expected_end_at: "2026-10-11T07:00:00Z",
+    expires_at: "2026-10-11T07:00:00Z",
+  });
+
+  const result = resolveTiboResetDisplayNameSourceIds({
+    candidate,
+    canonicalSourceTweetIds: ["current-reset"],
+    acceptedResets: [],
+    notices: [scheduledNotice],
+  });
+
+  assert.deepEqual(result, ["current-reset"]);
+});
+
+test("generation honors raw expiry for notices without a resolved schedule", () => {
+  const candidate = reset("current-reset", "2026-10-11T08:00:00Z");
+  const expiredNotice = notice("expired-notice", "2026-10-10T22:16:20Z", "Reset is coming soon.");
+  expiredNotice.temporal_resolution_status = "unresolved";
+  expiredNotice.expires_at = "2026-10-11T07:00:00Z";
+
+  const result = resolveTiboResetDisplayNameSourceIds({
+    candidate,
+    canonicalSourceTweetIds: ["current-reset"],
+    acceptedResets: [],
+    notices: [expiredNotice],
+  });
+
+  assert.deepEqual(result, ["current-reset"]);
+});
+
 test("generation notice association matches read-side selection for uncertain notices", () => {
   const candidate = reset("current-reset", "2026-10-11T12:00:00Z");
   const earlier = notice("notice-a", "2026-10-11T08:00:00Z", "Reset later today.");

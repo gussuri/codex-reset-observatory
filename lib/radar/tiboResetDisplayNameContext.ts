@@ -4,6 +4,7 @@ import {
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "./tiboHistory";
+import { getEffectiveTiboSignalExpiryMs } from "./tiboTemporal";
 
 function identityIds(signal: FormalTiboResetSignal) {
   return [signal.tweet_id, ...(signal.edit_history_tweet_ids ?? [])];
@@ -40,7 +41,7 @@ export function resolveTiboResetDisplayNameSourceIds(input: {
   const relatedNotices = findRelatedTiboNotices(
     input.candidate,
     input.notices.filter((notice) => {
-      const expiry = notice.expires_at ? Date.parse(notice.expires_at) : Number.NaN;
+      const expiry = getEffectiveTiboSignalExpiryMs(notice);
       return !Number.isFinite(expiry) || expiry > completedAt;
     }),
     previousReset?.tweet_created_at ?? null,

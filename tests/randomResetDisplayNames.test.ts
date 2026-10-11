@@ -395,6 +395,81 @@ test("v4 flags unsupported spelled-out quantities instead of letting all locales
   assert.equal(acceptance.status, "review_required");
 });
 
+test("v4 rejects whitespace-free CJK people units when the source quantity is tokens", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We generated 40M tokens today. Usage limits are reset.",
+    {
+      nameJa: "4000万人記念リセット",
+      nameEn: "40M Tokens Reset",
+      nameZh: "4000万用户重置",
+    },
+    "40M tokens",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 accepts whitespace-free CJK tokens when grounded in tokens", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We generated 40M tokens today. Usage limits are reset.",
+    {
+      nameJa: "4000万トークン記念リセット",
+      nameEn: "40M Tokens Reset",
+      nameZh: "4000万令牌重置",
+    },
+    "40M tokens",
+  );
+
+  assert.deepEqual(result.flags, []);
+  assert.equal(acceptance.status, "accepted");
+});
+
+test("v4 accepts whitespace-free CJK people units when grounded in users", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We reached 40M users this week. Reset complete.",
+    {
+      nameJa: "4000万人への感謝リセット",
+      nameEn: "40M Users Thank You Reset",
+      nameZh: "4000万用户致谢重置",
+    },
+    "40M users",
+  );
+
+  assert.deepEqual(result.flags, []);
+  assert.equal(acceptance.status, "accepted");
+});
+
+test("v4 flags an unfamiliar explicit CJK unit instead of treating it as unitless", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We generated 40M tokens today. Usage limits are reset.",
+    {
+      nameJa: "4000万ファイル記念リセット",
+      nameEn: "40M Tokens Reset",
+      nameZh: "4000万令牌重置",
+    },
+    "40M tokens",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 flags localized names that use different explicit units for the same number", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We generated 40M tokens and reached 40M users this week.",
+    {
+      nameJa: "4000万人記念リセット",
+      nameEn: "40M Tokens Reset",
+      nameZh: "4000万令牌重置",
+    },
+    "40M tokens",
+  );
+
+  assert.ok(result.flags.includes("localized_number_mismatch"));
+  assert.equal(acceptance.status, "review_required");
+});
+
 test("production naming failures remain best-effort webhook-safe results", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "A reset is available for the weekend.";

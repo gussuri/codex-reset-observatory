@@ -78,7 +78,7 @@ import {
 } from "@/lib/radar/bankedReset";
 import { isExecutionBearingResetDisplayNameNotice, type ResetDisplayNameCandidateActivation } from "@/lib/radar/resetDisplayNameCandidateTypes";
 import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNameReconciliation";
-import { TIBO_NOTICE_GRACE_MS } from "@/lib/radar/tiboTemporal";
+import { getEffectiveTiboSignalExpiryMs } from "@/lib/radar/tiboTemporal";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=600, stale-while-revalidate=300";
@@ -1205,28 +1205,7 @@ async function getTiboSignalBundle(
       ? fetchRawTimedTiboSignals(tiboCacheBoundary)
       : getCachedTimedTiboSignals(tiboCacheBoundary),
   ]);
-  const getEffectiveSignalExpiryMs = (signal: {
-    expires_at?: string | null;
-    expected_end_at?: string | null;
-    expected_start_at?: string | null;
-    temporal_resolution_status?: string | null;
-  }) => {
-    const rawExpiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
-    if (signal.temporal_resolution_status === "resolved") {
-      const end = signal.expected_end_at
-        ? Date.parse(signal.expected_end_at)
-        : signal.expected_start_at
-          ? Date.parse(signal.expected_start_at)
-          : Number.NaN;
-      if (Number.isFinite(end)) {
-        return Math.max(
-          Number.isFinite(rawExpiresTime) ? rawExpiresTime : Number.NEGATIVE_INFINITY,
-          end + TIBO_NOTICE_GRACE_MS,
-        );
-      }
-    }
-    return rawExpiresTime;
-  };
+  const getEffectiveSignalExpiryMs = getEffectiveTiboSignalExpiryMs;
 
   const formatAsActiveSignal = (
     signal: FormalTiboResetSignal | ActiveTiboSignal,

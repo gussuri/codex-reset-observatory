@@ -1422,10 +1422,7 @@ test("formal completion without a monitor observation resolves its canonical not
       confidence: 0.98,
       verification_status: "confirmed",
       is_reply: false,
-      temporal_resolution_status: "resolved",
-      temporal_precision: "day",
-      expected_start_at: noticeAt,
-      expected_end_at: "2026-10-11T07:00:00.000Z",
+      temporal_resolution_status: "unresolved",
       expires_at: "2026-10-11T00:00:00.000Z",
     },
     {
