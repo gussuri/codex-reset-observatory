@@ -410,3 +410,32 @@ test("resolver does not mutate logical post source arrays", () => {
   assert.deepEqual(sourceTweetIds, before);
   assert.notEqual(result.sourceTweetIds, sourceTweetIds);
 });
+
+test("delayed completion post arriving outside 90m observation window is held as ambiguous when an unadopted monitor estimate exists within grace", () => {
+  const estimateExecutionAt = "2026-08-31T03:00:00.000Z"; // 12:00 JST
+  const completionCreatedAt = "2026-08-31T05:00:00.000Z"; // 14:00 JST (120 min later)
+
+  const completionRow = trustedRow([B], B, {
+    tweet_created_at: completionCreatedAt,
+  });
+
+  const result = resolveTiboResetEventIdentity(post([completionRow]), {
+    sourceTweetIds: [B],
+    candidateCreatedAt: completionCreatedAt,
+    estimates: [
+      {
+        resetEventKey: "usage-reset-2026-08-31-0300",
+        recoveryObservationId: "obs-1200",
+        tiboSourceTweetIds: [NOTICE],
+        executionTimeSource: "usage_observation",
+        estimatorVersion: "usage-execution-monitor-v1",
+        displayExecutionAt: estimateExecutionAt,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.reason, "ambiguous_existing_claims");
+  assert.equal(result.resetEventKey, null);
+  assert.equal(result.canCreateNewSideEffects, false);
+});

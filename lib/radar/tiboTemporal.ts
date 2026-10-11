@@ -105,6 +105,10 @@ export function getTemporalExecutionWindowRelation(
     "status" | "expectedStartAt" | "expectedEndAt"
   > | null | undefined,
   executionWindow: ResetExecutionWindow | null | undefined,
+  options?: {
+    graceMs?: number;
+    earlyGraceMs?: number;
+  },
 ): TemporalExecutionWindowRelation {
   if (!resolution || resolution.status !== "resolved" || !executionWindow) {
     return "unknown";
@@ -134,8 +138,11 @@ export function getTemporalExecutionWindowRelation(
     return "unknown";
   }
 
-  if (executionEnd < expectedStart) return "before";
-  if (executionStart > expectedEnd) return "after";
+  const earlyGraceMs = options?.earlyGraceMs ?? 0;
+  const graceMs = options?.graceMs ?? 0;
+
+  if (executionEnd < expectedStart - earlyGraceMs) return "before";
+  if (executionStart > expectedEnd + graceMs) return "after";
   return "overlap";
 }
 
@@ -790,7 +797,11 @@ function hasClockExpression(value: string) {
 }
 
 export function isDeadlineTimeExpression(value: string) {
-  return /\bby\s+(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?|noon|midnight)\b/i.test(value);
+  return (
+    /\bby\s+(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?|noon|midnight|end\s+of\s+(?:the\s+)?day|eod|cob|close\s+of\s+business)\b/i.test(value) ||
+    /\b(?:before|until)\s+(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?|noon|midnight)\b/i.test(value) ||
+    /(?:までに|まで[にへと]|本日中)/.test(value)
+  );
 }
 
 function isDeadlineMidnightExpression(value: string) {
@@ -1824,24 +1835,16 @@ export function isOverdueNoticePending(
   if (resolution.temporalPrecision !== "exact_time" && !isDeadline) {
     return false;
   }
-  if (!resolution.expectedStartAt) return false;
+  if (!resolution.expectedStartAt && !resolution.expectedEndAt) return false;
   const nowTime = now.getTime();
   if (!Number.isFinite(nowTime)) return false;
 
-  if (isDeadline) {
-    const deadline = resolution.expectedEndAt
-      ? Date.parse(resolution.expectedEndAt)
-      : Date.parse(resolution.expectedStartAt);
-    if (!Number.isFinite(deadline)) return false;
-    if (nowTime <= deadline || nowTime > deadline + TIBO_NOTICE_GRACE_MS) {
-      return false;
-    }
-    return !isTemporalNoticeConsumedAtReset(resolution, latestResetAt);
-  }
+  const targetEnd = resolution.expectedEndAt
+    ? Date.parse(resolution.expectedEndAt)
+    : Date.parse(resolution.expectedStartAt!);
+  if (!Number.isFinite(targetEnd)) return false;
 
-  const start = Date.parse(resolution.expectedStartAt);
-  if (!Number.isFinite(start)) return false;
-  if (nowTime <= start || nowTime > start + TIBO_NOTICE_GRACE_MS) {
+  if (nowTime <= targetEnd || nowTime > targetEnd + TIBO_NOTICE_GRACE_MS) {
     return false;
   }
   return !isTemporalNoticeConsumedAtReset(resolution, latestResetAt);

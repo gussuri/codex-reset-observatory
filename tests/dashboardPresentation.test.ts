@@ -1733,6 +1733,31 @@ test("temporary Tibo teaser presentation override remains active throughout the 
   );
 });
 
+test("temporary Tibo teaser presentation override does not overwrite a reset_executed completion post", () => {
+  const calculationNow = new Date("2026-10-06T04:00:00.000Z");
+  const completionPost: ActiveTiboSignal = {
+    tweet_id: "2107500000000000000",
+    text: "Reset all propagated. Sweet dreams.",
+    tweet_url: "https://x.com/thsottiaux/status/2107500000000000000",
+    tweet_created_at: "2026-10-06T03:30:00.000Z",
+    signal_type: "reset_executed",
+    confidence: 0.98,
+    verification_status: "confirmed",
+  };
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [completionPost],
+  });
+
+  const snapshotJa = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  // The 28-day campaign teaser strength is maintained:
+  assert.equal(snapshotJa.resetTeaserStatus, "strong");
+  // BUT the latest activity card is NOT overwritten by the campaign teaser:
+  assert.equal(snapshotJa.latestTiboActivity?.classification, "reset_executed");
+  assert.equal(snapshotJa.latestTiboActivity?.sourceUrl, "https://x.com/thsottiaux/status/2107500000000000000");
+  assert.equal(snapshotJa.latestTiboActivity?.text, "Reset all propagated. Sweet dreams.");
+});
+
 test("temporary Tibo teaser presentation override expires back to the ordinary result after 28 days", () => {
   const calculationNow = new Date("2026-11-01T20:33:43.000Z");
   const data = getLocalRadarData({ calculationNow });

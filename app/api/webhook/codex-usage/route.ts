@@ -32,6 +32,8 @@ import {
 } from "@/lib/radar/probability";
 import {
   getTemporalExecutionWindowRelation,
+  TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
+  TIBO_NOTICE_GRACE_MS,
   type ResetExecutionWindow,
 } from "@/lib/radar/tiboTemporal";
 import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
@@ -124,6 +126,10 @@ function findRecentTiboTeaser(
             }
           : null,
         executionWindow,
+        {
+          graceMs: TIBO_NOTICE_GRACE_MS,
+          earlyGraceMs: TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
+        },
       );
       if (temporalRelation === "before" || temporalRelation === "after") return false;
       if (temporalRelation === "unknown" && observedTime - createdTime > USAGE_TIBO_MATCH_WINDOW_MS) {

@@ -1081,10 +1081,13 @@ export async function POST(req: NextRequest) {
                       tiboSourceTweetIds: estimate.tiboSourceTweetIds,
                       executionTimeSource: estimate.executionTimeSource,
                       estimatorVersion: estimate.estimatorVersion,
+                      displayExecutionAt: estimate.displayExecutionAt,
+                      officialNoticeTweetId: estimate.officialNoticeTweetId ?? null,
                     })),
                     staticHistory: getStaticHistoryEvidence(),
                     dynamicEvents,
                     sourceTweetIds: logicalPost.sourceTweetIds,
+                    candidateCreatedAt: flowTweetCreatedAt,
                   };
                   adoptionResolution = resolveTiboResetEventIdentity(logicalPost, evidence);
                   matchedLedger = adoptionResolution.resetEventKey
@@ -1092,6 +1095,13 @@ export async function POST(req: NextRequest) {
                       ledger.resetEventKey === adoptionResolution!.resetEventKey,
                     ) ?? null
                     : null;
+
+                  if (adoptionResolution.reason === "ambiguous_existing_claims") {
+                    console.info("[Tibo Webhook] Formal adoption held pending resolution of ambiguous existing execution estimate", {
+                      logicalPostId: logicalPost.logicalPostId,
+                      flowTweetCreatedAt,
+                    });
+                  }
 
                   const effectiveIsFormal = Boolean(
                     effectiveFormalCandidate &&

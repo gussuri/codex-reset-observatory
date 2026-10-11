@@ -43,6 +43,8 @@ import {
   type RandomResetEligibilityPolicy,
 } from "./resetEligibility";
 import {
+  getLastForcedRecoveryResetAt,
+  getLastForcedRecoveryResetWindow,
   getLastRandomRecoveryResetAt,
   getLastRandomRecoveryResetWindow,
   getLastRecoveryResetAt,
@@ -60,6 +62,7 @@ import {
   getTemporalExecutionWindowRelation,
   hasDeadlineSemantics,
   isTemporalNoticeConsumedAtReset,
+  TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
   TIBO_NOTICE_GRACE_MS,
   type ResetExecutionWindow,
 } from "./tiboTemporal";
@@ -1089,7 +1092,8 @@ export function getActiveOfficialNotice(
   excludeBankedDistributionForProbability = false,
 ): ActiveOfficialNotice | null {
   // Notice consumption has a narrower meaning than the display/recovery
-  // boundary: a regular-only reset must not consume an official notice.
+  // boundary: a regular-only reset must not consume an official notice,
+  // and an unrelated BANKED distribution must not consume a forced reset notice.
   const recoveryBoundaryIso = getLastRandomRecoveryResetAt(
     data,
     now,
@@ -1097,6 +1101,14 @@ export function getActiveOfficialNotice(
     canonicalHistoryContext,
   );
   const recoveryBoundaryAt = recoveryBoundaryIso ? new Date(recoveryBoundaryIso) : null;
+  const forcedRecoveryBoundaryIso = getLastForcedRecoveryResetAt(
+    data,
+    now,
+    LOCAL_RESET_HISTORY,
+    canonicalHistoryContext,
+  );
+  const forcedRecoveryBoundaryAt = forcedRecoveryBoundaryIso ? new Date(forcedRecoveryBoundaryIso) : null;
+
   const knownRecoveryBoundaries = getRecoveryResetEvents(
     data,
     now,
@@ -1111,30 +1123,58 @@ export function getActiveOfficialNotice(
         boundary.isRegular &&
         getDateTime(boundary.resetAt) === suppliedResetTime,
     );
+  const suppliedResetIsBanked = Number.isFinite(suppliedResetTime) &&
+    knownRecoveryBoundaries.some(
+      (boundary) =>
+        Boolean(boundary.isBanked) &&
+        getDateTime(boundary.resetAt) === suppliedResetTime,
+    );
+
   const suppliedRandomResetAt = suppliedResetIsRegularOnly ? null : latestResetAt;
+  const suppliedForcedResetAt = suppliedResetIsRegularOnly || suppliedResetIsBanked ? null : latestResetAt;
+
   const suppliedRandomResetTime = suppliedRandomResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const recoveryBoundaryTime = recoveryBoundaryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const resolvedLatestResetAt = suppliedRandomResetTime >= recoveryBoundaryTime
     ? suppliedRandomResetAt
     : recoveryBoundaryAt;
+
+  const suppliedForcedResetTime = suppliedForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const forcedRecoveryBoundaryTime = forcedRecoveryBoundaryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const resolvedLatestForcedResetAt = suppliedForcedResetTime >= forcedRecoveryBoundaryTime
+    ? suppliedForcedResetAt
+    : forcedRecoveryBoundaryAt;
+
   const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
   const dynamicRandomRecoveryBoundaryAt = getLastRandomRecoveryResetAt(data, now, [], canonicalHistoryContext);
   const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, [], canonicalHistoryContext);
-  const activeResetExecutionWindow = dynamicRandomRecoveryBoundaryAt &&
+  const dynamicForcedRecoveryBoundaryAt = getLastForcedRecoveryResetAt(data, now, [], canonicalHistoryContext);
+  const dynamicForcedRecoveryWindow = getLastForcedRecoveryResetWindow(data, now, [], canonicalHistoryContext);
+
+  const activeRandomResetExecutionWindow = dynamicRandomRecoveryBoundaryAt &&
       dynamicRandomRecoveryWindow?.executionWindowEndAt === dynamicRandomRecoveryBoundaryAt
     ? dynamicRandomRecoveryWindow
     : resetExecutionWindow;
-  // Prefer a dynamic canonical boundary over a later completion post. If the
-  // current data has no dynamic boundary, preserve the legacy Tibo-only and
-  // static-history cutoff behavior. A newer confirmed reset boundary must never
-  // be superseded by an older dynamic boundary.
-  const cutoff = dynamicRandomRecoveryBoundaryAt &&
+  const activeForcedResetExecutionWindow = dynamicForcedRecoveryBoundaryAt &&
+      dynamicForcedRecoveryWindow?.executionWindowEndAt === dynamicForcedRecoveryBoundaryAt
+    ? dynamicForcedRecoveryWindow
+    : (resetExecutionWindow && !suppliedResetIsBanked ? resetExecutionWindow : null);
+
+  const randomCutoff = dynamicRandomRecoveryBoundaryAt &&
       getDateTime(dynamicRandomRecoveryBoundaryAt) >= (resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
     ? getDateTime(dynamicRandomRecoveryBoundaryAt)
     : Math.max(
         resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
         latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
       );
+  const forcedCutoff = dynamicForcedRecoveryBoundaryAt &&
+      getDateTime(dynamicForcedRecoveryBoundaryAt) >= (resolvedLatestForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
+    ? getDateTime(dynamicForcedRecoveryBoundaryAt)
+    : Math.max(
+        resolvedLatestForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+        latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
+      );
+
   const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(Array.from(new Map(
     [
       ...getTiboReadSideSignals(
@@ -1164,6 +1204,12 @@ export function getActiveOfficialNotice(
         return [];
       }
 
+      const isBankedNotice = isBankedDistributionNotice(signal.text);
+      const cutoff = isBankedNotice ? randomCutoff : forcedCutoff;
+      const activeResetExecutionWindow = isBankedNotice
+        ? activeRandomResetExecutionWindow
+        : activeForcedResetExecutionWindow;
+
       const observedTime = new Date(signal.tweet_created_at).getTime();
       const rawExpiresTime = signal.expires_at ? new Date(signal.expires_at).getTime() : Number.NaN;
       const resolvedEnd = signal.expected_end_at
@@ -1191,6 +1237,10 @@ export function getActiveOfficialNotice(
       const temporalRelation = getTemporalExecutionWindowRelation(
         temporalResolution,
         activeResetExecutionWindow,
+        {
+          graceMs: TIBO_NOTICE_GRACE_MS,
+          earlyGraceMs: TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
+        },
       );
       if (
         requireExecutionWindowMatch &&

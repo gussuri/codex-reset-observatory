@@ -23,6 +23,7 @@ export type RecoveryResetBoundary = {
   resetAt: string;
   isRandom: boolean;
   isRegular: boolean;
+  isBanked?: boolean;
   sourceIds: string[];
 };
 
@@ -221,12 +222,14 @@ export function getRecoveryResetEvents(
       const completedAt = getCompletedTimestamp(item);
       const randomEligible = isEligibleRandomBoundary(item, completedAt, nowTime, policy);
       const regularEligible = isEligibleRegularRecoveryResetEvent(item, completedAt, nowTime);
+      const isBanked = item.recordKind === "banked_distribution" || item.details?.resetMethod === "任意リセット権配布";
       if (!randomEligible && !regularEligible || completedAt === null) return [];
       return [{
         id: item.id ?? `history-${index}`,
         time: completedAt,
         isRandom: randomEligible,
         isRegular: regularEligible,
+        isBanked: Boolean(isBanked),
       }];
     })
     .sort((left, right) => left.time - right.time);
@@ -243,6 +246,9 @@ export function getRecoveryResetEvents(
     if (sameBoundary) {
       previous.isRandom ||= candidate.isRandom;
       previous.isRegular ||= candidate.isRegular;
+      if (!candidate.isBanked) {
+        previous.isBanked = false;
+      }
       previous.sourceIds.push(candidate.id);
       continue;
     }
@@ -252,6 +258,7 @@ export function getRecoveryResetEvents(
       resetAt: new Date(candidate.time).toISOString(),
       isRandom: candidate.isRandom,
       isRegular: candidate.isRegular,
+      isBanked: candidate.isBanked,
       sourceIds: [candidate.id],
     });
   }
@@ -281,6 +288,30 @@ export function getLastRandomRecoveryResetAt(
     .at(-1)?.resetAt ?? null;
 }
 
+export function getLastForcedRecoveryResetAt(
+  data: RadarData | null,
+  now: Date = new Date(),
+  staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
+) {
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
+    .filter((boundary) => boundary.isRandom && !boundary.isBanked)
+    .at(-1)?.resetAt ?? null;
+}
+
+export function getLastBankedRecoveryResetAt(
+  data: RadarData | null,
+  now: Date = new Date(),
+  staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
+) {
+  return getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
+    .filter((boundary) => boundary.isRandom && Boolean(boundary.isBanked))
+    .at(-1)?.resetAt ?? null;
+}
+
 export function getLastRandomRecoveryResetWindow(
   data: RadarData | null,
   now: Date = new Date(),
@@ -290,6 +321,38 @@ export function getLastRandomRecoveryResetWindow(
 ): ResetExecutionWindow | null {
   const boundary = getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
     .filter((candidate) => candidate.isRandom)
+    .at(-1);
+  if (!boundary) return null;
+
+  const boundaryTime = getTimestamp(boundary.resetAt);
+  if (boundaryTime === null) return null;
+
+  const estimate = (data?.reset_execution_estimates ?? []).find((candidate) => {
+    const displayTime = getTimestamp(candidate.displayExecutionAt);
+    const windowStartTime = getTimestamp(candidate.executionWindowStartAt ?? null);
+    const windowEndTime = getTimestamp(candidate.executionWindowEndAt ?? null);
+    return displayTime === boundaryTime &&
+      windowStartTime !== null &&
+      windowEndTime !== null &&
+      windowStartTime < windowEndTime &&
+      windowEndTime === displayTime;
+  });
+
+  return {
+    executionWindowStartAt: estimate?.executionWindowStartAt ?? null,
+    executionWindowEndAt: boundary.resetAt,
+  };
+}
+
+export function getLastForcedRecoveryResetWindow(
+  data: RadarData | null,
+  now: Date = new Date(),
+  staticHistory: Array<WindowEventLike> = LOCAL_RESET_HISTORY,
+  canonicalHistoryContext?: CanonicalResetHistoryContext,
+  policy?: RandomResetEligibilityPolicy,
+): ResetExecutionWindow | null {
+  const boundary = getRecoveryResetEvents(data, now, staticHistory, canonicalHistoryContext, policy)
+    .filter((candidate) => candidate.isRandom && !candidate.isBanked)
     .at(-1);
   if (!boundary) return null;
 

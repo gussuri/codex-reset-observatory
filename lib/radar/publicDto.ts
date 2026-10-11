@@ -563,7 +563,8 @@ export function toPublicRadarSnapshot(
     replyToHandles: [],
   };
   const publicLatestTiboActivity = isTemporaryStrongTeaserOverrideActive &&
-      latestTiboActivity?.classification !== "official_notice"
+      latestTiboActivity?.classification !== "official_notice" &&
+      latestTiboActivity?.classification !== "reset_executed"
     ? latestTiboActivity?.sourceUrl === temporaryStrongTeaserActivitySource
       ? {
           ...latestTiboActivity,
