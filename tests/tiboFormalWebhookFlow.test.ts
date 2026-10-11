@@ -38,6 +38,7 @@ type WebhookState = {
     nameJa: string | null;
     nameEn: string | null;
     nameZh: string | null;
+    evidenceQuote?: string;
     reason: string;
   };
   geminiMetadataResult?: StoredRow;
@@ -861,6 +862,7 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
       nameJa: "GPT Astraリリース記念リセット",
       nameEn: "GPT Astra Release Reset",
       nameZh: "GPT Astra 发布纪念重置",
+      evidenceQuote: "GPT Astra is launching today.",
       reason: "GPT Astraのリリースという投稿内の特徴を使った。",
     },
     geminiMetadataResult: {

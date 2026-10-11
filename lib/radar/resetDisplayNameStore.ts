@@ -10,6 +10,7 @@ import {
   RANDOM_RESET_NAME_MODEL,
   RANDOM_RESET_NAME_PROMPT_VERSION,
   RANDOM_RESET_NAME_V2_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V3_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
   toRandomResetNameInput,
   type RandomResetNameEvaluationInput,
@@ -356,6 +357,8 @@ export function shouldPreserveExistingAcceptedResetDisplayName(
       (
         record.ai_prompt_version === RANDOM_RESET_NAME_V1_PROMPT_VERSION ||
         record.ai_prompt_version === RANDOM_RESET_NAME_V2_PROMPT_VERSION ||
+        record.ai_prompt_version === RANDOM_RESET_NAME_V3_PROMPT_VERSION ||
+        record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION ||
         record.ai_prompt_version === null
       ),
   );
@@ -521,8 +524,10 @@ export async function ensureResetDisplayNameForEvent(
     }
   }
 
-  if (existing?.manual_name_ja?.trim()) {
-    return { eventKey, status: "manual", displayName: existing.manual_name_ja.trim(), inputMode, skipped: true };
+  const manualName = existing?.manual_name_ja?.trim() ||
+    existing?.manual_name_en?.trim() || existing?.manual_name_zh?.trim() || null;
+  if (manualName) {
+    return { eventKey, status: "manual", displayName: existing?.manual_name_ja?.trim() || null, inputMode, skipped: true };
   }
   const existingAiName = existing?.ai_name_ja?.trim() ?? null;
   if (shouldPreserveExistingAcceptedResetDisplayName(existing) && existingAiName) {

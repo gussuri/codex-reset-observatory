@@ -320,7 +320,7 @@ async function fetchCanonicalTiboSourceRows(
   try {
     const result = await supabase
       .from("tibo_signals")
-      .select("tweet_id,text,tweet_created_at,is_reply,verification_status")
+      .select("tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status")
       .in("tweet_id", tweetIds)
       .limit(32);
     if (result.error) {
@@ -344,6 +344,7 @@ async function fetchCanonicalTiboSourceRows(
         tweet_created_at: typeof row.tweet_created_at === "string"
           ? row.tweet_created_at
           : null,
+        signal_type: typeof row.signal_type === "string" ? row.signal_type : null,
         is_reply: row.is_reply === true,
         verification_status: typeof row.verification_status === "string"
           ? row.verification_status
@@ -1282,6 +1283,7 @@ export async function POST(req: NextRequest) {
               effectiveFormalCandidate,
               sourceTweetIds: displayNameSourceTweetIds,
               sourceRows: canonicalSourceRows,
+              eventKind: "forced_reset",
             });
             const displayNameItem = {
               ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),

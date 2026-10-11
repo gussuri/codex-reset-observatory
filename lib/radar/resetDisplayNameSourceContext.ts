@@ -1,7 +1,13 @@
+import {
+  isBankedDistributionCompletionSignal,
+  isBankedDistributionNotice,
+} from "./bankedReset";
+
 export type ResetDisplayNameSourceRow = {
   tweet_id: string;
   text: string;
   tweet_created_at?: string | null;
+  signal_type?: string | null;
   is_reply?: boolean | null;
   verification_status?: string | null;
 };
@@ -10,6 +16,7 @@ export type ResetDisplayNameSourceContextInput = {
   effectiveFormalCandidate: ResetDisplayNameSourceRow;
   sourceTweetIds: readonly string[];
   sourceRows?: readonly ResetDisplayNameSourceRow[];
+  eventKind?: "forced_reset" | "banked_distribution" | "unknown";
 };
 
 export const MAX_RESET_DISPLAY_NAME_SOURCE_CONTEXT_LENGTH = 25_000;
@@ -38,6 +45,26 @@ function isUsableSourceRow(row: ResetDisplayNameSourceRow) {
     row.text.trim().length > 0;
 }
 
+function matchesEventKind(row: ResetDisplayNameSourceRow, eventKind: ResetDisplayNameSourceContextInput["eventKind"]) {
+  const isBankedNotice = isBankedDistributionNotice(row.text);
+  const isBankedCompletion = isBankedDistributionCompletionSignal(row.text);
+  if (eventKind === "forced_reset") {
+    return !isBankedNotice && !isBankedCompletion;
+  }
+  if (eventKind === "banked_distribution") {
+    if (row.signal_type === "official_notice") return isBankedNotice;
+    if (row.signal_type === "reset_executed") return isBankedCompletion;
+    return true;
+  }
+  return true;
+}
+
+function roleForRow(row: ResetDisplayNameSourceRow, effectiveCandidateId: string) {
+  if (row.signal_type === "official_notice") return "official_notice";
+  if (row.signal_type === "reset_executed" || row.tweet_id === effectiveCandidateId) return "completion";
+  return "canonical_event_post";
+}
+
 /**
  * Builds the naming source from explicit event provenance only. Nearby posts
  * are deliberately invisible to this helper unless their IDs were persisted
@@ -47,6 +74,7 @@ export function buildResetDisplayNameSourceContext({
   effectiveFormalCandidate,
   sourceTweetIds,
   sourceRows = [],
+  eventKind = "unknown",
 }: ResetDisplayNameSourceContextInput) {
   const canonicalIds = new Set(
     sourceTweetIds
@@ -58,12 +86,16 @@ export function buildResetDisplayNameSourceContext({
   const rowsByTweetId = new Map<string, ResetDisplayNameSourceRow>();
   for (const row of sourceRows) {
     const tweetId = row.tweet_id.trim();
-    if (!canonicalIds.has(tweetId) || !isUsableSourceRow(row)) continue;
+    if (!canonicalIds.has(tweetId) || !isUsableSourceRow(row) || !matchesEventKind(row, eventKind)) continue;
     if (!rowsByTweetId.has(tweetId)) rowsByTweetId.set(tweetId, { ...row, tweet_id: tweetId });
   }
 
   const candidateId = effectiveFormalCandidate.tweet_id.trim();
-  if (canonicalIds.has(candidateId) && isUsableSourceRow(effectiveFormalCandidate)) {
+  if (
+    canonicalIds.has(candidateId) &&
+    isUsableSourceRow(effectiveFormalCandidate) &&
+    matchesEventKind(effectiveFormalCandidate, eventKind)
+  ) {
     rowsByTweetId.set(candidateId, { ...effectiveFormalCandidate, tweet_id: candidateId });
   }
 
@@ -72,8 +104,8 @@ export function buildResetDisplayNameSourceContext({
 
   const context = rows
     .map((row, index) => [
-      `[Tibo post ${index + 1} | tweet_id=${row.tweet_id}]`,
-      row.text,
+      `[Tibo post ${index + 1} | role=${roleForRow(row, candidateId)} | tweet_created_at=${row.tweet_created_at?.trim() || "unavailable"} | tweet_id=${row.tweet_id}]`,
+      `AUTHOR TEXT: ${JSON.stringify(row.text.trim())}`,
       `[End Tibo post ${index + 1}]`,
     ].join("\n"))
     .join("\n\n");

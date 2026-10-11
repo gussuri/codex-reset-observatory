@@ -8,12 +8,15 @@ import {
   buildRandomResetNamePrompt,
   parseRandomResetNameResponse,
   parseRandomResetNameV3Response,
+  parseRandomResetNameV4Response,
   parseRandomResetNameV2Response,
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V3_PROMPT_VERSION,
   RANDOM_RESET_NAME_TEMPERATURE,
   RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V3_SYSTEM_PROMPT,
+  RANDOM_RESET_NAME_V4_SYSTEM_PROMPT,
   RANDOM_RESET_NAME_V2_SYSTEM_PROMPT,
   generateRandomResetName,
   toRandomResetNameInput,
@@ -137,7 +140,7 @@ test("production v3 naming uses the descriptive prompt and accepts grounded loca
   const input = toRandomResetNameInput(item, Date.parse(completedAt));
   input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
 
-  assert.equal(RANDOM_RESET_NAME_PROMPT_VERSION, "random-reset-name-v3");
+  assert.equal(RANDOM_RESET_NAME_PROMPT_VERSION, "random-reset-name-v4");
   assert.equal(RANDOM_RESET_NAME_TEMPERATURE, 0.2);
   assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /distinctive product names, model names, concrete numbers/);
   assert.match(RANDOM_RESET_NAME_V3_SYSTEM_PROMPT, /grounded metaphor, joke, phrase, mood, or motif/i);
@@ -156,7 +159,7 @@ test("production v3 naming uses the descriptive prompt and accepts grounded loca
     "gemini-3.5-flash-lite",
   );
   assert.equal(result.status, "success");
-  assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_V3_PROMPT_VERSION);
   assert.equal(result.confidence, null);
   assert.equal(result.evidence, null);
   assert.equal(assessRandomResetNameResult(result).status, "accepted");
@@ -205,7 +208,7 @@ test("production v3 naming rejects unsupported or generic generated names", () =
   assert.equal(RANDOM_RESET_NAME_MAX_LENGTH, 40);
 });
 
-test("production Gemini requests use the v3 prompt, temperature, and parser", async () => {
+test("production Gemini requests use the v4 prompt, temperature, and grounded parser", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "To celebrate 100,000 Luna threads this weekend, I reset Codex limits.";
   const originalFetch = globalThis.fetch;
@@ -221,6 +224,7 @@ test("production Gemini requests use the v3 prompt, temperature, and parser", as
         nameJa: "Luna 10万スレッド週末解放記念リセット",
         nameEn: "Luna 100k Thread Weekend Reset",
         nameZh: "Luna 10万线程周末重置",
+        evidenceQuote: "100,000 Luna threads",
         reason: "原文の具体的なスレッド数と週末の解放を要約した。",
       }) }] } }],
     }), { status: 200, headers: { "content-type": "application/json" } });
@@ -235,10 +239,35 @@ test("production Gemini requests use the v3 prompt, temperature, and parser", as
     assert.equal(assessRandomResetNameResult(result).status, "accepted");
     const capturedRequest = JSON.parse(requestJson ?? "{}") as GeminiRequest;
     assert.equal(capturedRequest.generationConfig?.temperature, RANDOM_RESET_NAME_TEMPERATURE);
-    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V3_SYSTEM_PROMPT);
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V4_SYSTEM_PROMPT);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("v4 evidence quotes must come from author text, not post metadata", () => {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = [
+    "[Tibo post 1 | role=official_notice | tweet_created_at=2026-10-10T22:16:20Z | tweet_id=2109045392684032299]",
+    `AUTHOR TEXT: ${JSON.stringify("Global reset by EOD. May the tokens do good things for you.")}`,
+    "[End Tibo post 1]",
+  ].join("\n");
+  const result = parseRandomResetNameV4Response({
+    nameJa: "トークンの願いリセット",
+    nameEn: "Tokens Do Good Reset",
+    nameZh: "令牌传递善意重置",
+    evidenceQuote: "role=official_notice",
+    reason: "告知の言葉をもとにしました。",
+  }, input, "gemini-3.5-flash-lite");
+
+  assert.equal(result.status, "invalid_schema");
+  assert.equal(assessRandomResetNameResult(result).status, "invalid_response");
+});
+
+test("v4 naming supports announced and completed stages without changing event kind", () => {
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /announced or completed/i);
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /Do not imply that the reset has completed unless/i);
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /distinguish a forced reset from a BANKED distribution/i);
 });
 
 test("production naming failures remain best-effort webhook-safe results", async () => {
@@ -359,9 +388,9 @@ test("existing accepted v1 names are preserved and source-less events skip Gemin
   assert.equal(shouldPreserveExistingAcceptedResetDisplayName(acceptedRecord()), true);
   assert.equal(
     shouldPreserveExistingAcceptedResetDisplayName(
-      acceptedRecord({ ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION, ai_confidence: null, ai_evidence: null }),
+      acceptedRecord({ ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION, ai_confidence: null, ai_evidence: "weekend" }),
     ),
-    false,
+    true,
   );
   assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource(null), true);
   assert.equal(shouldSkipResetDisplayNameGenerationWithoutSource("  "), true);
@@ -375,7 +404,7 @@ test("safe accepted notice-precomputed names require explicit provenance", () =>
     ai_prompt_version: RANDOM_RESET_NAME_PROMPT_VERSION,
     ai_input_mode: "notice-precompute-v1",
     ai_confidence: null,
-    ai_evidence: null,
+    ai_evidence: "Astra",
   });
   assert.equal(isSafeAcceptedPrecomputedResetDisplayName(precomputed), true);
   assert.equal(
@@ -545,7 +574,7 @@ test("production v3 naming accepts one grounded name per locale", () => {
   assert.equal(result.name, "快眠若返り記念リセット");
   assert.equal(result.nameEn, "Better Sleep, New Me Reset");
   assert.equal(result.nameZh, "睡得更好、焕然一新重置");
-  assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_V3_PROMPT_VERSION);
   assert.equal(assessRandomResetNameResult(result).status, "accepted");
   const payload = getResetDisplayNameWritePayload({
     eventKey: "tibo-reset-2086188036493344823",
@@ -591,7 +620,49 @@ test("production v3 naming rejects partial or generic localized output", () => {
   assert.equal(assessRandomResetNameResult(generic).status, "review_required");
 });
 
-test("production v3 Gemini request returns all locales with one API call", async () => {
+test("v4 names require one exact source quote and assess all locales together", () => {
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /post's creation time in America\/Los_Angeles/i);
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /Do not invent a clock time or infer an exact reset instant from the post timestamp/i);
+  assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /may be approximate or based on the completion post/i);
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = [
+    "[Tibo post 1 | role=official_notice | tweet_created_at=2026-09-01T12:00:00Z]",
+    'AUTHOR TEXT: "Global reset by EOD. May the tokens do good things for you."',
+    "[Tibo post 2 | role=completion | tweet_created_at=2026-09-02T01:00:00Z]",
+    'AUTHOR TEXT: "Put the reset in the bag. All propagated."',
+  ].join("\n");
+  const result = parseRandomResetNameV4Response(
+    {
+      nameJa: "トークンに願いを込めて・全体リセット",
+      nameEn: "Tokens for Good · Global Reset",
+      nameZh: "愿 Token 带来好事 · 全局重置",
+      evidenceQuote: "May the tokens do good things for you.",
+      reason: "告知投稿の印象的な願いを自然に短く表現した。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+
+  assert.equal(result.status, "success");
+  assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
+  assert.equal(result.evidenceGrounded, true);
+  assert.equal(assessRandomResetNameResult(result).status, "accepted");
+
+  const ungrounded = parseRandomResetNameV4Response(
+    {
+      nameJa: "GPT-7記念リセット",
+      nameEn: "GPT-7 Launch Reset",
+      nameZh: "GPT-7发布重置",
+      evidenceQuote: "GPT-7 launch",
+      reason: "根拠のないモデル名を加えた。",
+    },
+    input,
+    "gemini-3.5-flash-lite",
+  );
+  assert.equal(ungrounded.status, "invalid_schema");
+});
+
+test("production v4 Gemini request returns all locales and exact evidence in one API call", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "Never slept better and feeling reseted. Brand new me and brand new usage for all ChatGPT Work and Codex users. Regaining my youth one button press at a time.";
   const originalFetch = globalThis.fetch;
@@ -605,6 +676,7 @@ test("production v3 Gemini request returns all locales with one API call", async
         nameJa: "快眠若返り記念リセット",
         nameEn: "Better Sleep, New Me Reset",
         nameZh: "睡得更好、焕然一新重置",
+        evidenceQuote: "Never slept better",
         reason: "原文の印象的な表現を要約した。",
       }) }] } }],
     }), { status: 200, headers: { "content-type": "application/json" } });
@@ -622,7 +694,7 @@ test("production v3 Gemini request returns all locales with one API call", async
     const capturedRequest = JSON.parse(requestJson ?? "{}") as {
       contents?: Array<{ parts?: Array<{ text?: string }> }>;
     };
-    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V3_SYSTEM_PROMPT);
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V4_SYSTEM_PROMPT);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -636,7 +708,7 @@ test("localized AI display names are selected without changing the public DTO", 
     ai_name_en: "Better Sleep, New Me Reset",
     ai_name_zh: "睡得更好、焕然一新重置",
     ai_confidence: null,
-    ai_evidence: null,
+    ai_evidence: "Never slept better",
   });
 
   assert.equal(resolveResetDisplayTitle(item, record, "ja"), "快眠若返り記念リセット");

@@ -3,18 +3,19 @@ import test from "node:test";
 
 import {
   RESET_EVENT_METADATA_PROMPT_VERSION,
+  RESET_EVENT_METADATA_SYSTEM_PROMPT,
   buildResetEventMetadataPrompt,
   generateResetEventMetadata,
   parseResetEventMetadataResponse,
 } from "../lib/radar/resetEventMetadata";
 
 const sourceContext = [
-  "[Tibo post 1 | tweet_id=notice-1]",
-  "We found an Astra quality issue. We fixed it and will reset limits for all paid plans tonight.",
+  "[Tibo post 1 | role=official_notice | tweet_created_at=2026-09-12T12:00:00.000Z | tweet_id=notice-1]",
+  'AUTHOR TEXT: "We found an Astra quality issue. We fixed it and will reset limits for all paid plans tonight."',
   "[End Tibo post 1]",
   "",
-  "[Tibo post 2 | tweet_id=completion-1]",
-  "Sweet dreams. Reset complete.",
+  "[Tibo post 2 | role=completion | tweet_created_at=2026-09-12T14:00:00.000Z | tweet_id=completion-1]",
+  'AUTHOR TEXT: "Sweet dreams. Reset complete."',
   "[End Tibo post 2]",
 ].join("\n");
 
@@ -109,6 +110,13 @@ test("prompt treats all canonical related posts as one event and prioritizes spe
   assert.match(prompt, /same canonical reset event/i);
   assert.match(prompt, /specific|cause|reason|incident|milestone/i);
   assert.match(prompt, /all paid plans/i);
+  assert.match(prompt, /tweet_created_at=2026-09-12T12:00:00.000Z/);
+  assert.match(prompt, /tonight/);
+  assert.match(prompt, /may be approximate or post-based/i);
+  assert.doesNotMatch(prompt, /recorded execution timestamp/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /post's creation time in America\/Los_Angeles/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /may be approximate or based on the completion post/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /by end of day/i);
 });
 
 test("generator parses Gemini JSON and never needs to infer scope from product names", async () => {
@@ -140,7 +148,7 @@ test("generator parses Gemini JSON and never needs to infer scope from product n
   }
 });
 
-test("Gemini request separates short public event notes from the internal audit rationale", async () => {
+test("Gemini request asks for readable event context and separates it from internal audit rationale", async () => {
   const originalFetch = globalThis.fetch;
   let systemPrompt = "";
   globalThis.fetch = async (_input, init) => {
@@ -165,8 +173,10 @@ test("Gemini request separates short public event notes from the internal audit 
     );
 
     assert.equal(result.status, "success");
-    assert.match(systemPrompt, /public note[s]? (?:should|must) (?:only )?(?:add|describe).*event/i);
-    assert.match(systemPrompt, /one (?:short|concise) (?:factual )?sentence/i);
+    assert.match(systemPrompt, /Public notes should help someone understand the event later/i);
+    assert.match(systemPrompt, /1–3 readable sentences/i);
+    assert.match(systemPrompt, /tweet creation timestamp records when that post was published, not when the reset executed/i);
+    assert.match(systemPrompt, /propagated/i);
     assert.match(systemPrompt, /Do not.*(?:reasonType|classification rationale)/i);
     assert.match(systemPrompt, /Do not.*(?:classified|processed|explain scope|system interpretation)/i);
     assert.match(systemPrompt, /reasonJa.*internal audit.*reasonType.*scope/i);

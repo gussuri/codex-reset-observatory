@@ -1346,6 +1346,186 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
   }
 });
 
+test("formal completion without a monitor observation uses only its existing canonical notice association for generated copy", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+  const requestUrls: string[] = [];
+  const generationPrompts: string[] = [];
+  const canonicalSourceQueries: string[] = [];
+  const noticeId = "2107000000000000101";
+  const completionId = "2107000000000000102";
+  const unrelatedId = "2107000000000000103";
+  const noticeAt = "2026-10-10T15:00:00.000Z";
+  const completionAt = "2026-10-10T22:30:00.000Z";
+  const noticeText = "Global reset by EOD. May the tokens do good things for you.";
+  const completionText = "The reset is live now.";
+  const unrelatedText = "A separate announcement from another event.";
+  const ledger = {
+    id: "00000000-0000-4000-8000-000000000010",
+    logical_post_id: completionId,
+    logical_post_tweet_ids: [completionId],
+    reset_event_key: `tibo-reset-${completionId}`,
+    representative_tweet_id: completionId,
+    source_tweet_ids: [noticeId, completionId],
+    claim_source: "new_adoption",
+    adopted_at: completionAt,
+    claimed_at: completionAt,
+    created_at: completionAt,
+    updated_at: completionAt,
+  };
+  const sourceRows = [
+    {
+      tweet_id: noticeId,
+      text: noticeText,
+      tweet_created_at: noticeAt,
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: false,
+    },
+    {
+      tweet_id: completionId,
+      text: completionText,
+      tweet_created_at: completionAt,
+      signal_type: "reset_executed",
+      tweet_url: `https://x.com/thsottiaux/status/${completionId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: false,
+    },
+    {
+      tweet_id: unrelatedId,
+      text: unrelatedText,
+      tweet_created_at: "2026-10-10T22:25:00.000Z",
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${unrelatedId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: false,
+    },
+  ];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  const restoreClassification = installGeminiClassificationMock({
+    signalType: "reset_executed",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: completionText,
+    reasonJa: "リセットの完了を伝えています。",
+    teaserStrength: "none",
+    teaserStrengthConfidence: 1,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
+  });
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    requestUrls.push(url);
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    if (body !== null) requestBodies.push(body);
+
+    if (url.includes("generativelanguage.googleapis.com")) {
+      const contents = Array.isArray(body?.contents) ? body.contents as Array<{ parts?: Array<{ text?: string }> }> : [];
+      const prompt = contents.flatMap((content) => content.parts ?? [])
+        .map((part) => part.text ?? "")
+        .join("\n");
+      generationPrompts.push(prompt);
+      const response = prompt.includes('"evidenceQuote"')
+        ? {
+            nameJa: "トークンに願いをリセット",
+            nameEn: "Tokens Do Good Reset",
+            nameZh: "让令牌传递善意重置",
+            evidenceQuote: "May the tokens do good things for you.",
+            reason: "告知にある願いを短い名前にしました。",
+          }
+        : {
+            reasonType: "ご祝儀リセット",
+            scope: null,
+            scopeEvidence: null,
+            summaryJa: "Codexの利用枠がリセットされました。",
+            summaryEn: "Codex usage limits were reset.",
+            summaryZh: "Codex 使用额度已重置。",
+            noteJa: "告知では一日の終わりまでにリセットすると伝え、投稿ではトークンが役立つよう願っていました。",
+            noteEn: "The notice said the reset would arrive by the end of the day and wished users well with their tokens.",
+            noteZh: "告知称重置会在当天结束前到来，并祝愿用户善用令牌。",
+            reasonJa: "告知文の願いを補足に反映しました。",
+          };
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(response) }] } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+
+    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+      return new Response(JSON.stringify({ status: "existing", record: ledger }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/tibo_formal_adoptions")) {
+      return new Response(JSON.stringify([ledger]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/tibo_signals") && method === "GET" && url.includes("tweet_id=in.")) {
+      canonicalSourceQueries.push(decodeURIComponent(url));
+      return new Response(JSON.stringify(sourceRows), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/reset_execution_estimates") || url.includes("/codex_recovery_observations")) {
+      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/reset_display_names") && method === "GET") {
+      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "GET") {
+      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify([]), { status: 201, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: completionId,
+      text: completionText,
+      tweetUrl: `https://x.com/thsottiaux/status/${completionId}`,
+      tweetCreatedAt: completionAt,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(generationPrompts.length, 2);
+    assert.ok(canonicalSourceQueries.some((query) =>
+      query.includes("select=tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status"),
+    ));
+    assert.equal(requestUrls.some((url) => url.includes("/codex_recovery_observations") && url.includes("method=POST")), false);
+    assert.equal(requestUrls.some((url) => url.includes("/reset_execution_estimates") && url.includes("method=POST")), false);
+    for (const prompt of generationPrompts) {
+      assert.ok(prompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`));
+      assert.ok(prompt.includes(`role=completion | tweet_created_at=${completionAt} | tweet_id=${completionId}`));
+      assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`));
+      assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(completionText)}`));
+      assert.doesNotMatch(prompt, new RegExp(unrelatedText));
+      assert.match(prompt, /America\/Los_Angeles/);
+      assert.match(prompt, /may be approximate or post-based/i);
+      assert.doesNotMatch(prompt, /recorded execution timestamp/i);
+    }
+    assert.ok(requestBodies.some((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === completionId,
+    ));
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreClassification();
+    restoreEnvironment(previous);
+  }
+});
+
 test("accepted concealed teaser persists its own today window without becoming an official notice", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

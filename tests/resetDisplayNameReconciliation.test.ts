@@ -9,6 +9,8 @@ import {
   isAutoNameableCanonicalEvent,
   reconcileResetDisplayNames,
 } from "../lib/radar/resetDisplayNameReconciliation";
+import { generateRandomResetName, toRandomResetNameInput } from "../lib/radar/randomResetNaming";
+import type { ResetDisplayNameSourceRow } from "../lib/radar/resetDisplayNameSourceContext";
 import type { ResetDisplayNameGenerationOutcome } from "../lib/radar/resetDisplayNameStore";
 import type { FormalTiboResetSignal, TiboVerificationStatus } from "../lib/radar/tiboHistory";
 import type { RadarData, ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
@@ -46,7 +48,7 @@ function resetEvent(overrides: Partial<WindowEventLike> = {}): WindowEventLike {
 function sourceSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTiboResetSignal {
   return {
     tweet_id: TWEET_ID,
-    text: "We have distributed a reset to the eligible users.",
+    text: "We will distribute BANKED resets to eligible users.",
     tweet_url: `https://x.com/thsottiaux/status/${TWEET_ID}`,
     tweet_created_at: COMPLETED_AT,
     signal_type: "official_notice",
@@ -157,7 +159,10 @@ test("monitor-only naming candidates wait for source context and retry on a late
   assert.equal(calls.length, 0);
 
   const second = await reconcileResetDisplayNames({
-    data: { formal_tibo_resets: [sourceSignal()], reset_display_names: [] },
+    data: {
+      formal_tibo_resets: [sourceSignal({ text: "We will reset usage limits for all paid users tomorrow." })],
+      reset_display_names: [],
+    },
     canonicalHistory: [{
       ...item,
       source_url: sourceSignal().tweet_url,
@@ -170,7 +175,7 @@ test("monitor-only naming candidates wait for source context and retry on a late
   assert.equal(second.outcomes[0]?.status, "accepted");
   assert.equal(calls.length, 1);
   assert.equal(calls[0]?.eventKey, "canonical-event-key");
-  assert.match(calls[0]?.sourcePostText ?? "", /eligible users/);
+  assert.match(calls[0]?.sourcePostText ?? "", /reset usage limits for all paid users/);
 });
 
 test("reconciliation bounds Gemini work and passes only the canonical event key", async () => {
@@ -208,6 +213,85 @@ test("reconciliation bounds Gemini work and passes only the canonical event key"
     "canonical-event-3",
   ]);
   assert.equal(result.outcomes.filter((outcome) => outcome.status === "gemini_cap_reached").length, 1);
+});
+
+test("reconciliation Gemini request includes only the canonical notice and completion with roles and post times", async () => {
+  const noticeId = "2109045392684032299";
+  const completionId = "2109132167112782291";
+  const noticeAt = "2026-10-10T22:16:20.000Z";
+  const completionAt = "2026-10-11T04:01:09.000Z";
+  const noticeText = "Global reset by EOD. May the tokens do good things for you.";
+  const completionText = "Put the reset in the bag. All propagated.";
+  const unrelatedText = "A nearby post for a different event.";
+  const item = resetEvent({
+    id: `tibo-reset-${completionId}`,
+    recordKind: "confirmed_global",
+    completed_at: completionAt,
+    closed_at: completionAt,
+    opened_at: completionAt,
+    source_url: `https://x.com/thsottiaux/status/${completionId}`,
+    sourceTweetIds: [noticeId, completionId],
+    scope: "全有料プラン",
+    details: {
+      ...resetEvent().details!,
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+    },
+  });
+  const sourceRows: ResetDisplayNameSourceRow[] = [
+    { tweet_id: noticeId, text: noticeText, tweet_created_at: noticeAt, signal_type: "official_notice", verification_status: "confirmed" },
+    { tweet_id: completionId, text: completionText, tweet_created_at: completionAt, signal_type: "reset_executed", verification_status: "confirmed" },
+    { tweet_id: "2109132167112782292", text: unrelatedText, tweet_created_at: "2026-10-11T04:02:00.000Z", signal_type: "official_notice", verification_status: "confirmed" },
+    { tweet_id: "2109132167112782293", text: "A reply that should not be used.", tweet_created_at: "2026-10-11T04:03:00.000Z", signal_type: "official_notice", is_reply: true, verification_status: "confirmed" },
+    { tweet_id: "2109132167112782294", text: "A rejected related copy.", tweet_created_at: "2026-10-11T04:04:00.000Z", signal_type: "official_notice", verification_status: "rejected" },
+  ];
+  let generationPrompt = "";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as {
+      contents?: Array<{ parts?: Array<{ text?: string }> }>;
+    };
+    generationPrompt = request.contents?.flatMap((content) => content.parts ?? [])
+      .map((part) => part.text ?? "").join("\n") ?? "";
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({
+        nameJa: "トークンに願いをリセット",
+        nameEn: "Tokens Do Good Reset",
+        nameZh: "让令牌传递善意重置",
+        evidenceQuote: "May the tokens do good things for you.",
+        reason: "告知の願いを名前に反映しました。",
+      }) }] } }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const now = new Date("2026-10-11T05:00:00.000Z");
+    const result = await reconcileResetDisplayNames({
+      data: { reset_display_names: [] } as RadarData,
+      canonicalHistory: [item],
+      sourceRows,
+      now,
+      apiKey: "test-key",
+      ensure: async (candidate, options) => {
+        const completedAt = getCompletedResetTimestamp(candidate);
+        assert.notEqual(completedAt, null);
+        const input = toRandomResetNameInput(candidate, completedAt!);
+        input.sourcePostText = options.sourcePostText ?? null;
+        await generateRandomResetName(input, { apiKey: options.apiKey ?? "test-key", timeoutMs: 1_000 });
+        return acceptedOutcome(options.canonicalEventKey ?? "");
+      },
+    });
+
+    assert.equal(result.geminiRequests, 1);
+    assert.equal(result.outcomes[0]?.status, "accepted");
+    assert.ok(generationPrompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`));
+    assert.ok(generationPrompt.includes(`role=completion | tweet_created_at=${completionAt} | tweet_id=${completionId}`));
+    assert.ok(generationPrompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`));
+    assert.ok(generationPrompt.includes(`AUTHOR TEXT: ${JSON.stringify(completionText)}`));
+    assert.doesNotMatch(generationPrompt, /nearby post for a different event|reply that should not be used|rejected related copy/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("the scheduled adoption boundary is opt-in and excludes only older events", async () => {
@@ -393,6 +477,29 @@ test("manual and legacy accepted V2 names are protected before Gemini", async ()
   });
   assert.equal(legacyAccepted.outcomes[0]?.status, "preserved_legacy_accepted");
   assert.equal(calls, 0);
+});
+
+test("manual name in a non-Japanese locale stops reconciliation before generation", async () => {
+  let ensureCalls = 0;
+  const manual = transientExisting("api_error", "2026-09-04T10:00:00.000Z");
+  manual.manual_name_en = "Human-approved title";
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [sourceSignal()],
+      reset_display_names: [manual],
+    } as RadarData,
+    canonicalHistory: [resetEvent()],
+    now: NOW,
+    apiKey: "test-key",
+    ensure: async () => {
+      ensureCalls += 1;
+      return acceptedOutcome("canonical-event-key");
+    },
+  });
+
+  assert.equal(result.outcomes[0]?.status, "manual");
+  assert.equal(result.geminiRequests, 0);
+  assert.equal(ensureCalls, 0);
 });
 
 test("promoted notice-precomputed names survive a completed-event hash mismatch", async () => {
