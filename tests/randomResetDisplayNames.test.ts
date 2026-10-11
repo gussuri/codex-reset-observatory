@@ -350,6 +350,51 @@ test("v4 accepts equivalent grounded number formats across locales", () => {
   assert.equal(acceptance.status, "accepted");
 });
 
+test("v4 does not transfer a grounded quantity between tokens and users", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We generated 40M tokens today. Usage limits are reset.",
+    {
+      nameJa: "4000万人記念リセット",
+      nameEn: "40M Users Reset",
+      nameZh: "4000万用户重置",
+    },
+    "40M tokens",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 model version digits do not ground a named quantity", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "GPT-40M was released. Usage limits are reset.",
+    {
+      nameJa: "4000万人記念リセット",
+      nameEn: "40M Users Reset",
+      nameZh: "4000万用户重置",
+    },
+    "GPT-40M was released",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 flags unsupported spelled-out quantities instead of letting all locales pass", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We reached 40M users this week. Reset complete.",
+    {
+      nameJa: "四千万人への感謝リセット",
+      nameEn: "Forty Million Users Thank You Reset",
+      nameZh: "四千万用户致谢重置",
+    },
+    "40M users",
+  );
+
+  assert.ok(result.flags.includes("unsupported_number_format"));
+  assert.equal(acceptance.status, "review_required");
+});
+
 test("production naming failures remain best-effort webhook-safe results", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "A reset is available for the weekend.";

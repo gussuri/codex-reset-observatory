@@ -646,23 +646,37 @@ function getV4AuthorTextEvidence(sourcePostText: string) {
 }
 
 function getV4NumericQuantities(text: string) {
-  const pattern = /(^|[^A-Za-z0-9])(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(million|millions|m|billion|billions|bn|b|thousand|thousands|k|万|萬|亿|億|千|百))?(?:\s*(?:users?|people|accounts?|threads?|tokens?|人|名|用户|帳戶|账户|线程|個|个))?/gi;
+  const pattern = /(^|[^A-Za-z0-9])(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(million|millions|m|billion|billions|bn|b|thousand|thousands|k|万|萬|亿|億|千|百))?(?:\s+(?:(?:[A-Za-z][A-Za-z0-9-]*)\s+){0,2}(users?|people|accounts?|threads?|tokens?|人|名|用户|帳戶|账户|线程|個|个))?/gi;
   const quantities = new Set<string>();
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     const value = Number((match[2] ?? "").replace(/,/g, ""));
     if (!Number.isFinite(value)) continue;
-    const unit = (match[3] ?? "").toLocaleLowerCase();
-    const scale = unit === "m" || unit.startsWith("million") ? 1_000_000
-      : unit === "b" || unit === "bn" || unit.startsWith("billion") ? 1_000_000_000
-      : unit === "k" || unit.startsWith("thousand") || unit === "千" ? 1_000
-      : unit === "万" || unit === "萬" ? 10_000
-      : unit === "亿" || unit === "億" ? 100_000_000
-      : unit === "百" ? 100
+    const previousText = text.slice(0, match.index + (match[1] ?? "").length);
+    if (/(?:gpt|chatgpt|claude|gemini|model|version)[ -]?$/i.test(previousText)) continue;
+    const scaleUnit = (match[3] ?? "").toLocaleLowerCase();
+    const noun = (match[4] ?? "").toLocaleLowerCase();
+    const scale = scaleUnit === "m" || scaleUnit.startsWith("million") ? 1_000_000
+      : scaleUnit === "b" || scaleUnit === "bn" || scaleUnit.startsWith("billion") ? 1_000_000_000
+      : scaleUnit === "k" || scaleUnit.startsWith("thousand") || scaleUnit === "千" ? 1_000
+      : scaleUnit === "万" || scaleUnit === "萬" ? 10_000
+      : scaleUnit === "亿" || scaleUnit === "億" ? 100_000_000
+      : scaleUnit === "百" ? 100
       : 1;
-    quantities.add(String(Math.round(value * scale)));
+    const category = /^(?:users?|people|人|名|用户)$/.test(noun) ? "people"
+      : /^(?:tokens?)$/.test(noun) ? "tokens"
+      : /^(?:accounts?|帳戶|账户)$/.test(noun) ? "accounts"
+      : /^(?:threads?|线程)$/.test(noun) ? "threads"
+      : noun ? `unit:${noun}`
+      : "unspecified";
+    quantities.add(`${Math.round(value * scale)}|${category}`);
   }
   return quantities;
+}
+
+function hasUnsupportedV4NumberWords(text: string) {
+  return /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/i.test(text) ||
+    /[零〇一二两兩三四五六七八九十百千万萬亿億]+(?:人|名|用户|令牌|帳戶|账户|线程|個|个)/.test(text);
 }
 
 function addV4SafetyFlags(
@@ -685,10 +699,24 @@ function addV4SafetyFlags(
     }
   }
 
-  if (nameNumbers.some((numbers) => Array.from(numbers).some((value) => !sourceNumbers.has(value)))) {
+  if (nameNumbers.some((numbers) => Array.from(numbers).some((quantity) => {
+    const [value, category] = quantity.split("|");
+    return !Array.from(sourceNumbers).some((sourceQuantity) => {
+      const [sourceValue, sourceCategory] = sourceQuantity.split("|");
+      return sourceValue === value && (category === "unspecified" || sourceCategory === category);
+    });
+  }))) {
     flags.push("unprovided_number");
   }
-  const numberSets = nameNumbers.map((numbers) => Array.from(numbers).sort().join(","));
+  if (names.some((name, index) => Boolean(
+      name && nameNumbers[index].size === 0 && hasUnsupportedV4NumberWords(name),
+    ))) {
+    flags.push("unsupported_number_format");
+  }
+  const numberSets = nameNumbers.map((numbers) => Array.from(numbers)
+    .map((quantity) => quantity.split("|")[0])
+    .sort()
+    .join(","));
   if (numberSets.some((values) => values !== numberSets[0])) {
     flags.push("localized_number_mismatch");
   }

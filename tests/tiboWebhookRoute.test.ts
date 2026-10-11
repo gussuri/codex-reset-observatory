@@ -1475,10 +1475,24 @@ test("formal completion without a monitor observation resolves its canonical not
   });
 
   try {
-    for (const scenario of ["new_adoption", "existing_completion_only"] as const) {
+    for (const scenario of ["new_adoption", "existing_completion_only", "independent_nearby_completion", "context_lookup_error"] as const) {
       const requestLog: Array<{ url: string; method: string; body: unknown }> = [];
       const generationPrompts: string[] = [];
       const canonicalSourceQueries: string[] = [];
+      const independentCompletionText = "Four hundred million tokens for the special anniversary reset.";
+      const scenarioSourceRows = scenario === "independent_nearby_completion"
+        ? [...sourceRows, {
+            tweet_id: "2109132167112782200",
+            text: independentCompletionText,
+            tweet_created_at: "2026-10-11T04:00:00.000Z",
+            signal_type: "reset_executed",
+            tweet_url: "https://x.com/thsottiaux/status/2109132167112782200",
+            confidence: 0.98,
+            verification_status: "confirmed",
+            classification_source: "gemini",
+            is_reply: false,
+          }]
+        : sourceRows;
       const ledger = {
         id: "00000000-0000-4000-8000-000000000010",
         logical_post_id: completionId,
@@ -1535,7 +1549,7 @@ test("formal completion without a monitor observation resolves its canonical not
           const requestBody = body as Record<string, unknown> | null;
           assert.deepEqual(requestBody?.p_source_tweet_ids, [completionId]);
           return new Response(JSON.stringify({
-            status: scenario === "new_adoption" ? "claimed_new" : "existing",
+            status: scenario === "existing_completion_only" ? "existing" : "claimed_new",
             record: ledger,
           }), { status: 200, headers: { "content-type": "application/json" } });
         }
@@ -1545,19 +1559,29 @@ test("formal completion without a monitor observation resolves its canonical not
         }
         if (url.includes("/tibo_signals") && method === "GET") {
           const decodedUrl = decodeURIComponent(url);
+          if (decodedUrl.includes("signal_type=in.")) {
+            if (scenario === "context_lookup_error") {
+              return new Response(JSON.stringify({ message: "temporary read failure" }), {
+                status: 503, headers: { "content-type": "application/json" },
+              });
+            }
+            return new Response(JSON.stringify(scenarioSourceRows.filter((row) =>
+              row.verification_status !== "rejected" && !row.is_reply,
+            )), { status: 200, headers: { "content-type": "application/json" } });
+          }
           if (decodedUrl.includes("signal_type=eq.reset_executed")) {
-            return new Response(JSON.stringify(sourceRows.filter((row) => row.signal_type === "reset_executed")), {
+            return new Response(JSON.stringify(scenarioSourceRows.filter((row) => row.signal_type === "reset_executed")), {
               status: 200, headers: { "content-type": "application/json" },
             });
           }
           if (decodedUrl.includes("signal_type=eq.official_notice")) {
-            return new Response(JSON.stringify(sourceRows.filter((row) =>
+            return new Response(JSON.stringify(scenarioSourceRows.filter((row) =>
               row.signal_type === "official_notice" && !row.is_reply && row.verification_status !== "rejected",
             )), { status: 200, headers: { "content-type": "application/json" } });
           }
           if (decodedUrl.includes("tweet_id=in.")) {
             canonicalSourceQueries.push(decodedUrl);
-            return new Response(JSON.stringify(sourceRows.filter((row) => decodedUrl.includes(row.tweet_id))), {
+            return new Response(JSON.stringify(scenarioSourceRows.filter((row) => decodedUrl.includes(row.tweet_id))), {
               status: 200, headers: { "content-type": "application/json" },
             });
           }
@@ -1583,18 +1607,27 @@ test("formal completion without a monitor observation resolves its canonical not
       }));
 
       assert.equal(response.status, 200, scenario);
-      assert.equal(generationPrompts.length, 2, scenario);
-      assert.ok(canonicalSourceQueries.some((query) =>
-        query.includes("select=tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status"),
-      ));
+      assert.equal(generationPrompts.length, scenario === "context_lookup_error" ? 0 : 2, scenario);
+      if (scenario !== "context_lookup_error") {
+        assert.ok(canonicalSourceQueries.some((query) =>
+          query.includes("select=tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status"),
+        ));
+      }
       assert.equal(requestLog.some((request) =>
         (request.url.includes("/codex_recovery_observations") || request.url.includes("/reset_execution_estimates")) &&
         request.method === "POST",
       ), false);
       for (const prompt of generationPrompts) {
-        assert.ok(prompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`), scenario);
+        if (scenario === "independent_nearby_completion") {
+          assert.doesNotMatch(prompt, /role=official_notice/);
+          assert.doesNotMatch(prompt, /Four hundred million tokens for the special anniversary reset/);
+        } else {
+          assert.ok(prompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`), scenario);
+        }
         assert.ok(prompt.includes(`role=completion | tweet_created_at=${completionAt} | tweet_id=${completionId}`), scenario);
-        assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`), scenario);
+        if (scenario !== "independent_nearby_completion") {
+          assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`), scenario);
+        }
         assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(completionText)}`), scenario);
         assert.doesNotMatch(prompt, /A separate reset announcement|A reply about a separate reset|A rejected reset announcement|window expired before completion|distributing banked resets/i);
         assert.match(prompt, /America\/Los_Angeles/);
@@ -2104,7 +2137,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     assert.equal(response.status, 200);
     assert.deepEqual(fetchMethods, [
       "GET", "POST", "GET", "POST", "GET", "GET", "GET", "GET",
-      "POST", "GET", "GET", "GET", "GET", "GET", "GET", "POST", "POST", "GET", "POST", "POST",
+      "POST", "GET", "GET", "GET", "GET", "GET", "POST", "POST", "GET", "POST", "POST",
     ]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");

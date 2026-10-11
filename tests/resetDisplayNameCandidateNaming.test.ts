@@ -72,7 +72,7 @@ test("candidate adapter uses the shared V4 transport and notice prompt", async (
     assert.equal(result.status, "success");
     assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
     assert.equal(result.nameEn, "GPT-99 Reset");
-    assert.deepEqual(result.flags, ["unprovided_named_token", "unprovided_number"]);
+    assert.deepEqual(result.flags, ["unprovided_named_token"]);
 
     const capturedRequest = JSON.parse(requestJson ?? "{}") as {
       contents?: Array<{ parts?: Array<{ text?: string }> }>;
