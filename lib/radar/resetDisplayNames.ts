@@ -3,6 +3,7 @@ import { resolveLocalizedText } from "./i18n";
 import {
   RANDOM_RESET_NAME_MAX_LENGTH,
   RANDOM_RESET_NAME_PROMPT_VERSION,
+  RANDOM_RESET_NAME_V3_PROMPT_VERSION,
   RANDOM_RESET_NAME_V2_PROMPT_VERSION,
   RANDOM_RESET_NAME_V1_MAX_LENGTH,
   RANDOM_RESET_NAME_V1_PROMPT_VERSION,
@@ -52,6 +53,27 @@ export function isSafeStoredAiResetName(record: ResetDisplayNameRecord | null | 
   }
 
   if (record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION) {
+    const hasLocalizedColumns = record.ai_name_en !== undefined || record.ai_name_zh !== undefined;
+    return (
+      record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+      record.ai_name_ja.trim().endsWith("リセット") &&
+      (!hasLocalizedColumns || (
+        typeof record.ai_name_en === "string" &&
+        record.ai_name_en.trim().length > 0 &&
+        record.ai_name_en.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+        /reset$/i.test(record.ai_name_en.trim()) &&
+        typeof record.ai_name_zh === "string" &&
+        record.ai_name_zh.trim().length > 0 &&
+        record.ai_name_zh.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&
+        record.ai_name_zh.trim().endsWith("重置")
+      )) &&
+      typeof record.ai_evidence === "string" &&
+      record.ai_evidence.trim().length > 0 &&
+      (!record.ai_flags || record.ai_flags.length === 0)
+    );
+  }
+
+  if (record.ai_prompt_version === RANDOM_RESET_NAME_V3_PROMPT_VERSION) {
     const hasLocalizedColumns = record.ai_name_en !== undefined || record.ai_name_zh !== undefined;
     return (
       record.ai_name_ja.trim().length <= RANDOM_RESET_NAME_MAX_LENGTH &&

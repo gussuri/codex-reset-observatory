@@ -159,6 +159,7 @@ function toSourceRow(value: unknown): ResetDisplayNameSourceRow | null {
     tweet_id: tweetId,
     text,
     tweet_created_at: getText(row.tweet_created_at),
+    signal_type: getText(row.signal_type),
     is_reply: row.is_reply === true,
     verification_status: getText(row.verification_status),
   };
@@ -441,12 +442,24 @@ function candidateSourcePostText(
   notices: readonly ResetDisplayNameCandidateNotice[],
 ) {
   const sourceIds = new Set(candidate.sourceTweetIds);
-  const contexts = notices
+  const sources = notices
+    .filter((source) => source.candidateEventKind === candidate.candidateEventKind)
     .filter((source) => noticeIdentityIds(source).some((id) => sourceIds.has(id)))
-    .map((source) => source.sourceContext?.trim() ?? "")
-    .filter(Boolean);
-  if (contexts.length === 0 && notice.sourceContext?.trim()) contexts.push(notice.sourceContext.trim());
-  return uniqueExact(contexts).join("\n\n") || null;
+    .filter((source) => source.sourceContext?.trim())
+    .sort((left, right) => compareSourceRows(
+      { tweet_id: left.officialNoticeTweetId, text: left.sourceContext ?? "", tweet_created_at: left.tweetCreatedAt },
+      { tweet_id: right.officialNoticeTweetId, text: right.sourceContext ?? "", tweet_created_at: right.tweetCreatedAt },
+    ));
+  if (sources.length === 0 && notice.sourceContext?.trim()) sources.push(notice);
+  const uniqueSources = Array.from(new Map(
+    sources.map((source) => [source.officialNoticeTweetId, source] as const),
+  ).values());
+  if (uniqueSources.length === 0) return null;
+  return uniqueSources.map((source, index) => [
+    `[Tibo post ${index + 1} | role=official_notice | tweet_created_at=${source.tweetCreatedAt} | tweet_id=${source.officialNoticeTweetId}]`,
+    `AUTHOR TEXT: ${JSON.stringify(source.sourceContext!.trim())}`,
+    `[End Tibo post ${index + 1}]`,
+  ].join("\n")).join("\n\n");
 }
 
 function buildCandidateNamingInput(
@@ -457,6 +470,7 @@ function buildCandidateNamingInput(
   return {
     officialNoticeTweetId: candidate.officialNoticeTweetId,
     logicalPostId: candidate.logicalPostId ?? notice.logicalPostId,
+    tweetCreatedAt: notice.tweetCreatedAt,
     noticeObservedAt: notice.noticeObservedAt,
     expectedStartAt: notice.expectedStartAt,
     expectedEndAt: notice.expectedEndAt,
@@ -653,11 +667,17 @@ function shouldReuseCandidateResult(
   record: ResetDisplayNameCandidateRecord,
   inputHash: string,
   model: string,
+  sourceSnapshotHash: string,
 ) {
+  const validAcceptedName = record.aiStatus === "accepted" &&
+    typeof record.aiNameJa === "string" && record.aiNameJa.trim().endsWith("リセット") &&
+    typeof record.aiNameEn === "string" && /reset$/i.test(record.aiNameEn.trim()) &&
+    typeof record.aiNameZh === "string" && record.aiNameZh.trim().endsWith("重置") &&
+    record.aiFlags.length === 0;
+  if (validAcceptedName && record.sourceSnapshotHash === sourceSnapshotHash) return true;
+
   return record.inputHash === inputHash &&
     record.aiModel === model &&
-    record.aiPromptVersion === "random-reset-name-v3" &&
-    record.aiInputMode === "notice-precompute-v1" &&
     ["accepted", "null", "review_required"].includes(record.aiStatus);
 }
 
@@ -880,6 +900,7 @@ export async function reconcileResetDisplayNames(
           effectiveFormalCandidate: effectiveSource,
           sourceTweetIds,
           sourceRows,
+          eventKind: toResetEventReference(item)?.eventKind,
         })
       : null;
     const input = toRandomResetNameInput(item, completedAt);
@@ -912,24 +933,29 @@ export async function reconcileResetDisplayNames(
       results.outcomes.push(outcome(candidate, "preserved_precomputed"));
       continue;
     }
-    const existingManualName = candidate.existing?.manual_name_ja?.trim();
-    if (existingManualName) {
+    const existingManualName = candidate.existing?.manual_name_ja?.trim() || null;
+    const hasManualName = Boolean(
+      existingManualName ||
+      candidate.existing?.manual_name_en?.trim() ||
+      candidate.existing?.manual_name_zh?.trim(),
+    );
+    if (hasManualName) {
       results.outcomes.push(outcome(candidate, "manual", false, existingManualName));
-      continue;
-    }
-    if (shouldPreserveExistingAcceptedResetDisplayName(candidate.existing)) {
-      results.outcomes.push(outcome(
-        candidate,
-        "preserved_legacy_accepted",
-        false,
-        candidate.existing?.ai_name_ja ?? null,
-      ));
       continue;
     }
     if (isSafeAcceptedPrecomputedResetDisplayName(candidate.existing)) {
       results.outcomes.push(outcome(
         candidate,
         "preserved_precomputed",
+        false,
+        candidate.existing?.ai_name_ja ?? null,
+      ));
+      continue;
+    }
+    if (shouldPreserveExistingAcceptedResetDisplayName(candidate.existing)) {
+      results.outcomes.push(outcome(
+        candidate,
+        "preserved_legacy_accepted",
         false,
         candidate.existing?.ai_name_ja ?? null,
       ));
@@ -1043,7 +1069,7 @@ export async function reconcileResetDisplayNames(
         namingInput,
       });
 
-      if (shouldReuseCandidateResult(candidate, inputHash, model)) continue;
+      if (shouldReuseCandidateResult(candidate, inputHash, model, sourceSnapshotHash)) continue;
       if (isWithinCandidateRetryCooldown(candidate, now)) continue;
       if (!apiKey || results.geminiRequests >= maxGeminiRequests) continue;
       if (options.dryRun) continue;

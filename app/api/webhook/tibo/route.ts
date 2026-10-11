@@ -13,8 +13,10 @@ import {
 import {
   convertTiboResetSignalToHistoryEvent,
   isFormalTiboResetSignal,
+  NOTICE_LOOKBACK_MS,
   type FormalTiboResetSignal,
 } from "@/lib/radar/tiboHistory";
+import { resolveTiboResetDisplayNameSourceIds } from "@/lib/radar/tiboResetDisplayNameContext";
 import { invalidateRadarCache } from "@/lib/radar/cacheInvalidation";
 import {
   confirmNearestCodexRecoveryObservation,
@@ -311,26 +313,26 @@ function getSupabaseServiceClient() {
 async function fetchCanonicalTiboSourceRows(
   supabase: ReturnType<typeof getSupabaseServiceClient>,
   sourceTweetIds: readonly string[],
-): Promise<ResetDisplayNameSourceRow[]> {
+): Promise<{ rows: ResetDisplayNameSourceRow[]; error: unknown | null }> {
   const tweetIds = Array.from(new Set(
     sourceTweetIds.map((tweetId) => tweetId.trim()).filter(Boolean),
   ));
-  if (tweetIds.length === 0) return [];
+  if (tweetIds.length === 0) return { rows: [], error: null };
 
   try {
     const result = await supabase
       .from("tibo_signals")
-      .select("tweet_id,text,tweet_created_at,is_reply,verification_status")
+      .select("tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status,expires_at")
       .in("tweet_id", tweetIds)
       .limit(32);
     if (result.error) {
       console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
         reason: "lookup_failed",
       });
-      return [];
+      return { rows: [], error: result.error };
     }
 
-    return (result.data ?? []).flatMap((row) => {
+    const rows = (result.data ?? []).flatMap((row) => {
       if (
         !row ||
         typeof row.tweet_id !== "string" ||
@@ -344,17 +346,52 @@ async function fetchCanonicalTiboSourceRows(
         tweet_created_at: typeof row.tweet_created_at === "string"
           ? row.tweet_created_at
           : null,
+        signal_type: typeof row.signal_type === "string" ? row.signal_type : null,
         is_reply: row.is_reply === true,
         verification_status: typeof row.verification_status === "string"
           ? row.verification_status
           : null,
+        expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
       }];
     });
-  } catch {
+    return { rows, error: null };
+  } catch (error) {
     console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
       reason: "request_failed",
     });
-    return [];
+    return { rows: [], error };
+  }
+}
+
+async function fetchTiboDisplayNameContextSignals(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  completionAt: string,
+) {
+  const completionTime = Date.parse(completionAt);
+  if (!Number.isFinite(completionTime)) return { acceptedResets: [], notices: [], error: new Error("invalid_completion_time") };
+  try {
+    const result = await supabase
+      .from("tibo_signals")
+      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+      .in("signal_type", ["reset_executed", "official_notice", "teaser"])
+      .eq("is_reply", false)
+      .neq("verification_status", "rejected")
+      .gte("tweet_created_at", new Date(completionTime - NOTICE_LOOKBACK_MS).toISOString())
+      .lt("tweet_created_at", new Date(completionTime).toISOString())
+      .order("tweet_created_at", { ascending: true })
+      .limit(500);
+    if (result.error) return { acceptedResets: [], notices: [], error: result.error };
+
+    const acceptedResets = (result.data ?? [])
+      .filter((row) => row.signal_type === "reset_executed")
+      .map((row) => row as unknown as FormalTiboResetSignal)
+      .filter(isFormalTiboResetSignal);
+    const notices = (result.data ?? [])
+      .filter((row) => row.signal_type === "official_notice" || row.signal_type === "teaser")
+      .map((row) => row as unknown as import("@/lib/radar/tiboHistory").TiboNoticeSignal);
+    return { acceptedResets, notices, error: null };
+  } catch (error) {
+    return { acceptedResets: [], notices: [], error };
   }
 }
 
@@ -1182,6 +1219,11 @@ export async function POST(req: NextRequest) {
 
     if (canEnrichFormalEvent && effectiveFormalCandidate && adoptionResolution?.resetEventKey) {
       try {
+        const generationCanonicalSourceTweetIds = Array.from(new Set([
+          ...adoptionResolution.sourceTweetIds,
+          ...(matchedLedger?.sourceTweetIds ?? []),
+          ...logicalPost?.sourceTweetIds ?? [],
+        ]));
         const recoveryMatch = await confirmNearestCodexRecoveryObservation(
           supabase,
           effectiveFormalCandidate.tweet_id,
@@ -1269,37 +1311,59 @@ export async function POST(req: NextRequest) {
 
         if (!formalEnrichmentFailed) {
           try {
-            const displayNameSourceTweetIds = Array.from(new Set([
-              ...formalFlowSourceTweetIds,
-              ...logicalPost?.sourceTweetIds ?? [],
-              ...(formalFlowCluster?.sourceTweetIds ?? []),
-            ]));
-            const canonicalSourceRows = await fetchCanonicalTiboSourceRows(
+            const contextSignals = await fetchTiboDisplayNameContextSignals(
               supabase,
-              displayNameSourceTweetIds,
+              effectiveFormalCandidate.tweet_created_at,
             );
-            const sourcePostText = buildResetDisplayNameSourceContext({
-              effectiveFormalCandidate,
-              sourceTweetIds: displayNameSourceTweetIds,
-              sourceRows: canonicalSourceRows,
-            });
-            const displayNameItem = {
-              ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),
-              id: adoptionResolution.resetEventKey,
-              source_url: effectiveFormalCandidate.tweet_url,
-              sourceTweetIds: displayNameSourceTweetIds,
-            };
-            const displayNameResult = await ensureResetDisplayNameForEvent(
-              displayNameItem,
-              {
-                canonicalEventKey: adoptionResolution.resetEventKey,
-                sourcePostText,
-                sourceTweetId: effectiveFormalCandidate.tweet_id,
-                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-                model: RANDOM_RESET_NAME_MODEL,
-                timeoutMs: 8_000,
-              },
-            );
+            if (contextSignals.error) {
+              console.warn("[Webhook Warning] Reset display-name context lookup failed", {
+                reason: "lookup_failed",
+              });
+            } else {
+              const displayNameSourceTweetIds = resolveTiboResetDisplayNameSourceIds({
+                candidate: effectiveFormalCandidate,
+                canonicalSourceTweetIds: generationCanonicalSourceTweetIds,
+                acceptedResets: contextSignals.acceptedResets,
+                notices: contextSignals.notices,
+              });
+              if (!displayNameSourceTweetIds) {
+                console.warn("[Webhook Warning] Reset display-name context lookup failed", {
+                  reason: "invalid_candidate",
+                });
+              } else {
+                const canonicalSourceResult = await fetchCanonicalTiboSourceRows(
+                  supabase,
+                  displayNameSourceTweetIds,
+                );
+                if (canonicalSourceResult.error) {
+                  console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
+                    reason: "lookup_failed",
+                  });
+                } else {
+                  const canonicalSourceRows = canonicalSourceResult.rows;
+                  const sourcePostText = buildResetDisplayNameSourceContext({
+                    effectiveFormalCandidate,
+                    sourceTweetIds: displayNameSourceTweetIds,
+                    sourceRows: canonicalSourceRows,
+                    eventKind: "forced_reset",
+                  });
+                  const displayNameItem = {
+                    ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),
+                    id: adoptionResolution.resetEventKey,
+                    source_url: effectiveFormalCandidate.tweet_url,
+                    sourceTweetIds: displayNameSourceTweetIds,
+                  };
+                  const displayNameResult = await ensureResetDisplayNameForEvent(
+                    displayNameItem,
+                    {
+                      canonicalEventKey: adoptionResolution.resetEventKey,
+                      sourcePostText,
+                      sourceTweetId: effectiveFormalCandidate.tweet_id,
+                      apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+                      model: RANDOM_RESET_NAME_MODEL,
+                      timeoutMs: 8_000,
+                    },
+                  );
             // Display-name generation remains best-effort. The raw signal and
             // formal ledger are already durable, so a naming-model failure must
             // not turn an otherwise successful webhook into a retry storm.
@@ -1309,21 +1373,24 @@ export async function POST(req: NextRequest) {
               });
             }
 
-            const eventMetadataResult = await ensureResetEventMetadataForEvent(
-              displayNameItem,
-              {
-                canonicalEventKey: adoptionResolution.resetEventKey,
-                sourcePostText,
-                sourceTweetId: effectiveFormalCandidate.tweet_id,
-                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-                model: RANDOM_RESET_NAME_MODEL,
-                timeoutMs: 8_000,
-              },
-            );
-            if (["api_error", "read_error", "write_error", "generation_error"].includes(eventMetadataResult.status)) {
-              console.warn("[Webhook Warning] Reset event metadata generation skipped", {
-                reason: "best_effort_failed",
-              });
+                  const eventMetadataResult = await ensureResetEventMetadataForEvent(
+                    displayNameItem,
+                    {
+                      canonicalEventKey: adoptionResolution.resetEventKey,
+                      sourcePostText,
+                      sourceTweetId: effectiveFormalCandidate.tweet_id,
+                      apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+                      model: RANDOM_RESET_NAME_MODEL,
+                      timeoutMs: 8_000,
+                    },
+                  );
+                  if (["api_error", "read_error", "write_error", "generation_error"].includes(eventMetadataResult.status)) {
+                    console.warn("[Webhook Warning] Reset event metadata generation skipped", {
+                      reason: "best_effort_failed",
+                    });
+                  }
+                }
+              }
             }
           } catch {
             console.warn("[Webhook Warning] Reset display-name generation skipped", {

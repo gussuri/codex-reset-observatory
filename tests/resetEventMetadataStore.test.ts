@@ -206,6 +206,121 @@ test("reuses a successful same-input row without a duplicate metadata generation
   }
 });
 
+test("preserves successful localized metadata when source context changes after rollout", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const existing = record({
+    event_metadata_status: "success",
+    event_metadata_input_hash: "previous-source-hash",
+    event_metadata_prompt_version: "reset-event-metadata-v2",
+    event_summary_ja: "手動確認済みの日本語要約",
+    event_summary_en: "Previously approved English summary",
+    event_summary_zh: "已确认的中文摘要",
+    event_note_ja: "手動確認済みの補足。",
+    event_note_en: "Previously approved note.",
+    event_note_zh: "已确认的补充说明。",
+  });
+  const mock = setupStoreFetch(existing);
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: `${sourceContext}\nAdditional canonical notice context.`,
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        throw new Error("generation must not replace a successful copy");
+      },
+    });
+
+    assert.equal(result.status, "preserved_existing_success");
+    assert.equal(result.wrote, false);
+    assert.equal(generatedCalls, 0);
+    assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("does not overwrite copy associated with manually reviewed display names", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const existing = record({
+    manual_name_ja: "手動確定済みの履歴名",
+    manual_name_en: "Manually approved title",
+    event_note_ja: "ユーザーが確認した補足。",
+    event_metadata_status: "api_error",
+  });
+  const mock = setupStoreFetch(existing);
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        return { ...generated, status: "success", flags: [], model: "test-model", promptVersion: "reset-event-metadata-v3", latencyMs: 0, httpStatus: 200, retryAfterSeconds: null };
+      },
+    });
+
+    assert.equal(result.status, "preserved_manual_copy");
+    assert.equal(result.wrote, false);
+    assert.equal(generatedCalls, 0);
+    assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("does not persist a partial localized result reported as success", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const mock = setupStoreFetch();
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      apiKey: "test-gemini-key",
+      generate: async () => ({
+        ...generated,
+        noteEn: null,
+        status: "success",
+        flags: [],
+        model: "test-model",
+        promptVersion: "reset-event-metadata-v3",
+        latencyMs: 0,
+        httpStatus: 200,
+        retryAfterSeconds: null,
+      }),
+    });
+
+    assert.equal(result.status, "invalid_response");
+    assert.equal(result.wrote, false);
+    assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("stores a failure audit without blocking callers or losing the event key", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -246,6 +361,72 @@ test("stores a failure audit without blocking callers or losing the event key", 
     assert.equal(mock.writes[0]?.event_reason_type, null);
   } finally {
     mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("timeout and 429 audits retain source identity and accepted localized names", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  try {
+    for (const status of ["timeout", "rate_limited"] as const) {
+      const existing = record({
+        source_tweet_id: "completion-1",
+        ai_name_ja: "手動確認済みのAI名リセット",
+        ai_name_en: "Previously Accepted Reset",
+        ai_name_zh: "已接受名称重置",
+        ai_status: "accepted",
+        ai_prompt_version: "random-reset-name-v3",
+        event_metadata_status: "api_error",
+        event_note_ja: "以前保存された補足。",
+      });
+      const mock = setupStoreFetch(existing);
+      try {
+        const result = await ensureResetEventMetadataForEvent(item, {
+          sourcePostText: sourceContext,
+          sourceTweetId: "completion-1",
+          apiKey: "test-gemini-key",
+          generate: async () => ({
+            reasonType: null,
+            scope: null,
+            summaryJa: null,
+            summaryEn: null,
+            summaryZh: null,
+            noteJa: null,
+            noteEn: null,
+            noteZh: null,
+            reasonJa: null,
+            scopeEvidence: null,
+            status,
+            flags: [],
+            model: "test-model",
+            promptVersion: "reset-event-metadata-v3",
+            latencyMs: 1,
+            httpStatus: status === "rate_limited" ? 429 : null,
+            retryAfterSeconds: status === "rate_limited" ? 5 : null,
+          }),
+        });
+
+        assert.equal(result.status, status);
+        assert.equal(result.wrote, true);
+        assert.equal(mock.writes.length, 1);
+        assert.equal(mock.writes[0]?.event_key, eventKey);
+        assert.equal(mock.writes[0]?.source_tweet_id, "completion-1");
+        assert.equal(mock.writes[0]?.event_metadata_status, status);
+        assert.equal(mock.writes[0]?.ai_name_ja, existing.ai_name_ja);
+        assert.equal(mock.writes[0]?.ai_name_en, existing.ai_name_en);
+        assert.equal(mock.writes[0]?.ai_name_zh, existing.ai_name_zh);
+      } finally {
+        mock.restore();
+      }
+    }
+  } finally {
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;
     else process.env.SUPABASE_URL = previousUrl;
     if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;

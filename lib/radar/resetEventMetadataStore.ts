@@ -142,6 +142,23 @@ function withoutEventMetadata(
   return result;
 }
 
+function hasManualDisplayName(record: ResetDisplayNameRecord | null) {
+  return Boolean(
+    record?.manual_name_ja?.trim() ||
+    record?.manual_name_en?.trim() ||
+    record?.manual_name_zh?.trim(),
+  );
+}
+
+function isCompleteMetadataSuccess(result: ResetEventMetadataResult) {
+  return result.status === "success" &&
+    (result.reasonType === "詫びリセット" || result.reasonType === "ご祝儀リセット") &&
+    (result.scope === null || result.scope === "全有料プラン" || result.scope === "一部ユーザー") &&
+    Boolean(result.summaryJa?.trim() && result.summaryEn?.trim() && result.summaryZh?.trim()) &&
+    Boolean(result.noteJa?.trim() && result.noteEn?.trim() && result.noteZh?.trim()) &&
+    Boolean(result.reasonJa?.trim());
+}
+
 async function writeMetadata(
   supabase: SupabaseClient,
   payload: ReturnType<typeof buildMetadataWritePayload>,
@@ -213,6 +230,16 @@ export async function ensureResetEventMetadataForEvent(
     return { eventKey, status: "reused", wrote: false, skipped: true };
   }
 
+  // Prompt/version rollouts and source-context enrichment are not backfills.
+  // Preserve every already successful public copy; only missing/failed rows
+  // may be generated or retried through the normal path.
+  if (existing?.event_metadata_status === "success") {
+    return { eventKey, status: "preserved_existing_success", wrote: false, skipped: true };
+  }
+  if (hasManualDisplayName(existing)) {
+    return { eventKey, status: "preserved_manual_copy", wrote: false, skipped: true };
+  }
+
   const generate = options.generate ?? generateResetEventMetadata;
   let result: ResetEventMetadataResult;
   try {
@@ -223,6 +250,10 @@ export async function ensureResetEventMetadataForEvent(
     });
   } catch {
     return { eventKey, status: "generation_error", wrote: false, skipped: true };
+  }
+
+  if (result.status === "success" && !isCompleteMetadataSuccess(result)) {
+    return { eventKey, status: "invalid_response", wrote: false, skipped: true };
   }
 
   const generatedAt = options.generatedAt ?? new Date().toISOString();

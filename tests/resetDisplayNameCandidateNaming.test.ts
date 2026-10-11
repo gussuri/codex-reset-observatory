@@ -10,13 +10,14 @@ import {
   generateRandomResetNameFromPrompt,
   RANDOM_RESET_NAME_PROMPT_VERSION,
   RANDOM_RESET_NAME_TEMPERATURE,
-  RANDOM_RESET_NAME_V3_SYSTEM_PROMPT,
+  RANDOM_RESET_NAME_V4_SYSTEM_PROMPT,
 } from "../lib/radar/randomResetNaming";
 
 function candidateInput(): ResetDisplayNameCandidateNamingInput {
   return {
     officialNoticeTweetId: "notice-1",
     logicalPostId: "logical-1",
+    tweetCreatedAt: "2026-09-08T00:00:00.000Z",
     noticeObservedAt: "2026-09-08T00:00:00.000Z",
     expectedStartAt: "2026-09-08T01:00:00.000Z",
     expectedEndAt: "2026-09-08T03:00:00.000Z",
@@ -35,6 +36,7 @@ function mockGeminiResponse() {
       nameJa: "GPT-99リセット",
       nameEn: "GPT-99 Reset",
       nameZh: "GPT-99重置",
+      evidenceQuote: "reset is planned",
       reason: "test",
     }) }] } }],
   }), { status: 200, headers: { "content-type": "application/json" } });
@@ -43,13 +45,17 @@ function mockGeminiResponse() {
 test("candidate prompt describes a notice and never a completed event", () => {
   const prompt = buildResetDisplayNameCandidatePrompt(candidateInput());
 
-  assert.match(prompt, /notice observed at/i);
+  assert.match(prompt, /role=official_notice/i);
+  assert.match(prompt, /tweet_created_at=2026-09-08T00:00:00.000Z/i);
+  assert.match(prompt, /webhook observed the notice at/i);
   assert.match(prompt, /expected reset end/i);
+  assert.match(prompt, /Expected reset window start: 2026-09-08T01:00:00.000Z/);
+  assert.match(prompt, /tweet_created_at=2026-09-08T00:00:00.000Z/i);
   assert.doesNotMatch(prompt, /reset completed at/i);
   assert.doesNotMatch(prompt, /completedAt/i);
 });
 
-test("candidate adapter uses the shared V3 transport and notice prompt", async () => {
+test("candidate adapter uses the shared V4 transport and notice prompt", async () => {
   const originalFetch = globalThis.fetch;
   let requestJson: string | null = null;
   globalThis.fetch = async (_input, init) => {
@@ -66,14 +72,14 @@ test("candidate adapter uses the shared V3 transport and notice prompt", async (
     assert.equal(result.status, "success");
     assert.equal(result.promptVersion, RANDOM_RESET_NAME_PROMPT_VERSION);
     assert.equal(result.nameEn, "GPT-99 Reset");
-    assert.deepEqual(result.flags, ["unprovided_named_token", "unprovided_number"]);
+    assert.deepEqual(result.flags, ["unprovided_named_token"]);
 
     const capturedRequest = JSON.parse(requestJson ?? "{}") as {
       contents?: Array<{ parts?: Array<{ text?: string }> }>;
       generationConfig?: { temperature?: number };
     };
-    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V3_SYSTEM_PROMPT);
-    assert.match(capturedRequest.contents?.[0]?.parts?.[1]?.text ?? "", /notice observed at/i);
+    assert.equal(capturedRequest.contents?.[0]?.parts?.[0]?.text, RANDOM_RESET_NAME_V4_SYSTEM_PROMPT);
+    assert.match(capturedRequest.contents?.[0]?.parts?.[1]?.text ?? "", /webhook observed the notice at/i);
     assert.doesNotMatch(capturedRequest.contents?.[0]?.parts?.[1]?.text ?? "", /completedAt/i);
     assert.equal(capturedRequest.generationConfig?.temperature, RANDOM_RESET_NAME_TEMPERATURE);
   } finally {
@@ -81,7 +87,7 @@ test("candidate adapter uses the shared V3 transport and notice prompt", async (
   }
 });
 
-test("prompt-based V3 generation preserves named-token and number safety flags", async () => {
+test("prompt-based V4 generation preserves named-token and number safety flags", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => mockGeminiResponse();
 

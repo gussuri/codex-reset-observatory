@@ -8,6 +8,29 @@
 export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v7";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
+
+export function getEffectiveTiboSignalExpiryMs(signal: {
+  expires_at?: string | null;
+  expected_end_at?: string | null;
+  expected_start_at?: string | null;
+  temporal_resolution_status?: string | null;
+}) {
+  const rawExpiresTime = signal.expires_at ? Date.parse(signal.expires_at) : Number.NaN;
+  if (signal.temporal_resolution_status === "resolved") {
+    const end = signal.expected_end_at
+      ? Date.parse(signal.expected_end_at)
+      : signal.expected_start_at
+        ? Date.parse(signal.expected_start_at)
+        : Number.NaN;
+    if (Number.isFinite(end)) {
+      return Math.max(
+        Number.isFinite(rawExpiresTime) ? rawExpiresTime : Number.NEGATIVE_INFINITY,
+        end + TIBO_NOTICE_GRACE_MS,
+      );
+    }
+  }
+  return rawExpiresTime;
+}
 export const TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS = 3 * 60 * 60 * 1000;
 
 const MINUTE_MS = 60 * 1000;
