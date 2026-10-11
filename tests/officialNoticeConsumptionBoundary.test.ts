@@ -164,3 +164,63 @@ test("regular boundary remains regular-only for history and random eligibility",
   assert.equal(boundaries.at(-1)?.isRandom, false);
   assert.equal(getLastRandomRecoveryResetAt(data, CALCULATION_AT, []), null);
 });
+
+test("an unrelated BANKED distribution does not consume an active forced reset notice", () => {
+  const bankedAt = "2026-09-19T12:00:00.000Z";
+  const bankedDistributionEvent = {
+    id: "banked-event-1",
+    recordKind: "banked_distribution" as const,
+    completed_at: bankedAt,
+    closed_at: bankedAt,
+    status: "completed",
+    details: {
+      cycleType: "ランダムリセット" as const,
+      resetMethod: "任意リセット権配布" as const,
+      scope: "全有料プラン",
+    },
+  };
+  const data = getLocalRadarData({
+    calculationNow: CALCULATION_AT,
+    activeTiboSignals: [resolvedNotice("forced-notice-1")],
+    formalTiboResets: [bankedDistributionEvent as any],
+  });
+
+  const notice = getActiveOfficialNotice(data, null, CALCULATION_AT);
+  assert.equal(notice?.id, "forced-notice-1");
+});
+
+test("observation 1h past notice deadline matches the official notice via grace period", () => {
+  const deadlineEnd = "2026-09-19T07:00:00.000Z"; // 16:00 JST
+  const observedAt = new Date("2026-09-19T08:00:00.000Z"); // 17:00 JST (1h past deadline)
+  const notice = {
+    tweet_id: "deadline-notice-1600",
+    text: "Reset will land by 4pm JST.",
+    tweet_url: "https://x.com/tibo/status/deadline-notice-1600",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    tweet_created_at: "2026-09-19T02:00:00.000Z",
+    verification_status: "confirmed" as const,
+    temporal_resolution_status: "resolved" as const,
+    ai_temporal_precision: "range" as const,
+    expected_start_at: "2026-09-19T02:00:00.000Z",
+    expected_end_at: deadlineEnd,
+  };
+  const executionWindow = {
+    executionWindowStartAt: "2026-09-19T07:55:00.000Z",
+    executionWindowEndAt: "2026-09-19T08:00:00.000Z",
+  };
+  const data = getLocalRadarData({
+    calculationNow: observedAt,
+    activeTiboSignals: [notice],
+  });
+
+  const matched = getActiveOfficialNotice(
+    data,
+    null,
+    observedAt,
+    undefined,
+    executionWindow,
+    true, // requireExecutionWindowMatch
+  );
+  assert.equal(matched?.id, "deadline-notice-1600");
+});

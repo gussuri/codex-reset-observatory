@@ -4,6 +4,7 @@ import {
   type TiboLogicalPostRow,
 } from "./tiboLogicalPost";
 import { isBankedDistributionEstimatorVersion } from "./bankedReset";
+import { TIBO_NOTICE_GRACE_MS } from "./tiboTemporal";
 
 export type TiboFormalAdoptionClaimSource =
   | "new_adoption"
@@ -31,6 +32,8 @@ export type TiboResetExecutionEstimateReference = {
   tiboSourceTweetIds?: readonly string[] | null;
   executionTimeSource?: string | null;
   estimatorVersion?: string | null;
+  displayExecutionAt?: string | null;
+  officialNoticeTweetId?: string | null;
 };
 
 export type TiboResetEventReference = {
@@ -47,6 +50,7 @@ export type TiboResetEventIdentityEvidence = {
   staticHistory?: readonly TiboResetEventReference[];
   dynamicEvents?: readonly TiboResetEventReference[];
   sourceTweetIds?: readonly string[];
+  candidateCreatedAt?: string | null;
 };
 
 export type TiboResetEventEvidenceKind =
@@ -418,6 +422,37 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
       matchedEvidence: null,
       reason: "unresolved_classification",
     };
+  }
+
+  const candidateCreatedAt = evidence.candidateCreatedAt ??
+    logicalPost.effectiveContent?.tweet_created_at ??
+    null;
+  const candidateTime = candidateCreatedAt ? Date.parse(candidateCreatedAt) : Number.NaN;
+
+  if (Number.isFinite(candidateTime)) {
+    const hasAmbiguousMonitorEstimate = (evidence.estimates ?? []).some((estimate) => {
+      if (!isMonitorBackedEstimate(estimate) || isBankedEstimate(estimate)) return false;
+      const isClaimed = (evidence.adoptionLedgers ?? []).some(
+        (ledger) => normalizedEventKey(ledger.resetEventKey) === estimate.resetEventKey,
+      );
+      if (isClaimed) return false;
+      const estimateTime = Date.parse(estimate.displayExecutionAt ?? "");
+      if (!Number.isFinite(estimateTime)) return false;
+      const delta = candidateTime - estimateTime;
+      return delta >= 0 && delta <= TIBO_NOTICE_GRACE_MS;
+    });
+
+    if (hasAmbiguousMonitorEstimate) {
+      return {
+        ...base,
+        status: "blocked",
+        resetEventKey: null,
+        canCreateNewSideEffects: false,
+        canRunFormalEnrichments: false,
+        matchedEvidence: null,
+        reason: "ambiguous_existing_claims",
+      };
+    }
   }
 
   return {
