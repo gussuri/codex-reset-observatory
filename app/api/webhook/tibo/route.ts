@@ -320,7 +320,7 @@ async function fetchCanonicalTiboSourceRows(
   try {
     const result = await supabase
       .from("tibo_signals")
-      .select("tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status")
+      .select("tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status,expires_at")
       .in("tweet_id", tweetIds)
       .limit(32);
     if (result.error) {
@@ -349,6 +349,7 @@ async function fetchCanonicalTiboSourceRows(
         verification_status: typeof row.verification_status === "string"
           ? row.verification_status
           : null,
+        expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
       }];
     });
   } catch {
@@ -1196,7 +1197,10 @@ export async function POST(req: NextRequest) {
           console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
             reason: "lookup_failed",
           });
-        } else if (recoveryMatch.observation) {
+        } else {
+          // Resolve canonical notice context even without a monitor observation.
+          // In that path the cluster is used only for generation input below;
+          // it does not update adoption provenance or create an estimate.
           formalFlowCluster = await findFormalTiboResetCluster(
             supabase,
             effectiveFormalCandidate.tweet_id,
@@ -1208,9 +1212,9 @@ export async function POST(req: NextRequest) {
               confidence: effectiveFormalCandidate.confidence ?? 0,
             },
           );
-          if (formalFlowCluster.error) {
+          if (recoveryMatch.observation && formalFlowCluster.error) {
             formalEnrichmentFailed = true;
-          } else {
+          } else if (recoveryMatch.observation) {
             const enrichedSourceTweetIds = Array.from(new Set([
               ...formalFlowSourceTweetIds,
               ...formalFlowCluster.sourceTweetIds,
@@ -1279,10 +1283,20 @@ export async function POST(req: NextRequest) {
               supabase,
               displayNameSourceTweetIds,
             );
+            const completionTime = Date.parse(effectiveFormalCandidate.tweet_created_at);
+            const expiredNoticeIds = new Set(canonicalSourceRows
+              .filter((row) => row.signal_type === "official_notice" && row.expires_at?.trim())
+              .filter((row) => {
+                const expiresAt = Date.parse(row.expires_at!);
+                return !Number.isFinite(expiresAt) || !Number.isFinite(completionTime) || expiresAt <= completionTime;
+              })
+              .map((row) => row.tweet_id));
+            const namingSourceTweetIds = displayNameSourceTweetIds.filter((id) => !expiredNoticeIds.has(id));
+            const namingSourceRows = canonicalSourceRows.filter((row) => !expiredNoticeIds.has(row.tweet_id));
             const sourcePostText = buildResetDisplayNameSourceContext({
               effectiveFormalCandidate,
-              sourceTweetIds: displayNameSourceTweetIds,
-              sourceRows: canonicalSourceRows,
+              sourceTweetIds: namingSourceTweetIds,
+              sourceRows: namingSourceRows,
               eventKind: "forced_reset",
             });
             const displayNameItem = {

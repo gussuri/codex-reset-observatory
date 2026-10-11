@@ -645,6 +645,57 @@ function getV4AuthorTextEvidence(sourcePostText: string) {
   });
 }
 
+function getV4NumericQuantities(text: string) {
+  const pattern = /(^|[^A-Za-z0-9])(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(million|millions|m|billion|billions|bn|b|thousand|thousands|k|万|萬|亿|億|千|百))?(?:\s*(?:users?|people|accounts?|threads?|tokens?|人|名|用户|帳戶|账户|线程|個|个))?/gi;
+  const quantities = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    const value = Number((match[2] ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(value)) continue;
+    const unit = (match[3] ?? "").toLocaleLowerCase();
+    const scale = unit === "m" || unit.startsWith("million") ? 1_000_000
+      : unit === "b" || unit === "bn" || unit.startsWith("billion") ? 1_000_000_000
+      : unit === "k" || unit.startsWith("thousand") || unit === "千" ? 1_000
+      : unit === "万" || unit === "萬" ? 10_000
+      : unit === "亿" || unit === "億" ? 100_000_000
+      : unit === "百" ? 100
+      : 1;
+    quantities.add(String(Math.round(value * scale)));
+  }
+  return quantities;
+}
+
+function addV4SafetyFlags(
+  names: Array<string | null>,
+  authorTexts: readonly string[],
+) {
+  const flags: string[] = [];
+  const source = authorTexts.join("\n").toLocaleLowerCase();
+  const sourceNumbers = getV4NumericQuantities(authorTexts.join("\n"));
+  const nameNumbers = names.map((name) => getV4NumericQuantities(name ?? ""));
+
+  for (const name of names) {
+    if (!name) continue;
+    if (GENERIC_LOCALIZED_NAMES.has(name.toLocaleLowerCase())) {
+      flags.push("generic_only_name");
+    }
+    const namedTokens = name.match(/\b(?:tibo|gpt(?:[- ]?[0-9]+(?:\.[0-9]+)?)?|chatgpt|codex|luna|openai|gemini|claude|sora)\b/gi) ?? [];
+    if (namedTokens.some((token) => !source.includes(token.toLocaleLowerCase()))) {
+      flags.push("unprovided_named_token");
+    }
+  }
+
+  if (nameNumbers.some((numbers) => Array.from(numbers).some((value) => !sourceNumbers.has(value)))) {
+    flags.push("unprovided_number");
+  }
+  const numberSets = nameNumbers.map((numbers) => Array.from(numbers).sort().join(","));
+  if (numberSets.some((values) => values !== numberSets[0])) {
+    flags.push("localized_number_mismatch");
+  }
+
+  return Array.from(new Set(flags));
+}
+
 export function parseRandomResetNameV4ResponseWithValidationContext(
   raw: unknown,
   validationContext: RandomResetNameV3ValidationContext,
@@ -693,7 +744,7 @@ export function parseRandomResetNameV4ResponseWithValidationContext(
   }
 
   const flags = allNull ? [] : [
-    ...addV3SafetyFlags(validationContext, [nameJa ?? null, nameEn ?? null, nameZh ?? null]),
+    ...addV4SafetyFlags([nameJa ?? null, nameEn ?? null, nameZh ?? null], authorTexts),
     ...(evidenceGrounded ? [] : ["ungrounded_evidence"]),
   ];
   return {

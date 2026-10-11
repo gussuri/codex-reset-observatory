@@ -270,6 +270,86 @@ test("v4 naming supports announced and completed stages without changing event k
   assert.match(RANDOM_RESET_NAME_V4_SYSTEM_PROMPT, /distinguish a forced reset from a BANKED distribution/i);
 });
 
+function evaluateV4Names(
+  authorText: string,
+  names: { nameJa: string; nameEn: string; nameZh: string },
+  evidenceQuote: string,
+) {
+  const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
+  input.sourcePostText = [
+    "[Tibo post 1 | role=completion | tweet_created_at=2026-10-11T04:01:09Z | tweet_id=2109132167112782291]",
+    `AUTHOR TEXT: ${JSON.stringify(authorText)}`,
+    "[End Tibo post 1]",
+  ].join("\n");
+  const result = parseRandomResetNameV4Response({
+    ...names,
+    evidenceQuote,
+    reason: "原文の特徴を名前に反映しました。",
+  }, input, "gemini-3.5-flash-lite");
+  return { result, acceptance: assessRandomResetNameResult(result) };
+}
+
+test("v4 numeric safety ignores header IDs and timestamps when the author text has no number", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "Reset complete. May the tokens do good things.",
+    {
+      nameJa: "2000万人への願いリセット",
+      nameEn: "Wishes for 2000 Million Reset",
+      nameZh: "2000万人心愿重置",
+    },
+    "May the tokens do good things.",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 rejects a different number even when another number appears in the author text", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We reached 40M users this week. Reset complete.",
+    {
+      nameJa: "99M usersへの感謝リセット",
+      nameEn: "99M Users Thank You Reset",
+      nameZh: "9900万用户致谢重置",
+    },
+    "40M users",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 requires the same supported number across all three localized names", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We reached 40M users this week. Reset complete.",
+    {
+      nameJa: "4000万人への感謝リセット",
+      nameEn: "99M Users Thank You Reset",
+      nameZh: "4000万用户致谢重置",
+    },
+    "40M users",
+  );
+
+  assert.ok(result.flags.includes("unprovided_number"));
+  assert.ok(result.flags.includes("localized_number_mismatch"));
+  assert.equal(acceptance.status, "review_required");
+});
+
+test("v4 accepts equivalent grounded number formats across locales", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "We reached 40M users this week. Reset complete.",
+    {
+      nameJa: "4000万人への感謝リセット",
+      nameEn: "40M Users Thank You Reset",
+      nameZh: "4000万用户致谢重置",
+    },
+    "40M users",
+  );
+
+  assert.deepEqual(result.flags, []);
+  assert.equal(acceptance.status, "accepted");
+});
+
 test("production naming failures remain best-effort webhook-safe results", async () => {
   const input = toRandomResetNameInput(resetItem(), Date.parse(completedAt));
   input.sourcePostText = "A reset is available for the weekend.";

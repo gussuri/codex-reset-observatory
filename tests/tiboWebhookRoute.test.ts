@@ -1229,7 +1229,7 @@ test("webhook reclassification updates secondary AI fields but preserves a manua
         edit_version: 1,
         edit_metadata_source: "none",
       };
-      return new Response(JSON.stringify(url.includes("tweet_id=in.") ? [signal] : signal), {
+      return new Response(JSON.stringify([signal]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -1346,36 +1346,22 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
   }
 });
 
-test("formal completion without a monitor observation uses only its existing canonical notice association for generated copy", async () => {
+test("formal completion without a monitor observation resolves its canonical notice for generation only", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
   const originalFetch = globalThis.fetch;
-  const requestBodies: unknown[] = [];
-  const requestUrls: string[] = [];
-  const generationPrompts: string[] = [];
-  const canonicalSourceQueries: string[] = [];
-  const noticeId = "2107000000000000101";
-  const completionId = "2107000000000000102";
-  const unrelatedId = "2107000000000000103";
-  const noticeAt = "2026-10-10T15:00:00.000Z";
-  const completionAt = "2026-10-10T22:30:00.000Z";
+  const noticeId = "2109045392684032299";
+  const completionId = "2109132167112782291";
+  const unrelatedId = "2109132167112782292";
+  const replyId = "2109132167112782293";
+  const rejectedId = "2109132167112782294";
+  const expiredId = "2109132167112782295";
+  const bankedId = "2109132167112782296";
+  const noticeAt = "2026-10-10T22:16:20.000Z";
+  const completionAt = "2026-10-11T04:01:09.000Z";
   const noticeText = "Global reset by EOD. May the tokens do good things for you.";
-  const completionText = "The reset is live now.";
-  const unrelatedText = "A separate announcement from another event.";
-  const ledger = {
-    id: "00000000-0000-4000-8000-000000000010",
-    logical_post_id: completionId,
-    logical_post_tweet_ids: [completionId],
-    reset_event_key: `tibo-reset-${completionId}`,
-    representative_tweet_id: completionId,
-    source_tweet_ids: [noticeId, completionId],
-    claim_source: "new_adoption",
-    adopted_at: completionAt,
-    claimed_at: completionAt,
-    created_at: completionAt,
-    updated_at: completionAt,
-  };
+  const completionText = "Put the reset in the bag. All propagated.";
   const sourceRows = [
     {
       tweet_id: noticeId,
@@ -1386,6 +1372,11 @@ test("formal completion without a monitor observation uses only its existing can
       confidence: 0.98,
       verification_status: "confirmed",
       is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      expected_start_at: noticeAt,
+      expected_end_at: "2026-10-11T07:00:00.000Z",
+      expires_at: "2026-10-11T07:00:00.000Z",
     },
     {
       tweet_id: completionId,
@@ -1399,12 +1390,67 @@ test("formal completion without a monitor observation uses only its existing can
     },
     {
       tweet_id: unrelatedId,
-      text: unrelatedText,
+      text: "A separate reset announcement for next week.",
       tweet_created_at: "2026-10-10T22:25:00.000Z",
       signal_type: "official_notice",
       tweet_url: `https://x.com/thsottiaux/status/${unrelatedId}`,
       confidence: 0.98,
       verification_status: "confirmed",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      expected_start_at: "2026-10-12T07:00:00.000Z",
+      expected_end_at: "2026-10-13T07:00:00.000Z",
+      expires_at: "2026-10-13T07:00:00.000Z",
+    },
+    {
+      tweet_id: replyId,
+      text: "A reply about a separate reset.",
+      tweet_created_at: "2026-10-10T22:26:00.000Z",
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${replyId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: true,
+    },
+    {
+      tweet_id: expiredId,
+      text: "An earlier reset notice whose window expired before completion.",
+      tweet_created_at: "2026-10-10T23:00:00.000Z",
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${expiredId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      expected_start_at: noticeAt,
+      expected_end_at: "2026-10-11T07:00:00.000Z",
+      expires_at: "2026-10-11T00:00:00.000Z",
+    },
+    {
+      tweet_id: bankedId,
+      text: "We are distributing banked resets to paid accounts.",
+      tweet_created_at: "2026-10-10T23:15:00.000Z",
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${bankedId}`,
+      confidence: 0.98,
+      verification_status: "confirmed",
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "day",
+      expected_start_at: noticeAt,
+      expected_end_at: "2026-10-11T07:00:00.000Z",
+      expires_at: "2026-10-11T07:00:00.000Z",
+    },
+    {
+      tweet_id: rejectedId,
+      text: "A rejected reset announcement.",
+      tweet_created_at: "2026-10-10T22:27:00.000Z",
+      signal_type: "official_notice",
+      tweet_url: `https://x.com/thsottiaux/status/${rejectedId}`,
+      confidence: 0.98,
+      verification_status: "rejected",
       is_reply: false,
     },
   ];
@@ -1427,98 +1473,137 @@ test("formal completion without a monitor observation uses only its existing can
     teaserStrengthEvidenceQuote: null,
     teaserStrengthReasonJa: null,
   });
-  globalThis.fetch = async (input, init) => {
-    const url = input instanceof Request ? input.url : String(input);
-    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-    requestUrls.push(url);
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
-    if (body !== null) requestBodies.push(body);
-
-    if (url.includes("generativelanguage.googleapis.com")) {
-      const contents = Array.isArray(body?.contents) ? body.contents as Array<{ parts?: Array<{ text?: string }> }> : [];
-      const prompt = contents.flatMap((content) => content.parts ?? [])
-        .map((part) => part.text ?? "")
-        .join("\n");
-      generationPrompts.push(prompt);
-      const response = prompt.includes('"evidenceQuote"')
-        ? {
-            nameJa: "トークンに願いをリセット",
-            nameEn: "Tokens Do Good Reset",
-            nameZh: "让令牌传递善意重置",
-            evidenceQuote: "May the tokens do good things for you.",
-            reason: "告知にある願いを短い名前にしました。",
-          }
-        : {
-            reasonType: "ご祝儀リセット",
-            scope: null,
-            scopeEvidence: null,
-            summaryJa: "Codexの利用枠がリセットされました。",
-            summaryEn: "Codex usage limits were reset.",
-            summaryZh: "Codex 使用额度已重置。",
-            noteJa: "告知では一日の終わりまでにリセットすると伝え、投稿ではトークンが役立つよう願っていました。",
-            noteEn: "The notice said the reset would arrive by the end of the day and wished users well with their tokens.",
-            noteZh: "告知称重置会在当天结束前到来，并祝愿用户善用令牌。",
-            reasonJa: "告知文の願いを補足に反映しました。",
-          };
-      return new Response(JSON.stringify({
-        candidates: [{ content: { parts: [{ text: JSON.stringify(response) }] } }],
-      }), { status: 200, headers: { "content-type": "application/json" } });
-    }
-
-    if (url.includes("/rpc/claim_tibo_formal_adoption")) {
-      return new Response(JSON.stringify({ status: "existing", record: ledger }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    if (url.includes("/tibo_formal_adoptions")) {
-      return new Response(JSON.stringify([ledger]), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    if (url.includes("/tibo_signals") && method === "GET" && url.includes("tweet_id=in.")) {
-      canonicalSourceQueries.push(decodeURIComponent(url));
-      return new Response(JSON.stringify(sourceRows), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    if (url.includes("/reset_execution_estimates") || url.includes("/codex_recovery_observations")) {
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    if (url.includes("/reset_display_names") && method === "GET") {
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    if (method === "GET") {
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify([]), { status: 201, headers: { "content-type": "application/json" } });
-  };
 
   try {
-    const response = await POST(buildRequest({
-      tweetId: completionId,
-      text: completionText,
-      tweetUrl: `https://x.com/thsottiaux/status/${completionId}`,
-      tweetCreatedAt: completionAt,
-    }));
+    for (const scenario of ["new_adoption", "existing_completion_only"] as const) {
+      const requestLog: Array<{ url: string; method: string; body: unknown }> = [];
+      const generationPrompts: string[] = [];
+      const canonicalSourceQueries: string[] = [];
+      const ledger = {
+        id: "00000000-0000-4000-8000-000000000010",
+        logical_post_id: completionId,
+        logical_post_tweet_ids: [completionId],
+        reset_event_key: `tibo-reset-${completionId}`,
+        representative_tweet_id: completionId,
+        source_tweet_ids: [completionId],
+        claim_source: "new_adoption",
+        adopted_at: completionAt,
+        claimed_at: completionAt,
+        created_at: completionAt,
+        updated_at: completionAt,
+      };
+      globalThis.fetch = async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+        const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+        requestLog.push({ url, method, body });
 
-    assert.equal(response.status, 200);
-    assert.equal(generationPrompts.length, 2);
-    assert.ok(canonicalSourceQueries.some((query) =>
-      query.includes("select=tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status"),
-    ));
-    assert.equal(requestUrls.some((url) => url.includes("/codex_recovery_observations") && url.includes("method=POST")), false);
-    assert.equal(requestUrls.some((url) => url.includes("/reset_execution_estimates") && url.includes("method=POST")), false);
-    for (const prompt of generationPrompts) {
-      assert.ok(prompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`));
-      assert.ok(prompt.includes(`role=completion | tweet_created_at=${completionAt} | tweet_id=${completionId}`));
-      assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`));
-      assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(completionText)}`));
-      assert.doesNotMatch(prompt, new RegExp(unrelatedText));
-      assert.match(prompt, /America\/Los_Angeles/);
-      assert.match(prompt, /may be approximate or post-based/i);
-      assert.doesNotMatch(prompt, /recorded execution timestamp/i);
+        if (url.includes("generativelanguage.googleapis.com")) {
+          const contents = Array.isArray((body as Record<string, unknown> | null)?.contents)
+            ? (body as { contents: Array<{ parts?: Array<{ text?: string }> }> }).contents
+            : [];
+          const prompt = contents.flatMap((content) => content.parts ?? [])
+            .map((part) => part.text ?? "")
+            .join("\n");
+          generationPrompts.push(prompt);
+          const response = prompt.includes('"evidenceQuote"')
+            ? {
+                nameJa: "トークンに願いをリセット",
+                nameEn: "Tokens Do Good Reset",
+                nameZh: "让令牌传递善意重置",
+                evidenceQuote: "May the tokens do good things for you.",
+                reason: "告知にある願いを短い名前にしました。",
+              }
+            : {
+                reasonType: "ご祝儀リセット",
+                scope: null,
+                scopeEvidence: null,
+                summaryJa: "Codexの利用枠がリセットされました。",
+                summaryEn: "Codex usage limits were reset.",
+                summaryZh: "Codex 使用额度已重置。",
+                noteJa: "告知では一日の終わりまでにリセットすると伝え、投稿ではトークンが役立つよう願っていました。",
+                noteEn: "The notice said the reset would arrive by the end of the day and wished users well with their tokens.",
+                noteZh: "告知称重置会在当天结束前到来，并祝愿用户善用令牌。",
+                reasonJa: "告知文の願いを補足に反映しました。",
+              };
+          return new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(response) }] } }],
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+
+        if (url.includes("/rpc/claim_tibo_formal_adoption")) {
+          const requestBody = body as Record<string, unknown> | null;
+          assert.deepEqual(requestBody?.p_source_tweet_ids, [completionId]);
+          return new Response(JSON.stringify({
+            status: scenario === "new_adoption" ? "claimed_new" : "existing",
+            record: ledger,
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/tibo_formal_adoptions")) {
+          const existingRows = scenario === "existing_completion_only" ? [ledger] : [];
+          return new Response(JSON.stringify(existingRows), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/tibo_signals") && method === "GET") {
+          const decodedUrl = decodeURIComponent(url);
+          if (decodedUrl.includes("signal_type=eq.reset_executed")) {
+            return new Response(JSON.stringify(sourceRows.filter((row) => row.signal_type === "reset_executed")), {
+              status: 200, headers: { "content-type": "application/json" },
+            });
+          }
+          if (decodedUrl.includes("signal_type=eq.official_notice")) {
+            return new Response(JSON.stringify(sourceRows.filter((row) =>
+              row.signal_type === "official_notice" && !row.is_reply && row.verification_status !== "rejected",
+            )), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          if (decodedUrl.includes("tweet_id=in.")) {
+            canonicalSourceQueries.push(decodedUrl);
+            return new Response(JSON.stringify(sourceRows.filter((row) => decodedUrl.includes(row.tweet_id))), {
+              status: 200, headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/reset_execution_estimates") || url.includes("/codex_recovery_observations")) {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/reset_display_names") && method === "GET") {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (method === "GET") {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify([]), { status: 201, headers: { "content-type": "application/json" } });
+      };
+
+      const response = await POST(buildRequest({
+        tweetId: completionId,
+        text: completionText,
+        tweetUrl: `https://x.com/thsottiaux/status/${completionId}`,
+        tweetCreatedAt: completionAt,
+      }));
+
+      assert.equal(response.status, 200, scenario);
+      assert.equal(generationPrompts.length, 2, scenario);
+      assert.ok(canonicalSourceQueries.some((query) =>
+        query.includes("select=tweet_id,text,tweet_created_at,signal_type,is_reply,verification_status"),
+      ));
+      assert.equal(requestLog.some((request) =>
+        (request.url.includes("/codex_recovery_observations") || request.url.includes("/reset_execution_estimates")) &&
+        request.method === "POST",
+      ), false);
+      for (const prompt of generationPrompts) {
+        assert.ok(prompt.includes(`role=official_notice | tweet_created_at=${noticeAt} | tweet_id=${noticeId}`), scenario);
+        assert.ok(prompt.includes(`role=completion | tweet_created_at=${completionAt} | tweet_id=${completionId}`), scenario);
+        assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(noticeText)}`), scenario);
+        assert.ok(prompt.includes(`AUTHOR TEXT: ${JSON.stringify(completionText)}`), scenario);
+        assert.doesNotMatch(prompt, /A separate reset announcement|A reply about a separate reset|A rejected reset announcement|window expired before completion|distributing banked resets/i);
+        assert.match(prompt, /America\/Los_Angeles/);
+        assert.match(prompt, /may be approximate or post-based/i);
+        assert.doesNotMatch(prompt, /recorded execution timestamp/i);
+      }
+      const claimedIds = requestLog.find((request) => request.url.includes("/rpc/claim_tibo_formal_adoption"))?.body as Record<string, unknown> | undefined;
+      assert.deepEqual(claimedIds?.p_source_tweet_ids, [completionId]);
     }
-    assert.ok(requestBodies.some((body) =>
-      typeof body === "object" && body !== null &&
-      (body as Record<string, unknown>).tweet_id === completionId,
-    ));
   } finally {
     globalThis.fetch = originalFetch;
     restoreClassification();
@@ -2019,7 +2104,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     assert.equal(response.status, 200);
     assert.deepEqual(fetchMethods, [
       "GET", "POST", "GET", "POST", "GET", "GET", "GET", "GET",
-      "POST", "GET", "GET", "GET", "GET", "POST", "POST", "GET", "POST", "POST",
+      "POST", "GET", "GET", "GET", "GET", "GET", "GET", "POST", "POST", "GET", "POST", "POST",
     ]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");

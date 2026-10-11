@@ -7,6 +7,7 @@ export type ResetDisplayNameSourceRow = {
   tweet_id: string;
   text: string;
   tweet_created_at?: string | null;
+  expires_at?: string | null;
   signal_type?: string | null;
   is_reply?: boolean | null;
   verification_status?: string | null;
