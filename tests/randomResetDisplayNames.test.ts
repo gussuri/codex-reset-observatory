@@ -380,6 +380,47 @@ test("v4 model version digits do not ground a named quantity", () => {
   assert.equal(acceptance.status, "review_required");
 });
 
+test("v4 accepts a source-grounded model version followed by natural title words in every locale", () => {
+  const { result, acceptance } = evaluateV4Names(
+    "GPT-6 launches today. To celebrate, usage limits are reset.",
+    {
+      nameJa: "GPT-6リリース記念リセット",
+      nameEn: "GPT-6 Launch Reset",
+      nameZh: "GPT-6发布纪念重置",
+    },
+    "GPT-6 launches today.",
+  );
+
+  assert.deepEqual(result.flags, []);
+  assert.equal(acceptance.status, "accepted");
+});
+
+test("v4 rejects an unsupported model version and cannot reuse version digits as a quantity", () => {
+  const unsupportedVersion = evaluateV4Names(
+    "GPT-6 launches today. To celebrate, usage limits are reset.",
+    {
+      nameJa: "GPT-7リリース記念リセット",
+      nameEn: "GPT-7 Launch Reset",
+      nameZh: "GPT-7发布纪念重置",
+    },
+    "GPT-6 launches today.",
+  );
+  assert.ok(unsupportedVersion.result.flags.includes("unprovided_named_token"));
+  assert.equal(unsupportedVersion.acceptance.status, "review_required");
+
+  const convertedVersionQuantity = evaluateV4Names(
+    "GPT-6 launches today. To celebrate, usage limits are reset.",
+    {
+      nameJa: "GPT-6Mユーザー記念リセット",
+      nameEn: "GPT-6M Users Reset",
+      nameZh: "GPT-6M用户纪念重置",
+    },
+    "GPT-6 launches today.",
+  );
+  assert.ok(convertedVersionQuantity.result.flags.includes("unprovided_number"));
+  assert.equal(convertedVersionQuantity.acceptance.status, "review_required");
+});
+
 test("v4 flags unsupported spelled-out quantities instead of letting all locales pass", () => {
   const { result, acceptance } = evaluateV4Names(
     "We reached 40M users this week. Reset complete.",

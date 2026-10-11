@@ -705,7 +705,8 @@ function getV4NumericQuantities(text: string, sourceEvidence = false) {
     const category = cjkUnit?.[1] ?? (cjkPrefix ? "unknown_cjk_unit"
       : knownEnglishUnit ?? (firstNonModifierWord ? `unit:${firstNonModifierWord}` : "unspecified"));
     const isModelVersion = /(?:gpt|chatgpt|claude|gemini|model|version)[ -]?$/i.test(previousText);
-    if (isModelVersion && (sourceEvidence || !cjkUnit && !knownEnglishUnit && !firstNonModifierWord)) continue;
+    const hasExplicitQuantityUnit = Boolean(scaleUnit || cjkUnit || knownEnglishUnit);
+    if (isModelVersion && (sourceEvidence || !hasExplicitQuantityUnit)) continue;
     quantities.add(`${Math.round(value * scale)}|${category}`);
   }
   return quantities;
