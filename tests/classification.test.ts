@@ -42,6 +42,39 @@ test("classifyTiboTweet correctly classifies official notices", () => {
   assert.ok(result.confidence >= 0.95);
 });
 
+test("explicit reset implementation deadlines by EOD are official notices without widening to unrelated or conditional resets", () => {
+  const positiveCases = [
+    "Global reset by EOD.",
+    "Global reset by end of day.",
+    "Usage limits will be reset by end of the day.",
+  ];
+  for (const text of positiveCases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2109045392684032299").signalType,
+      "official_notice",
+      text,
+    );
+  }
+
+  const negativeCases = [
+    "No global reset by EOD.",
+    "If users complain, global reset by EOD.",
+    "I wish global reset by EOD were possible.",
+    "We completed the global reset by EOD yesterday.",
+    "We reset the cache by EOD.",
+    "Reset is not planned by EOD.",
+    "BANKED reset credits distributed by EOD.",
+    "Registration for reset closes by EOD.",
+  ];
+  for (const text of negativeCases) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2109045392684032299").signalType,
+      "irrelevant",
+      text,
+    );
+  }
+});
+
 test("classifyTiboTweet correctly classifies reset_executed (immediate resets)", () => {
   const cases = [
     "We just reset everyone's limits for Codex. Enjoy!",

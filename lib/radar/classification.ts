@@ -99,6 +99,7 @@ const CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN =
   /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
 const EXPLICIT_FUTURE_USAGE_RESET_PATTERN =
   /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:i|we)'ll\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
+const EXPLICIT_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/i;
 
 function normalizedClassificationText(text: string) {
   return text.toLowerCase().replace(/[’‘]/g, "'");
@@ -142,6 +143,39 @@ export function hasNonUsageActivationCompletion(text: string) {
 export function isPureHypotheticalReset(text: string) {
   const normalized = normalizedClassificationText(text);
   return PURE_HYPOTHETICAL_PATTERN.test(normalized) && !INDEPENDENT_INTENT_AFTER_HYPOTHETICAL_PATTERN.test(normalized);
+}
+
+function isQuotedAt(text: string, index: number) {
+  const before = text.slice(0, index);
+  return (before.match(/"/g)?.length ?? 0) % 2 === 1 ||
+    before.lastIndexOf("“") > before.lastIndexOf("”");
+}
+
+function hasExplicitResetEodDeadlineNotice(text: string) {
+  const segments = text.split(/[.!?;\n]+/);
+  return segments.some((segment) => {
+    const deadline = EXPLICIT_EOD_DEADLINE_PATTERN.exec(segment);
+    if (!deadline || deadline.index === undefined) return false;
+    const resetMatches = Array.from(segment.matchAll(/\breset\b/gi));
+    const reset = resetMatches
+      .filter((match) => (match.index ?? Number.POSITIVE_INFINITY) < deadline.index)
+      .at(-1);
+    if (!reset || reset.index === undefined) return false;
+
+    const beforeReset = segment.slice(0, reset.index);
+    const afterReset = segment.slice(reset.index + reset[0].length, deadline.index).trim();
+    if (isQuotedAt(segment, deadline.index)) return false;
+    if (/\b(?:if|unless|assuming|suppose|what\s+if)\b/i.test(beforeReset)) return false;
+    if (/\b(?:no|not|never|cancel(?:led|ed)?|canceled|wish|imagine|could|would|might|maybe|perhaps)\b/i.test(beforeReset)) return false;
+    if (/\b(?:no|not|never|cancel(?:led|ed)?|canceled|wish|imagine|could|would|might|maybe|perhaps)\b/i.test(afterReset)) return false;
+    if (HISTORICAL_RESET_PATTERN.test(segment) || hasExplicitNonUsageResetObject(segment)) return false;
+    if (/\b(?:registration|register|sign\s*up|signup|application|upgrade|subscribe|enroll)\b/i.test(beforeReset)) return false;
+    if (/\b(?:close[sd]?|expires?|eligibility|eligible|registration|register|sign\s*up|signup|application|upgrade|subscribe|enroll)\b/i.test(afterReset)) return false;
+    if (/\bbanked\b/i.test(segment)) return false;
+
+    if (!afterReset) return true;
+    return /^(?:(?:will|shall|is|are|going\s+to|planned\s+to|scheduled\s+to|expected\s+to|set\s+to)\s+)?(?:land(?:s|ed|ing)?|happen(?:s|ed|ing)?|occur(?:s|red|ring)?|be\s+(?:reset|done|completed|executed)|reset|scheduled|planned|expected)\s*$/i.test(afterReset);
+  });
 }
 
 export function hasCurrentResetExecution(text: string) {
@@ -438,6 +472,16 @@ export function classifyTiboTweet(
       signalType: "official_notice",
       confidence: 0.96,
       reason: "Matched explicit future usage-limit reset announcement.",
+      isReply,
+      isQuote,
+    });
+  }
+
+  if (hasExplicitResetEodDeadlineNotice(text)) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "official_notice",
+      confidence: 0.96,
+      reason: "Matched an explicit reset implementation deadline by end of day.",
       isReply,
       isQuote,
     });
