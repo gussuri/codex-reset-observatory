@@ -514,6 +514,75 @@ test("a legacy lock owned by a reused PID is reclaimed without changing the pend
   }
 });
 
+test("schema 1 pending queue fixtures load, save, and reload without losing posts or order", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-v1-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const originalPosts = [
+      { reason: "initial", snapshot: { observedAt: "2026-10-11T00:45:00.000Z", limitId: "codex", planType: "plus", usedPercent: 20, windowDurationMins: 10080, resetsAt: 1_787_012_727 } },
+      { reason: "recovery_candidate", snapshot: { observedAt: "2026-10-11T00:53:00.000Z", limitId: "codex", planType: "plus", usedPercent: 0, windowDurationMins: 10080, resetsAt: 1_787_012_727, bankedResetAvailableCount: 2 } },
+    ];
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: originalPosts }));
+
+    const store = createPendingMonitorPostStore(queuePath);
+    assert.deepEqual(store.load(), originalPosts);
+    store.save(store.load());
+    const saved = JSON.parse(readFileSync(queuePath, "utf8")) as { schemaVersion: number; pendingPosts: unknown[] };
+    assert.equal(saved.schemaVersion, 1);
+    assert.deepEqual(saved.pendingPosts, originalPosts);
+    assert.deepEqual(createPendingMonitorPostStore(queuePath).load(), originalPosts);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema 1 empty queue fixture loads and remains schema 1 after save", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-empty-queue-v1-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: [] }));
+    const store = createPendingMonitorPostStore(queuePath);
+    assert.deepEqual(store.load(), []);
+    store.save(store.load());
+    assert.deepEqual(JSON.parse(readFileSync(queuePath, "utf8")), { schemaVersion: 1, pendingPosts: [] });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a schema 1 queue remains readable after recovering a schema 1 stale lock", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-lock-v1-upgrade-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    const originalPosts = [{ reason: "recovery_candidate", snapshot: { observedAt: "2026-10-11T00:53:00.000Z", limitId: "codex", planType: "plus", usedPercent: 0, windowDurationMins: 10080, resetsAt: 1_787_012_727 } }];
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: originalPosts }));
+    writeFileSync(lockPath, JSON.stringify({ schemaVersion: 1, pid: process.pid, token: "41234567-89ab-4cde-8fab-0123456789ab", acquiredAt: "2026-10-11T00:53:56.754Z" }));
+
+    const lease = acquirePendingMonitorPostLock(queuePath, { getProcessStartTime: () => Date.parse("2026-10-13T00:22:21.213Z") });
+    try {
+      assert.deepEqual(createPendingMonitorPostStore(queuePath).load(), originalPosts);
+      assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).schemaVersion, 2);
+      assert.equal(JSON.parse(readFileSync(queuePath, "utf8")).schemaVersion, 1);
+    } finally {
+      lease.release();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pending queue rejects schema versions other than 1", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-invalid-schema-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 2, pendingPosts: [] }));
+    assert.throws(() => createPendingMonitorPostStore(queuePath).load(), /pending_posts_corrupt/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("a matching schema 2 process identity remains the live lock owner", () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-live-v2-owner-"));
   try {

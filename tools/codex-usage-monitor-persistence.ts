@@ -6,7 +6,8 @@ import { randomUUID } from "node:crypto";
 
 import type { PendingMonitorPost } from "./codex-usage-monitor";
 
-const PENDING_POSTS_SCHEMA_VERSION = 2;
+const PENDING_POSTS_QUEUE_SCHEMA_VERSION = 1;
+const PENDING_POSTS_LOCK_SCHEMA_VERSION = 2;
 const PROCESS_START_TIME_TOLERANCE_MS = 2_000;
 let cachedCurrentProcessStartTime: number | null | undefined;
 export const MAX_SHORT_PENDING_POST_FAILURES = 3;
@@ -205,7 +206,7 @@ function diagnoseExistingPendingMonitorPostRecoveryGate(gatePath: string) {
 
 function acquirePendingMonitorPostRecoveryGate(gatePath: string, processStartedAt: number) {
   const record: PendingMonitorPostLockRecord = {
-    schemaVersion: PENDING_POSTS_SCHEMA_VERSION,
+    schemaVersion: PENDING_POSTS_LOCK_SCHEMA_VERSION,
     pid: process.pid,
     token: randomUUID(),
     acquiredAt: new Date().toISOString(),
@@ -326,7 +327,7 @@ export function acquirePendingMonitorPostLock(
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const record: PendingMonitorPostLockRecord = {
-        schemaVersion: PENDING_POSTS_SCHEMA_VERSION,
+        schemaVersion: PENDING_POSTS_LOCK_SCHEMA_VERSION,
         pid: process.pid,
         token: randomUUID(),
         acquiredAt: new Date().toISOString(),
@@ -494,7 +495,7 @@ export function createPendingMonitorPostStore(filePath: string) {
         throw new PendingMonitorPostStoreError("pending_posts_corrupt");
       }
       const candidate = envelope as Record<string, unknown>;
-      if (candidate.schemaVersion !== PENDING_POSTS_SCHEMA_VERSION) {
+      if (candidate.schemaVersion !== PENDING_POSTS_QUEUE_SCHEMA_VERSION) {
         throw new PendingMonitorPostStoreError("pending_posts_corrupt");
       }
       const pendingPosts = normalizePendingPosts(candidate.pendingPosts);
@@ -513,7 +514,7 @@ export function createPendingMonitorPostStore(filePath: string) {
         fs.mkdirSync(directory, { recursive: true });
         fileDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
         fs.writeFileSync(fileDescriptor, JSON.stringify({
-          schemaVersion: PENDING_POSTS_SCHEMA_VERSION,
+          schemaVersion: PENDING_POSTS_QUEUE_SCHEMA_VERSION,
           pendingPosts: normalized,
         }), "utf8");
         fs.fsyncSync(fileDescriptor);
