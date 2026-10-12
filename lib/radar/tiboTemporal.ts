@@ -211,7 +211,7 @@ const SOURCE_CLOCK_PATTERN =
 const INVALID_MERIDIEM_CLOCK_PATTERN =
   /\b(?:0|(?:1[3-9]|2[0-3])|\d{3,})\s*(?::\d{2})?\s*am\b|\b(?:0|\d{3,})\s*(?::\d{2})?\s*pm\b/i;
 const SOURCE_TIMEZONE_PATTERN =
-  /\b(?:UTC|GMT)(?:[+-]\d{2}:\d{2})?\b|\b(?:PST|PDT|EST|EDT|PT|ET|JST)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
+  /\b(?:UTC|GMT)(?:[+-][A-Za-z0-9:]*)?(?![A-Za-z0-9:+-])|\b(?:PST|PDT|EST|EDT|PT|ET|JST)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
 const SOURCE_DAY_PATTERN =
   /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
@@ -518,6 +518,28 @@ function getSourceTimezoneMatch(segment: SourceSegment, clock: Pick<SourceClock,
 
 const SOURCE_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/gi;
 const UNSAFE_EOD_CONTEXT_PATTERN = /\b(?:if|unless|wish|hope|hopefully|maybe|might|could|would|perhaps|not|never|no|was|were|had|landed|reset\s+landed|yesterday|ago|used\s+to|cache|server|registration|register|sign\s*up|signup|eligibility)\b/i;
+const NON_TIMEZONE_ADJACENT_TOKENS = new Set([
+  "AND", "ALL", "FOR", "GLOBAL", "PLUS", "PRO", "USER", "USERS", "CODEX", "RESET", "RESETS", "TODAY", "WILL",
+]);
+
+function getUnknownAdjacentEodTimezone(
+  segment: SourceSegment,
+  phraseStart: number,
+  phraseEnd: number,
+): SourceTimezone | null {
+  const beforePhrase = segment.text.slice(0, phraseStart);
+  const afterPhrase = segment.text.slice(phraseEnd);
+  const before = /\b([A-Z]{3})\s+$/.exec(beforePhrase);
+  const after = /^\s+([A-Z]{3})\b(?=$|[.!?;,\s])/.exec(afterPhrase);
+  const token = before?.[1] ?? after?.[1];
+  if (!token || NON_TIMEZONE_ADJACENT_TOKENS.has(token)) return null;
+  if (new RegExp(SOURCE_TIMEZONE_PATTERN.source, SOURCE_TIMEZONE_PATTERN.flags.replace("g", "")).test(token)) return null;
+
+  const index = before
+    ? segment.start + phraseStart - token.length - (beforePhrase.endsWith(" ") ? 1 : 0)
+    : segment.start + phraseEnd + afterPhrase.indexOf(token);
+  return { value: token, index, end: index + token.length };
+}
 
 function isInsideSourceQuote(sourceText: string, index: number) {
   const before = sourceText.slice(0, index);
@@ -554,18 +576,8 @@ function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): So
         return Math.abs(zoneIndex - phraseStart) <= 24 || Math.abs(zoneIndex - phraseEnd) <= 24;
       })
       .map((zone) => ({ value: zone[0], index: segment.start + (zone.index ?? 0), end: segment.start + (zone.index ?? 0) + zone[0].length }));
-    const unknownAdjacentZone = /(?:\b([A-Z]{3,5})\s+)?\bby\s+(?:EOD|end\s+of\s+(?:the\s+)?day)\b(?:\s+([A-Z]{3,5}))?(?=$|[.!?;,\s])/i.exec(segment.text);
-    const unknownToken = unknownAdjacentZone && [unknownAdjacentZone[1], unknownAdjacentZone[2]]
-      .find((token) => token && token === token.toUpperCase());
-    if (unknownToken &&
-      !new RegExp(SOURCE_TIMEZONE_PATTERN.source, SOURCE_TIMEZONE_PATTERN.flags.replace("g", "")).test(unknownToken)) {
-      const unknownIndex = unknownAdjacentZone[1]
-        ? segment.start + (unknownAdjacentZone.index ?? 0)
-        : segment.start + (unknownAdjacentZone.index ?? 0) + unknownAdjacentZone[0].lastIndexOf(unknownToken);
-      timezoneMatches.push({ value: unknownToken, index: unknownIndex, end: unknownIndex + unknownToken.length });
-    } else {
-      SOURCE_TIMEZONE_PATTERN.lastIndex = 0;
-    }
+    const unknownZone = getUnknownAdjacentEodTimezone(segment, phraseStart, phraseEnd);
+    if (unknownZone) timezoneMatches.push(unknownZone);
     if (timezoneMatches.length > 1) continue;
     const timezone = timezoneMatches[0] ?? null;
     const day: SourceDay = { value: "today", index, end: index + match[0].length };
@@ -1148,6 +1160,20 @@ function isCandidateWithinSpan(
  * single explicit schedule. In that case, use only source tokens that can be
  * resolved deterministically; never invent a day, clock, or timezone.
  */
+function isIndependentScheduleCandidate(candidate: SourceTemporalCandidate) {
+  const semantics = candidate.semantics;
+  return semantics.explicitTimeParts !== null ||
+    semantics.explicitDateParts !== null ||
+    semantics.weekday !== null ||
+    semantics.rangeKind !== null ||
+    semantics.relativeAmount !== null ||
+    semantics.relativeUnit !== null ||
+    semantics.daypart !== null && semantics.daypart !== "day" ||
+    semantics.relativeDayOffset !== null && semantics.relativeDayOffset !== 0 ||
+    semantics.temporalKind === "weekday" ||
+    semantics.temporalKind === "range";
+}
+
 export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
   const sourceExtraction = parseDeterministicTemporalSemantics(sourceText);
   if (sourceExtraction.rejected) return null;
@@ -1158,14 +1184,10 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   SOURCE_EOD_DEADLINE_PATTERN.lastIndex = 0;
   const eodCandidates = candidates.filter((candidate) => candidate.semantics.daypart === "day" && candidate.semantics.isDeadline);
   if (hasEod && eodCandidates.length === 1) {
-    const otherResetSchedules = candidates.filter((candidate) => candidate !== eodCandidates[0] && (
-      candidate.semantics.explicitTimeParts !== null ||
-      candidate.semantics.relativeDayOffset !== null && candidate.semantics.relativeDayOffset !== 0 ||
-      candidate.semantics.explicitDateParts !== null
-    ));
+    const otherResetSchedules = candidates.filter((candidate) => candidate !== eodCandidates[0] && isIndependentScheduleCandidate(candidate));
     if (otherResetSchedules.length > 0) return null;
     if (geminiSemantics && geminiSemantics.temporalKind !== "none" && geminiSemantics.temporalKind !== "vague" &&
-      ((geminiSemantics.relativeDayOffset !== null && geminiSemantics.relativeDayOffset !== 0) || geminiSemantics.explicitDateParts || geminiSemantics.explicitTimeParts || (geminiSemantics.daypart && geminiSemantics.daypart !== "day"))) return null;
+      ((geminiSemantics.relativeDayOffset !== null && geminiSemantics.relativeDayOffset !== 0) || geminiSemantics.explicitDateParts || geminiSemantics.explicitTimeParts || geminiSemantics.weekday || geminiSemantics.rangeKind || (geminiSemantics.daypart && geminiSemantics.daypart !== "day") || !["daypart", "relative_day"].includes(geminiSemantics.temporalKind))) return null;
   }
   if (hasEod && eodCandidates.length !== 1 && candidates.length !== 1) return null;
   const sourceSemantics = eodCandidates?.length === 1 ? eodCandidates[0].semantics : candidates.length === 1 ? candidates[0].semantics : null;

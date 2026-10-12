@@ -488,6 +488,64 @@ test("keeps timed reset deadlines, rejects competing same-day schedules, and val
   assert.equal(parseTiboTemporalSemantics(null, "Global reset by EOD UTC PST."), null);
 });
 
+test("does not mistake reset wording, audience words, or usage plans for unknown timezone suffixes", () => {
+  const partial = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    temporalConfidence: 0.9,
+  };
+  for (const source of [
+    "Global RESET by EOD.",
+    "Global reset by EOD FOR all users.",
+    "Global reset by EOD for CODEX and PLUS users.",
+  ]) {
+    for (const ai of [null, partial]) {
+      const parsed = parseTiboTemporalSemantics(ai, source);
+      assert.ok(parsed, source);
+      assert.equal(parsed.explicitTimezone, null, source);
+      assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "resolved", source);
+      assert.match(parsed.temporalExpression ?? "", /by EOD/i, source);
+      assert.doesNotMatch(parsed.temporalExpression ?? "", /RESET|FOR|CODEX|PLUS/, source);
+    }
+  }
+
+  const unsupported = parseTiboTemporalSemantics(null, "Global reset by EOD XYZ.");
+  assert.ok(unsupported);
+  assert.equal(unsupported.explicitTimezone, "XYZ");
+  assert.equal(unsupported.temporalExpression, "by EOD XYZ");
+  assert.equal(resolveTiboTemporalSchedule(unsupported, "2026-10-10T22:16:20.000Z").status, "unresolved");
+});
+
+test("rejects malformed UTC offset tokens without truncating them to bare UTC", () => {
+  const partial = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    temporalConfidence: 0.9,
+  };
+  for (const suffix of ["+25", "+bad", "+", "+09:"]) {
+    const source = `Global reset by EOD UTC${suffix}.`;
+    for (const ai of [null, partial]) {
+      const parsed = parseTiboTemporalSemantics(ai, source);
+      assert.ok(parsed, source);
+      assert.equal(parsed.explicitTimezone, `UTC${suffix}`, source);
+      assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "unresolved", source);
+    }
+  }
+});
+
+test("weekday schedule candidates conflict with an EOD candidate even when AI quotes EOD", () => {
+  const aiEod = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    daypart: "day", temporalConfidence: 0.9, evidenceQuote: "Global reset by EOD",
+  };
+  for (const source of [
+    "Global reset by EOD or Monday.",
+    "Global reset by EOD. A reset scheduled Monday.",
+  ]) {
+    for (const ai of [null, aiEod]) {
+      assert.equal(parseTiboTemporalSemantics(ai, source), null, source);
+    }
+  }
+});
+
 test("does not source a reset schedule from quoted text across sentences, but accepts a later unquoted notice", () => {
   const quoted = '"Maintenance today. Global reset by EOD."';
   assert.equal(parseTiboTemporalSemantics(null, quoted), null);
