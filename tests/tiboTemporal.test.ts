@@ -37,7 +37,7 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v7");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v8");
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {
@@ -346,6 +346,232 @@ test("resolves dayparts and ranges in the source-local calendar", () => {
   );
   assert.equal(weekend.expectedStartAt, "2026-08-08T07:00:00.000Z");
   assert.equal(weekend.expectedEndAt, "2026-08-10T07:00:00.000Z");
+});
+
+test("resolves a unique reset-by-EOD source deadline with complete, partial, or absent Gemini timing", () => {
+  const source = "Global reset by EOD. May the tokens do good things for you.";
+  const aiCases = [
+    {
+      temporalExpression: "by EOD",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      daypart: "day",
+      temporalConfidence: 0.9,
+      evidenceQuote: "Global reset by EOD.",
+    },
+    {
+      temporalExpression: "by EOD",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      daypart: null,
+      temporalConfidence: 0.9,
+      evidenceQuote: "Global reset by EOD.",
+    },
+    null,
+  ];
+
+  for (const ai of aiCases) {
+    const parsed = parseTiboTemporalSemantics(ai, source);
+    assert.ok(parsed, JSON.stringify(ai));
+    const result = resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z");
+    assert.equal(result.status, "resolved", JSON.stringify(ai));
+    assert.equal(result.temporalKind, "daypart");
+    assert.equal(result.temporalPrecision, "daypart");
+    assert.equal(result.timezone, "America/Los_Angeles");
+    assert.equal(result.expectedStartAt, "2026-10-10T22:16:20.000Z");
+    assert.equal(result.expectedEndAt, "2026-10-11T07:00:00.000Z");
+    assert.equal(result.isDeadline, true);
+    assert.equal(isTemporalNoticeConsumedAtReset(result, "2026-10-11T06:30:00.000Z"), true);
+  }
+
+  const displayed = formatOfficialNoticeScheduleSubject({
+    expectedAt: "2026-10-10T22:16:20.000Z",
+    expectedEndAt: "2026-10-11T07:00:00.000Z",
+    temporalPrecision: "daypart",
+    temporalResolutionStatus: "resolved",
+    temporalTimezone: "America/Los_Angeles",
+  }, "ja");
+  assert.ok(displayed);
+  assert.ok(formatOfficialNoticeScheduleSubject({
+    expectedAt: "2026-10-10T22:16:20.000Z", expectedEndAt: "2026-10-11T07:00:00.000Z",
+    temporalPrecision: "daypart", temporalResolutionStatus: "resolved", temporalTimezone: "America/Los_Angeles",
+  }, "en"));
+  assert.ok(formatOfficialNoticeScheduleSubject({
+    expectedAt: "2026-10-10T22:16:20.000Z", expectedEndAt: "2026-10-11T07:00:00.000Z",
+    temporalPrecision: "daypart", temporalResolutionStatus: "resolved", temporalTimezone: "America/Los_Angeles",
+  }, "zh"));
+});
+
+test("resolves only the specified EOD phrases, respects explicit zones, and rejects an invalid zone", () => {
+  for (const phrase of ["by EOD", "by end of day", "by end of the day"]) {
+    const parsed = parseTiboTemporalSemantics(null, `Global reset ${phrase}.`);
+    assert.ok(parsed, phrase);
+    assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "resolved");
+  }
+
+  assert.equal(parseTiboTemporalSemantics(null, "Global reset by COB.") , null);
+
+  const utc = parseTiboTemporalSemantics(null, "Global reset by EOD UTC.");
+  assert.ok(utc);
+  const utcResult = resolveTiboTemporalSchedule(utc, "2026-10-10T22:16:20.000Z");
+  assert.equal(utcResult.status, "resolved");
+  assert.equal(utcResult.timezone, "UTC");
+  assert.equal(utcResult.expectedStartAt, "2026-10-10T22:16:20.000Z");
+  assert.equal(utcResult.expectedEndAt, "2026-10-11T00:00:00.000Z");
+
+  const invalidZone = parseTiboTemporalSemantics(null, "Global reset by EOD Mars/Olympus.");
+  assert.ok(invalidZone);
+  assert.equal(invalidZone.explicitTimezone, "Mars/Olympus");
+  const invalidResult = resolveTiboTemporalSchedule(invalidZone, "2026-10-10T22:16:20.000Z");
+  assert.equal(invalidResult.status, "unresolved");
+  assert.equal(invalidResult.timezone, null);
+});
+
+test("keeps timed reset deadlines, rejects competing same-day schedules, and validates attached timezones", () => {
+  const timed = parseTiboTemporalSemantics({
+    temporalExpression: "10pm PT today", temporalKind: "relative_day", temporalPrecision: "exact_time",
+    relativeDayOffset: 0, explicitTimeParts: { hour: 22, minute: 0 }, explicitTimezone: "PT", temporalConfidence: 0.9,
+  }, "Global reset by 10pm PT today.");
+  assert.ok(timed);
+  const timedResult = resolveTiboTemporalSchedule(timed, "2026-10-10T22:16:20.000Z");
+  assert.equal(timedResult.temporalExpression, "by 10pm PT today");
+  assert.equal(timedResult.temporalPrecision, "range");
+  assert.equal(timedResult.expectedStartAt, "2026-10-10T22:16:20.000Z");
+  assert.equal(timedResult.expectedEndAt, "2026-10-11T05:00:00.000Z");
+  assert.equal(timedResult.isDeadline, true);
+
+  const aiEod = { temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart", daypart: "day", temporalConfidence: 0.9, evidenceQuote: "Global reset by EOD" };
+  for (const source of [
+    "Global reset by EOD or at 10pm today.",
+    "Global reset by EOD. A separate usage reset at 10pm today.",
+  ]) {
+    assert.equal(parseTiboTemporalSemantics(null, source), null, source);
+    assert.equal(parseTiboTemporalSemantics(aiEod, source), null, source);
+  }
+
+  for (const source of ["Global reset by EOD XYZ.", "Global reset by EOD UTC+09:99.", "Global reset by EOD UTC+24:00."]) {
+    const parsed = parseTiboTemporalSemantics(null, source);
+    assert.ok(parsed, source);
+    assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "unresolved", source);
+    assert.equal(parseTiboTemporalSemantics({ ...aiEod, explicitTimezone: undefined }, source) &&
+      resolveTiboTemporalSchedule(parseTiboTemporalSemantics({ ...aiEod, explicitTimezone: undefined }, source)!, "2026-10-10T22:16:20.000Z").status,
+    "unresolved", source);
+  }
+
+  const jst = parseTiboTemporalSemantics(null, "Global reset by EOD JST.");
+  assert.ok(jst);
+  const jstResult = resolveTiboTemporalSchedule(jst, "2026-10-10T22:16:20.000Z");
+  assert.equal(jstResult.timezone, "Asia/Tokyo");
+  assert.equal(jstResult.expectedEndAt, "2026-10-11T15:00:00.000Z");
+  const partialJst = parseTiboTemporalSemantics({ ...aiEod, explicitTimezone: undefined }, "Global reset by EOD JST.");
+  assert.ok(partialJst);
+  assert.equal(resolveTiboTemporalSchedule(partialJst, "2026-10-10T22:16:20.000Z").timezone, "Asia/Tokyo");
+
+  const zoneBefore = parseTiboTemporalSemantics(null, "Global reset UTC by EOD.");
+  assert.ok(zoneBefore);
+  assert.equal(zoneBefore.explicitTimezone, "UTC");
+  assert.equal(resolveTiboTemporalSchedule(zoneBefore, "2026-10-10T22:16:20.000Z").status, "resolved");
+
+  const quarterOffset = parseTiboTemporalSemantics(null, "Global reset by EOD UTC+05:45.");
+  assert.ok(quarterOffset);
+  const quarterResult = resolveTiboTemporalSchedule(quarterOffset, "2026-10-10T22:16:20.000Z");
+  assert.equal(quarterResult.timezone, "UTC+05:45");
+  assert.equal(quarterResult.expectedEndAt, "2026-10-11T18:15:00.000Z");
+
+  const maxOffset = parseTiboTemporalSemantics(null, "Global reset by EOD UTC+14:00.");
+  assert.ok(maxOffset);
+  assert.equal(resolveTiboTemporalSchedule(maxOffset, "2026-10-10T22:16:20.000Z").status, "resolved");
+  const beyondMaxOffset = parseTiboTemporalSemantics(null, "Global reset by EOD UTC+14:01.");
+  assert.ok(beyondMaxOffset);
+  assert.equal(resolveTiboTemporalSchedule(beyondMaxOffset, "2026-10-10T22:16:20.000Z").status, "unresolved");
+  assert.ok(parseTiboTemporalSemantics(null, "Global reset by EOD for XYZ users."));
+  assert.equal(parseTiboTemporalSemantics(null, "Global reset by EOD UTC PST."), null);
+});
+
+test("does not mistake reset wording, audience words, or usage plans for unknown timezone suffixes", () => {
+  const partial = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    temporalConfidence: 0.9,
+  };
+  for (const source of [
+    "Global RESET by EOD.",
+    "Global reset by EOD FOR all users.",
+    "Global reset by EOD for CODEX and PLUS users.",
+  ]) {
+    for (const ai of [null, partial]) {
+      const parsed = parseTiboTemporalSemantics(ai, source);
+      assert.ok(parsed, source);
+      assert.equal(parsed.explicitTimezone, null, source);
+      assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "resolved", source);
+      assert.match(parsed.temporalExpression ?? "", /by EOD/i, source);
+      assert.doesNotMatch(parsed.temporalExpression ?? "", /RESET|FOR|CODEX|PLUS/, source);
+    }
+  }
+
+  const unsupported = parseTiboTemporalSemantics(null, "Global reset by EOD XYZ.");
+  assert.ok(unsupported);
+  assert.equal(unsupported.explicitTimezone, "XYZ");
+  assert.equal(unsupported.temporalExpression, "by EOD XYZ");
+  assert.equal(resolveTiboTemporalSchedule(unsupported, "2026-10-10T22:16:20.000Z").status, "unresolved");
+});
+
+test("rejects malformed UTC offset tokens without truncating them to bare UTC", () => {
+  const partial = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    temporalConfidence: 0.9,
+  };
+  for (const suffix of ["+25", "+bad", "+", "+09:"]) {
+    const source = `Global reset by EOD UTC${suffix}.`;
+    for (const ai of [null, partial]) {
+      const parsed = parseTiboTemporalSemantics(ai, source);
+      assert.ok(parsed, source);
+      assert.equal(parsed.explicitTimezone, `UTC${suffix}`, source);
+      assert.equal(resolveTiboTemporalSchedule(parsed, "2026-10-10T22:16:20.000Z").status, "unresolved", source);
+    }
+  }
+});
+
+test("weekday schedule candidates conflict with an EOD candidate even when AI quotes EOD", () => {
+  const aiEod = {
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    daypart: "day", temporalConfidence: 0.9, evidenceQuote: "Global reset by EOD",
+  };
+  for (const source of [
+    "Global reset by EOD or Monday.",
+    "Global reset by EOD. A reset scheduled Monday.",
+  ]) {
+    for (const ai of [null, aiEod]) {
+      assert.equal(parseTiboTemporalSemantics(ai, source), null, source);
+    }
+  }
+});
+
+test("does not source a reset schedule from quoted text across sentences, but accepts a later unquoted notice", () => {
+  const quoted = '"Maintenance today. Global reset by EOD."';
+  assert.equal(parseTiboTemporalSemantics(null, quoted), null);
+  assert.equal(parseTiboTemporalSemantics({ temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart", daypart: "day", temporalConfidence: 0.9 }, quoted), null);
+  assert.equal(parseTiboTemporalSemantics(null, "“Maintenance today. Global reset by EOD.”"), null);
+  assert.equal(parseTiboTemporalSemantics(null, '"Maintenance today.\nGlobal reset by EOD."'), null);
+  assert.ok(parseTiboTemporalSemantics(null, '"Maintenance today." Global reset by EOD.'));
+});
+
+test("does not resolve quoted, negative, hypothetical, historical, conditional, unrelated, BANKED, or ambiguous EOD text", () => {
+  const cases = [
+    '"Global reset by EOD."',
+    "No global reset by EOD.",
+    "I wish a global reset by EOD were possible.",
+    "The global reset landed by EOD yesterday.",
+    "If the dashboard looks bad, global reset by EOD.",
+    "We reset the cache by EOD.",
+    "Registration for reset closes by EOD.",
+    "BANKED reset credits have now been distributed by EOD.",
+    "Global reset by EOD or tomorrow.",
+    "Global reset by EOD. A separate usage reset is scheduled tomorrow.",
+  ];
+
+  for (const source of cases) {
+    assert.equal(parseTiboTemporalSemantics(null, source), null, source);
+  }
 });
 
 test("resolves during the day from the post instant to the source-local day boundary", () => {

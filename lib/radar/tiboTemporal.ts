@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v7";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v8";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
 export const TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS = 3 * 60 * 60 * 1000;
@@ -211,7 +211,7 @@ const SOURCE_CLOCK_PATTERN =
 const INVALID_MERIDIEM_CLOCK_PATTERN =
   /\b(?:0|(?:1[3-9]|2[0-3])|\d{3,})\s*(?::\d{2})?\s*am\b|\b(?:0|\d{3,})\s*(?::\d{2})?\s*pm\b/i;
 const SOURCE_TIMEZONE_PATTERN =
-  /\b(?:UTC|GMT)(?:[+-]\d{2}:\d{2})?\b|\b(?:PST|PDT|EST|EDT|PT|ET)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
+  /\b(?:UTC|GMT)(?:[+-][A-Za-z0-9:]*)?(?![A-Za-z0-9:+-])|\b(?:PST|PDT|EST|EDT|PT|ET|JST)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
 const SOURCE_DAY_PATTERN =
   /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
@@ -501,7 +501,7 @@ function getSourceDayMatches(segment: SourceSegment): SourceDay[] {
   }));
 }
 
-function getSourceTimezoneMatch(segment: SourceSegment, clock: SourceClock): SourceTimezone | null {
+function getSourceTimezoneMatch(segment: SourceSegment, clock: Pick<SourceClock, "end">): SourceTimezone | null {
   const candidates = Array.from(segment.text.matchAll(SOURCE_TIMEZONE_PATTERN))
     .filter((match) => {
       const index = segment.start + (match.index ?? 0);
@@ -513,9 +513,87 @@ function getSourceTimezoneMatch(segment: SourceSegment, clock: SourceClock): Sou
       end: segment.start + (match.index ?? 0) + match[0].length,
     }));
 
-  const validCandidates = candidates.filter((candidate) => getTimeZone(candidate.value) !== null);
-  if (validCandidates.length !== 1) return null;
-  return validCandidates[0];
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+const SOURCE_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/gi;
+const UNSAFE_EOD_CONTEXT_PATTERN = /\b(?:if|unless|wish|hope|hopefully|maybe|might|could|would|perhaps|not|never|no|was|were|had|landed|reset\s+landed|yesterday|ago|used\s+to|cache|server|registration|register|sign\s*up|signup|eligibility)\b/i;
+const NON_TIMEZONE_ADJACENT_TOKENS = new Set([
+  "AND", "ALL", "FOR", "GLOBAL", "PLUS", "PRO", "USER", "USERS", "CODEX", "RESET", "RESETS", "TODAY", "WILL",
+]);
+
+function getUnknownAdjacentEodTimezone(
+  segment: SourceSegment,
+  phraseStart: number,
+  phraseEnd: number,
+): SourceTimezone | null {
+  const beforePhrase = segment.text.slice(0, phraseStart);
+  const afterPhrase = segment.text.slice(phraseEnd);
+  const before = /\b([A-Z]{3})\s+$/.exec(beforePhrase);
+  const after = /^\s+([A-Z]{3})\b(?=$|[.!?;,\s])/.exec(afterPhrase);
+  const token = before?.[1] ?? after?.[1];
+  if (!token || NON_TIMEZONE_ADJACENT_TOKENS.has(token)) return null;
+  if (new RegExp(SOURCE_TIMEZONE_PATTERN.source, SOURCE_TIMEZONE_PATTERN.flags.replace("g", "")).test(token)) return null;
+
+  const index = before
+    ? segment.start + phraseStart - token.length - (beforePhrase.endsWith(" ") ? 1 : 0)
+    : segment.start + phraseEnd + afterPhrase.indexOf(token);
+  return { value: token, index, end: index + token.length };
+}
+
+function isInsideSourceQuote(sourceText: string, index: number) {
+  const before = sourceText.slice(0, index);
+  const straightOpen = (before.match(/"/g)?.length ?? 0) % 2 === 1;
+  let curlyOpen = false;
+  for (const char of before) {
+    if (char === "“") curlyOpen = true;
+    if (char === "”") curlyOpen = false;
+  }
+  return straightOpen || curlyOpen;
+}
+
+function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): SourceTemporalCandidate[] {
+  if (!RESET_CUE_PATTERN.test(segment.text) || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(segment.text)) return [];
+  const result: SourceTemporalCandidate[] = [];
+  for (const match of Array.from(segment.text.matchAll(SOURCE_EOD_DEADLINE_PATTERN))) {
+    const localIndex = match.index ?? 0;
+    const index = segment.start + localIndex;
+    const before = segment.text.slice(0, localIndex);
+    const tail = segment.text.slice(localIndex + match[0].length);
+    const clauseBoundary = /\b(?:and\s+)?if\b|[,;]|\bbut\b/i.exec(tail);
+    const after = tail.slice(0, clauseBoundary?.index ?? tail.length);
+    const resetCue = RESET_CUE_PATTERN.exec(before);
+    if (!resetCue || UNSAFE_EOD_CONTEXT_PATTERN.test(before) || UNSAFE_EOD_CONTEXT_PATTERN.test(after)) continue;
+    if (/\bbanked\b/i.test(before) && /\b(?:distributed|completed|sent|arrived)\b/i.test(before)) continue;
+    if (/\b(?:if|unless)\b/i.test(sourceText.slice(Math.max(0, index - 160), index))) continue;
+    if (/\b(?:account|registration|register|signup|sign\s*up|eligibility)\b/i.test(before)) continue;
+    if (isInsideSourceQuote(sourceText, index)) continue;
+    const phraseStart = localIndex;
+    const phraseEnd = localIndex + match[0].length;
+    const timezoneMatches = Array.from(segment.text.matchAll(SOURCE_TIMEZONE_PATTERN))
+      .filter((zone) => {
+        const zoneIndex = zone.index ?? 0;
+        return Math.abs(zoneIndex - phraseStart) <= 24 || Math.abs(zoneIndex - phraseEnd) <= 24;
+      })
+      .map((zone) => ({ value: zone[0], index: segment.start + (zone.index ?? 0), end: segment.start + (zone.index ?? 0) + zone[0].length }));
+    const unknownZone = getUnknownAdjacentEodTimezone(segment, phraseStart, phraseEnd);
+    if (unknownZone) timezoneMatches.push(unknownZone);
+    if (timezoneMatches.length > 1) continue;
+    const timezone = timezoneMatches[0] ?? null;
+    const day: SourceDay = { value: "today", index, end: index + match[0].length };
+    const temporalExpression = sourceText.slice(Math.min(index, timezone?.index ?? index), Math.max(day.end, timezone?.end ?? day.end)).trim();
+    result.push({
+      clock: null, day, timezone,
+      semantics: {
+        temporalExpression, temporalKind: "daypart", temporalPrecision: "daypart",
+        weekday: null, relativeDayOffset: 0, relativeAmount: null, relativeUnit: null,
+        explicitDateParts: null, explicitTimeParts: null, daypart: "day", rangeKind: null,
+        explicitTimezone: timezone?.value ?? null, temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
+        resolutionSource: "deterministic", isDeadline: true,
+      },
+    });
+  }
+  return result;
 }
 
 function getSourceTemporalExpression(
@@ -756,6 +834,7 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
   const candidates: SourceTemporalCandidate[] = [];
   let rejected = false;
   for (const segment of getSourceSegments(sourceText)) {
+    candidates.push(...buildSourceEodCandidate(sourceText, segment));
     const rescheduled = buildRescheduledDayCandidate(sourceText, segment);
     if (rescheduled) {
       candidates.push(rescheduled);
@@ -769,11 +848,18 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
     }
     const days = getSourceDayMatches(segment);
     for (const clock of clockResult.clocks) {
+      const isUtcOffsetClock = Array.from(segment.text.matchAll(SOURCE_TIMEZONE_PATTERN)).some((zone) => {
+        const zoneStart = segment.start + (zone.index ?? 0);
+        const zoneEnd = zoneStart + zone[0].length;
+        return /^UTC[+-]\d{2}:\d{2}$/i.test(zone[0]) && clock.index >= zoneStart && clock.end <= zoneEnd;
+      });
+      if (isUtcOffsetClock) continue;
       const candidate = buildSourceClockCandidate(sourceText, segment, clock, days);
       if (candidate) candidates.push(candidate);
     }
     if (clockResult.clocks.length === 0) {
       for (const day of days) {
+        if (day.value === "today" && /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/i.test(segment.text)) continue;
         const candidate = buildSourceDayCandidate(sourceText, segment, day);
         if (candidate) candidates.push(candidate);
       }
@@ -1074,13 +1160,37 @@ function isCandidateWithinSpan(
  * single explicit schedule. In that case, use only source tokens that can be
  * resolved deterministically; never invent a day, clock, or timezone.
  */
+function isIndependentScheduleCandidate(candidate: SourceTemporalCandidate) {
+  const semantics = candidate.semantics;
+  return semantics.explicitTimeParts !== null ||
+    semantics.explicitDateParts !== null ||
+    semantics.weekday !== null ||
+    semantics.rangeKind !== null ||
+    semantics.relativeAmount !== null ||
+    semantics.relativeUnit !== null ||
+    semantics.daypart !== null && semantics.daypart !== "day" ||
+    semantics.relativeDayOffset !== null && semantics.relativeDayOffset !== 0 ||
+    semantics.temporalKind === "weekday" ||
+    semantics.temporalKind === "range";
+}
+
 export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
   const sourceExtraction = parseDeterministicTemporalSemantics(sourceText);
   if (sourceExtraction.rejected) return null;
 
   const geminiSemantics = parseGeminiTemporalSemantics(value, sourceText);
   const candidates = filterConditionalTemporalCandidates(sourceText, sourceExtraction.candidates);
-  const sourceSemantics = candidates.length === 1 ? candidates[0].semantics : null;
+  const hasEod = SOURCE_EOD_DEADLINE_PATTERN.test(sourceText);
+  SOURCE_EOD_DEADLINE_PATTERN.lastIndex = 0;
+  const eodCandidates = candidates.filter((candidate) => candidate.semantics.daypart === "day" && candidate.semantics.isDeadline);
+  if (hasEod && eodCandidates.length === 1) {
+    const otherResetSchedules = candidates.filter((candidate) => candidate !== eodCandidates[0] && isIndependentScheduleCandidate(candidate));
+    if (otherResetSchedules.length > 0) return null;
+    if (geminiSemantics && geminiSemantics.temporalKind !== "none" && geminiSemantics.temporalKind !== "vague" &&
+      ((geminiSemantics.relativeDayOffset !== null && geminiSemantics.relativeDayOffset !== 0) || geminiSemantics.explicitDateParts || geminiSemantics.explicitTimeParts || geminiSemantics.weekday || geminiSemantics.rangeKind || (geminiSemantics.daypart && geminiSemantics.daypart !== "day") || !["daypart", "relative_day"].includes(geminiSemantics.temporalKind))) return null;
+  }
+  if (hasEod && eodCandidates.length !== 1 && candidates.length !== 1) return null;
+  const sourceSemantics = eodCandidates?.length === 1 ? eodCandidates[0].semantics : candidates.length === 1 ? candidates[0].semantics : null;
   const untrustedGeminiClock = Boolean(
     value &&
       typeof value === "object" &&
@@ -1199,6 +1309,22 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   }
   if (!candidate) return sourceSemantics;
   if (!candidate.clock) {
+    if (candidate.semantics.daypart === "day") {
+      const aiHasSchedule = geminiSemantics.temporalKind !== "none" && geminiSemantics.temporalKind !== "vague";
+      if (aiHasSchedule && ((geminiSemantics.relativeDayOffset !== null && geminiSemantics.relativeDayOffset !== 0) || geminiSemantics.explicitDateParts || geminiSemantics.explicitTimeParts || (geminiSemantics.daypart && geminiSemantics.daypart !== "day"))) return null;
+      return {
+        ...geminiSemantics,
+        ...candidate.semantics,
+        temporalExpression: typeof (value as Record<string, unknown> | null)?.temporalExpression === "string" &&
+          /\b(?:eod|end\s+of\s+(?:the\s+)?day)\b/i.test(String((value as Record<string, unknown>).temporalExpression)) &&
+          !candidate.semantics.explicitTimezone
+          ? String((value as Record<string, unknown>).temporalExpression)
+          : candidate.semantics.temporalExpression,
+        temporalConfidence: Math.min(geminiSemantics.temporalConfidence, candidate.semantics.temporalConfidence),
+        resolutionSource: "merged",
+        isDeadline: true,
+      };
+    }
     return {
       ...geminiSemantics,
       temporalExpression: candidate.semantics.temporalExpression,
@@ -1277,6 +1403,7 @@ function getTimeZone(value: string | null): ResolvedTimeZone | null {
     "EASTERN TIME": "America/New_York",
     UTC: "UTC",
     GMT: "UTC",
+    JST: "Asia/Tokyo",
   };
   const alias = aliases[normalized.toUpperCase()];
   if (alias) return { name: alias };
@@ -1287,7 +1414,10 @@ function getTimeZone(value: string | null): ResolvedTimeZone | null {
   }
   const explicitOffset = normalized.match(/^UTC([+-])(\d{2}):(\d{2})$/i);
   if (explicitOffset) {
-    const minutes = Number(explicitOffset[2]) * 60 + Number(explicitOffset[3]);
+    const hours = Number(explicitOffset[2]);
+    const minutePart = Number(explicitOffset[3]);
+    const minutes = hours * 60 + minutePart;
+    if (minutePart > 59 || minutes > 14 * 60 || (hours === 14 && minutePart !== 0)) return null;
     return { name: normalized.toUpperCase(), offsetMinutes: explicitOffset[1] === "+" ? minutes : -minutes };
   }
   try {
@@ -1532,6 +1662,7 @@ export function resolveTiboTemporalSchedule(
   let precision = semantics.temporalPrecision;
   let unresolvedInterpretation = false;
   let resolvedIsDeadline = false;
+  if (semantics.isDeadline) resolvedIsDeadline = true;
 
   if (semantics.temporalKind === "relative_duration" && semantics.relativeAmount && semantics.relativeUnit) {
     if (semantics.relativeUnit === "days") {

@@ -1338,9 +1338,103 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v7");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
   } finally {
     restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("persists a source-grounded EOD deadline while retaining Gemini temporal audit fields", async () => {
+  const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]])) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice", confidence: 0.98, temporalDirection: "future",
+    temporalExpression: "by EOD", temporalKind: "daypart", temporalPrecision: "daypart",
+    daypart: null, temporalConfidence: 0.9, evidenceQuote: "Global reset by EOD.",
+    reasonJa: "本日中に実施される予告です。", noticeToExecution: "by EOD",
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2109045392684032299",
+      text: "Global reset by EOD. May the tokens do good things for you.",
+      tweetUrl: "https://x.com/thsottiaux/status/2109045392684032299",
+      tweetCreatedAt: "2026-10-10T22:16:20.000Z",
+    }));
+    assert.equal(response.status, 200);
+    const body = requestBodies[0] as Record<string, unknown>;
+    assert.equal(body.signal_type, "official_notice");
+    assert.equal(body.ai_temporal_expression, "by EOD");
+    assert.equal(body.ai_temporal_kind, "daypart");
+    assert.equal(body.temporal_resolution_source, "merged");
+    assert.equal(body.temporal_kind, "daypart");
+    assert.equal(body.temporal_precision, "daypart");
+    assert.equal(body.temporal_timezone, "America/Los_Angeles");
+    assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
+    assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
+    assert.equal(body.temporal_resolution_status, "resolved");
+    assert.equal(body.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("resolves and stores EOD notices when Gemini is off or returns an API error", async () => {
+  const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]])) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  let restoreGemini: (() => void) | null = null;
+
+  try {
+    process.env.GEMINI_CLASSIFICATION_MODE = "off";
+    const base = {
+      text: "Global reset by EOD. May the tokens do good things for you.",
+      tweetCreatedAt: "2026-10-10T22:16:20.000Z",
+    };
+    let response = await POST(buildRequest({ ...base, tweetId: "2109045392684032299" }));
+    assert.equal(response.status, 200);
+    let body = requestBodies.find((item): item is Record<string, unknown> => (item as Record<string, unknown>).tweet_id === "2109045392684032299");
+    assert.ok(body);
+    assert.equal(body.signal_type, "official_notice");
+    assert.equal(body.classification_source, "rule");
+    assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
+    assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
+    assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
+
+    process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+    process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+    restoreGemini = installGeminiHttpErrorMock(503);
+    response = await POST(buildRequest({ ...base, tweetId: "2109045392684032300" }));
+    assert.equal(response.status, 200);
+    body = requestBodies.find((item): item is Record<string, unknown> => (item as Record<string, unknown>).tweet_id === "2109045392684032300");
+    assert.ok(body);
+    assert.equal(body.signal_type, "official_notice");
+    assert.equal(body.ai_classification_status, "api_error");
+    assert.equal(body.classification_source, "rule_fallback");
+    assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
+    assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
+    assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
+  } finally {
+    restoreGemini?.();
     restoreFetch();
     restoreEnvironment(previous);
   }
@@ -1404,7 +1498,7 @@ test("accepted concealed teaser persists its own today window without becoming a
     assert.equal(upsertBody.expected_start_at, "2026-09-29T07:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-09-30T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v7");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
     assert.equal(upsertBody.codex_operational_status, null);
   } finally {
     restoreGemini();

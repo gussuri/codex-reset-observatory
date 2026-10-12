@@ -835,6 +835,60 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 
+test("publishes an EOD notice window in three locales and consumes it after the related completed reset", () => {
+  const noticeId = "2109045392684032299";
+  const source = `https://x.com/thsottiaux/status/${noticeId}`;
+  const expectedStartAt = "2026-10-10T22:16:20.000Z";
+  const expectedEndAt = "2026-10-11T07:00:00.000Z";
+  const notice = {
+    tweet_id: noticeId, signal_type: "official_notice" as const, text: "Global reset by EOD. May the tokens do good things for you.",
+    tweet_url: source, tweet_created_at: expectedStartAt, expires_at: "2026-10-11T15:00:00.000Z",
+    confidence: 0.98, verification_status: "auto_unverified" as const,
+    temporal_expression: "by EOD", temporal_kind: "daypart" as const, temporal_precision: "daypart" as const,
+    temporal_timezone: "America/Los_Angeles", temporal_confidence: 0.95, temporal_resolution_source: "merged" as const,
+    expected_start_at: expectedStartAt, expected_end_at: expectedEndAt,
+    temporal_resolution_status: "resolved" as const, temporal_resolution_version: "tibo-temporal-v8",
+  };
+  const beforeCompletion = getLocalRadarData({
+    calculationNow: new Date("2026-10-11T00:00:00.000Z"), activeTiboSignals: [notice],
+  });
+  const reset = {
+    tweet_id: "2109045392684032999", signal_type: "reset_executed" as const,
+    text: "We reset usage limits for all users.", tweet_url: "https://x.com/thsottiaux/status/2109045392684032999",
+    tweet_created_at: "2026-10-11T06:30:00.000Z", confidence: 0.98, verification_status: "confirmed" as const,
+    related_notice: notice,
+  };
+  const afterCompletion = getLocalRadarData({
+    calculationNow: new Date("2026-10-11T06:35:00.000Z"), activeTiboSignals: [notice], formalTiboResets: [reset],
+  });
+  const localizedWindow = {
+    ja: /07:16 JST ～ .*16:00 JST/,
+    en: /7:16 AM JST to .*4:00 PM JST/,
+    zh: /07:16 JST 至 .*16:00 JST/,
+  } as const;
+  let completedHistoryKey: string | null = null;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const before = toPublicRadarSnapshot(beforeCompletion, locale, { calculationNow: new Date("2026-10-11T00:00:00.000Z") });
+    assert.equal(before.viewModel.activeWindow.kind, "official");
+    assert.equal(before.viewModel.activeWindow.expectedAt, expectedStartAt);
+    assert.equal(before.viewModel.activeWindow.expectedEndAt, expectedEndAt);
+    assert.equal(before.viewModel.activeWindow.source, source);
+    const beforeHtml = renderToStaticMarkup(React.createElement(RadarDashboard, { initialData: before, locale }));
+    const noticeStart = beforeHtml.indexOf(locale === "ja" ? "リセット予定" : locale === "en" ? "Planned reset" : "重置安排");
+    const sourceStart = beforeHtml.indexOf(locale === "ja" ? "ソース" : locale === "en" ? "Source" : "来源", noticeStart);
+    assert.ok(noticeStart >= 0 && sourceStart > noticeStart);
+    assert.match(beforeHtml.slice(noticeStart, sourceStart).replace(/<[^>]*>/g, ""), localizedWindow[locale]);
+
+    const after = toPublicRadarSnapshot(afterCompletion, locale, { calculationNow: new Date("2026-10-11T06:35:00.000Z") });
+    assert.notEqual(after.viewModel.activeWindow.source, source);
+    const completion = after.viewModel.recentHistory.filter((item) => item.key.includes("2109045392684032999"));
+    assert.equal(completion.length, 1);
+    if (completedHistoryKey === null) completedHistoryKey = completion[0].key;
+    else assert.equal(completion[0].key, completedHistoryKey);
+  }
+});
+
 test("renders a reset end-of-day notice as a deadline without changing its internal window", () => {
   const openedAt = "2026-09-05T00:39:25.000Z";
   const expectedStartAt = "2026-09-05T00:39:25.000Z";
