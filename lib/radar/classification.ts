@@ -148,12 +148,23 @@ export function isPureHypotheticalReset(text: string) {
 function isQuotedAt(text: string, index: number) {
   const before = text.slice(0, index);
   return (before.match(/"/g)?.length ?? 0) % 2 === 1 ||
-    before.lastIndexOf("“") > before.lastIndexOf("”");
+    (before.match(/“/g)?.length ?? 0) > (before.match(/”/g)?.length ?? 0);
 }
 
 function hasExplicitResetEodDeadlineNotice(text: string) {
-  const segments = text.split(/[.!?;\n]+/);
-  return segments.some((segment) => {
+  const segments: Array<{ text: string; start: number }> = [];
+  const boundary = /[.!?;\n]+/g;
+  let start = 0;
+  for (const match of Array.from(text.matchAll(boundary))) {
+    const index = match.index ?? start;
+    const raw = text.slice(start, index);
+    const leading = raw.length - raw.trimStart().length;
+    if (raw.trim()) segments.push({ text: raw.trim(), start: start + leading });
+    start = index + match[0].length;
+  }
+  const tail = text.slice(start);
+  if (tail.trim()) segments.push({ text: tail.trim(), start: start + tail.length - tail.trimStart().length });
+  return segments.some(({ text: segment, start: segmentStart }) => {
     const deadline = EXPLICIT_EOD_DEADLINE_PATTERN.exec(segment);
     if (!deadline || deadline.index === undefined) return false;
     const resetMatches = Array.from(segment.matchAll(/\breset\b/gi));
@@ -164,7 +175,7 @@ function hasExplicitResetEodDeadlineNotice(text: string) {
 
     const beforeReset = segment.slice(0, reset.index);
     const afterReset = segment.slice(reset.index + reset[0].length, deadline.index).trim();
-    if (isQuotedAt(segment, deadline.index)) return false;
+    if (isQuotedAt(text, segmentStart + deadline.index)) return false;
     if (/\b(?:if|unless|assuming|suppose|what\s+if)\b/i.test(beforeReset)) return false;
     if (/\b(?:no|not|never|cancel(?:led|ed)?|canceled|wish|imagine|could|would|might|maybe|perhaps)\b/i.test(beforeReset)) return false;
     if (/\b(?:no|not|never|cancel(?:led|ed)?|canceled|wish|imagine|could|would|might|maybe|perhaps)\b/i.test(afterReset)) return false;
@@ -174,7 +185,8 @@ function hasExplicitResetEodDeadlineNotice(text: string) {
     if (/\bbanked\b/i.test(segment)) return false;
 
     if (!afterReset) return true;
-    return /^(?:(?:will|shall|is|are|going\s+to|planned\s+to|scheduled\s+to|expected\s+to|set\s+to)\s+)?(?:land(?:s|ed|ing)?|happen(?:s|ed|ing)?|occur(?:s|red|ring)?|be\s+(?:reset|done|completed|executed)|reset|scheduled|planned|expected)\s*$/i.test(afterReset);
+    if (/^(?:UTC|GMT|JST|PST|PDT|EST|EDT|PT|ET|[A-Za-z]+\/[A-Za-z_]+)$/i.test(afterReset)) return true;
+    return /^(?:(?:UTC|GMT|JST|PST|PDT|EST|EDT|PT|ET|[A-Za-z]+\/[A-Za-z_]+)\s+)?(?:(?:will|shall|is|are|going\s+to|planned\s+to|scheduled\s+to|expected\s+to|set\s+to)\s+)?(?:land(?:s|ed|ing)?|happen(?:s|ed|ing)?|occur(?:s|red|ring)?|be\s+(?:reset|done|completed|executed)|reset|scheduled|planned|expected)\s*$/i.test(afterReset);
   });
 }
 

@@ -211,7 +211,7 @@ const SOURCE_CLOCK_PATTERN =
 const INVALID_MERIDIEM_CLOCK_PATTERN =
   /\b(?:0|(?:1[3-9]|2[0-3])|\d{3,})\s*(?::\d{2})?\s*am\b|\b(?:0|\d{3,})\s*(?::\d{2})?\s*pm\b/i;
 const SOURCE_TIMEZONE_PATTERN =
-  /\b(?:UTC|GMT)(?:[+-]\d{2}:\d{2})?\b|\b(?:PST|PDT|EST|EDT|PT|ET)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
+  /\b(?:UTC|GMT)(?:[+-]\d{2}:\d{2})?\b|\b(?:PST|PDT|EST|EDT|PT|ET|JST)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
 const SOURCE_DAY_PATTERN =
   /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
@@ -519,6 +519,17 @@ function getSourceTimezoneMatch(segment: SourceSegment, clock: Pick<SourceClock,
 const SOURCE_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/gi;
 const UNSAFE_EOD_CONTEXT_PATTERN = /\b(?:if|unless|wish|hope|hopefully|maybe|might|could|would|perhaps|not|never|no|was|were|had|landed|reset\s+landed|yesterday|ago|used\s+to|cache|server|registration|register|sign\s*up|signup|eligibility)\b/i;
 
+function isInsideSourceQuote(sourceText: string, index: number) {
+  const before = sourceText.slice(0, index);
+  const straightOpen = (before.match(/"/g)?.length ?? 0) % 2 === 1;
+  let curlyOpen = false;
+  for (const char of before) {
+    if (char === "“") curlyOpen = true;
+    if (char === "”") curlyOpen = false;
+  }
+  return straightOpen || curlyOpen;
+}
+
 function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): SourceTemporalCandidate[] {
   if (!RESET_CUE_PATTERN.test(segment.text) || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(segment.text)) return [];
   const result: SourceTemporalCandidate[] = [];
@@ -534,17 +545,31 @@ function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): So
     if (/\bbanked\b/i.test(before) && /\b(?:distributed|completed|sent|arrived)\b/i.test(before)) continue;
     if (/\b(?:if|unless)\b/i.test(sourceText.slice(Math.max(0, index - 160), index))) continue;
     if (/\b(?:account|registration|register|signup|sign\s*up|eligibility)\b/i.test(before)) continue;
-    const prefix = segment.text.slice(0, localIndex);
-    const straightQuotes = prefix.match(/\"/g)?.length ?? 0;
-    const curlyQuotes = (prefix.match(/“/g)?.length ?? 0) - (prefix.match(/”/g)?.length ?? 0);
-    if (straightQuotes % 2 !== 0 || curlyQuotes > 0) continue;
-    const timezoneMatches = Array.from(segment.text.slice(0, localIndex + match[0].length + 24).matchAll(SOURCE_TIMEZONE_PATTERN))
-      .filter((zone) => Math.abs((zone.index ?? 0) - (localIndex + match[0].length)) <= 80)
+    if (isInsideSourceQuote(sourceText, index)) continue;
+    const phraseStart = localIndex;
+    const phraseEnd = localIndex + match[0].length;
+    const timezoneMatches = Array.from(segment.text.matchAll(SOURCE_TIMEZONE_PATTERN))
+      .filter((zone) => {
+        const zoneIndex = zone.index ?? 0;
+        return Math.abs(zoneIndex - phraseStart) <= 24 || Math.abs(zoneIndex - phraseEnd) <= 24;
+      })
       .map((zone) => ({ value: zone[0], index: segment.start + (zone.index ?? 0), end: segment.start + (zone.index ?? 0) + zone[0].length }));
+    const unknownAdjacentZone = /(?:\b([A-Z]{3,5})\s+)?\bby\s+(?:EOD|end\s+of\s+(?:the\s+)?day)\b(?:\s+([A-Z]{3,5}))?(?=$|[.!?;,\s])/i.exec(segment.text);
+    const unknownToken = unknownAdjacentZone && [unknownAdjacentZone[1], unknownAdjacentZone[2]]
+      .find((token) => token && token === token.toUpperCase());
+    if (unknownToken &&
+      !new RegExp(SOURCE_TIMEZONE_PATTERN.source, SOURCE_TIMEZONE_PATTERN.flags.replace("g", "")).test(unknownToken)) {
+      const unknownIndex = unknownAdjacentZone[1]
+        ? segment.start + (unknownAdjacentZone.index ?? 0)
+        : segment.start + (unknownAdjacentZone.index ?? 0) + unknownAdjacentZone[0].lastIndexOf(unknownToken);
+      timezoneMatches.push({ value: unknownToken, index: unknownIndex, end: unknownIndex + unknownToken.length });
+    } else {
+      SOURCE_TIMEZONE_PATTERN.lastIndex = 0;
+    }
     if (timezoneMatches.length > 1) continue;
     const timezone = timezoneMatches[0] ?? null;
     const day: SourceDay = { value: "today", index, end: index + match[0].length };
-    const temporalExpression = sourceText.slice(index, timezone?.end ?? day.end).trim();
+    const temporalExpression = sourceText.slice(Math.min(index, timezone?.index ?? index), Math.max(day.end, timezone?.end ?? day.end)).trim();
     result.push({
       clock: null, day, timezone,
       semantics: {
@@ -811,6 +836,12 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
     }
     const days = getSourceDayMatches(segment);
     for (const clock of clockResult.clocks) {
+      const isUtcOffsetClock = Array.from(segment.text.matchAll(SOURCE_TIMEZONE_PATTERN)).some((zone) => {
+        const zoneStart = segment.start + (zone.index ?? 0);
+        const zoneEnd = zoneStart + zone[0].length;
+        return /^UTC[+-]\d{2}:\d{2}$/i.test(zone[0]) && clock.index >= zoneStart && clock.end <= zoneEnd;
+      });
+      if (isUtcOffsetClock) continue;
       const candidate = buildSourceClockCandidate(sourceText, segment, clock, days);
       if (candidate) candidates.push(candidate);
     }
@@ -1127,7 +1158,11 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
   SOURCE_EOD_DEADLINE_PATTERN.lastIndex = 0;
   const eodCandidates = candidates.filter((candidate) => candidate.semantics.daypart === "day" && candidate.semantics.isDeadline);
   if (hasEod && eodCandidates.length === 1) {
-    const otherResetSchedules = candidates.filter((candidate) => candidate !== eodCandidates[0] && candidate.semantics.relativeDayOffset !== 0);
+    const otherResetSchedules = candidates.filter((candidate) => candidate !== eodCandidates[0] && (
+      candidate.semantics.explicitTimeParts !== null ||
+      candidate.semantics.relativeDayOffset !== null && candidate.semantics.relativeDayOffset !== 0 ||
+      candidate.semantics.explicitDateParts !== null
+    ));
     if (otherResetSchedules.length > 0) return null;
     if (geminiSemantics && geminiSemantics.temporalKind !== "none" && geminiSemantics.temporalKind !== "vague" &&
       ((geminiSemantics.relativeDayOffset !== null && geminiSemantics.relativeDayOffset !== 0) || geminiSemantics.explicitDateParts || geminiSemantics.explicitTimeParts || (geminiSemantics.daypart && geminiSemantics.daypart !== "day"))) return null;
@@ -1208,9 +1243,9 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
       const sourceDeadline = isDeadlineTimeExpression(candidate.semantics.temporalExpression ?? "");
       return {
         ...geminiSemantics,
-        temporalExpression: (value && typeof value === "object" && typeof (value as Record<string, unknown>).temporalExpression === "string")
-          ? String((value as Record<string, unknown>).temporalExpression)
-          : geminiSemantics.temporalExpression ?? candidate.semantics.temporalExpression,
+        temporalExpression: sourceDeadline
+          ? candidate.semantics.temporalExpression
+          : geminiSemantics.temporalExpression,
         temporalKind: sourceDeadline ? candidate.semantics.temporalKind : geminiSemantics.temporalKind,
         temporalPrecision: sourceDeadline
           ? candidate.semantics.temporalPrecision
@@ -1258,7 +1293,9 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
       return {
         ...geminiSemantics,
         ...candidate.semantics,
-        temporalExpression: typeof (value as Record<string, unknown> | null)?.temporalExpression === "string"
+        temporalExpression: typeof (value as Record<string, unknown> | null)?.temporalExpression === "string" &&
+          /\b(?:eod|end\s+of\s+(?:the\s+)?day)\b/i.test(String((value as Record<string, unknown>).temporalExpression)) &&
+          !candidate.semantics.explicitTimezone
           ? String((value as Record<string, unknown>).temporalExpression)
           : candidate.semantics.temporalExpression,
         temporalConfidence: Math.min(geminiSemantics.temporalConfidence, candidate.semantics.temporalConfidence),
@@ -1344,6 +1381,7 @@ function getTimeZone(value: string | null): ResolvedTimeZone | null {
     "EASTERN TIME": "America/New_York",
     UTC: "UTC",
     GMT: "UTC",
+    JST: "Asia/Tokyo",
   };
   const alias = aliases[normalized.toUpperCase()];
   if (alias) return { name: alias };
@@ -1354,7 +1392,10 @@ function getTimeZone(value: string | null): ResolvedTimeZone | null {
   }
   const explicitOffset = normalized.match(/^UTC([+-])(\d{2}):(\d{2})$/i);
   if (explicitOffset) {
-    const minutes = Number(explicitOffset[2]) * 60 + Number(explicitOffset[3]);
+    const hours = Number(explicitOffset[2]);
+    const minutePart = Number(explicitOffset[3]);
+    const minutes = hours * 60 + minutePart;
+    if (minutePart > 59 || minutes > 14 * 60 || (hours === 14 && minutePart !== 0)) return null;
     return { name: normalized.toUpperCase(), offsetMinutes: explicitOffset[1] === "+" ? minutes : -minutes };
   }
   try {

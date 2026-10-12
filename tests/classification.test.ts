@@ -47,6 +47,7 @@ test("explicit reset implementation deadlines by EOD are official notices withou
     "Global reset by EOD.",
     "Global reset by end of day.",
     "Usage limits will be reset by end of the day.",
+    "Global reset UTC by EOD.",
   ];
   for (const text of positiveCases) {
     assert.equal(
@@ -73,6 +74,20 @@ test("explicit reset implementation deadlines by EOD are official notices withou
       text,
     );
   }
+});
+
+test("quoted EOD examples stay quoted across sentence and line boundaries", () => {
+  for (const text of [
+    '"Maintenance today. Global reset by EOD."',
+    "“Maintenance today. Global reset by EOD.”",
+    '"Maintenance today.\nGlobal reset by EOD."',
+  ]) {
+    assert.equal(classifyTiboTweet(text, "https://x.com/thsottiaux/status/2109045392684032299").signalType, "irrelevant", text);
+  }
+  assert.equal(
+    classifyTiboTweet('"Maintenance today." Global reset by EOD.', "https://x.com/thsottiaux/status/2109045392684032299").signalType,
+    "official_notice",
+  );
 });
 
 test("classifyTiboTweet correctly classifies reset_executed (immediate resets)", () => {
