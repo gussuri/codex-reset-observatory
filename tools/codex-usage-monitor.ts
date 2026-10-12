@@ -1356,7 +1356,8 @@ export async function runCodexUsageMonitor(
       logger("pending_queue_lock_conflict", {
         reason: error.reason,
         action: error.reason === "pending_posts_lock_recovery_orphaned" ||
-          error.reason === "pending_posts_lock_recovery_corrupt"
+          error.reason === "pending_posts_lock_recovery_corrupt" ||
+          error.reason === "pending_posts_lock_identity_unknown"
           ? "manual_review_required_queue_untouched"
           : "monitor_exited_without_reading_or_writing_queue",
       });

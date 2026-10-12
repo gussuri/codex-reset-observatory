@@ -479,6 +479,222 @@ test("two real processes cannot reclaim the same stale lock or displace the new 
   }
 });
 
+test("a legacy lock owned by a reused PID is reclaimed without changing the pending queue", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-reused-pid-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    const store = createPendingMonitorPostStore(queuePath);
+    store.save([{ reason: "initial", snapshot: snapshot("2026-10-11T00:45:00.000Z") }]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    writeFileSync(lockPath, JSON.stringify({
+      schemaVersion: 1,
+      pid: process.pid,
+      token: "01234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-10-11T00:53:56.754Z",
+    }));
+
+    const reusedProcessStart = Date.parse("2026-10-13T00:22:21.213Z");
+    const lease = acquirePendingMonitorPostLock(queuePath, {
+      getProcessStartTime: () => reusedProcessStart,
+    });
+    const newOwner = JSON.parse(readFileSync(lockPath, "utf8")) as {
+      schemaVersion: number;
+      pid: number;
+      processStartedAt: number;
+    };
+    assert.equal(newOwner.schemaVersion, 2);
+    assert.equal(newOwner.pid, process.pid);
+    assert.equal(newOwner.processStartedAt, reusedProcessStart);
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+    lease.release();
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema 1 pending queue fixtures load, save, and reload without losing posts or order", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-v1-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const originalPosts = [
+      { reason: "initial", snapshot: { observedAt: "2026-10-11T00:45:00.000Z", limitId: "codex", planType: "plus", usedPercent: 20, windowDurationMins: 10080, resetsAt: 1_787_012_727 } },
+      { reason: "recovery_candidate", snapshot: { observedAt: "2026-10-11T00:53:00.000Z", limitId: "codex", planType: "plus", usedPercent: 0, windowDurationMins: 10080, resetsAt: 1_787_012_727, bankedResetAvailableCount: 2 } },
+    ];
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: originalPosts }));
+
+    const store = createPendingMonitorPostStore(queuePath);
+    assert.deepEqual(store.load(), originalPosts);
+    store.save(store.load());
+    const saved = JSON.parse(readFileSync(queuePath, "utf8")) as { schemaVersion: number; pendingPosts: unknown[] };
+    assert.equal(saved.schemaVersion, 1);
+    assert.deepEqual(saved.pendingPosts, originalPosts);
+    assert.deepEqual(createPendingMonitorPostStore(queuePath).load(), originalPosts);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema 1 empty queue fixture loads and remains schema 1 after save", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-empty-queue-v1-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: [] }));
+    const store = createPendingMonitorPostStore(queuePath);
+    assert.deepEqual(store.load(), []);
+    store.save(store.load());
+    assert.deepEqual(JSON.parse(readFileSync(queuePath, "utf8")), { schemaVersion: 1, pendingPosts: [] });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a schema 1 queue remains readable after recovering a schema 1 stale lock", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-lock-v1-upgrade-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    const originalPosts = [{ reason: "recovery_candidate", snapshot: { observedAt: "2026-10-11T00:53:00.000Z", limitId: "codex", planType: "plus", usedPercent: 0, windowDurationMins: 10080, resetsAt: 1_787_012_727 } }];
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 1, pendingPosts: originalPosts }));
+    writeFileSync(lockPath, JSON.stringify({ schemaVersion: 1, pid: process.pid, token: "41234567-89ab-4cde-8fab-0123456789ab", acquiredAt: "2026-10-11T00:53:56.754Z" }));
+
+    const lease = acquirePendingMonitorPostLock(queuePath, { getProcessStartTime: () => Date.parse("2026-10-13T00:22:21.213Z") });
+    try {
+      assert.deepEqual(createPendingMonitorPostStore(queuePath).load(), originalPosts);
+      assert.equal(JSON.parse(readFileSync(lockPath, "utf8")).schemaVersion, 2);
+      assert.equal(JSON.parse(readFileSync(queuePath, "utf8")).schemaVersion, 1);
+    } finally {
+      lease.release();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pending queue rejects schema versions other than 1", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-queue-invalid-schema-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    writeFileSync(queuePath, JSON.stringify({ schemaVersion: 2, pendingPosts: [] }));
+    assert.throws(() => createPendingMonitorPostStore(queuePath).load(), /pending_posts_corrupt/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a matching schema 2 process identity remains the live lock owner", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-live-v2-owner-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    createPendingMonitorPostStore(queuePath).save([]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    const processStartedAt = Date.parse("2026-10-12T23:50:00.000Z");
+    const record = JSON.stringify({
+      schemaVersion: 2,
+      pid: process.pid,
+      token: "11234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-10-13T00:00:00.000Z",
+      processStartedAt,
+    });
+    writeFileSync(lockPath, record);
+
+    assert.throws(
+      () => acquirePendingMonitorPostLock(queuePath, { getProcessStartTime: () => processStartedAt }),
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_owned",
+    );
+    assert.equal(readFileSync(lockPath, "utf8"), record);
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an unknown live process identity fails closed without touching lock or queue", async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-unknown-owner-"));
+  const ownerProcess = spawnProcess(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  try {
+    assert.ok(ownerProcess.pid);
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    createPendingMonitorPostStore(queuePath).save([]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    const record = JSON.stringify({
+      schemaVersion: 1,
+      pid: ownerProcess.pid,
+      token: "21234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-10-13T00:00:00.000Z",
+    });
+    writeFileSync(lockPath, record);
+
+    assert.throws(
+      () => acquirePendingMonitorPostLock(queuePath, {
+        getProcessStartTime: (pid) => pid === process.pid ? Date.parse("2026-10-12T00:00:00.000Z") : null,
+      }),
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_identity_unknown",
+    );
+    assert.equal(readFileSync(lockPath, "utf8"), record);
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+    assert.equal(existsSync(`${lockPath}.recovery`), false);
+  } finally {
+    if (ownerProcess.exitCode === null) {
+      ownerProcess.kill();
+      await once(ownerProcess, "exit");
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("the monitor fails closed when it cannot record its own process identity", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-self-identity-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const store = createPendingMonitorPostStore(queuePath);
+    store.save([]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+
+    assert.throws(
+      () => acquirePendingMonitorPostLock(queuePath, { getProcessStartTime: () => null }),
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_identity_unknown",
+    );
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+    assert.equal(existsSync(`${queuePath}.lock`), false);
+    assert.equal(existsSync(`${queuePath}.lock.recovery`), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema 2 lock records missing process identity are treated as corrupt", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-missing-identity-"));
+  try {
+    const queuePath = path.join(directory, "pending-posts.json");
+    const lockPath = `${queuePath}.lock`;
+    createPendingMonitorPostStore(queuePath).save([]);
+    const originalQueue = readFileSync(queuePath, "utf8");
+    const record = JSON.stringify({
+      schemaVersion: 2,
+      pid: process.pid,
+      token: "31234567-89ab-4cde-8fab-0123456789ab",
+      acquiredAt: "2026-10-13T00:00:00.000Z",
+    });
+    writeFileSync(lockPath, record);
+
+    assert.throws(
+      () => acquirePendingMonitorPostLock(queuePath, { getProcessStartTime: () => Date.parse("2026-10-12T00:00:00.000Z") }),
+      (error: unknown) => error instanceof PendingMonitorPostLockError && error.reason === "pending_posts_lock_corrupt",
+    );
+    assert.equal(readFileSync(lockPath, "utf8"), record);
+    assert.equal(readFileSync(queuePath, "utf8"), originalQueue);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("a corrupt process lock is reported and never replaced", () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "codex-usage-monitor-corrupt-lock-"));
   try {

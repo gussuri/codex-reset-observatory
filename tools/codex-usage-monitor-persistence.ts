@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import type { PendingMonitorPost } from "./codex-usage-monitor";
 
-const PENDING_POSTS_SCHEMA_VERSION = 1;
+const PENDING_POSTS_QUEUE_SCHEMA_VERSION = 1;
+const PENDING_POSTS_LOCK_SCHEMA_VERSION = 2;
+const PROCESS_START_TIME_TOLERANCE_MS = 2_000;
+let cachedCurrentProcessStartTime: number | null | undefined;
 export const MAX_SHORT_PENDING_POST_FAILURES = 3;
 export const DEFAULT_PENDING_POST_RECOVERY_BACKOFF_MS = [
   5 * 60_000,
@@ -33,7 +37,8 @@ export type PendingMonitorPostLockFailure =
   | "pending_posts_lock_race"
   | "pending_posts_lock_recovery_busy"
   | "pending_posts_lock_recovery_orphaned"
-  | "pending_posts_lock_recovery_corrupt";
+  | "pending_posts_lock_recovery_corrupt"
+  | "pending_posts_lock_identity_unknown";
 
 export class PendingMonitorPostLockError extends Error {
   constructor(readonly reason: PendingMonitorPostLockFailure) {
@@ -43,10 +48,16 @@ export class PendingMonitorPostLockError extends Error {
 }
 
 type PendingMonitorPostLockRecord = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   pid: number;
   token: string;
   acquiredAt: string;
+  processStartedAt?: number;
+};
+
+export type PendingMonitorPostLockOptions = {
+  /** Injectable OS metadata boundary for deterministic PID-reuse tests. */
+  getProcessStartTime?: (pid: number) => number | null;
 };
 
 function parsePendingMonitorPostLock(raw: string): PendingMonitorPostLockRecord | null {
@@ -55,14 +66,17 @@ function parsePendingMonitorPostLock(raw: string): PendingMonitorPostLockRecord 
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const record = value as Record<string, unknown>;
     if (
-      record.schemaVersion !== 1 ||
+      record.schemaVersion !== 1 && record.schemaVersion !== 2 ||
       typeof record.pid !== "number" ||
       !Number.isSafeInteger(record.pid) ||
       record.pid <= 0 ||
       typeof record.token !== "string" ||
       !/^[0-9a-f-]{36}$/i.test(record.token) ||
       typeof record.acquiredAt !== "string" ||
-      !Number.isFinite(Date.parse(record.acquiredAt))
+      !Number.isFinite(Date.parse(record.acquiredAt)) ||
+      record.processStartedAt !== undefined &&
+        (typeof record.processStartedAt !== "number" || !Number.isFinite(record.processStartedAt) || record.processStartedAt < 0) ||
+      record.schemaVersion === 2 && record.processStartedAt === undefined
     ) {
       return null;
     }
@@ -82,6 +96,92 @@ function isProcessAlive(pid: number) {
     if (code === "EPERM") return true;
     throw new PendingMonitorPostLockError("pending_posts_lock_failed");
   }
+}
+
+function readProcessStartTime(pid: number): number | null {
+  try {
+    if (process.platform === "win32") {
+      // PID is validated as a positive safe integer before it reaches this static PowerShell command.
+      const script = `$process = Get-CimInstance -ClassName Win32_Process -Filter 'ProcessId = ${pid}' -ErrorAction Stop; if ($null -ne $process) { [Console]::Out.WriteLine(([DateTimeOffset]$process.CreationDate).ToUnixTimeMilliseconds()) }`;
+      const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+        encoding: "utf8",
+        timeout: 5_000,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      const value = Number(output);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+
+    if (process.platform === "linux") {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+      const commandEnd = stat.lastIndexOf(")");
+      if (commandEnd < 0) return null;
+      const fields = stat.slice(commandEnd + 1).trim().split(/\s+/);
+      const startTicks = Number(fields[19]);
+      const bootTime = Number(/^btime\s+(\d+)$/m.exec(fs.readFileSync("/proc/stat", "utf8"))?.[1]);
+      const ticksPerSecond = Number(execFileSync("getconf", ["CLK_TCK"], {
+        encoding: "utf8",
+        timeout: 2_000,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim());
+      if (!Number.isFinite(startTicks) || !Number.isFinite(bootTime) || !Number.isFinite(ticksPerSecond) || ticksPerSecond <= 0) {
+        return null;
+      }
+      return bootTime * 1_000 + startTicks / ticksPerSecond * 1_000;
+    }
+
+    if (process.platform === "darwin") {
+      const output = execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
+        encoding: "utf8",
+        timeout: 2_000,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { ...process.env, LC_ALL: "C" },
+      }).trim();
+      const value = Date.parse(output);
+      return Number.isFinite(value) ? value : null;
+    }
+  } catch {
+    // An inaccessible process or unavailable identity provider is not evidence that the PID is stale.
+  }
+  return null;
+}
+
+function getCurrentProcessStartTime(getStartTime: (pid: number) => number | null) {
+  if (getStartTime !== readProcessStartTime) {
+    const injected = getStartTime(process.pid);
+    return Number.isFinite(injected) && injected !== null && injected >= 0 ? injected : null;
+  }
+  if (cachedCurrentProcessStartTime === undefined) {
+    const identity = getStartTime(process.pid);
+    cachedCurrentProcessStartTime = Number.isFinite(identity) && identity !== null && identity >= 0 ? identity : null;
+  }
+  return cachedCurrentProcessStartTime;
+}
+
+function isLockOwnedByLiveProcess(
+  record: PendingMonitorPostLockRecord,
+  getStartTime: (pid: number) => number | null,
+) {
+  if (!isProcessAlive(record.pid)) return false;
+  const processStartedAt = getStartTime(record.pid);
+  if (!Number.isFinite(processStartedAt) || processStartedAt === null || processStartedAt < 0) {
+    throw new PendingMonitorPostLockError("pending_posts_lock_identity_unknown");
+  }
+
+  if (record.processStartedAt !== undefined &&
+    Math.abs(processStartedAt - record.processStartedAt) <= PROCESS_START_TIME_TOLERANCE_MS) {
+    return true;
+  }
+
+  const acquiredAt = Date.parse(record.acquiredAt);
+  if (processStartedAt > acquiredAt + PROCESS_START_TIME_TOLERANCE_MS) return false;
+  if (record.processStartedAt !== undefined) {
+    throw new PendingMonitorPostLockError("pending_posts_lock_identity_unknown");
+  }
+  return true;
 }
 
 function diagnoseExistingPendingMonitorPostRecoveryGate(gatePath: string) {
@@ -104,12 +204,13 @@ function diagnoseExistingPendingMonitorPostRecoveryGate(gatePath: string) {
     : "pending_posts_lock_recovery_orphaned" as const;
 }
 
-function acquirePendingMonitorPostRecoveryGate(gatePath: string) {
+function acquirePendingMonitorPostRecoveryGate(gatePath: string, processStartedAt: number) {
   const record: PendingMonitorPostLockRecord = {
-    schemaVersion: 1,
+    schemaVersion: PENDING_POSTS_LOCK_SCHEMA_VERSION,
     pid: process.pid,
     token: randomUUID(),
     acquiredAt: new Date().toISOString(),
+    processStartedAt,
   };
   let descriptor: number | null = null;
   try {
@@ -175,17 +276,25 @@ function acquirePendingMonitorPostRecoveryGate(gatePath: string) {
  * intentionally not reclaimed automatically because that would recreate the
  * same check-then-rename race.
  */
-export function acquirePendingMonitorPostLock(queuePath: string) {
+export function acquirePendingMonitorPostLock(
+  queuePath: string,
+  options: PendingMonitorPostLockOptions = {},
+) {
   const lockPath = `${queuePath}.lock`;
   const recoveryGatePath = `${lockPath}.recovery`;
   const lockDirectory = path.dirname(lockPath);
+  const getProcessStartTime = options.getProcessStartTime ?? readProcessStartTime;
   try {
     fs.mkdirSync(lockDirectory, { recursive: true });
   } catch {
     throw new PendingMonitorPostLockError("pending_posts_lock_failed");
   }
 
-  const recoveryGate = acquirePendingMonitorPostRecoveryGate(recoveryGatePath);
+  const processStartedAt = getCurrentProcessStartTime(getProcessStartTime);
+  if (processStartedAt === null) {
+    throw new PendingMonitorPostLockError("pending_posts_lock_identity_unknown");
+  }
+  const recoveryGate = acquirePendingMonitorPostRecoveryGate(recoveryGatePath, processStartedAt);
   let recoveryGateReleased = false;
   const releaseRecoveryGate = () => {
     if (recoveryGateReleased) return;
@@ -218,10 +327,11 @@ export function acquirePendingMonitorPostLock(queuePath: string) {
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const record: PendingMonitorPostLockRecord = {
-        schemaVersion: 1,
+        schemaVersion: PENDING_POSTS_LOCK_SCHEMA_VERSION,
         pid: process.pid,
         token: randomUUID(),
         acquiredAt: new Date().toISOString(),
+        processStartedAt,
       };
       const temporaryPath = `${lockPath}.${record.pid}.${record.token}.tmp`;
       let descriptor: number | null = null;
@@ -268,7 +378,9 @@ export function acquirePendingMonitorPostLock(queuePath: string) {
         throw new PendingMonitorPostLockError("pending_posts_lock_failed");
       }
       if (!existing) throw new PendingMonitorPostLockError("pending_posts_lock_corrupt");
-      if (isProcessAlive(existing.pid)) throw new PendingMonitorPostLockError("pending_posts_lock_owned");
+      if (isLockOwnedByLiveProcess(existing, getProcessStartTime)) {
+        throw new PendingMonitorPostLockError("pending_posts_lock_owned");
+      }
 
       const stalePath = `${lockPath}.stale.${process.pid}.${randomUUID()}`;
       try {
@@ -383,7 +495,7 @@ export function createPendingMonitorPostStore(filePath: string) {
         throw new PendingMonitorPostStoreError("pending_posts_corrupt");
       }
       const candidate = envelope as Record<string, unknown>;
-      if (candidate.schemaVersion !== PENDING_POSTS_SCHEMA_VERSION) {
+      if (candidate.schemaVersion !== PENDING_POSTS_QUEUE_SCHEMA_VERSION) {
         throw new PendingMonitorPostStoreError("pending_posts_corrupt");
       }
       const pendingPosts = normalizePendingPosts(candidate.pendingPosts);
@@ -402,7 +514,7 @@ export function createPendingMonitorPostStore(filePath: string) {
         fs.mkdirSync(directory, { recursive: true });
         fileDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
         fs.writeFileSync(fileDescriptor, JSON.stringify({
-          schemaVersion: PENDING_POSTS_SCHEMA_VERSION,
+          schemaVersion: PENDING_POSTS_QUEUE_SCHEMA_VERSION,
           pendingPosts: normalized,
         }), "utf8");
         fs.fsyncSync(fileDescriptor);
