@@ -291,6 +291,13 @@ both use the same monitor core.
   address only the `.lock.recovery` gate after confirming no monitor process is
   alive. Then start the monitor and let the normal lock logic inspect or recover
   any canonical `.lock` file.
+- New canonical locks include the OS process start time. Schema 1 locks remain
+  readable; when the live process with that PID started clearly after the lock's
+  `acquiredAt`, the PID was reused and only that canonical lock can be recovered.
+  A live owner with matching or uncertain identity, an inaccessible process,
+  malformed lock, or unavailable identity remains protected. The GUI reports a
+  lock conflict or manual-review requirement instead of showing an unexplained
+  normal stop.
 
 The database migration is
 `20260811043509_add_codex_usage_recovery_observation.sql`. Both tables have RLS

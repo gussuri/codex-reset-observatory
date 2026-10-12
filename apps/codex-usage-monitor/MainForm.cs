@@ -26,6 +26,7 @@ internal sealed class MainForm : Form
     private string? _repositoryRoot;
     private bool _stopping;
     private bool _errorState;
+    private bool _lockConflict;
 
     public MainForm()
     {
@@ -158,6 +159,7 @@ internal sealed class MainForm : Form
 
         _stopping = false;
         _errorState = false;
+        _lockConflict = false;
         _repositoryRoot = FindRepositoryRoot();
         if (_repositoryRoot is null)
         {
@@ -265,7 +267,13 @@ internal sealed class MainForm : Form
         switch (eventName)
         {
             case "starting":
+                _lockConflict = false;
                 SetStatus("○ 起動中");
+                break;
+            case "pending_queue_lock_conflict":
+                _lockConflict = true;
+                SetStatus(ReadSafeLockConflictText(ReadString(root, "reason")));
+                _toggleButton.Text = "監視開始";
                 break;
             case "app_server_started":
                 SetStatus("● 監視中");
@@ -304,7 +312,7 @@ internal sealed class MainForm : Form
                 SetError(ReadSafeErrorText(ReadString(root, "reason")));
                 break;
             case "stopped":
-                SetStatus("○ 停止中");
+                if (!_lockConflict) SetStatus("○ 停止中");
                 _toggleButton.Text = "監視開始";
                 break;
         }
@@ -423,7 +431,7 @@ internal sealed class MainForm : Form
             if (_stopping) return;
             var exitedProcess = _monitorProcess;
             _monitorProcess = null;
-            if (!_errorState)
+            if (!_errorState && !_lockConflict)
             {
                 if (exitedProcess?.ExitCode == 0) SetStatus("○ 停止中");
                 else SetError("監視プロセスが終了しました");
@@ -455,7 +463,20 @@ internal sealed class MainForm : Form
             "invalid_webhook_url" or "webhook_requires_https" => "監視用設定を確認してください",
             "pending_posts_lock_recovery_orphaned" or "pending_posts_lock_recovery_corrupt" =>
                 "キュー回復ロックの手動確認が必要です",
+            "pending_posts_lock_identity_unknown" => "監視ロックの所有者を確認できません",
             _ => "監視エラー",
+        };
+    }
+
+    private static string ReadSafeLockConflictText(string? reason)
+    {
+        return reason switch
+        {
+            "pending_posts_lock_owned" or "pending_posts_lock_recovery_busy" => "△ 別の監視プロセスが実行中です",
+            "pending_posts_lock_recovery_orphaned" or
+            "pending_posts_lock_recovery_corrupt" => "△ キュー回復ロックの手動確認が必要です",
+            "pending_posts_lock_identity_unknown" => "△ 監視ロックの所有者を確認できません",
+            _ => "△ 監視ロックを確認できません",
         };
     }
 
