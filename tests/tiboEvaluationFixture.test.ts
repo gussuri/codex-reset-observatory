@@ -130,11 +130,13 @@ test("quoted completion retains true graph edges and separates baseline from ver
 test("layer gold separates BANKED delivery safety correction and avoids unsupported public-state assertions", () => {
   const cases = buildEvaluationCases();
   const banked = cases.find((item) => item.id === "eval-syn-033")!;
-  assert.equal(banked.gold.signalType, "reset_executed");
-  assert.equal(banked.gold.correctedSignalType, "irrelevant");
+  assert.equal(banked.gold.signalType, "irrelevant");
+  assert.equal(banked.gold.correctedSignalType, undefined);
   for (const id of ["eval-syn-045", "eval-syn-047", "eval-syn-048"]) assert.equal(cases.find((item) => item.id === id)?.gold.publicOutcome, undefined);
   const timing = cases.find((item) => item.id === "2110595554036400151::text-only")!;
   assert.ok(realPostFixture.posts.find((post) => post.tweetId === "2110595554036400151")?.gold.preState?.activeNotice);
+  assert.deepEqual(timing.evaluationState?.preState, realPostFixture.posts.find((post) => post.tweetId === "2110595554036400151")?.gold.preState);
+  assert.equal(timing.providerInput.target.text.includes("activeNotice"), false, "prior public state must stay outside model evidence");
   assert.equal(timing.gold.publicOutcome?.activeNotice, true);
 });
 

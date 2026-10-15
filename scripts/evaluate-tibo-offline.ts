@@ -28,6 +28,7 @@ export type OfflineEvaluationCase = {
   split: EvaluationSplit;
   layer: string;
   inputCondition: string;
+  evaluationState?: { preState: NonNullable<OfflineEvaluationCase["gold"]["preState"]> };
   providerInput: {
     target: { tweetId: string; author: string; text: string; createdAt: string };
     isReply?: boolean;
@@ -49,6 +50,7 @@ export type OfflineEvaluationCase = {
     temporal?: { startAt: string | null; endAt: string | null; precision: string; basePostId: string };
     publicOutcome?: { historyCreated?: boolean; activeNotice?: boolean; eventKind?: string | null; resetMethod?: string | null; eventIdentity?: string | null };
     preState?: { activeNotice?: { eventGroupId: string; eventKind: string } | null; history?: unknown[] };
+    publicOutcomeRequiresPreState?: boolean;
   };
 };
 
@@ -313,6 +315,7 @@ function scoreLayer(
   const attemptedSupport = Object.fromEntries(SIGNAL_TYPES.map((signal) => [signal, 0])) as Record<SignalType, number>;
   let successfulRequests = 0;
   let successfulCorrect = 0;
+  let eligibleSuccessfulCases = 0;
   let allRequestCorrect = 0;
   let correctAbstentions = 0;
   let abstentionMisses = 0;
@@ -359,6 +362,7 @@ function scoreLayer(
     if (isAttempted) confusion[expectedBucket][confusionPrediction] += 1;
 
     if (isAttempted && outcome?.responseStatus === "success") successfulRequests += 1;
+    if (evaluationCase.gold.decision !== "ambiguous" && layer.resultState === "available" && outcome?.responseStatus === "success") eligibleSuccessfulCases += 1;
     if (hasPrediction) availablePredictions += 1;
     let isCorrect = false;
     if (hasPrediction) {
@@ -401,7 +405,7 @@ function scoreLayer(
       eventAssociationEvaluated += 1;
       if (layer.relatedEventGroupId !== evaluationCase.gold.expectedEventGroupId) eventAssociationErrors += 1;
     }
-    if (isAttempted && layerName === "publicOutcome" && evaluationCase.gold.publicOutcome) {
+    if (isAttempted && layerName === "publicOutcome" && evaluationCase.gold.publicOutcome && (!evaluationCase.gold.publicOutcomeRequiresPreState || evaluationCase.evaluationState?.preState)) {
       publicContractEvaluated += 1;
       const actual = layer.publicOutcome;
       for (const key of Object.keys(evaluationCase.gold.publicOutcome) as Array<keyof NonNullable<OfflineEvaluationCase["gold"]["publicOutcome"]>>) {
@@ -463,7 +467,7 @@ function scoreLayer(
     allRequestAccuracy: decisionCases === 0 ? null : allRequestCorrect / decisionCases,
     successfulRequests,
     successfulCorrect,
-    successOnlyAccuracy: successfulRequests === 0 ? null : successfulCorrect / cases.filter((item) => item.gold.decision !== "ambiguous" && outcomesById.get(item.id)?.[layerName].resultState === "available" && outcomesById.get(item.id)?.responseStatus === "success").length,
+    successOnlyAccuracy: eligibleSuccessfulCases === 0 ? null : successfulCorrect / eligibleSuccessfulCases,
     correctAbstentions,
     abstentionMisses,
     ambiguousCases,
@@ -739,7 +743,8 @@ export function buildEvaluationCases(): OfflineEvaluationCase[] {
           ...((post.relationVerification === "verified_by_sol_x_dom" || post.relationVerification === "documented_event_mapping") ? (post.relatedPostIds as string[]).map((relationId) => String(postsById.get(relationId)?.eventGroupId ?? "")) : []),
           ...contextPosts.map((contextPost) => String(postsById.get(contextPost.tweetId)?.eventGroupId ?? String(post.eventGroupId))),
         ],
-      gold: { decision, signalType, rationale: String(variant.rationale ?? gold.rationale), ...((variant.correctedSignalType === null || isSignalType(variant.correctedSignalType)) ? { correctedSignalType: variant.correctedSignalType as SignalType | null } : {}), ...((post.relationVerification === "documented_event_mapping" || post.relationVerification === "verified_by_sol_x_dom") ? { expectedEventGroupId: post.relationVerification === "documented_event_mapping" || contextPosts.length > 0 ? String(post.eventGroupId) : null } : {}), ...(temporalExpected ? { temporal: temporalExpected } : {}), ...(publicOutcome ? { publicOutcome } : {}) },
+        ...(gold.preState ? { evaluationState: { preState: gold.preState as NonNullable<OfflineEvaluationCase["gold"]["preState"]> } } : {}),
+        gold: { decision, signalType, rationale: String(variant.rationale ?? gold.rationale), ...((post.relationVerification === "documented_event_mapping" || post.relationVerification === "verified_by_sol_x_dom") ? { expectedEventGroupId: post.relationVerification === "documented_event_mapping" || contextPosts.length > 0 ? String(post.eventGroupId) : null } : {}), ...(temporalExpected ? { temporal: temporalExpected } : {}), ...(publicOutcome ? { publicOutcome } : {}), ...(variant.publicOutcome ? { publicOutcomeRequiresPreState: true } : {}) },
       });
     }
   }

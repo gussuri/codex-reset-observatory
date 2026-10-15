@@ -222,6 +222,18 @@ test("ambiguous legacy rows are safe-hold scored outside definite-label accuracy
   assert.equal(ambiguousReport.rawAi.allRequestAccuracy, null);
   assert.equal(ambiguousReport.rawAi.safeHoldExpected, 1);
   assert.equal(ambiguousReport.rawAi.safeHoldCorrect, 0);
+  const legacyDone = buildEvaluationCases().find((item) => item.id === "exec-03")!;
+  const safeDone = normalizeStoredOutcome({ id: legacyDone.id, responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "abstain" } });
+  const ambiguousOnlyReport = buildOfflineReport([legacyDone], [safeDone]);
+  assert.equal(ambiguousOnlyReport.rawAi.successOnlyAccuracy, null);
+  assert.equal(ambiguousOnlyReport.rawAi.safeHoldCorrect, 1);
+  const definiteSuccess = normalizeStoredOutcome({ id: "definite-success", responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "official_notice" } });
+  const definiteFailure = normalizeStoredOutcome({ id: "definite-failure", responseStatus: "timeout", rawCaptureState: "attempt_logged", rawAi: { resultState: "attempted_no_result" } });
+  const mixedReport = buildOfflineReport([legacyDone, evaluationCase("definite-success", "official_notice"), evaluationCase("definite-failure", "reset_executed")], [safeDone, definiteSuccess, definiteFailure]);
+  assert.equal(mixedReport.rawAi.successOnlyAccuracy, 1);
+  assert.equal(mixedReport.rawAi.safeHoldCorrect, 1);
+  assert.equal(mixedReport.rawAi.resultStateCounts.attempted_no_result, 1);
+  assert.ok(Number.isFinite(mixedReport.rawAi.allRequestAccuracy));
   const teaserBoundary = buildEvaluationCases().find((item) => item.id === "eval-syn-025")!;
   const permittedTeaser = normalizeStoredOutcome({ id: teaserBoundary.id, responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "teaser" } });
   const boundaryReport = buildOfflineReport([teaserBoundary], [permittedTeaser]);
@@ -231,9 +243,21 @@ test("ambiguous legacy rows are safe-hold scored outside definite-label accuracy
   const banked = buildEvaluationCases().find((item) => item.id === "eval-syn-033")!;
   const bankedOutcome = normalizeStoredOutcome({ id: banked.id, responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "reset_executed" }, corrected: { resultState: "available", signalType: "irrelevant" }, publicOutcome: { resultState: "available", signalType: "irrelevant", publicOutcome: banked.gold.publicOutcome } });
   const bankedReport = buildOfflineReport([banked], [bankedOutcome]);
-  assert.equal(bankedReport.rawAi.allRequestAccuracy, 1);
+  assert.equal(bankedReport.rawAi.allRequestAccuracy, 0, "a reset_executed model output is wrong for pure BANKED delivery");
   assert.equal(bankedReport.corrected.allRequestAccuracy, 1);
   assert.equal(bankedReport.publicOutcome.publicContract.errors, 0);
+});
+
+test("real preState reaches public evaluation state but never provider input and gates state-dependent scoring", () => {
+  const timing = buildEvaluationCases().find((item) => item.id === "2110595554036400151::text-only")!;
+  assert.ok(timing.evaluationState?.preState?.activeNotice);
+  assert.equal(JSON.stringify(timing.providerInput).includes("preState"), false);
+  const saved = normalizeStoredOutcome({ id: timing.id, responseStatus: "success", rawCaptureState: "not_recorded", rawAi: { resultState: "not_recorded" }, publicOutcome: { resultState: "available", signalType: "abstain", publicOutcome: timing.gold.publicOutcome } });
+  const withState = buildOfflineReport([timing], [saved]);
+  assert.equal(withState.publicOutcome.publicContract.evaluated, 1);
+  const withoutState = { ...timing, evaluationState: undefined };
+  const noStateReport = buildOfflineReport([withoutState], [saved]);
+  assert.equal(noStateReport.publicOutcome.publicContract.evaluated, 0);
 });
 
 test("CLI scores selected saved rows by outer case ID and rejects forged run identities", () => {
