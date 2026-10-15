@@ -9,7 +9,7 @@
       "tweetCreatedAt": "2026-07-31T04:35:31.000Z",
       "url": "https://x.com/thsottiaux/status/2083048892405604681",
       "text": "What should we improve on Codex to improve the everyday experience? Nothing too small",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2083048892405604681",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -33,7 +33,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082883808194707792",
@@ -41,7 +42,7 @@
       "tweetCreatedAt": "2026-07-30T17:39:32.000Z",
       "url": "https://x.com/thsottiaux/status/2082883808194707792",
       "text": "Changes both affect API prices and usage in paid subscriptions. Something for everyone.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082883808194707792",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -65,7 +66,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2083395449814229287",
@@ -73,7 +75,7 @@
       "tweetCreatedAt": "2026-08-01T03:32:37.000Z",
       "url": "https://x.com/thsottiaux/status/2083395449814229287",
       "text": "To celebrate a week of efficiency and let you run 100'000 Luna threads this weekend... that's right... wait for it... I have reset usage limits for Codex and ChatGPT Work.\r\n\r\nEnjoy.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2083395449814229287",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -97,7 +99,8 @@
         "wrapperPrediction": "reset_executed",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082326593532473523",
@@ -105,7 +108,7 @@
       "tweetCreatedAt": "2026-07-29T04:45:22.000Z",
       "url": "https://x.com/thsottiaux/status/2082326593532473523",
       "text": "One day we created the reset button and the rest is history.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082326593532473523",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -129,7 +132,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2081839118531834176",
@@ -137,7 +141,7 @@
       "tweetCreatedAt": "2026-07-27T20:28:19.000Z",
       "url": "https://x.com/thsottiaux/status/2081839118531834176",
       "text": "Spotted Codex making friends at the OpenAI office",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2081839118531834176",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -161,7 +165,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2081979033261412537",
@@ -169,7 +174,7 @@
       "tweetCreatedAt": "2026-07-28T05:44:17.000Z",
       "url": "https://x.com/thsottiaux/status/2081979033261412537",
       "text": "Update. I have decided to take a break from x to recharge a bit. See you back tomorrow for more ChatGPT and Codex fun. It's going to be a fun week.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2081979033261412537",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -193,7 +198,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082895472184987985",
@@ -201,7 +207,7 @@
       "tweetCreatedAt": "2026-07-30T18:25:53.000Z",
       "url": "https://x.com/thsottiaux/status/2082895472184987985",
       "text": "承認します",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082895472184987985",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -225,7 +231,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2081860991210631476",
@@ -233,7 +240,7 @@
       "tweetCreatedAt": "2026-07-27T21:55:14.000Z",
       "url": "https://x.com/thsottiaux/status/2081860991210631476",
       "text": "Turns out GPT-5.6 Sol and friends are absolutely amazing at performance and efficiency improvements. Good time to brush up on using OpenAI models if you haven’t switched already. \r\n\r\nExcited to be able to share more soon. Pretty wild.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2081860991210631476",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -257,7 +264,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2083373529081291076",
@@ -265,7 +273,7 @@
       "tweetCreatedAt": "2026-08-01T02:05:31.000Z",
       "url": "https://x.com/thsottiaux/status/2083373529081291076",
       "text": "I don't come often to GMail (OpenAI is a Slack company), but I swear, every time I do open it, there is a new button somewhere around the top right corner.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2083373529081291076",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -289,7 +297,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082655731204096275",
@@ -297,7 +306,7 @@
       "tweetCreatedAt": "2026-07-30T02:33:14.000Z",
       "url": "https://x.com/thsottiaux/status/2082655731204096275",
       "text": "This week is all about intelligence too cheap to meter. Tomorrow we ship again.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082655731204096275",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -321,7 +330,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2081940052154933696",
@@ -329,7 +339,7 @@
       "tweetCreatedAt": "2026-07-28T03:09:23.000Z",
       "url": "https://x.com/thsottiaux/status/2081940052154933696",
       "text": "Back at the laptop. The usage limits have been reset for all paid users of Codex and ChatGPT Work. Weeeeeeeee. It's a good day!",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2081940052154933696",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -353,7 +363,8 @@
         "wrapperPrediction": "reset_executed",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082981910209540352",
@@ -361,7 +372,7 @@
       "tweetCreatedAt": "2026-07-31T00:09:21.000Z",
       "url": "https://x.com/thsottiaux/status/2082981910209540352",
       "text": "Benefits all",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082981910209540352",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -385,7 +396,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082578335167807775",
@@ -393,7 +405,7 @@
       "tweetCreatedAt": "2026-07-29T21:25:42.000Z",
       "url": "https://x.com/thsottiaux/status/2082578335167807775",
       "text": "効率！\r\n\r\n2つのステップで\r\na) 素晴らしいモデルを訓練する\r\nb) 素晴らしいモデルを使ってすべてを改善する。その中には、自身のインフラ、推論スタック、カーネルなどなど\r\n\r\nhttps://openai.com/index/gpt-5-6-frontier-intelligence-efficiency/…",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082578335167807775",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -417,7 +429,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2081899343091843463",
@@ -425,7 +438,7 @@
       "tweetCreatedAt": "2026-07-28T00:27:37.000Z",
       "url": "https://x.com/thsottiaux/status/2081899343091843463",
       "text": "We’re celebrating the fast adoption of chatGPT Work and all the incredible effort that went into it today. I’m feeling like a limit reset.\r\n\r\nHold on tight to your ultra and /fast and see you in a few hours when I’m back at the laptop!",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2081899343091843463",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -449,7 +462,8 @@
         "wrapperPrediction": "teaser",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2083387677945036995",
@@ -457,7 +471,7 @@
       "tweetCreatedAt": "2026-08-01T03:01:44.000Z",
       "url": "https://x.com/thsottiaux/status/2083387677945036995",
       "text": "ChatGPT Work counted",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2083387677945036995",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -481,7 +495,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082574687020966126",
@@ -489,7 +504,7 @@
       "tweetCreatedAt": "2026-07-29T21:11:12.000Z",
       "url": "https://x.com/thsottiaux/status/2082574687020966126",
       "text": "やった！科学！",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082574687020966126",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -513,7 +528,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082637967852806207",
@@ -521,7 +537,7 @@
       "tweetCreatedAt": "2026-07-30T01:22:39.000Z",
       "url": "https://x.com/thsottiaux/status/2082637967852806207",
       "text": "Terrific work by \r\n@ilanbigio\r\n and \r\n@sandersted\r\n on the investigation and post. Seems like it was a lot of fun.\r\n\r\nTake care of your harnesses out there, your model will thank you.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082637967852806207",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -545,7 +561,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082609662231502932",
@@ -553,7 +570,7 @@
       "tweetCreatedAt": "2026-07-29T23:30:11.000Z",
       "url": "https://x.com/thsottiaux/status/2082609662231502932",
       "text": "Turns out GPT-5.6 Sol is actually SoTA on ARC-AGI-3. \r\n\r\nJust took two setting changes. You just have to allow it to reason and work over multiple context windows with the help of our canonical compaction implementation.\r\n\r\n\r\nhttps://\r\nopenai.com/index/how-two-\r\nsettings-tripled-our-arc-agi-3-scores/\r\n…",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082609662231502932",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -577,7 +594,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2083378916203343920",
@@ -585,7 +603,7 @@
       "tweetCreatedAt": "2026-08-01T02:26:55.000Z",
       "url": "https://x.com/thsottiaux/status/2083378916203343920",
       "text": "And yet, I don't see a reset button there.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2083378916203343920",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -609,7 +627,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2082241164850364555",
@@ -617,7 +636,7 @@
       "tweetCreatedAt": "2026-07-28T23:05:54.000Z",
       "url": "https://x.com/thsottiaux/status/2082241164850364555",
       "text": "More opensource goodness. We have just released a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code. Scan repositories, review changes, track findings over time, and run security checks in CI.",
-      "sourceTextStatus": "stored_source_snapshot",
+      "sourceTextStatus": "stored_evaluation_snapshot_original_unverified",
       "sourceCitations": [
         "https://x.com/thsottiaux/status/2082241164850364555",
         "reports/tibo-classifier-eval-gemini-3.5-flash-lite-20260801.csv"
@@ -641,7 +660,8 @@
         "wrapperPrediction": "irrelevant",
         "wrapperStatus": "success",
         "rawAiAvailability": "unavailable"
-      }
+      },
+      "originalTextVerified": false
     },
     {
       "tweetId": "2110595484180214059",
@@ -897,8 +917,8 @@
         "read-only Supabase tibo_signals snapshot 2026-10-15"
       ],
       "eventGroupId": "standalone-2087423996115681767",
-      "split": "holdout_candidate",
-      "splitReviewStatus": "pending_leakage_review",
+      "split": "regression",
+      "splitReviewStatus": "known_leakage_regression",
       "role": "teaser",
       "replyParentTweetId": null,
       "quoteTweetId": null,
@@ -909,6 +929,13 @@
         "signalType": "teaser",
         "rationale": "過去のmilestone promiseとLittle surprise tomorrowを示すが、確定した時刻/実施告知ではない。",
         "reviewStatus": "curator_draft"
+      },
+      "leakageReview": {
+        "status": "known_regression",
+        "basis": "ID, exact/normalized text, or event-level reference found in repository tests, data, or reports",
+        "matches": [
+          "tests/tiboWebhookRoute.test.ts:795"
+        ]
       }
     },
     {
@@ -923,8 +950,8 @@
         "read-only Supabase tibo_signals snapshot 2026-10-15"
       ],
       "eventGroupId": "standalone-2087706104814023111",
-      "split": "holdout_candidate",
-      "splitReviewStatus": "pending_leakage_review",
+      "split": "regression",
+      "splitReviewStatus": "known_leakage_regression",
       "role": "official_notice",
       "replyParentTweetId": null,
       "quoteTweetId": null,
@@ -940,6 +967,14 @@
           "precision": "range",
           "basePostId": "2087706104814023111"
         }
+      },
+      "leakageReview": {
+        "status": "known_regression",
+        "basis": "ID, exact/normalized text, or event-level reference found in repository tests, data, or reports",
+        "matches": [
+          "tests/noticeBackedRecoveryConfirmation.test.ts",
+          "reports/reset-regime-analysis.md"
+        ]
       }
     },
     {
@@ -954,8 +989,8 @@
         "read-only Supabase tibo_signals snapshot 2026-10-15"
       ],
       "eventGroupId": "standalone-2089941380336644295",
-      "split": "holdout_candidate",
-      "splitReviewStatus": "pending_leakage_review",
+      "split": "regression",
+      "splitReviewStatus": "known_leakage_regression",
       "role": "teaser",
       "replyParentTweetId": null,
       "quoteTweetId": null,
@@ -966,6 +1001,14 @@
         "signalType": "teaser",
         "rationale": "Reset buttonの取得を示すが、権利使用・全体強制resetの実施は述べない。",
         "reviewStatus": "curator_draft"
+      },
+      "leakageReview": {
+        "status": "known_regression",
+        "basis": "ID, exact/normalized text, or event-level reference found in repository tests, data, or reports",
+        "matches": [
+          "tests/classification.test.ts",
+          "tests/fixtures/tibo-scenarios.json"
+        ]
       }
     },
     {
@@ -980,8 +1023,8 @@
         "read-only Supabase tibo_signals snapshot 2026-10-15"
       ],
       "eventGroupId": "standalone-2090947196107764189",
-      "split": "holdout_candidate",
-      "splitReviewStatus": "pending_leakage_review",
+      "split": "regression",
+      "splitReviewStatus": "known_leakage_regression",
       "role": "banked_notice",
       "replyParentTweetId": null,
       "quoteTweetId": null,
@@ -993,6 +1036,14 @@
         "rationale": "BANKED credit availability is announced for later; do not call it a forced reset or completed reset.",
         "reviewStatus": "curator_draft",
         "deliveryMethod": "banked_distribution"
+      },
+      "leakageReview": {
+        "status": "known_regression",
+        "basis": "ID, exact/normalized text, or event-level reference found in repository tests, data, or reports",
+        "matches": [
+          "tests/bankedReset.test.ts:314",
+          "tests/tiboTemporal.test.ts:1122"
+        ]
       }
     },
     {
@@ -1007,8 +1058,8 @@
         "read-only Supabase tibo_signals snapshot 2026-10-15"
       ],
       "eventGroupId": "standalone-2091412393368945027",
-      "split": "holdout_candidate",
-      "splitReviewStatus": "pending_leakage_review",
+      "split": "regression",
+      "splitReviewStatus": "known_leakage_regression",
       "role": "official_notice",
       "replyParentTweetId": null,
       "quoteTweetId": null,
@@ -1017,13 +1068,23 @@
       "gold": {
         "decision": "classify",
         "signalType": "official_notice",
-        "rationale": "Future reset notice, but 14pm is invalid and must not resolve to a fabricated timestamp.",
+        "rationale": "Future reset notice. Existing compatibility contract recovers 14pm as 14:00 PST; expected schedule is 2026-08-23T22:00:00Z.",
         "reviewStatus": "curator_draft",
         "temporalExpected": {
-          "resolutionStatus": "invalid",
-          "precision": "unknown",
+          "resolutionStatus": "resolved",
+          "expectedStartAt": "2026-08-23T22:00:00.000Z",
+          "expectedEndAt": "2026-08-23T22:00:00.000Z",
+          "precision": "exact_time",
           "basePostId": "2091412393368945027"
         }
+      },
+      "leakageReview": {
+        "status": "known_regression",
+        "basis": "ID, exact/normalized text, or event-level reference found in repository tests, data, or reports",
+        "matches": [
+          "tests/tiboTemporal.test.ts:718",
+          "tests/tiboWebhookRoute.test.ts:1297"
+        ]
       }
     }
   ]
