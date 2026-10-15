@@ -2921,3 +2921,62 @@ test("timed teaser outlook renders crawlable JST on SSR before browser-local hyd
   assert.match(html, /<time[^>]*dateTime="2026-08-27T07:00:00\.000Z"[^>]*>2026年8月27日 16:00 JST<\/time>/);
   assert.match(html, /<time[^>]*dateTime="2026-08-28T07:00:00\.000Z"[^>]*>2026年8月28日 16:00 JST<\/time>/);
 });
+
+test("range temporal precision omits weekday subject and falls back to generic summary", () => {
+  const rangeNotice = {
+    expectedAt: "2026-10-15T04:56:07.000Z",
+    expectedEndAt: "2026-10-15T06:56:07.000Z",
+    temporalPrecision: "range" as const,
+    temporalResolutionStatus: "resolved" as const,
+    temporalTimezone: "America/Los_Angeles",
+  };
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const summary = formatOfficialNoticeSummary(rangeNotice, locale);
+    assert.doesNotMatch(summary, /Wednesday|水曜日|星期三/);
+    if (locale === "ja") {
+      assert.equal(summary, "公式リセットの予告があります。最新状況をご確認ください。");
+    } else if (locale === "en") {
+      assert.equal(summary, "An official reset notice has been detected. Please check the latest status.");
+    } else if (locale === "zh") {
+      assert.equal(summary, "已检测到官方重置预告。请确认最新状态。");
+    }
+  }
+});
+
+test("curated Tibo post translation overrides low-quality machine translation stored in DB", () => {
+  const calculationNow = new Date("2026-10-15T05:00:00.000Z");
+  const rawPost = "The reports of my reset button being lost are greatly exaggerated\n\nDay 10/ Reset";
+  const awkwardMachineJa = "私リセットボタンが紛失したという報告は、大いに誇張されている。\n\n10日目 / リセット";
+  const internal = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [{
+      tweet_id: "2110595484180214059",
+      text: rawPost,
+      signal_type: "official_notice",
+      tweet_created_at: "2026-10-15T04:55:51.000Z",
+      translated_text_ja: awkwardMachineJa,
+      translated_text_zh: "关于我重置按钮丢失的传言被严重夸大了。\n\n第 10 天 / 重置",
+      verification_status: "confirmed",
+      confidence: 0.95,
+      is_reply: false,
+      temporal_resolution_status: "resolved",
+      temporal_precision: "range",
+      expected_start_at: "2026-10-15T04:56:07.000Z",
+      expected_end_at: "2026-10-15T06:56:07.000Z",
+    }],
+  });
+
+  const snapshotJa = toPublicRadarSnapshot(internal, "ja", { calculationNow });
+  assert.equal(
+    snapshotJa.latestTiboActivity?.text,
+    "私のリセットボタンが失われたという報告は、大いに誇張されています。\n\n10日目 / リセット",
+  );
+
+  const snapshotZh = toPublicRadarSnapshot(internal, "zh", { calculationNow });
+  assert.equal(
+    snapshotZh.latestTiboActivity?.text,
+    "关于我重置按钮丢失的传言被严重夸大了。\n\n第 10 天 / 重置",
+  );
+});
+

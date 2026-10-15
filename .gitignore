@@ -23,6 +23,7 @@ test-results/
 
 # Scratch / Temporary test files
 scratch/
+artifacts/
 
 # Environment variables (security protection)
 .env

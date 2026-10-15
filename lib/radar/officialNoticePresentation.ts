@@ -24,6 +24,9 @@ function getPresentationTimeZone(timeZone: string) {
     PDT: "Etc/GMT+7",
     EST: "Etc/GMT+5",
     EDT: "Etc/GMT+4",
+    PT: "America/Los_Angeles",
+    ET: "America/New_York",
+    JST: "Asia/Tokyo",
   };
   return fixedOffsetAliases[timeZone.toUpperCase()] ?? timeZone;
 }
@@ -108,6 +111,9 @@ export function formatOfficialNoticeScheduleSubject(
   try {
     if (notice.temporalPrecision === "exact_time") {
       return formatExactSchedule(date, timeZone, locale);
+    }
+    if (notice.temporalPrecision === "range") {
+      return null;
     }
     return formatScheduleWeekday(date, timeZone, locale);
   } catch {
