@@ -142,7 +142,7 @@ function installGeminiHttpErrorMock(statusCode = 503) {
   };
 }
 
-function installSupabaseWebhookMock(requestBodies: unknown[]) {
+function installSupabaseWebhookMock(requestBodies: unknown[], options: { parentNotice?: Record<string, unknown> } = {}) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     const url = _input instanceof Request ? _input.url : String(_input);
@@ -172,6 +172,12 @@ function installSupabaseWebhookMock(requestBodies: unknown[]) {
       });
     }
     if (method === "GET") {
+      if (options.parentNotice && url.includes("/rest/v1/tibo_signals?") && url.includes("signal_type=eq.official_notice")) {
+        return new Response(JSON.stringify([options.parentNotice]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify([]), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -187,6 +193,51 @@ function installSupabaseWebhookMock(requestBodies: unknown[]) {
     globalThis.fetch = originalFetch;
   };
 }
+
+test("verified daily-reset timing reply stores its range on the unique parent notice", async () => {
+  const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]])) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  const restoreFetch = installSupabaseWebhookMock(requestBodies, {
+    parentNotice: {
+      tweet_id: "2110595484180214059", tweet_created_at: "2026-10-15T04:55:51.000Z",
+      verification_status: "auto_unverified", classification_source: "gemini",
+    },
+  });
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "irrelevant", confidence: 0.95, temporalDirection: "unclear",
+    temporalExpression: "within the next 2 hours", temporalKind: "relative_duration",
+    temporalPrecision: "exact_time", relativeAmount: 2, relativeUnit: "hours", temporalConfidence: 0.95,
+    reasonJa: "タイミング返信です。", teaserStrength: null,
+  });
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "2110595554036400151", text: "Landing within the next 2 hours",
+      tweetUrl: "https://x.com/thsottiaux/status/2110595554036400151",
+      tweetCreatedAt: "2026-10-15T04:56:07.000Z", isReply: true,
+      replyToHandles: ["@thsottiaux"],
+      replyContextText: "The reports of my reset button being lost are greatly exaggerated\n\nDay 10/ Reset",
+    }));
+    assert.equal(response.status, 200);
+    assert.equal((requestBodies[0] as Record<string, unknown>).signal_type, "irrelevant");
+    assert.equal((requestBodies[0] as Record<string, unknown>).expected_start_at, null);
+    assert.equal((requestBodies[0] as Record<string, unknown>).expected_end_at, null);
+    const parentUpdate = requestBodies.find((body) => (body as Record<string, unknown>).expected_end_at === "2026-10-15T06:56:07.000Z") as Record<string, unknown> | undefined;
+    assert.ok(parentUpdate, "parent schedule update should contain the child's two-hour upper bound");
+    assert.equal(parentUpdate.expected_start_at, "2026-10-15T04:56:07.000Z");
+    assert.equal(parentUpdate.temporal_precision, "range");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
 
 function candidateSeedRecord(
   tweetId: string,
@@ -1338,7 +1389,7 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
   } finally {
     restoreGemini();
     restoreFetch();
@@ -1384,7 +1435,7 @@ test("persists a source-grounded EOD deadline while retaining Gemini temporal au
     assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
     assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
     assert.equal(body.temporal_resolution_status, "resolved");
-    assert.equal(body.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(body.temporal_resolution_version, "tibo-temporal-v9");
     assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
   } finally {
     restoreGemini();
@@ -1498,7 +1549,7 @@ test("accepted concealed teaser persists its own today window without becoming a
     assert.equal(upsertBody.expected_start_at, "2026-09-29T07:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-09-30T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
     assert.equal(upsertBody.codex_operational_status, null);
   } finally {
     restoreGemini();

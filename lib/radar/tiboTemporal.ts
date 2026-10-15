@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v8";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v9";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
 export const TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS = 3 * 60 * 60 * 1000;
@@ -1665,7 +1665,13 @@ export function resolveTiboTemporalSchedule(
   if (semantics.isDeadline) resolvedIsDeadline = true;
 
   if (semantics.temporalKind === "relative_duration" && semantics.relativeAmount && semantics.relativeUnit) {
-    if (semantics.relativeUnit === "days") {
+    if (/\bwithin\b/i.test(semantics.temporalExpression ?? "")) {
+      const duration = semantics.relativeAmount * (semantics.relativeUnit === "days" ? 24 * HOUR_MS : semantics.relativeUnit === "hours" ? HOUR_MS : MINUTE_MS);
+      expectedStart = created;
+      expectedEnd = new Date(created.getTime() + duration);
+      precision = "range";
+      resolvedIsDeadline = true;
+    } else if (semantics.relativeUnit === "days") {
       const localDay = addLocalDays(createdLocal, Math.round(semantics.relativeAmount));
       const window = buildWindow(atLocalTime(localDay, 0), atLocalTime(addLocalDays(localDay, 1), 0), timeZone);
       expectedStart = window?.expectedStart ?? null;

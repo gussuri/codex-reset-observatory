@@ -62,6 +62,20 @@ test("resending a rejected row never promotes it or changes its detection time",
   assert.equal(result.detected_at, "2026-08-04T12:00:00.000Z");
 });
 
+test("same-ID replay preserves the manually confirmed temporal window and expiry", () => {
+  const window = {
+    temporal_expression: "within the next 2 hours", temporal_kind: "relative_duration",
+    temporal_precision: "range", temporal_timezone: "America/Los_Angeles", temporal_confidence: 1,
+    temporal_resolution_source: "deterministic", expected_start_at: "2026-10-15T04:56:07.000Z",
+    expected_end_at: "2026-10-15T06:56:07.000Z", temporal_resolution_status: "resolved",
+    temporal_resolution_version: "manual-two-post-window-v1", expires_at: "2026-10-15T14:56:07.000Z",
+  };
+  const result = preserveTiboWebhookState({ ...payload(), ...Object.fromEntries(Object.keys(window).map((key) => [key, null])) } as never, {
+    tweet_id: payload().tweet_id, verification_status: "confirmed", classification_source: "manual", ...window,
+  }, receivedAt) as typeof window;
+  for (const [key, value] of Object.entries(window)) assert.equal(result[key as keyof typeof window], value);
+});
+
 test("a null detection time is initialized on the next delivery", () => {
   const result = preserveTiboWebhookState(payload(), {
     detected_at: null,

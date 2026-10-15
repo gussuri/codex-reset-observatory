@@ -146,11 +146,12 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    (including the common typo "reseting") describes current execution, not a future official notice;
    the Usage Monitor may confirm that execution after the post is received.
 
-2. "official_notice": An explicit announcement of an upcoming reset scheduled in the near future.
+2. "official_notice": An explicit announcement of an upcoming reset scheduled in the near future. An explicit daily offer such as "Day 10 / Reset" is a reset notice even when framed as a joke; classify the commitment, not the joke opener. It is not evidence the reset has completed.
    Examples: "We will reset limits tonight", "We'll reset usage limits for all paid users", "Reset scheduled in two hours", "Full reset coming tomorrow".
    Contracted future forms such as "I'll reset" and "we'll reset" are future notices, not completed resets.
    A separate statement that service is "back in action" or recovered describes operational status only;
    it does not change a future reset commitment into a completed reset.
+   When a trusted same-author parent post explicitly offers a reset and this reply supplies its timing (for example, "Landing within the next 2 hours"), classify the parent as the notice and the reply as its timing complement. Never treat the timing reply alone as a reset promise without verified parent context, and do not create two reset events from one thread.
 
 3. "teaser": A forward-looking signal that Tibo may perform a Codex/ChatGPT Work usage-limit reset. It can be direct (for example, "Should we press the reset button tonight?") or, in the narrow case below, indirect without using the word "reset".
 

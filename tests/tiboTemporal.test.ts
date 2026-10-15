@@ -13,7 +13,7 @@ import {
   TIBO_SOURCE_TIME_ZONE,
   TIBO_TEMPORAL_RESOLUTION_VERSION,
 } from "../lib/radar/tiboTemporal";
-import { formatOfficialNoticeScheduleSubject } from "../lib/radar/officialNoticePresentation";
+import { formatOfficialNoticeScheduleSubject, formatOfficialNoticeSummary } from "../lib/radar/officialNoticePresentation";
 
 const CREATED_AT = "2026-08-08T20:34:50.000Z";
 
@@ -37,7 +37,7 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v8");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v9");
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {
@@ -92,6 +92,32 @@ test("resolves explicit weekday time and relative times deterministically", () =
   );
   assert.equal(inTwoDays.temporalPrecision, "day");
   assert.equal(inTwoDays.expectedStartAt, "2026-08-10T07:00:00.000Z");
+});
+
+test("within a relative duration resolves to a window anchored at tweet creation", () => {
+  const result = resolveTiboTemporalSchedule(semantics({
+    temporalExpression: "within the next 2 hours",
+    temporalKind: "relative_duration",
+    temporalPrecision: "exact_time",
+    weekday: null,
+    relativeAmount: 2,
+    relativeUnit: "hours",
+  }) as never, "2026-10-15T04:56:07.000Z");
+  assert.equal(result.temporalPrecision, "range");
+  assert.equal(result.expectedStartAt, "2026-10-15T04:56:07.000Z");
+  assert.equal(result.expectedEndAt, "2026-10-15T06:56:07.000Z");
+});
+
+test("range notice summaries avoid reducing a window to a weekday and saying again", () => {
+  const notice = {
+    text: "Landing within the next 2 hours", expectedAt: "2026-10-15T04:56:07.000Z",
+    expectedEndAt: "2026-10-15T06:56:07.000Z", temporalPrecision: "range" as const,
+  };
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const summary = formatOfficialNoticeSummary(notice, locale);
+    assert.doesNotMatch(summary, /Wednesday|水曜日|星期三|again|再度/);
+    assert.match(summary, /official reset notice|公式リセットの予告|官方重置预告/i);
+  }
 });
 
 test("resolves a same-day absolute deadline from the tweet instant without inferring tomorrow", () => {

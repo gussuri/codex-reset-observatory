@@ -563,9 +563,14 @@ export async function POST(req: NextRequest) {
         }
       : baseClassificationResponse;
 
+    const isDailyResetTimingReply = replyMetadata.isReply === true &&
+      replyMetadata.replyToHandles?.some((handle) => handle.toLowerCase() === "@thsottiaux") === true &&
+      /\bday\s+\d+\s*\/\s*reset\b/i.test(replyMetadata.replyContextText ?? "") &&
+      /\blanding\s+within\s+the\s+next\s+\d+\s+(?:minutes?|hours?|days?)\b/i.test(text);
     const hasForwardTimingSignal =
       effectiveClassification.signalType === "official_notice" ||
-      effectiveClassification.signalType === "teaser";
+      effectiveClassification.signalType === "teaser" ||
+      isDailyResetTimingReply;
     const temporalSemantics = hasForwardTimingSignal
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
@@ -579,7 +584,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Expiration follows the resolved notice window when available. Other
     // signals retain the existing tweet-created-at + 24h behavior.
-    const expiresAt = temporalResolution?.status === "resolved"
+    const expiresAt = !isDailyResetTimingReply && temporalResolution?.status === "resolved"
       ? new Date(getTemporalNoticeExpiry(temporalResolution, createdDate.toISOString()) ?? createdDate.toISOString())
       : new Date(createdDate.getTime() + 24 * 60 * 60 * 1000);
     const receivedAt = new Date().toISOString();
@@ -645,16 +650,16 @@ export async function POST(req: NextRequest) {
       ai_temporal_precision: aiResult?.temporalPrecision || null,
       ai_temporal_timezone: aiResult?.explicitTimezone ?? null,
       ai_temporal_confidence: aiResult?.temporalConfidence ?? null,
-      temporal_expression: temporalResolution?.temporalExpression ?? null,
-      temporal_kind: temporalResolution?.temporalKind ?? null,
-      temporal_precision: temporalResolution?.temporalPrecision ?? null,
-      temporal_timezone: temporalResolution?.timezone ?? null,
-      temporal_confidence: temporalResolution?.confidence ?? null,
-      temporal_resolution_source: temporalResolution?.resolutionSource ?? null,
-      expected_start_at: temporalResolution?.expectedStartAt ?? null,
-      expected_end_at: temporalResolution?.expectedEndAt ?? null,
-      temporal_resolution_status: temporalResolution?.status ?? null,
-      temporal_resolution_version: temporalResolution?.version ?? null,
+      temporal_expression: isDailyResetTimingReply ? null : temporalResolution?.temporalExpression ?? null,
+      temporal_kind: isDailyResetTimingReply ? null : temporalResolution?.temporalKind ?? null,
+      temporal_precision: isDailyResetTimingReply ? null : temporalResolution?.temporalPrecision ?? null,
+      temporal_timezone: isDailyResetTimingReply ? null : temporalResolution?.timezone ?? null,
+      temporal_confidence: isDailyResetTimingReply ? null : temporalResolution?.confidence ?? null,
+      temporal_resolution_source: isDailyResetTimingReply ? null : temporalResolution?.resolutionSource ?? null,
+      expected_start_at: isDailyResetTimingReply ? null : temporalResolution?.expectedStartAt ?? null,
+      expected_end_at: isDailyResetTimingReply ? null : temporalResolution?.expectedEndAt ?? null,
+      temporal_resolution_status: isDailyResetTimingReply ? null : temporalResolution?.status ?? null,
+      temporal_resolution_version: isDailyResetTimingReply ? null : temporalResolution?.version ?? null,
       ai_model: aiResult?.model || null,
       ai_classification_status: aiResult?.status || "skipped",
       ai_classified_at: aiResult?.classifiedAt || null,
@@ -676,7 +681,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -899,6 +904,46 @@ export async function POST(req: NextRequest) {
         reason: "database_error",
       });
       return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
+
+    // A verified self-reply can supply the time window for its parent's
+    // explicit daily reset offer. Persist the schedule on that parent row so
+    // public notice selection remains single-event and never promotes replies.
+    if (isDailyResetTimingReply && temporalResolution?.status === "resolved") {
+      try {
+        const parentText = replyMetadata.replyContextText!.trim();
+        const { data: parents, error: parentLookupError } = await supabase
+          .from("tibo_signals")
+          .select("tweet_id,tweet_created_at,verification_status,classification_source")
+          .eq("text", parentText)
+          .eq("signal_type", "official_notice")
+          .eq("is_reply", false)
+          .limit(2);
+        const parent = !parentLookupError && parents?.length === 1 ? parents[0] : null;
+        const parentCreatedAt = parent?.tweet_created_at ? new Date(parent.tweet_created_at).getTime() : Number.NaN;
+        if (parent && Number.isFinite(parentCreatedAt) && parentCreatedAt < createdDate.getTime() &&
+          parent.verification_status !== "confirmed" && parent.classification_source !== "manual") {
+          const { error: parentUpdateError } = await supabase
+            .from("tibo_signals")
+            .update({
+              temporal_expression: temporalResolution.temporalExpression,
+              temporal_kind: temporalResolution.temporalKind,
+              temporal_precision: temporalResolution.temporalPrecision,
+              temporal_timezone: temporalResolution.timezone,
+              temporal_confidence: temporalResolution.confidence,
+              temporal_resolution_source: temporalResolution.resolutionSource,
+              expected_start_at: temporalResolution.expectedStartAt,
+              expected_end_at: temporalResolution.expectedEndAt,
+              temporal_resolution_status: temporalResolution.status,
+              temporal_resolution_version: temporalResolution.version,
+              expires_at: new Date(getTemporalNoticeExpiry(temporalResolution, createdDate.toISOString()) ?? createdDate.toISOString()).toISOString(),
+            })
+            .eq("tweet_id", parent.tweet_id);
+          if (parentUpdateError) console.warn("[Webhook Warning] Parent notice timing update skipped", { reason: "update_failed" });
+        }
+      } catch {
+        console.warn("[Webhook Warning] Parent notice timing update skipped", { reason: "lookup_failed" });
+      }
     }
 
     // Make the durable source row visible even when a later best-effort formal

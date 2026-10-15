@@ -28,6 +28,17 @@ export type ExistingTiboWebhookState = TiboEditIdentityFields & {
   codex_operational_evidence_quote?: string | null;
   codex_operational_reason_ja?: string | null;
   codex_operational_expires_at?: string | null;
+  temporal_expression?: string | null;
+  temporal_kind?: string | null;
+  temporal_precision?: string | null;
+  temporal_timezone?: string | null;
+  temporal_confidence?: number | null;
+  temporal_resolution_source?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: string | null;
+  temporal_resolution_version?: string | null;
+  expires_at?: string | null;
 };
 
 type TiboWebhookPayload = TiboEditIdentityFields & {
@@ -50,6 +61,17 @@ type TiboWebhookPayload = TiboEditIdentityFields & {
   codex_operational_evidence_quote?: string | null;
   codex_operational_reason_ja?: string | null;
   codex_operational_expires_at?: string | null;
+  temporal_expression?: string | null;
+  temporal_kind?: string | null;
+  temporal_precision?: string | null;
+  temporal_timezone?: string | null;
+  temporal_confidence?: number | null;
+  temporal_resolution_source?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: string | null;
+  temporal_resolution_version?: string | null;
+  expires_at?: string | null;
 };
 
 function keepExisting<T>(existing: T | undefined, incoming: T) {
@@ -140,6 +162,14 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
     preserved.codex_operational_expires_at = existingState.codex_operational_expires_at;
   }
 
+  // A manual/confirmed schedule is an editorial decision. Keep its entire
+  // temporal state together on same-ID webhook replays, including expiry.
+  if (existingState && (existingState.classification_source === "manual" || existingState.verification_status === "confirmed")) {
+    for (const key of ["temporal_expression", "temporal_kind", "temporal_precision", "temporal_timezone", "temporal_confidence", "temporal_resolution_source", "expected_start_at", "expected_end_at", "temporal_resolution_status", "temporal_resolution_version", "expires_at"] as const) {
+      if (existingState[key] !== undefined) (preserved as Record<string, unknown>)[key] = existingState[key];
+    }
+  }
+
   const isReviewed = existingState?.verification_status === "confirmed" ||
     existingState?.verification_status === "rejected";
   if (isReviewed || existingState?.classification_source === "manual") {
@@ -157,6 +187,7 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
       source_timeline: keepExisting(existingState?.source_timeline, preserved.source_timeline),
     } as T;
   }
+
 
   return preserved as T;
 }
