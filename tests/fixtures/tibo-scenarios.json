@@ -1553,6 +1553,2086 @@
       "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
       "pipeline": true,
       "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "eval-syn-001",
+      "category": "official_notice",
+      "description": "classification contrast: text only evidence",
+      "tweetText": "A planned reset will happen tonight.",
+      "tweetCreatedAt": "2026-10-16T00:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000145",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-0",
+      "evaluation": {
+        "eventGroupId": "syn-event-0",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic classification contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-002",
+      "category": "official_notice",
+      "description": "classification contrast: verified parent evidence",
+      "tweetText": "A planned reset will happen tonight.",
+      "tweetCreatedAt": "2026-10-16T01:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000146",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-0",
+      "evaluation": {
+        "eventGroupId": "syn-event-0",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic classification contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-003",
+      "category": "official_notice",
+      "description": "classification contrast: unrelated parent evidence",
+      "tweetText": "A planned reset will happen tonight.",
+      "tweetCreatedAt": "2026-10-16T02:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000147",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-0",
+      "evaluation": {
+        "eventGroupId": "syn-event-0",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic classification contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-004",
+      "category": "official_notice",
+      "description": "classification contrast: other author quote evidence",
+      "tweetText": "A planned reset will happen tonight.",
+      "tweetCreatedAt": "2026-10-16T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000148",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-0",
+      "evaluation": {
+        "eventGroupId": "syn-event-0",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic classification contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-005",
+      "category": "reset_executed",
+      "description": "classification contrast: text only evidence",
+      "tweetText": "The reset is complete; everything has propagated.",
+      "tweetCreatedAt": "2026-10-16T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000149",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-1",
+      "evaluation": {
+        "eventGroupId": "syn-event-1",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic classification contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-006",
+      "category": "reset_executed",
+      "description": "classification contrast: verified parent evidence",
+      "tweetText": "The reset is complete; everything has propagated.",
+      "tweetCreatedAt": "2026-10-16T04:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000150",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-1",
+      "evaluation": {
+        "eventGroupId": "syn-event-1",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic classification contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-007",
+      "category": "reset_executed",
+      "description": "classification contrast: unrelated parent evidence",
+      "tweetText": "The reset is complete; everything has propagated.",
+      "tweetCreatedAt": "2026-10-16T05:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000151",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-1",
+      "evaluation": {
+        "eventGroupId": "syn-event-1",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic classification contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-008",
+      "category": "reset_executed",
+      "description": "classification contrast: other author quote evidence",
+      "tweetText": "The reset is complete; everything has propagated.",
+      "tweetCreatedAt": "2026-10-16T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000152",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-1",
+      "evaluation": {
+        "eventGroupId": "syn-event-1",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic classification contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-009",
+      "category": "irrelevant",
+      "description": "classification contrast: text only evidence",
+      "tweetText": "I may reset the system if this keeps happening.",
+      "tweetCreatedAt": "2026-10-16T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000153",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-2",
+      "evaluation": {
+        "eventGroupId": "syn-event-2",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic classification contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-010",
+      "category": "irrelevant",
+      "description": "classification contrast: verified parent evidence",
+      "tweetText": "I may reset the system if this keeps happening.",
+      "tweetCreatedAt": "2026-10-16T07:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000154",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-2",
+      "evaluation": {
+        "eventGroupId": "syn-event-2",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic classification contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-011",
+      "category": "irrelevant",
+      "description": "classification contrast: unrelated parent evidence",
+      "tweetText": "I may reset the system if this keeps happening.",
+      "tweetCreatedAt": "2026-10-16T08:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000155",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-2",
+      "evaluation": {
+        "eventGroupId": "syn-event-2",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic classification contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-012",
+      "category": "irrelevant",
+      "description": "classification contrast: other author quote evidence",
+      "tweetText": "I may reset the system if this keeps happening.",
+      "tweetCreatedAt": "2026-10-16T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000156",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-2",
+      "evaluation": {
+        "eventGroupId": "syn-event-2",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic classification contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-013",
+      "category": "teaser",
+      "description": "classification contrast: text only evidence",
+      "tweetText": "A new release is coming soon, details tomorrow.",
+      "tweetCreatedAt": "2026-10-16T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000157",
+      "expected": {
+        "signalType": "teaser",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-3",
+      "evaluation": {
+        "eventGroupId": "syn-event-3",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "teaser",
+          "rationale": "Synthetic classification contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-014",
+      "category": "teaser",
+      "description": "classification contrast: verified parent evidence",
+      "tweetText": "A new release is coming soon, details tomorrow.",
+      "tweetCreatedAt": "2026-10-16T10:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000158",
+      "expected": {
+        "signalType": "teaser",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-3",
+      "evaluation": {
+        "eventGroupId": "syn-event-3",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "teaser",
+          "rationale": "Synthetic classification contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-015",
+      "category": "teaser",
+      "description": "classification contrast: unrelated parent evidence",
+      "tweetText": "A new release is coming soon, details tomorrow.",
+      "tweetCreatedAt": "2026-10-16T11:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000159",
+      "expected": {
+        "signalType": "teaser",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-3",
+      "evaluation": {
+        "eventGroupId": "syn-event-3",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "teaser",
+          "rationale": "Synthetic classification contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-016",
+      "category": "teaser",
+      "description": "classification contrast: other author quote evidence",
+      "tweetText": "A new release is coming soon, details tomorrow.",
+      "tweetCreatedAt": "2026-10-16T12:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000160",
+      "expected": {
+        "signalType": "teaser",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-classification-3",
+      "evaluation": {
+        "eventGroupId": "syn-event-3",
+        "split": "development",
+        "layer": "classification",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "teaser",
+          "rationale": "Synthetic classification contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-017",
+      "category": "official_notice",
+      "description": "temporal contrast: text only evidence",
+      "tweetText": "Reset window: 10:00–11:00 UTC tomorrow.",
+      "tweetCreatedAt": "2026-10-17T12:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000161",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-4",
+      "evaluation": {
+        "eventGroupId": "syn-event-4",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-018",
+      "category": "official_notice",
+      "description": "temporal contrast: verified parent evidence",
+      "tweetText": "Reset window: 10:00–11:00 UTC tomorrow.",
+      "tweetCreatedAt": "2026-10-17T13:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000162",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-4",
+      "evaluation": {
+        "eventGroupId": "syn-event-4",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-019",
+      "category": "official_notice",
+      "description": "temporal contrast: unrelated parent evidence",
+      "tweetText": "Reset window: 10:00–11:00 UTC tomorrow.",
+      "tweetCreatedAt": "2026-10-17T14:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000163",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-4",
+      "evaluation": {
+        "eventGroupId": "syn-event-4",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-020",
+      "category": "official_notice",
+      "description": "temporal contrast: other author quote evidence",
+      "tweetText": "Reset window: 10:00–11:00 UTC tomorrow.",
+      "tweetCreatedAt": "2026-10-17T15:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000164",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-4",
+      "evaluation": {
+        "eventGroupId": "syn-event-4",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-021",
+      "category": "reset_executed",
+      "description": "temporal contrast: text only evidence",
+      "tweetText": "We reset at 10:00 UTC and are live again.",
+      "tweetCreatedAt": "2026-10-17T15:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000165",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-5",
+      "evaluation": {
+        "eventGroupId": "syn-event-5",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-022",
+      "category": "reset_executed",
+      "description": "temporal contrast: verified parent evidence",
+      "tweetText": "We reset at 10:00 UTC and are live again.",
+      "tweetCreatedAt": "2026-10-17T16:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000166",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-5",
+      "evaluation": {
+        "eventGroupId": "syn-event-5",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-023",
+      "category": "reset_executed",
+      "description": "temporal contrast: unrelated parent evidence",
+      "tweetText": "We reset at 10:00 UTC and are live again.",
+      "tweetCreatedAt": "2026-10-17T17:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000167",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-5",
+      "evaluation": {
+        "eventGroupId": "syn-event-5",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-024",
+      "category": "reset_executed",
+      "description": "temporal contrast: other author quote evidence",
+      "tweetText": "We reset at 10:00 UTC and are live again.",
+      "tweetCreatedAt": "2026-10-17T18:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000168",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-5",
+      "evaluation": {
+        "eventGroupId": "syn-event-5",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-025",
+      "category": "official_notice",
+      "description": "temporal contrast: text only evidence",
+      "tweetText": "The reset should land sometime after launch.",
+      "tweetCreatedAt": "2026-10-17T18:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000169",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-6",
+      "evaluation": {
+        "eventGroupId": "syn-event-6",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-026",
+      "category": "official_notice",
+      "description": "temporal contrast: verified parent evidence",
+      "tweetText": "The reset should land sometime after launch.",
+      "tweetCreatedAt": "2026-10-17T19:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000170",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-6",
+      "evaluation": {
+        "eventGroupId": "syn-event-6",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-027",
+      "category": "official_notice",
+      "description": "temporal contrast: unrelated parent evidence",
+      "tweetText": "The reset should land sometime after launch.",
+      "tweetCreatedAt": "2026-10-17T20:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000171",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-6",
+      "evaluation": {
+        "eventGroupId": "syn-event-6",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-028",
+      "category": "official_notice",
+      "description": "temporal contrast: other author quote evidence",
+      "tweetText": "The reset should land sometime after launch.",
+      "tweetCreatedAt": "2026-10-17T21:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000172",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-6",
+      "evaluation": {
+        "eventGroupId": "syn-event-6",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic temporal contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-029",
+      "category": "reset_executed",
+      "description": "temporal contrast: text only evidence",
+      "tweetText": "Reset happened sometime before this post.",
+      "tweetCreatedAt": "2026-10-17T21:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000173",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-7",
+      "evaluation": {
+        "eventGroupId": "syn-event-7",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-030",
+      "category": "reset_executed",
+      "description": "temporal contrast: verified parent evidence",
+      "tweetText": "Reset happened sometime before this post.",
+      "tweetCreatedAt": "2026-10-17T22:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000174",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-7",
+      "evaluation": {
+        "eventGroupId": "syn-event-7",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-031",
+      "category": "reset_executed",
+      "description": "temporal contrast: unrelated parent evidence",
+      "tweetText": "Reset happened sometime before this post.",
+      "tweetCreatedAt": "2026-10-17T23:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000175",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-7",
+      "evaluation": {
+        "eventGroupId": "syn-event-7",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-032",
+      "category": "reset_executed",
+      "description": "temporal contrast: other author quote evidence",
+      "tweetText": "Reset happened sometime before this post.",
+      "tweetCreatedAt": "2026-10-17T00:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000176",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-temporal-7",
+      "evaluation": {
+        "eventGroupId": "syn-event-7",
+        "split": "development",
+        "layer": "temporal",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic temporal contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-033",
+      "category": "official_notice",
+      "description": "provenance contrast: text only evidence",
+      "tweetText": "Reset is scheduled for 09:00 UTC.",
+      "tweetCreatedAt": "2026-10-18T00:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000177",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-8",
+      "evaluation": {
+        "eventGroupId": "syn-event-8",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-034",
+      "category": "official_notice",
+      "description": "provenance contrast: verified parent evidence",
+      "tweetText": "Reset is scheduled for 09:00 UTC.",
+      "tweetCreatedAt": "2026-10-18T01:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000178",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-8",
+      "evaluation": {
+        "eventGroupId": "syn-event-8",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-035",
+      "category": "official_notice",
+      "description": "provenance contrast: unrelated parent evidence",
+      "tweetText": "Reset is scheduled for 09:00 UTC.",
+      "tweetCreatedAt": "2026-10-18T02:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000179",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-8",
+      "evaluation": {
+        "eventGroupId": "syn-event-8",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-036",
+      "category": "official_notice",
+      "description": "provenance contrast: other author quote evidence",
+      "tweetText": "Reset is scheduled for 09:00 UTC.",
+      "tweetCreatedAt": "2026-10-18T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000180",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-8",
+      "evaluation": {
+        "eventGroupId": "syn-event-8",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-037",
+      "category": "reset_executed",
+      "description": "provenance contrast: text only evidence",
+      "tweetText": "That reset is done.",
+      "tweetCreatedAt": "2026-10-18T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000181",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-9",
+      "evaluation": {
+        "eventGroupId": "syn-event-9",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic provenance contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-038",
+      "category": "reset_executed",
+      "description": "provenance contrast: verified parent evidence",
+      "tweetText": "That reset is done.",
+      "tweetCreatedAt": "2026-10-18T04:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000182",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-9",
+      "evaluation": {
+        "eventGroupId": "syn-event-9",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic provenance contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-039",
+      "category": "reset_executed",
+      "description": "provenance contrast: unrelated parent evidence",
+      "tweetText": "That reset is done.",
+      "tweetCreatedAt": "2026-10-18T05:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000183",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-9",
+      "evaluation": {
+        "eventGroupId": "syn-event-9",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic provenance contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-040",
+      "category": "reset_executed",
+      "description": "provenance contrast: other author quote evidence",
+      "tweetText": "That reset is done.",
+      "tweetCreatedAt": "2026-10-18T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000184",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-9",
+      "evaluation": {
+        "eventGroupId": "syn-event-9",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic provenance contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-041",
+      "category": "irrelevant",
+      "description": "provenance contrast: text only evidence",
+      "tweetText": "No reset planned; ordinary maintenance only.",
+      "tweetCreatedAt": "2026-10-18T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000185",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-10",
+      "evaluation": {
+        "eventGroupId": "syn-event-10",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic provenance contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-042",
+      "category": "irrelevant",
+      "description": "provenance contrast: verified parent evidence",
+      "tweetText": "No reset planned; ordinary maintenance only.",
+      "tweetCreatedAt": "2026-10-18T07:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000186",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-10",
+      "evaluation": {
+        "eventGroupId": "syn-event-10",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic provenance contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-043",
+      "category": "irrelevant",
+      "description": "provenance contrast: unrelated parent evidence",
+      "tweetText": "No reset planned; ordinary maintenance only.",
+      "tweetCreatedAt": "2026-10-18T08:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000187",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-10",
+      "evaluation": {
+        "eventGroupId": "syn-event-10",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic provenance contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-044",
+      "category": "irrelevant",
+      "description": "provenance contrast: other author quote evidence",
+      "tweetText": "No reset planned; ordinary maintenance only.",
+      "tweetCreatedAt": "2026-10-18T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000188",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-10",
+      "evaluation": {
+        "eventGroupId": "syn-event-10",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic provenance contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-045",
+      "category": "official_notice",
+      "description": "provenance contrast: text only evidence",
+      "tweetText": "The reset is coming.",
+      "tweetCreatedAt": "2026-10-18T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000189",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-11",
+      "evaluation": {
+        "eventGroupId": "syn-event-11",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-046",
+      "category": "official_notice",
+      "description": "provenance contrast: verified parent evidence",
+      "tweetText": "The reset is coming.",
+      "tweetCreatedAt": "2026-10-18T10:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000190",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-11",
+      "evaluation": {
+        "eventGroupId": "syn-event-11",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-047",
+      "category": "official_notice",
+      "description": "provenance contrast: unrelated parent evidence",
+      "tweetText": "The reset is coming.",
+      "tweetCreatedAt": "2026-10-18T11:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000191",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-11",
+      "evaluation": {
+        "eventGroupId": "syn-event-11",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-048",
+      "category": "official_notice",
+      "description": "provenance contrast: other author quote evidence",
+      "tweetText": "The reset is coming.",
+      "tweetCreatedAt": "2026-10-18T12:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000192",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-provenance-11",
+      "evaluation": {
+        "eventGroupId": "syn-event-11",
+        "split": "development",
+        "layer": "provenance",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic provenance contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-049",
+      "category": "irrelevant",
+      "description": "cancellation contrast: text only evidence",
+      "tweetText": "Reset planned for 09:00 is cancelled.",
+      "tweetCreatedAt": "2026-10-19T12:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000193",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-12",
+      "evaluation": {
+        "eventGroupId": "syn-event-12",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-050",
+      "category": "irrelevant",
+      "description": "cancellation contrast: verified parent evidence",
+      "tweetText": "Reset planned for 09:00 is cancelled.",
+      "tweetCreatedAt": "2026-10-19T13:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000194",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-12",
+      "evaluation": {
+        "eventGroupId": "syn-event-12",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-051",
+      "category": "irrelevant",
+      "description": "cancellation contrast: unrelated parent evidence",
+      "tweetText": "Reset planned for 09:00 is cancelled.",
+      "tweetCreatedAt": "2026-10-19T14:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000195",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-12",
+      "evaluation": {
+        "eventGroupId": "syn-event-12",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-052",
+      "category": "irrelevant",
+      "description": "cancellation contrast: other author quote evidence",
+      "tweetText": "Reset planned for 09:00 is cancelled.",
+      "tweetCreatedAt": "2026-10-19T15:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000196",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-12",
+      "evaluation": {
+        "eventGroupId": "syn-event-12",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-053",
+      "category": "official_notice",
+      "description": "cancellation contrast: text only evidence",
+      "tweetText": "The cancelled reset is now rescheduled for 11:00.",
+      "tweetCreatedAt": "2026-10-19T15:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000197",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-13",
+      "evaluation": {
+        "eventGroupId": "syn-event-13",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic cancellation contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-054",
+      "category": "official_notice",
+      "description": "cancellation contrast: verified parent evidence",
+      "tweetText": "The cancelled reset is now rescheduled for 11:00.",
+      "tweetCreatedAt": "2026-10-19T16:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000198",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-13",
+      "evaluation": {
+        "eventGroupId": "syn-event-13",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic cancellation contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-055",
+      "category": "official_notice",
+      "description": "cancellation contrast: unrelated parent evidence",
+      "tweetText": "The cancelled reset is now rescheduled for 11:00.",
+      "tweetCreatedAt": "2026-10-19T17:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000199",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-13",
+      "evaluation": {
+        "eventGroupId": "syn-event-13",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic cancellation contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-056",
+      "category": "official_notice",
+      "description": "cancellation contrast: other author quote evidence",
+      "tweetText": "The cancelled reset is now rescheduled for 11:00.",
+      "tweetCreatedAt": "2026-10-19T18:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000200",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-13",
+      "evaluation": {
+        "eventGroupId": "syn-event-13",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic cancellation contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-057",
+      "category": "irrelevant",
+      "description": "cancellation contrast: text only evidence",
+      "tweetText": "We tried to reset but the operation failed.",
+      "tweetCreatedAt": "2026-10-19T18:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000201",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-14",
+      "evaluation": {
+        "eventGroupId": "syn-event-14",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-058",
+      "category": "irrelevant",
+      "description": "cancellation contrast: verified parent evidence",
+      "tweetText": "We tried to reset but the operation failed.",
+      "tweetCreatedAt": "2026-10-19T19:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000202",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-14",
+      "evaluation": {
+        "eventGroupId": "syn-event-14",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-059",
+      "category": "irrelevant",
+      "description": "cancellation contrast: unrelated parent evidence",
+      "tweetText": "We tried to reset but the operation failed.",
+      "tweetCreatedAt": "2026-10-19T20:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000203",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-14",
+      "evaluation": {
+        "eventGroupId": "syn-event-14",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-060",
+      "category": "irrelevant",
+      "description": "cancellation contrast: other author quote evidence",
+      "tweetText": "We tried to reset but the operation failed.",
+      "tweetCreatedAt": "2026-10-19T21:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000204",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-14",
+      "evaluation": {
+        "eventGroupId": "syn-event-14",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic cancellation contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-061",
+      "category": "reset_executed",
+      "description": "cancellation contrast: text only evidence",
+      "tweetText": "Retry succeeded; reset completed.",
+      "tweetCreatedAt": "2026-10-19T21:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000205",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-15",
+      "evaluation": {
+        "eventGroupId": "syn-event-15",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic cancellation contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-062",
+      "category": "reset_executed",
+      "description": "cancellation contrast: verified parent evidence",
+      "tweetText": "Retry succeeded; reset completed.",
+      "tweetCreatedAt": "2026-10-19T22:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000206",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-15",
+      "evaluation": {
+        "eventGroupId": "syn-event-15",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic cancellation contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-063",
+      "category": "reset_executed",
+      "description": "cancellation contrast: unrelated parent evidence",
+      "tweetText": "Retry succeeded; reset completed.",
+      "tweetCreatedAt": "2026-10-19T23:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000207",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-15",
+      "evaluation": {
+        "eventGroupId": "syn-event-15",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic cancellation contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-064",
+      "category": "reset_executed",
+      "description": "cancellation contrast: other author quote evidence",
+      "tweetText": "Retry succeeded; reset completed.",
+      "tweetCreatedAt": "2026-10-19T00:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000208",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-cancellation-15",
+      "evaluation": {
+        "eventGroupId": "syn-event-15",
+        "split": "development",
+        "layer": "cancellation",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic cancellation contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-065",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: text only evidence",
+      "tweetText": "We will bank your earned tokens during the reset.",
+      "tweetCreatedAt": "2026-10-20T00:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000209",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-16",
+      "evaluation": {
+        "eventGroupId": "syn-event-16",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-066",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: verified parent evidence",
+      "tweetText": "We will bank your earned tokens during the reset.",
+      "tweetCreatedAt": "2026-10-20T01:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000210",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-16",
+      "evaluation": {
+        "eventGroupId": "syn-event-16",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-067",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: unrelated parent evidence",
+      "tweetText": "We will bank your earned tokens during the reset.",
+      "tweetCreatedAt": "2026-10-20T02:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000211",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-16",
+      "evaluation": {
+        "eventGroupId": "syn-event-16",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-068",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: other author quote evidence",
+      "tweetText": "We will bank your earned tokens during the reset.",
+      "tweetCreatedAt": "2026-10-20T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000212",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-16",
+      "evaluation": {
+        "eventGroupId": "syn-event-16",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-069",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: text only evidence",
+      "tweetText": "Your tokens will be forcibly wiped at reset.",
+      "tweetCreatedAt": "2026-10-20T03:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000213",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-17",
+      "evaluation": {
+        "eventGroupId": "syn-event-17",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-070",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: verified parent evidence",
+      "tweetText": "Your tokens will be forcibly wiped at reset.",
+      "tweetCreatedAt": "2026-10-20T04:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000214",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-17",
+      "evaluation": {
+        "eventGroupId": "syn-event-17",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-071",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: unrelated parent evidence",
+      "tweetText": "Your tokens will be forcibly wiped at reset.",
+      "tweetCreatedAt": "2026-10-20T05:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000215",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-17",
+      "evaluation": {
+        "eventGroupId": "syn-event-17",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-072",
+      "category": "official_notice",
+      "description": "banked-vs-forced contrast: other author quote evidence",
+      "tweetText": "Your tokens will be forcibly wiped at reset.",
+      "tweetCreatedAt": "2026-10-20T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000216",
+      "expected": {
+        "signalType": "official_notice",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": true
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-17",
+      "evaluation": {
+        "eventGroupId": "syn-event-17",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "official_notice",
+          "rationale": "Synthetic banked-vs-forced contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-073",
+      "category": "reset_executed",
+      "description": "banked-vs-forced contrast: text only evidence",
+      "tweetText": "Tokens were banked; reset completed.",
+      "tweetCreatedAt": "2026-10-20T06:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000217",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-18",
+      "evaluation": {
+        "eventGroupId": "syn-event-18",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic banked-vs-forced contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-074",
+      "category": "reset_executed",
+      "description": "banked-vs-forced contrast: verified parent evidence",
+      "tweetText": "Tokens were banked; reset completed.",
+      "tweetCreatedAt": "2026-10-20T07:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000218",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-18",
+      "evaluation": {
+        "eventGroupId": "syn-event-18",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic banked-vs-forced contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-075",
+      "category": "reset_executed",
+      "description": "banked-vs-forced contrast: unrelated parent evidence",
+      "tweetText": "Tokens were banked; reset completed.",
+      "tweetCreatedAt": "2026-10-20T08:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000219",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-18",
+      "evaluation": {
+        "eventGroupId": "syn-event-18",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic banked-vs-forced contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-076",
+      "category": "reset_executed",
+      "description": "banked-vs-forced contrast: other author quote evidence",
+      "tweetText": "Tokens were banked; reset completed.",
+      "tweetCreatedAt": "2026-10-20T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000220",
+      "expected": {
+        "signalType": "reset_executed",
+        "shouldCreateResetHistoryEvent": true,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-18",
+      "evaluation": {
+        "eventGroupId": "syn-event-18",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "reset_executed",
+          "rationale": "Synthetic banked-vs-forced contrast other_author_quote; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-077",
+      "category": "irrelevant",
+      "description": "banked-vs-forced contrast: text only evidence",
+      "tweetText": "No token change and no reset occurred.",
+      "tweetCreatedAt": "2026-10-20T09:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000221",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-19",
+      "evaluation": {
+        "eventGroupId": "syn-event-19",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "text_only",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic banked-vs-forced contrast text_only; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-078",
+      "category": "irrelevant",
+      "description": "banked-vs-forced contrast: verified parent evidence",
+      "tweetText": "No token change and no reset occurred.",
+      "tweetCreatedAt": "2026-10-20T10:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000222",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-19",
+      "evaluation": {
+        "eventGroupId": "syn-event-19",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "verified_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic banked-vs-forced contrast verified_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-079",
+      "category": "irrelevant",
+      "description": "banked-vs-forced contrast: unrelated parent evidence",
+      "tweetText": "No token change and no reset occurred.",
+      "tweetCreatedAt": "2026-10-20T11:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000223",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-19",
+      "evaluation": {
+        "eventGroupId": "syn-event-19",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "unrelated_parent",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic banked-vs-forced contrast unrelated_parent; evaluator-only expected label."
+        }
+      }
+    },
+    {
+      "id": "eval-syn-080",
+      "category": "irrelevant",
+      "description": "banked-vs-forced contrast: other author quote evidence",
+      "tweetText": "No token change and no reset occurred.",
+      "tweetCreatedAt": "2026-10-20T12:00:00.000Z",
+      "tweetUrl": "https://x.com/evaluation/status/920000000000000224",
+      "expected": {
+        "signalType": "irrelevant",
+        "shouldCreateResetHistoryEvent": false,
+        "shouldRemainActive": false
+      },
+      "pipeline": false,
+      "regressionGroup": "synthetic-banked-vs-forced-19",
+      "evaluation": {
+        "eventGroupId": "syn-event-19",
+        "split": "development",
+        "layer": "banked-vs-forced",
+        "inputCondition": "other_author_quote",
+        "gold": {
+          "decision": "classify",
+          "signalType": "irrelevant",
+          "rationale": "Synthetic banked-vs-forced contrast other_author_quote; evaluator-only expected label."
+        }
+      }
     }
   ]
 }
