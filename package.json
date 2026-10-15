@@ -15,6 +15,7 @@
     "tibo:ai-backfill": "tsx scripts/backfill-tibo-ai-classification.ts",
     "tibo:temporal-backfill": "tsx scripts/backfill-tibo-temporal.ts",
     "eval:tibo-classifiers": "tsx scripts/evaluate-tibo-classifiers.ts",
+    "eval:tibo-offline": "tsx scripts/evaluate-tibo-offline.ts",
     "eval:tibo-classifiers:resume": "tsx scripts/evaluate-tibo-classifiers.ts --resume",
     "eval:tibo-classifiers:fixed": "tsx scripts/evaluate-tibo-classifiers.ts --fixed-model --output-prefix tibo-classifier-eval-gemini-3.5-flash-lite",
     "eval:tibo-scenarios": "tsx scripts/evaluate-tibo-scenarios.ts --live",
