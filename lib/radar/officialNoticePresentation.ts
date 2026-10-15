@@ -129,19 +129,22 @@ export function formatOfficialNoticeSummary(
   }
 
   const subject = formatOfficialNoticeScheduleSubject(notice, locale);
+  // A range expresses a window, not a weekday appointment. Avoid stale or
+  // misleading "again on Wednesday" copy when it has a bounded time range.
+  const summarySubject = notice.temporalPrecision === "range" ? null : subject;
 
   if (locale === "en") {
-    return subject
-      ? `An official notice says another reset is planned for ${subject}. Please check the latest status.`
+    return summarySubject
+      ? `An official notice says a reset is planned for ${summarySubject}. Please check the latest status.`
       : "An official reset notice has been detected. Please check the latest status.";
   }
   if (locale === "zh") {
-    return subject
-      ? `有官方预告称计划在${subject}再次重置。请确认最新状态。`
+    return summarySubject
+      ? `有官方预告称计划在${summarySubject}进行重置。请确认最新状态。`
       : "已检测到官方重置预告。请确认最新状态。";
   }
-  return subject
-    ? `${subject}に再度リセットを行う予定との予告があります。最新状況をご確認ください。`
+  return summarySubject
+    ? `${summarySubject}にリセットを行う予定との予告があります。最新状況をご確認ください。`
     : "公式リセットの予告があります。最新状況をご確認ください。";
 }
 

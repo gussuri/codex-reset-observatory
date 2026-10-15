@@ -15,6 +15,7 @@
   const inFlightTweetIds = new Set();
   // Session-level Set of processed tweet IDs for this tab so scans skip silently
   const processedTweetIds = new Set();
+  const processedReplyContextTweetIds = new Set();
   // Do not submit a collapsed long post; request expansion once and wait for
   // X to render the complete tweet before the next scan.
   const textExpansionRequestedTweetIds = new Set();
@@ -563,6 +564,7 @@
 
         const replyMetadata = TiboMonitorScan.extractReplyMetadata(article, {
           sourceTimeline,
+          isThreadPage: /\/status\/\d+\/?$/i.test(window.location.pathname),
         });
         if (replyMetadata?.isReply === true) {
           record.replyParentFound = true;
@@ -590,6 +592,15 @@
         }
 
         // Silent skip if already processed or currently in-flight
+        const hasTrustedParent = replyMetadata?.isReply === true &&
+          typeof replyMetadata.replyContextText === "string" &&
+          replyMetadata.replyContextText.length > 0 &&
+          replyMetadata.replyToHandles?.some((handle) => handle.toLowerCase() === "@thsottiaux");
+        if (processedTweetIds.has(tweetId) && hasTrustedParent && !processedReplyContextTweetIds.has(tweetId)) {
+          // Permit exactly one same-ID enrichment delivery when a scan later
+          // discovers trusted same-author thread context.
+          processedTweetIds.delete(tweetId);
+        }
         if (processedTweetIds.has(tweetId) || inFlightTweetIds.has(tweetId)) {
           continue;
         }
@@ -698,6 +709,9 @@
             console.warn(`[Tibo Extension] Tweet ${tweetId} will be retried after a temporary webhook failure.`);
           } else if (response && response.success) {
             processedTweetIds.add(tweetId);
+            if (payload.isReply && payload.replyContextText && payload.replyToHandles.includes("@thsottiaux")) {
+              processedReplyContextTweetIds.add(tweetId);
+            }
             if (response.skipped) {
               console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
             } else {

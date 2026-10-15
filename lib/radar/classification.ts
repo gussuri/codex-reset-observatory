@@ -99,6 +99,7 @@ const CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN =
   /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
 const EXPLICIT_FUTURE_USAGE_RESET_PATTERN =
   /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:i|we)'ll\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
+const DAILY_RESET_OFFER_PATTERN = /\bday\s+\d+\s*\/\s*reset\b/i;
 const EXPLICIT_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/i;
 
 function normalizedClassificationText(text: string) {
@@ -224,6 +225,14 @@ export function getTiboClassificationSafetyDecision(
   text: string,
   candidate: ClassificationSignalType,
 ): TiboClassificationSafetyDecision {
+  if (DAILY_RESET_OFFER_PATTERN.test(normalizedClassificationText(text)) && candidate === "irrelevant") {
+    return {
+      signalType: "official_notice",
+      reasonJa: "日次のReset提供を明示する投稿として予告に分類します。実施完了とは扱いません。",
+      reasonCode: "explicit_future_notice",
+      suppressTeaserStrength: false,
+    };
+  }
   if (isBankedDistributionCompletionSignal(text) && candidate !== "irrelevant") {
     const hasFutureBankedDistribution = hasFutureBankedDistributionIntent(text);
     return {
@@ -428,6 +437,16 @@ export function classifyTiboTweet(
   const isQuote = typeof metadata?.isQuote === "boolean"
     ? metadata.isQuote
     : normalized.includes("quote") || false;
+
+  if (DAILY_RESET_OFFER_PATTERN.test(normalizedClassificationText(text))) {
+    return applyRuleSafetyDecision(text, {
+      signalType: "official_notice",
+      confidence: 0.9,
+      reason: "Matched an explicit daily reset offer; this is a notice, not a completed reset.",
+      isReply,
+      isQuote,
+    });
+  }
 
   // 1. 否定・過去・昔話回想パターンの先頭評価 (Negative / Past / Retrospective Exclusion -> irrelevant)
   const negativeOrPastPatterns = [

@@ -491,7 +491,6 @@
     const parentArticle = previousCell.querySelector?.('article[data-testid="tweet"]');
     if (!parentArticle) return { needsRetry: true };
     if (!hasOutgoingThreadConnector(parentArticle)) return { needsRetry: true };
-
     const parentContext = getReplyParentContext(parentArticle);
     if (!parentContext.ready) {
       return {
@@ -524,8 +523,10 @@
     const marker = getReplyMarker(article);
     if (!marker) {
       const sourceTimeline = typeof options === "string" ? options : options?.sourceTimeline;
-      if (sourceTimeline === "with_replies") {
-        const siblingMetadata = resolveSiblingReplyMetadata(article);
+      const isThreadPage = typeof options === "object" && options?.isThreadPage === true;
+      const siblingMetadata = sourceTimeline === "with_replies" || isThreadPage
+        ? resolveSiblingReplyMetadata(article)
+        : null;
         if (siblingMetadata?.needsRetry) {
           return {
             isReply: siblingMetadata.isReply === true,
@@ -551,7 +552,6 @@
             ...quoteMetadata,
           };
         }
-      }
       return {
         isReply: false,
         replyToHandles: [],

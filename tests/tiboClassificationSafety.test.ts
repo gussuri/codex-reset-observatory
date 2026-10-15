@@ -40,6 +40,13 @@ test("futureSignal prompt distinguishes explicit reset notices from contextual t
   );
 });
 
+test("daily Day N / Reset offer remains a notice even with a joking opener", () => {
+  const text = "The reports of my reset button being lost are greatly exaggerated\n\nDay 10/ Reset";
+  assert.equal(classifyTiboTweet(text, url).signalType, "official_notice");
+  assert.equal(getTiboClassificationSafetyDecision(text, "irrelevant").signalType, "official_notice");
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /daily offer such as "Day 10 \/ Reset"/i);
+});
+
 function geminiResult(signalType: GeminiClassificationOutput["signalType"]): GeminiClassificationOutput {
   return {
     signalType,

@@ -6,6 +6,7 @@
 importScripts("diagnostics.js", "scan-utils.js");
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
+const REPLY_CONTEXT_QUEUE_KEY = "tibo_reply_context_enriched_tweet_ids";
 const PENDING_QUEUE_KEY = "tibo_pending_tweet_payloads";
 const MAX_PENDING_TWEET_PAYLOADS = 50;
 const PENDING_RETRY_DELAY_MS = 10 * 60 * 1000;
@@ -984,11 +985,15 @@ async function executePostTweet(payload) {
   }
 
   // 1. Get processed IDs from chrome.storage.local
-  const storageData = await chrome.storage.local.get([QUEUE_KEY, QUARANTINE_KEY]);
+  const storageData = await chrome.storage.local.get([QUEUE_KEY, QUARANTINE_KEY, REPLY_CONTEXT_QUEUE_KEY]);
   const processedIds = storageData[QUEUE_KEY] || [];
+  const enrichedIds = storageData[REPLY_CONTEXT_QUEUE_KEY] || [];
 
   // 2. Skip if already processed in storage
-  if (processedIds.includes(tweetId)) {
+  const trustedReplyEnrichment = payload.isReply === true &&
+    typeof payload.replyContextText === "string" && payload.replyContextText.length > 0 &&
+    Array.isArray(payload.replyToHandles) && payload.replyToHandles.some((handle) => String(handle).toLowerCase() === "@thsottiaux");
+  if (processedIds.includes(tweetId) && (!trustedReplyEnrichment || enrichedIds.includes(tweetId))) {
     console.log(`[Service Worker] Tweet ${tweetId} already processed. Skipping fetch.`);
     await removePendingTweet(tweetId);
     return { success: true, skipped: true };
@@ -1117,6 +1122,11 @@ async function executePostTweet(payload) {
     if (!reVerifiedIds.includes(tweetId)) {
       throw new Error(`Storage write verification failed for tweetId ${tweetId}. Value was not persisted.`);
     }
+  }
+  if (trustedReplyEnrichment && !enrichedIds.includes(tweetId)) {
+    enrichedIds.push(tweetId);
+    if (enrichedIds.length > 100) enrichedIds.shift();
+    await chrome.storage.local.set({ [REPLY_CONTEXT_QUEUE_KEY]: enrichedIds });
   }
 
   await removePendingTweet(tweetId);
