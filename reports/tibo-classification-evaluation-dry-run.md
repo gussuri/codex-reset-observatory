@@ -1,15 +1,15 @@
 # Tibo classification evaluation: stage 1 dry run
 
-Generated 2026-10-15 from the offline evaluator. This is an input and scorer validation run, not a model evaluation.
+Generated 2026-10-15 from the offline evaluator. This validates inputs, serialization, and scoring behavior; no real AI evaluation has been run, so model precision and quality are unmeasured.
 
 ## Dry-run contract
 
-`pnpm eval:tibo-offline` selects and counts the same normalized cases used by `--results` scoring. The current corpus contains 229 selectable cases: 145 original virtual scenarios, 48 curated synthetic context contrasts, and 36 real-post/input-condition cases. The last count includes alternate evidence conditions for the two October 15 reply/quote records. Selection accepts `--condition`, `--split`, and `--limit`; unknown or empty selections fail.
+`pnpm eval:tibo-offline` selects and counts the same normalized cases used by `--results` scoring. The current corpus contains 230 selectable cases: 145 original virtual scenarios, 49 added synthetic cases (48 paired context contrasts plus one general release-notes negative), and 36 real-post/input-condition cases. Selection accepts `--condition`, `--split`, and `--limit`; unknown or empty selections fail.
 
 ```text
 Tibo classification evaluation dry-run
-- fixture cases: 229
-- selected cases: 229
+- fixture cases: 230
+- selected cases: 230
 - current API calls: 0
 - current network: none
 - current DB writes: 0
@@ -20,26 +20,24 @@ Tibo classification evaluation dry-run
 - real source posts: 32 in 29 groups
 ```
 
-The 48 new synthetic records use paired target text and timestamp across text-only, verified same-author parent, verified unrelated parent, and other-author quoted-post inputs. The inputs are formatted with the production `buildGeminiPrompt` formatter. They cover fragments (“Landing within the next 2 hours”, “Done and dusted”), direct reset notice/completion, a Codex milestone teaser whose parent context changes the gold, BANKED distribution notice/delivery and parent context, personal BANKED use, and cancellation. Gold expectations and rationales are explicit per condition. These are synthetic scorer controls, not model outputs or claims of model accuracy.
+The paired synthetic contrasts use the same target text and timestamp with text-only, verified same-author parent, unrelated parent, and other-author quoted-post inputs. The production baseline formatter is replayed faithfully. A separate evaluation-only `verified_graph` serializer includes source IDs, authors, timestamps, relation edges, and related post records; it is not silently mixed into baseline inputs. Serializer mode and formatter hash are part of the run identity. Cases with synthetic virtual parent/quote IDs say so explicitly and do not claim those IDs occur in a source fixture.
 
-## Real-post and source limitations
+## Legacy and real-post evidence
 
-The real-post fixture has 32 stored posts across 29 logical event groups. Twenty complete legacy-evaluation snapshots are represented, with old wrapper output separated from new curator-draft gold. Their stored text is marked as an evaluation snapshot with original-text verification false; the fixture does not claim those rows are exact author originals. Other source snapshots retain their source status and citations. Incomplete and ambiguous records are excluded from the gold set.
+All original 145 scenarios remain in the corpus. Their legacy reply/quote text, flags, reply handles, and timeline metadata now flow through normalization and the final production formatter. Explicit legacy `ambiguous` flags are preserved as ambiguous safe-hold cases; the old expected label remains in the original scenario JSON for audit and is not treated as definite gold or included in definite-label accuracy. This prevents contextless “Done” from being a correct completion label. Their safe-hold behavior is reported separately.
 
-Five August cases previously marked as holdout candidates are known from repository tests, data, or reports, including the banked 8pm, 14pm, and milestone examples. They are now regression cases. There are zero certified holdout cases. The 14pm PST temporal gold follows the existing tested compatibility contract: 14:00 PST resolves to `2026-08-23T22:00:00Z`. It is not scored as invalid. All gold remains `curator_draft` pending Sol review.
+The real-post fixture has 32 stored posts across 29 logical event groups. Twenty complete legacy-evaluation snapshots are represented, with old wrapper output separate from curator-draft gold. Their stored text is marked as an evaluation snapshot with original-text verification false; the fixture does not claim those rows are exact author originals. Incomplete records remain excluded. Five known-leakage candidates are regression cases, leaving zero certified holdouts. The 14pm PST temporal gold follows the existing tested compatibility contract: 14:00 PST resolves to `2026-08-23T22:00:00Z`. All curator-draft gold remains subject to human adjudication.
 
-The October 15 reply and quote chain uses the supplied X DOM relationship review. The September 12 relation follows the mapping in `docs/reset-history-normalization.md`. Other cross-post references remain unverified and are not treated as same-event lineage. Runtime validation rejects unsupported gold labels, broken IDs, invalid temporal values, and event/split leakage.
+For the October 15 quoted completion, the target is connected by a quote edge to the timing reply, and that quoted post has its own reply edge to the Day 10 post. The baseline mode marks the target as a quote and does not invent a direct reply to Day 10. The graph serializer preserves both directed edges. Public-state assertions are present only when the fixture carries an explicit prior state and expected resulting state; pure classification rows do not acquire public fields from evaluator-side assumptions.
 
-The old wrapper CSV does not preserve provider raw responses. Its `gemini_prediction` is wrapper output, not raw model text. Raw output is therefore recorded as `not_recorded`; raw quality metrics are N/A, separate from attempted failures and not-run rows.
+## Layer-specific gold and scoring
 
-## Prompt and request identity
+The BANKED delivery contrast keeps the raw text classification separate from the current correction contract: raw gold is `reset_executed`, while corrected gold is `irrelevant` for broad/global reset classification. Its public facts describe BANKED delivery and no forced reset history. Ambiguous Codex milestone wording is a boundary case accepting a safe hold or teaser, and cannot create completion or an official notice. A separate general release-notes sentence is a strict irrelevant control.
 
-The current `TIBO_GEMINI_SYSTEM_PROMPT` is 23,158 JavaScript string characters, 23,238 UTF-8 bytes, and 3,292 whitespace-separated words. Provider token count is unavailable. The request formatter adds target text, timestamp, reply parent text/author, and quoted text/author using the production `buildGeminiPrompt` function. The current wrapper requests JSON MIME output, temperature 0, and a 7-second timeout; it does not supply provider JSON schema. Saved-result scoring requires explicit provider, model, model version, and one input condition. The run identity is computed from the current commit and normalized fixture, prompt plus formatter, output contract, and request-options manifest; CLI tests reject mismatches.
+Old wrapper CSVs do not preserve provider raw responses. Their `gemini_prediction` is wrapper output, not raw model text. Raw capture remains `not_recorded`; attempted request failures and not-run rows are distinct. The current prompt formatter uses the production `buildGeminiPrompt` function. Request options are JSON MIME output, temperature 0, and a 7-second timeout; the wrapper supplies no provider JSON schema. Provider token count is unavailable. Saved-result scoring requires explicit provider, model, model version, and one input condition. The run identity includes current commit, normalized fixture, prompt, output contract, request options, and serialization mode/hash.
 
-## Scoring and remaining integration coverage
+Definite-label accuracy excludes ambiguous cases. Those cases are counted separately as safe-hold outcomes. Corrected-layer gold can differ from raw-AI gold. Public state is scored only when the fixture explicitly gives a pre-state and expected post-state. Missing temporal predictions and missing event associations count as errors only where those fields are explicitly in scope.
 
-Raw AI, corrected fallback, and public outcome are independently recorded and scored. Provider failure does not erase a saved fallback/public result. A missing public history assertion, missing temporal prediction, or null event association is counted as a miss/error when the layer was attempted. Not-recorded, not-run, attempted failure, and partial saved outcomes remain distinct. Zero support stays N/A; support with no correct prediction has zero recall/F1 where applicable. Latency and token-use omissions remain null and are counted as missing.
-
-Synthetic JSON cases do not verify ingestion order, retries/resends, process restarts, multi-tab races, database concurrency, manual/rejected override races, or persisted deduplication. Those remain integration-test requirements; this stage has no DB-backed assertions and makes no claims about those paths. Existing production tests cover some of these behaviors independently.
+Synthetic JSON cases do not verify ingestion order, retries/resends, process restarts, multi-tab races, database concurrency, manual/rejected override races, or persisted deduplication. Those remain integration-test requirements; this stage has no DB-backed assertions and makes no claims about those paths.
 
 No AI calls, network requests, database writes, production behavior changes, schema changes, or dependency changes were performed for stage 1.

@@ -724,7 +724,14 @@
           {
             "id": "text-only",
             "decision": "abstain",
-            "reason": "対象不明"
+            "reason": "対象不明",
+            "publicOutcome": {
+              "historyCreated": false,
+              "activeNotice": true,
+              "eventKind": "official_notice",
+              "resetMethod": null,
+              "eventIdentity": "oct15-day10-reset"
+            }
           },
           {
             "id": "verified-parent",
@@ -732,9 +739,23 @@
             "signalType": "official_notice",
             "expectedStartAt": "2026-10-15T04:56:07.000Z",
             "expectedEndAt": "2026-10-15T06:56:07.000Z",
-            "basePostId": "2110595554036400151"
+            "basePostId": "2110595554036400151",
+            "publicOutcome": {
+              "historyCreated": false,
+              "activeNotice": true,
+              "eventKind": "official_notice",
+              "resetMethod": null,
+              "eventIdentity": "oct15-day10-reset"
+            }
           }
-        ]
+        ],
+        "preState": {
+          "activeNotice": {
+            "eventGroupId": "oct15-day10-reset",
+            "eventKind": "official_notice"
+          },
+          "history": []
+        }
       }
     },
     {
@@ -769,16 +790,37 @@
           {
             "id": "text-only",
             "decision": "abstain",
-            "reason": "reset claim or target absent"
+            "reason": "reset claim or target absent",
+            "publicOutcome": {
+              "historyCreated": false,
+              "activeNotice": true,
+              "eventKind": "official_notice",
+              "resetMethod": null,
+              "eventIdentity": "oct15-day10-reset"
+            }
           },
           {
             "id": "verified-quote-reply-parent-chain",
             "decision": "classify",
             "signalType": "reset_executed",
             "completionTimestamp": "2026-10-15T06:28:13.000Z",
-            "timestampMeaning": "completion post time, not independently confirmed reset execution time"
+            "timestampMeaning": "completion post time, not independently confirmed reset execution time",
+            "publicOutcome": {
+              "historyCreated": true,
+              "activeNotice": false,
+              "eventKind": "global_reset",
+              "resetMethod": "forced_reset",
+              "eventIdentity": "oct15-day10-reset"
+            }
           }
-        ]
+        ],
+        "preState": {
+          "activeNotice": {
+            "eventGroupId": "oct15-day10-reset",
+            "eventKind": "official_notice"
+          },
+          "history": []
+        }
       }
     },
     {

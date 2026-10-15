@@ -34,10 +34,10 @@ test("legacy prediction snapshots remain separate from re-reviewed gold labels",
 
 test("synthetic scenarios retain the original 145 and provide 220+ evaluator cases", () => {
   assert.equal(scenarioFixture.scenarios.slice(0, 145).length, 145);
-  assert.equal(scenarioFixture.scenarios.length, 193);
+  assert.equal(scenarioFixture.scenarios.length, 194);
   const evaluationCases = scenarioFixture.scenarios.filter((item) => "evaluation" in item);
-  assert.equal(evaluationCases.length, 48);
-  assert.equal(buildEvaluationCases().length, 229);
+  assert.equal(evaluationCases.length, 194);
+  assert.equal(buildEvaluationCases().length, 230);
 });
 
 test("real-post fixture rejects missing source citations and split leakage", () => {
@@ -77,17 +77,65 @@ test("synthetic context conditions provide distinct original input evidence and 
   assert.match(cases.find((item) => item.inputCondition === "unrelated_parent")?.providerInput.contextPosts[0]?.text ?? "", /no reset is discussed/);
   assert.equal(cases.find((item) => item.inputCondition === "other_author_quote")?.providerInput.contextPosts[0]?.author, "@another_author");
   assert.equal(cases.find((item) => item.inputCondition === "verified_parent")?.gold.temporal?.precision, "range");
-  const formatted = cases.map(formatEvaluationInput);
+  const formatted = cases.map((item) => formatEvaluationInput(item));
   assert.equal(new Set(formatted).size, 4);
   assert.ok(formatted.find((text) => text.includes("Parent context shown in the same article: The reset is scheduled to happen")));
   assert.ok(formatted.find((text) => text.includes("QUOTED CONTEXT (not Tibo's own text): I reset my own account")));
   const teaser = allCases.filter((item) => item.eventGroupId === "synthetic-event-codex-teaser");
-  assert.equal(teaser.find((item) => item.inputCondition === "text_only")?.gold.signalType, "irrelevant");
+  assert.equal(teaser.find((item) => item.inputCondition === "text_only")?.gold.decision, "ambiguous");
+  assert.deepEqual(teaser.find((item) => item.inputCondition === "text_only")?.gold.acceptedSignalTypes, ["abstain", "teaser"]);
   assert.equal(teaser.find((item) => item.inputCondition === "verified_parent")?.gold.signalType, "teaser");
   const banked = allCases.find((item) => item.eventGroupId === "synthetic-event-banked-parent-fragment" && item.inputCondition === "verified_parent");
   assert.equal(banked?.gold.signalType, "official_notice");
   assert.equal(banked?.gold.publicOutcome?.resetMethod, "banked_distribution");
   assert.equal(banked?.gold.publicOutcome?.historyCreated, false);
+});
+
+test("legacy reply and quote context survives normalization and ambiguous Done is a safe hold", () => {
+  const cases = buildEvaluationCases();
+  const reply = cases.find((item) => item.id === "reply-03")!;
+  assert.equal(reply.inputCondition, "legacy_context");
+  assert.equal(reply.providerInput.isReply, true);
+  assert.equal(reply.providerInput.contextPosts[0]?.text, "Reset us please!");
+  assert.match(reply.providerInput.contextPosts[0]?.tweetId ?? "", /^synthetic-parent-/);
+  assert.match(formatEvaluationInput(reply), /Source timeline: with_replies/);
+  assert.equal(reply.gold.decision, "ambiguous");
+  assert.equal(reply.gold.signalType, null);
+  assert.match(formatEvaluationInput(reply), /Parent context shown in the same article: Reset us please!/);
+  const done = cases.find((item) => item.id === "exec-03")!;
+  assert.equal(done.gold.decision, "ambiguous");
+  assert.equal(done.gold.signalType, null);
+  assert.equal(cases.filter((item) => item.gold.decision === "ambiguous").length > 0, true);
+});
+
+test("quoted completion retains true graph edges and separates baseline from verified graph serialization", () => {
+  const completion = buildEvaluationCases().find((item) => item.id === "2110618732666257557::verified-quote-reply-parent-chain")!;
+  const targetId = completion.providerInput.target.tweetId;
+  const quoteEdge = completion.providerInput.edges?.find((edge) => edge.relation === "quote");
+  const ancestorReply = completion.providerInput.edges?.find((edge) => edge.relation === "reply");
+  assert.deepEqual(quoteEdge && [quoteEdge.fromTweetId, quoteEdge.toTweetId], [targetId, "2110595554036400151"]);
+  assert.deepEqual(ancestorReply && [ancestorReply.fromTweetId, ancestorReply.toTweetId], ["2110595554036400151", "2110595484180214059"]);
+  assert.notEqual(ancestorReply?.fromTweetId, targetId, "quoted post's parent must not become target's direct reply parent");
+  assert.equal(quoteEdge?.verification, "verified_by_sol_x_dom");
+  assert.equal(completion.providerInput.edges?.some((edge) => edge.fromTweetId === targetId && edge.toTweetId === "2110595484180214059"), false, "matching text or a related ID must not fabricate a direct edge");
+  const baseline = formatEvaluationInput(completion, "production_baseline");
+  const graph = formatEvaluationInput(completion, "verified_graph");
+  assert.match(baseline, /QUOTED CONTEXT/);
+  assert.doesNotMatch(baseline, /Day 10\/ Reset/);
+  assert.match(graph, /\"fromTweetId\": \"2110595554036400151\"/);
+  assert.match(graph, /\"toTweetId\": \"2110595484180214059\"/);
+  assert.notEqual(baseline, graph);
+});
+
+test("layer gold separates BANKED delivery safety correction and avoids unsupported public-state assertions", () => {
+  const cases = buildEvaluationCases();
+  const banked = cases.find((item) => item.id === "eval-syn-033")!;
+  assert.equal(banked.gold.signalType, "reset_executed");
+  assert.equal(banked.gold.correctedSignalType, "irrelevant");
+  for (const id of ["eval-syn-045", "eval-syn-047", "eval-syn-048"]) assert.equal(cases.find((item) => item.id === id)?.gold.publicOutcome, undefined);
+  const timing = cases.find((item) => item.id === "2110595554036400151::text-only")!;
+  assert.ok(realPostFixture.posts.find((post) => post.tweetId === "2110595554036400151")?.gold.preState?.activeNotice);
+  assert.equal(timing.gold.publicOutcome?.activeNotice, true);
 });
 
 test("contextless child abstention preserves the parent notice while verified completion updates history", () => {

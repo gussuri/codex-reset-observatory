@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +33,8 @@ const identity: OfflineRunIdentity = {
   inputCondition: "verified-context",
   conditions: ["verified-context"],
   selectionHash: "selection-a",
+  serializerMode: "production_baseline",
+  serializerHash: "serializer-a",
 };
 
 function evaluationCase(id: string, expectedSignalType: OfflineEvaluationCase["gold"]["signalType"], decision: OfflineEvaluationCase["gold"]["decision"] = "classify"): OfflineEvaluationCase {
@@ -141,6 +143,10 @@ test("checkpoint identity hashes every experiment-defining field and rejects mis
     const changed = { ...identity, [field]: `${identity[field]}-changed` };
     assert.equal(isCheckpointCompatible(changed, checkpoint), false, `${field} must invalidate resume`);
   }
+  const graphIdentity = buildCurrentRunIdentity({ inputCondition: "text_only", selectedCaseIds: ["one"], provider: "google", model: "gemini-test", modelVersion: "v1", serializerMode: "verified_graph" });
+  const baselineIdentity = buildCurrentRunIdentity({ inputCondition: "text_only", selectedCaseIds: ["one"], provider: "google", model: "gemini-test", modelVersion: "v1", serializerMode: "production_baseline" });
+  assert.notEqual(graphIdentity.serializerHash, baselineIdentity.serializerHash);
+  assert.notEqual(buildRunIdentityHash(graphIdentity), buildRunIdentityHash(baselineIdentity));
 });
 
 test("dry-run reports the selected scope and next-stage cap without enabling API calls", () => {
@@ -209,6 +215,27 @@ test("attempted all-fail and unrecorded raw outputs are distinct; missing tempor
   assert.throws(() => normalizeStoredOutcome({ id: "bad", responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "official_notice", temporal: { startAt: "not-a-time", endAt: null, precision: "range", basePostId: "bad" } } }), /temporal startAt/);
 });
 
+test("ambiguous legacy rows are safe-hold scored outside definite-label accuracy; corrected BANKED gold is independent", () => {
+  const ambiguous = { ...evaluationCase("ambiguous-legacy", "irrelevant"), gold: { decision: "ambiguous" as const, signalType: null, acceptedSignalTypes: ["abstain" as const], rationale: "Legacy ambiguity; safe hold only." } };
+  const wrongCommitment = normalizeStoredOutcome({ id: "ambiguous-legacy", responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "reset_executed" } });
+  const ambiguousReport = buildOfflineReport([ambiguous], [wrongCommitment]);
+  assert.equal(ambiguousReport.rawAi.allRequestAccuracy, null);
+  assert.equal(ambiguousReport.rawAi.safeHoldExpected, 1);
+  assert.equal(ambiguousReport.rawAi.safeHoldCorrect, 0);
+  const teaserBoundary = buildEvaluationCases().find((item) => item.id === "eval-syn-025")!;
+  const permittedTeaser = normalizeStoredOutcome({ id: teaserBoundary.id, responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "teaser" } });
+  const boundaryReport = buildOfflineReport([teaserBoundary], [permittedTeaser]);
+  assert.equal(boundaryReport.rawAi.allRequestAccuracy, null);
+  assert.equal(boundaryReport.rawAi.ambiguousAllowedPredictions, 1);
+  assert.equal(boundaryReport.rawAi.ambiguousConstraintErrors, 0);
+  const banked = buildEvaluationCases().find((item) => item.id === "eval-syn-033")!;
+  const bankedOutcome = normalizeStoredOutcome({ id: banked.id, responseStatus: "success", rawCaptureState: "captured", rawAi: { resultState: "available", signalType: "reset_executed" }, corrected: { resultState: "available", signalType: "irrelevant" }, publicOutcome: { resultState: "available", signalType: "irrelevant", publicOutcome: banked.gold.publicOutcome } });
+  const bankedReport = buildOfflineReport([banked], [bankedOutcome]);
+  assert.equal(bankedReport.rawAi.allRequestAccuracy, 1);
+  assert.equal(bankedReport.corrected.allRequestAccuracy, 1);
+  assert.equal(bankedReport.publicOutcome.publicContract.errors, 0);
+});
+
 test("CLI scores selected saved rows by outer case ID and rejects forged run identities", () => {
   const ids = ["eval-syn-001", "2091412393368945027::text_only"];
   const cases = selectEvaluationCases(buildEvaluationCases(), { condition: "text_only", ids });
@@ -225,12 +252,11 @@ test("CLI scores selected saved rows by outer case ID and rejects forged run ide
   const cli = path.resolve("scripts/evaluate-tibo-offline.ts");
   const invoke = (saved: { identity: OfflineRunIdentity; identityHash: string; outcomes: unknown[] }, shouldSucceed: boolean) => {
     fs.writeFileSync(resultPath, JSON.stringify(saved));
-    try {
-      execFileSync(process.execPath, ["--import", "tsx", cli, "--results", resultPath, "--output", reportPath, "--condition", "text_only", "--ids", ids.join(","), "--provider", "google", "--model", "gemini-test", "--model-version", "v1"], { stdio: "ignore" });
-      assert.equal(shouldSucceed, true);
-    } catch {
-      assert.equal(shouldSucceed, false);
-    }
+    fs.rmSync(reportPath, { force: true });
+    const result = spawnSync(process.execPath, ["--import", "tsx", cli, "--results", resultPath, "--output", reportPath, "--condition", "text_only", "--ids", ids.join(","), "--provider", "google", "--model", "gemini-test", "--model-version", "v1"], { encoding: "utf8" });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status === 0, shouldSucceed, result.stderr);
+    assert.equal(fs.existsSync(reportPath), shouldSucceed, "CLI report must be newly written only on success");
   };
   try {
     invoke({ identity, identityHash: buildRunIdentityHash(identity), outcomes: outcomeRecords }, true);
@@ -250,6 +276,9 @@ test("CLI scores selected saved rows by outer case ID and rejects forged run ide
     invoke({ identity, identityHash: buildRunIdentityHash(identity), outcomes: [...outcomeRecords, outcomeRecords[0]] }, false);
     assert.throws(() => selectEvaluationCases([...buildEvaluationCases(), evaluationCase("exec-01", "irrelevant")], { condition: "text_only" }), /Duplicate or empty evaluation case id/);
     assert.throws(() => execFileSync(process.execPath, ["--import", "tsx", cli, "--condition", "unknown"], { stdio: "ignore" }));
+    const expectCliStatus = (status: number | null, expectedSuccess: boolean) => assert.equal(status === 0, expectedSuccess, "unexpected CLI exit status");
+    const intentionallySuccessful = spawnSync(process.execPath, ["--import", "tsx", cli, "--dry-run"], { encoding: "utf8" });
+    assert.throws(() => expectCliStatus(intentionallySuccessful.status, false), /unexpected CLI exit status/);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

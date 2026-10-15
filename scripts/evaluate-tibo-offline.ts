@@ -30,17 +30,25 @@ export type OfflineEvaluationCase = {
   inputCondition: string;
   providerInput: {
     target: { tweetId: string; author: string; text: string; createdAt: string };
-    contextPosts: Array<{ tweetId: string; author: string; text: string; createdAt: string; relation: "reply_parent" | "quoted_post"; verification: string }>;
+    isReply?: boolean;
+    isQuote?: boolean;
+    replyToHandles?: string[];
+    sourceTimeline?: string;
+    contextPosts: Array<{ tweetId: string; author: string; text: string; createdAt: string; relation: "reply_parent" | "quoted_post" | "quoted_reply_parent"; verification: string }>;
+    edges?: Array<{ fromTweetId: string; toTweetId: string; relation: "reply" | "quote"; verification: string }>;
+    serializerMode?: "production_baseline" | "verified_graph";
   };
   relatedEventGroupIds?: string[];
   gold: {
     decision: "classify" | "abstain" | "ambiguous";
     signalType: SignalType | null;
+    correctedSignalType?: SignalType | null;
     acceptedSignalTypes?: Array<SignalType | "abstain">;
     rationale: string;
     expectedEventGroupId?: string | null;
     temporal?: { startAt: string | null; endAt: string | null; precision: string; basePostId: string };
     publicOutcome?: { historyCreated?: boolean; activeNotice?: boolean; eventKind?: string | null; resetMethod?: string | null; eventIdentity?: string | null };
+    preState?: { activeNotice?: { eventGroupId: string; eventKind: string } | null; history?: unknown[] };
   };
 };
 
@@ -84,6 +92,8 @@ export type OfflineRunIdentity = {
   inputCondition: string;
   conditions: string[];
   selectionHash: string;
+  serializerMode: string;
+  serializerHash: string;
 };
 
 export type OfflineLayerMetrics = {
@@ -98,6 +108,11 @@ export type OfflineLayerMetrics = {
   correctAbstentions: number;
   abstentionMisses: number;
   ambiguousCases: number;
+  decisionCases: number;
+  safeHoldExpected: number;
+  safeHoldCorrect: number;
+  ambiguousAllowedPredictions: number;
+  ambiguousConstraintErrors: number;
   byClass: Record<SignalType, { support: number; predicted: number; truePositive: number; precision: number | null; recall: number | null; f1: number | null }>;
   confusion: Record<SignalType | "abstain_expected" | "ambiguous_expected", Record<SignalType | "abstain" | "no_valid_prediction", number>>;
   byConfidenceThreshold: Record<string, { accepted: number; correct: number; accuracy: number | null; adoptionRate: number | null }>;
@@ -126,11 +141,12 @@ const SCHEMA_CONTRACT = {
   responseStatus: ALL_RESPONSE_STATUSES,
   layers: ["rawAi", "corrected", "publicOutcome"],
   outputFields: ["signalType", "confidence", "evidenceQuote", "reasonJa", "resetTypeJa", "noticeToExecution", "expectedAt", "expectedEndAt", "temporalPrecision", "temporalConfidence"],
-  goldContracts: ["expectedEventGroupId", "temporal", "publicOutcome"],
+  goldContracts: ["expectedEventGroupId", "temporal", "publicOutcome", "correctedSignalType", "acceptedSignalTypes", "preState"],
   signalTypes: SIGNAL_TYPES,
   layerState: ["available", "attempted_no_result", "not_recorded", "not_run"],
   rawCaptureState: ["captured", "attempt_logged", "not_recorded", "not_run"],
-  publicOutcome: ["historyCreated", "activeNotice", "eventKind", "resetMethod", "eventIdentity"],
+  publicOutcome: ["historyCreated", "activeNotice", "eventKind", "resetMethod", "eventIdentity", "preState"],
+  serializerModes: ["production_baseline", "verified_graph"],
   abstain: "separate decision, never encoded as irrelevant",
 };
 const REQUEST_OPTIONS_CONTRACT = {
@@ -301,6 +317,11 @@ function scoreLayer(
   let correctAbstentions = 0;
   let abstentionMisses = 0;
   let ambiguousCases = 0;
+  let decisionCases = 0;
+  let safeHoldExpected = 0;
+  let safeHoldCorrect = 0;
+  let ambiguousAllowedPredictions = 0;
+  let ambiguousConstraintErrors = 0;
   let attemptedCases = 0;
   let availablePredictions = 0;
   let eventAssociationEvaluated = 0;
@@ -326,9 +347,13 @@ function scoreLayer(
     const isAttempted = layer.resultState === "available" || layer.resultState === "attempted_no_result";
     const hasPrediction = layer.resultState === "available" && layer.availability === "available" && layer.signalType !== null;
     if (isAttempted) attemptedCases += 1;
+    if (isAttempted && evaluationCase.gold.decision !== "ambiguous") decisionCases += 1;
+    const ambiguousAllowed = evaluationCase.gold.acceptedSignalTypes ?? ["abstain"];
+    if (isAttempted && evaluationCase.gold.decision === "ambiguous" && ambiguousAllowed.length === 1 && ambiguousAllowed[0] === "abstain") safeHoldExpected += 1;
     const prediction = hasPrediction ? layer.signalType! : null;
-    const expectedBucket = evaluationCase.gold.decision === "classify"
-      ? evaluationCase.gold.signalType!
+    const expectedSignal = layerName === "corrected" && evaluationCase.gold.correctedSignalType !== undefined ? evaluationCase.gold.correctedSignalType : evaluationCase.gold.signalType;
+    const expectedBucket = evaluationCase.gold.decision === "classify" && expectedSignal
+      ? expectedSignal
       : evaluationCase.gold.decision === "abstain" ? "abstain_expected" : "ambiguous_expected";
     const confusionPrediction = prediction ?? "no_valid_prediction";
     if (isAttempted) confusion[expectedBucket][confusionPrediction] += 1;
@@ -338,23 +363,26 @@ function scoreLayer(
     let isCorrect = false;
     if (hasPrediction) {
       if (evaluationCase.gold.decision === "classify") {
-        isCorrect = prediction === evaluationCase.gold.signalType;
+        isCorrect = prediction === expectedSignal;
       } else if (evaluationCase.gold.decision === "abstain") {
         isCorrect = prediction === "abstain";
         if (isCorrect) correctAbstentions += 1;
         else if (prediction !== "abstain") abstentionMisses += 1;
       } else {
         ambiguousCases += 1;
-        isCorrect = evaluationCase.gold.acceptedSignalTypes?.includes(prediction as DecisionLabel) ?? false;
+        isCorrect = ambiguousAllowed.includes(prediction as DecisionLabel);
+        if (isCorrect) ambiguousAllowedPredictions += 1;
+        else ambiguousConstraintErrors += 1;
+        if (ambiguousAllowed.length === 1 && ambiguousAllowed[0] === "abstain" && prediction === "abstain") safeHoldCorrect += 1;
       }
     } else if (evaluationCase.gold.decision === "ambiguous") {
       ambiguousCases += 1;
     }
-    if (isAttempted && isCorrect) allRequestCorrect += 1;
-    if (isAttempted && outcome?.responseStatus === "success" && isCorrect) successfulCorrect += 1;
+    if (isAttempted && evaluationCase.gold.decision !== "ambiguous" && isCorrect) allRequestCorrect += 1;
+    if (isAttempted && outcome?.responseStatus === "success" && evaluationCase.gold.decision !== "ambiguous" && isCorrect) successfulCorrect += 1;
 
-    if (evaluationCase.gold.decision === "classify" && evaluationCase.gold.signalType) {
-      const expected = evaluationCase.gold.signalType;
+    if (evaluationCase.gold.decision === "classify" && expectedSignal) {
+      const expected = expectedSignal;
       support[expected] += 1;
       if (isAttempted) attemptedSupport[expected] += 1;
       if (prediction && SIGNAL_TYPES.includes(prediction as SignalType)) predicted[prediction as SignalType] += 1;
@@ -427,10 +455,15 @@ function scoreLayer(
     attemptedCases,
     resultStateCounts,
     allRequestCorrect,
-    allRequestAccuracy: attemptedCases === 0 ? null : allRequestCorrect / attemptedCases,
+    decisionCases,
+    safeHoldExpected,
+    safeHoldCorrect,
+    ambiguousAllowedPredictions,
+    ambiguousConstraintErrors,
+    allRequestAccuracy: decisionCases === 0 ? null : allRequestCorrect / decisionCases,
     successfulRequests,
     successfulCorrect,
-    successOnlyAccuracy: successfulRequests === 0 ? null : successfulCorrect / successfulRequests,
+    successOnlyAccuracy: successfulRequests === 0 ? null : successfulCorrect / cases.filter((item) => item.gold.decision !== "ambiguous" && outcomesById.get(item.id)?.[layerName].resultState === "available" && outcomesById.get(item.id)?.responseStatus === "success").length,
     correctAbstentions,
     abstentionMisses,
     ambiguousCases,
@@ -589,19 +622,26 @@ function isSignalType(value: unknown): value is SignalType {
   return typeof value === "string" && VALID_SIGNAL_TYPES.has(value);
 }
 
-export function formatEvaluationInput(evaluationCase: OfflineEvaluationCase) {
-  const parent = evaluationCase.providerInput.contextPosts.find((post) => post.relation === "reply_parent");
-  const quote = evaluationCase.providerInput.contextPosts.find((post) => post.relation === "quoted_post");
+export function formatEvaluationInput(evaluationCase: OfflineEvaluationCase, serializerMode: "production_baseline" | "verified_graph" = evaluationCase.providerInput.serializerMode ?? "production_baseline") {
+  const mode = serializerMode;
+  if (mode === "verified_graph") {
+    return `${buildGeminiPrompt({ text: evaluationCase.providerInput.target.text, tweetCreatedAt: evaluationCase.providerInput.target.createdAt, isReply: Boolean(evaluationCase.providerInput.isReply), replyToHandles: evaluationCase.providerInput.replyToHandles ?? [], isQuote: Boolean(evaluationCase.providerInput.isQuote), sourceTimeline: evaluationCase.providerInput.sourceTimeline === "with_replies" || evaluationCase.providerInput.sourceTimeline === "profile" ? evaluationCase.providerInput.sourceTimeline : undefined })}\n\nVerified source graph (evaluation serialization):\n${JSON.stringify({ target: evaluationCase.providerInput.target, targetMetadata: { isReply: evaluationCase.providerInput.isReply, isQuote: evaluationCase.providerInput.isQuote, replyToHandles: evaluationCase.providerInput.replyToHandles ?? [], sourceTimeline: evaluationCase.providerInput.sourceTimeline ?? null }, edges: evaluationCase.providerInput.edges ?? [], relatedPosts: evaluationCase.providerInput.contextPosts }, null, 2)}`;
+  }
+  const hasReply = evaluationCase.providerInput.isReply ?? evaluationCase.providerInput.contextPosts.some((post) => post.relation === "reply_parent");
+  const hasQuote = evaluationCase.providerInput.isQuote ?? evaluationCase.providerInput.contextPosts.some((post) => post.relation === "quoted_post");
+  const parent = hasReply ? evaluationCase.providerInput.contextPosts.find((post) => post.relation === "reply_parent") : undefined;
+  const quote = hasQuote ? evaluationCase.providerInput.contextPosts.find((post) => post.relation === "quoted_post") : undefined;
   return buildGeminiPrompt({
     text: evaluationCase.providerInput.target.text,
     tweetCreatedAt: evaluationCase.providerInput.target.createdAt,
-    isReply: Boolean(parent),
-    replyToHandles: parent ? [parent.author] : [],
+    isReply: Boolean(evaluationCase.providerInput.isReply ?? parent),
+    replyToHandles: evaluationCase.providerInput.replyToHandles ?? (parent ? [parent.author] : []),
     replyContextText: parent?.text,
-    isQuote: Boolean(quote),
+    isQuote: Boolean(evaluationCase.providerInput.isQuote ?? quote),
     quoteContextText: quote?.text,
     quoteAuthorHandle: quote?.author,
     quoteTweetUrl: quote ? `https://x.com/${quote.author.replace(/^@/, "")}/status/${quote.tweetId}` : null,
+    sourceTimeline: evaluationCase.providerInput.sourceTimeline === "with_replies" || evaluationCase.providerInput.sourceTimeline === "profile" ? evaluationCase.providerInput.sourceTimeline : undefined,
   });
 }
 
@@ -632,7 +672,19 @@ export function buildEvaluationCases(): OfflineEvaluationCase[] {
       split,
       layer: typeof evaluation?.layer === "string" ? evaluation.layer : "classification",
       inputCondition,
-      providerInput: providerInput ?? { target: { tweetId: postId, author: "@thsottiaux", text, createdAt }, contextPosts: [] },
+      providerInput: providerInput ?? {
+        target: { tweetId: postId, author: "@thsottiaux", text, createdAt },
+        isReply: Boolean(scenario.isReply), isQuote: Boolean(scenario.isQuote), replyToHandles: Array.isArray(scenario.replyToHandles) ? scenario.replyToHandles.filter((handle): handle is string => typeof handle === "string") : undefined, sourceTimeline: typeof scenario.sourceTimeline === "string" ? scenario.sourceTimeline : undefined,
+        serializerMode: "production_baseline",
+        contextPosts: [
+          ...(scenario.isReply && typeof scenario.replyContextText === "string" ? [{ tweetId: `synthetic-parent-${id}`, author: Array.isArray(scenario.replyToHandles) ? String(scenario.replyToHandles[0] ?? "@unknown") : "@unknown", text: scenario.replyContextText, createdAt, relation: "reply_parent" as const, verification: "synthetic_parent_id_not_in_source_fixture" }] : []),
+          ...(scenario.isQuote && typeof scenario.quoteContextText === "string" ? [{ tweetId: `synthetic-quote-${id}`, author: typeof scenario.quoteAuthorHandle === "string" ? scenario.quoteAuthorHandle : "@unknown", text: scenario.quoteContextText, createdAt, relation: "quoted_post" as const, verification: "synthetic_quote_id_not_in_source_fixture" }] : []),
+        ],
+        edges: [
+          ...(scenario.isReply ? [{ fromTweetId: postId, toTweetId: `synthetic-parent-${id}`, relation: "reply" as const, verification: "synthetic_parent_id_not_in_source_fixture" }] : []),
+          ...(scenario.isQuote ? [{ fromTweetId: postId, toTweetId: `synthetic-quote-${id}`, relation: "quote" as const, verification: "synthetic_quote_id_not_in_source_fixture" }] : []),
+        ],
+      },
       relatedEventGroupIds: Array.isArray(evaluation?.relatedEventGroupIds) ? evaluation.relatedEventGroupIds as string[] : (providerInput?.contextPosts ?? []).map(() => eventGroupId),
       gold,
     });
@@ -648,17 +700,18 @@ export function buildEvaluationCases(): OfflineEvaluationCase[] {
     for (const variant of Array.from(unique.values())) {
       if (typeof variant.id !== "string") continue;
       const contextPosts: OfflineEvaluationCase["providerInput"]["contextPosts"] = [];
+      const edges: NonNullable<OfflineEvaluationCase["providerInput"]["edges"]> = [];
       if (variant.id === "verified-parent" && typeof post.replyParentTweetId === "string") {
         const parent = postsById.get(post.replyParentTweetId);
-        if (parent) contextPosts.push({ tweetId: parent.tweetId as string, author: parent.author as string, text: parent.text as string, createdAt: parent.tweetCreatedAt as string, relation: "reply_parent", verification: String(post.relationVerification) });
+        if (parent) { contextPosts.push({ tweetId: parent.tweetId as string, author: parent.author as string, text: parent.text as string, createdAt: parent.tweetCreatedAt as string, relation: "reply_parent", verification: String(post.relationVerification) }); edges.push({ fromTweetId: String(post.tweetId), toTweetId: String(parent.tweetId), relation: "reply", verification: String(post.relationVerification) }); }
       }
       if (variant.id === "verified-quote-reply-parent-chain" && typeof post.quoteTweetId === "string") {
         const quoted = postsById.get(post.quoteTweetId);
         if (quoted) {
-          contextPosts.push({ tweetId: quoted.tweetId as string, author: quoted.author as string, text: quoted.text as string, createdAt: quoted.tweetCreatedAt as string, relation: "quoted_post", verification: String(post.relationVerification) });
+          contextPosts.push({ tweetId: quoted.tweetId as string, author: quoted.author as string, text: quoted.text as string, createdAt: quoted.tweetCreatedAt as string, relation: "quoted_post", verification: String(post.relationVerification) }); edges.push({ fromTweetId: String(post.tweetId), toTweetId: String(quoted.tweetId), relation: "quote", verification: String(post.relationVerification) });
           if (typeof quoted.replyParentTweetId === "string") {
             const parent = postsById.get(quoted.replyParentTweetId);
-            if (parent) contextPosts.push({ tweetId: parent.tweetId as string, author: parent.author as string, text: parent.text as string, createdAt: parent.tweetCreatedAt as string, relation: "reply_parent", verification: String(quoted.relationVerification) });
+            if (parent) { contextPosts.push({ tweetId: parent.tweetId as string, author: parent.author as string, text: parent.text as string, createdAt: parent.tweetCreatedAt as string, relation: "quoted_reply_parent", verification: String(quoted.relationVerification) }); edges.push({ fromTweetId: String(quoted.tweetId), toTweetId: String(parent.tweetId), relation: "reply", verification: String(quoted.relationVerification) }); }
           }
         }
       }
@@ -671,30 +724,22 @@ export function buildEvaluationCases(): OfflineEvaluationCase[] {
           ? { startAt: typeof temporalRaw.expectedStartAt === "string" ? temporalRaw.expectedStartAt : null, endAt: typeof temporalRaw.expectedEndAt === "string" ? temporalRaw.expectedEndAt : null, precision: String(temporalRaw.precision ?? temporalRaw.kind ?? "unknown"), basePostId: String(temporalRaw.basePostId ?? post.tweetId) }
           : undefined;
       const normalizedCondition = ({ "text-only": "text_only", "verified-parent": "verified_parent", "verified-quote-reply-parent-chain": "verified_quote_reply_parent_chain" } as Record<string, string>)[variant.id] ?? variant.id;
-      let publicOutcome = {
-        historyCreated: decision === "classify" && signalType === "reset_executed",
-        activeNotice: decision === "classify" && signalType === "official_notice",
-        eventKind: typeof gold.deliveryMethod === "string" ? gold.deliveryMethod : signalType === "reset_executed" ? "global_reset" : null,
-        resetMethod: typeof gold.deliveryMethod === "string" ? gold.deliveryMethod : signalType === "reset_executed" ? "forced_reset" : null,
-        eventIdentity: String(post.eventGroupId),
-      };
-      if (post.tweetId === "2110595554036400151") publicOutcome = { historyCreated: false, activeNotice: true, eventKind: "official_notice", resetMethod: null, eventIdentity: String(post.eventGroupId) };
-      if (post.tweetId === "2110618732666257557") {
-        const completedWithVerifiedChain = variant.id === "verified-quote-reply-parent-chain";
-        publicOutcome = { historyCreated: completedWithVerifiedChain, activeNotice: !completedWithVerifiedChain, eventKind: completedWithVerifiedChain ? "global_reset" : "official_notice", resetMethod: completedWithVerifiedChain ? "forced_reset" : null, eventIdentity: String(post.eventGroupId) };
-      }
+      const publicOutcome = gold.preState && variant.publicOutcome && typeof variant.publicOutcome === "object"
+        ? variant.publicOutcome as NonNullable<OfflineEvaluationCase["gold"]["publicOutcome"]>
+        : undefined;
+      const replyToHandles = Array.isArray(post.replyToHandles) && typeof post.replyToHandles[0] === "string" ? [post.replyToHandles[0] as string] : undefined;
       cases.push({
         id: `${String(post.tweetId)}::${variant.id}`,
         eventGroupId: String(post.eventGroupId),
         split: post.split as EvaluationSplit,
         layer: "classification",
         inputCondition: normalizedCondition,
-        providerInput: { target: { tweetId: String(post.tweetId), author: String(post.author), text: String(post.text), createdAt: String(post.tweetCreatedAt) }, contextPosts },
+        providerInput: { target: { tweetId: String(post.tweetId), author: String(post.author), text: String(post.text), createdAt: String(post.tweetCreatedAt) }, isReply: Boolean(post.replyParentTweetId), isQuote: Boolean(post.quoteTweetId), replyToHandles, contextPosts, edges, serializerMode: "production_baseline" },
         relatedEventGroupIds: [
           ...((post.relationVerification === "verified_by_sol_x_dom" || post.relationVerification === "documented_event_mapping") ? (post.relatedPostIds as string[]).map((relationId) => String(postsById.get(relationId)?.eventGroupId ?? "")) : []),
           ...contextPosts.map((contextPost) => String(postsById.get(contextPost.tweetId)?.eventGroupId ?? String(post.eventGroupId))),
         ],
-      gold: { decision, signalType, rationale: String(variant.rationale ?? gold.rationale), ...((post.relationVerification === "documented_event_mapping" || post.relationVerification === "verified_by_sol_x_dom") ? { expectedEventGroupId: post.relationVerification === "documented_event_mapping" || contextPosts.length > 0 ? String(post.eventGroupId) : null } : {}), ...(temporalExpected ? { temporal: temporalExpected } : {}), publicOutcome },
+      gold: { decision, signalType, rationale: String(variant.rationale ?? gold.rationale), ...((variant.correctedSignalType === null || isSignalType(variant.correctedSignalType)) ? { correctedSignalType: variant.correctedSignalType as SignalType | null } : {}), ...((post.relationVerification === "documented_event_mapping" || post.relationVerification === "verified_by_sol_x_dom") ? { expectedEventGroupId: post.relationVerification === "documented_event_mapping" || contextPosts.length > 0 ? String(post.eventGroupId) : null } : {}), ...(temporalExpected ? { temporal: temporalExpected } : {}), ...(publicOutcome ? { publicOutcome } : {}) },
       });
     }
   }
@@ -710,9 +755,14 @@ function validateEvaluationCases(cases: OfflineEvaluationCase[]) {
     if (!evaluationCase.inputCondition || !evaluationCase.layer) throw new Error(`Missing case condition/layer for ${evaluationCase.id}`);
     const target = evaluationCase.providerInput?.target;
     if (!target || !target.tweetId || !target.author || !target.text?.trim() || !Number.isFinite(Date.parse(target.createdAt))) throw new Error(`Invalid provider input target for ${evaluationCase.id}`);
-    if (!Array.isArray(evaluationCase.providerInput.contextPosts)) throw new Error(`Invalid context posts for ${evaluationCase.id}`);
+    if (!Array.isArray(evaluationCase.providerInput.contextPosts) || !Array.isArray(evaluationCase.providerInput.edges ?? [])) throw new Error(`Invalid context posts/edges for ${evaluationCase.id}`);
     for (const post of evaluationCase.providerInput.contextPosts) {
-      if (!post.tweetId || !post.author || !post.text.trim() || !Number.isFinite(Date.parse(post.createdAt)) || !["reply_parent", "quoted_post"].includes(post.relation) || !post.verification) throw new Error(`Invalid context post for ${evaluationCase.id}`);
+      if (!post.tweetId || !post.author || !post.text.trim() || !Number.isFinite(Date.parse(post.createdAt)) || !["reply_parent", "quoted_post", "quoted_reply_parent"].includes(post.relation) || !post.verification) throw new Error(`Invalid context post for ${evaluationCase.id}`);
+    }
+    for (const edge of evaluationCase.providerInput.edges ?? []) {
+      if (!edge.fromTweetId || !edge.toTweetId || !["reply", "quote"].includes(edge.relation) || !edge.verification) throw new Error(`Invalid relation edge for ${evaluationCase.id}`);
+      const nodeIds = new Set([target.tweetId, ...evaluationCase.providerInput.contextPosts.map((post) => post.tweetId)]);
+      if (!nodeIds.has(edge.fromTweetId) || !nodeIds.has(edge.toTweetId)) throw new Error(`Relation edge references a post outside the saved graph for ${evaluationCase.id}`);
     }
     if (!evaluationCase.gold || !["classify", "abstain", "ambiguous"].includes(evaluationCase.gold.decision) || typeof evaluationCase.gold.rationale !== "string" || !evaluationCase.gold.rationale.trim()) throw new Error(`Invalid case gold for ${evaluationCase.id}`);
     if (evaluationCase.gold.decision === "classify" ? !isSignalType(evaluationCase.gold.signalType) : evaluationCase.gold.decision === "abstain" ? evaluationCase.gold.signalType !== null : evaluationCase.gold.signalType !== null && !isSignalType(evaluationCase.gold.signalType)) throw new Error(`Invalid case gold signal for ${evaluationCase.id}`);
@@ -757,7 +807,7 @@ export function selectEvaluationCases(cases: OfflineEvaluationCase[], options: {
   return selected;
 }
 
-export function buildCurrentRunIdentity(input: { inputCondition: string; selectedCaseIds: string[]; provider: string; model: string; modelVersion: string }): OfflineRunIdentity {
+export function buildCurrentRunIdentity(input: { inputCondition: string; selectedCaseIds: string[]; provider: string; model: string; modelVersion: string; serializerMode?: "production_baseline" | "verified_graph" }): OfflineRunIdentity {
   if (!input.provider.trim() || !input.model.trim() || !input.modelVersion.trim() || input.provider === "not-run" || input.model === "not-run" || input.modelVersion === "not-run") throw new Error("Provider, model, and model version are required for saved-result scoring");
   if (input.selectedCaseIds.length === 0 || new Set(input.selectedCaseIds).size !== input.selectedCaseIds.length) throw new Error("Run identity requires a non-empty unique case selection");
   return {
@@ -773,6 +823,8 @@ export function buildCurrentRunIdentity(input: { inputCondition: string; selecte
     inputCondition: input.inputCondition,
     conditions: [input.inputCondition],
     selectionHash: hashJson(input.selectedCaseIds),
+    serializerMode: input.serializerMode ?? "production_baseline",
+    serializerHash: hashText(`${input.serializerMode ?? "production_baseline"}\n${formatEvaluationInput.toString()}`),
   };
 }
 
@@ -842,7 +894,9 @@ function main() {
   if (!input.identity || !input.identityHash || !Array.isArray(input.outcomes) || input.identityHash !== buildRunIdentityHash(input.identity)) {
     throw new Error("Saved results have an invalid run identity");
   }
-  const currentIdentity = buildCurrentRunIdentity({ inputCondition: condition, selectedCaseIds: selected.map((item) => item.id), provider, model, modelVersion });
+  const serializerMode = args.get("serializer-mode") ?? "production_baseline";
+  if (serializerMode !== "production_baseline" && serializerMode !== "verified_graph") throw new Error("Unknown serializer mode");
+  const currentIdentity = buildCurrentRunIdentity({ inputCondition: condition, selectedCaseIds: selected.map((item) => item.id), provider, model, modelVersion, serializerMode });
   if (!isCheckpointCompatible(currentIdentity, input)) {
     throw new Error("Saved results do not match the current fixture, prompt formatter, schema, request options, commit, provider, model, version, or condition");
   }
