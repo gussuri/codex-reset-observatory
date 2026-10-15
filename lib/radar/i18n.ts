@@ -2257,6 +2257,12 @@ const TIBO_POST_TRANSLATIONS: Array<{
     ja: "これからの28日間、毎日、大半のCodex / Workユーザーにとって明確な改善となるものを1つ提供するか、あるいはフルリセットを実施します。改善を始めましょう。",
     zh: "在接下来的28天里，我们每天要么推出一项对大多数 Codex / Work 用户有明确提升的内容，要么执行一次完全重置。让改进开始吧。",
   },
+  {
+    sourcePrefix:
+      "The reports of my reset button being lost are greatly exaggerated",
+    ja: "私のリセットボタンが失われたという報告は、大いに誇張されています。\n\n10日目 / リセット",
+    zh: "关于我重置按钮丢失的传言被严重夸大了。\n\n第 10 天 / 重置",
+  },
 ];
 
 export function translateTiboPostText(

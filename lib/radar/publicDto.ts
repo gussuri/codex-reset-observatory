@@ -102,6 +102,11 @@ function getLocalizedTiboPostText(
   signal: NonNullable<RadarData["recent_tibo_signals"]>[number],
   locale: Locale,
 ) {
+  const curated = translateTiboPostText(signal.text, locale);
+  if (curated && curated !== signal.text) {
+    return curated;
+  }
+
   const storedTranslation =
     locale === "ja" ? signal.translated_text_ja : locale === "zh" ? signal.translated_text_zh : null;
   const normalizedTranslation = normalizeTiboTranslationValue(storedTranslation);
@@ -113,7 +118,7 @@ function getLocalizedTiboPostText(
     return normalizedTranslation;
   }
 
-  return translateTiboPostText(signal.text, locale);
+  return curated || signal.text;
 }
 
 function toNoticeSpecificitySignal(
