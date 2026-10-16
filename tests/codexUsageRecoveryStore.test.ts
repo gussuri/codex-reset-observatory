@@ -9,8 +9,10 @@ import {
   confirmNearestCodexRecoveryObservation,
   findBankedEstimateByExactObservation,
   findLatestBankedGrant,
+  findRecentFormalTiboReset,
   getNextUsageMonitorLastBankedGrantAt,
   readResetExecutionEstimates,
+  upsertBankedDistributionEstimate,
   upsertResetExecutionEstimate,
 } from "../lib/codexUsageRecoveryStore";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
@@ -127,6 +129,7 @@ test("an execution estimate write error does not return an unsaved estimate", as
       const builder: Record<string, unknown> = {};
       builder.select = () => builder;
       builder.eq = () => builder;
+      builder.neq = () => builder;
       builder.overlaps = () => builder;
       builder.limit = () => builder;
       builder.upsert = () => {
@@ -407,6 +410,7 @@ test("an existing execution estimate keeps its event and primary provenance duri
       const builder: Record<string, any> = {};
       builder.select = () => builder;
       builder.eq = () => builder;
+      builder.neq = () => builder;
       builder.overlaps = () => builder;
       builder.limit = () => builder;
       builder.update = (values: Record<string, unknown>) => {
@@ -687,4 +691,144 @@ test("does not reuse an exact-time manual BANKED estimate as monitor-observation
   const result = await findBankedEstimateByExactObservation(client as never, "2026-10-07T23:12:28.952Z");
   assert.equal(result.estimate, null);
   assert.ok(result.error);
+});
+
+test("findRecentFormalTiboReset skips rows with manual classification source", async () => {
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.or = () => builder;
+      builder.eq = () => builder;
+      builder.neq = () => builder;
+      builder.gte = () => builder;
+      builder.lte = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({
+        data: [{
+          tweet_id: "manual-irrelevant-tweet",
+          text: "I have reset usage limits for everyone.",
+          tweet_created_at: OBSERVED_AT,
+          signal_type: "irrelevant",
+          confidence: 0.99,
+          verification_status: "confirmed",
+          classification_source: "manual",
+          ai_signal_type: "reset_executed",
+          ai_confidence: 0.99,
+          rule_signal_type: "reset_executed",
+          rule_confidence: 0.99,
+          is_reply: false,
+        }],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findRecentFormalTiboReset(client as never, OBSERVED_AT, 60_000);
+  assert.equal(result.tweetId, null);
+  assert.equal(result.needsPromotion, false);
+});
+
+test("findRecentFormalTiboReset skips rows failing context safety guard", async () => {
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.or = () => builder;
+      builder.eq = () => builder;
+      builder.neq = () => builder;
+      builder.gte = () => builder;
+      builder.lte = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({
+        data: [{
+          tweet_id: "receipt-context-tweet",
+          text: "I received this new special item package today.",
+          tweet_created_at: OBSERVED_AT,
+          signal_type: "reset_executed",
+          confidence: 0.99,
+          verification_status: "confirmed",
+          classification_source: "gemini",
+          ai_signal_type: "reset_executed",
+          ai_confidence: 0.99,
+          rule_signal_type: "reset_executed",
+          rule_confidence: 0.99,
+          is_reply: false,
+        }],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findRecentFormalTiboReset(client as never, OBSERVED_AT, 60_000);
+  assert.equal(result.tweetId, null);
+});
+
+test("upsertResetExecutionEstimate and upsertBankedDistributionEstimate filter overlaps query by estimator_version", async () => {
+  const filters: Array<{ method: string; column: string; value: unknown }> = [];
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.eq = (column: string, value: unknown) => {
+        filters.push({ method: "eq", column, value });
+        return builder;
+      };
+      builder.neq = (column: string, value: unknown) => {
+        filters.push({ method: "neq", column, value });
+        return builder;
+      };
+      builder.overlaps = (column: string, value: unknown) => {
+        filters.push({ method: "overlaps", column, value });
+        return builder;
+      };
+      builder.limit = () => builder;
+      builder.maybeSingle = async () => ({ data: null, error: null });
+      builder.upsert = () => builder;
+      return builder;
+    },
+  };
+
+  filters.length = 0;
+  await upsertResetExecutionEstimate(client as never, {
+    resetEventKey: "forced-event-key",
+    tiboSourceTweetIds: ["notice-123"],
+    isMonitorObserved: true,
+    usageObservation: {
+      id: "obs-1",
+      sourceKey: "local-codex-app-server",
+      observedAt: OBSERVED_AT,
+      previousObservedAt: "2026-08-26T01:10:00.000Z",
+      previousUsedPercent: 100,
+      currentUsedPercent: 0,
+      previousResetsAt: 1_788_000_000,
+      currentResetsAt: 1_788_604_800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+    },
+  });
+
+  const forcedNeqFilter = filters.find(
+    (f) => f.method === "neq" && f.column === "estimator_version" && f.value === "banked-distribution-observation-v2",
+  );
+  assert.ok(forcedNeqFilter, "upsertResetExecutionEstimate must filter neq banked-distribution-observation-v2");
+
+  filters.length = 0;
+  await upsertBankedDistributionEstimate(client as never, {
+    resetEventKey: "banked-event-key",
+    displayExecutionAt: OBSERVED_AT,
+    tiboAnnouncedAt: OBSERVED_AT,
+    tiboPrimaryTweetId: "notice-123",
+    tiboSourceTweetIds: ["notice-123"],
+    officialNoticeTweetId: "notice-123",
+    officialNoticeAt: OBSERVED_AT,
+  });
+
+  const bankedEqFilter = filters.find(
+    (f) => f.method === "eq" && f.column === "estimator_version" && f.value === "banked-distribution-observation-v2",
+  );
+  assert.ok(bankedEqFilter, "upsertBankedDistributionEstimate must filter eq banked-distribution-observation-v2");
 });

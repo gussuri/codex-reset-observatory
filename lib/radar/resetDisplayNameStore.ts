@@ -367,6 +367,18 @@ export function isSafeAcceptedPrecomputedResetDisplayName(
   return record?.ai_input_mode === "notice-precompute-v1" && isSafeStoredAiResetName(record);
 }
 
+export const getResetDisplayNameRecord = fetchResetDisplayNameByKey;
+
+export function hasManualResetDisplayName(
+  record: ResetDisplayNameRecord | null | undefined,
+) {
+  return Boolean(
+    record?.manual_name_ja?.trim() ||
+      record?.manual_name_en?.trim() ||
+      record?.manual_name_zh?.trim(),
+  );
+}
+
 export function shouldSkipResetDisplayNameGenerationWithoutSource(
   sourcePostText: string | null | undefined,
 ) {
@@ -387,6 +399,8 @@ function buildUpsertPayload(
     event_key: eventKey,
     source_tweet_id: sourceTweetId ?? existing?.source_tweet_id ?? null,
     manual_name_ja: existing?.manual_name_ja ?? null,
+    manual_name_en: existing?.manual_name_en ?? null,
+    manual_name_zh: existing?.manual_name_zh ?? null,
     ai_name_ja: acceptance.status === "accepted" ? result.name : null,
     ai_name_en: acceptance.status === "accepted" ? result.nameEn ?? null : null,
     ai_name_zh: acceptance.status === "accepted" ? result.nameZh ?? null : null,
@@ -448,6 +462,8 @@ async function upsertResetDisplayName(
   if (!error) return;
   if (isMissingLocalizedColumnsError(error)) {
     const {
+      manual_name_en: _manualNameEn,
+      manual_name_zh: _manualNameZh,
       ai_name_en: _aiNameEn,
       ai_name_zh: _aiNameZh,
       event_reason_type: _eventReasonType,
@@ -521,8 +537,13 @@ export async function ensureResetDisplayNameForEvent(
     }
   }
 
-  if (existing?.manual_name_ja?.trim()) {
-    return { eventKey, status: "manual", displayName: existing.manual_name_ja.trim(), inputMode, skipped: true };
+  if (hasManualResetDisplayName(existing)) {
+    const manualName =
+      existing?.manual_name_ja?.trim() ||
+      existing?.manual_name_en?.trim() ||
+      existing?.manual_name_zh?.trim() ||
+      "";
+    return { eventKey, status: "manual", displayName: manualName, inputMode, skipped: true };
   }
   const existingAiName = existing?.ai_name_ja?.trim() ?? null;
   if (shouldPreserveExistingAcceptedResetDisplayName(existing) && existingAiName) {
@@ -569,15 +590,36 @@ export async function ensureResetDisplayNameForEvent(
   });
   const acceptance = assessRandomResetNameResult(result);
 
+  let freshExisting = existing;
+  try {
+    const reRead = await fetchResetDisplayNameByKey(supabase, eventKey);
+    if (reRead !== null) {
+      freshExisting = reRead;
+    } else if (options.existingRecord === undefined) {
+      freshExisting = null;
+    }
+  } catch {
+    // Keep pre-call existing if re-read fails
+  }
+
   // A failed regeneration never hides an already accepted name.
-  if (existing?.ai_status === "accepted" && acceptance.status !== "accepted") {
+  if (freshExisting?.ai_status === "accepted" && acceptance.status !== "accepted") {
     return {
       eventKey,
       status: acceptance.status,
-      displayName: existing.ai_name_ja,
+      displayName: freshExisting.ai_name_ja,
       inputMode,
       skipped: true,
     };
+  }
+
+  if (hasManualResetDisplayName(freshExisting)) {
+    const manualName =
+      freshExisting?.manual_name_ja?.trim() ||
+      freshExisting?.manual_name_en?.trim() ||
+      freshExisting?.manual_name_zh?.trim() ||
+      "";
+    return { eventKey, status: "manual", displayName: manualName, inputMode, skipped: true };
   }
 
   try {
@@ -589,7 +631,7 @@ export async function ensureResetDisplayNameForEvent(
         inputMode,
         inputHash,
         result,
-        existing,
+        freshExisting,
         new Date().toISOString(),
       ),
     );

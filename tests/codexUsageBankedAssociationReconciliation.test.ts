@@ -385,3 +385,30 @@ function fakeTiboQueryClient(
     },
   };
 }
+
+test("preserves a manual association in resolveBankedAssociation and reconciliation", () => {
+  const manualNotice = notice({
+    tweet_id: "manual-notice-tweet-id",
+    tweet_created_at: "2026-10-07T20:00:00.000Z",
+  });
+  const competitorNotice = notice({
+    tweet_id: "competitor-notice-tweet-id",
+    tweet_created_at: "2026-10-07T21:00:00.000Z",
+  });
+
+  const manualObservation = fact(0, {
+    observed_at: OBSERVED_AT,
+    current_decision_source: "manual",
+    current_notice_tweet_id: manualNotice.tweet_id,
+  });
+
+  const resolved = resolveBankedAssociation(
+    manualObservation,
+    [manualNotice, competitorNotice],
+    { observedAt: OBSERVED_AT },
+  );
+
+  assert.equal(resolved.decision.status, "accepted");
+  assert.equal(resolved.decision.noticeTweetId, manualNotice.tweet_id);
+  assert.equal(resolved.decision.reason, "manual_association_preserved");
+});

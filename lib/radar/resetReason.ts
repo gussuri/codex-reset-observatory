@@ -72,6 +72,9 @@ function hasUsageFixCompensationEvidence(input: ResetReasonContext) {
   return USAGE_FIX_COMPENSATION_PATTERN.test(getContextText(input));
 }
 
+export const USER_COUNT_CELEBRATION_PATTERN =
+  /(?:\b\d+(?:[.,]\d+)*\s*(?:k|m|b|million|billion)?\s*(?:active\s+)?users?\b|\d+\s*(?:万|億)?\s*(?:アクティブ\s*)?ユーザー)/i;
+
 const EXPLICIT_CELEBRATION_EVIDENCE_PATTERN =
   /celebrat|launch|milestone|anniversary|gift|happy|campaign|thank|monday|記念|祝|周年|感謝|キャンペーン|突破|達成|ご祝儀/i;
 
@@ -81,7 +84,8 @@ export function hasExplicitResetReasonEvidence(input: ResetReasonContext) {
     hasCompensationEvidence(input) ||
       hasUsageFixCompensationEvidence(input) ||
       REGULAR_RESET_PATTERN.test(getContextText(input)) ||
-      EXPLICIT_CELEBRATION_EVIDENCE_PATTERN.test(getContextText(input)),
+      EXPLICIT_CELEBRATION_EVIDENCE_PATTERN.test(getContextText(input)) ||
+      USER_COUNT_CELEBRATION_PATTERN.test(getContextText(input)),
   );
 }
 
@@ -97,7 +101,7 @@ export function inferResetCycleType(input: ResetReasonContext): ResetCycleType {
 }
 
 const CELEBRATION_PATTERN =
-  /celebrat|launch|milestone|users|anniversary|gift|happy|campaign|thank|monday|記念|祝|周年|感謝|キャンペーン|突破|達成|ご祝儀/i;
+  /celebrat|launch|milestone|anniversary|gift|happy|campaign|thank|monday|記念|祝|周年|感謝|キャンペーン|突破|達成|ご祝儀/i;
 
 export function normalizeResetReasonType(input: ResetReasonContext): ResetReasonType | undefined {
   if (isRegularResetContext(input)) return "定期更新";
@@ -117,7 +121,12 @@ export function normalizeResetReasonType(input: ResetReasonContext): ResetReason
   }
 
   if (hasCompensationEvidence(input) || hasUsageFixCompensationEvidence(input)) return "詫びリセット";
-  if (CELEBRATION_PATTERN.test(getContextText(input))) return "ご祝儀リセット";
+  if (
+    CELEBRATION_PATTERN.test(getContextText(input)) ||
+    USER_COUNT_CELEBRATION_PATTERN.test(getContextText(input))
+  ) {
+    return "ご祝儀リセット";
+  }
 
   return undefined;
 }

@@ -313,3 +313,41 @@ test("an irrelevant none result is never promoted by context safety alone", () =
     assert.equal(decision, null, authorText);
   }
 });
+
+test("Tibo self-quotes with explicit reset context do not demote reset_executed completions to irrelevant", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Done and dusted.",
+    quoteAuthorHandle: "@thsottiaux",
+    quoteTweetUrl: "https://x.com/thsottiaux/status/2084000000000000100",
+    quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
+    selectedSignalType: "reset_executed",
+  });
+
+  assert.equal(decision, null);
+});
+
+test("external user quotes with explicit reset context still demote completions to irrelevant", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Done and dusted.",
+    quoteAuthorHandle: "@external_user",
+    quoteTweetUrl: "https://x.com/external_user/status/2084000000000000100",
+    quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
+    selectedSignalType: "reset_executed",
+  });
+
+  assert.ok(decision);
+  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision?.teaserStrength, "none");
+});
+
+test("Tibo self-quotes with explicit reset context do not demote official_notice announcements to irrelevant", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Landing in 1 hour for all accounts.",
+    quoteAuthorHandle: "@thsottiaux",
+    quoteTweetUrl: "https://x.com/thsottiaux/status/2084000000000000100",
+    quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
+    selectedSignalType: "official_notice",
+  });
+
+  assert.equal(decision, null);
+});

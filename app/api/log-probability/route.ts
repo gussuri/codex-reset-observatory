@@ -27,14 +27,14 @@ export const dynamic = "force-dynamic";
 let supabaseInstance: any = null;
 
 function getSupabaseClient() {
-  if (supabaseInstance) return supabaseInstance;
-
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error("Supabase environment variables (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) are missing.");
   }
+
+  if (supabaseInstance) return supabaseInstance;
 
   supabaseInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
@@ -57,6 +57,7 @@ async function handleLogRequest(request: NextRequest) {
     // 1. 最新の観測データをフェッチ
     const { data: rawData, trainingState } = await fetchCurrentRadarDataWithTrainingState({
       cache: "no-store",
+      bypassCache: true,
       calculationNow,
     });
     
@@ -122,6 +123,21 @@ async function handleLogRequest(request: NextRequest) {
     const loggedHour = new Date(calculationNow);
     loggedHour.setMinutes(0, 0, 0);
     loggedHour.setMilliseconds(0);
+
+    if (rawData.data_health?.overall === "degraded" || trainingState?.status === "error") {
+      const reason = rawData.data_health?.overall === "degraded"
+        ? "upstream data health is degraded"
+        : `training state error: ${trainingState?.reason ?? "unknown"}`;
+      console.warn("Skipping prediction history persistence due to degraded data or training error", {
+        reason,
+        dataHealth: rawData.data_health,
+        trainingStateStatus: trainingState?.status,
+      });
+      return NextResponse.json(
+        { ok: false, skipped: true, reason },
+        { status: 503 },
+      );
+    }
 
     // 6. Supabase への保存。logged_hour の最初の予測を保持し、後続実行では再利用する。
     let savedRecord: PredictionHistorySaveResult;

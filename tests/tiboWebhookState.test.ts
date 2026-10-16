@@ -267,3 +267,99 @@ test("does not preserve operational evidence after the same tweet text changes",
   assert.equal(result.codex_operational_status, null);
   assert.equal(result.codex_operational_evidence_quote, null);
 });
+
+test("webhook redelivery preserves resolved temporal schedule and expires_at when incoming is unresolved", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    temporal_expression: null,
+    temporal_kind: null,
+    temporal_precision: null,
+    temporal_timezone: null,
+    temporal_confidence: null,
+    temporal_resolution_source: null,
+    expected_start_at: null,
+    expected_end_at: null,
+    temporal_resolution_status: "unresolved",
+    temporal_resolution_version: null,
+    expires_at: "2026-08-06T00:00:00.000Z",
+  }, {
+    tweet_id: payload().tweet_id,
+    verification_status: "confirmed",
+    temporal_expression: "by EOD",
+    temporal_kind: "daypart",
+    temporal_precision: "daypart",
+    temporal_timezone: "America/Los_Angeles",
+    temporal_confidence: 0.95,
+    temporal_resolution_source: "deterministic",
+    expected_start_at: "2026-08-05T07:00:00.000Z",
+    expected_end_at: "2026-08-05T19:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v1",
+    expires_at: "2026-08-05T21:00:00.000Z",
+  }, receivedAt);
+
+  assert.equal(result.temporal_resolution_status, "resolved");
+  assert.equal(result.temporal_expression, "by EOD");
+  assert.equal(result.expected_start_at, "2026-08-05T07:00:00.000Z");
+  assert.equal(result.expected_end_at, "2026-08-05T19:00:00.000Z");
+  assert.equal(result.expires_at, "2026-08-05T21:00:00.000Z");
+});
+
+test("webhook redelivery preserves quote metadata when incoming lacks quote context", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    is_quote: false,
+    quote_context_text: null,
+    quote_tweet_url: null,
+    quote_author_handle: null,
+  }, {
+    tweet_id: payload().tweet_id,
+    verification_status: "auto_unverified",
+    is_quote: true,
+    quote_context_text: "Resetting usage limits today",
+    quote_tweet_url: "https://x.com/thsottiaux/status/2084000000000000100",
+    quote_author_handle: "@thsottiaux",
+  }, receivedAt);
+
+  assert.equal(result.is_quote, true);
+  assert.equal(result.quote_context_text, "Resetting usage limits today");
+  assert.equal(result.quote_tweet_url, "https://x.com/thsottiaux/status/2084000000000000100");
+  assert.equal(result.quote_author_handle, "@thsottiaux");
+});
+
+test("webhook redelivery on confirmed row preserves resolved temporal schedule and expires_at even if incoming is resolved", () => {
+  const result = preserveTiboWebhookState({
+    ...payload(),
+    temporal_expression: "in 1 hour",
+    temporal_kind: "relative_duration",
+    temporal_precision: "exact_time",
+    temporal_timezone: null,
+    temporal_confidence: 0.9,
+    temporal_resolution_source: "deterministic",
+    expected_start_at: "2026-08-05T13:00:00.000Z",
+    expected_end_at: "2026-08-05T13:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v1",
+    expires_at: "2026-08-05T14:00:00.000Z",
+  }, {
+    tweet_id: payload().tweet_id,
+    verification_status: "confirmed",
+    temporal_expression: "by EOD",
+    temporal_kind: "daypart",
+    temporal_precision: "daypart",
+    temporal_timezone: "America/Los_Angeles",
+    temporal_confidence: 0.95,
+    temporal_resolution_source: "deterministic",
+    expected_start_at: "2026-08-05T07:00:00.000Z",
+    expected_end_at: "2026-08-05T19:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v1",
+    expires_at: "2026-08-05T21:00:00.000Z",
+  }, receivedAt);
+
+  assert.equal(result.temporal_resolution_status, "resolved");
+  assert.equal(result.temporal_expression, "by EOD");
+  assert.equal(result.expected_start_at, "2026-08-05T07:00:00.000Z");
+  assert.equal(result.expected_end_at, "2026-08-05T19:00:00.000Z");
+  assert.equal(result.expires_at, "2026-08-05T21:00:00.000Z");
+});

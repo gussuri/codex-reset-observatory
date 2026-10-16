@@ -352,3 +352,133 @@ test("preserves BANKED conditional scope without changing its event kind", async
     else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
   }
 });
+
+test("does not overwrite display names when metadata columns are missing in DB", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  const originalFetch = globalThis.fetch;
+  const initialRow = record({
+    ai_name_ja: "保護されたAI名",
+    manual_name_ja: "保護された手動名",
+  });
+  let postCount = 0;
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("/reset_display_names") && method === "GET") {
+      return new Response(JSON.stringify([initialRow]), { status: 200 });
+    }
+    if (url.includes("/reset_display_names") && method === "POST") {
+      postCount += 1;
+      return new Response(
+        JSON.stringify({
+          code: "PGRST204",
+          message: "Could not find the 'event_metadata_status' column of 'reset_display_names' in the schema cache",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response("[]", { status: 200 });
+  };
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => ({
+        ...generated,
+        status: "success" as const,
+        flags: [],
+        model: "test-model",
+        promptVersion: "reset-event-metadata-v1",
+        latencyMs: 0,
+        httpStatus: 200,
+        retryAfterSeconds: null,
+      }),
+    });
+
+    assert.equal(result.status, "schema_unavailable");
+    assert.equal(result.wrote, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.record?.ai_name_ja, "保護されたAI名");
+    assert.equal(result.record?.manual_name_ja, "保護された手動名");
+    assert.equal(postCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("re-reads fresh row after Gemini generation so concurrent name updates are preserved", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  const originalFetch = globalThis.fetch;
+  let serverRow = record({
+    ai_name_ja: null,
+    manual_name_ja: null,
+  });
+  const writes: Record<string, unknown>[] = [];
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("/reset_display_names") && method === "GET") {
+      return new Response(JSON.stringify([serverRow]), { status: 200 });
+    }
+    if (url.includes("/reset_display_names") && method === "POST") {
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      writes.push(payload);
+      return new Response("[]", { status: 201 });
+    }
+    return new Response("[]", { status: 200 });
+  };
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        serverRow = {
+          ...serverRow,
+          ai_name_ja: "並行書き込みAI名",
+          manual_name_en: "Concurrent Manual EN",
+        };
+        return {
+          ...generated,
+          status: "success" as const,
+          flags: [],
+          model: "test-model",
+          promptVersion: "reset-event-metadata-v1",
+          latencyMs: 10,
+          httpStatus: 200,
+          retryAfterSeconds: null,
+        };
+      },
+    });
+
+    assert.equal(result.status, "success");
+    assert.equal(result.wrote, true);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0]?.ai_name_ja, "並行書き込みAI名");
+    assert.equal(writes[0]?.manual_name_en, "Concurrent Manual EN");
+    assert.equal(writes[0]?.event_reason_type, "詫びリセット");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});

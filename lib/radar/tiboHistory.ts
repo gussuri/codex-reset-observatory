@@ -417,7 +417,7 @@ function getReasonType(
 
   return relatedReasons.find((reason) => reason === "詫びリセット") ??
     relatedReasons.find((reason) => reason === "ご祝儀リセット") ??
-    "ご祝儀リセット";
+    undefined;
 }
 
 function formatNoticeToExecution(minutes: number) {

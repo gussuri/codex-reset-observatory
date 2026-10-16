@@ -394,6 +394,14 @@ export async function runBankedGrantAssociationReconciliation(
       const observation = observations[observationIndex]!;
       const identityFailed = identityResults[observationIndex]!.failed;
       result.scanned += 1;
+      const context = observation.current_decision_source === "manual" && observation.current_notice_tweet_id
+        ? {
+            protectedAssociation: {
+              noticeTweetId: observation.current_notice_tweet_id,
+              provenance: "manual" as const,
+            },
+          }
+        : undefined;
       const resolved = resolveBankedAssociation(
         observation,
         lookup.signals,
@@ -401,6 +409,7 @@ export async function runBankedGrantAssociationReconciliation(
           observedAt: observation.observed_at,
           lookupFailed: identityFailed || Boolean(lookup.error),
           lookupFailureReason: identityFailed ? "exact_legacy_estimate_lookup_failed" : undefined,
+          context,
         },
       );
       const decision = {

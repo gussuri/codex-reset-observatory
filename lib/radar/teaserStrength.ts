@@ -56,8 +56,10 @@ export type ResetTeaserSignal = {
   reply_context_text?: string | null;
   is_quote?: boolean | null;
   quote_context_text?: string | null;
+  quote_author_handle?: string | null;
+  quote_tweet_url?: string | null;
   expires_at?: string | null;
-  temporal_precision?: "exact_time" | "day" | "daypart" | "range" | "unknown" | null;
+  temporal_precision?: "exact_time" | "day" | "daypart" | "range" | "unknown" | "window" | null;
   temporal_confidence?: number | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
@@ -74,7 +76,7 @@ export type TeaserStrengthWindowOptions = {
   resetExecutionWindow?: ResetExecutionWindow | null;
 };
 
-export function getEffectiveTeaserStrength(signal: {
+export function getEffectiveTeaserStrength(signal: Partial<ResetTeaserSignal> | {
   teaser_strength?: TeaserStrength | null;
   ai_teaser_strength?: TeaserStrength | null;
 }) {

@@ -36,6 +36,7 @@ import { getCodexOperationalExpiryAt } from "@/lib/radar/codexOperationalStatus"
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
+import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
 import {
   isTiboTranslationValid,
@@ -544,6 +545,8 @@ export async function POST(req: NextRequest) {
       authorText: text,
       replyContextText: replyMetadata.replyContextText,
       quoteContextText: replyMetadata.quoteContextText,
+      quoteAuthorHandle: replyMetadata.quoteAuthorHandle,
+      quoteTweetUrl: replyMetadata.quoteTweetUrl,
       selectedSignalType: selectedClassification.signalType,
       aiTeaserStrength: aiResult?.teaserStrength,
     });
@@ -600,6 +603,23 @@ export async function POST(req: NextRequest) {
       ? new Date(secondaryExpiresTime)
       : expiresAt;
 
+    const isQuote = ruleResult.isQuote || replyMetadata.isQuote === true;
+    const effectiveTeaserStrength =
+      effectiveClassification.signalType === "teaser"
+        ? (contextSafetyDecision?.teaserStrength ??
+           aiResult?.teaserStrength ??
+           getEffectiveTeaserStrength({
+             signal_type: effectiveClassification.signalType,
+             confidence: effectiveClassification.confidence,
+             text: text,
+             is_reply: ruleResult.isReply,
+             is_quote: isQuote,
+             reply_context_text: replyMetadata.replyContextText,
+             quote_context_text: replyMetadata.quoteContextText,
+             ai_teaser_strength: aiResult?.teaserStrength ?? null,
+           }))
+        : (contextSafetyDecision?.teaserStrength ?? null);
+
     const payload = {
       tweet_id: tweetId,
       signal_type: effectiveClassification.signalType,
@@ -611,13 +631,13 @@ export async function POST(req: NextRequest) {
       expires_at: payloadExpiresAt.toISOString(),
       verification_status: "auto_unverified" as const,
       classification_reason: effectiveClassification.reason,
-      teaser_strength: contextSafetyDecision?.teaserStrength ?? null,
+      teaser_strength: effectiveTeaserStrength,
       secondary_signal: secondarySignal,
       is_reply: ruleResult.isReply,
       reply_to_handles: replyMetadata.replyToHandles ?? null,
       reply_context_text: replyMetadata.replyContextText ?? null,
       source_timeline: replyMetadata.sourceTimeline ?? null,
-      is_quote: ruleResult.isQuote || replyMetadata.isQuote === true,
+      is_quote: isQuote,
       quote_context_text: replyMetadata.quoteContextText ?? null,
       quote_tweet_url: replyMetadata.quoteTweetUrl ?? null,
       quote_author_handle: replyMetadata.quoteAuthorHandle ?? null,
@@ -676,7 +696,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,is_quote,quote_context_text,quote_tweet_url,quote_author_handle")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 

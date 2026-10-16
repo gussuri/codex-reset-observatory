@@ -2825,3 +2825,110 @@ test("quoted BANKED distribution context is not promoted to a public grant assoc
     restore();
   }
 });
+
+test("promoted deferred Tibo reset claims formal adoption and initiates event metadata in codex-usage webhook", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const deferredTweetId = "2099999999999999991";
+  const observedAt = "2026-08-26T01:15:00.000Z";
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: deferredTweetId,
+        text: "I have reset usage limits for Codex and ChatGPT Work.",
+        tweet_url: `https://x.com/thsottiaux/status/${deferredTweetId}`,
+        tweet_created_at: "2026-08-26T01:14:00.000Z",
+        signal_type: "irrelevant",
+        confidence: 0.1,
+        verification_status: "auto_unverified",
+        classification_source: "gemini",
+        ai_signal_type: "reset_executed",
+        ai_confidence: 0.99,
+        rule_signal_type: "reset_executed",
+        rule_confidence: 0.99,
+        is_reply: false,
+      }]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    }
+    if (method === "POST" && url.includes("/rpc/claim_tibo_formal_adoption")) {
+      return new Response(JSON.stringify({
+        status: "claimed_new",
+        record: {
+          id: "adoption-rec-1",
+          logical_post_id: deferredTweetId,
+          logical_post_tweet_ids: [deferredTweetId],
+          reset_event_key: `tibo-reset-${deferredTweetId}`,
+          representative_tweet_id: deferredTweetId,
+          source_tweet_ids: [deferredTweetId],
+          claim_source: "new_adoption",
+          adopted_at: "2026-08-26T01:15:05.000Z",
+          claimed_at: "2026-08-26T01:15:05.000Z",
+          created_at: "2026-08-26T01:15:05.000Z",
+          updated_at: "2026-08-26T01:15:05.000Z",
+        },
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      accepted: true,
+      recovery: "confirmed",
+    });
+
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.ok(plan.promotion, "Atomic write plan must include promotion");
+    assert.equal((plan.promotion as { tweet_id: string }).tweet_id, deferredTweetId);
+
+    const formalClaim = requests.find((req) => req.url.includes("/rpc/claim_tibo_formal_adoption"));
+    assert.ok(formalClaim, "Must call claim_tibo_formal_adoption RPC");
+    assert.equal(formalClaim.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
+    assert.equal(formalClaim.body?.p_claim_source, "new_adoption");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});

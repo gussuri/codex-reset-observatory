@@ -12,6 +12,7 @@ import {
   type UsageMonitorState,
 } from "./codexUsageMonitorCoverage";
 import { getTiboClassificationSafetyDecision } from "./radar/classification";
+import { getTiboContextSafetyDecision } from "./radar/tiboContextSafety";
 import {
   buildResetExecutionEstimate,
   type ResetExecutionEstimate,
@@ -497,12 +498,12 @@ export async function findRecentFormalTiboReset(
 ) {
   const time = Date.parse(observedAt);
   if (!Number.isFinite(time)) {
-    return { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null };
+    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null };
   }
 
   const result = await client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply")
     .or("signal_type.eq.reset_executed,rule_signal_type.eq.reset_executed,ai_signal_type.eq.reset_executed")
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
@@ -512,13 +513,21 @@ export async function findRecentFormalTiboReset(
     .limit(20);
 
   if (result.error) {
-    return { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: result.error };
+    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: result.error };
   }
 
   const candidates = (result.data ?? [])
     .filter((row) => {
       if (typeof row.tweet_id !== "string" || typeof row.tweet_created_at !== "string") return false;
+      if (row.classification_source === "manual") return false;
       if (getTiboClassificationSafetyDecision(String(row.text ?? ""), "reset_executed").signalType !== "reset_executed") {
+        return false;
+      }
+      const contextSafety = getTiboContextSafetyDecision({
+        authorText: String(row.text ?? ""),
+        selectedSignalType: "reset_executed",
+      });
+      if (contextSafety && contextSafety.signalType !== "reset_executed") {
         return false;
       }
 
@@ -534,6 +543,8 @@ export async function findRecentFormalTiboReset(
   return {
     tweetId: candidate?.tweet_id ?? null,
     tweetCreatedAt: candidate?.tweet_created_at ?? null,
+    tweetUrl: candidate?.tweet_url ?? null,
+    text: candidate?.text ?? null,
     needsPromotion: candidate?.signal_type === "irrelevant",
     confidence: candidate
       ? candidate.signal_type === "irrelevant"
@@ -588,6 +599,7 @@ export async function promoteDeferredTiboReset(
     })
     .eq("tweet_id", tweetId)
     .eq("signal_type", "irrelevant")
+    .neq("classification_source", "manual")
     .neq("verification_status", "rejected");
 }
 
@@ -882,6 +894,7 @@ export async function upsertResetExecutionEstimate(
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
+      .neq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds!)
       .limit(1)
       .maybeSingle();
@@ -995,6 +1008,7 @@ export async function upsertBankedDistributionEstimate(
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
+      .eq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
       .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds)
       .limit(1)
       .maybeSingle();

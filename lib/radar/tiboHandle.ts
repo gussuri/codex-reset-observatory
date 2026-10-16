@@ -52,3 +52,11 @@ export function getTiboDisplayLabel(
 ) {
   return `Tibo (@${getTiboHandle(sourceUrl, savedLabel)})`;
 }
+
+export function isTiboHandle(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const cleaned = value.replace(/^@/, "").trim().toLowerCase();
+  if (cleaned === TIBO_HANDLE_FALLBACK) return true;
+  const fromUrl = getHandleFromSourceUrl(value);
+  return fromUrl === TIBO_HANDLE_FALLBACK;
+}

@@ -4,6 +4,7 @@ import type { BankedDistributionEstimateInput } from "./codexUsageRecoveryStore"
 import {
   matchBankedObservationToPosts,
   normalizeBankedPostClaims,
+  type BankedPostAssociationContext,
   type BankedPostAssociationDecision,
 } from "./radar/resetPostAssociation";
 
@@ -27,11 +28,29 @@ export function toBankedMatcherObservation(
 export function resolveBankedAssociation(
   observation: CodexUsageAtomicBankedObservationWrite,
   signals: readonly ActiveTiboSignal[],
-  options: { observedAt: string; lookupFailed?: boolean; lookupFailureReason?: string },
+  options: {
+    observedAt: string;
+    lookupFailed?: boolean;
+    lookupFailureReason?: string;
+    context?: BankedPostAssociationContext;
+  },
 ): { decision: BankedPostAssociationDecision; estimate: BankedDistributionEstimateInput | null } {
   const matcherObservation = toBankedMatcherObservation(observation);
+  const context: BankedPostAssociationContext = options.context ?? (
+    "current_decision_source" in observation &&
+    (observation as unknown as { current_decision_source?: string }).current_decision_source === "manual" &&
+    typeof (observation as unknown as { current_notice_tweet_id?: unknown }).current_notice_tweet_id === "string"
+      ? {
+          protectedAssociation: {
+            noticeTweetId: (observation as unknown as { current_notice_tweet_id: string }).current_notice_tweet_id,
+            provenance: "manual" as const,
+          },
+        }
+      : {}
+  );
+
   if (options.lookupFailed) {
-    const pending = matchBankedObservationToPosts(matcherObservation, []);
+    const pending = matchBankedObservationToPosts(matcherObservation, [], context);
     return {
       decision: { ...pending, reason: options.lookupFailureReason ?? "candidate_lookup_failed" },
       estimate: null,
@@ -39,7 +58,7 @@ export function resolveBankedAssociation(
   }
 
   const claims = normalizeBankedPostClaims(signals, { observedAt: options.observedAt });
-  const decision = matchBankedObservationToPosts(matcherObservation, claims);
+  const decision = matchBankedObservationToPosts(matcherObservation, claims, context);
   if (decision.status !== "accepted" || !decision.noticeTweetId) {
     return { decision, estimate: null };
   }

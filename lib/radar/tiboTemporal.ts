@@ -32,7 +32,7 @@ const TEMPORAL_KINDS = [
   "range",
   "vague",
 ] as const;
-const TEMPORAL_PRECISIONS = ["exact_time", "day", "daypart", "range", "unknown"] as const;
+const TEMPORAL_PRECISIONS = ["exact_time", "day", "daypart", "range", "unknown", "window"] as const;
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 const DAYPART_NAMES = ["day", "morning", "afternoon", "evening", "tonight"] as const;
 const RANGE_KINDS = ["this_week", "this_weekend", "next_week"] as const;
@@ -552,6 +552,58 @@ function isInsideSourceQuote(sourceText: string, index: number) {
   return straightOpen || curlyOpen;
 }
 
+function isUnsafeEodBeforeContext(before: string, resetCueIndex: number): boolean {
+  if (/\b(?:if|unless|wish|hope|hopefully|maybe|might|could|would|perhaps)\b/i.test(before)) {
+    return true;
+  }
+  if (/\b(?:cache|server|registration|register|sign\s*up|signup|eligibility)\b/i.test(before)) {
+    return true;
+  }
+  if (
+    /\bno\s+(?:(?:global|usage|codex|rate|all|paid|another)\s+)*resets?\b/i.test(before) ||
+    /\b(?:not|never)\s+(?:going\s+to\s+)?(?:do\s+a\s+)?resets?\b/i.test(before)
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:reset|quota|limits?)\s+(?:was|were|had\s+been|landed)\b/i.test(before) ||
+    /\b(?:was|were|had)\s+(?:already\s+)?(?:reset|landed|distributed|executed)\b/i.test(before) ||
+    /\b(?:yesterday|ago|used\s+to|reset\s+landed)\b/i.test(before)
+  ) {
+    return true;
+  }
+
+  const clauseDelimiters = /[,;—–]|\b(?:and|but|so|yet|because|although|though)\b/gi;
+  let clauseStart = 0;
+  for (const delim of Array.from(before.matchAll(clauseDelimiters))) {
+    const delimIndex = delim.index ?? 0;
+    if (delimIndex + delim[0].length <= resetCueIndex) {
+      clauseStart = delimIndex + delim[0].length;
+    }
+  }
+  const resetClause = before.slice(clauseStart);
+
+  const sanitizedClause = resetClause.replace(
+    /\bno\s+(?:problems?|worries|doubt|delay|issues?|blockers?)\b/gi,
+    "",
+  );
+  if (/\b(?:not|never|no)\b/i.test(sanitizedClause)) {
+    return true;
+  }
+
+  const sanitizedPast = sanitizedClause
+    .replace(/\b(?:was|were)\s+(?:fixed|resolved|addressed|cleared|mitigated)\b/gi, "")
+    .replace(
+      /\b(?:was|were|had)\s+(?:an?\s+|the\s+|some\s+)?(?:issue|bug|outage|downtime|glitch|problem|incident|delay|disruption)\b/gi,
+      "",
+    );
+  if (/\b(?:was|were|had|landed)\b/i.test(sanitizedPast)) {
+    return true;
+  }
+
+  return false;
+}
+
 function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): SourceTemporalCandidate[] {
   if (!RESET_CUE_PATTERN.test(segment.text) || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(segment.text)) return [];
   const result: SourceTemporalCandidate[] = [];
@@ -563,7 +615,7 @@ function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): So
     const clauseBoundary = /\b(?:and\s+)?if\b|[,;]|\bbut\b/i.exec(tail);
     const after = tail.slice(0, clauseBoundary?.index ?? tail.length);
     const resetCue = RESET_CUE_PATTERN.exec(before);
-    if (!resetCue || UNSAFE_EOD_CONTEXT_PATTERN.test(before) || UNSAFE_EOD_CONTEXT_PATTERN.test(after)) continue;
+    if (!resetCue || isUnsafeEodBeforeContext(before, resetCue.index) || UNSAFE_EOD_CONTEXT_PATTERN.test(after)) continue;
     if (/\bbanked\b/i.test(before) && /\b(?:distributed|completed|sent|arrived)\b/i.test(before)) continue;
     if (/\b(?:if|unless)\b/i.test(sourceText.slice(Math.max(0, index - 160), index))) continue;
     if (/\b(?:account|registration|register|signup|sign\s*up|eligibility)\b/i.test(before)) continue;
@@ -590,6 +642,75 @@ function buildSourceEodCandidate(sourceText: string, segment: SourceSegment): So
         explicitDateParts: null, explicitTimeParts: null, daypart: "day", rangeKind: null,
         explicitTimezone: timezone?.value ?? null, temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
         resolutionSource: "deterministic", isDeadline: true,
+      },
+    });
+  }
+  return result;
+}
+
+const SOURCE_RELATIVE_DURATION_PATTERN =
+  /\b(within\s+(?:the\s+next\s+)?|in\s+(?:the\s+next\s+)?|in\s+)(\d+(?:\.\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty[- ]four|forty[- ]eight)\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m)\b/gi;
+
+function parseRelativeAmountToken(token: string): number | null {
+  const num = parseFloat(token);
+  if (!Number.isNaN(num)) return num;
+  const wordMap: Record<string, number> = {
+    a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12,
+    "twenty-four": 24, "twenty four": 24, "forty-eight": 48, "forty eight": 48,
+  };
+  return wordMap[token.toLowerCase()] ?? null;
+}
+
+function parseRelativeUnitToken(token: string): "hours" | "minutes" | null {
+  if (/^(?:hours?|hrs?|hr|h)$/i.test(token)) return "hours";
+  if (/^(?:minutes?|mins?|min|m)$/i.test(token)) return "minutes";
+  return null;
+}
+
+function buildSourceRelativeDurationCandidate(
+  sourceText: string,
+  segment: SourceSegment,
+): SourceTemporalCandidate[] {
+  if (!RESET_CUE_PATTERN.test(segment.text) || NON_USAGE_RESET_BUTTON_CONTEXT_PATTERN.test(segment.text)) return [];
+  const result: SourceTemporalCandidate[] = [];
+  SOURCE_RELATIVE_DURATION_PATTERN.lastIndex = 0;
+  for (const match of Array.from(segment.text.matchAll(SOURCE_RELATIVE_DURATION_PATTERN))) {
+    const localIndex = match.index ?? 0;
+    const index = segment.start + localIndex;
+    if (isInsideSourceQuote(sourceText, index)) continue;
+    const prefix = match[1];
+    const amountToken = match[2];
+    const unitToken = match[3];
+    const amount = parseRelativeAmountToken(amountToken);
+    const unit = parseRelativeUnitToken(unitToken);
+    if (amount === null || unit === null) continue;
+    const beforeMatch = segment.text.slice(0, localIndex);
+    if (/\b(?:not|never|won't|can't)\b/i.test(beforeMatch)) continue;
+    if (/\bno\s+(?:(?:global|usage|codex|rate|all|paid|another)\s+)*resets?\b/i.test(beforeMatch)) continue;
+
+    const isWithin = /\bwithin\b/i.test(prefix);
+    const temporalExpression = match[0].trim();
+    result.push({
+      clock: null,
+      day: null,
+      timezone: null,
+      semantics: {
+        temporalExpression,
+        temporalKind: "relative_duration",
+        temporalPrecision: isWithin ? "window" : "exact_time",
+        weekday: null,
+        relativeDayOffset: null,
+        relativeAmount: amount,
+        relativeUnit: unit,
+        explicitDateParts: null,
+        explicitTimeParts: null,
+        daypart: null,
+        rangeKind: null,
+        explicitTimezone: null,
+        temporalConfidence: DETERMINISTIC_TEMPORAL_CONFIDENCE,
+        resolutionSource: "deterministic",
+        isDeadline: isWithin,
       },
     });
   }
@@ -835,6 +956,11 @@ function parseDeterministicTemporalSemantics(sourceText: string): DeterministicT
   let rejected = false;
   for (const segment of getSourceSegments(sourceText)) {
     candidates.push(...buildSourceEodCandidate(sourceText, segment));
+    const relativeCandidates = buildSourceRelativeDurationCandidate(sourceText, segment);
+    if (relativeCandidates.length > 0) {
+      candidates.push(...relativeCandidates);
+      continue;
+    }
     const rescheduled = buildRescheduledDayCandidate(sourceText, segment);
     if (rescheduled) {
       candidates.push(rescheduled);
@@ -1199,6 +1325,14 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
         (typeof (value as Record<string, unknown>).temporalExpression === "string" &&
           hasClockExpression((value as Record<string, unknown>).temporalExpression as string))),
   );
+  const untrustedGeminiDuration = Boolean(
+    value &&
+      typeof value === "object" &&
+      ((value as Record<string, unknown>).relativeAmount !== null &&
+        (value as Record<string, unknown>).relativeAmount !== undefined ||
+        (value as Record<string, unknown>).relativeUnit !== null &&
+        (value as Record<string, unknown>).relativeUnit !== undefined),
+  );
   if (
     geminiSemantics &&
     (isConditionalAntecedentTemporal(sourceText, geminiSemantics) ||
@@ -1207,9 +1341,13 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
     return sourceSemantics;
   }
   if (!geminiSemantics) {
-    return untrustedGeminiClock && !candidates.some((candidate) => Boolean(candidate.clock))
-      ? null
-      : sourceSemantics;
+    if (untrustedGeminiClock && !candidates.some((candidate) => Boolean(candidate.clock))) {
+      return null;
+    }
+    if (untrustedGeminiDuration) {
+      return null;
+    }
+    return sourceSemantics;
   }
   if (candidates.length === 0) return geminiSemantics;
   if (
@@ -1673,9 +1811,18 @@ export function resolveTiboTemporalSchedule(
       precision = "day";
     } else {
       const duration = semantics.relativeAmount * (semantics.relativeUnit === "hours" ? HOUR_MS : MINUTE_MS);
-      expectedStart = new Date(created.getTime() + duration);
-      expectedEnd = expectedStart;
-      precision = "exact_time";
+      const isWithinWindow =
+        Boolean(semantics.temporalExpression && /\bwithin\b/i.test(semantics.temporalExpression)) ||
+        semantics.temporalPrecision === "window";
+      if (isWithinWindow) {
+        expectedStart = created;
+        expectedEnd = new Date(created.getTime() + duration);
+        precision = "window";
+      } else {
+        expectedStart = new Date(created.getTime() + duration);
+        expectedEnd = expectedStart;
+        precision = "exact_time";
+      }
     }
   } else if (semantics.temporalKind === "absolute" && semantics.explicitDateParts) {
     const year = semantics.explicitDateParts.year ?? createdLocal.year;

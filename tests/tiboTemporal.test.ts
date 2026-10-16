@@ -1420,3 +1420,79 @@ test("disambiguates repeated clock expressions using evidenceQuote", () => {
   assert.deepEqual(parsed.explicitTimeParts, { hour: 15, minute: 0 });
   assert.equal(parsed.relativeDayOffset, 1);
 });
+
+test("resolves within relative duration to a window [created, created + duration] with precision window", () => {
+  const createdAt = "2026-08-10T12:00:00.000Z";
+  const resolution = resolveTiboTemporalSchedule(
+    {
+      temporalExpression: "within the next 2 hours",
+      temporalKind: "relative_duration",
+      temporalPrecision: "window",
+      weekday: null,
+      relativeDayOffset: null,
+      relativeAmount: 2,
+      relativeUnit: "hours",
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: 0.95,
+      resolutionSource: "deterministic",
+      isDeadline: true,
+    },
+    createdAt,
+  );
+
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.temporalPrecision, "window");
+  assert.equal(resolution.expectedStartAt, "2026-08-10T12:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-08-10T14:00:00.000Z");
+});
+
+test("deterministic temporal extraction extracts within and in relative durations", () => {
+  const withinParsed = parseTiboTemporalSemantics(null, "Landing within the next 2 hours for all users.");
+  assert.ok(withinParsed);
+  assert.equal(withinParsed.temporalKind, "relative_duration");
+  assert.equal(withinParsed.temporalPrecision, "window");
+  assert.equal(withinParsed.relativeAmount, 2);
+  assert.equal(withinParsed.relativeUnit, "hours");
+
+  const withinResolved = resolveTiboTemporalSchedule(withinParsed, "2026-08-10T12:00:00.000Z");
+  assert.equal(withinResolved.status, "resolved");
+  assert.equal(withinResolved.temporalPrecision, "window");
+  assert.equal(withinResolved.expectedStartAt, "2026-08-10T12:00:00.000Z");
+  assert.equal(withinResolved.expectedEndAt, "2026-08-10T14:00:00.000Z");
+
+  const inParsed = parseTiboTemporalSemantics(null, "Reset landing in 2 hours for all users.");
+  assert.ok(inParsed);
+  assert.equal(inParsed.temporalKind, "relative_duration");
+  assert.equal(inParsed.temporalPrecision, "exact_time");
+  assert.equal(inParsed.relativeAmount, 2);
+  assert.equal(inParsed.relativeUnit, "hours");
+
+  const inResolved = resolveTiboTemporalSchedule(inParsed, "2026-08-10T12:00:00.000Z");
+  assert.equal(inResolved.status, "resolved");
+  assert.equal(inResolved.temporalPrecision, "exact_time");
+  assert.equal(inResolved.expectedStartAt, "2026-08-10T14:00:00.000Z");
+  assert.equal(inResolved.expectedEndAt, "2026-08-10T14:00:00.000Z");
+});
+
+test("benign words like was, were, had, no in before context do not veto valid EOD announcements", () => {
+  const benignCases = [
+    "The outage was fixed and global reset by EOD.",
+    "We had downtime earlier, usage reset by EOD.",
+    "There were some issues earlier, but reset by EOD.",
+    "No issues remaining and global reset by EOD.",
+    "No problem, reset by EOD.",
+  ];
+
+  for (const source of benignCases) {
+    const parsed = parseTiboTemporalSemantics(null, source);
+    assert.ok(parsed, `Should parse EOD from: "${source}"`);
+    assert.equal(parsed.daypart, "day", source);
+    assert.equal(parsed.isDeadline, true, source);
+    const resolved = resolveTiboTemporalSchedule(parsed, "2026-08-10T12:00:00.000Z");
+    assert.equal(resolved.status, "resolved", `Should resolve EOD from: "${source}"`);
+  }
+});

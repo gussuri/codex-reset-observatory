@@ -12,6 +12,10 @@ import {
   runManualResetDisplayNameCli,
 } from "../scripts/manage-reset-display-name";
 import { resolveResetDisplayTitle } from "../lib/radar/resetDisplayNames";
+import {
+  ensureResetDisplayNameForEvent,
+  hasManualResetDisplayName,
+} from "../lib/radar/resetDisplayNameStore";
 import type { ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 
 const eventKey = "tibo-reset-manual-localized-test";
@@ -334,5 +338,51 @@ test("CLI returns exit code 1 and null target fields for not_found", async () =>
     assert.equal(report.proposedUpdate, null);
   } finally {
     console.error = originalError;
+  }
+});
+
+test("hasManualResetDisplayName recognizes manual names across all locales and prevents AI generation", async () => {
+  assert.equal(hasManualResetDisplayName(null), false);
+  assert.equal(hasManualResetDisplayName(record({ manual_name_ja: null })), false);
+  assert.equal(hasManualResetDisplayName(record({ manual_name_ja: "   " })), false);
+  assert.equal(hasManualResetDisplayName(record({ manual_name_ja: "JA手動名" })), true);
+  assert.equal(hasManualResetDisplayName(record({ manual_name_en: "EN Manual Name" })), true);
+  assert.equal(hasManualResetDisplayName(record({ manual_name_zh: "ZH 手动名" })), true);
+
+  // ensureResetDisplayNameForEvent skips generation when EN manual name is present
+  const prevUrl = process.env.SUPABASE_URL;
+  const prevKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  try {
+    const outcome = await ensureResetDisplayNameForEvent(
+      resetItem({
+        completed_at: "2026-08-31T00:00:00.000Z",
+        closed_at: "2026-08-31T00:00:00.000Z",
+        recordKind: "confirmed_global",
+        details: {
+          cycleType: "ランダムリセット",
+          reasonType: "ご祝儀リセット",
+          resetMethod: "強制リセット",
+          scope: "全有料プラン",
+          noticeToExecution: "0分",
+          noticeType: "なし",
+        },
+      }),
+      {
+        canonicalEventKey: eventKey,
+        existingRecord: record({ manual_name_ja: null, manual_name_en: "EN Manual Name" }),
+        sourcePostText: "Reset is live.",
+        apiKey: "test-gemini-key",
+      },
+    );
+    assert.equal(outcome.status, "manual");
+    assert.equal(outcome.displayName, "EN Manual Name");
+    assert.equal(outcome.skipped, true);
+  } finally {
+    if (prevUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = prevUrl;
+    if (prevKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = prevKey;
   }
 });

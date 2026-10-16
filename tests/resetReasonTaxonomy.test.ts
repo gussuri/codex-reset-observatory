@@ -124,4 +124,37 @@ describe("canonical reset reason taxonomy", () => {
       }
     }
   });
+
+  it("does not classify ordinary user announcements as celebration reset while matching milestone user counts", () => {
+    assert.equal(
+      normalizeResetReasonType({
+        text: "We have reset usage limits for all Plus and Pro users",
+      }),
+      undefined,
+    );
+    assert.equal(
+      normalizeResetReasonType({
+        text: "Usage limits have been reset for all paid users.",
+      }),
+      undefined,
+    );
+    assert.equal(
+      normalizeResetReasonType({
+        text: "Codex reached 2M users today, resetting limits for everyone.",
+      }),
+      "ご祝儀リセット",
+    );
+    assert.equal(
+      normalizeResetReasonType({
+        text: "Resetting usage limits to celebrate reaching 1,000,000 users.",
+      }),
+      "ご祝儀リセット",
+    );
+    assert.equal(
+      normalizeResetReasonType({
+        text: "Surpassed 8 million active users, limits have been refreshed.",
+      }),
+      "ご祝儀リセット",
+    );
+  });
 });

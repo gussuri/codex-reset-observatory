@@ -62,6 +62,21 @@ test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
   assert.ok(prompt.indexOf("AUTHOR TEXT:") < prompt.indexOf("QUOTED CONTEXT"));
 });
 
+test("Gemini prompt labels Tibo's own self-quote as Tibo's own quoted post", () => {
+  const prompt = buildGeminiPrompt({
+    text: "Done and dusted.",
+    isQuote: true,
+    quoteAuthorHandle: "@thsottiaux",
+    quoteContextText: "Global reset scheduled for today.",
+    quoteTweetUrl: "https://x.com/thsottiaux/status/1234567890",
+  });
+
+  assert.match(prompt, /AUTHOR TEXT: Done and dusted\./);
+  assert.match(prompt, /QUOTED CONTEXT \(Tibo's own quoted post\): Global reset scheduled for today\./);
+  assert.match(prompt, /Quoted author: @thsottiaux/);
+  assert.doesNotMatch(prompt, /QUOTED CONTEXT \(not Tibo's own text\)/);
+});
+
 test("Gemini reset reason candidates exclude cycle labels", () => {
   assert.equal(normalizeGeminiResetType("ご祝儀リセット"), "ご祝儀リセット");
   assert.equal(normalizeGeminiResetType("詫びリセット"), "詫びリセット");
@@ -634,4 +649,30 @@ test("15. Gemini API prompt & schema evaluation keeps an ambiguous productivity 
   assert.strictEqual(simulatedAiOutput.teaserStrength, "none");
   assert.strictEqual(simulatedAiOutput.evidenceQuote, null);
   assert.ok(todayText.includes("Things getting faster"));
+});
+
+test("16. Tibo self-quote prompt distinguishes Tibo's own post from external quoted posts", () => {
+  const selfQuotePrompt = buildGeminiPrompt({
+    text: "Done and dusted.",
+    tweetCreatedAt: "2026-08-05T00:00:00.000Z",
+    quoteAuthorHandle: "@thsottiaux",
+    quoteTweetUrl: "https://x.com/thsottiaux/status/2084000000000000100",
+    quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
+  });
+
+  assert.ok(selfQuotePrompt.includes("QUOTED CONTEXT (Tibo's own quoted post):"));
+  assert.ok(selfQuotePrompt.includes("When quoting his own post, treat the quoted text as Tibo's earlier post context."));
+  assert.ok(!selfQuotePrompt.includes("QUOTED CONTEXT (not Tibo's own text):"));
+
+  const externalQuotePrompt = buildGeminiPrompt({
+    text: "Done and dusted.",
+    tweetCreatedAt: "2026-08-05T00:00:00.000Z",
+    quoteAuthorHandle: "@other_user",
+    quoteTweetUrl: "https://x.com/other_user/status/2084000000000000100",
+    quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
+  });
+
+  assert.ok(externalQuotePrompt.includes("QUOTED CONTEXT (not Tibo's own text):"));
+  assert.ok(externalQuotePrompt.includes("never treat it as Tibo's own assertion"));
+  assert.ok(!externalQuotePrompt.includes("QUOTED CONTEXT (Tibo's own quoted post):"));
 });

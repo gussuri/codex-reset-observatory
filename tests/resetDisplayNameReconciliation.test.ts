@@ -457,3 +457,48 @@ test("display-name read failures defer reconciliation instead of treating rows a
   assert.equal(calls, 0);
   assert.equal(result.writes, 0);
 });
+
+test("manual names in EN or ZH are protected before Gemini in reconciliation", async () => {
+  let ensureCalls = 0;
+  const existingWithEn: ResetDisplayNameRecord = {
+    event_key: "canonical-event-key",
+    source_tweet_id: TWEET_ID,
+    manual_name_ja: null,
+    manual_name_en: "Manual English Name",
+    manual_name_zh: null,
+    ai_name_ja: null,
+    ai_name_en: null,
+    ai_name_zh: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: null,
+    ai_flags: [],
+    ai_generated_at: null,
+    input_hash: null,
+    updated_at: "2026-09-04T09:00:00.000Z",
+  };
+
+  const result = await reconcileResetDisplayNames({
+    data: {
+      formal_tibo_resets: [sourceSignal()],
+      reset_display_names: [existingWithEn],
+    } as RadarData,
+    canonicalHistory: [resetEvent()],
+    now: NOW,
+    apiKey: "test-key",
+    ensure: async () => {
+      ensureCalls += 1;
+      return acceptedOutcome("canonical-event-key");
+    },
+  });
+
+  assert.equal(result.outcomes[0]?.status, "manual");
+  assert.equal(result.outcomes[0]?.displayName, "Manual English Name");
+  assert.equal(ensureCalls, 0);
+  assert.equal(result.writes, 0);
+  assert.equal(result.geminiRequests, 0);
+});

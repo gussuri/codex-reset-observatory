@@ -912,7 +912,11 @@ export async function reconcileResetDisplayNames(
       results.outcomes.push(outcome(candidate, "preserved_precomputed"));
       continue;
     }
-    const existingManualName = candidate.existing?.manual_name_ja?.trim();
+    const existingManualName =
+      candidate.existing?.manual_name_ja?.trim() ||
+      candidate.existing?.manual_name_en?.trim() ||
+      candidate.existing?.manual_name_zh?.trim() ||
+      null;
     if (existingManualName) {
       results.outcomes.push(outcome(candidate, "manual", false, existingManualName));
       continue;
@@ -1110,15 +1114,6 @@ export async function reconcileResetDisplayNames(
         // canonical event reconciliation and public cache.
       }
     }
-
-    if (!options.dryRun) {
-      try {
-        candidateRecords = await listResetDisplayNameCandidates(candidateStore);
-      } catch {
-        // A stale read can only defer promotion; it must not affect canonical work.
-      }
-    }
-
   }
 
   if (wrote && options.invalidateRadarData) {

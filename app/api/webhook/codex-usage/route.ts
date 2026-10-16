@@ -39,11 +39,16 @@ import {
 import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import {
   collectOfficialTiboNoticeSignals,
+  convertTiboResetSignalToHistoryEvent,
   findRelatedTiboNoticeCluster,
   selectRepresentativeTiboNotice,
   NOTICE_LOOKBACK_MS,
+  type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
+import { claimTiboFormalAdoption } from "@/lib/radar/tiboFormalAdoptionStore";
+import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
+import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
 import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
@@ -327,6 +332,8 @@ function recoveryResponse(status: string) {
 type MatchingTiboResult = {
   tweetId: string | null;
   tweetCreatedAt: string | null;
+  tweetUrl: string | null;
+  text: string | null;
   needsPromotion: boolean;
   confidence: number | null;
   error: unknown;
@@ -573,7 +580,7 @@ async function processCodexUsageSnapshot(
     const fallbackObservation = uncorroborated.kind === "recovery"
       ? createRecoveryObservation(
           uncorroborated,
-          { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null },
+          { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null },
           now,
         )
       : undefined;
@@ -622,7 +629,7 @@ async function processCodexUsageSnapshot(
   // covers the `unknown` near-regular case where an official notice exists:
   // a notice must not turn a regular quota recovery into a Tibo confirmation.
   const matchingTibo: MatchingTiboResult = !canCorroborateTiboReset(decision)
-    ? { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null }
+    ? { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null }
     : await findRecentFormalTiboReset(
         client,
         snapshot.observedAt,
@@ -635,7 +642,7 @@ async function processCodexUsageSnapshot(
     }
     const unconfirmedObservation = createRecoveryObservation(
       decision,
-      { tweetId: null, tweetCreatedAt: null, needsPromotion: false, confidence: null, error: null },
+      { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null },
       now,
     );
     const plan = buildCodexUsageAtomicWritePlan({
@@ -817,6 +824,60 @@ async function processCodexUsageSnapshot(
   });
   const atomicResponse = await applyPlan(plan);
   if (atomicResponse) return atomicResponse;
+
+  if (matchingTibo.tweetId && matchingTibo.needsPromotion && executionEstimate) {
+    try {
+      const resetEventKey = executionEstimate.reset_event_key;
+      const sourceTweetIds = executionEstimate.tibo_source_tweet_ids ?? [matchingTibo.tweetId];
+      const primaryTweetId = executionEstimate.tibo_primary_tweet_id ?? matchingTibo.tweetId;
+      await claimTiboFormalAdoption(client, {
+        logicalPostId: primaryTweetId,
+        logicalPostTweetIds: [primaryTweetId],
+        resetEventKey,
+        representativeTweetId: primaryTweetId,
+        sourceTweetIds,
+        claimSource: "new_adoption",
+        identitySource: "none",
+        adoptedAt: receivedAt,
+        claimedAt: receivedAt,
+      });
+
+      const formalSignal: FormalTiboResetSignal = {
+        tweet_id: matchingTibo.tweetId,
+        text: matchingTibo.text ?? "",
+        tweet_url: matchingTibo.tweetUrl ?? `https://x.com/thsottiaux/status/${matchingTibo.tweetId}`,
+        tweet_created_at: matchingTibo.tweetCreatedAt ?? snapshot.observedAt,
+        detected_at: receivedAt,
+        signal_type: "reset_executed",
+        confidence: matchingTibo.confidence ?? 0.95,
+        verification_status: "confirmed",
+        classification_source: "gemini",
+      };
+      const displayNameItem = {
+        ...convertTiboResetSignalToHistoryEvent(formalSignal),
+        id: resetEventKey,
+        source_url: formalSignal.tweet_url,
+        sourceTweetIds,
+      };
+      await ensureResetEventMetadataForEvent(
+        displayNameItem,
+        {
+          canonicalEventKey: resetEventKey,
+          sourcePostText: formalSignal.text,
+          sourceTweetId: formalSignal.tweet_id,
+          apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+          model: RANDOM_RESET_NAME_MODEL,
+          timeoutMs: 8_000,
+          supabase: client,
+        },
+      );
+    } catch (promotionError) {
+      console.warn("[Codex usage] Formal adoption or metadata claim deferred", {
+        reason: "best_effort_failed",
+        error: promotionError instanceof Error ? promotionError.message : String(promotionError),
+      });
+    }
+  }
 
   console.info("[Codex usage] recovery observation accepted", {
     cycleHint: decision.cycleHint,

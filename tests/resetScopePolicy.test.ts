@@ -43,10 +43,10 @@ test("unknown reset applicability leaves scope blank instead of using Codex / Ch
   assert.notEqual(event.scope, "Codex / ChatGPT Work");
 });
 
-test("completed non-regular reset gets a non-empty low-stakes reason fallback", () => {
+test("completed non-regular reset without reason evidence leaves reason blank", () => {
   const event = convertTiboResetSignalToHistoryEvent(resetSignal());
 
-  assert.equal(event.details?.reasonType, "ご祝儀リセット");
+  assert.equal(event.details?.reasonType, undefined);
 });
 
 test("explicit broad applicability still maps to all paid plans", () => {

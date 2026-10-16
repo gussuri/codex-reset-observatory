@@ -1,10 +1,13 @@
 import type { ClassificationSignalType } from "./classification";
 import type { TeaserStrength } from "./teaserStrength";
+import { isTiboHandle } from "./tiboHandle";
 
 export type TiboContextSafetyInput = {
   authorText: string;
   replyContextText?: string | null;
   quoteContextText?: string | null;
+  quoteAuthorHandle?: string | null;
+  quoteTweetUrl?: string | null;
   selectedSignalType: ClassificationSignalType;
   aiTeaserStrength?: TeaserStrength | null;
 };
@@ -28,6 +31,11 @@ export type TiboContextSafetyDecision =
   | {
       signalType: "teaser";
       teaserStrength: "strong";
+      reasonJa: string;
+    }
+  | {
+      signalType: "reset_executed";
+      teaserStrength?: TeaserStrength | null;
       reasonJa: string;
     };
 
@@ -79,9 +87,19 @@ export function getTiboContextSafetyDecision(
 
   if (!hasResetSignal) return null;
 
+  const isTiboSelfQuote =
+    Boolean(isTiboHandle(input.quoteAuthorHandle) || isTiboHandle(input.quoteTweetUrl)) &&
+    Boolean(input.quoteContextText && EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(input.quoteContextText)));
+
+  const externalContexts = [
+    input.replyContextText,
+    isTiboSelfQuote ? null : input.quoteContextText,
+  ].filter(Boolean);
+
   const contextOnlyResetClaim =
+    !isTiboSelfQuote &&
     !EXPLICIT_RESET_CONTEXT_PATTERN.test(authorText) &&
-    [input.replyContextText, input.quoteContextText].some((value) =>
+    externalContexts.some((value) =>
       EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(value)),
     );
   if (contextOnlyResetClaim && input.selectedSignalType !== "teaser") {

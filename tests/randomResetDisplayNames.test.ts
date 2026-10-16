@@ -410,11 +410,17 @@ test("accepted write payload keeps manual and audit fields separate", () => {
     inputMode: "metadata+source",
     inputHash: "hash",
     result,
-    existing: acceptedRecord({ manual_name_ja: "手動名" }),
+    existing: acceptedRecord({
+      manual_name_ja: "手動名",
+      manual_name_en: "Manual EN",
+      manual_name_zh: "Manual ZH",
+    }),
     generatedAt: "2026-08-09T00:00:00.000Z",
   });
   assert.equal(payload.event_key, "event-key");
   assert.equal(payload.manual_name_ja, "手動名");
+  assert.equal(payload.manual_name_en, "Manual EN");
+  assert.equal(payload.manual_name_zh, "Manual ZH");
   assert.equal(payload.ai_name_ja, "週末の利用上限リセット");
   assert.equal("title" in payload, false);
 });

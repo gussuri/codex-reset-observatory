@@ -17,6 +17,7 @@ export type ResetEventMetadataStoreOutcome = {
   status: string;
   wrote: boolean;
   skipped: boolean;
+  record?: ResetDisplayNameRecord | null;
 };
 
 type ResetEventMetadataStoreOptions = {
@@ -134,14 +135,6 @@ function buildMetadataWritePayload(
   };
 }
 
-function withoutEventMetadata(
-  payload: ReturnType<typeof buildMetadataWritePayload>,
-) {
-  const result = { ...payload } as Record<string, unknown>;
-  for (const field of EVENT_METADATA_FIELDS) delete result[field];
-  return result;
-}
-
 async function writeMetadata(
   supabase: SupabaseClient,
   payload: ReturnType<typeof buildMetadataWritePayload>,
@@ -225,11 +218,23 @@ export async function ensureResetEventMetadataForEvent(
     return { eventKey, status: "generation_error", wrote: false, skipped: true };
   }
 
+  let freshExisting = existing;
+  try {
+    const reRead = await fetchResetDisplayNameByKey(supabase, eventKey);
+    if (reRead !== null) {
+      freshExisting = reRead;
+    } else if (options.existingRecord === undefined) {
+      freshExisting = null;
+    }
+  } catch {
+    // Keep pre-call existing if re-read fails
+  }
+
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const payload = buildMetadataWritePayload(
     eventKey,
     options.sourceTweetId ?? item.sourceTweetIds?.[0] ?? null,
-    existing,
+    freshExisting,
     result,
     inputHash,
     generatedAt,
@@ -238,10 +243,13 @@ export async function ensureResetEventMetadataForEvent(
   try {
     const wrote = await writeMetadata(supabase, payload);
     if (!wrote) {
-      await supabase
-        .from("reset_display_names")
-        .upsert(withoutEventMetadata(payload), { onConflict: "event_key" });
-      return { eventKey, status: "schema_unavailable", wrote: false, skipped: true };
+      return {
+        eventKey,
+        status: "schema_unavailable",
+        record: freshExisting,
+        wrote: false,
+        skipped: true,
+      };
     }
   } catch {
     return { eventKey, status: "write_error", wrote: false, skipped: true };
