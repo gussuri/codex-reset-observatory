@@ -9,6 +9,7 @@ import { buildProbabilityDebugInfo } from "../lib/logProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import {
   calculatePublishedProbability,
+  getPublishedProbabilityPeriodAt,
   roundPublicProbabilityTime,
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
@@ -790,7 +791,7 @@ test("a Survival runtime exception falls back to valid broad-banked v2", () => {
   assert.equal(selected.fallbackReason, "survival_conditioned_exception");
 });
 
-test("a broad-banked failure reason wins when both future public candidates are invalid", () => {
+test("a survival-conditioned failure reason wins when survival-conditioned is active and both candidates are invalid", () => {
   const data = getLocalRadarData({ calculationNow: NOW });
   const primary = getLocalProbabilityCalculation(data, { now: NOW });
   const current = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
@@ -840,7 +841,95 @@ test("a broad-banked failure reason wins when both future public candidates are 
   );
 
   assert.equal(selected.source, "calibrated");
+  assert.equal(selected.fallbackReason, "survival_conditioned_invalid_prediction");
+});
+
+test("a broad-banked failure reason wins when survival-conditioned is inactive and broad-banked is invalid", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const current = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
+  const invalidBroad = {
+    modelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowSurvivalConditioned: false,
+      allowBroadBankedV2: true,
+      broadBankedV2: invalidBroad,
+      broadBankedV2FailureReason: "broad_banked_v2_invalid_prediction",
+    },
+  );
+
+  assert.equal(selected.source, "calibrated");
   assert.equal(selected.fallbackReason, "broad_banked_v2_invalid_prediction");
+});
+
+test("nextGenerationB receives publicFallbackReason when survivalConditioned is active and invalid", () => {
+  const data = getLocalRadarData({ calculationNow: NOW });
+  const primary = getLocalProbabilityCalculation(data, { now: NOW });
+  const current = calculatePublishedProbability(data, { now: NOW }, { logFallback: false });
+  const invalidSurvival = {
+    modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+    hazard: {},
+    survival: {},
+  } as never;
+  const validNextGenB = {
+    modelVersion: NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
+    predictions: {
+      probability12h: 0.1,
+      probability24h: 0.2,
+      probability48h: 0.3,
+      probability72h: 0.4,
+    },
+  };
+
+  const selected = selectPublishedProbability(
+    primary,
+    current.calibrated,
+    current.stableShadow,
+    null,
+    null,
+    current.rawShadow,
+    validNextGenB as never,
+    {
+      allowSurvivalConditioned: true,
+      survivalConditioned: invalidSurvival,
+      survivalConditionedFailureReason: "survival_conditioned_invalid_prediction",
+    },
+  );
+
+  assert.equal(selected.source, "calibrated");
+  assert.equal(selected.adoptedModel, validNextGenB.modelVersion);
+  assert.equal(selected.fallbackReason, "survival_conditioned_invalid_prediction");
+});
+
+test("period ordering returns survival-conditioned-v1 even if broadBankedV2AdoptionAt is null", () => {
+  const survivalAdoption = "2026-09-19T18:00:00.000Z";
+  const period = getPublishedProbabilityPeriodAt("2026-09-20T00:00:00.000Z", {
+    survivalConditionedAdoptionAt: survivalAdoption,
+    broadBankedV2AdoptionAt: null,
+  });
+  assert.equal(period, "survival-conditioned-v1");
 });
 
 test("valid low-confidence Shadow values do not emit a fallback warning", () => {

@@ -66,6 +66,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       path: "/",
       expectedTitle: "Codexリセット観測所｜タイミング・履歴・次回予測",
       expectedDescription: "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。",
+      expectedAlternateLocale: ["en_US", "zh_CN"],
     },
     {
       locale: "en",
@@ -75,6 +76,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       path: "/en",
       expectedTitle: "Codex Reset Observatory | Reset Timing, Forecasts & History",
       expectedDescription: "Check the latest Codex reset time, recent history, official notices, and reset forecasts for the next 24 and 48 hours.",
+      expectedAlternateLocale: ["ja_JP", "zh_CN"],
     },
     {
       locale: "zh",
@@ -84,6 +86,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       path: "/zh",
       expectedTitle: "Codex 重置观测站｜使用额度、时间、历史与预测",
       expectedDescription: "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
+      expectedAlternateLocale: ["ja_JP", "en_US"],
     },
   ] as const;
 
@@ -102,6 +105,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
     assert.strictEqual(openGraph.title, item.expectedTitle, item.locale);
     assert.strictEqual(openGraph.description, item.expectedDescription, item.locale);
     assert.strictEqual(openGraph.url, siteUrl(item.path), item.locale);
+    assert.deepStrictEqual(openGraph.alternateLocale, item.expectedAlternateLocale, item.locale);
     const firstImage = Array.isArray(openGraph.images) ? openGraph.images[0] : openGraph.images;
     const firstImageUrl =
       typeof firstImage === "string"

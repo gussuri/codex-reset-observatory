@@ -5,6 +5,7 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import {
   collapseTrustedTiboEditChains,
   getTiboLogicalIdentityAliases,
+  toEffectiveTiboLogicalPostRow,
   type TiboLogicalPost,
   type TiboLogicalPostRow,
 } from "../lib/radar/tiboLogicalPost";
@@ -416,4 +417,61 @@ test("public-v1 remains unchanged and excludes logical identity metadata", () =>
   assert.equal(serialized.includes("edit_history_tweet_ids"), false);
   assert.equal(serialized.includes("edit_version"), false);
   assert.equal(serialized.includes("edit_metadata_source"), false);
+});
+
+test("manual/resolved v1 notice keeps resolved temporal window and teaser_strength when edited by an unresolved v2 row", () => {
+  const v1 = trustedRow([A, B], A, {
+    verification_status: "confirmed",
+    classification_source: "manual",
+    signal_type: "teaser",
+    teaser_strength: "strong",
+    temporal_expression: "by EOD",
+    temporal_kind: "daypart",
+    temporal_precision: "daypart",
+    temporal_timezone: "America/Los_Angeles",
+    temporal_confidence: 0.95,
+    temporal_resolution_source: "deterministic",
+    expected_start_at: "2026-08-31T07:00:00.000Z",
+    expected_end_at: "2026-08-31T19:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v8",
+  } as unknown as Partial<TiboLogicalPostRow>);
+
+  const v2 = trustedRow([A, B], B, {
+    text: "Edited typo in notice text",
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    signal_type: "teaser",
+    teaser_strength: null,
+    temporal_expression: null,
+    temporal_kind: null,
+    temporal_precision: null,
+    temporal_timezone: null,
+    temporal_confidence: null,
+    temporal_resolution_source: null,
+    expected_start_at: null,
+    expected_end_at: null,
+    temporal_resolution_status: "unresolved",
+    temporal_resolution_version: null,
+  } as unknown as Partial<TiboLogicalPostRow>);
+
+  const post = firstPost([v1, v2]);
+  const effective = toEffectiveTiboLogicalPostRow(post) as Record<string, unknown> | null;
+
+  assert.ok(effective);
+  assert.equal(effective.tweet_id, B);
+  assert.equal(effective.text, "Edited typo in notice text");
+  assert.equal(effective.verification_status, "confirmed");
+  assert.equal(effective.classification_source, "manual");
+  assert.equal(effective.teaser_strength, "strong");
+  assert.equal(effective.temporal_expression, "by EOD");
+  assert.equal(effective.temporal_kind, "daypart");
+  assert.equal(effective.temporal_precision, "daypart");
+  assert.equal(effective.temporal_timezone, "America/Los_Angeles");
+  assert.equal(effective.temporal_confidence, 0.95);
+  assert.equal(effective.temporal_resolution_source, "deterministic");
+  assert.equal(effective.expected_start_at, "2026-08-31T07:00:00.000Z");
+  assert.equal(effective.expected_end_at, "2026-08-31T19:00:00.000Z");
+  assert.equal(effective.temporal_resolution_status, "resolved");
+  assert.equal(effective.temporal_resolution_version, "tibo-temporal-v8");
 });

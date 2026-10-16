@@ -1496,3 +1496,61 @@ test("benign words like was, were, had, no in before context do not veto valid E
     assert.equal(resolved.status, "resolved", `Should resolve EOD from: "${source}"`);
   }
 });
+
+test("resolveDay resolves relativeDayOffset=1 with daypart=day to tomorrow instead of today", () => {
+  const createdAt = "2026-08-10T12:00:00.000Z"; // Monday 05:00 in LA
+  const schedule = resolveTiboTemporalSchedule(
+    {
+      temporalExpression: "during the day",
+      temporalKind: "daypart",
+      temporalPrecision: "daypart",
+      weekday: null,
+      relativeDayOffset: 1,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: "day",
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: 0.9,
+      resolutionSource: "merged",
+    },
+    createdAt,
+  );
+
+  assert.equal(schedule.status, "resolved");
+  assert.equal(schedule.temporalPrecision, "daypart");
+  // Should resolve to Tuesday 2026-08-11 (07:00Z to 2026-08-12T07:00Z)
+  assert.equal(schedule.expectedStartAt, "2026-08-11T07:00:00.000Z");
+  assert.equal(schedule.expectedEndAt, "2026-08-12T07:00:00.000Z");
+});
+
+test("resolveWeekdayDate advances this <weekday> to next week if target weekday has already passed in the current week", () => {
+  const createdAt = "2026-08-12T12:00:00.000Z"; // Wednesday in LA
+  const schedule = resolveTiboTemporalSchedule(
+    {
+      temporalExpression: "this Monday",
+      temporalKind: "weekday",
+      temporalPrecision: "day",
+      weekday: "monday",
+      relativeDayOffset: null,
+      relativeAmount: null,
+      relativeUnit: null,
+      explicitDateParts: null,
+      explicitTimeParts: null,
+      daypart: null,
+      rangeKind: null,
+      explicitTimezone: null,
+      temporalConfidence: 0.9,
+      resolutionSource: "deterministic",
+    },
+    createdAt,
+  );
+
+  assert.equal(schedule.status, "resolved");
+  assert.equal(schedule.temporalPrecision, "day");
+  // Should advance to next Monday (2026-08-17), not 2026-08-10
+  assert.equal(schedule.expectedStartAt, "2026-08-17T07:00:00.000Z");
+  assert.equal(schedule.expectedEndAt, "2026-08-18T07:00:00.000Z");
+});

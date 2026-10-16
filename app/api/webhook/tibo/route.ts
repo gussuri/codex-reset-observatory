@@ -259,10 +259,13 @@ function buildSecondarySignal(
     return null;
   }
 
-  const temporalSemantics = futureSignal.signalType === "official_notice"
+  const isTimedSignal =
+    futureSignal.signalType === "official_notice" ||
+    futureSignal.signalType === "teaser";
+  const temporalSemantics = isTimedSignal
     ? parseTiboTemporalSemantics(futureSignal, sourceText)
     : null;
-  const temporalResolution = futureSignal.signalType === "official_notice"
+  const temporalResolution = isTimedSignal
     ? resolveTiboTemporalSchedule(temporalSemantics, createdAt, TIBO_SOURCE_TIME_ZONE)
     : null;
   const fallbackExpiresAt = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();

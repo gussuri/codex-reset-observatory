@@ -1626,8 +1626,10 @@ function resolveWeekdayDate(
   }
   if (lower.includes("this ")) {
     const currentWeekMonday = addLocalDays(createdLocal, -createdWeekday);
-    const result = addLocalDays(currentWeekMonday, target);
-    return result;
+    if (target < createdWeekday) {
+      return addLocalDays(currentWeekMonday, target + 7);
+    }
+    return addLocalDays(currentWeekMonday, target);
   }
   const delta = (target - createdWeekday + 7) % 7;
   if (delta === 0) {
@@ -1651,6 +1653,7 @@ function resolveDay(
   const lower = expression.toLowerCase();
   if (lower.includes("tomorrow")) return addLocalDays(createdLocal, 1);
   if (lower.includes("today")) return createdLocal;
+  if (semantics.relativeDayOffset !== null) return addLocalDays(createdLocal, semantics.relativeDayOffset);
   if (semantics.daypart === "day" || semantics.daypart === "tonight") return createdLocal;
   if (semantics.weekday) {
     return resolveWeekdayDate(
@@ -1662,7 +1665,6 @@ function resolveDay(
       isDeadlineMidnightExpression(expression),
     );
   }
-  if (semantics.relativeDayOffset !== null) return addLocalDays(createdLocal, semantics.relativeDayOffset);
   return null;
 }
 
@@ -1877,10 +1879,16 @@ export function resolveTiboTemporalSchedule(
     if (day && semantics.temporalKind === "daypart" && semantics.daypart) {
       const [startHour, endHour] = TIBO_DAYPARTS[semantics.daypart];
       if (semantics.daypart === "day") {
-        // "During the day" starts when the post is made, then ends at the
-        // next midnight in Tibo's source-local calendar. The start remains
-        // the original instant so seconds are not silently discarded.
-        expectedStart = created;
+        // "During the day" for today starts when the post is made, then ends at the
+        // next midnight in Tibo's source-local calendar. For a future day (e.g. tomorrow),
+        // it starts at the start of that target day.
+        const isCurrentDay =
+          day.year === createdLocal.year &&
+          day.month === createdLocal.month &&
+          day.day === createdLocal.day;
+        expectedStart = isCurrentDay
+          ? created
+          : localDateTimeToInstant(atLocalTime(day, startHour), timeZone);
         expectedEnd = localDateTimeToInstant(
           atLocalTime(addLocalDays(day, 1), 0),
           timeZone,

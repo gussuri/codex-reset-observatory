@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert";
+import { NextRequest } from "next/server";
+import { POST as postTiboHeartbeat } from "../app/api/webhook/tibo/heartbeat/route";
 import {
   buildHeartbeatRecord,
   isMissingHeartbeatDiagnosticColumn,
@@ -287,4 +289,110 @@ test("legacy heartbeat retry removes both optional diagnostic columns", () => {
     isMissingHeartbeatDiagnosticColumn({ message: "Could not find newest_seen_tweet_created_at" }),
     true,
   );
+});
+
+test("heartbeat route returns 500 when Supabase read returns non-PGRST116 error", async () => {
+  const previousEnv = {
+    TIBO_WEBHOOK_SECRET: process.env.TIBO_WEBHOOK_SECRET,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.includes("tibo_heartbeat")) {
+      return new Response(JSON.stringify({
+        code: "57014",
+        message: "canceling statement due to statement timeout",
+      }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+
+  try {
+    const req = new NextRequest("http://localhost/api/webhook/tibo/heartbeat", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: "test-session" }),
+    });
+
+    const response = await postTiboHeartbeat(req);
+    assert.equal(response.status, 500);
+    const body = await response.json();
+    assert.equal(body.error, "Database error");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, val] of Object.entries(previousEnv)) {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  }
+});
+
+test("heartbeat route treats PGRST116 error as new session (row does not exist yet)", async () => {
+  const previousEnv = {
+    TIBO_WEBHOOK_SECRET: process.env.TIBO_WEBHOOK_SECRET,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  const requests: { url: string; method: string }[] = [];
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    requests.push({ url, method });
+
+    if (method === "GET" && url.includes("tibo_heartbeat")) {
+      return new Response(JSON.stringify({
+        code: "PGRST116",
+        message: "JSON object requested, multiple (or no) rows returned",
+      }), {
+        status: 406,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({}), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const req = new NextRequest("http://localhost/api/webhook/tibo/heartbeat", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: "new-session" }),
+    });
+
+    const response = await postTiboHeartbeat(req);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.success, true);
+    assert.equal(body.heartbeatCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, val] of Object.entries(previousEnv)) {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  }
 });

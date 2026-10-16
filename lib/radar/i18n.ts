@@ -2169,6 +2169,15 @@ export const DYNAMIC_TRANSLATIONS = {
   },
 } satisfies Record<StandardHistoryTerm, Record<Locale, string>> & Record<string, Record<Locale, string>>;
 
+export const NORMALIZED_DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {};
+for (const [key, mapping] of Object.entries(DYNAMIC_TRANSLATIONS)) {
+  NORMALIZED_DYNAMIC_TRANSLATIONS[key.normalize("NFC")] = mapping;
+}
+
+const SORTED_NORMALIZED_DYNAMIC_ENTRIES = Object.entries(NORMALIZED_DYNAMIC_TRANSLATIONS).sort(
+  (a, b) => b[0].length - a[0].length,
+);
+
 export function translateUI(key: string, locale: Locale): string {
   return UI_TRANSLATIONS[key]?.[locale] ?? key;
 }
@@ -2180,13 +2189,7 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
 
   const trimmed = value.trim().normalize("NFC");
 
-  // DYNAMIC_TRANSLATIONS のキーもNFC正規化した辞書を作成して検索する（NFD/NFC差異対策）
-  const normalizedDict: Record<string, Record<Locale, string>> = {};
-  for (const [key, mapping] of Object.entries(DYNAMIC_TRANSLATIONS)) {
-    normalizedDict[key.normalize("NFC")] = mapping;
-  }
-
-  const directMatch = normalizedDict[trimmed]?.[locale];
+  const directMatch = NORMALIZED_DYNAMIC_TRANSLATIONS[trimmed]?.[locale];
   if (directMatch) {
     return directMatch;
   }
@@ -2218,6 +2221,7 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
         if (minutes > 0) parts.push(`${minutes} 分钟`);
         return parts.join(" ");
       }
+
       const parts: Array<string> = [];
       if (days > 0) parts.push(`${days}日`);
       if (hours > 0) parts.push(`${hours}時間`);
@@ -2228,10 +2232,7 @@ export function translateDynamic(value: string | undefined, locale: Locale): str
 
   // Fallback for partial/contains matching or dynamic strings
   let result = trimmed;
-  const sortedEntries = Object.entries(normalizedDict).sort(
-    (a, b) => b[0].length - a[0].length,
-  );
-  for (const [key, mapping] of sortedEntries) {
+  for (const [key, mapping] of SORTED_NORMALIZED_DYNAMIC_ENTRIES) {
     if (key.length > 3 && result.includes(key)) {
       result = result.replaceAll(key, mapping[locale]);
     }

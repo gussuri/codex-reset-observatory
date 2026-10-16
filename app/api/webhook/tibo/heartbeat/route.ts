@@ -39,11 +39,16 @@ export async function POST(req: NextRequest) {
     const now = new Date();
 
     // 1. Fetch current heartbeat record
-    const { data: existing } = await supabase
+    const { data: existing, error: readError } = await supabase
       .from("tibo_heartbeat")
       .select("*")
       .eq("id", "main")
       .single();
+
+    if (readError && readError.code !== "PGRST116") {
+      console.error("[Heartbeat Error] Supabase read failed:", readError);
+      return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
 
     const payload = buildHeartbeatRecord(body, existing, now);
 

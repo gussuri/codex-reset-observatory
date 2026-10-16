@@ -961,7 +961,7 @@ async function fetchRawRegularResetEvents(): Promise<
 
 const getCachedRegularResetEvents = unstable_cache(
   () => fetchRawRegularResetEvents(),
-  ["regular-reset-events-cache-v1"],
+  getRadarCacheKeyParts("regular-reset-events-cache-v1"),
   {
     revalidate: 60,
     tags: [RADAR_CACHE_TAGS.regularResetEvents],
@@ -1006,7 +1006,7 @@ async function fetchRawCodexRecoveryObservations(): Promise<
 
 const getCachedCodexRecoveryObservations = unstable_cache(
   () => fetchRawCodexRecoveryObservations(),
-  ["codex-recovery-observations-cache-v2"],
+  getRadarCacheKeyParts("codex-recovery-observations-cache-v2"),
   {
     revalidate: 30,
     tags: [RADAR_CACHE_TAGS.recoveryObservations],
@@ -1051,7 +1051,7 @@ async function fetchRawResetExecutionEstimates() {
 
 const getCachedResetExecutionEstimates = unstable_cache(
   () => fetchRawResetExecutionEstimates(),
-  ["reset-execution-estimates-cache-v2"],
+  getRadarCacheKeyParts("reset-execution-estimates-cache-v2"),
   {
     revalidate: 30,
     tags: [RADAR_CACHE_TAGS.resetExecutionEstimates],
@@ -1093,7 +1093,7 @@ async function fetchRawTiboFormalAdoptions(): Promise<
 
 const getCachedTiboFormalAdoptions = unstable_cache(
   () => fetchRawTiboFormalAdoptions(),
-  ["tibo-formal-adoptions-cache-v1"],
+  getRadarCacheKeyParts("tibo-formal-adoptions-cache-v1"),
   {
     revalidate: 30,
     tags: [RADAR_CACHE_TAGS.formalAdoptions],
@@ -1102,7 +1102,7 @@ const getCachedTiboFormalAdoptions = unstable_cache(
 
 const getCachedResetDisplayNames = unstable_cache(
   () => fetchResetDisplayNamesResult("public"),
-  ["reset-display-names-cache-v2"],
+  getRadarCacheKeyParts("reset-display-names-cache-v2"),
   {
     revalidate: RESET_DISPLAY_NAME_CACHE_TTL_SECONDS,
     tags: [RADAR_CACHE_TAGS.displayNames],
@@ -1567,6 +1567,8 @@ async function fetchCurrentRadarDataBase(
         regularResetEvents.health,
         codexRecovery.health,
         resetExecutionEstimates.health,
+        tiboFormalAdoptions.health,
+        resetDisplayNames.health,
       ),
       openAIStatus.health,
     ),

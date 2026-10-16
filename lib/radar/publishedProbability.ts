@@ -223,18 +223,14 @@ export function getPublishedProbabilityPeriodAt(
   if (selectiveModelAdoptionTime === null || valueTime < selectiveModelAdoptionTime) {
     return "b-v2";
   }
-  if (
-    rawContinuousAdoptionTime !== null
-    && valueTime >= rawContinuousAdoptionTime
-    && (broadBankedV2AdoptionTime === null || valueTime < broadBankedV2AdoptionTime)
-  ) {
-    return "raw-continuous-18-54";
-  }
   if (survivalConditionedAdoptionTime !== null && valueTime >= survivalConditionedAdoptionTime) {
     return "survival-conditioned-v1";
   }
   if (broadBankedV2AdoptionTime !== null && valueTime >= broadBankedV2AdoptionTime) {
     return "broad-banked-v2";
+  }
+  if (rawContinuousAdoptionTime !== null && valueTime >= rawContinuousAdoptionTime) {
+    return "raw-continuous-18-54";
   }
   if (rollbackTime !== null && valueTime >= rollbackTime) {
     return "corrective-rollback-v4";
@@ -492,13 +488,14 @@ export function selectPublishedProbability(
             ? "calibrated_exception"
             : fallbackReason
     : fallbackReason;
-  const publicFallbackReason = broadBankedV2FailureReason
-    ?? survivalConditionedFailureReason
-    ?? (rawContinuousFailureReason
-    && calibrated
-    && isValidCalibratedPrediction(calibrated)
-    ? rawContinuousFailureReason
-    : calibratedFallbackReason);
+  const publicFallbackReason = survivalConditionedActive
+    ? survivalConditionedFailureReason ?? broadBankedV2FailureReason ?? fallbackReason
+    : broadBankedV2FailureReason
+      ?? (rawContinuousFailureReason
+      && calibrated
+      && isValidCalibratedPrediction(calibrated)
+      ? rawContinuousFailureReason
+      : calibratedFallbackReason);
 
   if (
     survivalConditionedActive
@@ -590,7 +587,7 @@ export function selectPublishedProbability(
       probability72h: nextGenerationB.predictions.probability72h,
       adoptedModel: nextGenerationB.modelVersion,
       source: "calibrated",
-      fallbackReason: null,
+      fallbackReason: (survivalConditionedActive || broadBankedV2Active) ? publicFallbackReason : null,
       primary,
       nextGenerationB,
       broadBankedV2,

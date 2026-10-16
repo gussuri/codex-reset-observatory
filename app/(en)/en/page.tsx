@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     type: "website",
     locale: "en_US",
-    alternateLocale: ["ja_JP"],
+    alternateLocale: ["ja_JP", "zh_CN"],
     images: [
       {
         url: SITE_OG_IMAGE_URL,

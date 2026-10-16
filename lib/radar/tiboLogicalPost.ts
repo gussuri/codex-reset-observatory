@@ -312,9 +312,54 @@ export function toEffectiveTiboLogicalPostRow<T extends TiboLogicalPostRow>(
     return null;
   }
 
+  const classificationRow = classification.row as Record<string, unknown> | null;
+  const contentRecord = content as Record<string, unknown>;
+
+  const temporalPreserved: Record<string, unknown> = {};
+  const isDifferentVersion = classificationRow !== null && classificationRow.tweet_id !== content.tweet_id;
+  const classificationHasResolvedTemporal =
+    classificationRow !== null &&
+    (classificationRow.temporal_resolution_status === "resolved" ||
+      (Boolean(classificationRow.expected_start_at) && Boolean(classificationRow.expected_end_at)));
+  const contentHasResolvedTemporal = contentRecord.temporal_resolution_status === "resolved";
+
+  if (isDifferentVersion && !contentHasResolvedTemporal && classificationHasResolvedTemporal) {
+    if ("temporal_expression" in classificationRow) {
+      temporalPreserved.temporal_expression = classificationRow.temporal_expression ?? null;
+    }
+    if ("temporal_kind" in classificationRow) {
+      temporalPreserved.temporal_kind = classificationRow.temporal_kind ?? null;
+    }
+    if ("temporal_precision" in classificationRow) {
+      temporalPreserved.temporal_precision = classificationRow.temporal_precision ?? null;
+    }
+    if ("temporal_timezone" in classificationRow) {
+      temporalPreserved.temporal_timezone = classificationRow.temporal_timezone ?? null;
+    }
+    if ("temporal_confidence" in classificationRow) {
+      temporalPreserved.temporal_confidence = classificationRow.temporal_confidence ?? null;
+    }
+    if ("temporal_resolution_source" in classificationRow) {
+      temporalPreserved.temporal_resolution_source = classificationRow.temporal_resolution_source ?? null;
+    }
+    if ("expected_start_at" in classificationRow) {
+      temporalPreserved.expected_start_at = classificationRow.expected_start_at ?? null;
+    }
+    if ("expected_end_at" in classificationRow) {
+      temporalPreserved.expected_end_at = classificationRow.expected_end_at ?? null;
+    }
+    if ("temporal_resolution_status" in classificationRow) {
+      temporalPreserved.temporal_resolution_status = classificationRow.temporal_resolution_status ?? null;
+    }
+    if ("temporal_resolution_version" in classificationRow) {
+      temporalPreserved.temporal_resolution_version = classificationRow.temporal_resolution_version ?? null;
+    }
+  }
+
   const editVersion = logicalPost.sourceTweetIds.indexOf(content.tweet_id) + 1;
-  return {
+  const projected: Record<string, unknown> = {
     ...content,
+    ...temporalPreserved,
     tweet_id: content.tweet_id,
     text: content.text,
     tweet_url: content.tweet_url ?? null,
@@ -328,7 +373,13 @@ export function toEffectiveTiboLogicalPostRow<T extends TiboLogicalPostRow>(
     edit_history_tweet_ids: logicalPost.sourceTweetIds.slice(),
     edit_version: editVersion > 0 ? editVersion : content.edit_version ?? undefined,
     edit_metadata_source: logicalPost.authoritative ? "x_api" : "none",
-  } as T;
+  };
+
+  if ("teaser_strength" in contentRecord || (classificationRow && "teaser_strength" in classificationRow)) {
+    projected.teaser_strength = contentRecord.teaser_strength ?? classificationRow?.teaser_strength ?? null;
+  }
+
+  return projected as T;
 }
 
 function toVersion<T extends TiboLogicalPostRow>(

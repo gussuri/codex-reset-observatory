@@ -953,6 +953,77 @@ test("composite completion is saved as reset_executed with independent weak teas
   }
 });
 
+test("composite completion with timed teaser secondary signal retains resolved expected_start_at and expected_end_at", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const text = "Good Sunday. Reset has been propagated to accounts. Might press the reset button again tomorrow.";
+  const tweetId = "2092000000000000002";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.98,
+    temporalDirection: "completed_now",
+    evidenceQuote: "Reset has been propagated to accounts",
+    reasonJa: "完了報告と明日の追加リセット示唆を含む複合投稿です。",
+    teaserStrength: "strong",
+    teaserStrengthConfidence: 0.95,
+    teaserStrengthEvidenceQuote: "Might press the reset button again tomorrow",
+    futureSignal: {
+      signalType: "teaser",
+      teaserStrength: "strong",
+      confidence: 0.95,
+      evidenceQuote: "Might press the reset button again tomorrow",
+      reasonJa: "明日の追加リセット予告です。",
+      temporalDirection: "future",
+      temporalExpression: "tomorrow",
+      temporalKind: "relative_day",
+      temporalPrecision: "day",
+      relativeDayOffset: 1,
+      temporalConfidence: 0.95,
+    },
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: "2026-08-24T00:07:43.201Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const upsertBody = requestBodies.find((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown> | undefined;
+    assert.ok(upsertBody);
+    assert.equal(upsertBody.signal_type, "reset_executed");
+    const secondarySignal = upsertBody.secondary_signal as Record<string, unknown>;
+    assert.ok(secondarySignal);
+    assert.equal(secondarySignal.signalType, "teaser");
+    assert.equal(secondarySignal.teaserStrength, "strong");
+    const temporal = secondarySignal.temporal as Record<string, unknown> | null;
+    assert.ok(temporal, "Secondary signal should have resolved temporal schedule");
+    assert.equal(temporal.status, "resolved");
+    assert.ok(temporal.expectedStartAt, "Should have expectedStartAt");
+    assert.ok(temporal.expectedEndAt, "Should have expectedEndAt");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("generic account-wide completion cannot create a formal reset from a Gemini execution result", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
