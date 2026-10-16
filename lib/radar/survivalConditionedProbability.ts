@@ -620,7 +620,7 @@ export function calculateSurvivalConditionedProbability(
     confidence: {
       ...confidence,
       completedIntervalCount: hazard.completedIntervalCount,
-      totalExposureDays: hazard.weightedExposureHours / 24,
+      totalExposureDays: hazard.totalExposureHours / 24,
     },
     hazard,
     survival: {

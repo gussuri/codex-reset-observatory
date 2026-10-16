@@ -258,7 +258,7 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
       };
 
       const historyMarker = "export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [";
-      const formattedHistoryString = `  ${JSON.stringify(newHistoryEvent, null, 4).replace(/"([^"]+)":/g, "$1:")},`;
+      const formattedHistoryString = `  ${JSON.stringify(newHistoryEvent, null, 4).replace(/^(\s*)"([A-Za-z_$][A-Za-z0-9_$]*)":/gm, "$1$2:")},`;
 
       historyContent = historyContent.replace(
         historyMarker,
@@ -271,7 +271,7 @@ function autoRecordCompletedResetHistory(tweet: TweetItem, classification: Class
 
     let signalsContent = fs.readFileSync(SIGNALS_FILE, "utf-8");
     signalsContent = signalsContent.replace(
-      /(status:\s*)"active"/g,
+      /(status:\s*)"active"(?:,\s*(?:\r?\n\s*)resolvedAt:\s*"[^"]*")?/g,
       `$1"resolved",\n    resolvedAt: "${dateIso}"`
     );
     fs.writeFileSync(SIGNALS_FILE, signalsContent, "utf-8");
@@ -315,13 +315,13 @@ function autoApplySignalToObservatory(tweet: TweetItem, classification: Classifi
     }
 
     fileContent = fileContent.replace(
-      /(id:\s*"(?:official-tibo-|boost-)[^"]+",[\s\S]*?status:\s*)"active"/g,
+      /(id:\s*"(?:official-tibo-|boost-)[^"]+",[\s\S]*?status:\s*)"active"(?:,\s*(?:\r?\n\s*)resolvedAt:\s*"[^"]*")?/g,
       `$1"resolved",\n    resolvedAt: "${dateIso}"`
     );
 
     const targetMarker = "export const LOCAL_OBSERVATION_SIGNALS: Array<LocalObservationSignal> = [";
     const formattedSignalString = JSON.stringify(newSignalObject, null, 2)
-      .replace(/"([^"]+)":/g, "$1:")
+      .replace(/^(\s*)"([A-Za-z_$][A-Za-z0-9_$]*)":/gm, "$1$2:")
       .split("\n")
       .map((line) => `  ${line}`)
       .join("\n")

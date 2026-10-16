@@ -424,10 +424,10 @@ export function classifyTiboTweet(
   const isReply = typeof metadata?.isReply === "boolean"
     ? metadata.isReply
     : url.includes("/status/") &&
-      (text.startsWith("@") || normalized.includes("reply"));
+      (text.startsWith("@") || /^replying\s+to\b/i.test(text.trim()));
   const isQuote = typeof metadata?.isQuote === "boolean"
     ? metadata.isQuote
-    : normalized.includes("quote") || false;
+    : /^quoting\b|\bquote\s+tweet\b/i.test(normalized);
 
   // 1. 否定・過去・昔話回想パターンの先頭評価 (Negative / Past / Retrospective Exclusion -> irrelevant)
   const negativeOrPastPatterns = [

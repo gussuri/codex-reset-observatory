@@ -685,6 +685,45 @@ test("central interpretation preserves direct teaser and history eligibility as 
   assert.equal(interpretTiboSignal(completed, NOW).historyEligible, true);
 });
 
+test("quote reset signals are history eligible only if quoting Tibo himself", () => {
+  const baseSignal = {
+    tweet_id: "quote-reset-test",
+    tweet_created_at: "2026-08-04T00:00:00.000Z",
+    signal_type: "reset_executed" as const,
+    confidence: 0.99,
+    is_reply: false,
+    text: "Usage limits have been reset for everyone.",
+  };
+
+  const externalQuote = {
+    ...baseSignal,
+    is_quote: true,
+    quote_author_handle: "someone_else",
+    quote_tweet_url: "https://x.com/someone_else/status/12345",
+  };
+  assert.equal(interpretTiboSignal(externalQuote, NOW).historyEligible, false);
+
+  const anonymousQuote = {
+    ...baseSignal,
+    is_quote: true,
+  };
+  assert.equal(interpretTiboSignal(anonymousQuote, NOW).historyEligible, false);
+
+  const selfQuoteHandle = {
+    ...baseSignal,
+    is_quote: true,
+    quote_author_handle: "@thsottiaux",
+  };
+  assert.equal(interpretTiboSignal(selfQuoteHandle, NOW).historyEligible, true);
+
+  const selfQuoteUrl = {
+    ...baseSignal,
+    is_quote: true,
+    quote_tweet_url: "https://x.com/thsottiaux/status/2083395000000000000",
+  };
+  assert.equal(interpretTiboSignal(selfQuoteUrl, NOW).historyEligible, true);
+});
+
 test("does not derive a UI teaser from ordinary, unrelated, rejected, or context-free replies", () => {
   const base = {
     is_reply: true,

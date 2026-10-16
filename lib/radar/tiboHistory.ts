@@ -32,6 +32,7 @@ import {
   normalizeResetReasonType,
 } from "./resetReason";
 import { normalizeResetScope } from "./resetScope";
+import { isTiboHandle } from "./tiboHandle";
 import {
   getTiboClassificationSafetyDecision,
   isCurrentUsageResetAnnouncement,
@@ -627,6 +628,12 @@ export function findRelatedBankedDistributionNotices(
 
 export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
   if (signal.is_reply === true) return false;
+  if (
+    signal.is_quote === true &&
+    !(isTiboHandle(signal.quote_author_handle) || isTiboHandle(signal.quote_tweet_url))
+  ) {
+    return false;
+  }
   if (signal.signal_type !== "reset_executed") return false;
   if (getTiboClassificationSafetyDecision(signal.text, signal.signal_type).signalType !== "reset_executed") {
     return false;

@@ -584,22 +584,30 @@ async function processCodexUsageSnapshot(
           now,
         )
       : undefined;
+    const regularReset = uncorroborated.kind === "recovery" && uncorroborated.nearRegularSchedule
+      ? {
+          scheduledAt: new Date(uncorroborated.previous.resetsAt * 1000).toISOString(),
+          completedAt: snapshot.observedAt,
+        }
+      : undefined;
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
       snapshot,
       receivedAt,
       previousState: previousResult.state,
       observation: fallbackObservation,
-      regularReset: uncorroborated.kind === "recovery" && uncorroborated.nearRegularSchedule
-        ? {
-            scheduledAt: new Date(uncorroborated.previous.resetsAt * 1000).toISOString(),
-            completedAt: snapshot.observedAt,
-          }
-        : undefined,
+      regularReset,
       ...bankedPlanFields,
     });
     const atomicResponse = await applyPlan(plan);
     if (atomicResponse) return atomicResponse;
+    if (fallbackObservation || regularReset) {
+      try {
+        await invalidateRadarCache("codex-usage");
+      } catch {
+        console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+      }
+    }
     await invalidateBankedProjection();
     return recoveryResponse(hasBankedObservation
       ? bankedResponseStatus()
@@ -645,22 +653,30 @@ async function processCodexUsageSnapshot(
       { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null },
       now,
     );
+    const regularReset = decision.nearRegularSchedule
+      ? {
+          scheduledAt: new Date(decision.previous.resetsAt * 1000).toISOString(),
+          completedAt: snapshot.observedAt,
+        }
+      : undefined;
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
       snapshot,
       receivedAt,
       previousState: previousResult.state,
       observation: unconfirmedObservation,
-      regularReset: decision.nearRegularSchedule
-        ? {
-            scheduledAt: new Date(decision.previous.resetsAt * 1000).toISOString(),
-            completedAt: snapshot.observedAt,
-          }
-        : undefined,
+      regularReset,
       ...bankedPlanFields,
     });
     const atomicResponse = await applyPlan(plan);
     if (atomicResponse) return atomicResponse;
+    if (unconfirmedObservation || regularReset) {
+      try {
+        await invalidateRadarCache("codex-usage");
+      } catch {
+        console.warn("[Codex usage] cache revalidation skipped", { reason: "runtime_context" });
+      }
+    }
     await invalidateBankedProjection();
     return recoveryResponse(bankedResponseStatus());
   }

@@ -5,6 +5,7 @@ import {
   type ResetExecutionWindow,
 } from "./tiboTemporal";
 import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
+import { isTiboHandle } from "./tiboHandle";
 
 export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 
@@ -44,6 +45,7 @@ const RESET_TEASER_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 export type ResetTeaserSignal = {
   tweet_id?: string;
+  logical_post_id?: string | null;
   tweet_created_at: string;
   text?: string | null;
   teaser_strength?: TeaserStrength | null;
@@ -329,10 +331,14 @@ export function interpretTiboSignal(
     signal.is_reply !== true &&
     signal.is_quote !== true &&
     (effectiveStrength === "strong" || effectiveStrength === "weak");
+  const isQuoteHistoryEligible =
+    signal.is_quote !== true ||
+    isTiboHandle(signal.quote_author_handle) ||
+    isTiboHandle(signal.quote_tweet_url);
   const historyEligible = !rejected &&
     signal.signal_type === "reset_executed" &&
     signal.is_reply !== true &&
-    signal.is_quote !== true &&
+    isQuoteHistoryEligible &&
     typeof signal.confidence === "number" &&
     Number.isFinite(signal.confidence) &&
     signal.confidence >= 0.95;

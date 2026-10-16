@@ -329,6 +329,7 @@ export async function writeResetDisplayNameCandidateGeneration(
     retryAfterSeconds: number | null;
     generatedAt: string;
     claimedAt: string;
+    generationAttempts?: number;
   },
 ): Promise<void> {
   if (!nonEmpty(input.claimedAt)) {
@@ -338,19 +339,28 @@ export async function writeResetDisplayNameCandidateGeneration(
     throw new Error("Reset display name candidate result cannot use a seed or claim status");
   }
 
-  const existing = await client
-    .from("reset_display_name_candidates")
-    .select("generation_attempts")
-    .eq("candidate_id", input.candidateId)
-    .maybeSingle();
-  if (existing.error) {
-    throw new Error(`Reset display name candidate result read failed: ${errorMessage(existing.error)}`);
-  }
-  if (!isObject(existing.data) ||
-    typeof existing.data.generation_attempts !== "number" ||
-    !Number.isInteger(existing.data.generation_attempts) ||
-    existing.data.generation_attempts < 0) {
-    throw new Error("Reset display name candidate result requires an existing candidate");
+  let currentGenerationAttempts: number;
+  if (typeof input.generationAttempts === "number") {
+    if (!Number.isInteger(input.generationAttempts) || input.generationAttempts < 0) {
+      throw new Error("Reset display name candidate result requires an existing candidate");
+    }
+    currentGenerationAttempts = input.generationAttempts;
+  } else {
+    const existing = await client
+      .from("reset_display_name_candidates")
+      .select("generation_attempts")
+      .eq("candidate_id", input.candidateId)
+      .maybeSingle();
+    if (existing.error) {
+      throw new Error(`Reset display name candidate result read failed: ${errorMessage(existing.error)}`);
+    }
+    if (!isObject(existing.data) ||
+      typeof existing.data.generation_attempts !== "number" ||
+      !Number.isInteger(existing.data.generation_attempts) ||
+      existing.data.generation_attempts < 0) {
+      throw new Error("Reset display name candidate result requires an existing candidate");
+    }
+    currentGenerationAttempts = existing.data.generation_attempts;
   }
 
   const { data, error } = await client
@@ -369,7 +379,7 @@ export async function writeResetDisplayNameCandidateGeneration(
       ai_prompt_version: input.result.promptVersion ?? null,
       ai_input_mode: input.aiInputMode,
       ai_status: input.aiStatus,
-      generation_attempts: existing.data.generation_attempts + 1,
+      generation_attempts: currentGenerationAttempts + 1,
       last_generated_at: input.generatedAt,
       next_retry_at: retryAt(input.generatedAt, input.aiStatus, input.retryAfterSeconds),
       updated_at: input.generatedAt,

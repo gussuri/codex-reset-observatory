@@ -10,6 +10,7 @@ import {
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
 import {
   applyTimedTeaserProbabilityReallocation,
+  excludeTimedTeaserFromOrdinaryPath,
   getTimedTeaserReallocationWeight,
   getTimedTeaserCandidates,
 } from "../lib/radar/timedTeaserProbability";
@@ -585,4 +586,44 @@ test("validated manual direct strong override is not rejected solely for missing
   });
 
   assert.equal(interpretTiboSignal(signal, NOW).timedProbabilityEligible, true);
+});
+
+test("excludeTimedTeaserFromOrdinaryPath removes candidate and older sibling edit versions of the same logical post", () => {
+  const logicalPostId = "logical-post-123";
+  const olderEditTweetId = "tweet-edit-v1";
+  const currentEditTweetId = "tweet-edit-v2";
+  const unrelatedTweetId = "tweet-other-999";
+
+  const candidate = {
+    signal: contextualSignal({
+      tweet_id: currentEditTweetId,
+      logical_post_id: logicalPostId,
+    }),
+    interpretation: {
+      contextDependence: "direct" as const,
+      timedProbabilityEligible: true,
+      timedEvidenceClass: "strong_direct" as const,
+    } as never,
+    weight: 0.5,
+  };
+
+  const radarData = getLocalRadarData({
+    calculationNow: NOW,
+    activeTiboSignals: [
+      contextualSignal({ tweet_id: currentEditTweetId, logical_post_id: logicalPostId }),
+      contextualSignal({ tweet_id: olderEditTweetId, logical_post_id: logicalPostId }),
+      contextualSignal({ tweet_id: unrelatedTweetId, logical_post_id: "other-post" }),
+    ],
+    recentTiboSignals: [
+      contextualSignal({ tweet_id: olderEditTweetId, logical_post_id: logicalPostId }),
+      contextualSignal({ tweet_id: unrelatedTweetId, logical_post_id: "other-post" }),
+    ],
+  });
+
+  const excluded = excludeTimedTeaserFromOrdinaryPath(radarData, candidate);
+  assert.ok(excluded);
+  assert.equal(excluded.active_tibo_signals?.length, 1);
+  assert.equal(excluded.active_tibo_signals?.[0]?.tweet_id, unrelatedTweetId);
+  assert.equal(excluded.recent_tibo_signals?.length, 1);
+  assert.equal(excluded.recent_tibo_signals?.[0]?.tweet_id, unrelatedTweetId);
 });

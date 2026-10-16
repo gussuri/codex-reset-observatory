@@ -1108,6 +1108,7 @@ export async function reconcileResetDisplayNames(
           retryAfterSeconds: generation.retryAfterSeconds,
           generatedAt: now.toISOString(),
           claimedAt: claimed.updatedAt,
+          generationAttempts: claimed.generationAttempts,
         });
       } catch {
         // A stale or unavailable candidate result is isolated from the

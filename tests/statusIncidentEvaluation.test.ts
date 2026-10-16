@@ -545,3 +545,35 @@ test("ignores stale tweets mixed into a fresh timeline response", () => {
     [recent.id],
   );
 });
+
+test("monitor-tibo-x regexes format keys without corrupting string values and prevent duplicate resolvedAt", () => {
+  const obj = {
+    id: "test-id",
+    note: 'contains "quoted": text',
+  };
+  const formatted = JSON.stringify(obj, null, 2).replace(/^(\s*)"([A-Za-z_$][A-Za-z0-9_$]*)":/gm, "$1$2:");
+  assert.match(formatted, /^\s*id: "test-id"/m);
+  assert.match(formatted, /^\s*note: "contains \\"quoted\\": text"/m);
+
+  const activeNoResolved = `  status: "active",\n  expiresAt: "2026-08-01T00:00:00.000Z",`;
+  const resolved1 = activeNoResolved.replace(
+    /(status:\s*)"active"(?:,\s*(?:\r?\n\s*)resolvedAt:\s*"[^"]*")?/g,
+    `$1"resolved",\n  resolvedAt: "2026-08-01T01:00:00.000Z"`
+  );
+  assert.equal(
+    resolved1,
+    `  status: "resolved",\n  resolvedAt: "2026-08-01T01:00:00.000Z",\n  expiresAt: "2026-08-01T00:00:00.000Z",`
+  );
+
+  const activeWithResolved = `  status: "active",\n  resolvedAt: "2026-08-01T00:30:00.000Z",\n  expiresAt: "2026-08-01T00:00:00.000Z",`;
+  const resolved2 = activeWithResolved.replace(
+    /(status:\s*)"active"(?:,\s*(?:\r?\n\s*)resolvedAt:\s*"[^"]*")?/g,
+    `$1"resolved",\n  resolvedAt: "2026-08-01T01:00:00.000Z"`
+  );
+  assert.equal(
+    resolved2,
+    `  status: "resolved",\n  resolvedAt: "2026-08-01T01:00:00.000Z",\n  expiresAt: "2026-08-01T00:00:00.000Z",`
+  );
+  assert.equal((resolved2.match(/resolvedAt:/g) || []).length, 1);
+});
+

@@ -231,8 +231,16 @@ export function excludeTimedTeaserFromOrdinaryPath(
   }
 
   const tweetId = candidate.signal.tweet_id;
-  const filter = <T extends { tweet_id?: string | null }>(signals: T[] | undefined) =>
-    signals?.filter((signal) => signal.tweet_id !== tweetId);
+  const logicalPostId = candidate.signal.logical_post_id;
+  const hasLogicalPostId = Boolean(logicalPostId);
+  const filter = <T extends { tweet_id?: string | null; logical_post_id?: string | null }>(
+    signals: T[] | undefined,
+  ) =>
+    signals?.filter((signal) => {
+      if (signal.tweet_id === tweetId) return false;
+      if (hasLogicalPostId && signal.logical_post_id === logicalPostId) return false;
+      return true;
+    });
 
   return {
     ...data,

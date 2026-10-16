@@ -89,3 +89,11 @@ test("extension keeps legacy access while defaulting all current links to the ne
   assert.match(userScript, new RegExp(`@connect      ${legacyHost}`));
   assert.match(options, new RegExp(`value="https://${newHost}"`));
 });
+
+test("tibo-monitor userScript normalizes trailing slashes and guards datetime", () => {
+  const userScript = readFileSync("scripts/tibo-monitor.user.js", "utf8");
+  assert.ok(userScript.includes('let OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex.gussuriworks.com").replace(/\\/+$/, "");'));
+  assert.ok(userScript.includes('const normalized = input.trim().replace(/\\/+$/, "");'));
+  assert.match(userScript, /if \(Number\.isNaN\(parsedDate\.getTime\(\)\)\) return;/);
+});
+

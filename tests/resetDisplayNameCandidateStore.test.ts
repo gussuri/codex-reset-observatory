@@ -1050,3 +1050,44 @@ test("a stale reset snapshot cannot claim generation after BANKED reclassificati
   assert.equal(client.rows.get(seeded.candidateId)?.ai_status, "unprocessed");
   assert.equal(client.claimWrites.length, 0);
 });
+
+test("writeResetDisplayNameCandidateGeneration uses provided generationAttempts without extra select query", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-direct-attempts",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-direct-attempts"],
+    sourceTweetIds: ["notice-direct-attempts"],
+  });
+
+  const claimed = await claimResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution",
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    now: "2026-09-08T00:00:00.000Z",
+    stalePendingBefore: "2026-09-08T00:00:00.000Z",
+  });
+  assert.ok(claimed);
+
+  await writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "accepted",
+    aiInputMode: "notice-precompute-v1",
+    result: {
+      ...rateLimitedResult(null),
+      status: "success",
+      name: "直接試行回数リセット",
+      flags: [],
+    },
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T00:01:00.000Z",
+    claimedAt: claimed.updatedAt,
+    generationAttempts: claimed.generationAttempts,
+  });
+
+  const row = client.rows.get(seeded.candidateId);
+  assert.equal(row?.generation_attempts, claimed.generationAttempts + 1);
+});

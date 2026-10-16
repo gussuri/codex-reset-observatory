@@ -61,6 +61,8 @@ test("static-only history can calculate survival values but fails the public sup
   assert.ok(result.hazard.completedIntervalCount < SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT);
   assert.equal(result.survival.minimumCompletedIntervalCount, SURVIVAL_CONDITIONED_MIN_COMPLETED_INTERVAL_COUNT);
   assert.equal(result.survival.historySupportValid, false);
+  assert.equal(result.confidence.totalExposureDays, result.hazard.totalExposureHours / 24);
+  assert.equal(result.survival.weightedExposureDays, result.hazard.weightedExposureHours / 24);
   assert.equal(isValidSurvivalConditionedPrediction(result), false);
 });
 

@@ -36,6 +36,17 @@ test("explicit reply metadata takes priority over legacy text heuristics", () =>
   );
 });
 
+test("does not treat the conversational word reply as an automatic reply without reply metadata", () => {
+  const result = classifyTiboTweet(
+    "Sorry for the late reply, usage limits have been reset for everyone.",
+    "https://x.com/thsottiaux/status/2109045392684032299",
+  );
+  assert.equal(result.isReply, false);
+  assert.equal(result.isQuote, false);
+  assert.equal(result.signalType, "reset_executed");
+  assert.ok(result.confidence >= 0.95);
+});
+
 test("classifyTiboTweet correctly classifies official notices", () => {
   const result = classifyTiboTweet("Codex limits will reset in 2 hours! Get ready.", "https://x.com/thsottiaux/status/12345");
   assert.strictEqual(result.signalType, "official_notice");

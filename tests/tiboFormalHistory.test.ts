@@ -144,6 +144,32 @@ test("reply reset signals remain stored but are excluded from formal reset histo
   assert.equal(isFormalTiboResetSignal(resetSignal({ is_reply: true })), false);
 });
 
+test("quote reset signals are eligible for formal history only if quoting Tibo himself", () => {
+  const externalQuote = resetSignal({
+    is_quote: true,
+    quote_author_handle: "other_user",
+    quote_tweet_url: "https://x.com/other_user/status/12345",
+  });
+  assert.equal(isFormalTiboResetSignal(externalQuote), false);
+
+  const anonymousQuote = resetSignal({
+    is_quote: true,
+  });
+  assert.equal(isFormalTiboResetSignal(anonymousQuote), false);
+
+  const selfQuoteHandle = resetSignal({
+    is_quote: true,
+    quote_author_handle: "@thsottiaux",
+  });
+  assert.equal(isFormalTiboResetSignal(selfQuoteHandle), true);
+
+  const selfQuoteUrl = resetSignal({
+    is_quote: true,
+    quote_tweet_url: "https://x.com/thsottiaux/status/2083395000000000000",
+  });
+  assert.equal(isFormalTiboResetSignal(selfQuoteUrl), true);
+});
+
 test("rule_fallback reset_executed is eligible for formal history", () => {
   assert.equal(
     isFormalTiboResetSignal(

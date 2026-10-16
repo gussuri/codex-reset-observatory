@@ -36,13 +36,15 @@
     const current = GM_getValue("observatory_domain", "https://codex.gussuriworks.com");
     const input = prompt("Enter your Observatory domain URL:", current);
     if (input !== null) {
-      GM_setValue("observatory_domain", input.trim());
+      const normalized = input.trim().replace(/\/+$/, "");
+      OBSERVATORY_DOMAIN = normalized;
+      GM_setValue("observatory_domain", normalized);
       alert("Observatory Domain saved successfully!");
     }
   });
 
   // Local Configuration
-  const OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex.gussuriworks.com");
+  let OBSERVATORY_DOMAIN = GM_getValue("observatory_domain", "https://codex.gussuriworks.com").replace(/\/+$/, "");
   const QUEUE_KEY = "tibo_processed_tweet_ids";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
@@ -173,10 +175,13 @@
         // Strict URL check: Must belong to @thsottiaux
         if (!match) return;
 
+        const parsedDate = new Date(datetime);
+        if (Number.isNaN(parsedDate.getTime())) return;
+
         const tweetId = match[1];
         const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
         const text = textEl.innerText || "";
-        const createdAt = new Date(datetime).toISOString();
+        const createdAt = parsedDate.toISOString();
 
         lastSuccessfulParseAt = new Date().toISOString();
         lastSeenTweetId = tweetId;

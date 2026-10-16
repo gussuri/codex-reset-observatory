@@ -131,7 +131,7 @@ function resetRow(
     translated_text_ja: "利用上限がリセットされました。",
     translated_text_zh: "使用限额已重置。",
     is_reply: false,
-    is_quote: true,
+    is_quote: false,
     reply_to_handles: ["@thsottiaux"],
     reply_context_text: "parent context",
     source_timeline: "with_replies",

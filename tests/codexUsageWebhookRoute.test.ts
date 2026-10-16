@@ -2932,3 +2932,65 @@ test("promoted deferred Tibo reset claims formal adoption and initiates event me
     restore();
   }
 });
+
+test("partial error on notice lookup writes fallback observation and executes cache invalidation path", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const requests: MockRequest[] = [];
+  const observedAt = "2026-08-26T01:15:00.000Z";
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify({ message: "database connection error" }), { status: 500 });
+    }
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      accepted: true,
+      recovery: "recovery_observed_unconfirmed",
+    });
+
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.ok(plan.observation, "Must write fallback observation when uncorroborated recovery occurs");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
