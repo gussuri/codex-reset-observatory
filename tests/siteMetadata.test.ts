@@ -238,6 +238,15 @@ test("all localized pages use the formal application name and absolute URL metad
     assert.strictEqual(openGraphFrom(metadata).url, siteUrl(path), path);
     assert.strictEqual(metadata.alternates?.canonical, siteUrl(path), path);
     assert.strictEqual("keywords" in metadata, false, path);
+    const og = openGraphFrom(metadata);
+    const expectedLocale = path.startsWith("/en") ? "en_US" : path.startsWith("/zh") ? "zh_CN" : "ja_JP";
+    const expectedAlternateLocale = path.startsWith("/en")
+      ? ["ja_JP", "zh_CN"]
+      : path.startsWith("/zh")
+        ? ["ja_JP", "en_US"]
+        : ["en_US", "zh_CN"];
+    assert.strictEqual(og.locale, expectedLocale, path);
+    assert.deepStrictEqual(og.alternateLocale, expectedAlternateLocale, path);
   }
 });
 

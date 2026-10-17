@@ -29,6 +29,7 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     type: "article",
     locale: "ja_JP",
+    alternateLocale: ["en_US", "zh_CN"],
     images: [{ url: SITE_OG_IMAGE_URL, width: 1200, height: 630, alt: SITE_NAME }],
   },
   twitter: {

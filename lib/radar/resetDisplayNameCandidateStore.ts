@@ -222,6 +222,10 @@ export async function listResetDisplayNameCandidates(
   const rawRecords: unknown[] = Array.isArray(data) ? data : [];
   const records: ResetDisplayNameCandidateRecord[] = [];
   for (const raw of rawRecords) {
+    if (!isObject(raw)) {
+      console.warn("[Reset display name candidates] skipping non-object candidate element", { raw });
+      continue;
+    }
     const record = toResetDisplayNameCandidateRecord(raw);
     if (record) {
       records.push(record);
@@ -368,27 +372,29 @@ export async function writeResetDisplayNameCandidateGeneration(
     currentGenerationAttempts = existing.data.generation_attempts;
   }
 
-  const { data, error } = await client
+  const updatePayload = {
+    source_snapshot_hash: input.sourceSnapshotHash,
+    input_hash: input.inputHash,
+    ai_name_ja: input.result.name,
+    ai_name_en: input.result.nameEn ?? null,
+    ai_name_zh: input.result.nameZh ?? null,
+    ai_confidence: input.result.confidence,
+    ai_evidence: input.result.evidence,
+    ai_reason: input.result.reason,
+    ai_flags: [...input.result.flags],
+    ai_model: input.result.model,
+    ai_prompt_version: input.result.promptVersion ?? null,
+    ai_input_mode: input.aiInputMode,
+    ai_status: input.aiStatus,
+    generation_attempts: currentGenerationAttempts + 1,
+    last_generated_at: input.generatedAt,
+    next_retry_at: retryAt(input.generatedAt, input.aiStatus, input.retryAfterSeconds),
+    updated_at: input.generatedAt,
+  };
+
+  const primaryResult = await client
     .from("reset_display_name_candidates")
-    .update({
-      source_snapshot_hash: input.sourceSnapshotHash,
-      input_hash: input.inputHash,
-      ai_name_ja: input.result.name,
-      ai_name_en: input.result.nameEn ?? null,
-      ai_name_zh: input.result.nameZh ?? null,
-      ai_confidence: input.result.confidence,
-      ai_evidence: input.result.evidence,
-      ai_reason: input.result.reason,
-      ai_flags: [...input.result.flags],
-      ai_model: input.result.model,
-      ai_prompt_version: input.result.promptVersion ?? null,
-      ai_input_mode: input.aiInputMode,
-      ai_status: input.aiStatus,
-      generation_attempts: currentGenerationAttempts + 1,
-      last_generated_at: input.generatedAt,
-      next_retry_at: retryAt(input.generatedAt, input.aiStatus, input.retryAfterSeconds),
-      updated_at: input.generatedAt,
-    })
+    .update(updatePayload)
     .eq("candidate_id", input.candidateId)
     .eq("lifecycle_status", "provisional")
     .eq("ai_status", "pending")
@@ -397,8 +403,33 @@ export async function writeResetDisplayNameCandidateGeneration(
     .eq("updated_at", input.claimedAt)
     .select("candidate_id")
     .maybeSingle();
-  if (error) throw new Error(`Reset display name candidate result write failed: ${errorMessage(error)}`);
-  if (data === null) throw new Error("Reset display name candidate result write did not find the candidate");
+  if (primaryResult.error) {
+    throw new Error(`Reset display name candidate result write failed: ${errorMessage(primaryResult.error)}`);
+  }
+
+  let finalData = primaryResult.data;
+  if (finalData === null && typeof input.generationAttempts === "number") {
+    const fallbackResult = await client
+      .from("reset_display_name_candidates")
+      .update(updatePayload)
+      .eq("candidate_id", input.candidateId)
+      .eq("lifecycle_status", "provisional")
+      .eq("ai_status", "pending")
+      .eq("input_hash", input.inputHash)
+      .eq("source_snapshot_hash", input.sourceSnapshotHash)
+      .eq("generation_attempts", input.generationAttempts)
+      .select("candidate_id")
+      .maybeSingle();
+
+    if (fallbackResult.error) {
+      throw new Error(`Reset display name candidate result write failed: ${errorMessage(fallbackResult.error)}`);
+    }
+    finalData = fallbackResult.data;
+  }
+
+  if (finalData === null) {
+    throw new Error("Reset display name candidate result write did not find the candidate");
+  }
 }
 
 function isPromotionResultStatus(value: unknown): value is PromoteResetDisplayNameCandidateResult["status"] {

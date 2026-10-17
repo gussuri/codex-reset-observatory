@@ -1475,6 +1475,12 @@ function RecommendationRow({
         ? "text-amber-950"
         : "text-sky-950";
 
+    const dividerColor = isAlert
+      ? "border-red-200/60"
+      : isWarning
+        ? "border-amber-200/60"
+        : "border-sky-200/60";
+
     return (
       <div className={`rounded-lg border p-3.5 sm:p-4 ${containerStyle}`}>
         <div className="flex flex-col gap-2.5">
@@ -1493,7 +1499,7 @@ function RecommendationRow({
               {reason}
             </p>
             {manualOutlook.systemReason ? (
-              <div className="mt-3 border-t border-red-200/60 pt-2 text-xs font-normal text-slate-600 sm:text-sm">
+              <div className={`mt-3 border-t ${dividerColor} pt-2 text-xs font-normal text-slate-600 sm:text-sm`}>
                 <span className="font-semibold text-slate-700">
                   {translateUI("manualOutlookStandardForecast", locale)}
                   {locale === "en" ? ": " : "："}

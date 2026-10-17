@@ -1137,3 +1137,81 @@ test("listResetDisplayNameCandidates skips malformed rows and returns valid cand
   assert.equal(records[0]?.candidateId, seeded.candidateId);
 });
 
+test("listResetDisplayNameCandidates safely skips non-object elements in query data", async () => {
+  const client = {
+    from(_table: "reset_display_name_candidates") {
+      return {
+        select() {
+          return {
+            order() {
+              return Promise.resolve({
+                data: [
+                  null,
+                  "non-object-string",
+                  12345,
+                  databaseCandidate(candidate("valid-candidate")),
+                  undefined,
+                ],
+                error: null,
+              });
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const records = await listResetDisplayNameCandidates(client as never);
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.candidateId, "valid-candidate");
+});
+
+test("writeResetDisplayNameCandidateGeneration succeeds via fallback update when duplicate seed touch advances updated_at", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-seed-touch",
+    logicalPostId: null,
+    noticeTweetIds: ["notice-seed-touch"],
+    sourceTweetIds: ["notice-seed-touch"],
+  });
+
+  const claimed = await claimResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    candidateEventKind: "reset_execution",
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    now: "2026-09-08T00:00:00.000Z",
+    stalePendingBefore: "2026-09-08T00:00:00.000Z",
+  });
+  assert.ok(claimed);
+  assert.equal(claimed.updatedAt, "2026-09-08T00:00:00.000Z");
+
+  const row = client.rows.get(seeded.candidateId)!;
+  row.updated_at = "2026-09-08T00:00:05.000Z";
+
+  await writeResetDisplayNameCandidateGeneration(client, {
+    candidateId: seeded.candidateId,
+    sourceSnapshotHash: "source-hash",
+    inputHash: "input-hash",
+    aiStatus: "accepted",
+    aiInputMode: "notice-precompute-v1",
+    result: {
+      ...rateLimitedResult(null),
+      status: "success",
+      name: "更新シードリセット",
+      flags: [],
+      retryAfterSeconds: null,
+    },
+    retryAfterSeconds: null,
+    generatedAt: "2026-09-08T00:01:00.000Z",
+    claimedAt: claimed.updatedAt,
+    generationAttempts: claimed.generationAttempts,
+  });
+
+  assert.equal(row.ai_status, "accepted");
+  assert.equal(row.generation_attempts, claimed.generationAttempts + 1);
+  assert.equal(row.ai_name_ja, "更新シードリセット");
+  assert.equal(client.resultWrites.length, 1);
+});
+
+

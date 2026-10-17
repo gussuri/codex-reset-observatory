@@ -198,3 +198,46 @@ test("RadarDashboard renders alert container, badge, and manual message when ove
     setManualOutlookOverrideForTesting(undefined);
   }
 });
+
+test("RecommendationRow renders matching divider border color when showSystemReasonBelow is true", async () => {
+  const { setManualOutlookOverrideForTesting } = await import("../data/manualOutlook");
+  const calculationNow = new Date("2026-08-04T00:00:00.000Z");
+  const snapshot = toPublicRadarSnapshot(
+    getLocalRadarData({ calculationNow }),
+    "ja",
+    { calculationNow },
+  );
+
+  const styles = [
+    { style: "alert" as const, expectedBorder: "border-red-200/60" },
+    { style: "warning" as const, expectedBorder: "border-amber-200/60" },
+    { style: "info" as const, expectedBorder: "border-sky-200/60" },
+  ];
+
+  try {
+    for (const { style, expectedBorder } of styles) {
+      setManualOutlookOverrideForTesting({
+        expiresAt: "2026-08-04T06:00:00.000Z",
+        style,
+        showSystemReasonBelow: true,
+        message: {
+          ja: "手動メッセージ",
+          en: "Manual message",
+          zh: "手动消息",
+        },
+      });
+
+      const html = renderToStaticMarkup(
+        React.createElement(RadarDashboard, {
+          initialData: snapshot,
+          initialFetchedAt: "2026-08-04T02:00:00.000Z",
+          locale: "ja",
+        }),
+      );
+
+      assert.ok(html.includes(expectedBorder), `Style ${style} should include ${expectedBorder}`);
+    }
+  } finally {
+    setManualOutlookOverrideForTesting(undefined);
+  }
+});

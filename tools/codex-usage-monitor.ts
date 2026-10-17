@@ -970,6 +970,8 @@ async function runAppServerSession(
   monitorNow: () => number,
   pollIntervalMs: number,
   onFatalStorageError: (error: PendingMonitorPostStoreError | MonitorRecoveryCandidateStoreError) => void,
+  getLastKnownBankedResetAvailableCount?: () => number | null,
+  setLastKnownBankedResetAvailableCount?: (count: number | null) => void,
 ) {
   if (signal.aborted) return;
 
@@ -1001,8 +1003,12 @@ async function runAppServerSession(
       : {
           previousLocalSnapshot: null,
           lastSuccessfulPostAt: null,
+          lastKnownBankedResetAvailableCount: getLastKnownBankedResetAvailableCount?.() ?? null,
           pendingPosts: [],
         };
+    if (isValidBankedResetCount(restoredCandidate?.lastKnownBankedResetAvailableCount)) {
+      setLastKnownBankedResetAvailableCount?.(restoredCandidate.lastKnownBankedResetAvailableCount);
+    }
     if (restoredCandidate) {
       logger("recovery_candidate_restored", {
         observedAt: restoredCandidate.firstEvidenceSnapshot.observedAt,
@@ -1120,6 +1126,9 @@ async function runAppServerSession(
             nowMs,
             { nowMs, logger, trigger },
           );
+          if (isValidBankedResetCount(nextState.lastKnownBankedResetAvailableCount)) {
+            setLastKnownBankedResetAvailableCount?.(nextState.lastKnownBankedResetAvailableCount);
+          }
 
           let outboxPostEnqueued = false;
           if (postReason === "recovery_candidate" ||
@@ -1391,6 +1400,7 @@ export async function runCodexUsageMonitor(
     ? Math.max(1, Math.floor(testPollIntervalMs!))
     : config.pollIntervalMs;
   let durableRecoveryCandidate: PendingRecoveryCandidate | null = null;
+  let lastKnownBankedResetAvailableCount: number | null = null;
 
   const monitorAbort = new AbortController();
   const signal = monitorAbort.signal;
@@ -1436,14 +1446,17 @@ export async function runCodexUsageMonitor(
       const head = queue.list()[0];
       if (!head) return;
       const headKey = `${head.reason}:${head.snapshot.observedAt}:${head.snapshot.resetsAt}`;
-      const attemptPlan = pendingPostDeliveryLimiter.tryBegin(headKey);
+      const attemptPlan = pendingPostDeliveryLimiter.tryBegin(headKey, monitorNow());
       if (attemptPlan === "wait") return;
       const delivery = await queue.deliverOldest((post) =>
         postSnapshotSafely(logger, sendSnapshot, post.snapshot, post.reason)
       );
       if (delivery.accepted && delivery.response) {
         pendingPostDeliveryLimiter.reset();
-        logSnapshotSent(logger, head.reason, head.snapshot);
+        if (isValidBankedResetCount(head.snapshot.bankedResetAvailableCount)) {
+          lastKnownBankedResetAvailableCount = head.snapshot.bankedResetAvailableCount;
+        }
+        logSnapshotSent(logger, head.reason, head.snapshot, lastKnownBankedResetAvailableCount);
         activePostAcceptedHandler?.(delivery.pendingPosts, head, delivery.response);
         emitResetConfirmationIfNeeded(
           logger,
@@ -1454,7 +1467,7 @@ export async function runCodexUsageMonitor(
         );
       } else {
         const failure = delivery.response?.failure ?? { category: "invalid_response" as const };
-        const retry = pendingPostDeliveryLimiter.recordFailure(headKey, failure);
+        const retry = pendingPostDeliveryLimiter.recordFailure(headKey, failure, monitorNow());
         const details = {
           category: failure.category,
           ...(failure.httpStatus === undefined ? {} : { httpStatus: failure.httpStatus }),
@@ -1503,6 +1516,9 @@ export async function runCodexUsageMonitor(
       throw error;
     }
     durableRecoveryCandidate = candidateLoad.candidate;
+    if (isValidBankedResetCount(durableRecoveryCandidate?.lastKnownBankedResetAvailableCount)) {
+      lastKnownBankedResetAvailableCount = durableRecoveryCandidate.lastKnownBankedResetAvailableCount;
+    }
     if (candidateLoad.discardedReason) {
       logger("recovery_candidate_persistence_discarded", {
         reason: candidateLoad.discardedReason,
@@ -1569,6 +1585,8 @@ export async function runCodexUsageMonitor(
             fatalStorageError = error;
             monitorAbort.abort();
           },
+          () => lastKnownBankedResetAvailableCount,
+          (count) => { if (isValidBankedResetCount(count)) lastKnownBankedResetAvailableCount = count; },
         );
         restartAttempt = 0;
       } catch (error) {
