@@ -692,8 +692,24 @@ export async function POST(req: NextRequest) {
       classification_source: selectedClassification.classificationSource,
     };
 
+    let translationResult: Awaited<ReturnType<typeof translateWithGeminiWithRetry>> | null = null;
+    translationResult = await translateWithGeminiWithRetry({
+      text: text.trim(),
+      tweetCreatedAt: createdDate.toISOString(),
+    });
+    if (
+      translationResult.status !== "success" &&
+      translationResult.status !== "skipped" &&
+      translationResult.status !== "model_not_configured"
+    ) {
+      console.warn("[Webhook Warning] Tibo translation unavailable", {
+        reason: translationResult.status,
+      });
+    }
+
     // 7. Load existing state before the upsert. State lookup is fail-closed
     // so an unknown existing state can never be overwritten.
+    // Query runs after async translation so the snapshot is as fresh as possible.
     const supabase = getSupabaseServiceClient();
     let existingSignal: Partial<FormalTiboResetSignal> | null = null;
     try {
@@ -785,23 +801,6 @@ export async function POST(req: NextRequest) {
 
     const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja, text, "ja");
     const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh, text, "zh");
-    let translationResult: Awaited<ReturnType<typeof translateWithGeminiWithRetry>> | null = null;
-
-    if (!existingTranslationJa || !existingTranslationZh) {
-      translationResult = await translateWithGeminiWithRetry({
-        text: text.trim(),
-        tweetCreatedAt: createdDate.toISOString(),
-      });
-      if (
-        translationResult.status !== "success" &&
-        translationResult.status !== "skipped" &&
-        translationResult.status !== "model_not_configured"
-      ) {
-        console.warn("[Webhook Warning] Tibo translation unavailable", {
-          reason: translationResult.status,
-        });
-      }
-    }
 
     const payloadWithTranslations = {
       ...payload,

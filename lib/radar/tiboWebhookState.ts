@@ -237,5 +237,21 @@ export function preserveTiboWebhookState<T extends TiboWebhookPayload>(
     } as T;
   }
 
+  if (existingState?.signal_type === "reset_executed" && payload.signal_type === "irrelevant") {
+    return {
+      ...preserved,
+      signal_type: existingState.signal_type,
+      confidence: keepExisting(existingState.confidence, preserved.confidence),
+      classification_reason: keepExisting(
+        existingState.classification_reason,
+        preserved.classification_reason,
+      ),
+      classification_source: keepExisting(
+        existingState.classification_source,
+        preserved.classification_source,
+      ),
+    } as T;
+  }
+
   return preserved as T;
 }

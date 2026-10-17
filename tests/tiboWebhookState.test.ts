@@ -363,3 +363,34 @@ test("webhook redelivery on confirmed row preserves resolved temporal schedule a
   assert.equal(result.expected_end_at, "2026-08-05T19:00:00.000Z");
   assert.equal(result.expires_at, "2026-08-05T21:00:00.000Z");
 });
+
+test("preserveTiboWebhookState does not downgrade an existing reset_executed row to irrelevant on redelivery", () => {
+  const existing = {
+    tweet_id: "2084000000000000300",
+    detected_at: "2026-08-04T12:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    signal_type: "reset_executed",
+    confidence: 0.98,
+    classification_reason: "Promoted to reset_executed by usage recovery observation.",
+    classification_source: "gemini",
+  };
+
+  const redeliveryPayload = {
+    tweet_id: "2084000000000000300",
+    detected_at: receivedAt,
+    verification_status: "auto_unverified" as const,
+    signal_type: "irrelevant",
+    confidence: 0.8,
+    classification_reason: "Deferred because usage monitor is fresh but recovery not confirmed.",
+    classification_source: "rule",
+  };
+
+  const result = preserveTiboWebhookState(redeliveryPayload, existing, receivedAt);
+
+  assert.equal(result.signal_type, "reset_executed");
+  assert.equal(result.confidence, 0.98);
+  assert.equal(result.classification_reason, "Promoted to reset_executed by usage recovery observation.");
+  assert.equal(result.classification_source, "gemini");
+  assert.equal(result.detected_at, "2026-08-04T12:00:00.000Z");
+});
+

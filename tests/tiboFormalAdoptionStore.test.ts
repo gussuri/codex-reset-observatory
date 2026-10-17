@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   claimTiboFormalAdoption,
+  readTiboFormalAdoptions,
   TIBO_FORMAL_ADOPTION_RPC,
   type TiboFormalAdoptionRecord,
 } from "../lib/radar/tiboFormalAdoptionStore";
@@ -268,3 +269,55 @@ test("concurrent same-chain claims with different event keys have one new claim 
   assert.equal(results.filter((result) => result.status === "claimed_new").length, 1);
   assert.equal(results.filter((result) => result.claimedNew).length, 1);
 });
+
+test("readTiboFormalAdoptions returns records on valid data", async () => {
+  const client = {
+    from(_table: string) {
+      return {
+        select(_columns: string) {
+          return {
+            order(_column: string, _options: { ascending: boolean }) {
+              return Promise.resolve({
+                data: [databaseRecord(record())],
+                error: null,
+              });
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const result = await readTiboFormalAdoptions(client as never);
+  assert.equal(result.error, null);
+  assert.equal(result.ledgers.length, 1);
+  assert.equal(result.ledgers[0]?.resetEventKey, input.resetEventKey);
+});
+
+test("readTiboFormalAdoptions skips malformed records without failing valid ones", async () => {
+  const client = {
+    from(_table: string) {
+      return {
+        select(_columns: string) {
+          return {
+            order(_column: string, _options: { ascending: boolean }) {
+              return Promise.resolve({
+                data: [
+                  databaseRecord(record()),
+                  { id: "invalid-row", reset_event_key: "" },
+                ],
+                error: null,
+              });
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const result = await readTiboFormalAdoptions(client as never);
+  assert.equal(result.error, null);
+  assert.equal(result.ledgers.length, 1);
+  assert.equal(result.ledgers[0]?.resetEventKey, input.resetEventKey);
+});
+

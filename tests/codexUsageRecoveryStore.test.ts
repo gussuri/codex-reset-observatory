@@ -8,6 +8,7 @@ import {
 import {
   confirmNearestCodexRecoveryObservation,
   findBankedEstimateByExactObservation,
+  findFormalTiboResetCluster,
   findLatestBankedGrant,
   findRecentFormalTiboReset,
   getNextUsageMonitorLastBankedGrantAt,
@@ -832,3 +833,59 @@ test("upsertResetExecutionEstimate and upsertBankedDistributionEstimate filter o
   );
   assert.ok(bankedEqFilter, "upsertBankedDistributionEstimate must filter eq banked-distribution-observation-v2");
 });
+
+test("findFormalTiboResetCluster queries notice candidates with a 72-hour lookback window", async () => {
+  const gteCalls: Array<{ column: string; value: string }> = [];
+  const inCalls: Array<{ column: string; values: string[] }> = [];
+
+  const tweetCreatedAt = "2026-08-26T12:00:00.000Z";
+  const expectedLookbackGte = new Date(Date.parse(tweetCreatedAt) - 72 * 60 * 60 * 1000).toISOString();
+
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.eq = () => builder;
+      builder.neq = () => builder;
+      builder.in = (column: string, values: string[]) => {
+        inCalls.push({ column, values });
+        return builder;
+      };
+      builder.gte = (column: string, value: string) => {
+        gteCalls.push({ column, value });
+        return builder;
+      };
+      builder.lte = () => builder;
+      builder.lt = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({
+        data: [
+          {
+            tweet_id: "notice-within-72h",
+            text: "Usage limits will reset soon.",
+            tweet_url: "https://x.com/thsottiaux/status/notice-within-72h",
+            tweet_created_at: "2026-08-24T12:00:00.000Z",
+            signal_type: "official_notice",
+            confidence: 0.95,
+            verification_status: "auto_unverified",
+            is_reply: false,
+            expires_at: null,
+          },
+        ],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const cluster = await findFormalTiboResetCluster(client as never, "reset-tweet-1", tweetCreatedAt);
+
+  const noticeGte = gteCalls.find(
+    (call) => call.column === "tweet_created_at" && call.value === expectedLookbackGte,
+  );
+  assert.ok(noticeGte, "Notice query must query tweet_created_at gte exactly 72 hours prior");
+  assert.equal(noticeGte.value, "2026-08-23T12:00:00.000Z");
+  assert.equal(cluster.representativeNoticeId, "notice-within-72h");
+  assert.ok(cluster.sourceTweetIds.includes("notice-within-72h"));
+});
+

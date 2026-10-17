@@ -1821,6 +1821,55 @@ test("temporary Tibo teaser presentation override expires back to the ordinary r
   assert.equal(snapshot.latestTiboActivity, null);
 });
 
+test("temporary Tibo teaser presentation override is disabled once a newer reset occurs after campaign start", () => {
+  const calculationNow = new Date("2026-10-10T12:00:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [
+      {
+        tweet_id: "2109999999999999999",
+        text: "Reset complete.",
+        tweet_url: "https://x.com/thsottiaux/status/2109999999999999999",
+        tweet_created_at: "2026-10-08T05:00:00.000Z",
+        detected_at: "2026-10-08T05:00:00.000Z",
+        signal_type: "reset_executed",
+        confidence: 0.99,
+        verification_status: "confirmed",
+        classification_source: "manual",
+      },
+    ],
+  });
+
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  assert.equal(snapshot.resetTeaserStatus, "none");
+});
+
+test("temporary Tibo teaser presentation override retains localized text without double translation when source matches", () => {
+  const calculationNow = new Date("2026-10-05T03:38:00.000Z");
+  const data = getLocalRadarData({
+    calculationNow,
+    recentTiboSignals: [
+      {
+        tweet_id: "2106845241357824205",
+        signal_type: "teaser",
+        text: "Over the next 28 days, each day we’ll either ship one thing that is a clear improvement and relevant for most codex/work users or ship a full reset. Let the improvements begin.",
+        tweet_url: "https://x.com/thsottiaux/status/2106845241357824205",
+        tweet_created_at: "2026-10-04T20:33:43.000Z",
+        expires_at: "2026-10-06T20:33:43.000Z",
+        verification_status: "auto_unverified",
+        teaser_strength: "strong",
+      },
+    ],
+  });
+
+  const snapshotJa = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  assert.equal(snapshotJa.resetTeaserStatus, "strong");
+  assert.equal(
+    snapshotJa.latestTiboActivity?.text,
+    "これからの28日間、毎日、大半のCodex / Workユーザーにとって明確な改善となるものを1つ提供するか、あるいはフルリセットを実施します。改善を始めましょう。",
+  );
+});
+
 test("teaser strength labels stay natural in English and Simplified Chinese", () => {
   const calculationNow = new Date("2026-08-04T00:00:00.000Z");
   const internal = getLocalRadarData({

@@ -220,11 +220,16 @@ export async function listResetDisplayNameCandidates(
   }
 
   const rawRecords: unknown[] = Array.isArray(data) ? data : [];
-  const records = rawRecords.map(toResetDisplayNameCandidateRecord);
-  if (records.some((record) => record === null)) {
-    throw new Error("Reset display name candidate read returned an invalid record");
+  const records: ResetDisplayNameCandidateRecord[] = [];
+  for (const raw of rawRecords) {
+    const record = toResetDisplayNameCandidateRecord(raw);
+    if (record) {
+      records.push(record);
+    } else {
+      console.warn("[Reset display name candidates] skipping malformed candidate record", { raw });
+    }
   }
-  return records as ResetDisplayNameCandidateRecord[];
+  return records;
 }
 
 function nonEmpty(value: string) {

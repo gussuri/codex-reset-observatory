@@ -1091,3 +1091,49 @@ test("writeResetDisplayNameCandidateGeneration uses provided generationAttempts 
   const row = client.rows.get(seeded.candidateId);
   assert.equal(row?.generation_attempts, claimed.generationAttempts + 1);
 });
+
+test("listResetDisplayNameCandidates skips malformed rows and returns valid candidate records", async () => {
+  const client = fakeCandidateClient();
+  const seeded = await upsertResetDisplayNameCandidateSeed(client, {
+    officialNoticeTweetId: "notice-valid",
+    logicalPostId: "logical-valid",
+    noticeTweetIds: ["notice-valid"],
+    sourceTweetIds: ["notice-valid"],
+  });
+
+  client.rows.set("malformed-row", {
+    candidate_id: "malformed-row",
+    candidate_event_kind: "invalid_kind" as never,
+    notice_dedupe_key: "",
+    official_notice_tweet_id: null as unknown as string,
+    logical_post_id: null,
+    notice_tweet_ids: [],
+    source_tweet_ids: [],
+    source_snapshot_hash: null,
+    input_hash: null,
+    next_retry_at: null,
+    ai_name_ja: null,
+    ai_name_en: null,
+    ai_name_zh: null,
+    ai_confidence: null,
+    ai_evidence: null,
+    ai_reason: null,
+    ai_flags: [],
+    ai_model: null,
+    ai_prompt_version: null,
+    ai_input_mode: null,
+    ai_status: "unprocessed",
+    lifecycle_status: "provisional",
+    generation_attempts: 0,
+    last_generated_at: null,
+    promoted_event_key: null,
+    promoted_at: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+
+  const records = await listResetDisplayNameCandidates(client);
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.candidateId, seeded.candidateId);
+});
+

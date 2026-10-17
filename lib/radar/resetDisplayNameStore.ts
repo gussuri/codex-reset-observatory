@@ -189,6 +189,80 @@ const RESET_DISPLAY_NAME_PUBLIC_LEGACY_COLUMNS = [
   "ai_flags",
 ].join(",");
 
+export const RESET_DISPLAY_NAME_LOCALIZED_WITHOUT_METADATA_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "manual_name_en",
+  "manual_name_zh",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_reason",
+  "ai_model",
+  "ai_prompt_version",
+  "ai_input_mode",
+  "ai_status",
+  "ai_flags",
+  "ai_generated_at",
+  "input_hash",
+  "created_at",
+  "updated_at",
+].join(",");
+
+export const RESET_DISPLAY_NAME_AI_LOCALIZED_WITHOUT_METADATA_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_reason",
+  "ai_model",
+  "ai_prompt_version",
+  "ai_input_mode",
+  "ai_status",
+  "ai_flags",
+  "ai_generated_at",
+  "input_hash",
+  "created_at",
+  "updated_at",
+].join(",");
+
+export const RESET_DISPLAY_NAME_PUBLIC_LOCALIZED_WITHOUT_METADATA_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "manual_name_en",
+  "manual_name_zh",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_prompt_version",
+  "ai_status",
+  "ai_flags",
+].join(",");
+
+export const RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_WITHOUT_METADATA_COLUMNS = [
+  "event_key",
+  "source_tweet_id",
+  "manual_name_ja",
+  "ai_name_ja",
+  "ai_name_en",
+  "ai_name_zh",
+  "ai_confidence",
+  "ai_evidence",
+  "ai_prompt_version",
+  "ai_status",
+  "ai_flags",
+].join(",");
+
 export type ResetDisplayNameGenerationOutcome = {
   eventKey: string | null;
   status: string;
@@ -216,6 +290,15 @@ function isMissingTableError(error: unknown) {
   return code === "PGRST205" || /relation .* does not exist/i.test(message);
 }
 
+function isMissingMetadataColumnsError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown; details?: unknown };
+  const message = [value.message, value.details]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ");
+  return /(?:event_reason_type|event_scope|event_summary_|event_note_|event_metadata_)/i.test(message);
+}
+
 function isMissingLocalizedColumnsError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const value = error as { code?: unknown; message?: unknown; details?: unknown };
@@ -234,33 +317,64 @@ async function selectResetDisplayNames(
   const primaryColumns = readMode === "public"
     ? RESET_DISPLAY_NAME_PUBLIC_COLUMNS
     : RESET_DISPLAY_NAME_COLUMNS;
+  const localizedWithoutMetadataColumns = readMode === "public"
+    ? RESET_DISPLAY_NAME_PUBLIC_LOCALIZED_WITHOUT_METADATA_COLUMNS
+    : RESET_DISPLAY_NAME_LOCALIZED_WITHOUT_METADATA_COLUMNS;
   const aiLocalizedColumns = readMode === "public"
     ? RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_COLUMNS
     : RESET_DISPLAY_NAME_AI_LOCALIZED_COLUMNS;
+  const aiLocalizedWithoutMetadataColumns = readMode === "public"
+    ? RESET_DISPLAY_NAME_PUBLIC_AI_LOCALIZED_WITHOUT_METADATA_COLUMNS
+    : RESET_DISPLAY_NAME_AI_LOCALIZED_WITHOUT_METADATA_COLUMNS;
   const legacyColumns = readMode === "public"
     ? RESET_DISPLAY_NAME_PUBLIC_LEGACY_COLUMNS
     : RESET_DISPLAY_NAME_LEGACY_COLUMNS;
-  const query = supabase
-    .from("reset_display_names")
-    .select(primaryColumns);
-  const scopedQuery = eventKey ? query.eq("event_key", eventKey).maybeSingle() : query.limit(2000);
-  const result = await scopedQuery;
-  if (!isMissingLocalizedColumnsError(result.error)) return result;
 
-  const aiLocalizedQuery = supabase
-    .from("reset_display_names")
-    .select(aiLocalizedColumns);
-  const aiLocalizedResult = eventKey
-    ? await aiLocalizedQuery.eq("event_key", eventKey).maybeSingle()
-    : await aiLocalizedQuery.limit(2000);
-  if (!isMissingLocalizedColumnsError(aiLocalizedResult.error)) return aiLocalizedResult;
+  const runQuery = (cols: string) => {
+    const q = supabase.from("reset_display_names").select(cols);
+    return eventKey ? q.eq("event_key", eventKey).maybeSingle() : q.limit(2000);
+  };
 
-  const legacyQuery = supabase
-    .from("reset_display_names")
-    .select(legacyColumns);
-  return eventKey
-    ? legacyQuery.eq("event_key", eventKey).maybeSingle()
-    : legacyQuery.limit(2000);
+  const primaryResult = await runQuery(primaryColumns);
+  if (!primaryResult.error) return primaryResult;
+
+  if (isMissingMetadataColumnsError(primaryResult.error)) {
+    const withoutMetadataResult = await runQuery(localizedWithoutMetadataColumns);
+    if (!withoutMetadataResult.error) return withoutMetadataResult;
+
+    if (isMissingLocalizedColumnsError(withoutMetadataResult.error)) {
+      const aiWithoutMetadataResult = await runQuery(aiLocalizedWithoutMetadataColumns);
+      if (!aiWithoutMetadataResult.error) return aiWithoutMetadataResult;
+
+      if (isMissingLocalizedColumnsError(aiWithoutMetadataResult.error)) {
+        return runQuery(legacyColumns);
+      }
+      return aiWithoutMetadataResult;
+    }
+    return withoutMetadataResult;
+  }
+
+  if (isMissingLocalizedColumnsError(primaryResult.error)) {
+    const aiLocalizedResult = await runQuery(aiLocalizedColumns);
+    if (!aiLocalizedResult.error) return aiLocalizedResult;
+
+    if (isMissingMetadataColumnsError(aiLocalizedResult.error)) {
+      const aiWithoutMetadataResult = await runQuery(aiLocalizedWithoutMetadataColumns);
+      if (!aiWithoutMetadataResult.error) return aiWithoutMetadataResult;
+
+      if (isMissingLocalizedColumnsError(aiWithoutMetadataResult.error)) {
+        return runQuery(legacyColumns);
+      }
+      return aiWithoutMetadataResult;
+    }
+
+    if (isMissingLocalizedColumnsError(aiLocalizedResult.error)) {
+      return runQuery(legacyColumns);
+    }
+    return aiLocalizedResult;
+  }
+
+  return primaryResult;
 }
 
 export async function fetchResetDisplayNamesResult(
@@ -452,7 +566,39 @@ export function getResetDisplayNameWritePayload(args: {
   );
 }
 
-async function upsertResetDisplayName(
+function stripMetadataFields<T extends Record<string, unknown>>(payload: T) {
+  const {
+    event_reason_type: _eventReasonType,
+    event_scope: _eventScope,
+    event_summary_ja: _eventSummaryJa,
+    event_summary_en: _eventSummaryEn,
+    event_summary_zh: _eventSummaryZh,
+    event_note_ja: _eventNoteJa,
+    event_note_en: _eventNoteEn,
+    event_note_zh: _eventNoteZh,
+    event_metadata_model: _eventMetadataModel,
+    event_metadata_prompt_version: _eventMetadataPromptVersion,
+    event_metadata_status: _eventMetadataStatus,
+    event_metadata_flags: _eventMetadataFlags,
+    event_metadata_generated_at: _eventMetadataGeneratedAt,
+    event_metadata_input_hash: _eventMetadataInputHash,
+    ...withoutMetadata
+  } = payload;
+  return withoutMetadata;
+}
+
+function stripLocalizedNameFields<T extends Record<string, unknown>>(payload: T) {
+  const {
+    manual_name_en: _manualNameEn,
+    manual_name_zh: _manualNameZh,
+    ai_name_en: _aiNameEn,
+    ai_name_zh: _aiNameZh,
+    ...withoutLocalized
+  } = payload;
+  return withoutLocalized;
+}
+
+export async function upsertResetDisplayName(
   supabase: SupabaseClient,
   payload: ReturnType<typeof buildUpsertPayload>,
 ) {
@@ -460,28 +606,23 @@ async function upsertResetDisplayName(
     .from("reset_display_names")
     .upsert(payload, { onConflict: "event_key" });
   if (!error) return;
-  if (isMissingLocalizedColumnsError(error)) {
-    const {
-      manual_name_en: _manualNameEn,
-      manual_name_zh: _manualNameZh,
-      ai_name_en: _aiNameEn,
-      ai_name_zh: _aiNameZh,
-      event_reason_type: _eventReasonType,
-      event_scope: _eventScope,
-      event_summary_ja: _eventSummaryJa,
-      event_summary_en: _eventSummaryEn,
-      event_summary_zh: _eventSummaryZh,
-      event_note_ja: _eventNoteJa,
-      event_note_en: _eventNoteEn,
-      event_note_zh: _eventNoteZh,
-      event_metadata_model: _eventMetadataModel,
-      event_metadata_prompt_version: _eventMetadataPromptVersion,
-      event_metadata_status: _eventMetadataStatus,
-      event_metadata_flags: _eventMetadataFlags,
-      event_metadata_generated_at: _eventMetadataGeneratedAt,
-      event_metadata_input_hash: _eventMetadataInputHash,
-      ...legacyPayload
-    } = payload;
+
+  if (isMissingMetadataColumnsError(error)) {
+    const withoutMetadataPayload = stripMetadataFields(payload);
+    const { error: metadataError } = await supabase
+      .from("reset_display_names")
+      .upsert(withoutMetadataPayload, { onConflict: "event_key" });
+    if (!metadataError) return;
+
+    if (isMissingLocalizedColumnsError(metadataError)) {
+      const legacyPayload = stripLocalizedNameFields(withoutMetadataPayload);
+      const { error: legacyError } = await supabase
+        .from("reset_display_names")
+        .upsert(legacyPayload, { onConflict: "event_key" });
+      if (!legacyError) return;
+    }
+  } else if (isMissingLocalizedColumnsError(error)) {
+    const legacyPayload = stripLocalizedNameFields(stripMetadataFields(payload));
     const { error: legacyError } = await supabase
       .from("reset_display_names")
       .upsert(legacyPayload, { onConflict: "event_key" });

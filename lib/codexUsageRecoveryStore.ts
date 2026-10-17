@@ -24,6 +24,7 @@ import {
 } from "./radar/bankedReset";
 import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule";
 import {
+  NOTICE_LOOKBACK_MS,
   findRelatedTiboNotices,
   selectRepresentativeTiboNotice,
   type FormalTiboResetSignal,
@@ -782,16 +783,25 @@ export async function findFormalTiboResetCluster(
     tweet_created_at: tiboTweetCreatedAt,
   };
 
-  const noticeResult = await client
+  let noticeQuery = client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status")
-    .eq("signal_type", "official_notice")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status");
+
+  if (typeof (noticeQuery as any).in === "function") {
+    noticeQuery = (noticeQuery as any).in("signal_type", ["official_notice", "teaser"]);
+  } else if (typeof noticeQuery.eq === "function") {
+    noticeQuery = noticeQuery.eq("signal_type", "official_notice");
+  }
+
+  noticeQuery = noticeQuery
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
-    .gte("tweet_created_at", new Date(time - 48 * 60 * 60 * 1000).toISOString())
+    .gte("tweet_created_at", new Date(time - NOTICE_LOOKBACK_MS).toISOString())
     .lt("tweet_created_at", new Date(time).toISOString())
     .order("tweet_created_at", { ascending: true })
     .limit(100);
+
+  const noticeResult = await noticeQuery;
   if (noticeResult.error) return fallback(noticeResult.error);
 
   const notices = (noticeResult.data ?? [])
@@ -799,14 +809,21 @@ export async function findFormalTiboResetCluster(
       typeof row.tweet_id === "string" &&
       typeof row.text === "string" &&
       typeof row.tweet_url === "string" &&
-      typeof row.tweet_created_at === "string",
+      typeof row.tweet_created_at === "string" &&
+      (
+        row.signal_type === "official_notice" ||
+        (row.signal_type === "teaser" && (
+          (Number.isFinite(Number(row.confidence)) && Number(row.confidence) >= 0.8) ||
+          row.temporal_resolution_status === "resolved"
+        ))
+      )
     )
     .map((row): TiboNoticeSignal => ({
       tweet_id: row.tweet_id,
       text: row.text,
       tweet_url: row.tweet_url,
       tweet_created_at: row.tweet_created_at,
-      signal_type: "official_notice",
+      signal_type: row.signal_type === "teaser" ? "teaser" : "official_notice",
       confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
       verification_status: row.verification_status === "confirmed" || row.verification_status === "rejected"
         ? row.verification_status

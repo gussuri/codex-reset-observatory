@@ -222,14 +222,15 @@ export async function readTiboFormalAdoptions(
       };
     }
 
-    const ledgers = (result.data ?? [])
-      .map(toRecord)
-      .filter((record): record is TiboFormalAdoptionRecord => Boolean(record));
-    if (ledgers.length !== (result.data ?? []).length) {
-      return {
-        ledgers: [],
-        error: new Error("Formal adoption ledger contains an invalid record"),
-      };
+    const rawRecords = result.data ?? [];
+    const ledgers: TiboFormalAdoptionRecord[] = [];
+    for (const raw of rawRecords) {
+      const record = toRecord(raw);
+      if (record) {
+        ledgers.push(record);
+      } else {
+        console.warn("[Tibo formal adoptions] skipping malformed adoption record", { raw });
+      }
     }
     return { ledgers, error: null };
   } catch (error) {
