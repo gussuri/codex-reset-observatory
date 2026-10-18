@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -31,6 +32,15 @@ import {
   type PendingRecoveryCandidateRecord,
   type RecoveryCandidateDiscardReason,
 } from "./codex-usage-monitor-recovery-candidate";
+import {
+  createMonitorDiagnosticSink,
+  getMonitorDiagnosticDirectory,
+  MAX_MONITOR_DIAGNOSTIC_BANKED_RESET_COUNT,
+  normalizeMonitorDiagnosticErrorCode,
+  normalizeMonitorDiagnosticRecoveryOutcome,
+  type MonitorDiagnosticEvent,
+  type MonitorDiagnosticSink,
+} from "./codex-usage-monitor-diagnostics";
 
 export const DEFAULT_MONITOR_POLL_INTERVAL_MS = 120_000;
 export const MIN_MONITOR_POLL_INTERVAL_MS = 60_000;
@@ -561,6 +571,51 @@ export function evaluateMonitorRecoveryCandidate(
   };
 }
 
+export function getMonitorDiagnosticComparison(snapshot: CodexUsageSnapshot, state: MonitorSnapshotState, nowMs: number, trigger: MonitorRefreshTrigger = "poll") {
+  const evaluation = evaluateMonitorRecoveryCandidate(snapshot, state, nowMs, trigger);
+  if (evaluation.status === "started") return { evaluation, reason: "candidate_started" };
+  if (evaluation.status === "confirmed") return { evaluation, reason: "candidate_confirmed" };
+  if (evaluation.status === "cancelled") return { evaluation, reason: evaluation.cancellationReason ?? "candidate_cancelled" };
+  if (state.lastSuccessfulPostAt === null) return { evaluation, reason: "initial_baseline" };
+  if (isBankedResetAvailableCountGrant(getLastKnownBankedResetAvailableCount(state), snapshot.bankedResetAvailableCount)) {
+    return { evaluation, reason: "banked_reset_count_change" };
+  }
+
+  const baseline = state.pendingRecoveryCandidate?.preRecoveryBaseline ?? state.baselineSnapshot ?? state.previousLocalSnapshot;
+  if (!baseline) return { evaluation, reason: "no_baseline" };
+  if (snapshot.limitId !== baseline.limitId || snapshot.planType !== baseline.planType || snapshot.windowDurationMins !== baseline.windowDurationMins) {
+    return { evaluation, reason: "structure_change" };
+  }
+  const previousObservation = state.pendingRecoveryCandidate?.lastObservation ?? baseline;
+  const previousObservedAt = Date.parse(previousObservation.observedAt);
+  const currentObservedAt = Date.parse(snapshot.observedAt);
+  if (Number.isFinite(previousObservedAt) && Number.isFinite(currentObservedAt) && currentObservedAt < previousObservedAt) {
+    return { evaluation, reason: "stale_observation" };
+  }
+  if ((Number.isFinite(previousObservedAt) && Number.isFinite(currentObservedAt) && currentObservedAt - previousObservedAt > MAX_USAGE_COMPARISON_GAP_MS) ||
+      (state.pendingRecoveryCandidate && Number.isFinite(state.pendingRecoveryCandidate.candidateStartedAtMs) && nowMs - state.pendingRecoveryCandidate.candidateStartedAtMs > MAX_USAGE_COMPARISON_GAP_MS)) {
+    return { evaluation, reason: "comparison_gap" };
+  }
+
+  const usageDelta = baseline.usedPercent - snapshot.usedPercent;
+  const resetsAtDeltaSec = snapshot.resetsAt - baseline.resetsAt;
+  if (state.pendingRecoveryCandidate) {
+    if (usageDelta < 1) return { evaluation, reason: "usage_condition_unmet" };
+    if (resetsAtDeltaSec < RESET_AT_MEANINGFUL_FORWARD_SEC - RESET_AT_JITTER_TOLERANCE_SEC ||
+      Math.abs(snapshot.resetsAt - state.pendingRecoveryCandidate.firstEvidenceSnapshot.resetsAt) > RESET_AT_JITTER_TOLERANCE_SEC) {
+      return { evaluation, reason: "time_condition_unmet" };
+    }
+    return { evaluation, reason: "candidate_confirmation_waiting" };
+  }
+
+  const usageMet = usageDelta >= 1;
+  const timeMet = resetsAtDeltaSec >= RESET_AT_MEANINGFUL_FORWARD_SEC;
+  if (!usageMet && !timeMet) return { evaluation, reason: "both_conditions_unmet" };
+  if (!usageMet) return { evaluation, reason: "usage_condition_unmet" };
+  if (!timeMet) return { evaluation, reason: "time_condition_unmet" };
+  return { evaluation, reason: "candidate_confirmation_waiting" };
+}
+
 export function getMonitorSnapshotPostReason(
   snapshot: CodexUsageSnapshot,
   state: MonitorSnapshotState,
@@ -753,6 +808,10 @@ export function getMonitorConfig(env: NodeJS.ProcessEnv = process.env): CodexUsa
 
 export type MonitorLogger = (event: string, details?: Record<string, unknown>) => void;
 
+function toMonitorDiagnosticEvent(event: string, details: Record<string, unknown> = {}): MonitorDiagnosticEvent {
+  return { event, ...details };
+}
+
 export type MonitorEventWriter = (line: string) => void;
 
 export function createJsonMonitorLogger(
@@ -798,6 +857,20 @@ export function createJsonMonitorLogger(
                     ? ["category", "httpStatus", "failureCount", "retryInMs", "action"]
                     : event === "pending_queue_delivery_blocked"
                       ? ["category", "httpStatus", "failureCount", "retryInMs", "action"]
+                      : event === "diagnostic_poll_started"
+                        ? ["trigger", "startedAt"]
+                        : event === "diagnostic_rpc_completed"
+                          ? ["trigger", "readCompletedAt", "rpcDurationMs"]
+                          : event === "diagnostic_rpc_failed"
+                            ? ["trigger", "rpcDurationMs", "errorCode"]
+                            : event === "diagnostic_snapshot_selected"
+                              ? ["readCompletedAt", "upstreamGeneratedAt", "observedAt", "usedPercent", "resetsAt", "planType", "windowDurationMins", "bankedResetDisplayCount", "bankedResetCountSource", "rpcDurationMs"]
+                              : event === "diagnostic_snapshot_rejected"
+                                ? ["reason", "readCompletedAt", "rpcDurationMs"]
+                                : event === "diagnostic_comparison_evaluated"
+                                  ? ["trigger", "reason", "evaluationStatus", "previousUsedPercent", "usedPercent", "previousResetsAt", "resetsAt", "usageDelta", "resetsAtDeltaSec", "comparisonGapMs", "postReason"]
+                                  : event === "diagnostic_webhook_result"
+                                    ? ["status", "reason", "category", "httpStatus", "errorCode", "recoveryOutcome", "postObservedAt"]
                       : [];
 
     for (const key of allowedKeys) {
@@ -806,9 +879,14 @@ export function createJsonMonitorLogger(
         (typeof value !== "number" ||
           !Number.isSafeInteger(value) ||
           value < 0 ||
-          value > MAX_BANKED_RESET_AVAILABLE_COUNT)) {
+          value > MAX_MONITOR_DIAGNOSTIC_BANKED_RESET_COUNT)) {
         continue;
       }
+      if (key === "recoveryOutcome") {
+        safeDetails[key] = normalizeMonitorDiagnosticRecoveryOutcome(value);
+        continue;
+      }
+      if (key === "postObservedAt" && (typeof value !== "string" || !Number.isFinite(Date.parse(value)))) continue;
       if (typeof value === "string" || typeof value === "number") {
         safeDetails[key] = value;
       }
@@ -902,6 +980,23 @@ async function postSnapshotSafely(
   }
 }
 
+function logDiagnosticWebhookResult(
+  logger: MonitorLogger,
+  reason: MonitorSnapshotPostReason,
+  snapshot: CodexUsageSnapshot,
+  response: MonitorWebhookResponse,
+) {
+  const recoveryOutcome = normalizeMonitorDiagnosticRecoveryOutcome(response.recovery);
+  logger("diagnostic_webhook_result", {
+    status: response.accepted ? "success" : "failure",
+    reason,
+    recoveryOutcome,
+    postObservedAt: snapshot.observedAt,
+    ...(!response.accepted ? { category: response.failure?.category ?? "invalid_response" } : {}),
+    ...(response.failure?.httpStatus === undefined ? {} : { httpStatus: response.failure.httpStatus }),
+  });
+}
+
 function logSnapshotSent(
   logger: MonitorLogger,
   reason: MonitorSnapshotPostReason,
@@ -969,6 +1064,7 @@ async function runAppServerSession(
   emittedResetConfirmationKeys: Set<string>,
   monitorNow: () => number,
   pollIntervalMs: number,
+  requestTimeoutMs: number,
   onFatalStorageError: (error: PendingMonitorPostStoreError | MonitorRecoveryCandidateStoreError) => void,
   getLastKnownBankedResetAvailableCount?: () => number | null,
   setLastKnownBankedResetAvailableCount?: (count: number | null) => void,
@@ -1064,7 +1160,7 @@ async function runAppServerSession(
       const timeout = setTimeout(() => {
         pending.delete(id);
         rejectRequest(new Error("app_server_request_timeout"));
-      }, APP_SERVER_REQUEST_TIMEOUT_MS);
+      }, requestTimeoutMs);
       pending.set(id, {
         resolve: resolveRequest,
         reject: rejectRequest,
@@ -1083,20 +1179,57 @@ async function runAppServerSession(
       if (settled || !initialized || refreshInFlight) return;
       refreshInFlight = true;
       let rpcFailed = false;
+      const rpcStartedAt = performance.now();
+      const pollStartedAt = monitorNow();
+      logger("diagnostic_poll_started", { trigger, startedAt: new Date(pollStartedAt).toISOString() });
       try {
         let response: JsonObject;
+        let readCompletedAtMs: number;
+        let rpcDurationMs: number;
         try {
           response = await sendRequest("account/rateLimits/read");
+          readCompletedAtMs = monitorNow();
+          rpcDurationMs = Math.max(0, Math.round(performance.now() - rpcStartedAt));
+          logger("diagnostic_rpc_completed", {
+            trigger,
+            readCompletedAt: new Date(readCompletedAtMs).toISOString(),
+            rpcDurationMs,
+          });
         } catch (error) {
           rpcFailed = true;
+          logger("diagnostic_rpc_failed", {
+            trigger,
+            rpcDurationMs: Math.max(0, Math.round(performance.now() - rpcStartedAt)),
+            errorCode: getSafeMonitorErrorCode(error),
+          });
           throw error;
         }
         consecutiveRpcFailures = 0;
-        const snapshot = parseCodexRateLimitsResponse(response, new Date(monitorNow()));
+        const snapshot = parseCodexRateLimitsResponse(response, new Date(readCompletedAtMs));
         if (!snapshot) {
+          logger("diagnostic_snapshot_rejected", {
+            reason: "invalid_weekly_window",
+            readCompletedAt: new Date(readCompletedAtMs).toISOString(),
+            rpcDurationMs,
+          });
           logger("snapshot_rejected", { reason: "invalid_weekly_window" });
           return;
         }
+
+        const diagnosticPlanType = ["free", "plus", "pro", "team", "enterprise"].includes(snapshot.planType.toLowerCase())
+          ? snapshot.planType.toLowerCase()
+          : "other";
+        logger("diagnostic_snapshot_selected", {
+          readCompletedAt: new Date(readCompletedAtMs).toISOString(),
+          upstreamGeneratedAt: "unknown",
+          observedAt: snapshot.observedAt,
+          usedPercent: snapshot.usedPercent,
+          resetsAt: snapshot.resetsAt,
+          planType: diagnosticPlanType,
+          windowDurationMins: snapshot.windowDurationMins,
+          ...getMonitorBankedResetDisplayState(snapshot, monitorSnapshotState.lastKnownBankedResetAvailableCount),
+          rpcDurationMs,
+        });
 
         logger("snapshot_observed", {
           observedAt: snapshot.observedAt,
@@ -1119,6 +1252,27 @@ async function runAppServerSession(
           const nowMs = monitorNow();
           const postReason = getMonitorSnapshotPostReason(snapshot, monitorSnapshotState, nowMs, trigger);
           const postSnapshot = getMonitorPostSnapshot(snapshot, monitorSnapshotState, postReason, nowMs, trigger);
+          const diagnosticComparison = getMonitorDiagnosticComparison(snapshot, previousState, nowMs, trigger);
+          const comparisonBaseline = previousState.pendingRecoveryCandidate?.preRecoveryBaseline ?? previousState.baselineSnapshot ?? previousState.previousLocalSnapshot;
+          const comparisonObservation = previousState.pendingRecoveryCandidate?.lastObservation ?? comparisonBaseline;
+          const comparisonGapMs = comparisonObservation
+            ? Date.parse(snapshot.observedAt) - Date.parse(comparisonObservation.observedAt)
+            : null;
+          logger("diagnostic_comparison_evaluated", {
+            trigger,
+            reason: diagnosticComparison.reason,
+            evaluationStatus: diagnosticComparison.evaluation.status,
+            postReason,
+            ...(comparisonBaseline ? {
+              previousUsedPercent: comparisonBaseline.usedPercent,
+              previousResetsAt: comparisonBaseline.resetsAt,
+              usageDelta: comparisonBaseline.usedPercent - snapshot.usedPercent,
+              resetsAtDeltaSec: snapshot.resetsAt - comparisonBaseline.resetsAt,
+            } : {}),
+            usedPercent: snapshot.usedPercent,
+            resetsAt: snapshot.resetsAt,
+            ...(Number.isFinite(comparisonGapMs) && comparisonGapMs! >= 0 ? { comparisonGapMs } : {}),
+          });
           const nextState = updateMonitorSnapshotState(
             monitorSnapshotState,
             snapshot,
@@ -1203,6 +1357,7 @@ async function runAppServerSession(
           if (postReason === "heartbeat") {
             if (queue.list().length > 0) return true;
             const webhookResponse = await postSnapshotSafely(logger, sendSnapshot, postSnapshot, postReason);
+            if (webhookResponse) logDiagnosticWebhookResult(logger, postReason, postSnapshot, webhookResponse);
             if (webhookResponse?.accepted === true) {
               monitorSnapshotState = markMonitorSnapshotPostSucceeded(monitorSnapshotState, monitorNow());
               logSnapshotSent(logger, postReason, postSnapshot, monitorSnapshotState.lastKnownBankedResetAvailableCount);
@@ -1329,6 +1484,7 @@ async function runAppServerSession(
 export type RunCodexUsageMonitorOptions = {
   signal?: AbortSignal;
   logger?: MonitorLogger;
+  diagnosticSink?: MonitorDiagnosticSink;
   /** Dependency seams are used by local integration tests; production uses the Codex CLI and webhook. */
   spawnAppServer?: MonitorAppServerSpawner;
   sendSnapshot?: MonitorSnapshotSender;
@@ -1343,6 +1499,8 @@ export type RunCodexUsageMonitorOptions = {
   monitorTiming?: {
     now: () => number;
     pollIntervalMs: number;
+    /** RPC timeout override for local integration tests only. */
+    rpcTimeoutMs?: number;
   };
 };
 
@@ -1351,7 +1509,18 @@ export async function runCodexUsageMonitor(
   options: RunCodexUsageMonitorOptions = {},
 ) {
   const config = getMonitorConfig(env);
-  const logger = options.logger ?? defaultLogger;
+  const outputLogger = options.logger ?? defaultLogger;
+  let diagnosticSinkDisabled = false;
+  const logger: MonitorLogger = (event, details = {}) => {
+    const outputDetails = event === "diagnostic_rpc_failed"
+      ? { ...details, errorCode: normalizeMonitorDiagnosticErrorCode(details.errorCode) }
+      : details;
+    outputLogger(event, outputDetails);
+    if (!diagnosticSinkDisabled && options.diagnosticSink) {
+      try { options.diagnosticSink(toMonitorDiagnosticEvent(event, outputDetails)); }
+      catch { diagnosticSinkDisabled = true; }
+    }
+  };
   const requestedSignal = options.signal ?? new AbortController().signal;
   if (requestedSignal.aborted) return;
 
@@ -1399,6 +1568,10 @@ export async function runCodexUsageMonitor(
   const monitorPollIntervalMs = Number.isFinite(testPollIntervalMs) && (testPollIntervalMs ?? 0) > 0
     ? Math.max(1, Math.floor(testPollIntervalMs!))
     : config.pollIntervalMs;
+  const testRpcTimeoutMs = options.monitorTiming?.rpcTimeoutMs;
+  const monitorRpcTimeoutMs = Number.isFinite(testRpcTimeoutMs) && (testRpcTimeoutMs ?? 0) > 0
+    ? Math.max(1, Math.floor(testRpcTimeoutMs!))
+    : APP_SERVER_REQUEST_TIMEOUT_MS;
   let durableRecoveryCandidate: PendingRecoveryCandidate | null = null;
   let lastKnownBankedResetAvailableCount: number | null = null;
 
@@ -1448,9 +1621,11 @@ export async function runCodexUsageMonitor(
       const headKey = `${head.reason}:${head.snapshot.observedAt}:${head.snapshot.resetsAt}`;
       const attemptPlan = pendingPostDeliveryLimiter.tryBegin(headKey, monitorNow());
       if (attemptPlan === "wait") return;
-      const delivery = await queue.deliverOldest((post) =>
-        postSnapshotSafely(logger, sendSnapshot, post.snapshot, post.reason)
-      );
+      const delivery = await queue.deliverOldest(async (post) => {
+        const response = await postSnapshotSafely(logger, sendSnapshot, post.snapshot, post.reason);
+        logDiagnosticWebhookResult(logger, post.reason, post.snapshot, response);
+        return response;
+      });
       if (delivery.accepted && delivery.response) {
         pendingPostDeliveryLimiter.reset();
         if (isValidBankedResetCount(head.snapshot.bankedResetAvailableCount)) {
@@ -1581,6 +1756,7 @@ export async function runCodexUsageMonitor(
           emittedResetConfirmationKeys,
           monitorNow,
           monitorPollIntervalMs,
+          monitorRpcTimeoutMs,
           (error) => {
             fatalStorageError = error;
             monitorAbort.abort();
@@ -1635,10 +1811,11 @@ export async function runCodexUsageMonitor(
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : null;
 if (invokedPath === import.meta.url) {
   const controller = new AbortController();
+  const diagnosticSink = createMonitorDiagnosticSink({ directory: getMonitorDiagnosticDirectory(process.env) });
   const stop = () => controller.abort();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  runCodexUsageMonitor(process.env, { signal: controller.signal }).catch((error) => {
+  runCodexUsageMonitor(process.env, { signal: controller.signal, diagnosticSink }).catch((error) => {
     console.error("[Codex usage monitor] stopped", { reason: getSafeMonitorErrorCode(error) });
     process.exitCode = 1;
   });

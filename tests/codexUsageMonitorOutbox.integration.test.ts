@@ -188,11 +188,13 @@ test("outbox retries after three transient failures and drains FIFO after recove
   const logger: MonitorLogger = createJsonMonitorLogger((line) => {
     events.push(JSON.parse(line) as Record<string, unknown>);
   });
-  const attempts: Array<{ at: number; reason: string }> = [];
+  const diagnostics: Array<Record<string, unknown>> = [];
+  const attempts: Array<{ at: number; reason: string; observedAt: string }> = [];
   let spawnCount = 0;
   const monitor = runCodexUsageMonitor(env, {
     signal: controller.signal,
     logger,
+    diagnosticSink: (event) => diagnostics.push(event as Record<string, unknown>),
     spawnAppServer: () => {
       spawnCount += 1;
       return createFakeAppServer("invalid_snapshot");
@@ -203,8 +205,8 @@ test("outbox retries after three transient failures and drains FIFO after recove
       recoveryBackoffMs: [80, 160],
     },
     fetchWebhook: async (_input, init) => {
-      const payload = JSON.parse(String(init?.body)) as { postReason: string };
-      attempts.push({ at: Date.now(), reason: payload.postReason });
+      const payload = JSON.parse(String(init?.body)) as { postReason: string; observedAt: string };
+      attempts.push({ at: Date.now(), reason: payload.postReason, observedAt: payload.observedAt });
       if (attempts.length === 1) throw new TypeError("network unavailable");
       if (attempts.length === 2) return new Response("rate limited", { status: 429 });
       if (attempts.length === 3) return new Response("temporarily unavailable", { status: 503 });
@@ -240,6 +242,15 @@ test("outbox retries after three transient failures and drains FIFO after recove
         .map((event) => event.category),
       ["transport", "rate_limited", "server_error"],
     );
+    const webhookResults = diagnostics.filter((event) => event.event === "diagnostic_webhook_result");
+    assert.deepEqual(webhookResults.slice(0, 4).map((event) => [event.status, event.category, event.httpStatus]), [
+      ["failure", "transport", undefined],
+      ["failure", "rate_limited", 429],
+      ["failure", "server_error", 503],
+      ["success", undefined, undefined],
+    ]);
+    assert.equal(webhookResults[0]?.postObservedAt, attempts[0]?.observedAt);
+    assert.equal(webhookResults[0]?.recoveryOutcome, "missing");
   } finally {
     controller.abort();
     await monitor;
@@ -269,6 +280,7 @@ test(`permanent HTTP ${permanentFailure.httpStatus} failure retains the FIFO hea
 
   const controller = new AbortController();
   const events: Array<Record<string, unknown>> = [];
+  const diagnostics: Array<Record<string, unknown>> = [];
   const logger: MonitorLogger = createJsonMonitorLogger((line) => {
     events.push(JSON.parse(line) as Record<string, unknown>);
   });
@@ -276,6 +288,7 @@ test(`permanent HTTP ${permanentFailure.httpStatus} failure retains the FIFO hea
   const monitor = runCodexUsageMonitor(env, {
     signal: controller.signal,
     logger,
+    diagnosticSink: (event) => diagnostics.push(event as Record<string, unknown>),
     spawnAppServer: () => createFakeAppServer("invalid_snapshot"),
     pendingQueueRetryTiming: { checkIntervalMs: 2, shortRetryIntervalMs: 10, recoveryBackoffMs: [80] },
     fetchWebhook: async () => {
@@ -298,6 +311,7 @@ test(`permanent HTTP ${permanentFailure.httpStatus} failure retains the FIFO hea
     assert.equal(blocked?.httpStatus, permanentFailure.httpStatus);
     assert.equal(blocked?.action, "queue_retained_for_diagnosis_and_slow_retry");
     assert.equal(deliveryCount, 1, "permanent authorization failures are not retried in a tight loop");
+    assert.ok(diagnostics.some((event) => event.event === "diagnostic_webhook_result" && event.category === permanentFailure.category && event.httpStatus === permanentFailure.httpStatus));
     assert.deepEqual(store.load(), [pending], "a rejected item and the following FIFO queue remain durable");
   } finally {
     controller.abort();
