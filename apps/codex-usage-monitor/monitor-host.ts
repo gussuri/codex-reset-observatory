@@ -3,9 +3,14 @@ import {
   getSafeMonitorErrorCode,
   runCodexUsageMonitor,
 } from "../../tools/codex-usage-monitor";
+import {
+  createMonitorDiagnosticSink,
+  getMonitorDiagnosticDirectory,
+} from "../../tools/codex-usage-monitor-diagnostics";
 
 const controller = new AbortController();
 const logger = createJsonMonitorLogger();
+const diagnosticSink = createMonitorDiagnosticSink({ directory: getMonitorDiagnosticDirectory(process.env) });
 
 function emit(event: string, details: Record<string, unknown> = {}) {
   logger(event, details);
@@ -25,7 +30,7 @@ process.stdin.on("end", requestStop);
 
 emit("starting");
 
-runCodexUsageMonitor(process.env, { signal: controller.signal, logger })
+runCodexUsageMonitor(process.env, { signal: controller.signal, logger, diagnosticSink })
   .then(() => {
     emit("stopped");
     process.stdin.pause();

@@ -271,6 +271,35 @@ If the monitor is stopped, the server keeps the last state. After a gap over 10
 minutes, the next snapshot rebases instead of inventing a reset. The GUI and CLI
 both use the same monitor core.
 
+## Local bounded diagnostics
+
+The CLI and GUI also write JSONL diagnostics under the monitor's existing
+per-user state directory's `diagnostics` subdirectory
+(`%LOCALAPPDATA%\CodexUsageMonitor\diagnostics` on Windows; the same
+platform-specific state directory used for pending posts elsewhere).
+Diagnostics use three rotating files, each capped at 1 MiB by default. The sink
+is initialized lazily on its first recognized diagnostic event, which occurs
+after the monitor owns the pending-post lock. Startup repairs malformed rows
+and removes stale diagnostic generations and temporary files. An oversized
+row is skipped. If the directory cannot be written, the monitor emits one
+fixed warning and continues without retrying diagnostics.
+
+Rows use a fixed schema and event-specific field allowlists. They record local
+poll start and completion times, RPC duration, the selected weekly usage and
+reset values, comparison reason and baseline/current values, recovery
+candidate lifecycle, and webhook delivery result, including a fixed recovery
+outcome classification and the observation timestamp of the sent snapshot.
+Heartbeat comparison reasons remain separate from the selected post reason.
+The upstream generation time is recorded as `unknown`; the monitor records
+when it completed the local read. Diagnostics omit credentials, account
+identifiers, raw RPC output, response bodies, and exception messages. No
+additional provider or database requests are made for diagnostics.
+
+These logs explain the monitor's local observations and decisions; they do not
+prove that the upstream service generated a snapshot at the recorded read
+time. The local fake app-server integration tests exercise the diagnostic
+flow without making real provider or webhook calls.
+
 ## Troubleshooting
 
 - `monitor_secret_missing`: set the User-scope `CODEX_USAGE_MONITOR_SECRET` and
