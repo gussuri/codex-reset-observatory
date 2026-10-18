@@ -7,6 +7,11 @@ importScripts("diagnostics.js", "scan-utils.js");
 
 const QUEUE_KEY = "tibo_processed_tweet_ids";
 const PENDING_QUEUE_KEY = "tibo_pending_tweet_payloads";
+const SOURCE_CONTEXT_PENDING_QUEUE_KEY = "tibo_pending_source_context_enrichments";
+const SOURCE_CONTEXT_LEDGER_KEY = "tibo_source_context_revision_ledger";
+const MAX_SOURCE_CONTEXT_LEDGER_ENTRIES = 100;
+const MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET = 3;
+const MAX_SOURCE_CONTEXT_PENDING_ENTRIES = 50;
 const MAX_PENDING_TWEET_PAYLOADS = 50;
 const PENDING_RETRY_DELAY_MS = 10 * 60 * 1000;
 const MAX_PENDING_RETRY_ATTEMPTS = 3;
@@ -240,6 +245,7 @@ async function retryTweet(tweetId) {
     await chrome.storage.local.set(update);
   }
   await removePendingTweet(tweetId);
+  await resetSourceContextPendingRetries(tweetId);
 
   const notifiedTabs = await broadcastTweetRetry(tweetId);
   return {
@@ -259,6 +265,10 @@ async function clearAuthBlockedQuarantine() {
 
   for (const [tweetId, entry] of Object.entries(entries)) {
     if (!isAuthBlockedQuarantineEntry(entry)) continue;
+    const sourceContextMatch = tweetId.match(/^source-context:(\d{15,25}):([a-f0-9]{64})$/);
+    if (sourceContextMatch) {
+      await clearSourceContextAuthRevision(sourceContextMatch[1], sourceContextMatch[2]);
+    }
     delete entries[tweetId];
     clearedCount += 1;
   }
@@ -419,6 +429,341 @@ async function getDuePendingTweet() {
         entry.nextAttemptAt <= now,
     )
     .sort((left, right) => left.nextAttemptAt - right.nextAttemptAt)[0] || null;
+}
+
+function normalizeSourceContextStatusUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !/^(x|twitter)\.com$/i.test(url.hostname)
+      || url.username || url.password || url.port || url.search || url.hash) return null;
+    const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
+    if (!match) return null;
+    const authorHandle = match[1].toLowerCase();
+    return {
+      tweetId: match[2],
+      authorHandle: `@${authorHandle}`,
+      tweetUrl: `https://x.com/${authorHandle}/status/${match[2]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSourceContextPayload(payload) {
+  if (!payload || payload.kind !== "source_context_enrichment"
+    || typeof payload.tweetId !== "string" || !/^\d{15,25}$/.test(payload.tweetId)
+    || typeof payload.text !== "string" || !payload.text.trim() || payload.text.length > 25000
+    || typeof payload.tweetCreatedAt !== "string"
+    || !Number.isFinite(new Date(payload.tweetCreatedAt).getTime())) return null;
+  const root = normalizeSourceContextStatusUrl(payload.tweetUrl);
+  if (!root || root.tweetId !== payload.tweetId || root.authorHandle.toLowerCase() !== "@thsottiaux") return null;
+
+  const snapshot = {};
+  if (payload.isReply === true && Array.isArray(payload.replyToHandles)
+    && typeof payload.replyParentTweetId === "string"
+    && typeof payload.replyParentTweetUrl === "string"
+    && typeof payload.replyContextText === "string" && payload.replyContextText.trim()) {
+    const parent = normalizeSourceContextStatusUrl(payload.replyParentTweetUrl);
+    const matchingHandle = payload.replyToHandles.some((handle) => (
+      typeof handle === "string" && /^@?[A-Za-z0-9_]{1,15}$/.test(handle.trim())
+      && `@${handle.trim().replace(/^@/, "")}`.toLowerCase() === parent?.authorHandle.toLowerCase()
+    ));
+    if (!parent || parent.tweetId !== payload.replyParentTweetId || !matchingHandle
+      || payload.replyContextText.trim().length > 1000) return null;
+    snapshot.parent = {
+      tweetId: parent.tweetId,
+      tweetUrl: parent.tweetUrl,
+      authorHandle: parent.authorHandle,
+      text: payload.replyContextText.trim(),
+    };
+  }
+  if (payload.isQuote === true && typeof payload.quoteTweetUrl === "string"
+    && typeof payload.quoteAuthorHandle === "string"
+    && typeof payload.quoteContextText === "string" && payload.quoteContextText.trim()) {
+    const quote = normalizeSourceContextStatusUrl(payload.quoteTweetUrl);
+    if (!quote || quote.authorHandle.toLowerCase() !== payload.quoteAuthorHandle.toLowerCase()
+      || payload.quoteContextText.trim().length > 1000) return null;
+    snapshot.quote = {
+      tweetId: quote.tweetId,
+      tweetUrl: quote.tweetUrl,
+      authorHandle: quote.authorHandle,
+      text: payload.quoteContextText.trim(),
+    };
+  }
+  if (!snapshot.parent && !snapshot.quote) return null;
+  return {
+    payload: {
+      kind: "source_context_enrichment",
+      tweetId: payload.tweetId,
+      text: payload.text.trim(),
+      tweetUrl: root.tweetUrl,
+      tweetCreatedAt: new Date(payload.tweetCreatedAt).toISOString(),
+      ...(snapshot.parent ? {
+        isReply: true,
+        replyToHandles: [snapshot.parent.authorHandle],
+        replyContextText: snapshot.parent.text,
+        replyParentTweetId: snapshot.parent.tweetId,
+        replyParentTweetUrl: snapshot.parent.tweetUrl,
+      } : {}),
+      ...(snapshot.quote ? {
+        isQuote: true,
+        quoteContextText: snapshot.quote.text,
+        quoteTweetUrl: snapshot.quote.tweetUrl,
+        quoteAuthorHandle: snapshot.quote.authorHandle,
+      } : {}),
+    },
+    snapshot,
+  };
+}
+
+async function getSourceContextRevisionHash(snapshot) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(snapshot)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeSourceContextLedger(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry) => entry && typeof entry.tweetId === "string" && Array.isArray(entry.revisions))
+    .map((entry) => {
+      const revisions = entry.revisions
+        .filter((hash) => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash))
+        .slice(0, MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET);
+      const terminalRevisions = entry.terminalRevisions && typeof entry.terminalRevisions === "object"
+        ? Object.fromEntries(Object.entries(entry.terminalRevisions)
+          .filter(([hash, status]) => /^[a-f0-9]{64}$/.test(hash)
+            && ["terminal", "auth_blocked"].includes(status))
+          .slice(0, MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET - revisions.length))
+        : {};
+      return { tweetId: entry.tweetId, revisions, terminalRevisions };
+    })
+    .filter((entry) => entry.revisions.length > 0 || Object.keys(entry.terminalRevisions).length > 0)
+    .slice(-MAX_SOURCE_CONTEXT_LEDGER_ENTRIES);
+}
+
+function hasSourceContextRevision(entry, revisionHash) {
+  return Boolean(entry && (entry.revisions.includes(revisionHash)
+    || Object.hasOwn(entry.terminalRevisions, revisionHash)));
+}
+
+async function addSourceContextRevisionToLedger(tweetId, revisionHash) {
+  const data = await chrome.storage.local.get([SOURCE_CONTEXT_LEDGER_KEY]);
+  const entries = normalizeSourceContextLedger(data[SOURCE_CONTEXT_LEDGER_KEY]);
+  const index = entries.findIndex((entry) => entry.tweetId === tweetId);
+  const entry = index >= 0 ? entries[index] : { tweetId, revisions: [], terminalRevisions: {} };
+  if (hasSourceContextRevision(entry, revisionHash)) return { revisionLimit: false };
+  if (entry.revisions.length + Object.keys(entry.terminalRevisions).length >= MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET) return { revisionLimit: true };
+  entry.revisions.push(revisionHash);
+  if (index >= 0) entries.splice(index, 1);
+  entries.push(entry);
+  await chrome.storage.local.set({ [SOURCE_CONTEXT_LEDGER_KEY]: entries.slice(-MAX_SOURCE_CONTEXT_LEDGER_ENTRIES) });
+  return { revisionLimit: false };
+}
+
+async function addSourceContextTerminalRevision(tweetId, revisionHash, status) {
+  const data = await chrome.storage.local.get([SOURCE_CONTEXT_LEDGER_KEY]);
+  const entries = normalizeSourceContextLedger(data[SOURCE_CONTEXT_LEDGER_KEY]);
+  const index = entries.findIndex((entry) => entry.tweetId === tweetId);
+  const entry = index >= 0 ? entries[index] : { tweetId, revisions: [], terminalRevisions: {} };
+  if (hasSourceContextRevision(entry, revisionHash)) return { revisionLimit: false };
+  if (entry.revisions.length + Object.keys(entry.terminalRevisions).length >= MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET) return { revisionLimit: true };
+  entry.terminalRevisions[revisionHash] = status;
+  if (index >= 0) entries.splice(index, 1);
+  entries.push(entry);
+  await chrome.storage.local.set({ [SOURCE_CONTEXT_LEDGER_KEY]: entries.slice(-MAX_SOURCE_CONTEXT_LEDGER_ENTRIES) });
+  return { revisionLimit: false };
+}
+
+async function clearSourceContextAuthRevision(tweetId, revisionHash) {
+  const data = await chrome.storage.local.get([SOURCE_CONTEXT_LEDGER_KEY]);
+  const entries = normalizeSourceContextLedger(data[SOURCE_CONTEXT_LEDGER_KEY]);
+  const entry = entries.find((candidate) => candidate.tweetId === tweetId);
+  if (!entry || entry.terminalRevisions[revisionHash] !== "auth_blocked") return;
+  delete entry.terminalRevisions[revisionHash];
+  await chrome.storage.local.set({ [SOURCE_CONTEXT_LEDGER_KEY]: entries.filter((candidate) => (
+    candidate.revisions.length > 0 || Object.keys(candidate.terminalRevisions).length > 0
+  )) });
+}
+
+async function getSourceContextPendingEntries() {
+  await pendingQueueStorage;
+  const data = await chrome.storage.local.get([SOURCE_CONTEXT_PENDING_QUEUE_KEY]);
+  if (!Array.isArray(data[SOURCE_CONTEXT_PENDING_QUEUE_KEY])) return [];
+  return data[SOURCE_CONTEXT_PENDING_QUEUE_KEY]
+    .filter((entry) => entry && typeof entry.tweetId === "string"
+      && typeof entry.revisionHash === "string" && /^[a-f0-9]{64}$/.test(entry.revisionHash)
+      && entry.payload && typeof entry.payload === "object")
+    .slice(0, MAX_SOURCE_CONTEXT_PENDING_ENTRIES);
+}
+
+function updateSourceContextPendingQueue(mutator) {
+  const task = pendingQueueStorage.then(async () => {
+    const data = await chrome.storage.local.get([SOURCE_CONTEXT_PENDING_QUEUE_KEY]);
+    const entries = Array.isArray(data[SOURCE_CONTEXT_PENDING_QUEUE_KEY])
+      ? data[SOURCE_CONTEXT_PENDING_QUEUE_KEY]
+      : [];
+    const nextEntries = mutator(entries);
+    await chrome.storage.local.set({ [SOURCE_CONTEXT_PENDING_QUEUE_KEY]: nextEntries });
+    return nextEntries;
+  });
+  pendingQueueStorage = task.catch(() => {});
+  return task;
+}
+
+function persistSourceContextPending(payload, revisionHash) {
+  return updateSourceContextPendingQueue((entries) => {
+    if (entries.some((entry) => entry.tweetId === payload.tweetId && entry.revisionHash === revisionHash)) return entries;
+    if (entries.length >= MAX_SOURCE_CONTEXT_PENDING_ENTRIES) return entries;
+    return [...entries, {
+      tweetId: payload.tweetId,
+      revisionHash,
+      payload,
+      attempts: 0,
+      nextAttemptAt: Date.now(),
+      retryExhausted: false,
+    }];
+  }).then((entries) => entries.some((entry) => entry.tweetId === payload.tweetId && entry.revisionHash === revisionHash));
+}
+
+function removeSourceContextPending(tweetId, revisionHash) {
+  return updateSourceContextPendingQueue((entries) => entries.filter((entry) => (
+    entry.tweetId !== tweetId || entry.revisionHash !== revisionHash
+  )));
+}
+
+function resetSourceContextPendingRetries(tweetId) {
+  return updateSourceContextPendingQueue((entries) => entries.map((entry) => (
+    entry.tweetId === tweetId
+      ? { ...entry, attempts: 0, nextAttemptAt: Date.now(), retryExhausted: false }
+      : entry
+  )));
+}
+
+function recordSourceContextPendingFailure(tweetId, revisionHash) {
+  return updateSourceContextPendingQueue((entries) => {
+    const index = entries.findIndex((entry) => entry.tweetId === tweetId && entry.revisionHash === revisionHash);
+    if (index < 0) return entries;
+    const current = entries[index];
+    const attempts = current.attempts + 1;
+    const retryExhausted = attempts >= MAX_PENDING_RETRY_ATTEMPTS;
+    const retryDelay = Math.min(PENDING_RETRY_DELAY_MS * 2 ** (attempts - 1), 60 * 60 * 1000);
+    entries[index] = {
+      ...current,
+      attempts,
+      nextAttemptAt: retryExhausted ? null : Date.now() + retryDelay,
+      retryExhausted,
+    };
+    return entries;
+  });
+}
+
+async function getDueSourceContextPending() {
+  const entries = await getSourceContextPendingEntries();
+  return entries.filter((entry) => !entry.retryExhausted
+    && Number.isFinite(entry.nextAttemptAt) && entry.nextAttemptAt <= Date.now())
+    .sort((left, right) => left.nextAttemptAt - right.nextAttemptAt)[0] || null;
+}
+
+function saveSourceContextTerminalDiagnostic(tweetId, reasonCode, status = null) {
+  return saveServiceDiagnostic({
+    reasonCode,
+    messages: ["Source context enrichment was not accepted."],
+    error: Number.isInteger(status) ? `HTTP ${status}` : undefined,
+    payloadMetadata: { tweetId, kind: "source_context_enrichment" },
+  });
+}
+
+async function executeSourceContextEnrichment(payload, revisionHash) {
+  const { secret, domain } = await getConfig();
+  if (!secret) {
+    await recordSourceContextPendingFailure(payload.tweetId, revisionHash);
+    return { success: false, retryable: true, error: "Webhook secret is not configured." };
+  }
+  let response;
+  try {
+    response = await fetch(`${domain}/api/webhook/tibo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${secret}` },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    await recordSourceContextPendingFailure(payload.tweetId, revisionHash);
+    return { success: false, retryable: true, error: "Source context request failed." };
+  }
+  if (!response.ok) {
+    if (isRetryableWebhookStatus(response.status)) {
+      await recordSourceContextPendingFailure(payload.tweetId, revisionHash);
+      return { success: false, retryable: true, httpStatus: response.status };
+    }
+    const authBlocked = response.status === 401 || response.status === 403;
+    await addSourceContextTerminalRevision(payload.tweetId, revisionHash, authBlocked ? "auth_blocked" : "terminal");
+    if (authBlocked) {
+      await quarantineTweet(`source-context:${payload.tweetId}:${revisionHash}`, response.status, AUTH_BLOCKED_REASON);
+    }
+    await saveSourceContextTerminalDiagnostic(
+      payload.tweetId,
+      authBlocked ? "source_context_auth_blocked" : "source_context_terminal_rejection",
+      response.status,
+    );
+    await removeSourceContextPending(payload.tweetId, revisionHash);
+    return {
+      success: false,
+      terminal: !authBlocked,
+      quarantined: authBlocked,
+      httpStatus: response.status,
+    };
+  }
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    await recordSourceContextPendingFailure(payload.tweetId, revisionHash);
+    return { success: false, retryable: true, error: "Invalid source context response." };
+  }
+  if (result?.success !== true || !["applied", "duplicate"].includes(result.status)) {
+    await recordSourceContextPendingFailure(payload.tweetId, revisionHash);
+    return { success: false, retryable: true, error: "Source context was not acknowledged." };
+  }
+  const ledgerResult = await addSourceContextRevisionToLedger(payload.tweetId, revisionHash);
+  if (ledgerResult.revisionLimit) {
+    await removeSourceContextPending(payload.tweetId, revisionHash);
+    return { success: false, terminal: true, error: "revision_limit" };
+  }
+  await removeSourceContextPending(payload.tweetId, revisionHash);
+  return { success: true, status: result.status, revisionHash };
+}
+
+function enqueueSourceContextEnrichment(rawPayload) {
+  const resultPromise = processQueue.then(async () => {
+    const normalized = normalizeSourceContextPayload(rawPayload);
+    if (!normalized) return { success: false, error: "invalid_source_context_enrichment" };
+    const revisionHash = await getSourceContextRevisionHash(normalized.snapshot);
+    const ledgerData = await chrome.storage.local.get([SOURCE_CONTEXT_LEDGER_KEY]);
+    const ledger = normalizeSourceContextLedger(ledgerData[SOURCE_CONTEXT_LEDGER_KEY]);
+    const existing = ledger.find((entry) => entry.tweetId === normalized.payload.tweetId);
+    if (hasSourceContextRevision(existing, revisionHash)) {
+      const terminalStatus = existing.terminalRevisions[revisionHash];
+      return terminalStatus === "auth_blocked"
+        ? { success: false, skipped: true, quarantined: true }
+        : terminalStatus === "terminal"
+          ? { success: false, skipped: true, terminal: true }
+          : { success: true, skipped: true, status: "duplicate" };
+    }
+    const pending = await getSourceContextPendingEntries();
+    if (pending.some((entry) => entry.tweetId === normalized.payload.tweetId && entry.revisionHash === revisionHash)) {
+      return { success: false, retryable: true, revisionHash };
+    }
+    const pendingForTweet = new Set(pending.filter((entry) => entry.tweetId === normalized.payload.tweetId).map((entry) => entry.revisionHash));
+    if ((existing?.revisions.length || 0) + Object.keys(existing?.terminalRevisions || {}).length + pendingForTweet.size >= MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET) {
+      await saveSourceContextTerminalDiagnostic(normalized.payload.tweetId, "source_context_revision_limit");
+      return { success: false, terminal: true, error: "revision_limit" };
+    }
+    const persisted = await persistSourceContextPending(normalized.payload, revisionHash);
+    if (!persisted) return { success: false, retryable: true, error: "pending_queue_full" };
+    return executeSourceContextEnrichment(normalized.payload, revisionHash);
+  });
+  processQueue = resultPromise.catch(() => {});
+  return resultPromise;
 }
 
 // Setup alarms on Service Worker initialization
@@ -875,6 +1220,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep message channel open for async response
   }
 
+  if (request.action === "POST_TWEET_CONTEXT_ENRICHMENT") {
+    enqueueSourceContextEnrichment(request.payload)
+      .then((res) => sendResponse(res))
+      .catch(() => sendResponse({ success: false, retryable: true, error: "source_context_failed" }));
+    return true;
+  }
+
   if (request.action === "POST_HEARTBEAT") {
     handlePostHeartbeat(request.payload)
       .then((res) => sendResponse({ success: true, data: res }))
@@ -947,8 +1299,20 @@ function enqueuePostTweet(payload) {
 function retryPendingTweet() {
   const resultPromise = processQueue.then(async () => {
     const pendingEntry = await getDuePendingTweet();
-    if (!pendingEntry) return { success: true, skipped: true };
-    return executePostTweetWithRecovery(pendingEntry.payload);
+    if (pendingEntry) return executePostTweetWithRecovery(pendingEntry.payload);
+    const pendingContext = await getDueSourceContextPending();
+    if (!pendingContext) return { success: true, skipped: true };
+    const normalized = normalizeSourceContextPayload(pendingContext.payload);
+    if (!normalized) {
+      await removeSourceContextPending(pendingContext.tweetId, pendingContext.revisionHash);
+      return { success: true, skipped: true, terminal: true };
+    }
+    const revisionHash = await getSourceContextRevisionHash(normalized.snapshot);
+    if (revisionHash !== pendingContext.revisionHash) {
+      await removeSourceContextPending(pendingContext.tweetId, pendingContext.revisionHash);
+      return { success: true, skipped: true, terminal: true };
+    }
+    return executeSourceContextEnrichment(normalized.payload, revisionHash);
   });
   processQueue = resultPromise.catch(() => {});
   return resultPromise;

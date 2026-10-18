@@ -35,6 +35,11 @@ import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { getCodexOperationalExpiryAt } from "@/lib/radar/codexOperationalStatus";
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
+import {
+  parseTiboSourceContextEnrichment,
+  storeTiboSourceContextEnrichment,
+  TIBO_SOURCE_CONTEXT_ENRICHMENT_KIND,
+} from "@/lib/radar/tiboSourceContext";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
@@ -492,6 +497,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid reply metadata" }, { status: 400 });
     }
     const replyMetadata = replyMetadataResult.value;
+
+    if (body.kind === TIBO_SOURCE_CONTEXT_ENRICHMENT_KIND) {
+      const enrichmentResult = parseTiboSourceContextEnrichment(body);
+      if (!enrichmentResult.ok) {
+        return NextResponse.json({ error: "Invalid source context enrichment" }, { status: 400 });
+      }
+
+      try {
+        const result = await storeTiboSourceContextEnrichment(
+          getSupabaseServiceClient(),
+          enrichmentResult.value,
+        );
+        if (result.status === "root_missing") {
+          return NextResponse.json({ error: "Source root row is not available yet" }, { status: 503 });
+        }
+        if (result.status === "root_mismatch" || result.status === "conflict" || result.status === "revision_limit") {
+          return NextResponse.json({ error: "Source context enrichment was not applied", status: result.status }, { status: 409 });
+        }
+        return NextResponse.json({ success: true, status: result.status }, { status: 200 });
+      } catch {
+        // Missing schema, schema-cache lag, and database errors stay retryable.
+        console.warn("[Webhook Warning] Tibo source context storage unavailable", {
+          reason: "source_context_store_unavailable",
+        });
+        return NextResponse.json({ error: "Source context storage unavailable" }, { status: 503 });
+      }
+    }
+
     const editHistoryMetadata = await resolveTiboPostEditHistory(tweetId);
 
     // 3. Existing Rule Classification
