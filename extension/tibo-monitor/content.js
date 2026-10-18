@@ -15,6 +15,9 @@
   const inFlightTweetIds = new Set();
   // Session-level Set of processed tweet IDs for this tab so scans skip silently
   const processedTweetIds = new Set();
+  const pendingSourceContextByTweetId = new Map();
+  const sourceContextAcknowledgedKeys = new Map();
+  const sourceContextInFlightKeys = new Set();
   // Do not submit a collapsed long post; request expansion once and wait for
   // X to render the complete tweet before the next scan.
   const textExpansionRequestedTweetIds = new Set();
@@ -127,6 +130,182 @@
     if (blockedUntil > Date.now()) return true;
     retryBlockedUntil.delete(tweetId);
     return false;
+  }
+
+  function normalizeSourceContextStatusUrl(value) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || !/^(x|twitter)\.com$/i.test(url.hostname)
+        || url.username || url.password || url.port || url.search || url.hash) return null;
+      const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
+      if (!match) return null;
+      const authorHandle = `@${match[1].toLowerCase()}`;
+      return {
+        tweetId: match[2],
+        authorHandle,
+        tweetUrl: `https://x.com/${authorHandle.slice(1)}/status/${match[2]}`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function sourceContextSnapshotKey(payload) {
+    const snapshot = {};
+    if (payload.replyParentTweetId && payload.replyParentTweetUrl) {
+      const parent = normalizeSourceContextStatusUrl(payload.replyParentTweetUrl);
+      const parentAuthorMatches = Array.isArray(payload.replyToHandles) && payload.replyToHandles.some((handle) => (
+        typeof handle === "string"
+        && `@${handle.trim().replace(/^@/, "")}`.toLowerCase() === parent?.authorHandle
+      ));
+      if (parent && parent.tweetId === payload.replyParentTweetId && parentAuthorMatches
+        && typeof payload.replyContextText === "string" && payload.replyContextText.trim()) {
+        snapshot.parent = {
+          tweetId: parent.tweetId,
+          tweetUrl: parent.tweetUrl,
+          authorHandle: parent.authorHandle,
+          text: payload.replyContextText.trim(),
+        };
+      }
+    }
+    if (typeof payload.quoteTweetUrl === "string" && typeof payload.quoteAuthorHandle === "string"
+      && typeof payload.quoteContextText === "string" && payload.quoteContextText.trim()) {
+      const quote = normalizeSourceContextStatusUrl(payload.quoteTweetUrl);
+      if (quote
+        && quote.authorHandle === `@${payload.quoteAuthorHandle.trim().replace(/^@/, "")}`.toLowerCase()
+        && payload.quoteContextText.trim()) {
+        snapshot.quote = {
+          tweetId: quote.tweetId,
+          tweetUrl: quote.tweetUrl,
+          authorHandle: quote.authorHandle,
+          text: payload.quoteContextText.trim(),
+        };
+      }
+    }
+    return Object.keys(snapshot).length ? JSON.stringify(snapshot) : null;
+  }
+
+  function buildSourceContextEnrichmentPayload(tweetId, text, tweetUrl, tweetCreatedAt, replyMetadata) {
+    const payload = {
+      kind: "source_context_enrichment",
+      tweetId,
+      text: String(text || "").trim(),
+      tweetUrl,
+      tweetCreatedAt,
+    };
+    if (replyMetadata?.isReply === true
+      && replyMetadata.replyParentTweetId
+      && replyMetadata.replyParentTweetUrl
+      && typeof replyMetadata.replyContextText === "string"
+      && replyMetadata.replyContextText.trim()
+      && Array.isArray(replyMetadata.replyToHandles)
+      && replyMetadata.replyToHandles.length > 0) {
+      payload.isReply = true;
+      payload.replyToHandles = replyMetadata.replyToHandles;
+      payload.replyContextText = replyMetadata.replyContextText;
+      payload.replyParentTweetId = replyMetadata.replyParentTweetId;
+      payload.replyParentTweetUrl = replyMetadata.replyParentTweetUrl;
+    }
+    if (replyMetadata?.isQuote === true
+      && typeof replyMetadata.quoteContextText === "string"
+      && replyMetadata.quoteContextText.trim()
+      && typeof replyMetadata.quoteTweetUrl === "string"
+      && typeof replyMetadata.quoteAuthorHandle === "string") {
+      payload.isQuote = true;
+      payload.quoteContextText = replyMetadata.quoteContextText;
+      payload.quoteTweetUrl = replyMetadata.quoteTweetUrl;
+      payload.quoteAuthorHandle = replyMetadata.quoteAuthorHandle;
+    }
+    return sourceContextSnapshotKey(payload) ? payload : null;
+  }
+
+  function sourceContextParentKey(payload) {
+    return sourceContextSnapshotKey({
+      replyParentTweetId: payload.replyParentTweetId,
+      replyParentTweetUrl: payload.replyParentTweetUrl,
+      replyToHandles: payload.replyToHandles,
+      replyContextText: payload.replyContextText,
+    });
+  }
+
+  function sourceContextQuoteKey(payload) {
+    return sourceContextSnapshotKey({
+      quoteTweetUrl: payload.quoteTweetUrl,
+      quoteAuthorHandle: payload.quoteAuthorHandle,
+      quoteContextText: payload.quoteContextText,
+    });
+  }
+
+  function rememberPendingSourceContext(tweetId, incoming) {
+    if (!incoming) return;
+    const current = pendingSourceContextByTweetId.get(tweetId);
+    if (!current) {
+      pendingSourceContextByTweetId.set(tweetId, incoming);
+      return;
+    }
+    const merged = { ...current };
+    if (current.replyParentTweetId && incoming.replyParentTweetId
+      && sourceContextParentKey(current) !== sourceContextParentKey(incoming)) return;
+    if (!current.replyParentTweetId && incoming.replyParentTweetId) {
+      Object.assign(merged, {
+        isReply: true,
+        replyToHandles: incoming.replyToHandles,
+        replyContextText: incoming.replyContextText,
+        replyParentTweetId: incoming.replyParentTweetId,
+        replyParentTweetUrl: incoming.replyParentTweetUrl,
+      });
+    }
+    if (current.quoteTweetUrl && incoming.quoteTweetUrl
+      && sourceContextQuoteKey(current) !== sourceContextQuoteKey(incoming)) return;
+    if (!current.quoteTweetUrl && incoming.quoteTweetUrl) {
+      Object.assign(merged, {
+        isQuote: true,
+        quoteContextText: incoming.quoteContextText,
+        quoteTweetUrl: incoming.quoteTweetUrl,
+        quoteAuthorHandle: incoming.quoteAuthorHandle,
+      });
+    }
+    pendingSourceContextByTweetId.set(tweetId, merged);
+  }
+
+  function sendSourceContextEnrichment(tweetId, payload) {
+    if (!payload) return;
+    const revisionKey = sourceContextSnapshotKey(payload);
+    if (!revisionKey || sourceContextAcknowledgedKeys.get(tweetId) === revisionKey) return;
+    const inFlightKey = `${tweetId}:${revisionKey}`;
+    if (sourceContextInFlightKeys.has(inFlightKey)) return;
+    sourceContextInFlightKeys.add(inFlightKey);
+    try {
+      const runtime = getExtensionRuntime();
+      runtime.sendMessage({ action: "POST_TWEET_CONTEXT_ENRICHMENT", payload }, (response) => {
+        sourceContextInFlightKeys.delete(inFlightKey);
+        if (runtime.lastError) return;
+        if (response?.quarantined) {
+          authBlockedTweetIds.add(tweetId);
+          retryBlockedUntil.delete(tweetId);
+          return;
+        }
+        if (response?.success) {
+          sourceContextAcknowledgedKeys.set(tweetId, revisionKey);
+          const pending = pendingSourceContextByTweetId.get(tweetId);
+          if (pending && sourceContextSnapshotKey(pending) !== revisionKey) {
+            pendingSourceContextByTweetId.delete(tweetId);
+            sendSourceContextEnrichment(tweetId, pending);
+          } else {
+            pendingSourceContextByTweetId.delete(tweetId);
+          }
+        }
+      });
+    } catch (error) {
+      sourceContextInFlightKeys.delete(inFlightKey);
+      handleExtensionError(error, `Source context for ${tweetId}`);
+    }
+  }
+
+  function flushPendingSourceContext(tweetId) {
+    const pending = pendingSourceContextByTweetId.get(tweetId);
+    if (!pending) return;
+    sendSourceContextEnrichment(tweetId, pending);
   }
 
   function blockRetry(tweetId) {
@@ -564,6 +743,24 @@
         const replyMetadata = TiboMonitorScan.extractReplyMetadata(article, {
           sourceTimeline,
         });
+        const sourceContextPayload = buildSourceContextEnrichmentPayload(
+          tweetId,
+          text,
+          `https://x.com/thsottiaux/status/${tweetId}`,
+          createdAt,
+          replyMetadata,
+        );
+        if (sourceContextPayload) {
+          if (processedTweetIds.has(tweetId)) {
+            sendSourceContextEnrichment(tweetId, sourceContextPayload);
+            continue;
+          }
+          if (inFlightTweetIds.has(tweetId)) {
+            rememberPendingSourceContext(tweetId, sourceContextPayload);
+            continue;
+          }
+          rememberPendingSourceContext(tweetId, sourceContextPayload);
+        }
         if (replyMetadata?.isReply === true) {
           record.replyParentFound = true;
         }
@@ -661,6 +858,9 @@
         ? replyMetadata.replyToHandles
         : [],
       replyContextText: replyMetadata?.replyContextText || null,
+      ...(replyMetadata?.replyParentTweetId && replyMetadata?.replyParentTweetUrl
+        ? { replyParentTweetId: replyMetadata.replyParentTweetId, replyParentTweetUrl: replyMetadata.replyParentTweetUrl }
+        : {}),
       sourceTimeline: sourceTimeline || null,
       isQuote: replyMetadata?.isQuote === true,
       quoteContextText: replyMetadata?.quoteContextText || null,
@@ -698,6 +898,9 @@
             console.warn(`[Tibo Extension] Tweet ${tweetId} will be retried after a temporary webhook failure.`);
           } else if (response && response.success) {
             processedTweetIds.add(tweetId);
+            // A normal post success (including a processed-ID skip) does not
+            // acknowledge persistence in the dedicated source-context columns.
+            flushPendingSourceContext(tweetId);
             if (response.skipped) {
               console.log(`[Tibo Extension] Tweet ${tweetId} was skipped by Service Worker (already in storage).`);
             } else {

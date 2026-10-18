@@ -561,6 +561,103 @@ test("empty and whitespace-only source text are rejected before any database cal
   }
 });
 
+test("source-context enrichment exits before classification, translation, edit lookup, and adoption", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const originalHttpsRequest = https.request;
+  const requests: Array<{ url: string; method: string; body: unknown }> = [];
+  let modelCalls = 0;
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "on";
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    requests.push({
+      url,
+      method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return new Response(JSON.stringify({ status: "applied" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  https.request = ((...args: any[]) => {
+    modelCalls += 1;
+    return originalHttpsRequest.apply(https, args as any);
+  }) as typeof https.request;
+
+  try {
+    const response = await POST(buildRequest({
+      kind: "source_context_enrichment",
+      isReply: true,
+      replyToHandles: ["@Parent_Author"],
+      replyParentTweetId: "123456789012345678",
+      replyParentTweetUrl: "https://x.com/Parent_Author/status/123456789012345678",
+      replyContextText: "Verified parent context",
+      sourceTimeline: "with_replies",
+      detectedAt: "2026-10-18T01:00:00.000Z",
+      clientRevisionHash: "not-trusted",
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, status: "applied" });
+    assert.equal(modelCalls, 0);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url.endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment"), true);
+    assert.equal(requests[0].method, "POST");
+    const args = requests[0].body as Record<string, any>;
+    assert.equal(args.p_tweet_id, "2084000000000000200");
+    assert.equal(args.p_snapshot.parent.authorHandle, "@parent_author");
+    assert.notEqual(args.p_revision_hash, "not-trusted");
+    assert.match(args.p_revision_hash, /^[a-f0-9]{64}$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    https.request = originalHttpsRequest;
+    restoreEnvironment(previous);
+  }
+});
+
+test("source-context schema failures are retryable and never fall through to legacy upsert", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const urls: string[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  globalThis.fetch = async (input) => {
+    urls.push(input instanceof Request ? input.url : String(input));
+    return new Response(JSON.stringify({ code: "PGRST202", message: "function missing" }), {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const response = await POST(buildRequest({
+      kind: "source_context_enrichment",
+      isReply: true,
+      replyToHandles: ["@parent"],
+      replyParentTweetId: "123456789012345678",
+      replyParentTweetUrl: "https://x.com/parent/status/123456789012345678",
+      replyContextText: "parent",
+    }));
+    assert.equal(response.status, 503);
+    assert.equal(urls.length, 1);
+    assert.equal(urls[0].endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(previous);
+  }
+});
+
 test("long-form current reset announcement is accepted by the webhook", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),

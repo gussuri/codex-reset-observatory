@@ -252,7 +252,7 @@ test("content.js resolves reply metadata before deduplication and skips pending 
   const replyExpansionIndex = source.indexOf(
     "record.replyParentExpansionRequested = requestReplyContextExpansion(",
   );
-  const processedCheckIndex = source.indexOf("processedTweetIds.has(tweetId)");
+  const processedCheckIndex = source.lastIndexOf("processedTweetIds.has(tweetId)");
   const inFlightIndex = source.indexOf("inFlightTweetIds.add(tweetId)");
 
   assert.ok(metadataIndex >= 0);

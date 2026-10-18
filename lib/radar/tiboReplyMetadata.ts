@@ -4,6 +4,8 @@ export type TiboReplyMetadata = {
   isReply?: boolean;
   replyToHandles?: string[];
   replyContextText?: string | null;
+  replyParentTweetId?: string | null;
+  replyParentTweetUrl?: string | null;
   sourceTimeline?: TiboSourceTimeline;
   isQuote?: boolean;
   quoteContextText?: string | null;
@@ -35,6 +37,16 @@ function normalizeQuoteTweetUrl(value: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeReplyParentUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !/^(x|twitter)\.com$/i.test(url.hostname)
+      || url.username || url.password || url.port || url.search || url.hash) return null;
+    const match = url.pathname.match(QUOTE_TWEET_PATH_PATTERN);
+    return match ? { url: `https://${url.hostname.toLowerCase()}/${match[1]}/status/${match[2]}`, id: match[2], handle: `@${match[1]}` } : null;
+  } catch { return null; }
 }
 
 export function parseTiboReplyMetadata(
@@ -140,6 +152,32 @@ export function parseTiboReplyMetadata(
     } else {
       value.quoteAuthorHandle = null;
     }
+  }
+
+  // Parent provenance is a relationship among the fully parsed fields.
+  const hasParentId = Object.prototype.hasOwnProperty.call(body, "replyParentTweetId");
+  const hasParentUrl = Object.prototype.hasOwnProperty.call(body, "replyParentTweetUrl");
+  const parentId = body.replyParentTweetId;
+  const parentUrl = body.replyParentTweetUrl;
+  if ((hasParentId !== hasParentUrl)
+    || (hasParentId && ((parentId !== null && (typeof parentId !== "string" || !/^\d{1,30}$/.test(parentId)))
+      || (parentUrl !== null && typeof parentUrl !== "string")))) {
+    return { ok: false, errorCode: "invalid_reply_metadata" };
+  }
+  if (hasParentId && parentId !== null && parentUrl !== null) {
+    const normalized = normalizeReplyParentUrl(parentUrl as string);
+    if (!normalized || normalized.id !== parentId
+      || (typeof body.tweetId === "string" && body.tweetId === parentId)
+      || value.isReply !== true
+      || !value.replyToHandles?.some((handle) => handle.toLowerCase() === normalized.handle.toLowerCase())) {
+      return { ok: false, errorCode: "invalid_reply_metadata" };
+    }
+    value.replyParentTweetId = parentId as string;
+    value.replyParentTweetUrl = normalized.url;
+  } else if (hasParentId) {
+    if (parentId !== null || parentUrl !== null) return { ok: false, errorCode: "invalid_reply_metadata" };
+    value.replyParentTweetId = null;
+    value.replyParentTweetUrl = null;
   }
 
   return { ok: true, value };

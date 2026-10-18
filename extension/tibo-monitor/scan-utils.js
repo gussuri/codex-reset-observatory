@@ -394,17 +394,45 @@
     };
   }
 
-  function getTweetId(article) {
+  function getDisplayedAuthorHandle(article) {
     if (!article || typeof article.querySelectorAll !== "function") return null;
-    const links = Array.from(article.querySelectorAll('a[href*="/status/"]'));
-    for (const link of links) {
-      const owner = link.closest?.('article[data-testid="tweet"]');
-      if (owner && owner !== article) continue;
-      const href = String(link.getAttribute?.("href") || "");
-      const match = href.match(/\/status\/(\d+)(?:[/?#]|$)/i);
-      if (match) return match[1];
+    const userNames = getOwnedElements(article, '[data-testid="User-Name"]');
+    const handles = [];
+    for (const userName of userNames) {
+      const profileLinks = userName.querySelectorAll?.("a[href]") || [];
+      for (const link of Array.from(profileLinks)) {
+        const handle = extractHandleFromHref(link.getAttribute?.("href"));
+        const normalized = handle ? (handle.startsWith("@") ? handle : `@${handle}`) : null;
+        if (handle && !handles.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) handles.push(normalized);
+      }
     }
-    return null;
+    return handles.length === 1 ? handles[0] : null;
+  }
+
+  function getTweetIdentity(article) {
+    if (!article || typeof article.querySelectorAll !== "function") return null;
+    const authorHandle = getDisplayedAuthorHandle(article);
+    if (!authorHandle) return null;
+
+    const candidates = new Map();
+    for (const link of getOwnedElements(article, 'a[href*="/status/"]')) {
+      // The canonical status permalink is the time anchor in the author row.
+      // Body links, media links, and quote-card links are not identity evidence.
+      const userName = link.closest?.('[data-testid="User-Name"]');
+      if (!userName || !link.querySelector?.("time")) continue;
+      const parsed = extractQuoteTweetUrl(link.getAttribute?.("href"));
+      if (!parsed || parsed.handle.toLowerCase() !== authorHandle.toLowerCase()) continue;
+      candidates.set(`${parsed.handle.toLowerCase()}:${parsed.url.split("/status/")[1]}`, {
+        tweetId: parsed.url.split("/status/")[1],
+        tweetUrl: parsed.url,
+        authorHandle,
+      });
+    }
+    return candidates.size === 1 ? Array.from(candidates.values())[0] : null;
+  }
+
+  function getTweetId(article) {
+    return getTweetIdentity(article)?.tweetId || null;
   }
 
   function getOwnTweetTextState(article) {
@@ -457,26 +485,7 @@
   }
 
   function getParentHandle(article) {
-    if (!article || typeof article.querySelectorAll !== "function") return null;
-    const statusLinks = Array.from(article.querySelectorAll('a[href*="/status/"]'));
-    for (const link of statusLinks) {
-      const owner = link.closest?.('article[data-testid="tweet"]');
-      if (owner && owner !== article) continue;
-      const parsed = extractQuoteTweetUrl(link.getAttribute?.("href"));
-      if (parsed?.handle) return parsed.handle;
-    }
-
-    const userNames = article.querySelectorAll('[data-testid="User-Name"]');
-    for (const userName of Array.from(userNames)) {
-      const owner = userName.closest?.('article[data-testid="tweet"]');
-      if (owner && owner !== article) continue;
-      const profileLinks = userName.querySelectorAll?.("a[href]") || [];
-      for (const link of Array.from(profileLinks)) {
-        const handle = extractHandleFromHref(link.getAttribute?.("href"));
-        if (handle) return handle;
-      }
-    }
-    return null;
+    return getDisplayedAuthorHandle(article);
   }
 
   function resolveSiblingReplyMetadata(article) {
@@ -506,10 +515,15 @@
       };
     }
 
+    const parentIdentity = getTweetIdentity(parentArticle);
     return {
       isReply: true,
       replyToHandles: [getParentHandle(parentArticle)].filter(Boolean),
       replyContextText: parentContext.text,
+      ...(parentIdentity ? {
+        replyParentTweetId: parentIdentity.tweetId,
+        replyParentTweetUrl: parentIdentity.tweetUrl,
+      } : {}),
     };
   }
 
@@ -524,7 +538,7 @@
     const marker = getReplyMarker(article);
     if (!marker) {
       const sourceTimeline = typeof options === "string" ? options : options?.sourceTimeline;
-      if (sourceTimeline === "with_replies") {
+      if (sourceTimeline === "with_replies" || sourceTimeline === "profile") {
         const siblingMetadata = resolveSiblingReplyMetadata(article);
         if (siblingMetadata?.needsRetry) {
           return {
