@@ -318,4 +318,4 @@ test("service worker persists terminal revisions across retries and worker resta
   assert.equal(Array.from(storage.tibo_pending_source_context_enrichments as unknown[]).length, 1, "ack removes only its exact pending revision");
   await restartedWorker.__retryPendingTweet();
   assert.deepEqual(Array.from(storage.tibo_pending_source_context_enrichments as unknown[]), []);
-});\n
+});
