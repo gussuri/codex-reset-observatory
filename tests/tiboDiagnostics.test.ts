@@ -223,7 +223,7 @@ test("records safe reply-parent context diagnostics without storing parent text"
       },
     ],
     "https://x.com/thsottiaux/with_replies",
-    "v1.11-reply-context-expansion",
+    "v1.12-source-context-enrichment",
     "2026-08-17T00:00:00.000Z",
     "with_replies",
   );
@@ -252,7 +252,7 @@ test("uses a safe reply-parent retry reason when every parsed tweet is waiting f
       },
     ],
     "https://x.com/thsottiaux/with_replies",
-    "v1.11-reply-context-expansion",
+    "v1.12-source-context-enrichment",
     "2026-08-17T00:00:00.000Z",
     "with_replies",
   );

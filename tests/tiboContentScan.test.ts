@@ -269,9 +269,17 @@ test("content.js resolves reply metadata before deduplication and skips pending 
 test("content.js identifies reply-context collection with a new selector version", () => {
   const source = readContentScriptSource();
 
-  assert.match(source, /v1\.11-reply-context-expansion/);
+  assert.match(source, /v1\.12-source-context-enrichment/);
   assert.match(source, /replyContextExpansionRescanTimers/);
   assert.match(source, /clearReplyContextExpansionState\(tweetId\)/);
+});
+
+test("Tibo extension release increments its manifest version", () => {
+  const manifest = JSON.parse(
+    readFileSync("extension/tibo-monitor/manifest.json", "utf8"),
+  ) as { version: string };
+
+  assert.equal(manifest.version, "1.0.5");
 });
 
 test("content.js reads non-empty tweet text before marking a parse successful", () => {
