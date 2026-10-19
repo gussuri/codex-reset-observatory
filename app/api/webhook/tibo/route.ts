@@ -45,7 +45,9 @@ import {
 } from "@/lib/radar/tiboSourceContext";
 import {
   buildTiboEvidenceContext,
+  hasRetryableTiboEvidenceOmission,
   type TiboEvidencePost,
+  type TiboEvidenceContext,
 } from "@/lib/radar/tiboEvidenceContext";
 import { formatTiboEvidenceInput } from "@/lib/radar/tiboEvidencePrompt";
 import {
@@ -350,7 +352,10 @@ async function serializeTiboEvidenceContext(
   // The target row is fetched separately for identity validation; the builder
   // limits only the additional related-post lookups.
   const context = await buildTiboEvidenceContext(target, lookup);
-  return hasValidatedConnectedSourceEvidence(context) ? formatTiboEvidenceInput(context) : null;
+  return {
+    context,
+    input: hasValidatedConnectedSourceEvidence(context) ? formatTiboEvidenceInput(context) : null,
+  };
 }
 
 function getTiboPostIdentity(tweetUrl: string) {
@@ -386,8 +391,10 @@ async function loadStoredTiboEvidence(
       || Date.parse(target.createdAt) !== Date.parse(createdAt)) {
       return null;
     }
+    const evidence = await serializeTiboEvidenceContext(target, lookup);
     return {
-      input: await serializeTiboEvidenceContext(target, lookup),
+      input: evidence.input,
+      context: evidence.context,
       sourceContextRevisionHashes: target.sourceContextRevisionHashes ?? [],
       sourceContextClassifiedRevisionHashes: target.sourceContextClassifiedRevisionHashes ?? [],
     };
@@ -396,6 +403,43 @@ async function loadStoredTiboEvidence(
       reason: "lookup_failed",
     });
     return null;
+  }
+}
+
+type TiboSourceContextRevisionSnapshot =
+  | { status: "row"; revisionHashes: string[] }
+  | { status: "missing" }
+  | { status: "schema_unavailable" }
+  | { status: "lookup_failed" };
+
+async function loadTiboSourceContextRevisionSnapshot(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  tweetId: string,
+): Promise<TiboSourceContextRevisionSnapshot> {
+  try {
+    const { data, error } = await client
+      .from("tibo_signals")
+      .select("tweet_id,source_context_revision_hashes")
+      .eq("tweet_id", tweetId)
+      .maybeSingle();
+    if (error) {
+      return isMissingTiboOptionalColumnError(error)
+        ? { status: "schema_unavailable" }
+        : { status: "lookup_failed" };
+    }
+    if (!data || (Array.isArray(data) && data.length === 0)) return { status: "missing" };
+    const snapshot = Array.isArray(data) ? data[0] : data;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return { status: "lookup_failed" };
+    }
+    return {
+      status: "row",
+      revisionHashes: Array.isArray(snapshot.source_context_revision_hashes)
+        ? snapshot.source_context_revision_hashes.filter((value: unknown): value is string => typeof value === "string")
+        : [],
+    };
+  } catch {
+    return { status: "lookup_failed" };
   }
 }
 
@@ -518,6 +562,7 @@ async function handleTiboWebhookPost(
   req: NextRequest,
   internalOptions: {
     tiboEvidenceInput?: string | null;
+    tiboEvidenceContext?: TiboEvidenceContext | null;
     skipTranslation?: boolean;
     sourceContextRevisionHashes?: string[];
   } = {},
@@ -619,6 +664,12 @@ async function handleTiboWebhookPost(
             || sourceContextRevisionHashes.some((hash) => !/^[a-f0-9]{64}$/.test(hash))) {
             return NextResponse.json({ error: "Source context classification state unavailable" }, { status: 503 });
           }
+          if (hasRetryableTiboEvidenceOmission(storedEvidence.context)) {
+            console.warn("[Webhook Warning] Tibo source context dependency is not available yet", {
+              reason: "retryable_dependency_omission",
+            });
+            return NextResponse.json({ error: "Source context dependency is not available yet" }, { status: 503 });
+          }
           const classified = new Set(storedEvidence.sourceContextClassifiedRevisionHashes);
           if (sourceContextRevisionHashes.every((hash) => classified.has(hash))) {
             return NextResponse.json({ success: true, status: result.status }, { status: 200 });
@@ -640,6 +691,7 @@ async function handleTiboWebhookPost(
             {
               skipTranslation: true,
               tiboEvidenceInput: storedEvidence.input,
+              tiboEvidenceContext: storedEvidence.context,
               sourceContextRevisionHashes,
             },
           );
@@ -668,6 +720,8 @@ async function handleTiboWebhookPost(
 
     const hasEvidenceOverride = Object.prototype.hasOwnProperty.call(internalOptions, "tiboEvidenceInput");
     let tiboEvidenceInput = hasEvidenceOverride ? internalOptions.tiboEvidenceInput ?? null : null;
+    let tiboEvidenceContext = hasEvidenceOverride ? internalOptions.tiboEvidenceContext ?? null : null;
+    let normalSourceContextRevisionSnapshot: TiboSourceContextRevisionSnapshot | null = null;
     if (!hasEvidenceOverride && hasTiboSourceRelation(replyMetadata)) {
       try {
         const storedEvidence = await loadStoredTiboEvidence(
@@ -678,12 +732,31 @@ async function handleTiboWebhookPost(
           createdDate.toISOString(),
         );
         tiboEvidenceInput = storedEvidence?.input ?? null;
+        tiboEvidenceContext = storedEvidence?.context ?? null;
+        if (storedEvidence) {
+          normalSourceContextRevisionSnapshot = {
+            status: "row",
+            revisionHashes: storedEvidence.sourceContextRevisionHashes,
+          };
+        }
       } catch {
         // Source evidence is auxiliary. Keep the existing classification path
         // available when the canonical source-context read is unavailable.
         console.warn("[Webhook Warning] Tibo source evidence lookup unavailable", {
           reason: "lookup_failed",
         });
+      }
+    }
+    if (!internalOptions.sourceContextRevisionHashes && !normalSourceContextRevisionSnapshot) {
+      normalSourceContextRevisionSnapshot = await loadTiboSourceContextRevisionSnapshot(
+        getSupabaseServiceClient(),
+        tweetId,
+      );
+      if (normalSourceContextRevisionSnapshot.status === "lookup_failed") {
+        console.warn("[Webhook Warning] Tibo source context revision lookup failed", {
+          reason: "lookup_failed",
+        });
+        return NextResponse.json({ error: "Tibo state lookup unavailable" }, { status: 503 });
       }
     }
 
@@ -752,6 +825,10 @@ async function handleTiboWebhookPost(
       && selectedClassification.classificationSource === "rule_fallback") {
       return NextResponse.json({ error: "Source context classification fell back to rules" }, { status: 503 });
     }
+    if (internalOptions.sourceContextRevisionHashes && tiboEvidenceContext
+      && hasRetryableTiboEvidenceOmission(tiboEvidenceContext)) {
+      return NextResponse.json({ error: "Source context dependency is not available yet" }, { status: 503 });
+    }
     const contextSafetyDecision = getTiboContextSafetyDecision({
       authorText: text,
       replyContextText: replyMetadata.replyContextText,
@@ -760,6 +837,12 @@ async function handleTiboWebhookPost(
       quoteTweetUrl: replyMetadata.quoteTweetUrl,
       selectedSignalType: selectedClassification.signalType,
       aiTeaserStrength: aiResult?.teaserStrength,
+      evidenceQuote: aiResult?.evidenceQuote,
+      temporalDirection: aiResult?.temporalDirection,
+      targetTweetId: tweetId,
+      targetTweetUrl: tweetUrl,
+      targetTweetCreatedAt: createdDate.toISOString(),
+      validatedSourceContext: tiboEvidenceContext,
     });
     const effectiveClassification = contextSafetyDecision
       ? {
@@ -921,11 +1004,13 @@ async function handleTiboWebhookPost(
     // so an unknown existing state can never be overwritten.
     // Query runs after async translation so the snapshot is as fresh as possible.
     const supabase = getSupabaseServiceClient();
-    let existingSignal: Partial<FormalTiboResetSignal> | null = null;
+    let existingSignal: (Partial<FormalTiboResetSignal> & {
+      source_context_revision_hashes?: string[] | null;
+    }) | null = null;
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,is_quote,quote_context_text,quote_tweet_url,quote_author_handle")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,is_quote,quote_context_text,quote_tweet_url,quote_author_handle,source_context_revision_hashes")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -934,11 +1019,19 @@ async function handleTiboWebhookPost(
         // application deployment. Keep the existing state lookup usable during
         // that window, while all real lookup failures remain fail-closed.
         if (isMissingTiboOptionalColumnError(lookupError)) {
-          const legacyLookup = await supabase
+          const revisionAwareLegacyLookup = await supabase
             .from("tibo_signals")
-            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,is_reply,reply_to_handles,reply_context_text,source_timeline")
+            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,is_reply,reply_to_handles,reply_context_text,source_timeline,source_context_revision_hashes")
             .eq("tweet_id", tweetId)
             .maybeSingle();
+          const legacyLookup = revisionAwareLegacyLookup.error &&
+              isMissingTiboOptionalColumnError(revisionAwareLegacyLookup.error)
+            ? await supabase
+                .from("tibo_signals")
+                .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,is_reply,reply_to_handles,reply_context_text,source_timeline")
+                .eq("tweet_id", tweetId)
+                .maybeSingle()
+            : revisionAwareLegacyLookup;
           if (legacyLookup.error) {
             console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
               reason: "lookup_failed",
@@ -948,7 +1041,11 @@ async function handleTiboWebhookPost(
               { status: 503 },
             );
           }
-          existingSignal = legacyLookup.data as Partial<FormalTiboResetSignal> | null;
+          existingSignal = (Array.isArray(legacyLookup.data) && legacyLookup.data.length === 0
+            ? null
+            : legacyLookup.data) as (Partial<FormalTiboResetSignal> & {
+              source_context_revision_hashes?: string[] | null;
+            }) | null;
         } else {
           console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
             reason: "lookup_failed",
@@ -959,7 +1056,11 @@ async function handleTiboWebhookPost(
           );
         }
       } else {
-        existingSignal = data as Partial<FormalTiboResetSignal> | null;
+        existingSignal = (Array.isArray(data) && data.length === 0
+          ? null
+          : data) as (Partial<FormalTiboResetSignal> & {
+            source_context_revision_hashes?: string[] | null;
+          }) | null;
       }
 
     } catch {
@@ -1080,8 +1181,32 @@ async function handleTiboWebhookPost(
     // 8. Persist classification. Context reclassification is conditional on
     // the source revision set still matching the evidence snapshot used by
     // Gemini. The filter and update run atomically in Postgres, so a newer
-    // enrichment cannot be marked classified by an older model response.
-    let upsertResult: { error: unknown } = { error: null };
+    // enrichment cannot be overwritten by an older model response.
+    const normalExpectedRevisions = !internalOptions.sourceContextRevisionHashes &&
+      normalSourceContextRevisionSnapshot?.status === "row"
+      ? normalSourceContextRevisionSnapshot.revisionHashes
+      : null;
+    if (!internalOptions.sourceContextRevisionHashes &&
+      normalSourceContextRevisionSnapshot?.status === "missing" && existingSignal) {
+      console.warn("[Webhook Warning] Tibo signal appeared during classification", {
+        reason: "initial_insert_race",
+      });
+      return NextResponse.json({ error: "Tibo signal changed during classification" }, { status: 503 });
+    }
+    const writeNormalSignal = (value: typeof persistedPayload) => {
+      if (normalExpectedRevisions !== null) {
+        return supabase
+          .from("tibo_signals")
+          .update(value)
+          .eq("tweet_id", tweetId)
+          .eq("source_context_revision_hashes", `{${normalExpectedRevisions.join(",")}}`)
+          .select("tweet_id");
+      }
+      return normalSourceContextRevisionSnapshot?.status === "missing"
+        ? supabase.from("tibo_signals").insert(value)
+        : supabase.from("tibo_signals").upsert(value, { onConflict: "tweet_id" });
+    };
+    let persistenceResult: { error: unknown; data?: unknown } = { error: null };
     if (internalOptions.sourceContextRevisionHashes) {
       const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
       const contextUpdateResult = await supabase
@@ -1102,15 +1227,13 @@ async function handleTiboWebhookPost(
         });
         return NextResponse.json({ error: "Source context changed during classification" }, { status: 503 });
       }
-      upsertResult = contextUpdateResult;
+      persistenceResult = contextUpdateResult;
     } else {
-      upsertResult = await supabase
-        .from("tibo_signals")
-        .upsert(persistedPayload, { onConflict: "tweet_id" });
+      persistenceResult = await writeNormalSignal(persistedPayload);
     }
 
     if (!internalOptions.sourceContextRevisionHashes
-      && upsertResult.error && isMissingTiboOptionalColumnError(upsertResult.error)) {
+      && persistenceResult.error && isMissingTiboOptionalColumnError(persistenceResult.error)) {
       const {
         translated_text_ja: _translatedTextJa,
         translated_text_zh: _translatedTextZh,
@@ -1149,16 +1272,28 @@ async function handleTiboWebhookPost(
         secondary_signal: _secondarySignal,
         ...legacyPayload
       } = persistedPayload;
-      upsertResult = await supabase
-        .from("tibo_signals")
-        .upsert(legacyPayload, { onConflict: "tweet_id" });
+      persistenceResult = await writeNormalSignal(legacyPayload as typeof persistedPayload);
     }
 
-    if (upsertResult.error) {
-      console.error("[Webhook Error] Supabase upsert failed", {
+    if (persistenceResult.error) {
+      if (!internalOptions.sourceContextRevisionHashes
+        && normalSourceContextRevisionSnapshot?.status === "missing"
+        && (persistenceResult.error as { code?: unknown })?.code === "23505") {
+        return NextResponse.json({ error: "Tibo signal changed during classification" }, { status: 503 });
+      }
+      console.error("[Webhook Error] Tibo signal save failed", {
         reason: "database_error",
       });
       return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
+
+    const savedNormalRows = persistenceResult.data;
+    if (!internalOptions.sourceContextRevisionHashes && normalExpectedRevisions !== null
+      && (!Array.isArray(savedNormalRows) || savedNormalRows.length !== 1)) {
+      console.warn("[Webhook Warning] Tibo source context changed during normal classification", {
+        reason: "revision_set_changed",
+      });
+      return NextResponse.json({ error: "Source context changed during classification" }, { status: 503 });
     }
 
     // Make the durable source row visible even when a later best-effort formal

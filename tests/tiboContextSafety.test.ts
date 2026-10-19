@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getTiboContextSafetyDecision } from "../lib/radar/tiboContextSafety";
+import {
+  getTiboContextSafetyDecision,
+  type TiboContextSafetyInput,
+} from "../lib/radar/tiboContextSafety";
+import type { TiboEvidenceContext } from "../lib/radar/tiboEvidenceContext";
 import { getEffectiveTeaserStrength } from "../lib/radar/teaserStrength";
 import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 
@@ -350,4 +354,156 @@ test("Tibo self-quotes with explicit reset context do not demote official_notice
   });
 
   assert.equal(decision, null);
+});
+
+function validatedLandingContext(depth: 1 | 2 = 1, authorHandle = "@thsottiaux"): TiboEvidenceContext {
+  const targetId = "2115000000000000101";
+  const parentId = "2115000000000000102";
+  const grandparentId = "2115000000000000103";
+  const targetUrl = `https://x.com/thsottiaux/status/${targetId}`;
+  const parentUrl = `https://x.com/${authorHandle.slice(1)}/status/${parentId}`;
+  const grandparentUrl = `https://x.com/thsottiaux/status/${grandparentId}`;
+  const target = {
+    tweetId: targetId,
+    tweetUrl: targetUrl,
+    authorHandle: "@thsottiaux",
+    text: "Landing within the next 2 hours.",
+    createdAt: "2026-10-18T08:00:00.000Z",
+  };
+  const parent = {
+    tweetId: parentId,
+    tweetUrl: parentUrl,
+    authorHandle,
+    text: depth === 1 ? "Reset usage limits for all users tomorrow." : "A rollout is on the way.",
+    createdAt: "2026-10-18T07:00:00.000Z",
+  };
+  const grandparent = {
+    tweetId: grandparentId,
+    tweetUrl: grandparentUrl,
+    authorHandle: "@thsottiaux",
+    text: "Reset usage limits for all users tomorrow.",
+    createdAt: "2026-10-17T08:00:00.000Z",
+  };
+  return {
+    version: "tibo-evidence-context-v1",
+    status: "complete",
+    target,
+    relatedPosts: depth === 1 ? [parent] : [parent, grandparent],
+    edges: depth === 1
+      ? [{ fromTweetId: targetId, toTweetId: parentId, relation: "reply" }]
+      : [
+          { fromTweetId: targetId, toTweetId: parentId, relation: "reply" },
+          { fromTweetId: parentId, toTweetId: grandparentId, relation: "reply" },
+        ],
+    omissions: [],
+    lookupCount: depth,
+  };
+}
+
+test("validated same-author one-hop and two-hop evidence can support an exact future notice", () => {
+  for (const depth of [1, 2] as const) {
+    const validatedSourceContext = validatedLandingContext(depth);
+    const decision = getTiboContextSafetyDecision({
+      authorText: "Landing within the next 2 hours.",
+      replyContextText: depth === 1 ? "Reset usage limits for all users tomorrow." : "A rollout is on the way.",
+      selectedSignalType: "official_notice",
+      evidenceQuote: "Landing within the next 2 hours.",
+      temporalDirection: "future",
+      targetTweetId: "2115000000000000101",
+      targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
+      targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
+      validatedSourceContext,
+    });
+
+    assert.equal(decision, null, `${depth}-hop evidence should remain attributable to the aligned post`);
+  }
+});
+
+test("elliptical notices require a matching validated graph and do not bypass negation, BANKED, or history guards", () => {
+  const validContext = validatedLandingContext();
+  const base = {
+    authorText: "Landing within the next 2 hours.",
+    replyContextText: "Reset usage limits for all users tomorrow.",
+    selectedSignalType: "official_notice" as const,
+    evidenceQuote: "Landing within the next 2 hours.",
+    temporalDirection: "future" as const,
+    targetTweetId: "2115000000000000101",
+    targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
+    targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
+  };
+  const assertSuppressed = (overrides: Partial<TiboContextSafetyInput>, reason: string) => {
+    const decision = getTiboContextSafetyDecision({
+      ...base,
+      validatedSourceContext: validContext,
+      ...overrides,
+    });
+    assert.equal(decision?.signalType, "irrelevant", reason);
+  };
+
+  assertSuppressed({ validatedSourceContext: null }, "missing graph");
+  assertSuppressed({ evidenceQuote: "This is not the quote from the target post." }, "misaligned AI evidence");
+  assertSuppressed({ targetTweetId: "2115000000000000999" }, "different target ID");
+  assertSuppressed({
+    validatedSourceContext: validatedLandingContext(1, "@other_user"),
+  }, "foreign source author");
+  assertSuppressed({
+    authorText: "The reset is not landing in the next 2 hours.",
+    evidenceQuote: "The reset is not landing in the next 2 hours.",
+  }, "negated author statement");
+  assertSuppressed({
+    replyContextText: "BANKED reset credits are being distributed to users tomorrow.",
+    validatedSourceContext: {
+      ...validContext,
+      relatedPosts: [{
+        ...validContext.relatedPosts[0],
+        text: "BANKED reset credits are being distributed to users tomorrow.",
+      }],
+    },
+  }, "BANKED distribution");
+  assertSuppressed({
+    replyContextText: "I will reset usage limits for my account tomorrow.",
+    validatedSourceContext: {
+      ...validContext,
+      relatedPosts: [{
+        ...validContext.relatedPosts[0],
+        text: "I will reset usage limits for my account tomorrow.",
+      }],
+    },
+  }, "personal reset");
+  assertSuppressed({
+    replyContextText: "Reset usage limits for all users tomorrow. The product rollout is a separate event.",
+    validatedSourceContext: {
+      ...validContext,
+      relatedPosts: [{
+        ...validContext.relatedPosts[0],
+        text: "Reset usage limits for all users tomorrow. The product rollout is a separate event.",
+      }],
+    },
+  }, "explicitly different event");
+  assertSuppressed({
+    replyContextText: "Remember when we reset usage limits? This landing is about another event.",
+    validatedSourceContext: {
+      ...validContext,
+      relatedPosts: [{
+        ...validContext.relatedPosts[0],
+        text: "Remember when we reset usage limits? This landing is about another event.",
+      }],
+    },
+  }, "historical or unrelated event");
+});
+
+test("a completed elliptical phrase does not gain reset execution authority from source context", () => {
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Done and dusted.",
+    replyContextText: "Reset usage limits for all users tomorrow.",
+    selectedSignalType: "reset_executed",
+    evidenceQuote: "Done and dusted.",
+    temporalDirection: "completed_now",
+    targetTweetId: "2115000000000000101",
+    targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
+    targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
+    validatedSourceContext: validatedLandingContext(),
+  });
+
+  assert.equal(decision?.signalType, "irrelevant");
 });

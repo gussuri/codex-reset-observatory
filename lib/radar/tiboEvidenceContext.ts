@@ -65,6 +65,12 @@ export type TiboEvidenceContext = {
   lookupCount: number;
 };
 
+export function hasRetryableTiboEvidenceOmission(context: TiboEvidenceContext) {
+  return context.omissions.some((omission) =>
+    omission.reason === "not_found" || omission.reason === "lookup_failed",
+  );
+}
+
 const MAX_HOPS = 2;
 const MAX_RELATED_POSTS = 3;
 const MAX_RELATED_POST_LOOKUPS = 3;

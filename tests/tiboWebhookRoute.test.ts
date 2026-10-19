@@ -706,7 +706,7 @@ test("long-form current reset announcement is accepted by the webhook", async ()
   globalThis.fetch = async (_input, init) => {
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     const method = init?.method ?? "GET";
-    return new Response(JSON.stringify({ data: method === "GET" ? null : [], error: null }), {
+    return new Response(JSON.stringify(method === "GET" ? null : []), {
       status: method === "GET" ? 200 : 201,
       headers: { "content-type": "application/json" },
     });
@@ -756,12 +756,12 @@ test("context-only item receipt does not persist Gemini teaser as an effective t
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     const method = init?.method ?? "GET";
     if (method === "GET") {
-      return new Response(JSON.stringify({ data: null, error: null }), {
+      return new Response(JSON.stringify(null), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify({ data: [], error: null }), {
+    return new Response(JSON.stringify([]), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
@@ -1429,6 +1429,7 @@ test("webhook reclassification updates secondary AI fields but preserves a manua
         edit_history_tweet_ids: [tweetId],
         edit_version: 1,
         edit_metadata_source: "none",
+        source_context_revision_hashes: [],
       };
       return new Response(JSON.stringify(url.includes("tweet_id=in.") ? [signal] : signal), {
         status: 200,
@@ -1454,6 +1455,15 @@ test("webhook reclassification updates secondary AI fields but preserves a manua
           updated_at: now,
         },
       }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (method === "PATCH") {
+      return new Response(JSON.stringify([{
+        tweet_id: tweetId,
+        source_context_revision_hashes: [],
+      }]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -1861,15 +1871,16 @@ test("new reply metadata is validated and persisted while old payload fields rem
   process.env.GEMINI_CLASSIFICATION_MODE = "off";
   process.env.GEMINI_TRANSLATION_MODE = "off";
   globalThis.fetch = async (input, init) => {
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
-    if (fetchMethods.length === 1) {
-      return new Response(JSON.stringify({ data: null, error: null }), {
+    if (method === "GET") {
+      return new Response(JSON.stringify([]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify({ data: [], error: null }), {
+    return new Response(JSON.stringify([]), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
@@ -1889,7 +1900,7 @@ test("new reply metadata is validated and persisted while old payload fields rem
       }),
     );
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "GET", "POST"]);
+    assert.deepEqual(fetchMethods, ["GET", "GET", "GET", "POST"]);
     const upsertBody = requestBodies[0] as Record<string, unknown>;
     assert.equal(upsertBody.is_reply, true);
     assert.deepEqual(upsertBody.reply_to_handles, ["@alice"]);
@@ -1924,7 +1935,9 @@ test("webhook reprocessing preserves a manual final teaser state", async () => {
   globalThis.fetch = async (_input, init) => {
     fetchCalls += 1;
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
-    if (fetchCalls === 1) {
+    const method = init?.method ?? (_input instanceof Request ? _input.method : "GET");
+    const url = _input instanceof Request ? _input.url : String(_input);
+    if (method === "GET" && url.includes("/tibo_signals")) {
       return new Response(JSON.stringify({
         tweet_id: "2089063967301730789",
         text: "Maybe",
@@ -1948,13 +1961,14 @@ test("webhook reprocessing preserves a manual final teaser state", async () => {
         ai_confidence: 0.95,
         ai_reason_ja: "文脈のない短い返信として判定しました。",
         ai_teaser_strength: null,
+        source_context_revision_hashes: [],
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
-    if (fetchCalls === 2) {
-      return new Response(JSON.stringify({ data: null, error: null }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      });
+    if (method === "PATCH" && url.includes("/tibo_signals")) {
+      return new Response(JSON.stringify([{
+        tweet_id: "2089063967301730789",
+        source_context_revision_hashes: [],
+      }]), { status: 200, headers: { "content-type": "application/json" } });
     }
     return new Response(JSON.stringify({ data: [], error: null }), {
       status: 200,
@@ -2002,13 +2016,8 @@ test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async (
   globalThis.fetch = async (input, init) => {
     fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
-    if (fetchMethods.length === 1) {
-      return new Response(JSON.stringify({ data: null, error: null }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    if (fetchMethods.length === 2) {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.includes("/codex_usage_monitor_state")) {
       return new Response(JSON.stringify({
         source_key: "local-codex-app-server",
         observed_at: new Date(receivedAt - 30_000).toISOString(),
@@ -2025,14 +2034,8 @@ test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async (
         headers: { "content-type": "application/json" },
       });
     }
-    if (fetchMethods.length === 3) {
-      return new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    return new Response(JSON.stringify({ data: [], error: null }), {
-      status: 201,
+    return new Response(JSON.stringify([]), {
+      status: fetchMethods.at(-1) === "GET" ? 200 : 201,
       headers: { "content-type": "application/json" },
     });
   };
@@ -2043,7 +2046,7 @@ test("fresh Usage Monitor coverage defers an uncorroborated Tibo reset", async (
     }));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "GET", "GET", "POST"]);
+    assert.deepEqual(fetchMethods, ["GET", "GET", "GET", "GET", "POST"]);
     const upsertBody = requestBodies[0] as Record<string, unknown>;
     assert.equal(upsertBody.signal_type, "irrelevant");
     assert.equal(upsertBody.rule_signal_type, "reset_executed");
@@ -2134,7 +2137,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
 
     assert.equal(response.status, 200);
     assert.deepEqual(fetchMethods, [
-      "POST", "GET", "GET", "POST", "GET", "GET", "GET", "GET",
+      "GET", "POST", "GET", "GET", "POST", "GET", "GET", "GET", "GET",
       "POST", "GET", "GET", "GET", "GET", "POST", "GET", "POST", "GET", "POST", "GET", "POST",
     ]);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
@@ -2174,10 +2177,12 @@ test("preserves an existing locale translation while filling only the missing lo
         candidates: [{ content: { parts: [{ text: JSON.stringify({ ja: "上書き禁止", zh: "新的中文" }) }] } }],
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
-    if (method === "POST" && url.includes("/tibo_signals")) {
+    if ((method === "POST" || method === "PATCH") && url.includes("/tibo_signals")) {
       upserts.push(JSON.parse(String(init?.body)));
-      return new Response(JSON.stringify({ data: [], error: null }), {
-        status: 201,
+      return new Response(JSON.stringify(method === "PATCH"
+        ? [{ tweet_id: "2084000000000000200", source_context_revision_hashes: [] }]
+        : []), {
+        status: method === "PATCH" ? 200 : 201,
         headers: { "content-type": "application/json" },
       });
     }
@@ -2194,6 +2199,7 @@ test("preserves an existing locale translation while filling only the missing lo
         verification_status: "unverified",
         classification_source: "rule",
         is_reply: false,
+        source_context_revision_hashes: [],
         translated_text_ja: "既存の日本語",
         translated_text_zh: null,
       }), { status: 200, headers: { "content-type": "application/json" } });

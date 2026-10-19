@@ -1,5 +1,12 @@
 import type { ClassificationSignalType } from "./classification";
+import { getTiboClassificationSafetyDecision } from "./classification";
 import type { TeaserStrength } from "./teaserStrength";
+import { isBankedDistributionCompletionSignal, isBankedDistributionNotice } from "./bankedReset";
+import {
+  hasRetryableTiboEvidenceOmission,
+  type TiboEvidenceContext,
+  type TiboEvidenceNode,
+} from "./tiboEvidenceContext";
 import { isTiboHandle } from "./tiboHandle";
 
 export type TiboContextSafetyInput = {
@@ -10,6 +17,12 @@ export type TiboContextSafetyInput = {
   quoteTweetUrl?: string | null;
   selectedSignalType: ClassificationSignalType;
   aiTeaserStrength?: TeaserStrength | null;
+  evidenceQuote?: string | null;
+  temporalDirection?: "future" | "completed_now" | "historical" | "unclear" | null;
+  targetTweetId?: string | null;
+  targetTweetUrl?: string | null;
+  targetTweetCreatedAt?: string | null;
+  validatedSourceContext?: TiboEvidenceContext | null;
 };
 
 export type TiboContextSafetyDecision =
@@ -49,8 +62,11 @@ const PHYSICAL_ITEM_SHOWCASE_CUE_PATTERN = /\b(?:not\s+used\s+yet|(?:would\s+you
 const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage|quota|rate\s+limit|allowance|capacity)\b/i;
 const PERSON_TARGETED_RESET_PATTERN = /\b(?!codex\b|usage\b|quota\b|limits?\b|allowances?\b)[a-z][a-z'-]{1,30}\s+is\s+in\s+need\s+of\s+(?:a\s+)?reset\b/i;
 const HISTORICAL_RESET_CONTEXT_PATTERN = /\b(?:previously\s+promised\s+a\s+reset|one\s+day\s+(?:we|i)\s+(?:created|made)\s+the\s+reset\s+button|remember\s+when|long\s+time\s+ago|rest\s+is\s+history|(?:last\s+)?(?:year|month)s?\s+ago)\b/i;
-const FUTURE_CUE_PATTERN = /\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|in\s+(?:the\s+)?(?:next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i;
+const FUTURE_CUE_PATTERN = /\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|(?:in|within)\s+(?:the\s+)?(?:next\s+\d+|next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i;
+const ELLIPTICAL_FUTURE_EVENT_PATTERN = /\b(?:land(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|com(?:e|es|ing))\b/i;
+const ELLIPTICAL_EVENT_NEGATION_PATTERN = /\b(?:not|never|no\s+longer|cancel(?:led|ed)?|canceled)\b[^.!?]{0,70}\b(?:land(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|com(?:e|es|ing))\b/i;
 const AMBIGUOUS_FUTURE_NOUN_PATTERN = /\b(?:surprise|something|news|announcement|update)\b/i;
+const DIFFERENT_EVENT_CONTEXT_PATTERN = /\b(?:separately|separate\s+(?:event|announcement|rollout)|unrelated|another\s+event|different\s+event)\b/i;
 const EXPLICIT_FUTURE_RESET_INTENT_PATTERNS = [
   /\b(?:will|going\s+to|plan(?:s|ned)?\s+to|i['’]ll|we['’]ll)\b[^.!?]{0,100}\b(?:reset|resetting|usage[-\s]+limits?|quotas?|allowances?)\b/i,
   /\b(?:reset|resetting)\b[^.!?]{0,60}\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in\s+(?:the\s+)?(?:next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i,
@@ -65,6 +81,113 @@ function normalizeContext(value: string | null | undefined) {
 
 function hasExplicitFutureResetIntent(text: string) {
   return EXPLICIT_FUTURE_RESET_INTENT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function getTweetIdentity(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !/^(?:x|twitter)\.com$/i.test(url.hostname)
+      || url.username || url.password || url.port || url.search || url.hash) return null;
+    const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
+    return match ? { tweetId: match[2]!, authorHandle: `@${match[1]!.toLowerCase()}` } : null;
+  } catch {
+    return null;
+  }
+}
+
+function getValidatedPath(
+  context: TiboEvidenceContext,
+  targetTweetId: string,
+  relatedTweetId: string,
+): TiboEvidenceNode[] | null {
+  const nodes = new Map<string, TiboEvidenceNode>();
+  if (context.target) nodes.set(context.target.tweetId, context.target);
+  for (const post of context.relatedPosts) nodes.set(post.tweetId, post);
+  const queue: Array<{ tweetId: string; path: TiboEvidenceNode[] }> = [];
+  const target = nodes.get(targetTweetId);
+  if (!target) return null;
+  queue.push({ tweetId: targetTweetId, path: [target] });
+
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current.tweetId === relatedTweetId) return current.path;
+    if (current.path.length > 2) continue;
+    for (const edge of context.edges) {
+      if (edge.fromTweetId !== current.tweetId) continue;
+      const next = nodes.get(edge.toTweetId);
+      if (!next || current.path.some((node) => node.tweetId === next.tweetId)) continue;
+      queue.push({ tweetId: next.tweetId, path: [...current.path, next] });
+    }
+  }
+  return null;
+}
+
+function hasValidatedEllipticalNoticeEvidence(input: TiboContextSafetyInput, authorText: string) {
+  const exactSourceText = typeof input.authorText === "string" ? input.authorText : "";
+  if (
+    input.selectedSignalType !== "official_notice" ||
+    input.temporalDirection !== "future" ||
+    !input.evidenceQuote ||
+    !exactSourceText.includes(input.evidenceQuote.trim()) ||
+    !ELLIPTICAL_FUTURE_EVENT_PATTERN.test(authorText) ||
+    !FUTURE_CUE_PATTERN.test(authorText) ||
+    ELLIPTICAL_EVENT_NEGATION_PATTERN.test(authorText) ||
+    DIFFERENT_EVENT_CONTEXT_PATTERN.test(authorText) ||
+    /\b(?:my|my own|my account|my personal|individual(?:ly)?|for myself)\b/i.test(authorText)
+  ) return false;
+
+  const context = input.validatedSourceContext;
+  const targetTweetId = input.targetTweetId?.trim();
+  const targetTweetUrl = getTweetIdentity(input.targetTweetUrl);
+  const targetCreatedAt = Date.parse(input.targetTweetCreatedAt ?? "");
+  if (
+    !context ||
+    !context.target ||
+    context.status === "invalid_target" ||
+    hasRetryableTiboEvidenceOmission(context) ||
+    !targetTweetId ||
+    !targetTweetUrl ||
+    targetTweetUrl.tweetId !== targetTweetId ||
+    targetTweetUrl.authorHandle !== "@thsottiaux" ||
+    context.target.tweetId !== targetTweetId ||
+    !isTiboHandle(context.target.authorHandle) ||
+    normalizeContext(context.target.text.trim()) !== authorText ||
+    !Number.isFinite(targetCreatedAt) ||
+    Date.parse(context.target.createdAt) !== targetCreatedAt
+  ) return false;
+
+  const directReplyContext = normalizeContext(input.replyContextText);
+  const directQuoteContext = normalizeContext(input.quoteContextText);
+  const resetContextPosts = context.relatedPosts.filter((post) =>
+    EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(post.text)),
+  );
+  if (resetContextPosts.length !== 1) return false;
+
+  const resetContextPost = resetContextPosts[0]!;
+  const resetContextText = normalizeContext(resetContextPost.text);
+  if (
+    !isTiboHandle(resetContextPost.authorHandle) ||
+    !USAGE_LIMIT_CONTEXT_PATTERN.test(resetContextText) ||
+    isBankedDistributionNotice(resetContextPost.text) ||
+    isBankedDistributionCompletionSignal(resetContextPost.text) ||
+    DIFFERENT_EVENT_CONTEXT_PATTERN.test(resetContextPost.text) ||
+    /\b(?:banked|my\s+(?:own\s+)?account|for\s+myself|individual\s+users?)\b/i.test(resetContextText) ||
+    getTiboClassificationSafetyDecision(resetContextPost.text, "official_notice").signalType !== "official_notice"
+  ) return false;
+
+  const path = getValidatedPath(context, targetTweetId, resetContextPost.tweetId);
+  if (!path || path.length < 2 || path.length > 3 || path.some((node) => !isTiboHandle(node.authorHandle))) return false;
+  const firstEdge = context.edges.find((edge) => edge.fromTweetId === targetTweetId && edge.toTweetId === path[1]!.tweetId);
+  if (!firstEdge) return false;
+  if (firstEdge.relation === "reply" && directReplyContext !== normalizeContext(path[1]!.text)) return false;
+  if (firstEdge.relation === "quote" && (
+    directQuoteContext !== normalizeContext(path[1]!.text) ||
+    !isTiboHandle(input.quoteAuthorHandle) ||
+    getTweetIdentity(input.quoteTweetUrl)?.tweetId !== path[1]!.tweetId
+  )) return false;
+
+  return true;
 }
 
 /**
@@ -87,6 +210,17 @@ export function getTiboContextSafetyDecision(
 
   if (!hasResetSignal) return null;
 
+  if (
+    getTiboClassificationSafetyDecision(input.authorText, input.selectedSignalType).reasonCode === "explicit_negation" ||
+    (input.selectedSignalType !== "irrelevant" && ELLIPTICAL_EVENT_NEGATION_PATTERN.test(authorText))
+  ) {
+    return {
+      signalType: "irrelevant",
+      teaserStrength: "none",
+      reasonJa: "Context safety guard: 本文がresetの予告または実施を否定しているため、無関係として扱います。",
+    };
+  }
+
   const isTiboSelfQuote =
     Boolean(isTiboHandle(input.quoteAuthorHandle) || isTiboHandle(input.quoteTweetUrl)) &&
     Boolean(input.quoteContextText && EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(input.quoteContextText)));
@@ -102,7 +236,11 @@ export function getTiboContextSafetyDecision(
     externalContexts.some((value) =>
       EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(value)),
     );
-  if (contextOnlyResetClaim && input.selectedSignalType !== "teaser") {
+  if (
+    contextOnlyResetClaim &&
+    input.selectedSignalType !== "teaser" &&
+    !hasValidatedEllipticalNoticeEvidence(input, authorText)
+  ) {
     return {
       signalType: "irrelevant",
       teaserStrength: "none",

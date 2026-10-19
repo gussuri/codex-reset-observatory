@@ -201,7 +201,8 @@ function installSourceContextDatabase(
         const tweetId = url.searchParams.get("tweet_id")?.replace(/^eq\./, "");
         const root = tweetId ? rows.get(tweetId) : null;
         patchRoot = root ?? undefined;
-        if (failContextClassificationUpdateOnce) {
+        if (failContextClassificationUpdateOnce
+          && url.searchParams.get("source_context_revision_hashes") !== "eq.{}") {
           failContextClassificationUpdateOnce = false;
           return new Response(JSON.stringify({ message: "injected context classification save failure" }), { status: 500 });
         }
@@ -670,6 +671,287 @@ test("source-context reclassification keeps BANKED completion and reviewed manua
     assert.equal(database.urls.some((url) => url.includes("reset_execution_estimates")), false);
     assert.equal(database.upserts.filter((row) => row.tweet_id === bankedId).length, 2);
   } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("an exact Landing notice is saved when a validated one-hop or two-hop Tibo path supplies reset context", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const tweetId = "2115000000000000121";
+  const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
+  const text = "Landing within the next 2 hours.";
+  const createdAt = "2026-10-18T08:00:00.000Z";
+  const intermediateText = "A rollout is on the way tomorrow.";
+  const grandparentId = "2115000000000000123";
+  const grandparentText = "Reset usage limits for all users tomorrow.";
+  const noticeResult = {
+    signalType: "official_notice",
+    confidence: 0.94,
+    temporalDirection: "future",
+    evidenceQuote: text,
+    reasonJa: "検証済みの返信経路につながる利用上限リセットの告知です。",
+    resetTypeJa: null,
+    teaserStrength: "none",
+    teaserStrengthConfidence: 0.9,
+    teaserStrengthEvidenceQuote: null,
+    teaserStrengthReasonJa: null,
+  };
+  const targetRow = {
+    tweet_id: tweetId,
+    text,
+    tweet_url: tweetUrl,
+    tweet_created_at: createdAt,
+    verification_status: "auto_unverified",
+    is_reply: true,
+    reply_context_text: PARENT_TEXT,
+    source_context_snapshot: null,
+    source_context_revision_hashes: [],
+    source_context_classified_revision_hashes: [],
+  };
+  const rootReply = (replyText: string) => ({
+    isReply: true,
+    replyToHandles: ["@thsottiaux"],
+    replyParentTweetId: PARENT_ID,
+    replyParentTweetUrl: PARENT_URL,
+    replyContextText: replyText,
+    sourceTimeline: "with_replies" as const,
+  });
+  const buildLandingRequest = (replyText: string, kind?: string) => buildRequest({
+    tweetId,
+    text,
+    tweetUrl,
+    tweetCreatedAt: createdAt,
+    ...(kind ? { kind } : {}),
+    ...rootReply(replyText),
+  });
+
+  try {
+    for (const pathLength of [1, 2] as const) {
+      const parentText = pathLength === 1 ? PARENT_TEXT : intermediateText;
+      const rows: WebhookRow[] = [
+        targetRow,
+        {
+          ...parentRow(),
+          text: parentText,
+          ...(pathLength === 2 ? {
+            is_reply: true,
+            reply_context_text: grandparentText,
+            source_context_snapshot: {
+              parent: {
+                tweetId: grandparentId,
+                tweetUrl: `https://x.com/thsottiaux/status/${grandparentId}`,
+                authorHandle: "@thsottiaux",
+                text: grandparentText,
+              },
+            },
+          } : {}),
+        },
+        ...(pathLength === 2 ? [{
+          tweet_id: grandparentId,
+          text: grandparentText,
+          tweet_url: `https://x.com/thsottiaux/status/${grandparentId}`,
+          tweet_created_at: PARENT_CREATED_AT,
+          verification_status: "confirmed",
+          is_reply: false,
+          is_quote: false,
+        }] : []),
+      ];
+      const database = installSourceContextDatabase(rows);
+      const gemini = installGeminiPromptCapture([noticeResult, noticeResult]);
+      try {
+        const requestMetadata = rootReply(parentText);
+        const initialResponse = await POST(buildRequest({
+          tweetId,
+          text,
+          tweetUrl,
+          tweetCreatedAt: createdAt,
+          ...requestMetadata,
+        }));
+        assert.equal(initialResponse.status, 200);
+
+        const enrichmentResponse = await POST(buildLandingRequest(parentText, "source_context_enrichment"));
+
+        assert.equal(enrichmentResponse.status, 200, `${pathLength}-hop source context should classify`);
+        assert.equal(database.rows.get(tweetId)?.signal_type, "official_notice");
+        assert.equal(database.rows.get(tweetId)?.ai_signal_type, "official_notice");
+        assert.deepEqual(
+          database.rows.get(tweetId)?.source_context_classified_revision_hashes,
+          database.rows.get(tweetId)?.source_context_revision_hashes,
+        );
+        assert.match(gemini.prompts[1]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+        assert.match(gemini.prompts[1]!, new RegExp(pathLength === 1 ? PARENT_ID : grandparentId));
+        assert.equal((gemini.prompts[1]!.match(/"relation":"reply"/g) ?? []).length, pathLength);
+      } finally {
+        gemini.restore();
+        database.restore();
+      }
+    }
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
+
+test("missing and temporarily unreadable source parents stay retryable until the exact parent row is available", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+
+  try {
+    for (const failureMode of ["not_found", "lookup_failed"] as const) {
+      const database = installSourceContextDatabase(failureMode === "not_found" ? [] : [parentRow()]);
+      const gemini = installGeminiPromptCapture();
+      const originalFetch = globalThis.fetch;
+      let failParentLookup = failureMode === "lookup_failed";
+      if (failureMode === "lookup_failed") {
+        globalThis.fetch = async (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          if (failParentLookup && url.pathname.endsWith("/rest/v1/tibo_signals")
+            && url.searchParams.get("tweet_id") === `eq.${PARENT_ID}`) {
+            return new Response(JSON.stringify({ message: "temporary parent read failure" }), { status: 500 });
+          }
+          return originalFetch(input, init);
+        };
+      }
+      try {
+        assert.equal((await POST(buildRequest(sourceMetadata()))).status, 200);
+        const failedResponse = await POST(enrichmentRequest());
+
+        assert.equal(failedResponse.status, 503, `${failureMode} must remain retryable`);
+        assert.deepEqual(database.rows.get(TARGET_ID)?.source_context_classified_revision_hashes, []);
+        assert.equal(gemini.prompts.length, 1, `${failureMode} must be detected before the provider call`);
+
+        if (failureMode === "not_found") {
+          database.rows.set(PARENT_ID, parentRow());
+        } else {
+          failParentLookup = false;
+        }
+        const retryResponse = await POST(enrichmentRequest());
+
+        assert.equal(retryResponse.status, 200);
+        assert.deepEqual(
+          database.rows.get(TARGET_ID)?.source_context_classified_revision_hashes,
+          database.rows.get(TARGET_ID)?.source_context_revision_hashes,
+        );
+        assert.equal(database.rows.get(TARGET_ID)?.signal_type, "official_notice");
+        assert.equal(gemini.prompts.length, 2);
+        assert.match(gemini.prompts[1]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+      } finally {
+        globalThis.fetch = originalFetch;
+        gemini.restore();
+        database.restore();
+      }
+    }
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
+
+test("a permanent rejected-parent omission completes terminally and does not retry classification", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const database = installSourceContextDatabase([{ ...parentRow(), verification_status: "rejected" }]);
+  const gemini = installGeminiPromptCapture();
+
+  try {
+    assert.equal((await POST(buildRequest(sourceMetadata()))).status, 200);
+    const firstEnrichmentResponse = await POST(enrichmentRequest());
+    assert.equal(firstEnrichmentResponse.status, 200);
+    assert.deepEqual(
+      database.rows.get(TARGET_ID)?.source_context_classified_revision_hashes,
+      database.rows.get(TARGET_ID)?.source_context_revision_hashes,
+    );
+
+    const duplicateResponse = await POST(enrichmentRequest());
+    assert.equal(duplicateResponse.status, 200);
+    assert.deepEqual(await duplicateResponse.json(), { success: true, status: "duplicate" });
+    assert.equal(gemini.prompts.length, 2);
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a delayed normal webhook cannot overwrite a newer source-context classification", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const database = installSourceContextDatabase([parentRow(), contextTargetRow()]);
+  const validNotice = {
+    signalType: "official_notice",
+    confidence: 0.94,
+    temporalDirection: "future",
+    evidenceQuote: TARGET_TEXT,
+    reasonJa: "test notice",
+    teaserStrength: "none",
+  };
+  const gemini = installGeminiPromptCapture([validNotice, { ...validNotice, signalType: "irrelevant" }]);
+  const originalRequest = https.request;
+  let requestCount = 0;
+  let releaseFirstRequest: (() => void) | undefined;
+  let firstRequestStartedResolve: () => void = () => {};
+  const firstRequestStarted = new Promise<void>((resolve) => {
+    firstRequestStartedResolve = resolve;
+  });
+  https.request = ((...args: any[]) => {
+    const request = (originalRequest as any)(...args);
+    const originalEnd = request.end.bind(request);
+    if (++requestCount === 1) {
+      request.end = () => {
+        releaseFirstRequest = originalEnd;
+        firstRequestStartedResolve();
+      };
+    }
+    return request;
+  }) as typeof https.request;
+
+  try {
+    const delayedNormalResponsePromise = POST(buildRequest(sourceMetadata()));
+    await firstRequestStarted;
+    const enrichmentResponse = await POST(enrichmentRequest());
+    assert.equal(enrichmentResponse.status, 200);
+    assert.equal(database.rows.get(TARGET_ID)?.signal_type, "official_notice");
+
+    releaseFirstRequest!();
+    const delayedNormalResponse = await delayedNormalResponsePromise;
+
+    assert.equal(delayedNormalResponse.status, 503, "stale classification must lose the revision compare-and-swap");
+    assert.equal(database.rows.get(TARGET_ID)?.signal_type, "official_notice");
+    assert.deepEqual(
+      database.rows.get(TARGET_ID)?.source_context_classified_revision_hashes,
+      database.rows.get(TARGET_ID)?.source_context_revision_hashes,
+    );
+  } finally {
+    https.request = originalRequest;
     gemini.restore();
     database.restore();
     restoreEnvironment(previous);
