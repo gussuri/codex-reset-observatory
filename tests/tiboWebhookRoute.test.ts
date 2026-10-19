@@ -561,7 +561,7 @@ test("empty and whitespace-only source text are rejected before any database cal
   }
 });
 
-test("source-context enrichment exits before classification, translation, edit lookup, and adoption", async () => {
+test("duplicate source-context enrichment exits before classification, translation, edit lookup, and adoption", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -569,6 +569,7 @@ test("source-context enrichment exits before classification, translation, edit l
   const originalHttpsRequest = https.request;
   const requests: Array<{ url: string; method: string; body: unknown }> = [];
   let modelCalls = 0;
+  let revisionHash = "";
   process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
@@ -578,12 +579,42 @@ test("source-context enrichment exits before classification, translation, edit l
   process.env.GEMINI_TRANSLATION_MODE = "on";
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     requests.push({
       url,
-      method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+      method,
       body: init?.body ? JSON.parse(String(init.body)) : null,
     });
-    return new Response(JSON.stringify({ status: "applied" }), {
+    if (url.endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment")) {
+      revisionHash = (requests.at(-1)?.body as Record<string, string>).p_revision_hash;
+      return new Response(JSON.stringify({ status: "duplicate" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (new URL(url).pathname.endsWith("/rest/v1/tibo_signals") && method === "GET") {
+      return new Response(JSON.stringify([{
+        tweet_id: "2084000000000000200",
+        text: "I reset usage limits for Codex.",
+        tweet_url: "https://x.com/thsottiaux/status/2084000000000000200",
+        tweet_created_at: "2026-08-04T00:00:00.000Z",
+        verification_status: "auto_unverified",
+        is_reply: true,
+        reply_context_text: "Verified parent context",
+        source_context_snapshot: { parent: {
+          tweetId: "123456789012345678",
+          tweetUrl: "https://x.com/parent_author/status/123456789012345678",
+          authorHandle: "@parent_author",
+          text: "Verified parent context",
+        } },
+        source_context_revision_hashes: [revisionHash],
+        source_context_classified_revision_hashes: [revisionHash],
+      }]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ status: "duplicate" }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -607,11 +638,13 @@ test("source-context enrichment exits before classification, translation, edit l
     }));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { success: true, status: "applied" });
+    assert.deepEqual(await response.json(), { success: true, status: "duplicate" });
     assert.equal(modelCalls, 0);
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, 3);
     assert.equal(requests[0].url.endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment"), true);
     assert.equal(requests[0].method, "POST");
+    assert.equal(requests[1].method, "GET");
+    assert.equal(requests[2].method, "GET");
     const args = requests[0].body as Record<string, any>;
     assert.equal(args.p_tweet_id, "2084000000000000200");
     assert.equal(args.p_snapshot.parent.authorHandle, "@parent_author");
@@ -1856,7 +1889,7 @@ test("new reply metadata is validated and persisted while old payload fields rem
       }),
     );
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, ["GET", "POST"]);
+    assert.deepEqual(fetchMethods, ["GET", "GET", "POST"]);
     const upsertBody = requestBodies[0] as Record<string, unknown>;
     assert.equal(upsertBody.is_reply, true);
     assert.deepEqual(upsertBody.reply_to_handles, ["@alice"]);

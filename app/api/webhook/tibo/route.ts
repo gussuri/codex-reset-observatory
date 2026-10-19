@@ -34,12 +34,24 @@ import {
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { getCodexOperationalExpiryAt } from "@/lib/radar/codexOperationalStatus";
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
-import { parseTiboReplyMetadata } from "@/lib/radar/tiboReplyMetadata";
+import {
+  parseTiboReplyMetadata,
+  type TiboReplyMetadata,
+} from "@/lib/radar/tiboReplyMetadata";
 import {
   parseTiboSourceContextEnrichment,
   storeTiboSourceContextEnrichment,
   TIBO_SOURCE_CONTEXT_ENRICHMENT_KIND,
 } from "@/lib/radar/tiboSourceContext";
+import {
+  buildTiboEvidenceContext,
+  type TiboEvidencePost,
+} from "@/lib/radar/tiboEvidenceContext";
+import { formatTiboEvidenceInput } from "@/lib/radar/tiboEvidencePrompt";
+import {
+  createTiboEvidenceLookup,
+  type TiboEvidenceStoreClient,
+} from "@/lib/radar/tiboEvidenceStore";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
@@ -317,6 +329,76 @@ function getSupabaseServiceClient() {
   });
 }
 
+function hasTiboSourceRelation(metadata: TiboReplyMetadata) {
+  return metadata.isReply === true || metadata.isQuote === true ||
+    Boolean(metadata.replyContextText || metadata.quoteContextText || metadata.quoteTweetUrl);
+}
+
+function hasValidatedConnectedSourceEvidence(context: Awaited<ReturnType<typeof buildTiboEvidenceContext>>) {
+  return context.status !== "invalid_target" &&
+    (context.relatedPosts.length > 0 || context.omissions.length > 0);
+}
+
+function getTiboEvidenceLookup(client: ReturnType<typeof getSupabaseServiceClient>) {
+  return createTiboEvidenceLookup(client as unknown as TiboEvidenceStoreClient);
+}
+
+async function serializeTiboEvidenceContext(
+  target: TiboEvidencePost,
+  lookup: ReturnType<typeof getTiboEvidenceLookup>,
+) {
+  // The target row is fetched separately for identity validation; the builder
+  // limits only the additional related-post lookups.
+  const context = await buildTiboEvidenceContext(target, lookup);
+  return hasValidatedConnectedSourceEvidence(context) ? formatTiboEvidenceInput(context) : null;
+}
+
+function getTiboPostIdentity(tweetUrl: string) {
+  try {
+    const url = new URL(tweetUrl);
+    if (url.protocol !== "https:" || !/^(x|twitter)\.com$/i.test(url.hostname)
+      || url.username || url.password || url.port || url.search || url.hash) return null;
+    const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
+    return match ? { authorHandle: `@${match[1]!.toLowerCase()}`, tweetId: match[2]! } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadStoredTiboEvidence(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  tweetId: string,
+  text: string,
+  tweetUrl: string,
+  createdAt: string,
+) {
+  const lookup = getTiboEvidenceLookup(client);
+  try {
+    const rows = await lookup(tweetId);
+    if (rows.length !== 1) return null;
+    const target = rows[0]!;
+    const suppliedIdentity = getTiboPostIdentity(tweetUrl);
+    const storedIdentity = getTiboPostIdentity(target.tweetUrl);
+    if (!suppliedIdentity || !storedIdentity || suppliedIdentity.tweetId !== tweetId
+      || suppliedIdentity.authorHandle !== "@thsottiaux"
+      || storedIdentity.tweetId !== tweetId || storedIdentity.authorHandle !== "@thsottiaux"
+      || target.text.trim() !== text.trim()
+      || Date.parse(target.createdAt) !== Date.parse(createdAt)) {
+      return null;
+    }
+    return {
+      input: await serializeTiboEvidenceContext(target, lookup),
+      sourceContextRevisionHashes: target.sourceContextRevisionHashes ?? [],
+      sourceContextClassifiedRevisionHashes: target.sourceContextClassifiedRevisionHashes ?? [],
+    };
+  } catch {
+    console.warn("[Webhook Warning] Tibo source evidence lookup failed", {
+      reason: "lookup_failed",
+    });
+    return null;
+  }
+}
+
 async function fetchCanonicalTiboSourceRows(
   supabase: ReturnType<typeof getSupabaseServiceClient>,
   sourceTweetIds: readonly string[],
@@ -432,7 +514,14 @@ async function seedResetDisplayNameCandidateIfEligible(
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handleTiboWebhookPost(
+  req: NextRequest,
+  internalOptions: {
+    tiboEvidenceInput?: string | null;
+    skipTranslation?: boolean;
+    sourceContextRevisionHashes?: string[];
+  } = {},
+) {
   try {
     // 1. Fail closed if TIBO_WEBHOOK_SECRET is not configured
     const expectedSecret = process.env.TIBO_WEBHOOK_SECRET;
@@ -505,15 +594,62 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        const result = await storeTiboSourceContextEnrichment(
-          getSupabaseServiceClient(),
-          enrichmentResult.value,
-        );
+        const supabase = getSupabaseServiceClient();
+        const result = await storeTiboSourceContextEnrichment(supabase, enrichmentResult.value);
         if (result.status === "root_missing") {
           return NextResponse.json({ error: "Source root row is not available yet" }, { status: 503 });
         }
         if (result.status === "root_mismatch" || result.status === "conflict" || result.status === "revision_limit") {
           return NextResponse.json({ error: "Source context enrichment was not applied", status: result.status }, { status: 409 });
+        }
+        if (result.status === "applied" || result.status === "duplicate") {
+          // A duplicate may be a replay after the context merge succeeded but
+          // classification or its persistence failed. Consult the durable
+          // completion marker instead of treating duplicate as completion.
+          const storedEvidence = await loadStoredTiboEvidence(
+            supabase,
+            enrichmentResult.value.tweetId,
+            enrichmentResult.value.text,
+            enrichmentResult.value.tweetUrl,
+            enrichmentResult.value.tweetCreatedAt,
+          );
+          const sourceContextRevisionHashes = storedEvidence?.sourceContextRevisionHashes;
+          if (!storedEvidence || !Array.isArray(sourceContextRevisionHashes)
+            || sourceContextRevisionHashes.length === 0
+            || sourceContextRevisionHashes.some((hash) => !/^[a-f0-9]{64}$/.test(hash))) {
+            return NextResponse.json({ error: "Source context classification state unavailable" }, { status: 503 });
+          }
+          const classified = new Set(storedEvidence.sourceContextClassifiedRevisionHashes);
+          if (sourceContextRevisionHashes.every((hash) => classified.has(hash))) {
+            return NextResponse.json({ success: true, status: result.status }, { status: 200 });
+          }
+
+          const replayBody = {
+            tweetId: enrichmentResult.value.tweetId,
+            text: enrichmentResult.value.text,
+            tweetUrl: enrichmentResult.value.tweetUrl,
+            tweetCreatedAt: enrichmentResult.value.tweetCreatedAt,
+            ...replyMetadata,
+          };
+          const replayResponse = await handleTiboWebhookPost(
+            new NextRequest(req.url, {
+              method: "POST",
+              headers: new Headers(req.headers),
+              body: JSON.stringify(replayBody),
+            }),
+            {
+              skipTranslation: true,
+              tiboEvidenceInput: storedEvidence.input,
+              sourceContextRevisionHashes,
+            },
+          );
+          if (!replayResponse.ok) {
+            console.warn("[Webhook Warning] Tibo source context reclassification failed", {
+              reason: "reclassification_failed",
+              status: replayResponse.status,
+            });
+            return NextResponse.json({ error: "Source context classification unavailable" }, { status: 503 });
+          }
         }
         return NextResponse.json({ success: true, status: result.status }, { status: 200 });
       } catch {
@@ -530,6 +666,27 @@ export async function POST(req: NextRequest) {
     // 3. Existing Rule Classification
     const ruleResult = classifyTiboTweet(text, tweetUrl, replyMetadata);
 
+    const hasEvidenceOverride = Object.prototype.hasOwnProperty.call(internalOptions, "tiboEvidenceInput");
+    let tiboEvidenceInput = hasEvidenceOverride ? internalOptions.tiboEvidenceInput ?? null : null;
+    if (!hasEvidenceOverride && hasTiboSourceRelation(replyMetadata)) {
+      try {
+        const storedEvidence = await loadStoredTiboEvidence(
+          getSupabaseServiceClient(),
+          tweetId,
+          text,
+          tweetUrl,
+          createdDate.toISOString(),
+        );
+        tiboEvidenceInput = storedEvidence?.input ?? null;
+      } catch {
+        // Source evidence is auxiliary. Keep the existing classification path
+        // available when the canonical source-context read is unavailable.
+        console.warn("[Webhook Warning] Tibo source evidence lookup unavailable", {
+          reason: "lookup_failed",
+        });
+      }
+    }
+
     // 4. Gemini Classification (Optional based on GEMINI_CLASSIFICATION_MODE)
     const mode = normalizeTiboClassificationMode(process.env.GEMINI_CLASSIFICATION_MODE);
 
@@ -537,7 +694,13 @@ export async function POST(req: NextRequest) {
     if (shouldRunGeminiClassification(mode)) {
       try {
         aiResult = await classifyTiboWithSingleTransientRetry(() => classifyWithGemini(
-          { text, tweetCreatedAt, sourceTimeZone: TIBO_SOURCE_TIME_ZONE, ...replyMetadata },
+          {
+            text,
+            tweetCreatedAt,
+            sourceTimeZone: TIBO_SOURCE_TIME_ZONE,
+            ...replyMetadata,
+            ...(tiboEvidenceInput ? { tiboEvidenceInput } : {}),
+          },
           { mode },
         ));
       } catch {
@@ -576,7 +739,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (internalOptions.sourceContextRevisionHashes
+      && (!aiResult || aiResult.status !== "success")) {
+      console.warn("[Webhook Warning] Tibo source context classification did not complete", {
+        reason: aiResult?.status ?? "classification_skipped",
+      });
+      return NextResponse.json({ error: "Source context classification did not complete" }, { status: 503 });
+    }
+
     const selectedClassification = selectTiboClassification(mode, ruleResult, aiResult);
+    if (internalOptions.sourceContextRevisionHashes
+      && selectedClassification.classificationSource === "rule_fallback") {
+      return NextResponse.json({ error: "Source context classification fell back to rules" }, { status: 503 });
+    }
     const contextSafetyDecision = getTiboContextSafetyDecision({
       authorText: text,
       replyContextText: replyMetadata.replyContextText,
@@ -725,12 +900,14 @@ export async function POST(req: NextRequest) {
       classification_source: selectedClassification.classificationSource,
     };
 
-    let translationResult: Awaited<ReturnType<typeof translateWithGeminiWithRetry>> | null = null;
-    translationResult = await translateWithGeminiWithRetry({
-      text: text.trim(),
-      tweetCreatedAt: createdDate.toISOString(),
-    });
+    const translationResult = internalOptions.skipTranslation
+      ? null
+      : await translateWithGeminiWithRetry({
+          text: text.trim(),
+          tweetCreatedAt: createdDate.toISOString(),
+        });
     if (
+      translationResult &&
       translationResult.status !== "success" &&
       translationResult.status !== "skipped" &&
       translationResult.status !== "model_not_configured"
@@ -900,12 +1077,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 8. Supabase Upsert
-    let upsertResult = await supabase
-      .from("tibo_signals")
-      .upsert(persistedPayload, { onConflict: "tweet_id" });
+    // 8. Persist classification. Context reclassification is conditional on
+    // the source revision set still matching the evidence snapshot used by
+    // Gemini. The filter and update run atomically in Postgres, so a newer
+    // enrichment cannot be marked classified by an older model response.
+    let upsertResult: { error: unknown } = { error: null };
+    if (internalOptions.sourceContextRevisionHashes) {
+      const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
+      const contextUpdateResult = await supabase
+        .from("tibo_signals")
+        .update(persistedPayload)
+        .eq("tweet_id", tweetId)
+        .eq("source_context_revision_hashes", expectedRevisions)
+        .select("tweet_id");
+      if (contextUpdateResult.error) {
+        console.warn("[Webhook Warning] Tibo source context classification save failed", {
+          reason: "conditional_save_failed",
+        });
+        return NextResponse.json({ error: "Source context classification save unavailable" }, { status: 503 });
+      }
+      if (!Array.isArray(contextUpdateResult.data) || contextUpdateResult.data.length !== 1) {
+        console.warn("[Webhook Warning] Tibo source context changed during classification", {
+          reason: "revision_set_changed",
+        });
+        return NextResponse.json({ error: "Source context changed during classification" }, { status: 503 });
+      }
+      upsertResult = contextUpdateResult;
+    } else {
+      upsertResult = await supabase
+        .from("tibo_signals")
+        .upsert(persistedPayload, { onConflict: "tweet_id" });
+    }
 
-    if (upsertResult.error && isMissingTiboOptionalColumnError(upsertResult.error)) {
+    if (!internalOptions.sourceContextRevisionHashes
+      && upsertResult.error && isMissingTiboOptionalColumnError(upsertResult.error)) {
       const {
         translated_text_ja: _translatedTextJa,
         translated_text_zh: _translatedTextZh,
@@ -1414,6 +1619,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (internalOptions.sourceContextRevisionHashes) {
+      const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
+      const markerUpdateResult = await supabase
+        .from("tibo_signals")
+        .update({
+          source_context_classified_revision_hashes: internalOptions.sourceContextRevisionHashes,
+        })
+        .eq("tweet_id", tweetId)
+        .eq("source_context_revision_hashes", expectedRevisions)
+        .select("tweet_id");
+      if (markerUpdateResult.error) {
+        console.warn("[Webhook Warning] Tibo source context completion marker save failed", {
+          reason: "conditional_save_failed",
+        });
+        return NextResponse.json({ error: "Source context classification save unavailable" }, { status: 503 });
+      }
+      if (!Array.isArray(markerUpdateResult.data) || markerUpdateResult.data.length !== 1) {
+        console.warn("[Webhook Warning] Tibo source context changed before completion", {
+          reason: "revision_set_changed",
+        });
+        return NextResponse.json({ error: "Source context changed during classification" }, { status: 503 });
+      }
+    }
+
     const newlyAdopted = adoptionClaim?.status === "claimed_new";
     const formalAdoption = buildFormalAdoptionResult(newlyAdopted, formalCandidateForResponse);
 
@@ -1443,4 +1672,8 @@ export async function POST(req: NextRequest) {
     console.error("[Webhook Error] Request processing failed.");
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return handleTiboWebhookPost(req);
 }
