@@ -15,6 +15,11 @@ const MAX_SOURCE_CONTEXT_PENDING_ENTRIES = 50;
 const MAX_PENDING_TWEET_PAYLOADS = 50;
 const PENDING_RETRY_DELAY_MS = 10 * 60 * 1000;
 const MAX_PENDING_RETRY_ATTEMPTS = 3;
+const RETRYABLE_AI_CLASSIFICATION_STATUSES = new Set([
+  "timeout",
+  "rate_limited",
+  "api_error",
+]);
 const QUARANTINE_KEY = "tibo_quarantined_tweet_ids";
 const MAX_QUARANTINE_ENTRIES = 100;
 const AUTH_BLOCKED_REASON = "auth_blocked";
@@ -363,8 +368,13 @@ function persistPendingTweet(payload) {
   }).then((entries) => {
     const entry = entries.find((candidate) => candidate.tweetId === tweetId);
     return entry
-      ? { stored: true, retryExhausted: entry.retryExhausted === true }
-      : { stored: false, retryExhausted: false };
+      ? {
+          stored: true,
+          retryExhausted: entry.retryExhausted === true,
+          attempts: entry.attempts,
+          nextAttemptAt: entry.nextAttemptAt,
+        }
+      : { stored: false, retryExhausted: false, attempts: 0, nextAttemptAt: 0 };
   });
 }
 
@@ -1272,17 +1282,28 @@ async function getConfig() {
 }
 
 function enqueuePostTweet(payload) {
-  const persisted = persistPendingTweet(payload).catch((error) => {
-    void saveServiceDiagnostic({
-      reasonCode: "pending_queue_persist_error",
-      messages: ["The pending tweet queue could not be persisted."],
-      error: error?.message || String(error),
-      payloadMetadata: getTweetPayloadMetadata(payload),
-    });
-  });
   const resultPromise = processQueue
-    .then(() => persisted)
-    .then((pendingState) => {
+    .then(async () => {
+      let pendingState;
+      try {
+        pendingState = await persistPendingTweet(payload);
+      } catch (error) {
+        void saveServiceDiagnostic({
+          reasonCode: "pending_queue_persist_error",
+          messages: ["The pending tweet queue could not be persisted."],
+          error: error?.message || String(error),
+          payloadMetadata: getTweetPayloadMetadata(payload),
+        });
+      }
+
+      if (!pendingState?.stored) {
+        return {
+          success: false,
+          retryable: true,
+          error: "Tweet retry queue is unavailable; webhook request was not sent.",
+        };
+      }
+
       if (pendingState?.retryExhausted) {
         return {
           success: false,
@@ -1290,6 +1311,19 @@ function enqueuePostTweet(payload) {
           error: "Tweet webhook retry limit reached; use explicit retry to try again.",
         };
       }
+
+      if (
+        pendingState?.attempts > 0 &&
+        Number.isFinite(pendingState.nextAttemptAt) &&
+        pendingState.nextAttemptAt > Date.now()
+      ) {
+        return {
+          success: false,
+          retryable: true,
+          error: "Tweet webhook retry is waiting for its scheduled attempt.",
+        };
+      }
+
       return executePostTweetWithRecovery(payload);
     });
   processQueue = resultPromise.catch(() => {});
@@ -1463,6 +1497,22 @@ async function executePostTweet(payload) {
     await notifyFormalAdoption(json?.formalAdoption, domain);
   } catch {
     // Keep the webhook success result even when notification APIs are absent.
+  }
+
+  // The webhook persists a rule fallback and returns 2xx for these failures.
+  // Keep the tweet pending so the bounded queue can replay classification.
+  if (RETRYABLE_AI_CLASSIFICATION_STATUSES.has(json?.aiStatus)) {
+    await saveServiceDiagnostic({
+      reasonCode: "ai_classification_retry",
+      messages: ["The tweet was saved with a rule fallback after a transient AI classification failure."],
+      payloadMetadata: getTweetPayloadMetadata(payload),
+    });
+    await recordPendingFailure(payload);
+    return {
+      success: false,
+      retryable: true,
+      error: "Tweet saved with fallback; AI classification will be retried.",
+    };
   }
 
   // 4. Save to chrome.storage.local on 2xx success and verify write persistence

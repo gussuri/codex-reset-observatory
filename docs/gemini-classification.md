@@ -33,10 +33,12 @@ GEMINI_API_KEY=<set outside this repository>
 
 ## 実行上の制約と保存内容
 
-- 1投稿あたりのGemini API呼び出しは最大1回です。
+- 1回のWebhook処理では、最初の分類に加え、`timeout`、`rate_limited`、`api_error` の場合だけGemini分類を1回再試行します。合計で最大2回です。
 - モデルの自動フォールバックは行いません。Geminiが失敗した場合の最終結果のfallbackは、`primary`／`hybrid` の分類選択処理でルール分類へ戻します。
 - Geminiの応答は、4種類のシグナル種別、信頼度、時間方向、本文内に存在する証拠引用などを検証してから利用します。
 - ルール分類、Gemini分類、モデル名、分類ステータス、分類元はSupabaseの `public.tibo_signals` に監査情報として保存されます。
+- 最終的なGeminiステータスが `timeout`、`rate_limited`、`api_error` の場合、Chrome拡張は保存済みfallbackを処理済みにせず、tweet_id単位の再送キューへ入れます。Webhook全体の再送は初回を含め最大3回で、失敗が続く場合は明示的な再試行が必要です。
+- Webhook全体の各再送でもGeminiの分類を再実行するため、拡張機能経由では最大6回のGemini呼び出しが発生し得ます。不正なJSON、スキーマ不一致、証拠引用不一致、モデル未設定などはWebhook全体の自動再送を開始しません。
 
 分類ステータスには `success`、`skipped`、`timeout`、`rate_limited`、`invalid_json`、`invalid_schema`、`invalid_evidence`、`api_error`、`model_not_configured` などがあります。
 

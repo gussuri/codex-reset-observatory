@@ -879,7 +879,7 @@ test("403 is cleared by a successful connection test and can be sent again", asy
   assert.equal(context.mockFetchCalls.length, 3);
 });
 
-test("retryable webhook statuses are retried and are not quarantined", async () => {
+test("retryable webhook statuses remain pending until their scheduled retry", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext([], {
     fetchResponse: {
       ok: false,
@@ -901,11 +901,128 @@ test("retryable webhook statuses are retried and are not quarantined", async () 
   assert.equal(first.success, false);
   assert.equal(first.retryable, true);
   assert.equal(second.retryable, true);
-  assert.equal(mockFetchCalls.length, 2);
+  assert.equal(mockFetchCalls.length, 1);
+  assert.equal(localStore.tibo_pending_tweet_payloads[0].attempts, 1);
   assert.equal(localStore.tibo_quarantined_tweet_ids, undefined);
 });
 
-test("network webhook failures remain retryable and are not quarantined", async () => {
+test("transient AI classification fallback stays pending until a duplicate delivery succeeds", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: (_url, _fetchOpts, callIndex) => ({
+      ok: true,
+      status: 200,
+      json: async () => callIndex === 1
+        ? { success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }
+        : { success: true, aiStatus: "success", classificationSource: "gemini" },
+    }),
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149749",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149749",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.success, false);
+  assert.equal(first.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  assert.equal(context.localStore.tibo_processed_tweet_ids, undefined);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 1);
+
+  assert.equal((await context.sendMessage({ action: "POST_TWEET", payload })).retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+
+  const retry = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(retry.success, true);
+  assert.equal(context.mockFetchCalls.length, 2);
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, [payload.tweetId]);
+  assert.deepEqual(context.localStore.tibo_pending_tweet_payloads, []);
+
+  const duplicate = await context.sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(duplicate.skipped, true);
+  assert.equal(context.mockFetchCalls.length, 2);
+});
+
+test("transient AI classification retries exhaust the existing bounded queue", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }),
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149750",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149750",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.retryable, true);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  const stopped = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(stopped.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].retryExhausted, true);
+});
+
+test("a full retry queue prevents untracked webhook attempts", async () => {
+  const pendingPayloads = Array.from({ length: 50 }, (_value, index) => {
+    const tweetId = String(2200000000000000000 + index);
+    return {
+      tweetId,
+      payload: {
+        tweetId,
+        text: "A previously failed tweet",
+        tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+        tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+      },
+      attempts: 1,
+      nextAttemptAt: Date.now() + 60_000,
+      retryExhausted: false,
+    };
+  });
+  const context = setupServiceWorkerContext([], {
+    initialLocalStore: {
+      tibo_pending_tweet_payloads: pendingPayloads,
+    },
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }),
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+
+  const response = await context.sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2112592264686149751",
+      text: "A valid tweet",
+      tweetUrl: "https://x.com/thsottiaux/status/2112592264686149751",
+      tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+    },
+  });
+
+  assert.equal(response.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 0);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads.length, 50);
+});
+
+test("network webhook failures remain pending until their scheduled retry", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext([], {
     fetchError: "network offline",
   });
@@ -922,7 +1039,8 @@ test("network webhook failures remain retryable and are not quarantined", async 
 
   assert.equal(first.retryable, true);
   assert.equal(second.retryable, true);
-  assert.equal(mockFetchCalls.length, 2);
+  assert.equal(mockFetchCalls.length, 1);
+  assert.equal(localStore.tibo_pending_tweet_payloads[0].attempts, 1);
   assert.equal(localStore.tibo_quarantined_tweet_ids, undefined);
 });
 
@@ -1022,7 +1140,9 @@ test("pending tweet retries stop after the conservative attempt limit", async ()
   };
 
   await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
   await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
   await context.sendMessage({ action: "POST_TWEET", payload });
   const stopped = await context.sendMessage({ action: "POST_TWEET", payload });
 

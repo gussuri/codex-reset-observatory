@@ -24,8 +24,8 @@ Chromeの通知ページは投稿スキャンの対象になり得ます。通�
 3. 起動時・alarmのどちらも、プロフィールと返信の各URLについて既存タブを最大1つずつ扱います。タブを自動で新規作成・閉鎖することはありません。タブがなければ従来の `monitored_tab_missing` 診断を記録します。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
 4. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
 5. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信先を復元します。後者では、親cell自身の本文とauthorだけを親文脈として保存します。
-6. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
-7. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
+6. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。通常は2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。応答の `aiStatus` が `timeout`、`rate_limited`、`api_error` の場合は保存済みfallbackを残したまま再送キューへ入れ、Gemini成功後か試行上限に達するまで処理済みにはしません。
+7. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類を実行します。`timeout`、`rate_limited`、`api_error` の場合だけWebhookごとに1回再試行し、1回のWebhookあたり最大2回呼び出します。
 8. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
 9. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。返信は収集・保存・分類の対象ですが、返信であること自体はシグナルを強めず、正式リセット履歴・公開確率へは自動反映しません。
 10. 返信でない投稿のうち、条件を満たす `reset_executed` は次回のレーダーデータ取得で正式リセット履歴へ自動統合されます。正式採用は `confirmed` へ自動変更する処理ではなく、`auto_unverified` のままでも採用条件を満たせば反映されます。
