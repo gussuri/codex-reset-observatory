@@ -318,25 +318,31 @@ test("an irrelevant none result is never promoted by context safety alone", () =
   }
 });
 
-test("Tibo self-quotes with explicit reset context do not demote reset_executed completions to irrelevant", () => {
+test("a self-quote does not establish a same-event completion without a validated source graph", () => {
   const decision = getTiboContextSafetyDecision({
     authorText: "Done and dusted.",
+    isQuote: true,
     quoteAuthorHandle: "@thsottiaux",
     quoteTweetUrl: "https://x.com/thsottiaux/status/2084000000000000100",
     quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
     selectedSignalType: "reset_executed",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2084000000000000100",
   });
 
-  assert.equal(decision, null);
+  assert.equal(decision?.signalType, "irrelevant");
 });
 
 test("external user quotes with explicit reset context still demote completions to irrelevant", () => {
   const decision = getTiboContextSafetyDecision({
     authorText: "Done and dusted.",
+    isQuote: true,
     quoteAuthorHandle: "@external_user",
     quoteTweetUrl: "https://x.com/external_user/status/2084000000000000100",
     quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
     selectedSignalType: "reset_executed",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2084000000000000100",
   });
 
   assert.ok(decision);
@@ -344,16 +350,21 @@ test("external user quotes with explicit reset context still demote completions 
   assert.equal(decision?.teaserStrength, "none");
 });
 
-test("Tibo self-quotes with explicit reset context do not demote official_notice announcements to irrelevant", () => {
+test("a self-quote does not establish a same-event notice without a validated source graph", () => {
   const decision = getTiboContextSafetyDecision({
     authorText: "Landing in 1 hour for all accounts.",
+    isQuote: true,
     quoteAuthorHandle: "@thsottiaux",
     quoteTweetUrl: "https://x.com/thsottiaux/status/2084000000000000100",
     quoteContextText: "we'll reset usage limits for all paid users across codex and ChatGPT work",
     selectedSignalType: "official_notice",
+    temporalDirection: "future",
+    evidenceQuote: "Landing in 1 hour for all accounts.",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2084000000000000100",
   });
 
-  assert.equal(decision, null);
+  assert.equal(decision?.signalType, "irrelevant");
 });
 
 function validatedLandingContext(depth: 1 | 2 = 1, authorHandle = "@thsottiaux"): TiboEvidenceContext {
@@ -405,10 +416,15 @@ test("validated same-author one-hop and two-hop evidence can support an exact fu
     const validatedSourceContext = validatedLandingContext(depth);
     const decision = getTiboContextSafetyDecision({
       authorText: "Landing within the next 2 hours.",
+      isReply: true,
       replyContextText: depth === 1 ? "Reset usage limits for all users tomorrow." : "A rollout is on the way.",
+      replyParentTweetId: depth === 1 ? "2115000000000000102" : "2115000000000000102",
+      replyParentTweetUrl: "https://x.com/thsottiaux/status/2115000000000000102",
       selectedSignalType: "official_notice",
       evidenceQuote: "Landing within the next 2 hours.",
       temporalDirection: "future",
+      contextualResetAssessment: "same_global_reset",
+      contextualResetTweetId: depth === 1 ? "2115000000000000102" : "2115000000000000103",
       targetTweetId: "2115000000000000101",
       targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
       targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
@@ -419,14 +435,60 @@ test("validated same-author one-hop and two-hop evidence can support an exact fu
   }
 });
 
-test("elliptical notices require a matching validated graph and do not bypass negation, BANKED, or history guards", () => {
+test("an exact self-contained notice ignores unrelated parent wording when the AI marks context not applicable", () => {
+  const input: TiboContextSafetyInput = {
+    authorText: "We will reset usage limits tomorrow.",
+    isReply: true,
+    replyContextText: "Remember the old reset from last year.",
+    selectedSignalType: "official_notice",
+    evidenceQuote: "We will reset usage limits tomorrow.",
+    temporalDirection: "future",
+    contextualResetAssessment: "not_applicable",
+  };
+
+  assert.equal(getTiboContextSafetyDecision(input), null);
+  assert.equal(
+    getTiboContextSafetyDecision({ ...input, evidenceQuote: null })?.signalType,
+    "irrelevant",
+  );
+});
+
+test("a verified quote edge can support a semantic same-event judgment", () => {
+  const context = validatedLandingContext();
+  context.edges[0]!.relation = "quote";
+  const decision = getTiboContextSafetyDecision({
+    authorText: "Landing within the next 2 hours.",
+    isQuote: true,
+    quoteContextText: "Reset usage limits for all users tomorrow.",
+    quoteAuthorHandle: "@thsottiaux",
+    quoteTweetUrl: "https://x.com/thsottiaux/status/2115000000000000102",
+    selectedSignalType: "official_notice",
+    evidenceQuote: "Landing within the next 2 hours.",
+    temporalDirection: "future",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2115000000000000102",
+    targetTweetId: "2115000000000000101",
+    targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
+    targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
+    validatedSourceContext: context,
+  });
+
+  assert.equal(decision, null);
+});
+
+test("semantic same-event judgments require a matching complete graph and exact post evidence", () => {
   const validContext = validatedLandingContext();
   const base = {
     authorText: "Landing within the next 2 hours.",
+    isReply: true,
     replyContextText: "Reset usage limits for all users tomorrow.",
+    replyParentTweetId: "2115000000000000102",
+    replyParentTweetUrl: "https://x.com/thsottiaux/status/2115000000000000102",
     selectedSignalType: "official_notice" as const,
     evidenceQuote: "Landing within the next 2 hours.",
     temporalDirection: "future" as const,
+    contextualResetAssessment: "same_global_reset" as const,
+    contextualResetTweetId: "2115000000000000102",
     targetTweetId: "2115000000000000101",
     targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
     targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
@@ -441,69 +503,88 @@ test("elliptical notices require a matching validated graph and do not bypass ne
   };
 
   assertSuppressed({ validatedSourceContext: null }, "missing graph");
+  assertSuppressed({ contextualResetAssessment: "unknown" }, "unknown semantic assessment");
+  assertSuppressed({ contextualResetAssessment: undefined }, "missing semantic assessment");
   assertSuppressed({ evidenceQuote: "This is not the quote from the target post." }, "misaligned AI evidence");
   assertSuppressed({ targetTweetId: "2115000000000000999" }, "different target ID");
+  assertSuppressed({ contextualResetTweetId: "2115000000000000999" }, "source ID outside the connected graph");
+  assertSuppressed({ replyParentTweetId: "2115000000000000999" }, "reply sidecar points to another parent");
+  assertSuppressed({ replyParentTweetUrl: "https://x.com/thsottiaux/status/2115000000000000999" }, "reply URL points to another parent");
+  assertSuppressed({ targetTweetCreatedAt: "2026-10-18T09:00:00.000Z" }, "target timestamp mismatch");
+  assertSuppressed({ validatedSourceContext: { ...validContext, status: "partial" } }, "partial graph");
+  assertSuppressed({
+    validatedSourceContext: {
+      ...validContext,
+      omissions: [{ fromTweetId: "2115000000000000101", relation: "reply", reason: "not_found" }],
+    },
+  }, "graph with omitted source evidence");
   assertSuppressed({
     validatedSourceContext: validatedLandingContext(1, "@other_user"),
+    replyParentTweetUrl: "https://x.com/other_user/status/2115000000000000102",
   }, "foreign source author");
+  assertSuppressed({ replyContextText: "A different parent quote." }, "reply sidecar text mismatch");
   assertSuppressed({
     authorText: "The reset is not landing in the next 2 hours.",
     evidenceQuote: "The reset is not landing in the next 2 hours.",
   }, "negated author statement");
+  for (const assessment of [
+    "same_banked_distribution",
+    "same_personal_reset",
+    "different_event",
+    "negated",
+    "uncertain",
+    "unknown",
+  ] as const) {
+    assertSuppressed({ contextualResetAssessment: assessment }, `${assessment} assessment`);
+  }
   assertSuppressed({
-    replyContextText: "BANKED reset credits are being distributed to users tomorrow.",
+    authorText: "The reset is not landing in the next 2 hours.",
+    evidenceQuote: "The reset is not landing in the next 2 hours.",
+    contextualResetAssessment: "negated",
     validatedSourceContext: {
       ...validContext,
-      relatedPosts: [{
-        ...validContext.relatedPosts[0],
-        text: "BANKED reset credits are being distributed to users tomorrow.",
-      }],
+      target: { ...validContext.target!, text: "The reset is not landing in the next 2 hours." },
     },
-  }, "BANKED distribution");
-  assertSuppressed({
-    replyContextText: "I will reset usage limits for my account tomorrow.",
-    validatedSourceContext: {
-      ...validContext,
-      relatedPosts: [{
-        ...validContext.relatedPosts[0],
-        text: "I will reset usage limits for my account tomorrow.",
-      }],
-    },
-  }, "personal reset");
-  assertSuppressed({
-    replyContextText: "Reset usage limits for all users tomorrow. The product rollout is a separate event.",
-    validatedSourceContext: {
-      ...validContext,
-      relatedPosts: [{
-        ...validContext.relatedPosts[0],
-        text: "Reset usage limits for all users tomorrow. The product rollout is a separate event.",
-      }],
-    },
-  }, "explicitly different event");
-  assertSuppressed({
-    replyContextText: "Remember when we reset usage limits? This landing is about another event.",
-    validatedSourceContext: {
-      ...validContext,
-      relatedPosts: [{
-        ...validContext.relatedPosts[0],
-        text: "Remember when we reset usage limits? This landing is about another event.",
-      }],
-    },
-  }, "historical or unrelated event");
+  }, "negated author statement");
 });
 
-test("a completed elliptical phrase does not gain reset execution authority from source context", () => {
+test("an AI-confirmed elliptical completion requires a verified same-event path", () => {
   const decision = getTiboContextSafetyDecision({
     authorText: "Done and dusted.",
+    isReply: true,
     replyContextText: "Reset usage limits for all users tomorrow.",
+    replyParentTweetId: "2115000000000000102",
+    replyParentTweetUrl: "https://x.com/thsottiaux/status/2115000000000000102",
     selectedSignalType: "reset_executed",
     evidenceQuote: "Done and dusted.",
     temporalDirection: "completed_now",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2115000000000000102",
     targetTweetId: "2115000000000000101",
     targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
     targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
-    validatedSourceContext: validatedLandingContext(),
+    validatedSourceContext: {
+      ...validatedLandingContext(),
+      target: { ...validatedLandingContext().target!, text: "Done and dusted." },
+    },
   });
 
-  assert.equal(decision?.signalType, "irrelevant");
+  assert.equal(decision, null);
+
+  const missingGraphDecision = getTiboContextSafetyDecision({
+    authorText: "Done and dusted.",
+    isReply: true,
+    replyContextText: "Reset usage limits for all users tomorrow.",
+    replyParentTweetId: "2115000000000000102",
+    replyParentTweetUrl: "https://x.com/thsottiaux/status/2115000000000000102",
+    selectedSignalType: "reset_executed",
+    evidenceQuote: "Done and dusted.",
+    temporalDirection: "completed_now",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2115000000000000102",
+    targetTweetId: "2115000000000000101",
+    targetTweetUrl: "https://x.com/thsottiaux/status/2115000000000000101",
+    targetTweetCreatedAt: "2026-10-18T08:00:00.000Z",
+  });
+  assert.equal(missingGraphDecision?.signalType, "irrelevant");
 });

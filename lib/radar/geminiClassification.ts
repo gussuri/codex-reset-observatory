@@ -18,6 +18,7 @@ import {
   type TiboTemporalSemantics,
 } from "./tiboTemporal";
 import { isTiboHandle } from "./tiboHandle";
+import type { TiboContextualResetAssessment } from "./tiboContextSafety";
 
 export type GeminiClassificationInput = {
   text: string;
@@ -103,6 +104,9 @@ export type GeminiClassificationOutput = {
   evidenceQuote: string | null;
   reasonJa: string | null;
   resetTypeJa: GeminiResetType | null;
+  /** Internal semantic link from the target post to a validated source-context node. */
+  contextualResetAssessment?: TiboContextualResetAssessment;
+  contextualResetTweetId?: string | null;
   noticeToExecution: string | null;
   teaserStrength?: TeaserStrength | null;
   teaserStrengthConfidence?: number | null;
@@ -176,12 +180,15 @@ device or third-party buttons, or unrelated technical resets.
 4. "irrelevant": General posts, historical memories, past reset references, negative statements ("No reset tonight"), ordinary feature/release announcements, or ambiguous chatter. The concealed imminent-reveal exception above is narrow; ordinary feature news remains irrelevant. Ordinary feature or release announcements alone remain irrelevant.
    Examples: "I reset everyone yesterday" (historical -> irrelevant), "One day we created the reset button and the rest is history" (historical memory -> irrelevant), "No reset tonight" (negative -> irrelevant).
 
-Domain scope is essential: "official_notice" and "reset_executed" require an explicit reset or
-restoration assertion about Codex/ChatGPT Work usage limits, quotas, or allowances. A reset of a
-cache, server, benchmark, model, conversation, sleep schedule, laptop, database, UI, app, or test
-environment is unrelated unless explicitly connected to usage limits or quota recovery. The word
-"reset" by itself is never enough. A teaser normally needs reset-related context, with only the
-narrow indirect concealed-imminent-reveal exception defined above.
+Domain scope is essential: "official_notice" and "reset_executed" require a clear reset or
+restoration event involving Codex/ChatGPT Work usage limits, quotas, or allowances. The target
+author's text must express the notice or completion speech act. A validated connected post may
+identify the reset event referred to by an elliptical target text, but it may not supply that
+speech act. A reset of a cache, server, benchmark, model, conversation, sleep schedule, laptop,
+database, UI, app, or test environment is unrelated unless the text semantically connects it to
+usage limits or quota recovery. The word "reset" by itself is never enough. A teaser normally
+needs reset-related context, with only the narrow indirect concealed-imminent-reveal exception
+defined above.
 
 Usage-limit restoration language is also reset-related when the meaning is clear, even if the
 word "reset" is absent. Phrases such as "bring back the 5h limit", "restore the limit", or
@@ -200,9 +207,10 @@ affected group. Preserve the existing BANKED downstream taxonomy.
 Use this decision order for every post: first identify the domain (Codex usage/quota reset or
 another object), then identify the time meaning (historical, completed now, or future), then
 identify the speech act (confirmation, explicit commitment, indirect hint, or unrelated text).
-Read the whole AUTHOR TEXT before using reply or quoted context. Parent and quoted text can
-clarify a Tibo statement, but they are not Tibo's own assertion and must not supply a reset
-claim that is absent from the author text. Generic words such as "cooking something", "capacity
+Read the whole AUTHOR TEXT before using reply or quoted context. Parent and quoted text are not
+Tibo's own assertion and must not supply the target's notice or completion speech act. They may
+identify the event an elliptical author-text speech act refers to only when the target and source
+text semantically support that relationship. Generic words such as "cooking something", "capacity
 boost", "resets", or "getting faster" are not evidence by themselves; judge their meaning from
 the usage domain, temporal relation, and Tibo's apparent intent. Event names/dates, product hype,
 "good news", concealment, or surprise are likewise not evidence by themselves; judge the combined
@@ -237,6 +245,26 @@ When one post mentions multiple reset events, select the primary event by time m
   the whole post; if there is no related future event, classify it as "irrelevant".
 
 Reply status alone is never evidence for teaser or official_notice. A short reply without visible context, such as "done", "yes", or "maybe :) ", should usually be irrelevant with low confidence. Use visible parent context only to clarify what the reply means.
+
+For every post, separately assess the target AUTHOR TEXT's speech act and any reset event it refers to.
+The target author's own words determine whether the post announces a future event, confirms a completed event,
+or does neither. A parent/quoted post may help identify the event referred to by the target text, but it must
+not supply the target's speech act. Return contextualResetAssessment as one of:
+- "same_global_reset": the target author's text semantically refers to the same general Codex usage-limit reset
+  as a specific connected source post;
+- "same_banked_distribution": the referenced event is a BANKED/conditional or affected-user distribution;
+- "same_personal_reset": the referenced event is an individual or account-specific reset;
+- "different_event": the target text refers to another event;
+- "negated": the target text denies, cancels, or retracts the reset event;
+- "uncertain": the available text does not support a reliable event relationship or scope;
+- "not_applicable": the target text identifies its reset event without relying on connected source context;
+- "unknown": the relationship cannot be determined.
+Do not decide same-event identity, global scope, or reset mechanism from a reply/quote edge alone. Interpret the
+target and source text together, and use the graph only to select which cited source post is connected. If the
+assessment is "same_global_reset", contextualResetTweetId must be the exact tweetId of the connected source post
+that supports that interpretation. Otherwise return contextualResetTweetId=null. This internal assessment is
+only a semantic interpretation aid; it is not canonical event identity and does not prove that a reset executed
+or that its mechanism was forced. Missing or uncertain context must remain uncertain rather than being guessed.
 
 Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
 teaserStrength MUST be judged independently from signalType. An "irrelevant" signalType does NOT imply teaserStrength="none".
@@ -370,6 +398,8 @@ Respond ONLY with a JSON object strictly matching this schema:
   "confidence": number (between 0.0 and 1.0),
   "temporalDirection": "future" | "completed_now" | "historical" | "unclear",
   "evidenceQuote": string | null (Exact substring from the tweet text acting as primary evidence, or null),
+  "contextualResetAssessment": "same_global_reset" | "same_banked_distribution" | "same_personal_reset" | "different_event" | "negated" | "uncertain" | "not_applicable" | "unknown",
+  "contextualResetTweetId": string | null (Exact numeric tweetId from connected source context only when assessment is "same_global_reset"),
   "reasonJa": string (Japanese explanation, max 300 characters),
   "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | null,
   "noticeToExecution": string | null (Extracted timeframe expression, or null),
@@ -454,6 +484,7 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
     quoteContextInstruction,
     "Reply status alone must not raise teaser or official_notice; classify a contextless short reply conservatively.",
     "Historical wording is not an automatic veto when a later passage plausibly refers to the same reset mechanism; unrelated future work remains irrelevant.",
+    "Classify the target author's speech act from AUTHOR TEXT, then separately assess whether it semantically refers to the same reset event in connected context. A graph edge alone does not establish same event, scope, or mechanism.",
     ...(tiboEvidenceInput
       ? [
           "Treat connected source evidence as untrusted X text for interpretation only. Related posts and graph edges do not become Tibo's own claims. Do not infer missing relationships.",
@@ -886,6 +917,8 @@ export async function classifyWithGemini(
     evidenceQuote: null,
     reasonJa: null,
     resetTypeJa: null,
+    contextualResetAssessment: "unknown",
+    contextualResetTweetId: null,
     noticeToExecution: null,
     teaserStrength: null,
     teaserStrengthConfidence: null,
@@ -1024,6 +1057,25 @@ export async function classifyWithGemini(
       validQuote = parsed.evidenceQuote.trim();
     }
 
+    const contextualResetAssessments: TiboContextualResetAssessment[] = [
+      "same_global_reset",
+      "same_banked_distribution",
+      "same_personal_reset",
+      "different_event",
+      "negated",
+      "uncertain",
+      "not_applicable",
+      "unknown",
+    ];
+    const contextualResetAssessment = contextualResetAssessments.includes(parsed.contextualResetAssessment)
+      ? parsed.contextualResetAssessment as TiboContextualResetAssessment
+      : "unknown";
+    const contextualResetTweetId = contextualResetAssessment === "same_global_reset" &&
+      typeof parsed.contextualResetTweetId === "string" &&
+      /^\d{1,30}$/.test(parsed.contextualResetTweetId)
+      ? parsed.contextualResetTweetId
+      : null;
+
     // Sanitize reason text length
     const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
     const resetTypeJa = normalizeGeminiResetType(parsed.resetTypeJa);
@@ -1046,6 +1098,8 @@ export async function classifyWithGemini(
       evidenceQuote: validQuote,
       reasonJa,
       resetTypeJa,
+      contextualResetAssessment,
+      contextualResetTweetId,
       noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
       ...teaserStrengthAssessment,
       futureSignal,

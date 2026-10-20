@@ -1857,7 +1857,7 @@ test("a transient Gemini API error is retried once and the BANKED notice is stor
   }
 });
 
-test("new reply metadata is validated and persisted while old payload fields remain compatible", async () => {
+test("reply metadata remains compatible while unknown contextual reset meaning is held", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -1912,7 +1912,8 @@ test("new reply metadata is validated and persisted while old payload fields rem
     assert.equal(upsertBody.quote_author_handle, "@blueemi99");
     assert.equal(upsertBody.ai_teaser_strength, null);
     assert.equal(upsertBody.ai_teaser_strength_confidence, null);
-    assert.equal(upsertBody.teaser_strength, null);
+    assert.equal(upsertBody.signal_type, "irrelevant");
+    assert.equal(upsertBody.teaser_strength, "none");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment(previous);

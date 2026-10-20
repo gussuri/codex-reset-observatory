@@ -1,17 +1,29 @@
 import type { ClassificationSignalType } from "./classification";
 import { getTiboClassificationSafetyDecision } from "./classification";
 import type { TeaserStrength } from "./teaserStrength";
-import { isBankedDistributionCompletionSignal, isBankedDistributionNotice } from "./bankedReset";
 import {
-  hasRetryableTiboEvidenceOmission,
   type TiboEvidenceContext,
   type TiboEvidenceNode,
 } from "./tiboEvidenceContext";
 import { isTiboHandle } from "./tiboHandle";
 
+export type TiboContextualResetAssessment =
+  | "same_global_reset"
+  | "same_banked_distribution"
+  | "same_personal_reset"
+  | "different_event"
+  | "negated"
+  | "uncertain"
+  | "not_applicable"
+  | "unknown";
+
 export type TiboContextSafetyInput = {
   authorText: string;
+  isReply?: boolean;
+  isQuote?: boolean;
   replyContextText?: string | null;
+  replyParentTweetId?: string | null;
+  replyParentTweetUrl?: string | null;
   quoteContextText?: string | null;
   quoteAuthorHandle?: string | null;
   quoteTweetUrl?: string | null;
@@ -19,6 +31,8 @@ export type TiboContextSafetyInput = {
   aiTeaserStrength?: TeaserStrength | null;
   evidenceQuote?: string | null;
   temporalDirection?: "future" | "completed_now" | "historical" | "unclear" | null;
+  contextualResetAssessment?: TiboContextualResetAssessment | null;
+  contextualResetTweetId?: string | null;
   targetTweetId?: string | null;
   targetTweetUrl?: string | null;
   targetTweetCreatedAt?: string | null;
@@ -59,18 +73,13 @@ const ITEM_RECEIPT_PATTERN = /\b(?:me\s+receiving|i\s+(?:am|'m)\s+receiving|i\s+
 const EXPLICIT_RESET_CONTEXT_PATTERN = /\b(?:reset(?:s|ting)?|usage[-\s]+limits?|rate[-\s]+limits?|quotas?|allowances?|fresh[-\s]+limits?|topped\s+up|limit\s+reset)\b/i;
 const PHYSICAL_ITEM_SHOWCASE_PATTERN = /\bfor\s+scale\b/i;
 const PHYSICAL_ITEM_SHOWCASE_CUE_PATTERN = /\b(?:not\s+used\s+yet|(?:would\s+you\s+)?look\s+at\s+(?:this|that))\b/i;
-const USAGE_LIMIT_CONTEXT_PATTERN = /\b(?:usage|quota|rate\s+limit|allowance|capacity)\b/i;
 const PERSON_TARGETED_RESET_PATTERN = /\b(?!codex\b|usage\b|quota\b|limits?\b|allowances?\b)[a-z][a-z'-]{1,30}\s+is\s+in\s+need\s+of\s+(?:a\s+)?reset\b/i;
 const HISTORICAL_RESET_CONTEXT_PATTERN = /\b(?:previously\s+promised\s+a\s+reset|one\s+day\s+(?:we|i)\s+(?:created|made)\s+the\s+reset\s+button|remember\s+when|long\s+time\s+ago|rest\s+is\s+history|(?:last\s+)?(?:year|month)s?\s+ago)\b/i;
 const FUTURE_CUE_PATTERN = /\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|(?:in|within)\s+(?:the\s+)?(?:next\s+\d+|next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i;
-const ELLIPTICAL_FUTURE_EVENT_PATTERN = /\b(?:land(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|com(?:e|es|ing))\b/i;
-const ELLIPTICAL_EVENT_NEGATION_PATTERN = /\b(?:not|never|no\s+longer|cancel(?:led|ed)?|canceled)\b[^.!?]{0,70}\b(?:land(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|com(?:e|es|ing))\b/i;
 const AMBIGUOUS_FUTURE_NOUN_PATTERN = /\b(?:surprise|something|news|announcement|update)\b/i;
-const DIFFERENT_EVENT_CONTEXT_PATTERN = /\b(?:separately|separate\s+(?:event|announcement|rollout)|unrelated|another\s+event|different\s+event)\b/i;
 const EXPLICIT_FUTURE_RESET_INTENT_PATTERNS = [
   /\b(?:will|going\s+to|plan(?:s|ned)?\s+to|i['’]ll|we['’]ll)\b[^.!?]{0,100}\b(?:reset|resetting|usage[-\s]+limits?|quotas?|allowances?)\b/i,
   /\b(?:reset|resetting)\b[^.!?]{0,60}\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year)|on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in\s+(?:the\s+)?(?:next|an?|one|two|\d+)\s+(?:minute|minutes|hour|hours|day|days|week|weeks))\b/i,
-  /\b(?:reset|resetting)\b.{0,80}\b(?:landing|coming|arriving)\b/i,
 ];
 
 function normalizeContext(value: string | null | undefined) {
@@ -102,8 +111,18 @@ function getValidatedPath(
   relatedTweetId: string,
 ): TiboEvidenceNode[] | null {
   const nodes = new Map<string, TiboEvidenceNode>();
-  if (context.target) nodes.set(context.target.tweetId, context.target);
-  for (const post of context.relatedPosts) nodes.set(post.tweetId, post);
+  const allNodes = [context.target, ...context.relatedPosts].filter((node): node is TiboEvidenceNode => Boolean(node));
+  if (new Set(allNodes.map((node) => node.tweetId)).size !== allNodes.length) return null;
+  for (const node of allNodes) {
+    const identity = getTweetIdentity(node.tweetUrl);
+    if (
+      !/^\d{1,30}$/.test(node.tweetId) ||
+      identity?.tweetId !== node.tweetId ||
+      identity.authorHandle !== node.authorHandle ||
+      !Number.isFinite(Date.parse(node.createdAt))
+    ) return null;
+    nodes.set(node.tweetId, node);
+  }
   const queue: Array<{ tweetId: string; path: TiboEvidenceNode[] }> = [];
   const target = nodes.get(targetTweetId);
   if (!target) return null;
@@ -123,70 +142,94 @@ function getValidatedPath(
   return null;
 }
 
-function hasValidatedEllipticalNoticeEvidence(input: TiboContextSafetyInput, authorText: string) {
-  const exactSourceText = typeof input.authorText === "string" ? input.authorText : "";
-  if (
-    input.selectedSignalType !== "official_notice" ||
-    input.temporalDirection !== "future" ||
-    !input.evidenceQuote ||
-    !exactSourceText.includes(input.evidenceQuote.trim()) ||
-    !ELLIPTICAL_FUTURE_EVENT_PATTERN.test(authorText) ||
-    !FUTURE_CUE_PATTERN.test(authorText) ||
-    ELLIPTICAL_EVENT_NEGATION_PATTERN.test(authorText) ||
-    DIFFERENT_EVENT_CONTEXT_PATTERN.test(authorText) ||
-    /\b(?:my|my own|my account|my personal|individual(?:ly)?|for myself)\b/i.test(authorText)
-  ) return false;
+function hasValidatedContextualResetReference(input: TiboContextSafetyInput, authorText: string) {
+  if (input.selectedSignalType !== "official_notice" && input.selectedSignalType !== "reset_executed") return false;
+  if (input.selectedSignalType === "official_notice" && input.temporalDirection !== "future") return false;
+  if (input.selectedSignalType === "reset_executed" && input.temporalDirection !== "completed_now") return false;
+
+  const evidenceQuote = input.evidenceQuote?.trim();
+  if (!evidenceQuote || !input.authorText.includes(evidenceQuote)) return false;
 
   const context = input.validatedSourceContext;
   const targetTweetId = input.targetTweetId?.trim();
   const targetTweetUrl = getTweetIdentity(input.targetTweetUrl);
   const targetCreatedAt = Date.parse(input.targetTweetCreatedAt ?? "");
+  const contextTargetUrl = getTweetIdentity(context?.target?.tweetUrl);
+  const contextTargetCreatedAt = Date.parse(context?.target?.createdAt ?? "");
   if (
     !context ||
+    context.version !== "tibo-evidence-context-v1" ||
+    context.status !== "complete" ||
     !context.target ||
-    context.status === "invalid_target" ||
-    hasRetryableTiboEvidenceOmission(context) ||
+    context.omissions.length > 0 ||
     !targetTweetId ||
     !targetTweetUrl ||
     targetTweetUrl.tweetId !== targetTweetId ||
     targetTweetUrl.authorHandle !== "@thsottiaux" ||
     context.target.tweetId !== targetTweetId ||
+    contextTargetUrl?.tweetId !== targetTweetId ||
+    contextTargetUrl.authorHandle !== context.target.authorHandle ||
     !isTiboHandle(context.target.authorHandle) ||
     normalizeContext(context.target.text.trim()) !== authorText ||
     !Number.isFinite(targetCreatedAt) ||
-    Date.parse(context.target.createdAt) !== targetCreatedAt
+    !Number.isFinite(contextTargetCreatedAt) ||
+    contextTargetCreatedAt !== targetCreatedAt
   ) return false;
 
-  const directReplyContext = normalizeContext(input.replyContextText);
-  const directQuoteContext = normalizeContext(input.quoteContextText);
-  const resetContextPosts = context.relatedPosts.filter((post) =>
-    EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(post.text)),
-  );
-  if (resetContextPosts.length !== 1) return false;
-
-  const resetContextPost = resetContextPosts[0]!;
-  const resetContextText = normalizeContext(resetContextPost.text);
-  if (
-    !isTiboHandle(resetContextPost.authorHandle) ||
-    !USAGE_LIMIT_CONTEXT_PATTERN.test(resetContextText) ||
-    isBankedDistributionNotice(resetContextPost.text) ||
-    isBankedDistributionCompletionSignal(resetContextPost.text) ||
-    DIFFERENT_EVENT_CONTEXT_PATTERN.test(resetContextPost.text) ||
-    /\b(?:banked|my\s+(?:own\s+)?account|for\s+myself|individual\s+users?)\b/i.test(resetContextText) ||
-    getTiboClassificationSafetyDecision(resetContextPost.text, "official_notice").signalType !== "official_notice"
-  ) return false;
-
-  const path = getValidatedPath(context, targetTweetId, resetContextPost.tweetId);
+  const contextualResetTweetId = input.contextualResetTweetId?.trim();
+  if (!contextualResetTweetId || !/^\d{1,30}$/.test(contextualResetTweetId)) return false;
+  const path = getValidatedPath(context, targetTweetId, contextualResetTweetId);
   if (!path || path.length < 2 || path.length > 3 || path.some((node) => !isTiboHandle(node.authorHandle))) return false;
-  const firstEdge = context.edges.find((edge) => edge.fromTweetId === targetTweetId && edge.toTweetId === path[1]!.tweetId);
-  if (!firstEdge) return false;
-  if (firstEdge.relation === "reply" && directReplyContext !== normalizeContext(path[1]!.text)) return false;
-  if (firstEdge.relation === "quote" && (
-    directQuoteContext !== normalizeContext(path[1]!.text) ||
-    !isTiboHandle(input.quoteAuthorHandle) ||
-    getTweetIdentity(input.quoteTweetUrl)?.tweetId !== path[1]!.tweetId
-  )) return false;
+  const pathEdges = path.slice(1).map((node, index) => {
+    const fromTweetId = path[index]!.tweetId;
+    const matching = context.edges.filter((edge) => edge.fromTweetId === fromTweetId && edge.toTweetId === node.tweetId);
+    return matching.length === 1 ? matching[0]! : null;
+  });
+  if (pathEdges.some((edge) => !edge)) return false;
+  if (path.some((node, index) => index > 0 && Date.parse(node.createdAt) > Date.parse(path[index - 1]!.createdAt))) return false;
 
+  const firstEdge = pathEdges[0]!;
+  if (firstEdge.relation === "reply" && (
+    input.isReply !== true ||
+    normalizeContext(input.replyContextText) !== normalizeContext(path[1]!.text) ||
+    input.replyParentTweetId !== path[1]!.tweetId ||
+    getTweetIdentity(input.replyParentTweetUrl)?.tweetId !== path[1]!.tweetId ||
+    getTweetIdentity(input.replyParentTweetUrl)?.authorHandle !== path[1]!.authorHandle
+  )) return false;
+  if (firstEdge.relation === "quote" && (
+    input.isQuote !== true ||
+    normalizeContext(input.quoteContextText) !== normalizeContext(path[1]!.text) ||
+    !isTiboHandle(input.quoteAuthorHandle) ||
+    getTweetIdentity(input.quoteTweetUrl)?.tweetId !== path[1]!.tweetId ||
+    getTweetIdentity(input.quoteTweetUrl)?.authorHandle !== path[1]!.authorHandle
+  )) return false;
+  if (firstEdge.relation !== "reply" && firstEdge.relation !== "quote") return false;
+
+  return true;
+}
+
+function hasExternalSourceContext(input: TiboContextSafetyInput) {
+  return input.isReply === true ||
+    input.isQuote === true ||
+    Boolean(input.replyContextText || input.quoteContextText) ||
+    Boolean(input.validatedSourceContext?.relatedPosts.length);
+}
+
+function hasExactTargetSpeechEvidence(input: TiboContextSafetyInput) {
+  const evidenceQuote = input.evidenceQuote?.trim();
+  if (!evidenceQuote || !input.authorText.includes(evidenceQuote)) return false;
+  if (input.selectedSignalType === "official_notice") return input.temporalDirection === "future";
+  if (input.selectedSignalType === "reset_executed") return input.temporalDirection === "completed_now";
+  return false;
+}
+
+function contextRelationMustBeSuppressed(input: TiboContextSafetyInput) {
+  if (input.selectedSignalType !== "official_notice" && input.selectedSignalType !== "reset_executed") return false;
+  if (!hasExternalSourceContext(input)) return false;
+  if (input.contextualResetAssessment === "not_applicable") return !hasExactTargetSpeechEvidence(input);
+  if (input.contextualResetAssessment === "same_global_reset") {
+    return !hasValidatedContextualResetReference(input, normalizeContext(input.authorText));
+  }
   return true;
 }
 
@@ -198,11 +241,6 @@ export function getTiboContextSafetyDecision(
   input: TiboContextSafetyInput,
 ): TiboContextSafetyDecision | null {
   const authorText = normalizeContext(input.authorText);
-  const context = [
-    authorText,
-    normalizeContext(input.replyContextText),
-    normalizeContext(input.quoteContextText),
-  ].filter(Boolean).join("\n");
 
   const hasResetSignal = input.selectedSignalType !== "irrelevant" ||
     input.aiTeaserStrength === "strong" ||
@@ -212,7 +250,7 @@ export function getTiboContextSafetyDecision(
 
   if (
     getTiboClassificationSafetyDecision(input.authorText, input.selectedSignalType).reasonCode === "explicit_negation" ||
-    (input.selectedSignalType !== "irrelevant" && ELLIPTICAL_EVENT_NEGATION_PATTERN.test(authorText))
+    input.contextualResetAssessment === "negated"
   ) {
     return {
       signalType: "irrelevant",
@@ -221,32 +259,25 @@ export function getTiboContextSafetyDecision(
     };
   }
 
-  const isTiboSelfQuote =
-    Boolean(isTiboHandle(input.quoteAuthorHandle) || isTiboHandle(input.quoteTweetUrl)) &&
-    Boolean(input.quoteContextText && EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(input.quoteContextText)));
-
-  const externalContexts = [
-    input.replyContextText,
-    isTiboSelfQuote ? null : input.quoteContextText,
-  ].filter(Boolean);
-
-  const contextOnlyResetClaim =
-    !isTiboSelfQuote &&
-    !EXPLICIT_RESET_CONTEXT_PATTERN.test(authorText) &&
-    externalContexts.some((value) =>
-      EXPLICIT_RESET_CONTEXT_PATTERN.test(normalizeContext(value)),
-    );
-  if (
-    contextOnlyResetClaim &&
-    input.selectedSignalType !== "teaser" &&
-    !hasValidatedEllipticalNoticeEvidence(input, authorText)
-  ) {
+  if (contextRelationMustBeSuppressed(input)) {
     return {
       signalType: "irrelevant",
       teaserStrength: "none",
-      reasonJa: "Context safety guard: resetの根拠は返信元または引用文脈にのみあり、Tibo本人の本文にはないため無関係として扱います。",
+      reasonJa: "Context safety guard: the AI did not identify a verified same-event global reset reference for this post.",
     };
   }
+
+  const contextualResetAccepted = input.contextualResetAssessment === "same_global_reset" &&
+    hasValidatedContextualResetReference(input, authorText);
+  const context = contextualResetAccepted || (
+    hasExternalSourceContext(input) && input.contextualResetAssessment === "not_applicable"
+  )
+    ? authorText
+    : [
+        authorText,
+        normalizeContext(input.replyContextText),
+        normalizeContext(input.quoteContextText),
+      ].filter(Boolean).join("\n");
 
   if (
     input.selectedSignalType === "official_notice" &&
@@ -262,10 +293,7 @@ export function getTiboContextSafetyDecision(
     };
   }
 
-  if (
-    PERSON_TARGETED_RESET_PATTERN.test(authorText) &&
-    !USAGE_LIMIT_CONTEXT_PATTERN.test(context)
-  ) {
+  if (PERSON_TARGETED_RESET_PATTERN.test(authorText)) {
     return {
       signalType: "irrelevant",
       teaserStrength: "none",

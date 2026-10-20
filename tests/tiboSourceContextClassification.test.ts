@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { NextRequest } from "next/server";
 
-import { buildGeminiPrompt } from "../lib/radar/geminiClassification";
+import { buildGeminiPrompt, TIBO_GEMINI_SYSTEM_PROMPT } from "../lib/radar/geminiClassification";
 import { POST } from "../app/api/webhook/tibo/route";
 
 const ENV_KEYS = [
@@ -82,7 +82,9 @@ function installGeminiPromptCapture(
   teaserStrengthConfidence: 0.9,
   teaserStrengthEvidenceQuote: null,
   teaserStrengthReasonJa: null,
-}, responseStatuses: number[] = []) {
+  contextualResetAssessment: "not_applicable",
+  contextualResetTweetId: null,
+}, responseStatuses: number[] = [], options: { preserveMissingContextualResetAssessment?: boolean } = {}) {
   const original = https.request;
   const prompts: string[] = [];
   https.request = ((...args: any[]) => {
@@ -103,9 +105,13 @@ function installGeminiPromptCapture(
       prompts.push(requestBody.contents[0]!.parts[1]!.text);
       const responseIndex = prompts.length - 1;
       const responseStatus = responseStatuses[responseIndex] ?? 200;
-      const responseResult = Array.isArray(result)
+      const rawResponseResult = Array.isArray(result)
         ? result[Math.min(responseIndex, result.length - 1)]
         : result;
+      const responseResult = options.preserveMissingContextualResetAssessment ||
+        Object.prototype.hasOwnProperty.call(rawResponseResult, "contextualResetAssessment")
+        ? rawResponseResult
+        : { ...rawResponseResult, contextualResetAssessment: "not_applicable", contextualResetTweetId: null };
       const response = new EventEmitter() as EventEmitter & { statusCode?: number };
       response.statusCode = responseStatus;
       callback(response);
@@ -299,6 +305,9 @@ test("Gemini prompt includes bounded source evidence only when supplied", () => 
   } as never);
 
   assert.match(prompt, /VALIDATED CONNECTED SOURCE CONTEXT/);
+  assert.match(prompt, /separately assess whether it semantically refers to the same reset event/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /contextualResetAssessment/);
+  assert.match(prompt, /A graph edge alone does not establish same event, scope, or mechanism/i);
   assert.ok(prompt.includes(evidence));
   assert.doesNotMatch(buildGeminiPrompt({ text: "Maybe" }), /VALIDATED CONNECTED SOURCE CONTEXT/);
 });
@@ -705,6 +714,7 @@ test("an exact Landing notice is saved when a validated one-hop or two-hop Tibo 
     teaserStrengthConfidence: 0.9,
     teaserStrengthEvidenceQuote: null,
     teaserStrengthReasonJa: null,
+    contextualResetAssessment: "same_global_reset",
   };
   const targetRow = {
     tweet_id: tweetId,
@@ -767,7 +777,11 @@ test("an exact Landing notice is saved when a validated one-hop or two-hop Tibo 
         }] : []),
       ];
       const database = installSourceContextDatabase(rows);
-      const gemini = installGeminiPromptCapture([noticeResult, noticeResult]);
+      const scenarioNoticeResult = {
+        ...noticeResult,
+        contextualResetTweetId: pathLength === 1 ? PARENT_ID : grandparentId,
+      };
+      const gemini = installGeminiPromptCapture([scenarioNoticeResult, scenarioNoticeResult]);
       try {
         const requestMetadata = rootReply(parentText);
         const initialResponse = await POST(buildRequest({
@@ -791,6 +805,290 @@ test("an exact Landing notice is saved when a validated one-hop or two-hop Tibo 
         assert.match(gemini.prompts[1]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
         assert.match(gemini.prompts[1]!, new RegExp(pathLength === 1 ? PARENT_ID : grandparentId));
         assert.equal((gemini.prompts[1]!.match(/"relation":"reply"/g) ?? []).length, pathLength);
+      } finally {
+        gemini.restore();
+        database.restore();
+      }
+    }
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
+
+test("AI same-event judgments classify the real reset-button root and elliptical completions through validated paths", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+
+  const rootId = "2115000000000000131";
+  const rootText = "The reports of my reset button being lost are greatly exaggerated\n\nDay 10/ Reset";
+  const rootUrl = `https://x.com/thsottiaux/status/${rootId}`;
+  const scenarios = [
+    {
+      name: "the real-root Landing notice",
+      targetId: "2115000000000000132",
+      targetText: "Landing within the next 2 hours.",
+      signalType: "official_notice",
+      temporalDirection: "future",
+      pathLength: 1,
+    },
+    {
+      name: "one-hop Done and dusted completion",
+      targetId: "2115000000000000133",
+      targetText: "Done and dusted.",
+      signalType: "reset_executed",
+      temporalDirection: "completed_now",
+      pathLength: 1,
+    },
+    {
+      name: "two-hop All taken care of completion",
+      targetId: "2115000000000000134",
+      targetText: "All taken care of.",
+      signalType: "reset_executed",
+      temporalDirection: "completed_now",
+      pathLength: 2,
+    },
+  ] as const;
+
+  try {
+    for (const scenario of scenarios) {
+      const intermediateId = "2115000000000000135";
+      const intermediateText = "A difficult day, but we are still here.";
+      const parentId = scenario.pathLength === 1 ? rootId : intermediateId;
+      const parentText = scenario.pathLength === 1 ? rootText : intermediateText;
+      const parentUrl = `https://x.com/thsottiaux/status/${parentId}`;
+      const targetUrl = `https://x.com/thsottiaux/status/${scenario.targetId}`;
+      const createdAt = TARGET_CREATED_AT;
+      const sourceMetadata = {
+        isReply: true,
+        replyToHandles: ["@thsottiaux"],
+        replyParentTweetId: parentId,
+        replyParentTweetUrl: parentUrl,
+        replyContextText: parentText,
+        sourceTimeline: "with_replies" as const,
+      };
+      const targetRow = {
+        tweet_id: scenario.targetId,
+        text: scenario.targetText,
+        tweet_url: targetUrl,
+        tweet_created_at: createdAt,
+        verification_status: "auto_unverified",
+        is_reply: true,
+        reply_to_handles: ["@thsottiaux"],
+        reply_context_text: parentText,
+        source_timeline: "with_replies",
+        source_context_snapshot: null,
+        source_context_revision_hashes: [],
+        source_context_classified_revision_hashes: [],
+      };
+      const rootRow = {
+        tweet_id: rootId,
+        text: rootText,
+        tweet_url: rootUrl,
+        tweet_created_at: PARENT_CREATED_AT,
+        verification_status: "confirmed",
+        is_reply: false,
+        is_quote: false,
+      };
+      const parentRowForScenario = scenario.pathLength === 1
+        ? rootRow
+        : {
+            tweet_id: intermediateId,
+            text: intermediateText,
+            tweet_url: parentUrl,
+            tweet_created_at: PARENT_CREATED_AT,
+            verification_status: "confirmed",
+            is_reply: true,
+            reply_context_text: rootText,
+            source_context_snapshot: {
+              parent: {
+                tweetId: rootId,
+                tweetUrl: rootUrl,
+                authorHandle: "@thsottiaux",
+                text: rootText,
+              },
+            },
+          };
+      const scenarioResult = {
+        signalType: scenario.signalType,
+        confidence: 0.96,
+        temporalDirection: scenario.temporalDirection,
+        evidenceQuote: scenario.targetText,
+        reasonJa: "著者本文の発話が、検証済みの同一resetイベントを指しています。",
+        resetTypeJa: null,
+        teaserStrength: "none",
+        teaserStrengthConfidence: 0.95,
+        teaserStrengthEvidenceQuote: null,
+        teaserStrengthReasonJa: null,
+        contextualResetAssessment: "same_global_reset",
+        contextualResetTweetId: rootId,
+      };
+      const database = installSourceContextDatabase([
+        targetRow,
+        parentRowForScenario,
+        ...(scenario.pathLength === 2 ? [rootRow] : []),
+      ]);
+      const gemini = installGeminiPromptCapture([scenarioResult, scenarioResult]);
+
+      try {
+        const initialResponse = await POST(buildRequest({
+          tweetId: scenario.targetId,
+          text: scenario.targetText,
+          tweetUrl: targetUrl,
+          tweetCreatedAt: createdAt,
+          ...sourceMetadata,
+        }));
+        assert.equal(initialResponse.status, 200, `${scenario.name} initial delivery`);
+        assert.equal(database.rows.get(scenario.targetId)?.signal_type, "irrelevant");
+
+        const enrichmentResponse = await POST(buildRequest({
+          tweetId: scenario.targetId,
+          text: scenario.targetText,
+          tweetUrl: targetUrl,
+          tweetCreatedAt: createdAt,
+          kind: "source_context_enrichment",
+          ...sourceMetadata,
+        }));
+
+        assert.equal(enrichmentResponse.status, 200, `${scenario.name} enrichment`);
+        const finalRow = database.rows.get(scenario.targetId)!;
+        assert.equal(finalRow.signal_type, scenario.signalType, scenario.name);
+        assert.equal(finalRow.ai_signal_type, scenario.signalType, `${scenario.name} preserves AI audit`);
+        assert.deepEqual(
+          finalRow.source_context_classified_revision_hashes,
+          finalRow.source_context_revision_hashes,
+          `${scenario.name} records the classified revision`,
+        );
+        assert.match(gemini.prompts[1]!, new RegExp(rootId));
+        assert.equal(database.urls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+        assert.equal(database.urls.some((url) => url.includes("reset_execution_estimates")), false);
+      } finally {
+        gemini.restore();
+        database.restore();
+      }
+    }
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
+
+test("provider semantic contrasts stay irrelevant when source identity or event meaning is unsafe or unknown", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+
+  const parentText = "Reset usage limits for all users tomorrow.";
+  const cases: Array<{
+    name: string;
+    targetId: string;
+    assessment?: string;
+    sourceAuthor?: string;
+    sourceText?: string;
+    targetText?: string;
+    preserveMissingFacet?: boolean;
+    missingParent?: boolean;
+  }> = [
+    { name: "foreign source author", targetId: "2115000000000000141", assessment: "same_global_reset", sourceAuthor: "@external_user" },
+    { name: "different event", targetId: "2115000000000000142", assessment: "different_event", sourceText: "The product rollout is on the way tomorrow." },
+    { name: "BANKED distribution", targetId: "2115000000000000143", assessment: "same_banked_distribution", sourceText: "BANKED reset credits are being distributed to affected users." },
+    { name: "personal reset", targetId: "2115000000000000144", assessment: "same_personal_reset", sourceText: "I will reset usage limits for my account tomorrow." },
+    { name: "negated target speech act", targetId: "2115000000000000145", assessment: "negated", targetText: "The reset is not landing within the next 2 hours." },
+    { name: "missing semantic assessment", targetId: "2115000000000000146", assessment: undefined, preserveMissingFacet: true },
+    { name: "missing source graph", targetId: "2115000000000000147", assessment: "same_global_reset", missingParent: true },
+  ];
+
+  try {
+    for (const scenario of cases) {
+      const targetText = scenario.targetText ?? "Landing within the next 2 hours.";
+      const sourceAuthor = scenario.sourceAuthor ?? "@thsottiaux";
+      const sourceText = scenario.sourceText ?? parentText;
+      const parentUrl = `https://x.com/${sourceAuthor.slice(1)}/status/${PARENT_ID}`;
+      const targetUrl = `https://x.com/thsottiaux/status/${scenario.targetId}`;
+      const responseResult: Record<string, unknown> = {
+        signalType: "official_notice",
+        confidence: 0.96,
+        temporalDirection: "future",
+        evidenceQuote: targetText,
+        reasonJa: "対象本文と接続先を意味的に評価しました。",
+        resetTypeJa: null,
+        teaserStrength: "none",
+        contextualResetTweetId: PARENT_ID,
+      };
+      if (scenario.assessment !== undefined) responseResult.contextualResetAssessment = scenario.assessment;
+
+      const targetRow = {
+        tweet_id: scenario.targetId,
+        text: targetText,
+        tweet_url: targetUrl,
+        tweet_created_at: TARGET_CREATED_AT,
+        verification_status: "auto_unverified",
+        is_reply: true,
+        reply_to_handles: [sourceAuthor],
+        reply_context_text: sourceText,
+        source_timeline: "with_replies",
+        source_context_snapshot: null,
+        source_context_revision_hashes: [],
+        source_context_classified_revision_hashes: [],
+      };
+      const parentRow = {
+        tweet_id: PARENT_ID,
+        text: sourceText,
+        tweet_url: parentUrl,
+        tweet_created_at: PARENT_CREATED_AT,
+        verification_status: "confirmed",
+        is_reply: false,
+        is_quote: false,
+      };
+      const database = installSourceContextDatabase(scenario.missingParent ? [targetRow] : [targetRow, parentRow]);
+      const gemini = installGeminiPromptCapture(
+        [responseResult, responseResult],
+        [],
+        { preserveMissingContextualResetAssessment: scenario.preserveMissingFacet === true },
+      );
+
+      try {
+        const metadata = {
+          isReply: true,
+          replyToHandles: [sourceAuthor],
+          replyParentTweetId: PARENT_ID,
+          replyParentTweetUrl: parentUrl,
+          replyContextText: sourceText,
+          sourceTimeline: "with_replies" as const,
+        };
+        const initialResponse = await POST(buildRequest({
+          tweetId: scenario.targetId,
+          text: targetText,
+          tweetUrl: targetUrl,
+          tweetCreatedAt: TARGET_CREATED_AT,
+          ...metadata,
+        }));
+        assert.equal(initialResponse.status, 200, `${scenario.name} initial delivery`);
+
+        if (!scenario.missingParent) {
+          const enrichmentResponse = await POST(buildRequest({
+            tweetId: scenario.targetId,
+            text: targetText,
+            tweetUrl: targetUrl,
+            tweetCreatedAt: TARGET_CREATED_AT,
+            kind: "source_context_enrichment",
+            ...metadata,
+          }));
+          assert.equal(enrichmentResponse.status, 200, `${scenario.name} enrichment`);
+        }
+
+        assert.equal(database.rows.get(scenario.targetId)?.signal_type, "irrelevant", scenario.name);
       } finally {
         gemini.restore();
         database.restore();

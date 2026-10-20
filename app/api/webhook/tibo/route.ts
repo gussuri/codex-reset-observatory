@@ -831,7 +831,11 @@ async function handleTiboWebhookPost(
     }
     const contextSafetyDecision = getTiboContextSafetyDecision({
       authorText: text,
+      isReply: replyMetadata.isReply,
+      isQuote: replyMetadata.isQuote,
       replyContextText: replyMetadata.replyContextText,
+      replyParentTweetId: replyMetadata.replyParentTweetId,
+      replyParentTweetUrl: replyMetadata.replyParentTweetUrl,
       quoteContextText: replyMetadata.quoteContextText,
       quoteAuthorHandle: replyMetadata.quoteAuthorHandle,
       quoteTweetUrl: replyMetadata.quoteTweetUrl,
@@ -839,6 +843,8 @@ async function handleTiboWebhookPost(
       aiTeaserStrength: aiResult?.teaserStrength,
       evidenceQuote: aiResult?.evidenceQuote,
       temporalDirection: aiResult?.temporalDirection,
+      contextualResetAssessment: aiResult?.contextualResetAssessment,
+      contextualResetTweetId: aiResult?.contextualResetTweetId,
       targetTweetId: tweetId,
       targetTweetUrl: tweetUrl,
       targetTweetCreatedAt: createdDate.toISOString(),
