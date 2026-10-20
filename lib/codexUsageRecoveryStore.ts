@@ -26,10 +26,15 @@ import { createObservedRegularResetEventRow } from "./radar/regularResetSchedule
 import {
   NOTICE_LOOKBACK_MS,
   findRelatedTiboNotices,
+  isFormalTiboResetSignal,
   selectRepresentativeTiboNotice,
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "./radar/tiboHistory";
+import {
+  getTrustedTiboEditIdentity,
+  type TiboEditIdentityUpdate,
+} from "./radar/tiboEditIdentity";
 
 export type CodexUsageMonitorStateRow = {
   source_key: string;
@@ -499,12 +504,12 @@ export async function findRecentFormalTiboReset(
 ) {
   const time = Date.parse(observedAt);
   if (!Number.isFinite(time)) {
-    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null };
+    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, trustedEditIdentity: null, error: null };
   }
 
   const result = await client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
     .or("signal_type.eq.reset_executed,rule_signal_type.eq.reset_executed,ai_signal_type.eq.reset_executed")
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
@@ -514,7 +519,7 @@ export async function findRecentFormalTiboReset(
     .limit(20);
 
   if (result.error) {
-    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: result.error };
+    return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, trustedEditIdentity: null, error: result.error };
   }
 
   const candidates = (result.data ?? [])
@@ -553,6 +558,9 @@ export async function findRecentFormalTiboReset(
           ? Number(candidate.ai_confidence)
           : Number(candidate.rule_confidence)
         : Number(candidate.confidence)
+      : null,
+    trustedEditIdentity: candidate
+      ? getTrustedTiboEditIdentity(candidate, candidate.tweet_id)
       : null,
     error: null,
   };
@@ -722,6 +730,27 @@ export async function confirmNearestCodexRecoveryObservation(
   };
 }
 
+function areCompatibleTrustedTiboEditIdentities(
+  left: TiboEditIdentityUpdate,
+  right: TiboEditIdentityUpdate,
+) {
+  if (
+    left.edit_metadata_source !== "x_api" ||
+    right.edit_metadata_source !== "x_api" ||
+    left.logical_post_id !== right.logical_post_id
+  ) {
+    return false;
+  }
+
+  const shorter = left.edit_history_tweet_ids.length <= right.edit_history_tweet_ids.length
+    ? left.edit_history_tweet_ids
+    : right.edit_history_tweet_ids;
+  const longer = shorter === left.edit_history_tweet_ids
+    ? right.edit_history_tweet_ids
+    : left.edit_history_tweet_ids;
+  return shorter.every((tweetId, index) => tweetId === longer[index]);
+}
+
 export async function findFormalTiboResetCluster(
   client: SupabaseClient<any>,
   tiboTweetId: string,
@@ -732,6 +761,7 @@ export async function findFormalTiboResetCluster(
     tweet_created_at: string;
     confidence: number;
   },
+  currentTrustedEditIdentity?: TiboEditIdentityUpdate | null,
 ) {
   const time = Date.parse(tiboTweetCreatedAt);
   const fallback = (error: unknown = null) => ({
@@ -749,7 +779,7 @@ export async function findFormalTiboResetCluster(
 
   const result = await client
     .from("tibo_signals")
-    .select("tweet_id,tweet_created_at,signal_type,confidence,verification_status,is_reply")
+    .select("tweet_id,tweet_created_at,signal_type,confidence,verification_status,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
     .eq("signal_type", "reset_executed")
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
@@ -783,6 +813,114 @@ export async function findFormalTiboResetCluster(
     tweet_created_at: tiboTweetCreatedAt,
   };
 
+  const primaryTime = Date.parse(primary.tweet_created_at);
+  if (!Number.isFinite(primaryTime)) {
+    return fallback(new Error("Formal Tibo reset timestamp is invalid"));
+  }
+  const persistedCurrentRow = (result.data ?? []).find((row) => row.tweet_id === tiboTweetId);
+  const trustedCurrentEditIdentity = currentTrustedEditIdentity
+    ? getTrustedTiboEditIdentity({ ...currentTrustedEditIdentity, tweet_id: tiboTweetId }, tiboTweetId)
+    : getTrustedTiboEditIdentity(persistedCurrentRow, tiboTweetId);
+  const previousResetResult = await client
+    .from("tibo_signals")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,quote_author_handle,quote_tweet_url,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+    .eq("signal_type", "reset_executed")
+    .neq("verification_status", "rejected")
+    .gte("tweet_created_at", new Date(primaryTime - NOTICE_LOOKBACK_MS).toISOString())
+    .lt("tweet_created_at", new Date(primaryTime).toISOString())
+    .order("tweet_created_at", { ascending: false })
+    .limit(100);
+
+  if (previousResetResult.error) {
+    return fallback(previousResetResult.error);
+  }
+
+  const previousFormalRows = (previousResetResult.data ?? [])
+    .filter((row) =>
+      typeof row.tweet_id === "string" &&
+      typeof row.text === "string" &&
+      typeof row.tweet_url === "string" &&
+      typeof row.tweet_created_at === "string" &&
+      row.signal_type === "reset_executed",
+    )
+    .map((row) => ({
+      row,
+      signal: {
+        tweet_id: row.tweet_id,
+        text: row.text,
+        tweet_url: row.tweet_url,
+        tweet_created_at: row.tweet_created_at,
+        signal_type: "reset_executed" as const,
+        confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
+        verification_status: row.verification_status === "confirmed" || row.verification_status === "rejected"
+          ? row.verification_status
+          : "auto_unverified" as const,
+        classification_source: typeof row.classification_source === "string"
+          ? row.classification_source
+          : null,
+        is_reply: row.is_reply === true,
+        is_quote: row.is_quote === true,
+        quote_author_handle: typeof row.quote_author_handle === "string" ? row.quote_author_handle : null,
+        quote_tweet_url: typeof row.quote_tweet_url === "string" ? row.quote_tweet_url : null,
+      } satisfies FormalTiboResetSignal,
+    }))
+    .filter(({ signal }) => {
+      const signalTime = Date.parse(signal.tweet_created_at);
+      return Number.isFinite(signalTime) && signalTime < primaryTime && isFormalTiboResetSignal(signal);
+    });
+  const isCurrentEditChainVersion = (
+    row: Parameters<typeof getTrustedTiboEditIdentity>[0],
+  ) => {
+    if (!trustedCurrentEditIdentity || typeof row?.tweet_id !== "string") return false;
+    if (!trustedCurrentEditIdentity.edit_history_tweet_ids.includes(row.tweet_id)) return false;
+    const rowIdentity = getTrustedTiboEditIdentity(row, row.tweet_id);
+    if (rowIdentity) {
+      return areCompatibleTrustedTiboEditIdentities(trustedCurrentEditIdentity, rowIdentity);
+    }
+    return row.edit_metadata_source !== "x_api";
+  };
+  const currentEditChainRows = previousFormalRows.filter(({ row }) => isCurrentEditChainVersion(row));
+  const currentClusterEditVersions = trustedCurrentEditIdentity
+    ? candidates.filter((row) => {
+        if (!trustedCurrentEditIdentity.edit_history_tweet_ids.includes(row.tweet_id)) return false;
+        if (row.tweet_id === tiboTweetId) return true;
+        const rowIdentity = getTrustedTiboEditIdentity(row, row.tweet_id);
+        return Boolean(
+          rowIdentity &&
+          areCompatibleTrustedTiboEditIdentities(trustedCurrentEditIdentity, rowIdentity),
+        );
+      })
+    : [];
+  const currentLogicalPostVersions = [
+    ...currentClusterEditVersions,
+    ...currentEditChainRows.map(({ row }) => ({
+      tweet_id: row.tweet_id,
+      tweet_created_at: row.tweet_created_at,
+      confidence: Number(row.confidence),
+    })),
+  ].sort((left, right) => Date.parse(left.tweet_created_at) - Date.parse(right.tweet_created_at));
+  const eventAnchor = currentLogicalPostVersions[0] ?? {
+    tweet_id: tiboTweetId,
+    tweet_created_at: tiboTweetCreatedAt,
+  };
+  const eventPrimary = trustedCurrentEditIdentity ? eventAnchor : primary;
+  const eventCandidates = [
+    ...candidates,
+    ...currentEditChainRows.map(({ row }) => ({
+      tweet_id: row.tweet_id,
+      tweet_created_at: row.tweet_created_at,
+      confidence: Number(row.confidence),
+    })),
+  ];
+  const eventAnchorTime = Date.parse(eventAnchor.tweet_created_at);
+  const previousResetAt = previousFormalRows
+    .filter(({ row, signal }) => {
+      const signalTime = Date.parse(signal.tweet_created_at);
+      return signalTime < eventAnchorTime && !isCurrentEditChainVersion(row);
+    })
+    .sort((left, right) => Date.parse(right.signal.tweet_created_at) - Date.parse(left.signal.tweet_created_at))[0]
+    ?.signal.tweet_created_at ?? null;
+
   let noticeQuery = client
     .from("tibo_signals")
     .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status");
@@ -796,8 +934,8 @@ export async function findFormalTiboResetCluster(
   noticeQuery = noticeQuery
     .eq("is_reply", false)
     .neq("verification_status", "rejected")
-    .gte("tweet_created_at", new Date(time - NOTICE_LOOKBACK_MS).toISOString())
-    .lt("tweet_created_at", new Date(time).toISOString())
+    .gte("tweet_created_at", new Date(eventAnchorTime - NOTICE_LOOKBACK_MS).toISOString())
+    .lt("tweet_created_at", new Date(eventAnchorTime).toISOString())
     .order("tweet_created_at", { ascending: true })
     .limit(100);
 
@@ -844,24 +982,25 @@ export async function findFormalTiboResetCluster(
       temporal_resolution_status: row.temporal_resolution_status ?? null,
     }));
   const resetSignal = {
-    tweet_id: tiboTweetId,
+    tweet_id: eventAnchor.tweet_id,
     text: "",
-    tweet_url: `https://x.com/thsottiaux/status/${tiboTweetId}`,
-    tweet_created_at: tiboTweetCreatedAt,
+    tweet_url: `https://x.com/thsottiaux/status/${eventAnchor.tweet_id}`,
+    tweet_created_at: eventAnchor.tweet_created_at,
     signal_type: "reset_executed" as const,
     confidence: 1,
     verification_status: "auto_unverified" as const,
   } satisfies FormalTiboResetSignal;
-  const relatedNotices = findRelatedTiboNotices(resetSignal, notices);
+  const relatedNotices = findRelatedTiboNotices(resetSignal, notices, previousResetAt);
   const representativeNotice = selectRepresentativeTiboNotice(relatedNotices);
   const timestampByTweetId = new Map<string, number>([
-    ...candidates.map((row) => [row.tweet_id, Date.parse(row.tweet_created_at)] as const),
+    ...eventCandidates.map((row) => [row.tweet_id, Date.parse(row.tweet_created_at)] as const),
     ...relatedNotices.map((notice) => [notice.tweet_id, Date.parse(notice.tweet_created_at)] as const),
     [tiboTweetId, time],
   ]);
   const sourceTweetIds = Array.from(new Set([
     ...relatedNotices.map((notice) => notice.tweet_id),
-    ...candidates.map((row) => row.tweet_id),
+    ...eventCandidates.map((row) => row.tweet_id),
+    ...(trustedCurrentEditIdentity?.edit_history_tweet_ids ?? []),
     tiboTweetId,
   ])).sort((left, right) =>
     (timestampByTweetId.get(left) ?? Number.MAX_SAFE_INTEGER) -
@@ -870,12 +1009,12 @@ export async function findFormalTiboResetCluster(
   );
 
   return {
-    primaryTweetId: primary.tweet_id,
-    representativeTweetId: representativeNotice?.tweet_id ?? primary.tweet_id,
+    primaryTweetId: eventPrimary.tweet_id,
+    representativeTweetId: representativeNotice?.tweet_id ?? eventPrimary.tweet_id,
     representativeNoticeId: representativeNotice?.tweet_id ?? null,
     representativeNoticeAt: representativeNotice?.tweet_created_at ?? null,
     sourceTweetIds,
-    announcedAt: relatedNotices[0]?.tweet_created_at ?? primary.tweet_created_at,
+    announcedAt: relatedNotices[0]?.tweet_created_at ?? eventPrimary.tweet_created_at,
     error: null,
   };
 }
@@ -907,12 +1046,15 @@ export async function upsertResetExecutionEstimate(
     }
   }
 
-  if (!existingResult.data && (input.tiboSourceTweetIds ?? []).length > 0) {
+  const estimateIdentityTweetIds = input.tiboPrimaryTweetId?.trim()
+    ? [input.tiboPrimaryTweetId.trim()]
+    : [];
+  if (!existingResult.data && estimateIdentityTweetIds.length > 0) {
     existingResult = await client
       .from("reset_execution_estimates")
       .select(EXECUTION_ESTIMATE_COLUMNS)
       .neq("estimator_version", BANKED_DISTRIBUTION_ESTIMATOR_VERSION)
-      .overlaps("tibo_source_tweet_ids", input.tiboSourceTweetIds!)
+      .overlaps("tibo_source_tweet_ids", estimateIdentityTweetIds)
       .limit(1)
       .maybeSingle();
     if (existingResult.error) {
@@ -924,18 +1066,29 @@ export async function upsertResetExecutionEstimate(
   const existingEstimate = toResetExecutionEstimate(
     existingRow,
   );
+  const tiboProvenanceResolved = input.tiboProvenanceResolved === true;
   const stableInput = existingEstimate
     ? {
         ...input,
         resetEventKey: existingEstimate.resetEventKey,
-        tiboAnnouncedAt: existingEstimate.tiboAnnouncedAt ?? input.tiboAnnouncedAt,
-        tiboPrimaryTweetId: existingEstimate.tiboPrimaryTweetId ?? input.tiboPrimaryTweetId,
-        officialNoticeTweetId: existingEstimate.officialNoticeTweetId ?? input.officialNoticeTweetId,
-        officialNoticeAt: existingEstimate.officialNoticeAt ?? input.officialNoticeAt,
-        tiboSourceTweetIds: Array.from(new Set([
-          ...(input.tiboSourceTweetIds ?? []),
-          ...existingEstimate.tiboSourceTweetIds,
-        ])),
+        tiboAnnouncedAt: tiboProvenanceResolved
+          ? input.tiboAnnouncedAt ?? null
+          : existingEstimate.tiboAnnouncedAt ?? input.tiboAnnouncedAt,
+        tiboPrimaryTweetId: tiboProvenanceResolved
+          ? input.tiboPrimaryTweetId ?? null
+          : existingEstimate.tiboPrimaryTweetId ?? input.tiboPrimaryTweetId,
+        officialNoticeTweetId: tiboProvenanceResolved
+          ? input.officialNoticeTweetId ?? null
+          : existingEstimate.officialNoticeTweetId ?? input.officialNoticeTweetId,
+        officialNoticeAt: tiboProvenanceResolved
+          ? input.officialNoticeAt ?? null
+          : existingEstimate.officialNoticeAt ?? input.officialNoticeAt,
+        tiboSourceTweetIds: tiboProvenanceResolved
+          ? Array.from(new Set(input.tiboSourceTweetIds ?? []))
+          : Array.from(new Set([
+              ...(input.tiboSourceTweetIds ?? []),
+              ...existingEstimate.tiboSourceTweetIds,
+            ])),
       }
     : input;
   const estimate = buildResetExecutionEstimate({
@@ -956,7 +1109,9 @@ export async function upsertResetExecutionEstimate(
       recovery_previous_observed_at: estimate.recoveryPreviousObservedAt,
       recovery_observed_at: estimate.recoveryObservedAt,
       tibo_announced_at: estimate.tiboAnnouncedAt,
-      tibo_primary_tweet_id: existingEstimate?.tiboPrimaryTweetId ?? estimate.tiboPrimaryTweetId,
+      tibo_primary_tweet_id: tiboProvenanceResolved
+        ? estimate.tiboPrimaryTweetId
+        : existingEstimate?.tiboPrimaryTweetId ?? estimate.tiboPrimaryTweetId,
       tibo_source_tweet_ids: estimate.tiboSourceTweetIds,
       official_notice_tweet_id: estimate.officialNoticeTweetId,
       official_notice_at: estimate.officialNoticeAt,

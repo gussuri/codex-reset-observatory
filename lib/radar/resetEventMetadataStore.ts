@@ -199,6 +199,8 @@ export async function ensureResetEventMetadataForEvent(
     }
   }
 
+  // Successful same-input metadata may contain human-edited summaries or notes.
+  // A prompt upgrade alone must not overwrite that event-level correction.
   if (
     existing?.event_metadata_status === "success" &&
     existing.event_metadata_input_hash === inputHash

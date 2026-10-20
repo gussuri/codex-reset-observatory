@@ -187,6 +187,130 @@ test("a trusted logical post cannot time-merge with unrelated unlabeled history"
   );
 });
 
+test("a prior notice shared by history and a stale estimate does not merge two completed resets", () => {
+  const oldNoticeId = "2111492673890824348";
+  const oldCompletionId = "2111566005684289735";
+  const currentCompletionId = "2112432076767289678";
+  const oldNoticeAt = "2026-10-17T16:20:57.000Z";
+  const oldNotice: TiboNoticeSignal = {
+    tweet_id: oldNoticeId,
+    text: "Usage limits reset soon.",
+    tweet_url: `https://x.com/thsottiaux/status/${oldNoticeId}`,
+    tweet_created_at: oldNoticeAt,
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "confirmed",
+  };
+  const oldCompletion = tiboSignal(oldCompletionId, "2026-10-17T17:00:00.000Z");
+  const currentCompletion = tiboSignal(
+    currentCompletionId,
+    "2026-10-20T06:33:48.000Z",
+    { text: "Day 15/ Nevermind, we're still cooking... and reset. Enjoy." },
+  );
+  const staleEstimate: ResetExecutionEstimate = {
+    resetEventKey: `tibo-reset-${currentCompletionId}`,
+    displayExecutionAt: "2026-10-20T06:34:03.741Z",
+    executionTimeSource: "usage_observation",
+    executionTimeConfidence: "high",
+    executionTimePrecision: "approximate",
+    executionWindowStartAt: "2026-10-20T06:32:03.403Z",
+    executionWindowEndAt: "2026-10-20T06:34:03.741Z",
+    recoveryObservationId: "observation-current-reset",
+    tiboPrimaryTweetId: oldNoticeId,
+    tiboSourceTweetIds: [oldNoticeId, currentCompletionId],
+    officialNoticeTweetId: oldNoticeId,
+    officialNoticeAt: oldNoticeAt,
+    estimatorVersion: "usage-execution-monitor-v1",
+  };
+  const oldDynamicEvent: WindowEventLike = {
+    id: `tibo-reset-${oldCompletionId}`,
+    recordKind: "confirmed_global",
+    officialNoticeTweetId: oldNoticeId,
+    sourceTweetIds: [oldNoticeId, oldCompletionId],
+    source_url: oldNotice.tweet_url,
+    completed_at: oldCompletion.tweet_created_at,
+    closed_at: oldCompletion.tweet_created_at,
+  };
+
+  const history = combineWithIdentityContext(
+    [],
+    [oldCompletion, currentCompletion],
+    [],
+    [],
+    [oldNotice],
+    [],
+    [staleEstimate],
+    [],
+    {
+      rawTiboSignals: [oldNotice, oldCompletion, currentCompletion],
+      dynamicEvents: [oldDynamicEvent],
+    },
+  );
+  assert.deepEqual(
+    history.map((event) => event.id).sort(),
+    [`tibo-reset-${oldCompletionId}`, `tibo-reset-${currentCompletionId}`].sort(),
+  );
+  const oldEvent = history.find((event) => event.id === `tibo-reset-${oldCompletionId}`);
+  const currentEvent = history.find((event) => event.id === `tibo-reset-${currentCompletionId}`);
+  assert.ok(oldEvent);
+  assert.ok(currentEvent);
+  assert.equal(oldEvent.completed_at, oldCompletion.tweet_created_at);
+  assert.equal(currentEvent.officialNoticeTweetId, undefined);
+  assert.equal(currentEvent.completed_at, staleEstimate.displayExecutionAt);
+  assert.deepEqual(currentEvent.sourceTweetIds, [currentCompletionId]);
+  assert.equal(currentEvent.source_url, currentCompletion.tweet_url);
+});
+
+test("a shared official notice alone does not dedupe distinct completion records", () => {
+  const noticeId = "2111492673890824348";
+  const oldCompletionId = "2111566005684289735";
+  const currentCompletionId = "2112432076767289678";
+  const notice: TiboNoticeSignal = {
+    tweet_id: noticeId,
+    text: "Usage limits reset soon.",
+    tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
+    tweet_created_at: "2026-10-17T16:20:57.000Z",
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "confirmed",
+  };
+  const oldEvent = staticEvent({
+    id: `tibo-reset-${oldCompletionId}`,
+    opened_at: "2026-10-17T16:20:57.000Z",
+    completed_at: "2026-10-17T17:00:00.000Z",
+    closed_at: "2026-10-17T17:00:00.000Z",
+    source_url: notice.tweet_url,
+    officialNoticeTweetId: noticeId,
+    sourceTweetIds: [noticeId, oldCompletionId],
+  });
+  const currentCompletion = tiboSignal(
+    currentCompletionId,
+    "2026-10-20T06:33:48.000Z",
+    {
+      text: "Day 15/ Nevermind, we're still cooking... and reset. Enjoy.",
+      related_notice: notice,
+      related_notices: [notice],
+    },
+  );
+
+  const history = combineWithIdentityContext(
+    [oldEvent],
+    [currentCompletion],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    { rawTiboSignals: [currentCompletion] },
+  );
+
+  assert.deepEqual(
+    history.map((event) => event.id).sort(),
+    [`tibo-reset-${oldCompletionId}`, `tibo-reset-${currentCompletionId}`].sort(),
+  );
+});
+
 test("reuses an estimate key when one recovery observation uniquely matches the logical post", () => {
   const signal = tiboSignal("2000000000000000031", "2026-08-01T05:00:00.000Z", {
     logical_post_id: "2000000000000000031",

@@ -5,6 +5,7 @@ import {
   ensureResetEventMetadataForEvent,
   hashResetEventMetadataInput,
 } from "../lib/radar/resetEventMetadataStore";
+import { RESET_EVENT_METADATA_PROMPT_VERSION } from "../lib/radar/resetEventMetadata";
 import type { ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 
 const eventKey = "tibo-reset-event-metadata-store";
@@ -170,6 +171,7 @@ test("reuses a successful same-input row without a duplicate metadata generation
   const mock = setupStoreFetch(record({
     event_metadata_status: "success",
     event_metadata_input_hash: inputHash,
+    event_metadata_prompt_version: RESET_EVENT_METADATA_PROMPT_VERSION,
   }));
   let generatedCalls = 0;
 
@@ -197,6 +199,68 @@ test("reuses a successful same-input row without a duplicate metadata generation
     assert.equal(result.wrote, false);
     assert.equal(generatedCalls, 0);
     assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("reuses same-input successful metadata across prompt versions to protect corrected summaries and notes", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const inputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+  });
+  const existing = record({
+    event_metadata_status: "success",
+    event_metadata_input_hash: inputHash,
+    event_metadata_prompt_version: "reset-event-metadata-v2",
+    manual_name_ja: "手動名を維持",
+    event_summary_ja: "手動修正した日本語の要約",
+    event_summary_en: "Manually corrected English summary",
+    event_summary_zh: "手动修正的中文摘要",
+    event_note_ja: "手動で整えた日本語の補足。",
+    event_note_en: "Manually polished English note.",
+    event_note_zh: "手动润色的中文补充。",
+  });
+  const mock = setupStoreFetch(existing);
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        return {
+          ...generated,
+          status: "success" as const,
+          flags: [],
+          model: "test-model",
+          promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+          latencyMs: 0,
+          httpStatus: 200,
+          retryAfterSeconds: null,
+        };
+      },
+    });
+
+    assert.equal(result.status, "reused");
+    assert.equal(result.wrote, false);
+    assert.equal(result.skipped, true);
+    assert.equal(generatedCalls, 0);
+    assert.equal(mock.writes.length, 0);
+    assert.equal(existing.event_summary_ja, "手動修正した日本語の要約");
+    assert.equal(existing.event_note_en, "Manually polished English note.");
   } finally {
     mock.restore();
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;

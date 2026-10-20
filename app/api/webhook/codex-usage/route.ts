@@ -54,7 +54,7 @@ import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
 import { resolveBankedAssociation as resolveSharedBankedAssociation } from "@/lib/codexUsageBankedAssociation";
 import type { BankedPostAssociationDecision } from "@/lib/radar/resetPostAssociation";
-import { getTrustedTiboEditIdentity } from "@/lib/radar/tiboEditIdentity";
+import { getTrustedTiboEditIdentity, type TiboEditIdentityUpdate } from "@/lib/radar/tiboEditIdentity";
 
 const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
@@ -336,6 +336,7 @@ type MatchingTiboResult = {
   text: string | null;
   needsPromotion: boolean;
   confidence: number | null;
+  trustedEditIdentity?: TiboEditIdentityUpdate | null;
   error: unknown;
 };
 
@@ -720,6 +721,7 @@ async function processCodexUsageSnapshot(
               confidence: matchingTibo.confidence ?? 0.95,
             }
           : undefined,
+        matchingTibo.trustedEditIdentity,
       );
       if (cluster.error) {
         console.warn("[Codex usage] reset execution estimate lookup failed", { reason: "database_error" });

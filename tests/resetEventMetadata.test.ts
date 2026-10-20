@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RESET_EVENT_METADATA_PROMPT_VERSION,
+  RESET_EVENT_METADATA_SYSTEM_PROMPT,
   buildResetEventMetadataPrompt,
   generateResetEventMetadata,
   parseResetEventMetadataResponse,
@@ -24,9 +25,9 @@ const validPayload = {
   summaryJa: "Astraの品質問題修正に伴うリセット",
   summaryEn: "Reset following a fix for an Astra quality issue",
   summaryZh: "修复Astra质量问题后的重置",
-  noteJa: "予告投稿で品質問題の修正が説明され、完了投稿でリセット実施が確認された。",
-  noteEn: "The notice described the quality fix and the completion post confirmed the reset.",
-  noteZh: "预告说明了质量问题修复，完成帖确认了重置实施。",
+  noteJa: "予告投稿で品質問題の修正が説明されています。完了投稿でリセット実施が確認されました。",
+  noteEn: "The notice described the quality fix. The completion post confirmed the reset.",
+  noteZh: "预告说明了质量问题的修复。完成帖确认了重置已执行。",
   reasonJa: "関連投稿のうち、完了文面より具体的な品質問題修正を主要文脈として採用。",
   scopeEvidence: "will reset limits for all paid plans tonight",
 };
@@ -94,6 +95,55 @@ test("requires a non-empty apology-or-celebration reason and localized copy", ()
   assert.equal(invalidNote.status, "invalid_schema");
 });
 
+test("accepts one concise factual sentence when the source supports no further note", () => {
+  const oneSentence = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      noteJa: "完了投稿で利用枠のリセットが確認されました。",
+      noteEn: "The completion post confirmed the usage-limit reset.",
+      noteZh: "完成帖确认了使用额度已重置。",
+    },
+    "test-model",
+    0,
+    sourceContext,
+  );
+  assert.equal(oneSentence.status, "success");
+
+  const naturalTwoToThreeSentences = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      noteJa: "予告投稿で品質問題の修正が説明されています。完了投稿でリセット実施が確認されました。",
+    },
+    "test-model",
+    0,
+    sourceContext,
+  );
+  assert.equal(naturalTwoToThreeSentences.status, "success");
+});
+
+test("accepts source quotations with internal punctuation, abbreviations, and decimals", () => {
+  const quotedSource = [
+    "Tibo noted the v1.5 update and a 3.5-hour window.",
+    "The completion post confirmed the usage-limit reset.",
+  ].join(" ");
+  const result = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      scope: null,
+      scopeEvidence: null,
+      noteJa: "Tibo氏はDay 15のリセット完了を報告しました。",
+      noteEn: "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.",
+      noteZh: "Tibo报告第15天重置完成。原文保留了烹饪相关的措辞。",
+    },
+    "test-model",
+    0,
+    quotedSource,
+  );
+
+  assert.equal(result.status, "success");
+  assert.equal(result.noteEn, "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.");
+});
+
 test("prompt treats all canonical related posts as one event and prioritizes specific cause context", () => {
   const prompt = buildResetEventMetadataPrompt({
     completedAt: "2026-09-12T15:00:00.000Z",
@@ -109,6 +159,30 @@ test("prompt treats all canonical related posts as one event and prioritizes spe
   assert.match(prompt, /same canonical reset event/i);
   assert.match(prompt, /specific|cause|reason|incident|milestone/i);
   assert.match(prompt, /all paid plans/i);
+});
+
+test("short cooking callbacks get retrospective notes without invented incident or audience details", () => {
+  const shortPost = [
+    "[Tibo post | tweet_id=2112432076767289678]",
+    "Day 15/ Nevermind, we're still cooking... and reset. Enjoy.",
+    "[End Tibo post]",
+  ].join("\n");
+  const prompt = buildResetEventMetadataPrompt({
+    completedAt: "2026-10-20T06:33:48.000Z",
+    sourceContext: shortPost,
+    fallbackReasonType: "ご祝儀リセット",
+    fallbackScope: null,
+  });
+
+  assert.match(prompt, /we're still cooking.*and reset/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /source-grounded wordplay or callback/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /usage limits returning/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not add facts not supported/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /2–3 short factual sentences as a style target/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /single concise factual sentence is acceptable/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not pad.*or invent facts/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /If applicability is difficult to determine, return null/i);
+  assert.doesNotMatch(prompt, /2112268918681485431/);
 });
 
 test("generator parses Gemini JSON and never needs to infer scope from product names", async () => {
@@ -166,7 +240,9 @@ test("Gemini request separates short public event notes from the internal audit 
 
     assert.equal(result.status, "success");
     assert.match(systemPrompt, /public note[s]? (?:should|must) (?:only )?(?:add|describe).*event/i);
-    assert.match(systemPrompt, /one (?:short|concise) (?:factual )?sentence/i);
+    assert.match(systemPrompt, /2–3 short factual sentences/i);
+    assert.match(systemPrompt, /natural retrospective wording/i);
+    assert.match(systemPrompt, /usage limits returning/i);
     assert.match(systemPrompt, /Do not.*(?:reasonType|classification rationale)/i);
     assert.match(systemPrompt, /Do not.*(?:classified|processed|explain scope|system interpretation)/i);
     assert.match(systemPrompt, /reasonJa.*internal audit.*reasonType.*scope/i);
