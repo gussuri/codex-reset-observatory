@@ -1597,6 +1597,12 @@ async function handleTiboWebhookPost(
             reason: "lookup_failed",
           });
         } else if (recoveryMatch.observation) {
+          const formalVersion = logicalPost?.rawVersions.find((row) =>
+            row.tweet_id === effectiveFormalCandidate.tweet_id,
+          );
+          const trustedEditIdentity = formalVersion
+            ? getTrustedTiboEditIdentity(formalVersion, effectiveFormalCandidate.tweet_id)
+            : null;
           formalFlowCluster = await findFormalTiboResetCluster(
             supabase,
             effectiveFormalCandidate.tweet_id,
@@ -1607,6 +1613,7 @@ async function handleTiboWebhookPost(
               tweet_created_at: effectiveFormalCandidate.tweet_created_at,
               confidence: effectiveFormalCandidate.confidence ?? 0,
             },
+            trustedEditIdentity,
           );
           if (formalFlowCluster.error) {
             formalEnrichmentFailed = true;
