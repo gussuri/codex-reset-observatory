@@ -979,9 +979,41 @@ test("transient AI classification retries exhaust the existing bounded queue", a
   assert.equal(context.localStore.tibo_pending_tweet_payloads[0].retryExhausted, true);
 });
 
+test("transient classification fallback recovers on the existing alarm without a duplicate tweet delivery", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: (_url, _fetchOpts, callIndex) => ({
+      ok: true,
+      status: 200,
+      json: async () => callIndex === 1
+        ? { success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }
+        : { success: true, aiStatus: "success", classificationSource: "gemini" },
+    }),
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149752",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149752",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 1);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+
+  await context.fireAlarm("tibo_page_reload_alarm");
+
+  assert.equal(context.mockFetchCalls.length, 2);
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, [payload.tweetId]);
+  assert.deepEqual(context.localStore.tibo_pending_tweet_payloads, []);
+});
+
 test("a full retry queue prevents untracked webhook attempts", async () => {
   const pendingPayloads = Array.from({ length: 50 }, (_value, index) => {
-    const tweetId = String(2200000000000000000 + index);
+    const tweetId = `220000000000000${String(index).padStart(4, "0")}`;
     return {
       tweetId,
       payload: {
@@ -995,6 +1027,7 @@ test("a full retry queue prevents untracked webhook attempts", async () => {
       retryExhausted: false,
     };
   });
+  assert.equal(new Set(pendingPayloads.map((entry) => entry.tweetId)).size, 50);
   const context = setupServiceWorkerContext([], {
     initialLocalStore: {
       tibo_pending_tweet_payloads: pendingPayloads,
