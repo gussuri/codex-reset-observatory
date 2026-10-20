@@ -438,6 +438,10 @@ test("history read starts with one canonical non-reply page below the pagination
 
 test("canonical history cursor filter keeps non-reply scope and deterministic tweet ordering", () => {
   assert.equal(buildCanonicalTiboHistoryFilter(), "is_reply.is.null,is_reply.eq.false");
+  assert.match(
+    buildCanonicalTiboHistoryFilter(undefined, true),
+    /formal_reply_admission_proof->>version\.eq\.tibo-formal-reply-admission-v3/,
+  );
   const filter = buildCanonicalTiboHistoryFilter({
     tweetCreatedAt: "2026-08-02T10:00:00.000Z",
     tweetId: "123",

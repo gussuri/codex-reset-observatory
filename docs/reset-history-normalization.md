@@ -1,6 +1,6 @@
 # リセット履歴のcanonical normalization
 
-この文書は、リセット履歴を source facts から canonical history と公開表示へ変換する際の正本です。コードとテストに既にある挙動を根拠にしつつ、レビューで明示された不変条件を整理します。ここに書かれた仕様は、履歴データ、分類、Gemini prompt、公開UIをこの変更で更新するという意味ではありません。
+この文書は、リセット履歴を source facts から canonical history と公開表示へ変換する際の正本です。コードとテストにある挙動と、レビューで明示された不変条件を整理します。この変更では、Day N 見出しの時間解釈と、検証済みの同一 global reset へ reply で結び付く完了投稿だけを正式履歴へ加える狭い経路を記録します。
 
 ## 読み方と監査範囲
 
@@ -50,6 +50,8 @@ source facts
 ### 実施時刻と「告知から実施まで」
 
 notice-to-execution は notice と execution の差を人間向けに表す derived presentation です。履歴の canonical execution timestamp そのものではありません。現在の表示処理では notice がない場合、または保存値が `0分` 相当の場合にこの行を空にできます。これによって event identity や execution timestamp を変更してはいけません。
+
+告知の有無と時刻の確度は別に判定します。Gemini が `official_notice`、時制 `unclear`、時刻 `unknown` と分類し、引用 evidence が本文にあり、利用上限リセットへの明示的な話題で、返信・引用・拒否・相殺・履歴・技術的 reset ではない投稿は、信頼度 `0.80` 以上なら unscheduled notice として表示・履歴連携できます。この例外は notice の存在だけを示します。予定時刻、実行時刻、probability teaser、完了済み reset は作らず、開始/終了時刻も公開しません。予定時刻がある通常 notice の `0.95` 閾値と、reset completion の判定は維持します。
 
 ### Legacy scope input の扱い
 
@@ -220,6 +222,15 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - **Canonical fields**: `recordKind = banked_distribution`、`cycleType = ランダムリセット`、`reasonType = 詫びリセット`、`resetMethod = 任意リセット権配布`、`scope = 一部ユーザー`、`randomResetTargetScope = conditional`。
 - **Public presentation**: JA/EN/ZH の補償配布名、限定 scope、詫び reason、BANKED method/note を表示する。internal の `randomResetTargetScope` は public DTO/history item へ露出しない。`isEligibleRandomResetEvent()` は false のまま。
 
+### 7. Day N 見出しと、検証済み reply 完了投稿
+
+- `Day 10/ Reset` や `Day 13/ Le limit reset` の `Day N` はシリーズ上の番号として扱い、過去の日付、経過日数、時計時刻、event timestamp に変換しません。時制や schedule の根拠がなければ temporal direction は unresolved のままにします。見出しの後に独立した明示 schedule がある場合は、その引用された時刻だけを解釈できます。
+- reply の `reset_executed` は既定では正式履歴から除外します。例外は、成功した Gemini 分類が `reset_executed`、confidence `>= 0.95`、`completed_now` で、同じ global reset と特定した source tweet ID までの完全な検証済みグラフがあり、すべての辺が Tibo 本人の reply である場合だけです。さらに、同一の Gemini 応答が cited source text の exact quote で forced method と全 paid-user または all-user scope の両方を裏付ける必要があります。same-event 判定、reply edge、affected-user 内の “everyone” は method/scope の証拠になりません。グラフは最大2辺とし、target の本文・投稿時刻・URL・完全一致する evidence quote、method/scope quote と各 source text hash、現在の source-context revision hashes、分類完了 marker を同じ proof に束縛します。
+- proof は versioned なサーバー生成 JSON で、private な `tibo_signals.formal_reply_admission_proof` に保存します。読み取り時も Gemini audit fields、auto-unverified 状態、evidence quote、method/scope evidence、source-context revision hashes を再検査します。manual/confirmed/rejected、古い revision、失敗・未完了分類、部分・不明・foreign-author・quote path、BANKED distribution、affected-user/personal/unknown scope、proof 欠落は fail closed です。proof は public DTO に含めません。
+- `official_notice` は告知の種類であり、実施時刻の確定度とは別に評価します。短い usage-limit reset 見出しが告知として成立しても、信頼できる時刻がなければ `noticeTimingStatus=unknown` と `temporalDirection=unclear` で保存し、日時・実施完了を推定しません。曖昧な時制の official notice はこの timing status が明示されなければ選択時に fail closed です。
+- event identity は検証された contextual reset root の tweet ID を使い、その reply path の tweet IDs を provenance に加えます。同じ root を示す複数の reply は同じ event identity に集約します。時刻の近さや似た文面だけでは結びません。
+- 対応する migration は [`supabase/migrations/20261020120000_add_tibo_formal_reply_admission.sql`](../supabase/migrations/20261020120000_add_tibo_formal_reply_admission.sql) にあります。この変更では migration を production DB へ適用せず、過去行の backfill もしません。column が未適用の場合、通常の保存は旧schema向けfallbackで proof を保存せず reply を正式履歴から除外します。source-context 分類時の proof 保存は retryable な `503` となり、分類完了 marker は進めません。migration 適用後の再試行でのみ proof admission が可能です。
+
 ## 10. やってはいけないこと
 
 - `Hi Astra users` だけを根拠に `scope = Astraユーザー` とする。
@@ -230,21 +241,22 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - `reasonType = ランダムリセット` を canonical reason として保存/公開する。
 - presentation correction のついでに execution time、event key、source tweet、duplicate 判定を変更する。
 - BANKED/conditional/account-specific distribution を broad random reset の probability target へ入れる。
-- reply、rejected signal、reference record、pending/opened-only を completed global reset として扱う。
+- proof がない、古い、手動確定された、または現在の分類/audit/context と一致しない reply を completed global reset として扱う。
+- `Day N` 見出しの番号から日付・時刻・経過時間を作る。
 - 別の notice や近い時刻、似た文章だけで event identity を fuzzy merge する。
 
-## 11. 既存実装との境界と今回変更しない項目
+## 11. 既存実装との境界と今回の変更範囲
 
 現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
-今回のsource-text safety rule以外では、次は変更しません。
+今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、および上述の versioned proof による reply 完了投稿の正式履歴 admission です。migration は repository に含めますが、適用はしません。
 
-- Production data、Supabase、DB schema、migration
-- Tibo classification の他の条件、reason inference、event identity、current history event。random/Tibo scopeのlegacy label除去とregular scopeの具体値復元は、この文書のcanonical normalization規則に従う。
-- BANKED/conditional semantics、event identity、execution estimate
+次は変更しません。
+
+- Production data、Supabase の本番 DB、過去履歴の backfill/relabel/rewrite
+- Tibo classification の既存 safety conditions、reason inference、proof のない投稿の採否
+- BANKED/conditional semantics と probability eligibility。BANKED/conditional completion は reply proof でも forced-reset 履歴へ変換しない
 - public UI の既存表示挙動
-- Gemini prompt と AI audit fields
-- probability model、history/adoption、public-v1 DTO
-- 過去履歴の backfill、relabel、rewrite
+- probability model、public-v1 DTO、既存の recovery/adoption source semantics
 
 今後この領域を変更する場合は、まずこの文書と列挙した実装・テストを読み、変更が source normalization、canonical identity/chronology、または presentation のどの層に属するかを明示してください。

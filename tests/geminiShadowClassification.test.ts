@@ -136,6 +136,33 @@ test("3. Primary mode adopts a successful Gemini result as the final classificat
   assert.strictEqual(selected.classificationSource, "gemini");
 });
 
+test("primary mode only accepts an unscheduled official notice when the timing status is explicit", () => {
+  const text = "Day 13/ Le limit reset";
+  const ruleResult = classifyTiboTweet(text, "https://x.com/thsottiaux/status/123457");
+  const baseResult = {
+    signalType: "official_notice" as const,
+    confidence: 0.95,
+    temporalDirection: "unclear" as const,
+    evidenceQuote: text,
+    reasonJa: "利用上限リセットの告知です。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "gemini-3.5-flash-lite",
+    status: "success" as const,
+    classifiedAt: new Date().toISOString(),
+  };
+
+  const missingTimingContract = selectTiboClassification("primary", ruleResult, baseResult);
+  assert.equal(missingTimingContract.classificationSource, "rule_fallback");
+
+  const unresolvedNotice = selectTiboClassification("primary", ruleResult, {
+    ...baseResult,
+    noticeTimingStatus: "unknown",
+  });
+  assert.equal(unresolvedNotice.signalType, "official_notice");
+  assert.equal(unresolvedNotice.classificationSource, "gemini");
+});
+
 test("4. Primary mode falls back to the rule result for every Gemini failure status", () => {
   const ruleResult = classifyTiboTweet("Just chatting about models today.", "https://x.com/thsottiaux/status/123456");
   const failedStatuses: GeminiClassificationOutput["status"][] = [

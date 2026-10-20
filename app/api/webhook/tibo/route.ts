@@ -55,6 +55,11 @@ import {
   type TiboEvidenceStoreClient,
 } from "@/lib/radar/tiboEvidenceStore";
 import { getTiboContextSafetyDecision } from "@/lib/radar/tiboContextSafety";
+import {
+  attachTiboFormalReplyAdmissionProof,
+  createTiboFormalReplyAdmissionProof,
+  getCurrentTiboFormalReplyAdmissionProof,
+} from "@/lib/radar/tiboFormalReplyAdmission";
 import { getEffectiveTeaserStrength } from "@/lib/radar/teaserStrength";
 import { translateWithGeminiWithRetry } from "@/lib/radar/geminiTranslation";
 import {
@@ -159,7 +164,7 @@ function toLogicalPostRow(value: unknown): TiboLogicalPostRow | null {
     return null;
   }
 
-  return {
+  return attachTiboFormalReplyAdmissionProof({
     ...source,
     tweet_id: source.tweet_id,
     text: source.text,
@@ -186,7 +191,7 @@ function toLogicalPostRow(value: unknown): TiboLogicalPostRow | null {
     edit_metadata_source: source.edit_metadata_source === "x_api" || source.edit_metadata_source === "none"
       ? source.edit_metadata_source
       : null,
-  } as TiboLogicalPostRow;
+  } as TiboLogicalPostRow & Record<string, unknown>);
 }
 
 function toFormalTiboResetSignal(value: TiboLogicalPostRow | Record<string, unknown>): FormalTiboResetSignal | null {
@@ -217,23 +222,22 @@ function getStaticHistoryEvidence() {
 
 function getDynamicHistoryEvidence(rows: readonly TiboLogicalPostRow[]) {
   return rows
-    .filter((row) => row.signal_type === "reset_executed")
+    .filter((row) => isFormalTiboResetSignal(row as FormalTiboResetSignal))
     .filter((row) => !isBankedDistributionCompletionSignal(row.text))
-    .map((row) => ({
-      eventKey: `tibo-reset-${row.tweet_id}`,
-      sourceTweetIds: row.edit_history_tweet_ids ?? [row.tweet_id],
-      sourceUrl: row.tweet_url ?? null,
-      eventKind: "forced_reset" as const,
-    }));
+    .map((row) => {
+      const proof = getCurrentTiboFormalReplyAdmissionProof(row as FormalTiboResetSignal);
+      return {
+        eventKey: `tibo-reset-${proof?.contextualResetTweetId ?? row.tweet_id}`,
+        sourceTweetIds: proof?.pathTweetIds ?? row.edit_history_tweet_ids ?? [row.tweet_id],
+        sourceUrl: proof?.path.at(-1)?.tweetUrl ?? row.tweet_url ?? null,
+        eventKind: "forced_reset" as const,
+      };
+    });
 }
 
 function hasFormalRawVersion(logicalPost: TiboLogicalPost<TiboLogicalPostRow>) {
   return logicalPost.rawVersions.some((row) =>
-    row.signal_type === "reset_executed" &&
-    typeof row.confidence === "number" &&
-    row.confidence >= 0.95 &&
-    row.verification_status !== "rejected" &&
-    (row as TiboLogicalPostRow & { is_reply?: boolean | null }).is_reply !== true,
+    isFormalTiboResetSignal(row as FormalTiboResetSignal),
   );
 }
 
@@ -391,12 +395,17 @@ async function loadStoredTiboEvidence(
       || Date.parse(target.createdAt) !== Date.parse(createdAt)) {
       return null;
     }
+    const sourceContextGeneration = target.sourceContextGeneration;
+    if (!Number.isSafeInteger(sourceContextGeneration) || (sourceContextGeneration ?? -1) < 0) {
+      return null;
+    }
     const evidence = await serializeTiboEvidenceContext(target, lookup);
     return {
       input: evidence.input,
       context: evidence.context,
       sourceContextRevisionHashes: target.sourceContextRevisionHashes ?? [],
       sourceContextClassifiedRevisionHashes: target.sourceContextClassifiedRevisionHashes ?? [],
+      sourceContextGeneration,
     };
   } catch {
     console.warn("[Webhook Warning] Tibo source evidence lookup failed", {
@@ -407,7 +416,7 @@ async function loadStoredTiboEvidence(
 }
 
 type TiboSourceContextRevisionSnapshot =
-  | { status: "row"; revisionHashes: string[] }
+  | { status: "row"; revisionHashes: string[]; generation: number }
   | { status: "missing" }
   | { status: "schema_unavailable" }
   | { status: "lookup_failed" };
@@ -419,7 +428,7 @@ async function loadTiboSourceContextRevisionSnapshot(
   try {
     const { data, error } = await client
       .from("tibo_signals")
-      .select("tweet_id,source_context_revision_hashes")
+      .select("tweet_id,source_context_revision_hashes,source_context_generation")
       .eq("tweet_id", tweetId)
       .maybeSingle();
     if (error) {
@@ -432,11 +441,15 @@ async function loadTiboSourceContextRevisionSnapshot(
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
       return { status: "lookup_failed" };
     }
+    if (!Number.isSafeInteger(snapshot.source_context_generation) || snapshot.source_context_generation < 0) {
+      return { status: "schema_unavailable" };
+    }
     return {
       status: "row",
       revisionHashes: Array.isArray(snapshot.source_context_revision_hashes)
         ? snapshot.source_context_revision_hashes.filter((value: unknown): value is string => typeof value === "string")
         : [],
+      generation: snapshot.source_context_generation,
     };
   } catch {
     return { status: "lookup_failed" };
@@ -565,6 +578,7 @@ async function handleTiboWebhookPost(
     tiboEvidenceContext?: TiboEvidenceContext | null;
     skipTranslation?: boolean;
     sourceContextRevisionHashes?: string[];
+    sourceContextGeneration?: number;
   } = {},
 ) {
   try {
@@ -631,6 +645,11 @@ async function handleTiboWebhookPost(
       return NextResponse.json({ error: "Invalid reply metadata" }, { status: 400 });
     }
     const replyMetadata = replyMetadataResult.value;
+    if (internalOptions.sourceContextRevisionHashes &&
+      (!Number.isSafeInteger(internalOptions.sourceContextGeneration) ||
+        (internalOptions.sourceContextGeneration ?? -1) < 0)) {
+      return NextResponse.json({ error: "Source context generation unavailable" }, { status: 503 });
+    }
 
     if (body.kind === TIBO_SOURCE_CONTEXT_ENRICHMENT_KIND) {
       const enrichmentResult = parseTiboSourceContextEnrichment(body);
@@ -660,6 +679,8 @@ async function handleTiboWebhookPost(
           );
           const sourceContextRevisionHashes = storedEvidence?.sourceContextRevisionHashes;
           if (!storedEvidence || !Array.isArray(sourceContextRevisionHashes)
+            || !Number.isSafeInteger(storedEvidence.sourceContextGeneration)
+            || (storedEvidence.sourceContextGeneration ?? -1) < 0
             || sourceContextRevisionHashes.length === 0
             || sourceContextRevisionHashes.some((hash) => !/^[a-f0-9]{64}$/.test(hash))) {
             return NextResponse.json({ error: "Source context classification state unavailable" }, { status: 503 });
@@ -693,6 +714,7 @@ async function handleTiboWebhookPost(
               tiboEvidenceInput: storedEvidence.input,
               tiboEvidenceContext: storedEvidence.context,
               sourceContextRevisionHashes,
+              sourceContextGeneration: storedEvidence.sourceContextGeneration,
             },
           );
           if (!replayResponse.ok) {
@@ -737,6 +759,7 @@ async function handleTiboWebhookPost(
           normalSourceContextRevisionSnapshot = {
             status: "row",
             revisionHashes: storedEvidence.sourceContextRevisionHashes,
+            generation: storedEvidence.sourceContextGeneration!,
           };
         }
       } catch {
@@ -843,8 +866,10 @@ async function handleTiboWebhookPost(
       aiTeaserStrength: aiResult?.teaserStrength,
       evidenceQuote: aiResult?.evidenceQuote,
       temporalDirection: aiResult?.temporalDirection,
+      noticeTimingStatus: aiResult?.noticeTimingStatus,
       contextualResetAssessment: aiResult?.contextualResetAssessment,
       contextualResetTweetId: aiResult?.contextualResetTweetId,
+      resetMeaning: aiResult?.resetMeaning,
       targetTweetId: tweetId,
       targetTweetUrl: tweetUrl,
       targetTweetCreatedAt: createdDate.toISOString(),
@@ -952,6 +977,7 @@ async function handleTiboWebhookPost(
       ai_signal_type: rawAiAudit ? rawAiAudit.signalType : aiResult?.signalType ?? null,
       ai_confidence: aiResult?.confidence ?? null,
       ai_temporal_direction: rawAiAudit ? rawAiAudit.temporalDirection : aiResult?.temporalDirection || null,
+      ai_notice_timing_status: aiResult?.noticeTimingStatus ?? null,
       ai_evidence_quote: aiResult?.evidenceQuote || null,
       ai_reason_ja: rawAiAudit ? rawAiAudit.reasonJa : aiResult?.reasonJa || null,
       ai_reset_type_ja: aiResult?.resetTypeJa || null,
@@ -1012,11 +1038,12 @@ async function handleTiboWebhookPost(
     const supabase = getSupabaseServiceClient();
     let existingSignal: (Partial<FormalTiboResetSignal> & {
       source_context_revision_hashes?: string[] | null;
+      source_context_classified_revision_hashes?: string[] | null;
     }) | null = null;
     try {
       const { data, error: lookupError } = await supabase
         .from("tibo_signals")
-        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,is_quote,quote_context_text,quote_tweet_url,quote_author_handle,source_context_revision_hashes")
+        .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,classification_reason,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,teaser_strength,secondary_signal,is_reply,reply_to_handles,reply_context_text,source_timeline,translated_text_ja,translated_text_zh,ai_teaser_strength,ai_teaser_strength_confidence,ai_teaser_strength_evidence_quote,ai_teaser_strength_reason_ja,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source,codex_operational_status,codex_operational_confidence,codex_operational_evidence_quote,codex_operational_reason_ja,codex_operational_expires_at,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,is_quote,quote_context_text,quote_tweet_url,quote_author_handle,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof")
         .eq("tweet_id", tweetId)
         .maybeSingle();
 
@@ -1027,7 +1054,7 @@ async function handleTiboWebhookPost(
         if (isMissingTiboOptionalColumnError(lookupError)) {
           const revisionAwareLegacyLookup = await supabase
             .from("tibo_signals")
-            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,is_reply,reply_to_handles,reply_context_text,source_timeline,source_context_revision_hashes")
+            .select("tweet_id,text,tweet_url,tweet_created_at,detected_at,signal_type,confidence,classification_reason,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,is_reply,reply_to_handles,reply_context_text,source_timeline,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation")
             .eq("tweet_id", tweetId)
             .maybeSingle();
           const legacyLookup = revisionAwareLegacyLookup.error &&
@@ -1051,6 +1078,7 @@ async function handleTiboWebhookPost(
             ? null
             : legacyLookup.data) as (Partial<FormalTiboResetSignal> & {
               source_context_revision_hashes?: string[] | null;
+              source_context_classified_revision_hashes?: string[] | null;
             }) | null;
         } else {
           console.warn("[Webhook Warning] Existing Tibo state lookup failed", {
@@ -1066,6 +1094,7 @@ async function handleTiboWebhookPost(
           ? null
           : data) as (Partial<FormalTiboResetSignal> & {
             source_context_revision_hashes?: string[] | null;
+            source_context_classified_revision_hashes?: string[] | null;
           }) | null;
       }
 
@@ -1119,9 +1148,91 @@ async function handleTiboWebhookPost(
     const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja, text, "ja");
     const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh, text, "zh");
 
+    const formalReplySourceContextRevisionHashes = internalOptions.sourceContextRevisionHashes ??
+      (normalSourceContextRevisionSnapshot?.status === "row"
+        ? normalSourceContextRevisionSnapshot.revisionHashes
+        : null);
+    const formalReplySourceContextGeneration = internalOptions.sourceContextGeneration ??
+      (normalSourceContextRevisionSnapshot?.status === "row"
+        ? normalSourceContextRevisionSnapshot.generation
+        : Number.isSafeInteger(existingSignal?.source_context_generation)
+          ? existingSignal?.source_context_generation ?? 0
+          : 0);
+    const formalReplySourceContextIsCurrentAndClassified = Boolean(
+      formalReplySourceContextRevisionHashes?.length &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      (internalOptions.sourceContextRevisionHashes || (
+        Array.isArray(existingSignal?.source_context_revision_hashes) &&
+        existingSignal.source_context_revision_hashes.length === formalReplySourceContextRevisionHashes.length &&
+        existingSignal.source_context_revision_hashes.every((hash, index) =>
+          hash === formalReplySourceContextRevisionHashes[index],
+        ) &&
+        formalReplySourceContextRevisionHashes.every((hash) =>
+          existingSignal?.source_context_classified_revision_hashes?.includes(hash),
+        )
+      ))
+    );
+    const canCreateFormalReplyProof = Boolean(
+      formalReplySourceContextIsCurrentAndClassified &&
+      !editIdentityFlowBlocked &&
+      existingSignal?.classification_source !== "manual" &&
+      existingSignal?.verification_status !== "confirmed" &&
+      existingSignal?.verification_status !== "rejected" &&
+      replyMetadata.isReply === true &&
+      replyMetadata.isQuote !== true &&
+      selectedClassification.classificationSource === "gemini" &&
+      selectedClassification.signalType === "reset_executed" &&
+      selectedClassification.confidence >= 0.95 &&
+      aiResult?.status === "success" &&
+      aiResult.signalType === "reset_executed" &&
+      contextSafetyDecision === null
+    );
+    const formalReplyAdmissionProof = canCreateFormalReplyProof && aiResult
+      ? createTiboFormalReplyAdmissionProof({
+          authorText: text,
+          isReply: replyMetadata.isReply,
+          isQuote: replyMetadata.isQuote,
+          replyContextText: replyMetadata.replyContextText,
+          replyParentTweetId: replyMetadata.replyParentTweetId,
+          replyParentTweetUrl: replyMetadata.replyParentTweetUrl,
+          quoteContextText: replyMetadata.quoteContextText,
+          quoteAuthorHandle: replyMetadata.quoteAuthorHandle,
+          quoteTweetUrl: replyMetadata.quoteTweetUrl,
+          selectedSignalType: selectedClassification.signalType,
+          aiTeaserStrength: aiResult.teaserStrength,
+          evidenceQuote: aiResult.evidenceQuote,
+          temporalDirection: aiResult.temporalDirection,
+          contextualResetAssessment: aiResult.contextualResetAssessment,
+          contextualResetTweetId: aiResult.contextualResetTweetId,
+          resetMeaning: aiResult.resetMeaning,
+          targetTweetId: tweetId,
+          targetTweetUrl: tweetUrl,
+          targetTweetCreatedAt: createdDate.toISOString(),
+          validatedSourceContext: tiboEvidenceContext,
+        }, formalReplySourceContextRevisionHashes ?? [], formalReplySourceContextGeneration)
+      : null;
+
+    const locallyClassifiedContextRevisions = formalReplyAdmissionProof
+      ? Array.from(new Set([
+          ...(existingSignal?.source_context_classified_revision_hashes ?? []),
+          ...(internalOptions.sourceContextRevisionHashes ?? []),
+        ]))
+      : null;
+
     const payloadWithTranslations = {
       ...payload,
       ...editIdentityForPayload,
+      formal_reply_admission_proof: formalReplyAdmissionProof,
+      source_context_generation: formalReplySourceContextGeneration,
+      ...(internalOptions.sourceContextRevisionHashes
+        ? {
+            source_context_revision_hashes: internalOptions.sourceContextRevisionHashes,
+            ...(locallyClassifiedContextRevisions
+              ? { source_context_classified_revision_hashes: locallyClassifiedContextRevisions }
+              : {}),
+          }
+        : {}),
       translated_text_ja: existingTranslationJa ?? translationResult?.textJa ?? null,
       translated_text_zh: existingTranslationZh ?? translationResult?.textZh ?? null,
     };
@@ -1173,6 +1284,7 @@ async function handleTiboWebhookPost(
             persistedPayload = {
               ...persistedPayload,
               signal_type: "irrelevant",
+              formal_reply_admission_proof: null,
               classification_reason: "Usage Monitorがfreshですが、quota recoveryが未確認のため正式resetとして保留しています。",
             };
             formalCandidate = {
@@ -1192,6 +1304,10 @@ async function handleTiboWebhookPost(
       normalSourceContextRevisionSnapshot?.status === "row"
       ? normalSourceContextRevisionSnapshot.revisionHashes
       : null;
+    const normalExpectedGeneration = !internalOptions.sourceContextRevisionHashes &&
+      normalSourceContextRevisionSnapshot?.status === "row"
+      ? normalSourceContextRevisionSnapshot.generation
+      : null;
     if (!internalOptions.sourceContextRevisionHashes &&
       normalSourceContextRevisionSnapshot?.status === "missing" && existingSignal) {
       console.warn("[Webhook Warning] Tibo signal appeared during classification", {
@@ -1206,20 +1322,29 @@ async function handleTiboWebhookPost(
           .update(value)
           .eq("tweet_id", tweetId)
           .eq("source_context_revision_hashes", `{${normalExpectedRevisions.join(",")}}`)
+          .eq("source_context_generation", normalExpectedGeneration)
           .select("tweet_id");
       }
       return normalSourceContextRevisionSnapshot?.status === "missing"
         ? supabase.from("tibo_signals").insert(value)
         : supabase.from("tibo_signals").upsert(value, { onConflict: "tweet_id" });
     };
+    const persistedDatabasePayload = { ...persistedPayload };
+    if (internalOptions.sourceContextRevisionHashes) {
+      // Mark this revision classified only after formal side effects have
+      // completed. The in-memory candidate can use the successful CAS result,
+      // while readers still fail closed until the durable marker is written.
+      delete persistedDatabasePayload.source_context_classified_revision_hashes;
+    }
     let persistenceResult: { error: unknown; data?: unknown } = { error: null };
     if (internalOptions.sourceContextRevisionHashes) {
       const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
       const contextUpdateResult = await supabase
         .from("tibo_signals")
-        .update(persistedPayload)
+        .update(persistedDatabasePayload)
         .eq("tweet_id", tweetId)
         .eq("source_context_revision_hashes", expectedRevisions)
+        .eq("source_context_generation", internalOptions.sourceContextGeneration)
         .select("tweet_id");
       if (contextUpdateResult.error) {
         console.warn("[Webhook Warning] Tibo source context classification save failed", {
@@ -1235,7 +1360,7 @@ async function handleTiboWebhookPost(
       }
       persistenceResult = contextUpdateResult;
     } else {
-      persistenceResult = await writeNormalSignal(persistedPayload);
+      persistenceResult = await writeNormalSignal(persistedDatabasePayload);
     }
 
     if (!internalOptions.sourceContextRevisionHashes
@@ -1249,6 +1374,7 @@ async function handleTiboWebhookPost(
         ai_teaser_strength_evidence_quote: _aiTeaserStrengthEvidenceQuote,
         ai_teaser_strength_reason_ja: _aiTeaserStrengthReasonJa,
         ai_temporal_expression: _aiTemporalExpression,
+        ai_notice_timing_status: _aiNoticeTimingStatus,
         ai_temporal_kind: _aiTemporalKind,
         ai_temporal_precision: _aiTemporalPrecision,
         ai_temporal_timezone: _aiTemporalTimezone,
@@ -1268,6 +1394,8 @@ async function handleTiboWebhookPost(
         codex_operational_evidence_quote: _codexOperationalEvidenceQuote,
         codex_operational_reason_ja: _codexOperationalReasonJa,
         codex_operational_expires_at: _codexOperationalExpiresAt,
+        formal_reply_admission_proof: _formalReplyAdmissionProof,
+        source_context_generation: _sourceContextGeneration,
         quote_context_text: _quoteContextText,
         quote_tweet_url: _quoteTweetUrl,
         quote_author_handle: _quoteAuthorHandle,
@@ -1419,7 +1547,7 @@ async function handleTiboWebhookPost(
                   try {
                     const nearbyResult = await supabase
                       .from("tibo_signals")
-                      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,is_reply")
+                      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_evidence_quote,is_reply,is_quote,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof")
                       .eq("signal_type", "reset_executed")
                       .neq("tweet_id", tweetId)
                       .gte("tweet_created_at", new Date(createdTime - 5 * 60 * 1000).toISOString())
@@ -1427,7 +1555,9 @@ async function handleTiboWebhookPost(
                       .limit(20);
                     if (!nearbyResult.error && hasExistingFormalResetCluster(
                       effectiveFormalCandidate,
-                      (nearbyResult.data ?? []) as Array<FormalTiboResetSignal>,
+                      (nearbyResult.data ?? []).map((row) =>
+                        attachTiboFormalReplyAdmissionProof(row as Record<string, unknown>) as FormalTiboResetSignal,
+                      ),
                     )) {
                       dynamicEvents.push({
                         eventKey: `tibo-reset-${tweetId}`,
@@ -1487,7 +1617,18 @@ async function handleTiboWebhookPost(
                     })),
                     staticHistory: getStaticHistoryEvidence(),
                     dynamicEvents,
-                    sourceTweetIds: logicalPost.sourceTweetIds,
+                    sourceTweetIds: [
+                      ...logicalPost.sourceTweetIds,
+                      ...(effectiveFormalCandidate
+                        ? getCurrentTiboFormalReplyAdmissionProof(effectiveFormalCandidate)?.pathTweetIds ?? []
+                        : []),
+                    ],
+                    verifiedContextTweetIds: effectiveFormalCandidate
+                      ? getCurrentTiboFormalReplyAdmissionProof(effectiveFormalCandidate)?.pathTweetIds ?? []
+                      : [],
+                    verifiedContextResetTweetId: effectiveFormalCandidate
+                      ? getCurrentTiboFormalReplyAdmissionProof(effectiveFormalCandidate)?.contextualResetTweetId ?? null
+                      : null,
                     candidateCreatedAt: flowTweetCreatedAt,
                   };
                   adoptionResolution = resolveTiboResetEventIdentity(logicalPost, evidence);
@@ -1511,6 +1652,7 @@ async function handleTiboWebhookPost(
                   const resolvedResetEventKey = adoptionResolution.resetEventKey;
                   const shouldReconcileExisting = adoptionResolution.status === "existing" &&
                     adoptionResolution.matchedEvidence !== null &&
+                    adoptionResolution.matchedEvidence.kind !== "verified_context" &&
                     hasFormalVersionInPost &&
                     logicalPost.manualState.kind !== "conflict";
                   const shouldClaim = !editIdentityMerge.status.includes("conflict") &&
@@ -1780,6 +1922,7 @@ async function handleTiboWebhookPost(
         })
         .eq("tweet_id", tweetId)
         .eq("source_context_revision_hashes", expectedRevisions)
+        .eq("source_context_generation", internalOptions.sourceContextGeneration)
         .select("tweet_id");
       if (markerUpdateResult.error) {
         console.warn("[Webhook Warning] Tibo source context completion marker save failed", {

@@ -1241,6 +1241,35 @@ test("rejects contradictory or vague source clocks and replaces hallucinated clo
   assert.equal(hallucinated.temporalKind, "relative_day");
 });
 
+test("does not treat a Day N heading as a date while retaining a separate explicit clock time", () => {
+  const dayCountOnly = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "Day 13",
+      temporalKind: "absolute",
+      temporalPrecision: "day",
+      explicitDateParts: { year: null, month: 10, day: 13 },
+      temporalConfidence: 0.99,
+    },
+    "Day 13/ Le limit reset",
+  );
+  assert.equal(dayCountOnly, null);
+  assert.equal(resolveTiboTemporalSchedule(dayCountOnly, "2026-10-20T08:00:00.000Z").status, "unresolved");
+
+  const groundedClock = parseTiboTemporalSemantics(
+    {
+      temporalExpression: "5pm PT",
+      temporalKind: "explicit_time",
+      temporalPrecision: "exact_time",
+      explicitTimeParts: { hour: 17, minute: 0 },
+      explicitTimezone: "America/Los_Angeles",
+      temporalConfidence: 0.99,
+    },
+    "Day 13/ Reset lands at 5pm PT",
+  );
+  assert.ok(groundedClock);
+  assert.deepEqual(groundedClock.explicitTimeParts, { hour: 17, minute: 0 });
+});
+
 
 test("recovers a cross-sentence tomorrow window when a historical reset button is reused", () => {
   const source = "A good thing about having aged is that I feel that it’s been 20 years since I’ve pressed the reset button. Intrigued to see if I can find it tomorrow and dust it up";

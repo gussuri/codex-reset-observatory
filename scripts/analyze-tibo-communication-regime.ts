@@ -236,9 +236,17 @@ function toRawSignal(value: unknown): RawTiboSignal | null {
     rule_signal_type: typeof record.rule_signal_type === "string" ? record.rule_signal_type as RawTiboSignal["rule_signal_type"] : null,
     ai_signal_type: typeof record.ai_signal_type === "string" ? record.ai_signal_type as RawTiboSignal["ai_signal_type"] : null,
     ai_classification_status: typeof record.ai_classification_status === "string" ? record.ai_classification_status : null,
+    ai_temporal_direction: typeof record.ai_temporal_direction === "string" ? record.ai_temporal_direction : null,
+    ai_notice_timing_status: typeof record.ai_notice_timing_status === "string" ? record.ai_notice_timing_status : null,
+    ai_evidence_quote: typeof record.ai_evidence_quote === "string" ? record.ai_evidence_quote : null,
     ai_reset_type_ja: typeof record.ai_reset_type_ja === "string" ? record.ai_reset_type_ja : null,
     ai_notice_to_execution: typeof record.ai_notice_to_execution === "string" ? record.ai_notice_to_execution : null,
     ai_temporal_precision: typeof record.ai_temporal_precision === "string" ? record.ai_temporal_precision as RawTiboSignal["ai_temporal_precision"] : null,
+    ai_temporal_expression: typeof record.ai_temporal_expression === "string" ? record.ai_temporal_expression : null,
+    ai_temporal_kind: typeof record.ai_temporal_kind === "string" ? record.ai_temporal_kind as RawTiboSignal["ai_temporal_kind"] : null,
+    ai_temporal_timezone: typeof record.ai_temporal_timezone === "string" ? record.ai_temporal_timezone : null,
+    ai_temporal_confidence: asNumber(record.ai_temporal_confidence),
+    temporal_expression: typeof record.temporal_expression === "string" ? record.temporal_expression : null,
     expected_start_at: typeof record.expected_start_at === "string" ? record.expected_start_at : null,
     expected_end_at: typeof record.expected_end_at === "string" ? record.expected_end_at : null,
     temporal_resolution_status: typeof record.temporal_resolution_status === "string" ? record.temporal_resolution_status as RawTiboSignal["temporal_resolution_status"] : null,
@@ -269,11 +277,25 @@ function toNoticeSignal(signal: RawTiboSignal): TiboNoticeSignal | null {
     signal_type: signal.signal_type,
     confidence: signal.confidence,
     verification_status: signal.verification_status,
-    expires_at: signal.expires_at ?? null,
+    classification_source: signal.classification_source ?? null,
+    ai_signal_type: signal.ai_signal_type ?? null,
+    ai_classification_status: signal.ai_classification_status ?? null,
+    ai_temporal_direction: signal.ai_temporal_direction ?? null,
+    ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+    ai_evidence_quote: signal.ai_evidence_quote ?? null,
+    ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+    ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
+    ai_temporal_expression: signal.ai_temporal_expression ?? null,
+    ai_temporal_kind: signal.ai_temporal_kind ?? null,
     ai_temporal_precision: signal.ai_temporal_precision ?? null,
+    ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+    temporal_expression: signal.temporal_expression ?? null,
+    temporal_resolution_status: signal.temporal_resolution_status ?? null,
     expected_start_at: signal.expected_start_at ?? null,
     expected_end_at: signal.expected_end_at ?? null,
-    temporal_resolution_status: signal.temporal_resolution_status ?? null,
+    is_reply: signal.is_reply,
+    is_quote: signal.is_quote,
+    expires_at: signal.expires_at ?? null,
   };
 }
 
@@ -297,6 +319,24 @@ function toCommunicationSignal(signal: RawTiboSignal): CommunicationSignalInput 
     confidence: signal.confidence,
     verificationStatus: signal.verification_status,
     isReply: signal.is_reply === true,
+    isQuote: signal.is_quote === true,
+    text: signal.text,
+    classificationSource: signal.classification_source ?? null,
+    aiSignalType: signal.ai_signal_type ?? null,
+    aiClassificationStatus: signal.ai_classification_status ?? null,
+    aiTemporalDirection: signal.ai_temporal_direction ?? null,
+    aiNoticeTimingStatus: signal.ai_notice_timing_status ?? null,
+    aiEvidenceQuote: signal.ai_evidence_quote ?? null,
+    aiNoticeToExecution: signal.ai_notice_to_execution ?? null,
+    aiTemporalExpression: signal.ai_temporal_expression ?? null,
+    aiTemporalKind: signal.ai_temporal_kind ?? null,
+    aiTemporalPrecision: signal.ai_temporal_precision ?? null,
+    aiTemporalTimezone: signal.ai_temporal_timezone ?? null,
+    aiTemporalConfidence: signal.ai_temporal_confidence ?? null,
+    temporalResolutionStatus: signal.temporal_resolution_status ?? null,
+    temporalExpression: signal.temporal_expression ?? null,
+    expectedStartAt: signal.expected_start_at ?? null,
+    expectedEndAt: signal.expected_end_at ?? null,
   };
 }
 
@@ -1391,7 +1431,7 @@ async function loadDataset(): Promise<Dataset> {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const sourceErrors: string[] = [];
-  const signalColumns = "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_reset_type_ja,ai_notice_to_execution,ai_teaser_strength,ai_temporal_precision,expected_start_at,expected_end_at,temporal_resolution_status,is_reply,is_quote,source_timeline";
+  const signalColumns = "tweet_id,text,tweet_url,tweet_created_at,detected_at,expires_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,ai_signal_type,ai_classification_status,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,ai_reset_type_ja,ai_notice_to_execution,ai_teaser_strength,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,expected_start_at,expected_end_at,temporal_resolution_status,is_reply,is_quote,source_timeline";
   let signalResult: { data: unknown[] | null; error: unknown | null } = await supabase.from("tibo_signals").select(signalColumns).order("tweet_created_at", { ascending: true }).limit(5000) as unknown as { data: unknown[] | null; error: unknown | null };
   if (signalResult.error) {
     sourceErrors.push("tibo_signals query failed with the full research column set.");

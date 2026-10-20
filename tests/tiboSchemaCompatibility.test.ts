@@ -29,6 +29,7 @@ const KNOWN_OPTIONAL_TIBO_COLUMNS = [
   "edit_history_tweet_ids",
   "edit_version",
   "edit_metadata_source",
+  "formal_reply_admission_proof",
   "codex_operational_status",
   "codex_operational_confidence",
   "codex_operational_evidence_quote",

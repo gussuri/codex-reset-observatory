@@ -6,6 +6,7 @@ import {
 } from "./tiboTemporal";
 import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
 import { isTiboHandle } from "./tiboHandle";
+import { isTiboUnscheduledOfficialNoticeEligible } from "./tiboNoticeEligibility";
 
 export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 
@@ -53,6 +54,18 @@ export type ResetTeaserSignal = {
   signal_type?: string | null;
   confidence?: number | null;
   classification_source?: string | null;
+  ai_signal_type?: string | null;
+  ai_classification_status?: string | null;
+  ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
+  ai_evidence_quote?: string | null;
+  ai_notice_to_execution?: string | null;
+  ai_temporal_expression?: string | null;
+  ai_temporal_kind?: string | null;
+  ai_temporal_precision?: string | null;
+  ai_temporal_timezone?: string | null;
+  ai_temporal_confidence?: number | null;
+  temporal_expression?: string | null;
   verification_status?: string | null;
   is_reply?: boolean | null;
   reply_context_text?: string | null;
@@ -223,6 +236,7 @@ function hasAuthorOwnedExplicitFutureResetReplyEvidence(
 }
 
 function isOfficialNoticeEligible(signal: ResetTeaserSignal) {
+  if (isTiboUnscheduledOfficialNoticeEligible(signal)) return true;
   if (signal.signal_type !== "official_notice" ||
       signal.verification_status === "rejected" ||
       signal.is_quote === true ||

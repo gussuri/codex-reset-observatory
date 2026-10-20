@@ -16,11 +16,216 @@ import {
   upsertBankedDistributionEstimate,
   upsertResetExecutionEstimate,
 } from "../lib/codexUsageRecoveryStore";
+import { createTiboFormalReplyAdmissionProof } from "../lib/radar/tiboFormalReplyAdmission";
+import type { TiboContextSafetyInput } from "../lib/radar/tiboContextSafety";
+import type { TiboEvidenceContext } from "../lib/radar/tiboEvidenceContext";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 import type { UsageMonitorState } from "../lib/codexUsageMonitorCoverage";
 
 const OBSERVED_AT = "2026-08-26T01:15:00.000Z";
 const TRUSTED_GRANT_AT = "2026-08-20T00:00:00.000Z";
+const REPLY_CONTEXT_REVISION = "a".repeat(64);
+const REPLY_TARGET_TEXT = "Done and dusted.";
+const REPLY_PARENT_TEXT = "I pressed the forced reset button for all paid users.";
+
+function formalReplySignal(tweetId: string, tweetCreatedAt: string, parentId: string) {
+  const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
+  const parentUrl = `https://x.com/thsottiaux/status/${parentId}`;
+  const parentCreatedAt = new Date(Date.parse(tweetCreatedAt) - 5 * 60_000).toISOString();
+  const sourceContext: TiboEvidenceContext = {
+    version: "tibo-evidence-context-v1",
+    status: "complete",
+    target: {
+      tweetId,
+      tweetUrl,
+      authorHandle: "@thsottiaux",
+      text: REPLY_TARGET_TEXT,
+      createdAt: tweetCreatedAt,
+      sourceContextRevisionHashes: [REPLY_CONTEXT_REVISION],
+    },
+    relatedPosts: [{
+      tweetId: parentId,
+      tweetUrl: parentUrl,
+      authorHandle: "@thsottiaux",
+      text: REPLY_PARENT_TEXT,
+      createdAt: parentCreatedAt,
+    }],
+    edges: [{ fromTweetId: tweetId, toTweetId: parentId, relation: "reply" }],
+    omissions: [],
+    lookupCount: 1,
+  };
+  const proofInput: TiboContextSafetyInput = {
+    authorText: REPLY_TARGET_TEXT,
+    isReply: true,
+    isQuote: false,
+    replyContextText: REPLY_PARENT_TEXT,
+    replyParentTweetId: parentId,
+    replyParentTweetUrl: parentUrl,
+    selectedSignalType: "reset_executed",
+    temporalDirection: "completed_now",
+    evidenceQuote: REPLY_TARGET_TEXT,
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: parentId,
+    resetMeaning: {
+      method: "forced",
+      methodEvidence: { tweetId: parentId, quote: "I pressed the forced reset button" },
+      scope: "all_paid_users",
+      scopeEvidence: { tweetId: parentId, quote: "for all paid users" },
+    },
+    targetTweetId: tweetId,
+    targetTweetUrl: tweetUrl,
+    targetTweetCreatedAt: tweetCreatedAt,
+    validatedSourceContext: sourceContext,
+  };
+  const proof = createTiboFormalReplyAdmissionProof(proofInput, [REPLY_CONTEXT_REVISION], 1);
+  assert.ok(proof, "fixture must produce a current v3 formal reply proof");
+
+  return {
+    tweet_id: tweetId,
+    text: REPLY_TARGET_TEXT,
+    tweet_url: tweetUrl,
+    tweet_created_at: tweetCreatedAt,
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "reset_executed",
+    ai_confidence: 0.99,
+    ai_classification_status: "success",
+    ai_temporal_direction: "completed_now",
+    ai_evidence_quote: REPLY_TARGET_TEXT,
+    is_reply: true,
+    is_quote: false,
+    source_context_revision_hashes: [REPLY_CONTEXT_REVISION],
+    source_context_classified_revision_hashes: [REPLY_CONTEXT_REVISION],
+    source_context_generation: 1,
+    formal_reply_admission_proof: proof,
+  };
+}
+
+function projectedTiboSignalsClient(
+  rows: Array<Record<string, unknown>>,
+  options: { missingColumn?: string } = {},
+) {
+  return {
+    from(table: string) {
+      assert.equal(table, "tibo_signals");
+      let projection: string[] = [];
+      let rowLimit = Number.MAX_SAFE_INTEGER;
+      const filters: Array<(row: Record<string, unknown>) => boolean> = [];
+      const orderings: Array<{ column: string; ascending: boolean }> = [];
+      const builder: Record<string, any> = {};
+      builder.select = (columns: string) => {
+        projection = columns.split(",");
+        return builder;
+      };
+      builder.or = (expression: string) => {
+        const alternatives = expression.split(",").map((term) => {
+          const [column, value] = term.split(".eq.");
+          return (row: Record<string, unknown>) => row[column!] === value;
+        });
+        filters.push((row) => alternatives.some((matches) => matches(row)));
+        return builder;
+      };
+      builder.eq = (column: string, value: unknown) => {
+        filters.push((row) => row[column] === value);
+        return builder;
+      };
+      builder.neq = (column: string, value: unknown) => {
+        filters.push((row) => row[column] !== value);
+        return builder;
+      };
+      builder.in = (column: string, values: unknown[]) => {
+        filters.push((row) => values.includes(row[column]));
+        return builder;
+      };
+      builder.gte = (column: string, value: string) => {
+        filters.push((row) => typeof row[column] === "string" && row[column] >= value);
+        return builder;
+      };
+      builder.lte = (column: string, value: string) => {
+        filters.push((row) => typeof row[column] === "string" && row[column] <= value);
+        return builder;
+      };
+      builder.lt = (column: string, value: string) => {
+        filters.push((row) => typeof row[column] === "string" && row[column] < value);
+        return builder;
+      };
+      builder.order = (column: string, options?: { ascending?: boolean }) => {
+        orderings.push({ column, ascending: options?.ascending ?? true });
+        return builder;
+      };
+      builder.limit = (limit: number) => {
+        rowLimit = limit;
+        return builder;
+      };
+      builder.then = (resolve: (result: unknown) => unknown, reject: (error: unknown) => unknown) => {
+        if (options.missingColumn && projection.includes(options.missingColumn)) {
+          return Promise.resolve({
+            data: null,
+            error: {
+              code: "42703",
+              message: `column ${options.missingColumn} does not exist`,
+            },
+          }).then(resolve, reject);
+        }
+        const matchingRows = rows.filter((row) => filters.every((matches) => matches(row)));
+        matchingRows.sort((left, right) => {
+          for (const { column, ascending } of orderings) {
+            const comparison = String(left[column] ?? "").localeCompare(String(right[column] ?? ""));
+            if (comparison !== 0) return ascending ? comparison : -comparison;
+          }
+          return 0;
+        });
+        const data = matchingRows.slice(0, rowLimit).map((row) => Object.fromEntries(
+          projection
+            .filter((column) => Object.prototype.hasOwnProperty.call(row, column))
+            .map((column) => [column, row[column]]),
+        ));
+        return Promise.resolve({ data, error: null }).then(resolve, reject);
+      };
+      return builder;
+    },
+  };
+}
+
+function unscheduledOfficialNotice(tweetId: string, tweetCreatedAt: string) {
+  const text = "Day 13/ Le limit reset";
+  const expiresAt = new Date(Date.parse(tweetCreatedAt) + 24 * 60 * 60_000).toISOString();
+  return {
+    tweet_id: tweetId,
+    text,
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: tweetCreatedAt,
+    signal_type: "official_notice",
+    confidence: 0.85,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_classification_status: "success",
+    ai_temporal_direction: "unclear",
+    ai_notice_timing_status: "unknown",
+    ai_evidence_quote: "Le limit reset",
+    ai_notice_to_execution: null,
+    ai_temporal_confidence: null,
+    ai_temporal_expression: null,
+    ai_temporal_kind: null,
+    ai_temporal_precision: null,
+    ai_temporal_timezone: null,
+    temporal_expression: null,
+    temporal_kind: null,
+    temporal_precision: null,
+    temporal_timezone: null,
+    temporal_confidence: null,
+    temporal_resolution_source: null,
+    expected_start_at: null,
+    expected_end_at: null,
+    temporal_resolution_status: "unresolved",
+    is_reply: false,
+    is_quote: false,
+    expires_at: expiresAt,
+  };
+}
 
 function state(
   count: number | null | undefined,
@@ -820,6 +1025,126 @@ test("findRecentFormalTiboReset skips rows with manual classification source", a
   const result = await findRecentFormalTiboReset(client as never, OBSERVED_AT, 60_000);
   assert.equal(result.tweetId, null);
   assert.equal(result.needsPromotion, false);
+});
+
+test("findRecentFormalTiboReset retains a current v3 reply proof through the SELECT projection", async () => {
+  const tweetId = "2115000000000000951";
+  const tweetCreatedAt = "2026-10-20T10:00:00.000Z";
+  const reply = formalReplySignal(tweetId, tweetCreatedAt, "2115000000000000950");
+
+  const result = await findRecentFormalTiboReset(
+    projectedTiboSignalsClient([reply]) as never,
+    tweetCreatedAt,
+    60_000,
+  );
+
+  assert.equal(result.tweetId, tweetId);
+});
+
+test("findFormalTiboResetCluster keeps a current v3 reply as the reset anchor through the SELECT projection", async () => {
+  const tweetId = "2115000000000000961";
+  const tweetCreatedAt = "2026-10-20T10:00:00.000Z";
+  const reply = formalReplySignal(tweetId, tweetCreatedAt, "2115000000000000960");
+
+  const result = await findFormalTiboResetCluster(
+    projectedTiboSignalsClient([reply]) as never,
+    "cluster-fallback-id",
+    tweetCreatedAt,
+  );
+
+  assert.equal(result.primaryTweetId, tweetId);
+});
+
+test("findFormalTiboResetCluster uses a prior formal reply generation as the notice boundary", async () => {
+  const currentResetAt = "2026-10-20T10:00:00.000Z";
+  const previousResetAt = "2026-10-20T09:00:00.000Z";
+  const currentReset = {
+    tweet_id: "2115000000000000971",
+    text: "I reset usage limits for everyone.",
+    tweet_url: "https://x.com/thsottiaux/status/2115000000000000971",
+    tweet_created_at: currentResetAt,
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    classification_source: "gemini",
+    is_reply: false,
+    is_quote: false,
+  };
+  const previousReply = formalReplySignal(
+    "2115000000000000972",
+    previousResetAt,
+    "2115000000000000973",
+  );
+  const notice = {
+    ...unscheduledOfficialNotice("2115000000000000974", "2026-10-20T08:45:00.000Z"),
+    confidence: 0.95,
+  };
+
+  const result = await findFormalTiboResetCluster(
+    projectedTiboSignalsClient([currentReset, previousReply, notice]) as never,
+    currentReset.tweet_id,
+    currentResetAt,
+  );
+
+  assert.equal(result.representativeNoticeId, null);
+  assert.equal(result.announcedAt, currentResetAt);
+});
+
+test("findFormalTiboResetCluster associates an accepted .85 unresolved Gemini official notice", async () => {
+  const currentResetAt = "2026-10-20T10:00:00.000Z";
+  const currentReset = {
+    tweet_id: "2115000000000000981",
+    text: "I reset usage limits for everyone.",
+    tweet_url: "https://x.com/thsottiaux/status/2115000000000000981",
+    tweet_created_at: currentResetAt,
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    classification_source: "gemini",
+    is_reply: false,
+    is_quote: false,
+  };
+  const notice = unscheduledOfficialNotice("2115000000000000982", "2026-10-20T09:30:00.000Z");
+
+  const result = await findFormalTiboResetCluster(
+    projectedTiboSignalsClient([currentReset, notice]) as never,
+    currentReset.tweet_id,
+    currentResetAt,
+  );
+
+  assert.equal(result.representativeNoticeId, notice.tweet_id);
+  assert.equal(result.representativeNoticeAt, notice.tweet_created_at);
+});
+
+test("findRecentFormalTiboReset excludes legacy rows with unknown reply state", async () => {
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.or = () => builder;
+      builder.neq = () => builder;
+      builder.gte = () => builder;
+      builder.lte = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({
+        data: [{
+          tweet_id: "unknown-reply-state",
+          text: "I have reset usage limits for everyone.",
+          tweet_created_at: OBSERVED_AT,
+          signal_type: "reset_executed",
+          confidence: 0.99,
+          verification_status: "confirmed",
+          classification_source: "gemini",
+          is_reply: null,
+        }],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findRecentFormalTiboReset(client as never, OBSERVED_AT, 60_000);
+  assert.equal(result.tweetId, null);
 });
 
 test("findRecentFormalTiboReset preserves a trusted edit identity for monitor promotion", async () => {

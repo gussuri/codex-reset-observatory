@@ -13,6 +13,8 @@ import {
 } from "./codexUsageMonitorCoverage";
 import { getTiboClassificationSafetyDecision } from "./radar/classification";
 import { getTiboContextSafetyDecision } from "./radar/tiboContextSafety";
+import { attachTiboFormalReplyAdmissionProof } from "./radar/tiboFormalReplyAdmission";
+import { isMissingTiboOptionalColumnError } from "./radar/tiboSchemaCompatibility";
 import {
   buildResetExecutionEstimate,
   type ResetExecutionEstimate,
@@ -344,7 +346,7 @@ export async function findLatestBankedGrantAt(
 }
 
 export async function readCodexUsageMonitorState(client: SupabaseClient<any>) {
-  let result = await client
+  let result: any = await client
     .from("codex_usage_monitor_state")
     .select(STATE_COLUMNS)
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
@@ -507,24 +509,43 @@ export async function findRecentFormalTiboReset(
     return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, trustedEditIdentity: null, error: null };
   }
 
-  const result = await client
+  let result: any = await client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_evidence_quote,is_reply,is_quote,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
     .or("signal_type.eq.reset_executed,rule_signal_type.eq.reset_executed,ai_signal_type.eq.reset_executed")
-    .eq("is_reply", false)
     .neq("verification_status", "rejected")
     .gte("tweet_created_at", new Date(time - matchWindowMs).toISOString())
     .lte("tweet_created_at", new Date(time + matchWindowMs).toISOString())
     .order("tweet_created_at", { ascending: true })
     .limit(20);
 
+  if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+    result = await client
+      .from("tibo_signals")
+      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,rule_signal_type,rule_confidence,ai_signal_type,ai_confidence,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+      .or("signal_type.eq.reset_executed,rule_signal_type.eq.reset_executed,ai_signal_type.eq.reset_executed")
+      .eq("is_reply", false)
+      .neq("verification_status", "rejected")
+      .gte("tweet_created_at", new Date(time - matchWindowMs).toISOString())
+      .lte("tweet_created_at", new Date(time + matchWindowMs).toISOString())
+      .order("tweet_created_at", { ascending: true })
+      .limit(20);
+  }
+
   if (result.error) {
     return { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, trustedEditIdentity: null, error: result.error };
   }
 
-  const candidates = (result.data ?? [])
+  const resultRows = (result.data ?? []) as Array<Record<string, any>>;
+  const candidates = resultRows
     .filter((row) => {
       if (typeof row.tweet_id !== "string" || typeof row.tweet_created_at !== "string") return false;
+      if (row.is_reply === true) {
+        return row.signal_type === "reset_executed" && isFormalTiboResetSignal(
+          attachTiboFormalReplyAdmissionProof(row as Record<string, unknown>) as FormalTiboResetSignal,
+        );
+      }
+      if (row.is_reply !== false) return false;
       if (row.classification_source === "manual") return false;
       if (getTiboClassificationSafetyDecision(String(row.text ?? ""), "reset_executed").signalType !== "reset_executed") {
         return false;
@@ -777,23 +798,41 @@ export async function findFormalTiboResetCluster(
     return fallback();
   }
 
-  const result = await client
+  let result: any = await client
     .from("tibo_signals")
-    .select("tweet_id,tweet_created_at,signal_type,confidence,verification_status,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_evidence_quote,is_reply,is_quote,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
     .eq("signal_type", "reset_executed")
-    .eq("is_reply", false)
     .neq("verification_status", "rejected")
     .gte("tweet_created_at", new Date(time - clusterWindowMs).toISOString())
     .lte("tweet_created_at", new Date(time + clusterWindowMs).toISOString())
     .order("tweet_created_at", { ascending: true })
     .limit(20);
 
+  if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+    result = await client
+      .from("tibo_signals")
+      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+      .eq("signal_type", "reset_executed")
+      .eq("is_reply", false)
+      .neq("verification_status", "rejected")
+      .gte("tweet_created_at", new Date(time - clusterWindowMs).toISOString())
+      .lte("tweet_created_at", new Date(time + clusterWindowMs).toISOString())
+      .order("tweet_created_at", { ascending: true })
+      .limit(20);
+  }
+
   if (result.error) {
     return fallback(result.error);
   }
 
+  const clusterRows = (result.data ?? []) as Array<Record<string, any>>;
+  const formalReplyAwareRows = clusterRows
+    .map((row) => attachTiboFormalReplyAdmissionProof(row as Record<string, unknown>) as FormalTiboResetSignal)
+    .filter((row) => row.is_reply === true
+      ? isFormalTiboResetSignal(row)
+      : row.is_reply === false);
   const candidates = [
-    ...(result.data ?? []),
+    ...formalReplyAwareRows,
     ...(promotionCandidate
       ? [{
           tweet_id: promotionCandidate.tweet_id,
@@ -817,13 +856,13 @@ export async function findFormalTiboResetCluster(
   if (!Number.isFinite(primaryTime)) {
     return fallback(new Error("Formal Tibo reset timestamp is invalid"));
   }
-  const persistedCurrentRow = (result.data ?? []).find((row) => row.tweet_id === tiboTweetId);
+  const persistedCurrentRow = clusterRows.find((row) => row.tweet_id === tiboTweetId);
   const trustedCurrentEditIdentity = currentTrustedEditIdentity
     ? getTrustedTiboEditIdentity({ ...currentTrustedEditIdentity, tweet_id: tiboTweetId }, tiboTweetId)
     : getTrustedTiboEditIdentity(persistedCurrentRow, tiboTweetId);
-  const previousResetResult = await client
+  let previousResetResult: any = await client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,quote_author_handle,quote_tweet_url,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_evidence_quote,is_reply,is_quote,quote_author_handle,quote_tweet_url,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
     .eq("signal_type", "reset_executed")
     .neq("verification_status", "rejected")
     .gte("tweet_created_at", new Date(primaryTime - NOTICE_LOOKBACK_MS).toISOString())
@@ -831,11 +870,25 @@ export async function findFormalTiboResetCluster(
     .order("tweet_created_at", { ascending: false })
     .limit(100);
 
+  if (previousResetResult.error && isMissingTiboOptionalColumnError(previousResetResult.error)) {
+    previousResetResult = await client
+      .from("tibo_signals")
+      .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,quote_author_handle,quote_tweet_url,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source")
+      .eq("signal_type", "reset_executed")
+      .eq("is_reply", false)
+      .neq("verification_status", "rejected")
+      .gte("tweet_created_at", new Date(primaryTime - NOTICE_LOOKBACK_MS).toISOString())
+      .lt("tweet_created_at", new Date(primaryTime).toISOString())
+      .order("tweet_created_at", { ascending: false })
+      .limit(100);
+  }
+
   if (previousResetResult.error) {
     return fallback(previousResetResult.error);
   }
 
-  const previousFormalRows = (previousResetResult.data ?? [])
+  const previousRows = (previousResetResult.data ?? []) as Array<Record<string, any>>;
+  const previousFormalRows = previousRows
     .filter((row) =>
       typeof row.tweet_id === "string" &&
       typeof row.text === "string" &&
@@ -845,7 +898,8 @@ export async function findFormalTiboResetCluster(
     )
     .map((row) => ({
       row,
-      signal: {
+      signal: attachTiboFormalReplyAdmissionProof({
+        ...(row as Record<string, unknown>),
         tweet_id: row.tweet_id,
         text: row.text,
         tweet_url: row.tweet_url,
@@ -862,7 +916,7 @@ export async function findFormalTiboResetCluster(
         is_quote: row.is_quote === true,
         quote_author_handle: typeof row.quote_author_handle === "string" ? row.quote_author_handle : null,
         quote_tweet_url: typeof row.quote_tweet_url === "string" ? row.quote_tweet_url : null,
-      } satisfies FormalTiboResetSignal,
+      }) as FormalTiboResetSignal,
     }))
     .filter(({ signal }) => {
       const signalTime = Date.parse(signal.tweet_created_at);
@@ -923,7 +977,7 @@ export async function findFormalTiboResetCluster(
 
   let noticeQuery = client
     .from("tibo_signals")
-    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,expires_at,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status");
+    .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,expires_at,ai_signal_type,ai_classification_status,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,ai_notice_to_execution,ai_temporal_confidence,ai_temporal_expression,ai_temporal_kind,ai_temporal_precision,ai_temporal_timezone,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status");
 
   if (typeof (noticeQuery as any).in === "function") {
     noticeQuery = (noticeQuery as any).in("signal_type", ["official_notice", "teaser"]);
@@ -966,6 +1020,18 @@ export async function findFormalTiboResetCluster(
       verification_status: row.verification_status === "confirmed" || row.verification_status === "rejected"
         ? row.verification_status
         : "auto_unverified",
+      classification_source: typeof row.classification_source === "string" ? row.classification_source : null,
+      ai_signal_type: typeof row.ai_signal_type === "string" ? row.ai_signal_type : null,
+      ai_classification_status: typeof row.ai_classification_status === "string" ? row.ai_classification_status : null,
+      ai_temporal_direction: typeof row.ai_temporal_direction === "string" ? row.ai_temporal_direction : null,
+      ai_notice_timing_status: typeof row.ai_notice_timing_status === "string" ? row.ai_notice_timing_status : null,
+      ai_evidence_quote: typeof row.ai_evidence_quote === "string" ? row.ai_evidence_quote : null,
+      ai_notice_to_execution: typeof row.ai_notice_to_execution === "string" ? row.ai_notice_to_execution : null,
+      ai_temporal_confidence: typeof row.ai_temporal_confidence === "number" && Number.isFinite(row.ai_temporal_confidence)
+        ? row.ai_temporal_confidence
+        : null,
+      is_reply: row.is_reply === true,
+      is_quote: row.is_quote === true,
       expires_at: row.expires_at ?? null,
       ai_temporal_expression: row.ai_temporal_expression ?? null,
       ai_temporal_kind: row.ai_temporal_kind ?? null,

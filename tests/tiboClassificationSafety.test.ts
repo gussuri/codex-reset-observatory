@@ -307,6 +307,14 @@ test("Gemini prompt requires semantic domain and temporal reasoning", () => {
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /generic words such as[\s\S]*not evidence by themselves/i);
 });
 
+test("Gemini prompt handles day-count reset headlines without inventing history or a schedule", () => {
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /day-count headings?[\s\S]*not historical by default/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /Day N[\s\S]*not a date or elapsed-time\s+claim/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /Do not turn the day number into a clock time, schedule, or event timestamp/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /no reliable\s+time or tense cue[\s\S]*temporalDirection="unclear"/i);
+  assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /retrospective[\s\S]*cancels or conditions[\s\S]*unrelated product\/technical reset/i);
+});
+
 test("Gemini prompt separates completed events from postponed future events", () => {
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /moved|postponed|delayed|rescheduled/i);
   assert.match(TIBO_GEMINI_SYSTEM_PROMPT, /completed event[\s\S]*future event/i);

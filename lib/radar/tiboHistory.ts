@@ -33,6 +33,7 @@ import {
 } from "./resetReason";
 import { normalizeResetScope } from "./resetScope";
 import { isTiboHandle } from "./tiboHandle";
+import { isTiboUnscheduledOfficialNoticeEligible } from "./tiboNoticeEligibility";
 import {
   getTiboClassificationSafetyDecision,
   isCurrentUsageResetAnnouncement,
@@ -66,6 +67,12 @@ import {
   getOfficialNoticeConsumption,
   isTiboForecastSignalTerminatedAt,
 } from "./officialNoticePolicy";
+import {
+  TIBO_FORMAL_REPLY_ADMISSION_PROOF,
+  getCurrentTiboFormalReplyAdmissionProof,
+  isTiboFormalReplyAdmissionProofCurrent,
+  type TiboFormalReplyAdmissionProof,
+} from "./tiboFormalReplyAdmission";
 
 export type TiboSignalType =
   | "official_notice"
@@ -92,21 +99,28 @@ export type TiboNoticeSignal = TiboEditIdentityFields & {
   confidence: number | null;
   verification_status: TiboVerificationStatus;
   classification_source?: TiboClassificationSource | null;
-  teaser_strength?: TeaserStrength | null;
-  expires_at?: string | null;
+  ai_signal_type?: string | null;
+  ai_classification_status?: string | null;
+  ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
+  ai_evidence_quote?: string | null;
+  ai_notice_to_execution?: string | null;
+  ai_temporal_confidence?: number | null;
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   temporal_expression?: string | null;
+  teaser_strength?: TeaserStrength | null;
+  expires_at?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: TemporalResolutionStatus | null;
   temporal_kind?: TemporalKind | null;
   temporal_precision?: TemporalPrecision | null;
   temporal_timezone?: string | null;
   temporal_confidence?: number | null;
   temporal_resolution_source?: TemporalResolutionSource | null;
-  expected_start_at?: string | null;
-  expected_end_at?: string | null;
-  temporal_resolution_status?: TemporalResolutionStatus | null;
   is_reply?: boolean | null;
   is_quote?: boolean | null;
 };
@@ -175,8 +189,12 @@ export type FormalTiboResetSignal = TiboEditIdentityFields & {
   classification_reason?: string | null;
   classification_source?: TiboClassificationSource | null;
   rule_signal_type?: TiboSignalType | null;
-  ai_signal_type?: TiboSignalType | null;
+  ai_signal_type?: string | null;
+  ai_confidence?: number | null;
   ai_classification_status?: string | null;
+  ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
+  ai_evidence_quote?: string | null;
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
   ai_teaser_strength?: TeaserStrength | null;
@@ -210,6 +228,10 @@ export type FormalTiboResetSignal = TiboEditIdentityFields & {
   quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
+  source_context_revision_hashes?: string[] | null;
+  source_context_classified_revision_hashes?: string[] | null;
+  source_context_generation?: number | null;
+  [TIBO_FORMAL_REPLY_ADMISSION_PROOF]?: TiboFormalReplyAdmissionProof | null;
   source_timeline?: "profile" | "with_replies" | null;
   codex_operational_status?: "none" | "investigating" | "active" | "recovered" | null;
   codex_operational_confidence?: number | null;
@@ -574,7 +596,8 @@ export function findRelatedTiboNoticeCluster(
         notice.signal_type === "official_notice" &&
         notice.verification_status !== "rejected" &&
         !isBankedDistributionNotice(notice.text) &&
-        (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE,
+        ((notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE ||
+          isTiboUnscheduledOfficialNoticeEligible(notice)),
     );
   });
   return getNoticeCluster(candidates, representative);
@@ -630,7 +653,10 @@ export function findRelatedBankedDistributionNotices(
 }
 
 export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
-  if (signal.is_reply === true) return false;
+  const hasCurrentReplyProof = signal.is_reply === true &&
+    isTiboFormalReplyAdmissionProofCurrent(signal);
+  if (signal.is_reply === true && !hasCurrentReplyProof) return false;
+  if (signal.is_reply === true && signal.is_quote === true) return false;
   if (
     signal.is_quote === true &&
     !(isTiboHandle(signal.quote_author_handle) || isTiboHandle(signal.quote_tweet_url))
@@ -638,7 +664,8 @@ export function isFormalTiboResetSignal(signal: FormalTiboResetSignal) {
     return false;
   }
   if (signal.signal_type !== "reset_executed") return false;
-  if (getTiboClassificationSafetyDecision(signal.text, signal.signal_type).signalType !== "reset_executed") {
+  if (!hasCurrentReplyProof &&
+    getTiboClassificationSafetyDecision(signal.text, signal.signal_type).signalType !== "reset_executed") {
     return false;
   }
   if ((signal.confidence ?? 0) < FORMAL_RESET_CONFIDENCE) return false;
@@ -664,9 +691,10 @@ export function findRelatedTiboNotices(
   const candidates = noticeSignals.filter((signal) => {
     const signalTime = getTimestamp(signal.tweet_created_at);
     const noticeConsumption = getOfficialNoticeConsumption(signal.tweet_id);
-    const confidenceThreshold = signal.signal_type === "official_notice"
-      ? OFFICIAL_NOTICE_CONFIDENCE
-      : TEASER_CONFIDENCE;
+    const confidenceEligible = signal.signal_type === "official_notice"
+      ? (signal.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE ||
+        isTiboUnscheduledOfficialNoticeEligible(signal)
+      : (signal.confidence ?? 0) >= TEASER_CONFIDENCE;
     const hasResolvedSchedule = signal.signal_type === "official_notice" &&
       signal.temporal_resolution_status === "resolved" &&
       getTimestamp(signal.expected_start_at) !== null;
@@ -709,7 +737,7 @@ export function findRelatedTiboNotices(
         signal.verification_status !== "rejected" &&
         signal.is_reply !== true &&
         !isBankedDistributionNotice(signal.text) &&
-        (signal.confidence ?? 0) >= confidenceThreshold,
+        confidenceEligible,
     );
   });
 
@@ -732,6 +760,7 @@ export function convertTiboResetSignalToHistoryEvent(
   completedAtOverride?: string,
   relatedNotices: ReadonlyArray<TiboNoticeSignal> = signal.related_notices ?? [],
 ): WindowEventLike {
+  const replyAdmissionProof = getCurrentTiboFormalReplyAdmissionProof(signal);
   const completedAt = new Date(completedAtOverride ?? signal.tweet_created_at).toISOString();
   const notices = sortTiboNoticesChronologically([
     ...relatedNotices,
@@ -761,7 +790,7 @@ export function convertTiboResetSignalToHistoryEvent(
   const title = "ランダムリセット";
 
   return {
-    id: `tibo-reset-${signal.tweet_id}`,
+    id: `tibo-reset-${replyAdmissionProof?.contextualResetTweetId ?? signal.tweet_id}`,
     recordKind: "confirmed_global",
     title,
     kind: "reset_completed",
@@ -790,6 +819,7 @@ export function convertTiboResetSignalToHistoryEvent(
     sourceTweetIds: sortTiboNoticesChronologically(notices)
       .map((notice) => notice.tweet_id)
       .concat(signal.tweet_id)
+      .concat(replyAdmissionProof?.pathTweetIds ?? [])
       .filter((tweetId, index, all) => all.indexOf(tweetId) === index),
   };
 }
@@ -833,6 +863,12 @@ export function areFormalTiboResetSignalsSameCluster(
   right: FormalTiboResetSignal,
 ) {
   if (!isFormalTiboResetSignal(left) || !isFormalTiboResetSignal(right)) return false;
+  const leftProof = getCurrentTiboFormalReplyAdmissionProof(left);
+  const rightProof = getCurrentTiboFormalReplyAdmissionProof(right);
+  if (leftProof && rightProof &&
+    leftProof.contextualResetTweetId === rightProof.contextualResetTweetId) return true;
+  if (leftProof?.contextualResetTweetId === right.tweet_id ||
+    rightProof?.contextualResetTweetId === left.tweet_id) return true;
   const leftEvent = convertTiboResetSignalToHistoryEvent(left);
   const rightEvent = convertTiboResetSignalToHistoryEvent(right);
   return isBroadResetScope(leftEvent) && isBroadResetScope(rightEvent) && isSameReset(leftEvent, rightEvent);
@@ -1270,7 +1306,22 @@ function buildCanonicalFormalHistory(
       .filter((notice, index, all) =>
         all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
       );
-    const sourceTweetIds = getCanonicalHistorySourceTweetIds(logicalPost, relatedNotices);
+    const replyProofs = formalRows
+      .map((row) => getCurrentTiboFormalReplyAdmissionProof(row as FormalTiboResetSignal))
+      .filter((proof): proof is NonNullable<typeof proof> => proof !== null);
+    const contextualResetTweetIds = uniqueTweetIds(replyProofs.map((proof) => proof.contextualResetTweetId));
+    const verifiedContextResetTweetId = contextualResetTweetIds.length === 1
+      ? contextualResetTweetIds[0]!
+      : null;
+    const verifiedContextTweetIds = verifiedContextResetTweetId
+      ? uniqueTweetIds(replyProofs
+          .filter((proof) => proof.contextualResetTweetId === verifiedContextResetTweetId)
+          .flatMap((proof) => proof.pathTweetIds))
+      : [];
+    const sourceTweetIds = uniqueTweetIds([
+      ...getCanonicalHistorySourceTweetIds(logicalPost, relatedNotices),
+      ...verifiedContextTweetIds,
+    ]);
     const resolution = resolveTiboResetEventIdentity(logicalPost, {
       recoveryObservationId: getRecoveryObservationIdForLogicalPost(
         logicalPost,
@@ -1281,6 +1332,8 @@ function buildCanonicalFormalHistory(
       staticHistory: staticReferences,
       dynamicEvents: dynamicReferences,
       sourceTweetIds,
+      verifiedContextTweetIds,
+      verifiedContextResetTweetId,
     });
     if (!resolution.resetEventKey) continue;
 
@@ -1395,8 +1448,25 @@ function buildCanonicalFormalHistory(
     legacySignals.push(signal);
   }
 
+  const uniqueGeneratedEvents = new Map<string, WindowEventLike>();
+  for (const event of generatedEvents) {
+    const eventKey = getHistoryEventKey(event);
+    if (!eventKey || !uniqueGeneratedEvents.has(eventKey)) {
+      if (eventKey) uniqueGeneratedEvents.set(eventKey, event);
+      continue;
+    }
+    const previous = uniqueGeneratedEvents.get(eventKey)!;
+    uniqueGeneratedEvents.set(eventKey, {
+      ...mergeDuplicateHistory(previous, event),
+      sourceTweetIds: uniqueTweetIds([
+        ...(previous.sourceTweetIds ?? []),
+        ...(event.sourceTweetIds ?? []),
+      ]),
+    });
+  }
+
   return {
-    events: [...generatedEvents, ...clusterFormalTiboResetSignals(legacySignals)],
+    events: [...Array.from(uniqueGeneratedEvents.values()), ...clusterFormalTiboResetSignals(legacySignals)],
     sourceTweetIdsByEventKey,
   };
 }
@@ -1660,6 +1730,13 @@ export function collectOfficialTiboNoticeSignals(
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
       classification_source: signal.classification_source ?? null,
+      ai_signal_type: signal.ai_signal_type ?? null,
+      ai_classification_status: signal.ai_classification_status ?? null,
+      ai_temporal_direction: signal.ai_temporal_direction ?? null,
+      ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+      ai_evidence_quote: signal.ai_evidence_quote ?? null,
+      ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+      ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
       teaser_strength: signal.teaser_strength ?? null,
       expires_at: signal.expires_at ?? null,
       ai_temporal_expression: signal.ai_temporal_expression ?? null,
@@ -1719,9 +1796,30 @@ function collectTiboRecoveryEvidenceSignals(
       signal_type: signalType,
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
+      classification_source: signal.classification_source ?? null,
+      ai_signal_type: signal.ai_signal_type ?? null,
+      ai_classification_status: signal.ai_classification_status ?? null,
+      ai_temporal_direction: signal.ai_temporal_direction ?? null,
+      ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+      ai_evidence_quote: signal.ai_evidence_quote ?? null,
+      ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+      ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
       expires_at: signal.expires_at ?? null,
+      ai_temporal_expression: signal.ai_temporal_expression ?? null,
+      ai_temporal_kind: signal.ai_temporal_kind ?? null,
+      ai_temporal_precision: signal.ai_temporal_precision ?? null,
+      ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+      temporal_expression: signal.temporal_expression ?? null,
+      temporal_kind: signal.temporal_kind ?? null,
+      temporal_precision: signal.temporal_precision ?? null,
+      temporal_timezone: signal.temporal_timezone ?? null,
+      temporal_confidence: signal.temporal_confidence ?? null,
+      temporal_resolution_source: signal.temporal_resolution_source ?? null,
+      expected_start_at: signal.expected_start_at ?? null,
+      expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
       is_reply: signal.is_reply ?? null,
+      is_quote: signal.is_quote ?? null,
       logical_post_id: signal.logical_post_id ?? null,
       edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
       edit_version: signal.edit_version ?? null,
@@ -2345,7 +2443,7 @@ function buildCanonicalResetHistoryParts(
   projection?: TiboReadSideProjection,
 ): CanonicalResetHistoryParts {
   const formalSignals = formalTiboResets
-    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
+    .filter(isFormalTiboResetSignal);
   const canonicalFormalHistory = identityContext
     ? buildCanonicalFormalHistory(
         formalSignals,
@@ -2507,7 +2605,7 @@ export function buildCanonicalResetHistoryContext(
   if (options.metrics) options.metrics.noticeBackedHistoryInputBuilds += 1;
   const inputs = getNoticeBackedHistoryInputs(data);
   const formalSignals = (data?.formal_tibo_resets ?? [])
-    .filter((signal) => signal.is_reply !== true && isFormalTiboResetSignal(signal));
+    .filter(isFormalTiboResetSignal);
   const projection = buildIdentityProjection(
     formalSignals,
     inputs.identityContext,

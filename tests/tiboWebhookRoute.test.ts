@@ -609,6 +609,7 @@ test("duplicate source-context enrichment exits before classification, translati
         } },
         source_context_revision_hashes: [revisionHash],
         source_context_classified_revision_hashes: [revisionHash],
+        source_context_generation: 0,
       }]), {
         status: 200,
         headers: { "content-type": "application/json" },

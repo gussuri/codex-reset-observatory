@@ -5,6 +5,7 @@ import {
 } from "./tiboLogicalPost";
 import { isBankedDistributionEstimatorVersion } from "./bankedReset";
 import { TIBO_NOTICE_GRACE_MS } from "./tiboTemporal";
+import { isTiboFormalReplyAdmissionProofCurrent } from "./tiboFormalReplyAdmission";
 
 export type TiboFormalAdoptionClaimSource =
   | "new_adoption"
@@ -50,6 +51,8 @@ export type TiboResetEventIdentityEvidence = {
   staticHistory?: readonly TiboResetEventReference[];
   dynamicEvents?: readonly TiboResetEventReference[];
   sourceTweetIds?: readonly string[];
+  verifiedContextTweetIds?: readonly string[];
+  verifiedContextResetTweetId?: string | null;
   candidateCreatedAt?: string | null;
 };
 
@@ -57,7 +60,8 @@ export type TiboResetEventEvidenceKind =
   | "existing_ledger"
   | "existing_estimate"
   | "existing_history"
-  | "existing_dynamic";
+  | "existing_dynamic"
+  | "verified_context";
 
 export type TiboResetEventIdentityResolution = {
   status: "new" | "existing" | "conflict" | "blocked";
@@ -105,7 +109,8 @@ function canRunFormalEnrichments<T extends TiboLogicalPostRow>(
       typeof classification.confidence === "number" &&
       classification.confidence >= 0.95 &&
       classification.verificationStatus !== "rejected" &&
-      (row as TiboLogicalPostRow & { is_reply?: boolean | null } | null)?.is_reply !== true,
+      ((row as (TiboLogicalPostRow & { is_reply?: boolean | null }) | null)?.is_reply !== true ||
+        isTiboFormalReplyAdmissionProofCurrent(row as TiboLogicalPostRow & { is_reply?: boolean | null })),
   );
 }
 
@@ -195,15 +200,24 @@ function collectEvidenceMatches(
     const key = normalizedEventKey(resetEventKey);
     if (key) matches.push({ kind, resetEventKey: key, priority });
   };
+  const verifiedContextIds = uniqueStrings(evidence.verifiedContextTweetIds ?? []);
+  const matchesVerifiedContextOnly = (ids: readonly string[]) =>
+    !hasAliasOverlap(logicalPostTweetIds, ids) && hasAliasOverlap(verifiedContextIds, ids);
 
   for (const ledger of evidence.adoptionLedgers ?? []) {
     const key = normalizedEventKey(ledger.resetEventKey);
     if (!key) continue;
     const sameIdentity = ledger.logicalPostId === logicalPostId ||
       hasAliasOverlap(ledger.logicalPostTweetIds, logicalPostTweetIds);
-    if (!sameIdentity) continue;
+    const verifiedContextMatch = !sameIdentity &&
+      hasAliasOverlap(verifiedContextIds, ledger.sourceTweetIds);
+    if (!sameIdentity && !verifiedContextMatch) continue;
     if (bankedEventKeys.has(key)) {
       conflictingEventKeys.push(key);
+      continue;
+    }
+    if (verifiedContextMatch) {
+      add("verified_context", key, 450);
       continue;
     }
     if (!isCompatibleLedgerChain(ledger.logicalPostTweetIds, logicalPostTweetIds)) {
@@ -224,6 +238,8 @@ function collectEvidenceMatches(
     }
     if (hasAliasOverlap(logicalPostTweetIds, estimate.tiboSourceTweetIds ?? [])) {
       add("existing_estimate", estimate.resetEventKey, 300);
+    } else if (matchesVerifiedContextOnly(estimate.tiboSourceTweetIds ?? [])) {
+      add("verified_context", estimate.resetEventKey, 250);
     }
   }
 
@@ -231,6 +247,8 @@ function collectEvidenceMatches(
     if (reference.eventKind === "banked_distribution") continue;
     if (hasAliasOverlap(logicalPostTweetIds, getReferenceTweetIds(reference))) {
       add("existing_history", reference.eventKey, 200);
+    } else if (matchesVerifiedContextOnly(getReferenceTweetIds(reference))) {
+      add("verified_context", reference.eventKey, 175);
     }
   }
 
@@ -238,6 +256,8 @@ function collectEvidenceMatches(
     if (reference.eventKind === "banked_distribution") continue;
     if (hasAliasOverlap(logicalPostTweetIds, getReferenceTweetIds(reference))) {
       add("existing_dynamic", reference.eventKey, 100);
+    } else if (matchesVerifiedContextOnly(getReferenceTweetIds(reference))) {
+      add("verified_context", reference.eventKey, 75);
     }
   }
 
@@ -245,7 +265,13 @@ function collectEvidenceMatches(
   // the same spelling. Source overlap alone remains non-identifying; this is
   // only an exact-key collision guard.
   const selfEventKey = `tibo-reset-${logicalPostId}`;
+  const contextualEventKey = evidence.verifiedContextResetTweetId
+    ? `tibo-reset-${evidence.verifiedContextResetTweetId}`
+    : null;
   if (bankedEventKeys.has(selfEventKey)) conflictingEventKeys.push(selfEventKey);
+  if (contextualEventKey && bankedEventKeys.has(contextualEventKey)) {
+    conflictingEventKeys.push(contextualEventKey);
+  }
 
   return { matches, conflictingEventKeys };
 }
@@ -272,6 +298,9 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
   logicalPost: TiboLogicalPost<T>,
   evidence: TiboResetEventIdentityEvidence = {},
 ): TiboResetEventIdentityResolution {
+  const contextualEventKey = evidence.verifiedContextResetTweetId
+    ? `tibo-reset-${evidence.verifiedContextResetTweetId}`
+    : null;
   const base = buildBaseResolution(logicalPost, evidence.sourceTweetIds ?? []);
   const evidenceCollection = collectEvidenceMatches(
     base.logicalPostTweetIds,
@@ -458,7 +487,7 @@ export function resolveTiboResetEventIdentity<T extends TiboLogicalPostRow>(
   return {
     ...base,
     status: "new",
-    resetEventKey: `tibo-reset-${logicalPost.logicalPostId}`,
+    resetEventKey: contextualEventKey ?? `tibo-reset-${logicalPost.logicalPostId}`,
     canCreateNewSideEffects: true,
     canRunFormalEnrichments: canRunFormalEnrichments(logicalPost),
     matchedEvidence: null,
