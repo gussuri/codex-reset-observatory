@@ -301,30 +301,16 @@ test("an open but empty timeline downgrades healthy monitor status to warning", 
   const result = evaluateTiboHeartbeat(
     snapshot({
       last_scan_summary: {
-        timelineDiagnostics: {
-          profile: {
-            sourceTimeline: "profile",
-            status: "healthy",
-            scanTimestamp: "2026-08-01T23:59:00.000Z",
-            articleCount: 4,
-            parseSuccessCount: 2,
-            selectorVersion: "v1.13-bounded-reply-capture",
-            recoveryStatus: "not_attempted",
-            recoveryMoveCount: 0,
-            recoveryMaxMoves: 4,
-          },
-          with_replies: {
-            sourceTimeline: "with_replies",
-            status: "empty",
-            scanTimestamp: "2026-08-01T23:59:30.000Z",
-            articleCount: 2,
-            parseSuccessCount: 0,
-            selectorVersion: "v1.13-bounded-reply-capture",
-            recoveryStatus: "target_not_visible",
-            recoveryMoveCount: 4,
-            recoveryMaxMoves: 4,
-          },
-        },
+        timelineDiagnostics: currentTimelineDiagnostics({}, {
+          status: "empty",
+          scanTimestamp: "2026-08-01T23:59:30.000Z",
+          articleCount: 2,
+          parseSuccessCount: 0,
+          lastSuccessfulParseAt: null,
+          recoveryStatus: "target_not_visible",
+          recoveryMoveCount: 4,
+          recoveryMaxMoves: 4,
+        }),
       },
     }),
     now,
@@ -341,20 +327,12 @@ test("an open but stale timeline is unhealthy while an unopened timeline stays o
   const result = evaluateTiboHeartbeat(
     snapshot({
       last_scan_summary: {
-        timelineDiagnostics: {
-          profile: {
-            sourceTimeline: "profile",
-            status: "stale",
-            scanTimestamp: "2026-08-01T23:40:00.000Z",
-            articleCount: 1,
-            parseSuccessCount: 1,
-            selectorVersion: "v1.13-bounded-reply-capture",
-            recoveryStatus: "not_attempted",
-            recoveryMoveCount: 0,
-            recoveryMaxMoves: 4,
-          },
-          with_replies: { sourceTimeline: "with_replies", status: "not_open" },
-        },
+        timelineDiagnostics: currentTimelineDiagnostics({
+          status: "stale",
+          scanTimestamp: "2026-08-01T23:40:00.000Z",
+          articleCount: 1,
+          parseSuccessCount: 1,
+        }, { status: "not_open" }),
       },
     }),
     now,
@@ -370,16 +348,7 @@ test("a timeline marked not_open is optional when the other monitored timeline i
   const result = evaluateTiboHeartbeat(
     snapshot({
       last_scan_summary: {
-        timelineDiagnostics: {
-          profile: {
-            sourceTimeline: "profile",
-            status: "healthy",
-            scanTimestamp: "2026-08-01T23:59:00.000Z",
-            articleCount: 4,
-            parseSuccessCount: 2,
-          },
-          with_replies: { sourceTimeline: "with_replies", status: "not_open" },
-        },
+        timelineDiagnostics: currentTimelineDiagnostics({}, { status: "not_open" }),
       },
     }),
     now,
@@ -388,4 +357,146 @@ test("a timeline marked not_open is optional when the other monitored timeline i
   assert.equal(result.status, "healthy");
   assert.equal(result.timelines?.profile?.status, "healthy");
   assert.equal(result.timelines?.with_replies?.status, "not_open");
+});
+
+function currentTimelineDiagnostics(
+  profile: Record<string, unknown>,
+  withReplies: Record<string, unknown>,
+) {
+  return {
+    formatVersion: 2,
+    profile: {
+      sourceTimeline: "profile",
+      status: "healthy",
+      observedAt: "2026-08-01T23:59:55.000Z",
+      scanTimestamp: "2026-08-01T23:59:55.000Z",
+      lastSuccessfulParseAt: "2026-08-01T23:59:55.000Z",
+      sessionStartedAt: "2026-08-01T23:50:00.000Z",
+      documentStartedAt: "2026-08-01T23:50:01.000Z",
+      scanSequence: 15,
+      articleCount: 4,
+      parseSuccessCount: 2,
+      selectorVersion: "v1.14-current-timeline-diagnostics",
+      recoveryStatus: "not_attempted",
+      recoveryMoveCount: 0,
+      recoveryMaxMoves: 4,
+      ...profile,
+    },
+    with_replies: {
+      sourceTimeline: "with_replies",
+      status: "healthy",
+      observedAt: "2026-08-01T23:59:55.000Z",
+      scanTimestamp: "2026-08-01T23:59:55.000Z",
+      lastSuccessfulParseAt: "2026-08-01T23:59:55.000Z",
+      sessionStartedAt: "2026-08-01T23:50:00.000Z",
+      documentStartedAt: "2026-08-01T23:50:02.000Z",
+      scanSequence: 8,
+      articleCount: 2,
+      parseSuccessCount: 1,
+      selectorVersion: "v1.14-current-timeline-diagnostics",
+      recoveryStatus: "not_attempted",
+      recoveryMoveCount: 0,
+      recoveryMaxMoves: 4,
+      ...withReplies,
+    },
+  };
+}
+
+test("complete current timeline evidence replaces only the legacy leader parse status", () => {
+  const diagnostics = currentTimelineDiagnostics({}, {});
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_successful_parse_at: null,
+      last_scan_summary: { timelineDiagnostics: diagnostics },
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "healthy");
+  assert.equal(result.detail, "healthy");
+  assert.equal(result.timelines?.profile?.status, "healthy");
+  assert.equal(result.timelines?.with_replies?.status, "healthy");
+  assert.equal(result.timelines?.with_replies?.lastSuccessfulParseAt, "2026-08-01T23:59:55.000Z");
+});
+
+test("timeline health keeps communication and operational failures authoritative", () => {
+  const diagnostics = currentTimelineDiagnostics({}, {});
+  const staleHeartbeat = evaluateTiboHeartbeat(
+    snapshot({
+      last_heartbeat_at: "2026-08-01T23:44:59.000Z",
+      last_successful_parse_at: null,
+      last_scan_summary: { timelineDiagnostics: diagnostics },
+    }),
+    now,
+  );
+  assert.equal(staleHeartbeat.status, "unhealthy");
+  assert.equal(staleHeartbeat.detail, "heartbeat_stale");
+
+  const failedReload = evaluateTiboHeartbeat(
+    snapshot({
+      last_successful_parse_at: null,
+      last_page_reload_status: "error",
+      last_scan_summary: { timelineDiagnostics: diagnostics },
+    }),
+    now,
+  );
+  assert.equal(failedReload.status, "unhealthy");
+  assert.equal(failedReload.detail, "page_reload_failed");
+});
+
+test("an empty latest timeline scan reports its last successful parse separately", () => {
+  const diagnostics = currentTimelineDiagnostics({}, {
+    status: "empty",
+    scanTimestamp: "2026-08-01T23:59:50.000Z",
+    lastSuccessfulParseAt: "2026-08-01T23:50:00.000Z",
+    parseSuccessCount: 0,
+    sessionStartedAt: "2026-08-01T23:45:00.000Z",
+  });
+  const result = evaluateTiboHeartbeat(
+    snapshot({ last_scan_summary: { timelineDiagnostics: diagnostics } }),
+    now,
+  );
+
+  assert.equal(result.status, "warning");
+  assert.equal(result.detail, "timeline_scan_empty");
+  assert.equal(result.timelines?.with_replies?.status, "empty");
+  assert.equal(result.timelines?.with_replies?.parseSuccessCount, 0);
+  assert.equal(result.timelines?.with_replies?.lastSuccessfulParseAt, "2026-08-01T23:50:00.000Z");
+  assert.equal(result.timelines?.with_replies?.lastSuccessfulParseAgeSeconds, 600);
+});
+
+test("a new timeline session does not inherit its previous session's successful parse", () => {
+  const diagnostics = currentTimelineDiagnostics({}, {
+    status: "empty",
+    scanTimestamp: "2026-08-01T23:59:55.000Z",
+    sessionStartedAt: "2026-08-01T23:59:00.000Z",
+    lastSuccessfulParseAt: "2026-08-01T23:50:00.000Z",
+    parseSuccessCount: 0,
+  });
+  const result = evaluateTiboHeartbeat(
+    snapshot({ last_scan_summary: { timelineDiagnostics: diagnostics } }),
+    now,
+  );
+
+  assert.equal(result.timelines?.with_replies?.status, "empty");
+  assert.equal(result.timelines?.with_replies?.lastSuccessfulParseAt, null);
+});
+
+test("legacy timeline diagnostics fall back to the legacy parser health contract", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_successful_parse_at: null,
+      last_scan_summary: {
+        timelineDiagnostics: {
+          profile: { sourceTimeline: "profile", status: "healthy", parseSuccessCount: 1 },
+          with_replies: { sourceTimeline: "with_replies", status: "not_open" },
+        },
+      },
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "unhealthy");
+  assert.equal(result.detail, "parse_missing");
+  assert.equal(result.timelines, undefined);
 });

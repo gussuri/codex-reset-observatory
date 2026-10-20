@@ -10,16 +10,27 @@ export interface HeartbeatScanSummary {
   currentUrl: string;
   selectorVersion: string;
   scanTimestamp: string;
-  timelineDiagnostics?: Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic>;
+  sessionStartedAt?: string | null;
+  documentStartedAt?: string | null;
+  scanSequence?: number;
+  lastSuccessfulParseAt?: string | null;
+  heartbeatObservedAt?: string;
+  timelineDiagnostics?: HeartbeatTimelineDiagnostics;
 }
 
 export type TiboMonitorTimeline = "profile" | "with_replies";
 export type TiboTimelineHealthStatus = "not_open" | "healthy" | "empty" | "stale";
+export const HEARTBEAT_TIMELINE_DIAGNOSTICS_VERSION = 2 as const;
 
 export interface HeartbeatTimelineDiagnostic {
   sourceTimeline: TiboMonitorTimeline;
   status: TiboTimelineHealthStatus;
+  observedAt: string;
   scanTimestamp?: string | null;
+  lastSuccessfulParseAt?: string | null;
+  sessionStartedAt?: string | null;
+  documentStartedAt?: string | null;
+  scanSequence?: number;
   articleCount?: number;
   matchingTiboStatusCount?: number;
   parseSuccessCount?: number;
@@ -27,6 +38,17 @@ export interface HeartbeatTimelineDiagnostic {
   recoveryStatus?: string;
   recoveryMoveCount?: number;
   recoveryMaxMoves?: number;
+}
+
+export interface HeartbeatTimelineDiagnostics {
+  formatVersion: typeof HEARTBEAT_TIMELINE_DIAGNOSTICS_VERSION;
+  profile: HeartbeatTimelineDiagnostic;
+  with_replies: HeartbeatTimelineDiagnostic;
+}
+
+export interface HeartbeatStoredScanSummary extends Partial<Omit<HeartbeatScanSummary, "timelineDiagnostics">> {
+  heartbeatObservedAt?: string;
+  timelineDiagnostics?: HeartbeatTimelineDiagnostics;
 }
 
 export interface HeartbeatRequestBody {
@@ -43,6 +65,7 @@ export interface HeartbeatRequestBody {
   last_page_reload_error?: string | null;
   last_scan_summary?: unknown | null;
   timelineDiagnostics?: unknown | null;
+  heartbeatObservedAt?: unknown | null;
   lastPageReloadAt?: string | null;
   lastPageReloadStatus?: string | null;
   lastPageReloadError?: string | null;
@@ -55,8 +78,10 @@ export interface ExistingHeartbeatRecord {
   last_heartbeat_at?: string | null;
   heartbeat_count?: number | null;
   max_gap_seconds?: number | null;
+  last_successful_parse_at?: string | null;
   last_scan_summary?: unknown | null;
   newest_seen_tweet_created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface HeartbeatRecord {
@@ -72,7 +97,7 @@ export interface HeartbeatRecord {
   last_page_reload_at: string | null;
   last_page_reload_status: string | null;
   last_page_reload_error: string | null;
-  last_scan_summary: HeartbeatScanSummary | null;
+  last_scan_summary: HeartbeatStoredScanSummary | null;
   heartbeat_count: number;
   max_gap_seconds: number;
   last_gap_seconds: number;
@@ -129,10 +154,17 @@ function normalizeRecoveryStatus(value: unknown): string {
   return SAFE_RECOVERY_STATES.has(status) ? status : "not_attempted";
 }
 
-function normalizeTimelineDiagnostics(value: unknown): Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic> | null {
+function normalizeSafeTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const timestamp = new Date(value);
+  return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+}
+
+function normalizeTimelineDiagnostics(value: unknown): HeartbeatTimelineDiagnostics | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Record<string, unknown>;
   const result = {} as Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic>;
+  if (source.formatVersion !== HEARTBEAT_TIMELINE_DIAGNOSTICS_VERSION) return null;
 
   for (const timeline of ["profile", "with_replies"] as const) {
     const raw = source[timeline];
@@ -143,24 +175,35 @@ function normalizeTimelineDiagnostics(value: unknown): Record<TiboMonitorTimelin
     if (status !== "not_open" && status !== "healthy" && status !== "empty" && status !== "stale") {
       continue;
     }
-    if (status === "not_open") {
-      result[timeline] = { sourceTimeline: timeline, status };
-      continue;
+    const observedAt = normalizeSafeTimestamp(diagnostic.observedAt);
+    if (!observedAt) continue;
+    const scanTimestamp = normalizeSafeTimestamp(diagnostic.scanTimestamp);
+    if (status !== "not_open" && status !== "stale" && !scanTimestamp) continue;
+    const sessionStartedAt = normalizeSafeTimestamp(diagnostic.sessionStartedAt);
+    const documentStartedAt = normalizeSafeTimestamp(diagnostic.documentStartedAt);
+    const parseSuccessCount = normalizeCount(diagnostic.parseSuccessCount);
+    let lastSuccessfulParseAt = normalizeSafeTimestamp(diagnostic.lastSuccessfulParseAt);
+    if (lastSuccessfulParseAt && sessionStartedAt && lastSuccessfulParseAt < sessionStartedAt) {
+      lastSuccessfulParseAt = null;
     }
-
-    const scanTimestampValue = diagnostic.scanTimestamp;
-    const scanTimestamp = typeof scanTimestampValue === "string"
-      && Number.isFinite(new Date(scanTimestampValue).getTime())
-      ? new Date(scanTimestampValue).toISOString()
-      : null;
+    if (parseSuccessCount > 0 && scanTimestamp) {
+      lastSuccessfulParseAt = !sessionStartedAt || scanTimestamp >= sessionStartedAt
+        ? scanTimestamp
+        : null;
+    }
     const selectorVersionValue = String(diagnostic.selectorVersion || "unknown").slice(0, 100);
     result[timeline] = {
       sourceTimeline: timeline,
       status,
+      observedAt,
       scanTimestamp,
+      lastSuccessfulParseAt,
+      sessionStartedAt,
+      documentStartedAt,
+      scanSequence: Math.min(1_000_000_000, normalizeCount(diagnostic.scanSequence)),
       articleCount: normalizeCount(diagnostic.articleCount),
       matchingTiboStatusCount: normalizeCount(diagnostic.matchingTiboStatusCount),
-      parseSuccessCount: normalizeCount(diagnostic.parseSuccessCount),
+      parseSuccessCount,
       selectorVersion: /^[-A-Za-z0-9_.]+$/.test(selectorVersionValue)
         ? selectorVersionValue
         : "unknown",
@@ -170,7 +213,9 @@ function normalizeTimelineDiagnostics(value: unknown): Record<TiboMonitorTimelin
     };
   }
 
-  return Object.keys(result).length === 2 ? result : null;
+  return Object.keys(result).length === 2
+    ? { formatVersion: HEARTBEAT_TIMELINE_DIAGNOSTICS_VERSION, ...result }
+    : null;
 }
 
 function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
@@ -191,6 +236,10 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
   if (!/^[-A-Za-z0-9_.]+$/.test(selectorVersion) || !scanTimestamp) return null;
 
   const timelineDiagnostics = normalizeTimelineDiagnostics(summary.timelineDiagnostics);
+  const sessionStartedAt = normalizeSafeTimestamp(summary.sessionStartedAt);
+  const documentStartedAt = normalizeSafeTimestamp(summary.documentStartedAt);
+  const lastSuccessfulParseAt = normalizeSafeTimestamp(summary.lastSuccessfulParseAt);
+  const heartbeatObservedAt = normalizeSafeTimestamp(summary.heartbeatObservedAt);
   return {
     articleCount: normalizeCount(summary.articleCount),
     timeElementCount: normalizeCount(summary.timeElementCount),
@@ -207,7 +256,119 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
     currentUrl,
     selectorVersion,
     scanTimestamp,
+    sessionStartedAt,
+    documentStartedAt,
+    scanSequence: Math.min(1_000_000_000, normalizeCount(summary.scanSequence)),
+    lastSuccessfulParseAt:
+      lastSuccessfulParseAt && (!sessionStartedAt || lastSuccessfulParseAt >= sessionStartedAt)
+        ? lastSuccessfulParseAt
+        : null,
+    ...(heartbeatObservedAt ? { heartbeatObservedAt } : {}),
     ...(timelineDiagnostics ? { timelineDiagnostics } : {}),
+  };
+}
+
+function getStoredHeartbeatObservedAt(summary: unknown): string | null {
+  if (!summary || typeof summary !== "object") return null;
+  return normalizeSafeTimestamp((summary as Record<string, unknown>).heartbeatObservedAt);
+}
+
+export function isStaleHeartbeatPayload(
+  body: HeartbeatRequestBody,
+  existing: ExistingHeartbeatRecord | null,
+): boolean {
+  const existingObservedAt =
+    getStoredHeartbeatObservedAt(existing?.last_scan_summary) ??
+    normalizeSafeTimestamp(existing?.last_heartbeat_at);
+  if (!existingObservedAt) return false;
+  const incomingObservedAt = normalizeSafeTimestamp(body.heartbeatObservedAt);
+  return !incomingObservedAt || incomingObservedAt <= existingObservedAt;
+}
+
+function compareSafeTimestamps(left: string | null | undefined, right: string | null | undefined): number {
+  if (!left && !right) return 0;
+  if (!left) return -1;
+  if (!right) return 1;
+  return left.localeCompare(right);
+}
+
+function laterSafeTimestamp(left: string | null | undefined, right: string | null | undefined): string | null {
+  if (!left) return right || null;
+  if (!right) return left;
+  return left >= right ? left : right;
+}
+
+function mergeTimelineSlot(
+  current: HeartbeatTimelineDiagnostic | undefined,
+  incoming: HeartbeatTimelineDiagnostic | undefined,
+): HeartbeatTimelineDiagnostic | undefined {
+  if (!incoming) return current;
+  if (!current) return incoming;
+
+  if (incoming.status === "not_open") {
+    if (incoming.observedAt < current.observedAt) return current;
+    return {
+      ...incoming,
+      lastSuccessfulParseAt: current.sessionStartedAt === incoming.sessionStartedAt
+        ? laterSafeTimestamp(current.lastSuccessfulParseAt, incoming.lastSuccessfulParseAt)
+        : incoming.lastSuccessfulParseAt || null,
+    };
+  }
+  if (current.status === "not_open") {
+    if (incoming.observedAt < current.observedAt) return current;
+    return incoming;
+  }
+
+  const sessionOrder = compareSafeTimestamps(
+    incoming.sessionStartedAt || null,
+    current.sessionStartedAt || null,
+  );
+  if (sessionOrder < 0) return current;
+  if (sessionOrder > 0) {
+    return { ...incoming, lastSuccessfulParseAt: incoming.lastSuccessfulParseAt || null };
+  }
+
+  const currentDocument = current.documentStartedAt || null;
+  const incomingDocument = incoming.documentStartedAt || null;
+  const documentOrder = compareSafeTimestamps(incomingDocument, currentDocument);
+  if (documentOrder < 0) return current;
+  if (documentOrder > 0) {
+    return {
+      ...incoming,
+      lastSuccessfulParseAt: laterSafeTimestamp(
+        current.lastSuccessfulParseAt,
+        incoming.lastSuccessfulParseAt,
+      ),
+    };
+  }
+
+  const sequenceOrder = (incoming.scanSequence || 0) - (current.scanSequence || 0);
+  const scanOrder = compareSafeTimestamps(incoming.scanTimestamp, current.scanTimestamp);
+  if (sequenceOrder < 0 || (sequenceOrder === 0 && scanOrder < 0)) return current;
+
+  const sameScan = sequenceOrder === 0 && scanOrder === 0;
+  if (sameScan && incoming.observedAt < current.observedAt) return current;
+  const lastSuccessfulParseAt = laterSafeTimestamp(
+    current.lastSuccessfulParseAt,
+    incoming.lastSuccessfulParseAt,
+  );
+  return {
+    ...incoming,
+    observedAt: incoming.observedAt >= current.observedAt ? incoming.observedAt : current.observedAt,
+    lastSuccessfulParseAt,
+  };
+}
+
+function mergeTimelineDiagnostics(
+  current: HeartbeatTimelineDiagnostics | null,
+  incoming: HeartbeatTimelineDiagnostics | null,
+): HeartbeatTimelineDiagnostics | null {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  return {
+    formatVersion: HEARTBEAT_TIMELINE_DIAGNOSTICS_VERSION,
+    profile: mergeTimelineSlot(current.profile, incoming.profile)!,
+    with_replies: mergeTimelineSlot(current.with_replies, incoming.with_replies)!,
   };
 }
 
@@ -265,9 +426,10 @@ export function buildHeartbeatRecord(
   const requestedScanSummary = body.last_scan_summary ?? body.lastScanSummary;
   const requestedNewestSeenTweetCreatedAt =
     body.newest_seen_tweet_created_at ?? body.newestSeenTweetCreatedAt;
-  const newestSeenTweetCreatedAt =
-    normalizeNewestSeenTweetCreatedAt(requestedNewestSeenTweetCreatedAt, now) ??
-    normalizeNewestSeenTweetCreatedAt(existing?.newest_seen_tweet_created_at, now);
+  const newestSeenTweetCreatedAt = laterSafeTimestamp(
+    normalizeNewestSeenTweetCreatedAt(requestedNewestSeenTweetCreatedAt, now),
+    normalizeNewestSeenTweetCreatedAt(existing?.newest_seen_tweet_created_at, now),
+  );
 
   const isNewSession = existing?.session_id !== normalizedSessionId;
   if (isNewSession) {
@@ -285,28 +447,60 @@ export function buildHeartbeatRecord(
 
   const requestedSummary = normalizeScanSummary(requestedScanSummary);
   const existingSummary = normalizeScanSummary(existing?.last_scan_summary);
-  const timelineDiagnostics =
+  const existingSummarySource = existing?.last_scan_summary && typeof existing.last_scan_summary === "object"
+    ? existing.last_scan_summary as Record<string, unknown>
+    : null;
+  const incomingTimelineDiagnostics =
     normalizeTimelineDiagnostics(body.timelineDiagnostics) ??
-    normalizeTimelineDiagnostics(requestedSummary?.timelineDiagnostics) ??
-    normalizeTimelineDiagnostics(existingSummary?.timelineDiagnostics);
-  const summaryToPersist = typeof requestedScanSummary === "undefined"
-    ? existingSummary
-    : requestedSummary;
-  if (summaryToPersist && timelineDiagnostics) summaryToPersist.timelineDiagnostics = timelineDiagnostics;
+    normalizeTimelineDiagnostics(requestedSummary?.timelineDiagnostics);
+  const timelineDiagnostics = mergeTimelineDiagnostics(
+    normalizeTimelineDiagnostics(existingSummarySource?.timelineDiagnostics),
+    incomingTimelineDiagnostics,
+  );
+  const summaryToPersist: HeartbeatStoredScanSummary | null = requestedSummary || existingSummary
+    ? { ...(requestedSummary || existingSummary)! }
+    : null;
+  const heartbeatObservedAt =
+    normalizeSafeTimestamp(body.heartbeatObservedAt) ??
+    getStoredHeartbeatObservedAt(existing?.last_scan_summary);
+  const storedSummary: HeartbeatStoredScanSummary | null = summaryToPersist || timelineDiagnostics || heartbeatObservedAt
+    ? {
+        ...(summaryToPersist || {}),
+        ...(timelineDiagnostics ? { timelineDiagnostics } : {}),
+        ...(heartbeatObservedAt ? { heartbeatObservedAt } : {}),
+      }
+    : null;
+  const requestedLastSuccessfulParseAt = normalizeNewestSeenTweetCreatedAt(
+    body.lastSuccessfulParseAt,
+    now,
+  );
+  const existingLastSuccessfulParseAt = normalizeNewestSeenTweetCreatedAt(
+    existing?.last_successful_parse_at,
+    now,
+  );
+  const lastSuccessfulParseAt = isNewSession
+    ? requestedLastSuccessfulParseAt
+    : [requestedLastSuccessfulParseAt, existingLastSuccessfulParseAt]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) || null;
 
   const record: HeartbeatRecord = {
     id: "main",
     session_id: normalizedSessionId,
     session_started_at: sessionStartedAt,
-    last_heartbeat_at: nowIso,
-    last_successful_parse_at: body.lastSuccessfulParseAt || null,
+    last_heartbeat_at: laterSafeTimestamp(
+      nowIso,
+      normalizeSafeTimestamp(existing?.last_heartbeat_at),
+    ) || nowIso,
+    last_successful_parse_at: lastSuccessfulParseAt,
     last_seen_tweet_id: body.lastSeenTweetId || null,
     last_scan_error: normalizeScanError(body.lastScanError),
     selector_version: body.selectorVersion || "v1",
     last_page_reload_at: body.last_page_reload_at ?? body.lastPageReloadAt ?? null,
     last_page_reload_status: pageReloadStatus,
     last_page_reload_error: pageReloadStatus === "error" ? "page_reload_error" : null,
-    last_scan_summary: summaryToPersist,
+    last_scan_summary: storedSummary,
     heartbeat_count: heartbeatCount,
     max_gap_seconds: maxGapSeconds,
     last_gap_seconds: lastGapSeconds,

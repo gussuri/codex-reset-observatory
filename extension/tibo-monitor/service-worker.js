@@ -1153,9 +1153,16 @@ function markContentScanSuccessful() {
   return TiboDiagnostics.markSuccessfulScan(chrome.storage.local);
 }
 
-function saveTimelineScanSummary(summary) {
+function saveTimelineScanSummary(summary, sender) {
   const safeSummary = TiboDiagnostics.sanitizeScanSummary(summary);
-  if (!safeSummary || !isValidRestoreTimeline(safeSummary.sourceTimeline)) {
+  const senderTimeline = getMonitoredTimeline(sender?.tab?.url);
+  if (
+    !safeSummary
+    || !Number.isInteger(sender?.tab?.id)
+    || (Number.isInteger(sender?.frameId) && sender.frameId !== 0)
+    || !isValidRestoreTimeline(senderTimeline)
+    || safeSummary.sourceTimeline !== senderTimeline
+  ) {
     return Promise.reject(new Error("invalid_timeline_scan_summary"));
   }
 
@@ -1164,7 +1171,10 @@ function saveTimelineScanSummary(summary) {
     const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
       stored[TIMELINE_SCAN_SUMMARIES_KEY],
     );
-    summaries[safeSummary.sourceTimeline] = safeSummary;
+    summaries[safeSummary.sourceTimeline] = TiboDiagnostics.mergeTimelineScanSummary(
+      summaries[safeSummary.sourceTimeline],
+      safeSummary,
+    );
     await chrome.storage.local.set({ [TIMELINE_SCAN_SUMMARIES_KEY]: summaries });
     return summaries;
   };
@@ -1189,15 +1199,32 @@ async function getTimelineHeartbeatDiagnostics() {
       (tabs || []).map((tab) => getMonitoredTimeline(tab.url)).filter(Boolean),
     );
     const now = Date.now();
-    const slots = {};
+    const slots = { formatVersion: TiboDiagnostics.TIMELINE_DIAGNOSTICS_FORMAT_VERSION };
+    const observedAt = new Date(now).toISOString();
 
     for (const timeline of ["profile", "with_replies"]) {
+      const summary = summaries[timeline];
       if (!openTimelines.has(timeline)) {
-        slots[timeline] = { sourceTimeline: timeline, status: "not_open" };
+        slots[timeline] = {
+          sourceTimeline: timeline,
+          status: "not_open",
+          observedAt,
+          scanTimestamp: summary?.scanTimestamp || null,
+          lastSuccessfulParseAt: summary?.lastSuccessfulParseAt || null,
+          sessionStartedAt: summary?.sessionStartedAt || null,
+          documentStartedAt: summary?.documentStartedAt || null,
+          scanSequence: summary?.scanSequence || 0,
+          articleCount: summary?.articleCount || 0,
+          matchingTiboStatusCount: summary?.matchingTiboStatusCount || 0,
+          parseSuccessCount: summary?.parseSuccessCount || 0,
+          selectorVersion: summary?.selectorVersion || "unknown",
+          recoveryStatus: summary?.recoveryStatus || "not_attempted",
+          recoveryMoveCount: summary?.recoveryMoveCount || 0,
+          recoveryMaxMoves: summary?.recoveryMaxMoves || 0,
+        };
         continue;
       }
 
-      const summary = summaries[timeline];
       const scanTime = summary ? new Date(summary.scanTimestamp).getTime() : NaN;
       const age = Number.isFinite(scanTime) ? now - scanTime : Infinity;
       const status = age < 0 || age > TIMELINE_SCAN_STALE_AFTER_MS
@@ -1208,7 +1235,12 @@ async function getTimelineHeartbeatDiagnostics() {
       slots[timeline] = {
         sourceTimeline: timeline,
         status,
+        observedAt,
         scanTimestamp: summary?.scanTimestamp || null,
+        lastSuccessfulParseAt: summary?.lastSuccessfulParseAt || null,
+        sessionStartedAt: summary?.sessionStartedAt || null,
+        documentStartedAt: summary?.documentStartedAt || null,
+        scanSequence: summary?.scanSequence || 0,
         articleCount: summary?.articleCount || 0,
         matchingTiboStatusCount: summary?.matchingTiboStatusCount || 0,
         parseSuccessCount: summary?.parseSuccessCount || 0,
@@ -1281,13 +1313,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "REPORT_TIMELINE_SCAN") {
-    const senderTimeline = getMonitoredTimeline(sender?.tab?.url);
     const requestedSummary = TiboDiagnostics.sanitizeScanSummary(request.summary);
-    if (!senderTimeline || requestedSummary?.sourceTimeline !== senderTimeline) {
-      sendResponse({ success: false, error: "invalid_timeline_scan_report" });
-      return false;
-    }
-    saveTimelineScanSummary(requestedSummary)
+    saveTimelineScanSummary(requestedSummary, sender)
       .then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: false, error: "timeline_scan_report_failed" }));
     return true;
@@ -2029,6 +2056,7 @@ async function handlePostHeartbeat(payload) {
     "tibo_last_page_reload_error",
   ]);
   const timelineDiagnostics = await getTimelineHeartbeatDiagnostics();
+  const heartbeatObservedAt = new Date().toISOString();
 
   const rawLastPageReloadAt =
     payload.last_page_reload_at ||
@@ -2062,6 +2090,7 @@ async function handlePostHeartbeat(payload) {
     lastScanError: TiboDiagnostics.sanitizeReasonCode(payload.lastScanError),
     lastScanSummary: TiboDiagnostics.sanitizeScanSummary(payload.lastScanSummary),
     timelineDiagnostics,
+    heartbeatObservedAt,
     selectorVersion: TiboDiagnostics.sanitizeSelectorVersion(payload.selectorVersion),
     last_page_reload_at: TiboDiagnostics.sanitizeTimestamp(rawLastPageReloadAt),
     last_page_reload_status: lastPageReloadStatus,
@@ -2130,6 +2159,7 @@ async function handleTestConnection() {
         leaderTabId: 9999,
         isLeader: true,
         lastSuccessfulParseAt: new Date().toISOString(),
+        heartbeatObservedAt: new Date().toISOString(),
         lastSeenTweetId: "test-connection",
         lastScanError: null,
         last_page_reload_at: storageData.tibo_last_page_reload_at || null,

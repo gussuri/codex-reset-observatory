@@ -30,7 +30,7 @@ Chromeの通知ページは投稿スキャンの対象になり得ます。通�
 9. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。返信であること自体はシグナルを強めません。返信は既定で正式リセット履歴・公開確率へ反映されません。
 10. 返信でない投稿のうち、条件を満たす `reset_executed` は次回のレーダーデータ取得で正式リセット履歴へ自動統合されます。返信は、同じglobal resetに至るTibo本人の検証済みreply path（最大2辺）があり、成功したGemini分類が `reset_executed` / confidence `0.95`以上 / `completed_now` で、同じ分類応答の引用が強制方式と全有料または全ユーザー範囲の両方を裏付け、現在のsource-context revisionに結び付くproofを通過した場合に限り採用されます。proofがない・古い・不明な返信は引き続き除外されます。採用されても `confirmed` へ自動変更せず、`auto_unverified` のまま条件を満たせば反映されます。詳細は [`docs/reset-history-normalization.md`](../reset-history-normalization.md) のsection 7を参照してください。
 
-Chrome起動時の再読み込みは通常のContent Script初回DOMスキャンを早く始めるだけです。返信タブでは、画面の大半を占める第三者の親投稿が返信connectorで確認され、Tiboの返信がまだ見えない場合に限り、最大4回・合計10秒以内のスクロールで読み込みを試します。同じ試行の再開には60秒以上の間隔を空け、ユーザー操作またはページ移動で停止します。第三者投稿の展開、追加タブ、X API、画面外に読み込まれていない投稿の過去取得は行いません。
+Chrome起動時の再読み込みは通常のContent Script初回DOMスキャンを早く始めるだけです。返信タブでは、画面の大半を占める第三者の親投稿が返信connectorで確認され、Tiboの返信がまだ見えない場合に限り、親投稿の下端まで最大4回・累計4画面分以内、各試行10秒以内でスクロールします。同じ試行の再開には60秒以上の間隔を空け、累計移動量と回数は同じタブセッション内のページ再読み込み後も維持します。ユーザー操作またはページ移動で停止します。第三者投稿の展開、追加タブ、X API、画面外に読み込まれていない投稿の過去取得は行いません。
 
 通常の正式履歴条件は、非返信、`signal_type=reset_executed`、confidence 0.95以上、`verification_status` が `rejected` ではないことに加え、`classification_source` が `gemini`、`rule`、`shadow`、または `rule_fallback` のいずれかであることです。返信は前節の検証済みproof経路を通った場合だけ例外的に採用されます。`verification_status=confirmed` だけでは返信を採用しません。`expires_at` は正式履歴の判定には使いません。
 
@@ -40,7 +40,7 @@ Chrome起動時の再読み込みは通常のContent Script初回DOMスキャン
 
 返信タブで強い返信先文脈が得られると、初回スキャンですでに文脈がある場合も含め、拡張機能は専用のsource-only Webhookで保存します。これは通常投稿Webhookとは別のHTTPリクエストで、1つの異なる文脈リビジョンにつき最大3回試行します（初回を含む）。分類だけの処理や文脈が変わらない通常ポーリングでは追加リクエストはありません。同じ文脈の再送は抑止され、1投稿あたり最大3つの異なるリビジョン、再送キューは最大50件、ローカル再送台帳は最大100件です。分類は再実行しません。失敗・終端拒否されたリビジョンは保存済み（applied）として扱いません。
 
-このリリースの拡張機能バージョンは `1.0.6`、Content Scriptの診断selector markerは `v1.13-bounded-reply-capture` です。監視後の診断にこのmarkerが出ていれば、新しいContent Scriptが実行されたことを確認できます。
+このリリースの拡張機能バージョンは `1.0.7`、Content Scriptの診断selector markerは `v1.14-current-timeline-diagnostics` です。監視後の診断にこのmarkerが出ていれば、新しいContent Scriptが実行されたことを確認できます。
 
 返信本文の通常取込とタイムライン診断は既存Webhookと `last_scan_summary` JSONBを使うため、追加migrationはありません。source-context enrichmentの既存migrationは従来どおり [`supabase/migrations/20261018034219_tibo_source_context_enrichment.sql`](../../supabase/migrations/20261018034219_tibo_source_context_enrichment.sql) を参照してください。この手順の変更だけでは本番DBへの適用やデプロイは行われません。
 
@@ -97,13 +97,13 @@ LIMIT 1;
 - `quote_context_text`: 同じ記事内で明確に表示された引用本文だけが入り、取得できない場合は空です。
 - `quote_tweet_url` / `quote_author_handle`: 安全なXのstatus URLから取得できた引用元のURLとハンドルです。
 
-監視の稼働状態は `public.tibo_heartbeat` の `id='main'` と `GET /api/monitor/health` を確認します。既存のheartbeat項目に加え、`last_scan_summary.timelineDiagnostics` は最大2つのprofile/with_repliesスロットを持ちます。開いていないスロットは `not_open`（任意）、開いていて最新スキャンが成功していないスロットは `empty`（warning）、15分より古いスロットは `stale`（unhealthy）として返します。各Content Scriptのスキャン要約はService WorkerがChromeローカルへ集約し、5分ごとの既存leader heartbeatだけで送信します。要約には本文、DOM、認証情報、tab/session IDを含めません。
+監視の稼働状態は `public.tibo_heartbeat` の `id='main'` と `GET /api/monitor/health` を確認します。形式バージョン2の `last_scan_summary.timelineDiagnostics` は `profile` と `with_replies` の固定2スロットを持ちます。最新スキャン時刻と最終成功パース時刻は別々に記録されます。開いていないスロットは `not_open`（任意）、最新スキャンが成功していないスロットは `empty`（warning）、スキャンが15分より古い・現在のタブセッションより前・未来時刻の場合は `stale`（unhealthy）です。最新の空スキャンでも、同じタブセッション内の最後の成功時刻は `lastSuccessfulParseAt` として別に返します。ハートビート異常、スキャンエラー、ページ再読み込みエラーはレーンの結果より優先します。古い形式や不完全な形式は従来の `last_successful_parse_at` 判定に戻ります。各Content Scriptのスキャン要約はService WorkerがChromeローカルへ集約し、5分ごとの既存leader heartbeatだけで送信します。要約には本文、DOM、認証情報、tab/session IDを含めません。
 
 ## 5. 監視ヘルスチェックとアラート
 
 本番の監視ヘルスエンドポイントは `GET https://codex.gussuriworks.com/api/monitor/health` です。呼び出しには `Authorization: Bearer <CRON_SECRET>` が必要です。秘密値そのものをIssue、ログ、手順書、チャットへ貼り付けないでください。
 
-正常と判定されるには、`last_heartbeat_at` と `last_successful_parse_at` の両方が現在から15分以内であり、`last_scan_error` がnull、かつ `last_page_reload_status` が `success` またはnullである必要があります。さらに、開いているtimelineのスキャンが成功していない場合は `warning`、開いたtimelineのスキャンが15分より古い場合は `unhealthy` です。閉じているtimelineの `not_open` は任意です。`healthy` と `warning` はHTTP 200、`unhealthy`・設定不足・データベース読み取り失敗はHTTP 503になります。応答には安全な状態と理由だけが含まれ、生のエラー本文は含まれません。
+形式バージョン2が完全な場合は、開いているtimelineの最新スキャンを基準に判定します。全レーンが最新かつパース成功なら `healthy`、空スキャンがあれば `warning`、古いスキャンがあれば `unhealthy` です。`lastSuccessfulParseAt` とその経過秒数はレーンごとに確認できます。ハートビート時刻がない・不正・未来・15分超過、`last_scan_error`、`last_page_reload_status` の失敗は引き続き `unhealthy` です。旧形式・不完全な形式では `last_successful_parse_at` を使う従来判定に戻ります。閉じているtimelineの `not_open` は任意です。`healthy` と `warning` はHTTP 200、`unhealthy`・設定不足・データベース読み取り失敗はHTTP 503になります。応答には安全な状態と理由だけが含まれ、生のエラー本文は含まれません。
 
 `.github/workflows/tibo-monitor-health.yml` は10分ごとと手動実行時に本番エンドポイントを確認します。GitHub Actionsの `CRON_SECRET` は本番環境の `CRON_SECRET` と一致させます。HTTP 200以外はワークフロー失敗として扱います。
 

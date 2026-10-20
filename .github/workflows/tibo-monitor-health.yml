@@ -45,7 +45,7 @@ jobs:
 
           DETAIL="$(jq -r '.detail // "unknown"' "$RESPONSE_FILE")"
           case "$DETAIL" in
-            healthy|heartbeat_missing|heartbeat_invalid|heartbeat_future|heartbeat_stale|parse_missing|parse_invalid|parse_future|parse_stale|scan_error|page_reload_failed|configuration_unavailable|database_unavailable|unauthorized)
+            healthy|heartbeat_missing|heartbeat_invalid|heartbeat_future|heartbeat_stale|parse_missing|parse_invalid|parse_future|parse_stale|scan_error|page_reload_failed|timeline_scan_empty|timeline_scan_stale|configuration_unavailable|database_unavailable|unauthorized)
               ;;
             *)
               DETAIL="unknown"

@@ -233,6 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       element.innerText = [
         `Scanned: ${summary.scanTimestamp}`,
+        `Last successful parse: ${summary.lastSuccessfulParseAt || "none in this tab session"}`,
         `Articles: ${summary.articleCount}; Tibo matches: ${summary.matchingTiboStatusCount}; parsed: ${summary.parseSuccessCount}`,
         `Recovery: ${summary.recoveryStatus} (${summary.recoveryMoveCount}/${summary.recoveryMaxMoves})`,
         `Selector: ${summary.selectorVersion}`,

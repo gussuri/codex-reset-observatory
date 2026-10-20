@@ -13,7 +13,7 @@ function loadScanUtils() {
   return (context as typeof context & { TiboMonitorScan: Record<string, any> }).TiboMonitorScan;
 }
 
-test("bounded reply recovery moves at most four times and reports a missing target", () => {
+test("bounded reply recovery honors parent-end distance and never renews its page budget", () => {
   const recovery = loadScanUtils().createBoundedReplyRecoveryController();
   const page = {
     sourceTimeline: "with_replies",
@@ -22,6 +22,7 @@ test("bounded reply recovery moves at most four times and reports a missing targ
     targetFound: false,
     userIntervened: false,
     viewportHeight: 800,
+    desiredScrollPixels: 500,
   };
 
   let result = recovery.consider({ ...page, now: 0 });
@@ -30,7 +31,7 @@ test("bounded reply recovery moves at most four times and reports a missing targ
     status: "attempting",
     move: 1,
     moveCount: 1,
-    scrollPixels: 600,
+    scrollPixels: 500,
   });
   assert.equal(recovery.consider({ ...page, now: 10 }).status, "in_progress", "mutation-triggered scans must not re-enter a pending move");
 
@@ -47,8 +48,51 @@ test("bounded reply recovery moves at most four times and reports a missing targ
     status: "target_not_visible",
     moveCount: 4,
   });
-  assert.equal(recovery.consider({ ...page, now: 63_999 }).status, "cooldown");
-  assert.equal(recovery.consider({ ...page, now: 64_000 }).action, "scroll");
+  assert.equal(recovery.consider({ ...page, now: 63_999 }).status, "target_not_visible");
+  assert.equal(recovery.consider({ ...page, now: 64_000 }).action, "none");
+  assert.equal(recovery.consider({ ...page, now: 120_000 }).status, "target_not_visible");
+});
+
+test("reply recovery caps cumulative movement at four viewport heights", () => {
+  const recovery = loadScanUtils().createBoundedReplyRecoveryController();
+  const page = {
+    sourceTimeline: "with_replies",
+    currentUrl: "https://x.com/thsottiaux/with_replies",
+    eligible: true,
+    targetFound: false,
+    userIntervened: false,
+    viewportHeight: 1_000,
+    desiredScrollPixels: 9_000,
+  };
+
+  assert.equal(recovery.consider({ ...page, now: 1 }).scrollPixels, 4_000);
+  recovery.finishMove();
+  assert.equal(recovery.consider({ ...page, now: 2 }).status, "target_not_visible");
+  assert.equal(recovery.snapshot().totalScrollPixels, 4_000);
+});
+
+test("reply recovery state survives a document reload within the same tab session", () => {
+  const scan = loadScanUtils();
+  const firstDocument = scan.createBoundedReplyRecoveryController();
+  const page = {
+    sourceTimeline: "with_replies",
+    currentUrl: "https://x.com/thsottiaux/with_replies",
+    eligible: true,
+    targetFound: false,
+    userIntervened: false,
+    viewportHeight: 1_000,
+    desiredScrollPixels: 4_000,
+  };
+
+  assert.equal(firstDocument.consider({ ...page, now: 1 }).scrollPixels, 4_000);
+  const reloadedDocument = scan.createBoundedReplyRecoveryController({
+    initialState: firstDocument.snapshot(),
+  });
+  assert.equal(
+    reloadedDocument.consider({ ...page, now: 70_000 }).status,
+    "target_not_visible",
+    "a periodic page reload must not renew the missing-target budget",
+  );
 });
 
 test("recovery stops at the ten-second deadline even when fewer than four moves ran", () => {

@@ -508,7 +508,7 @@ test("content recovery scrolls only for a missing reply below an oversized conne
   vm.runInContext(contentSource, contentContext);
   await Promise.all(scanTasks);
 
-  assert.deepEqual(scrolls, [750], "one bounded viewport move should start only when the with-replies target is absent below a connected long parent");
+  assert.deepEqual(scrolls, [700], "recovery should jump to the long parent's lower half only when the with-replies target is absent");
   assert.equal(parent.article.querySelector("button")?.clickCount, 0, "third-party parent text must not be expanded");
 });
 
@@ -998,6 +998,164 @@ test("actual content and service worker scripts preserve parent provenance throu
   assert.equal(postedBodies[1].replyParentTweetUrl, "https://x.com/parent_author/status/123456789012345678");
   assert.equal(postedBodies[1].replyContextText, "Parent body provenance");
   assert.deepEqual(Array.from(postedBodies[1].replyToHandles as string[]), ["@parent_author"]);
+});
+
+test("actual worker keeps a markerless contextless reply separate from later source-only enrichment", async () => {
+  const storage: Record<string, unknown> = {
+    webhook_secret: "test-only-secret",
+    observatory_domain: "https://example.test",
+  };
+  const storageLocal = {
+    async get(keys: string[]) {
+      return Object.fromEntries(keys.filter((key) => Object.hasOwn(storage, key)).map((key) => [key, storage[key]]));
+    },
+    async set(items: Record<string, unknown>) { Object.assign(storage, items); },
+    async setAccessLevel() {},
+  };
+  const listeners: Array<(request: any, sender: any, sendResponse: (response: any) => void) => unknown> = [];
+  const postedBodies: Array<Record<string, unknown>> = [];
+  const workerChrome = {
+    storage: { local: storageLocal },
+    runtime: {
+      onMessage: { addListener(listener: typeof listeners[number]) { listeners.push(listener); } },
+      onInstalled: { addListener() {} },
+      onStartup: { addListener() {} },
+      getManifest: () => ({ version: "test" }),
+    },
+    alarms: { get(_name: string, callback: (alarm: unknown) => void) { callback(null); }, create() {}, onAlarm: { addListener() {} } },
+    tabs: { query: async () => [] },
+  };
+  const workerContext = vm.createContext({
+    chrome: workerChrome,
+    TiboDiagnostics: { appendDiagnosticLog: async () => {}, markSuccessfulScan: async () => {} },
+    TiboMonitorScan: loadScanUtils(),
+    importScripts() {},
+    crypto: (await import("node:crypto")).webcrypto,
+    TextEncoder: (await import("node:util")).TextEncoder,
+    URL,
+    fetch: async (url: string, init: { body?: string }) => {
+      if (!url.endsWith("/api/webhook/tibo")) return { ok: true, status: 200, json: async () => ({}) };
+      const body = JSON.parse(init.body || "{}") as Record<string, unknown>;
+      postedBodies.push(body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body.kind === "source_context_enrichment"
+          ? { success: true, status: "applied" }
+          : { success: true },
+      };
+    },
+    console,
+  });
+  const workerSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/service-worker.js"), "utf8");
+  vm.runInContext(workerSource, workerContext);
+
+  const workerResponses: Promise<void>[] = [];
+  const dispatchToWorker = (request: any, callback: (response: any) => void) => {
+    const listener = listeners[listeners.length - 1];
+    workerResponses.push(new Promise((resolve) => listener(request, {}, (response) => {
+      callback(response);
+      resolve();
+    })));
+  };
+  const parent = makeThreadArticle({
+    id: "123456789012345678",
+    handle: "parent_author",
+    text: "A collapsed third-party parent opening",
+    outgoing: true,
+    expandLabel: "Show more",
+  });
+  const reply = makeThreadArticle({
+    id: "987654321098765432",
+    handle: "thsottiaux",
+    text: "The complete Tibo reply body",
+    incoming: true,
+  });
+  const timeline = makeTimeline(parent.cell, reply.cell);
+  const mutationCallback: { current: (() => void) | null } = { current: null };
+  const scanTasks: Promise<unknown>[] = [];
+  const sendMessages: Array<Record<string, unknown>> = [];
+  const contentContext = vm.createContext({
+    chrome: {
+      runtime: {
+        lastError: null,
+        onMessage: { addListener() {} },
+        sendMessage(message: Record<string, unknown>, callback: (response: any) => void) {
+          sendMessages.push(message);
+          dispatchToWorker(message, callback);
+        },
+      },
+    },
+    TiboMonitorScan: loadScanUtils(),
+    TiboExtensionRuntime: {
+      isExtensionContextInvalidated: () => false,
+      async runSafely(task: () => Promise<unknown>) {
+        const promise = task();
+        scanTasks.push(promise);
+        return promise;
+      },
+    },
+    TiboDiagnostics: {
+      MAX_SNAPSHOT_CHARS: 100,
+      buildScanSummary(records: Array<{ isParseSuccess?: boolean }>) {
+        return { parseSuccessCount: records.filter((record) => record.isParseSuccess).length, articleCount: records.length };
+      },
+      getScanFailureReason: () => null,
+    },
+    document: { body: {}, querySelectorAll: (selector: string) => timeline.querySelectorAll(selector) },
+    window: {
+      location: { href: "https://x.com/thsottiaux/with_replies", pathname: "/thsottiaux/with_replies" },
+      addEventListener() {},
+      innerHeight: 900,
+    },
+    sessionStorage: {
+      getItem: () => null,
+      setItem() {},
+    },
+    MutationObserver: class {
+      constructor(callback: () => void) { mutationCallback.current = callback; }
+      observe() {}
+      disconnect() {}
+    },
+    setInterval: () => 1,
+    clearInterval() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    URL,
+    Blob,
+    console,
+  });
+  const contentSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/content.js"), "utf8");
+  vm.runInContext(contentSource, contentContext);
+  await Promise.all(scanTasks);
+  await Promise.all(workerResponses);
+
+  const initialPost = postedBodies[0];
+  assert.equal(initialPost.kind, undefined);
+  assert.equal(initialPost.tweetId, "987654321098765432");
+  assert.equal(initialPost.isReply, true);
+  assert.deepEqual(Array.from(initialPost.replyToHandles as string[]), ["@parent_author"]);
+  assert.equal(initialPost.replyContextText, null);
+  assert.equal(initialPost.replyParentTweetId, undefined);
+  assert.equal(parent.article.querySelector("button")?.clickCount, 0, "the worker flow must not expand a foreign parent");
+
+  const parentText = parent.article.querySelector('[data-testid="tweetText"]') as StructuralElement;
+  parentText.innerText = "The verified complete third-party parent context";
+  parentText.children.splice(0);
+  mutationCallback.current?.();
+  await Promise.all(scanTasks);
+  await Promise.all(workerResponses);
+
+  assert.equal(postedBodies.length, 2);
+  assert.equal(postedBodies[1].kind, "source_context_enrichment");
+  assert.equal(postedBodies[1].tweetId, initialPost.tweetId);
+  assert.equal(postedBodies[1].replyParentTweetId, "123456789012345678");
+  assert.equal(postedBodies[1].replyParentTweetUrl, "https://x.com/parent_author/status/123456789012345678");
+  assert.equal(postedBodies[1].replyContextText, "The verified complete third-party parent context");
+  assert.deepEqual(Array.from(storage.tibo_pending_source_context_enrichments as unknown[]), []);
+  assert.equal((storage.tibo_processed_tweet_ids as string[]).includes("987654321098765432"), true);
+  assert.equal(sendMessages.filter((message) => message.action === "POST_TWEET").length, 1);
+  assert.equal(sendMessages.filter((message) => message.action === "POST_TWEET_CONTEXT_ENRICHMENT").length, 1);
 });
 
 test("a confirmed reply posts before a collapsed third-party parent is expanded and later enriches once", async () => {

@@ -1133,6 +1133,85 @@ test("content scan reports merge both timeline slots without a read-modify-write
   assert.equal(context.localStore.tibo_timeline_scan_summaries.with_replies.sourceTimeline, "with_replies");
 });
 
+test("timeline reports stay monotonic across delayed scans, documents, and sessions", async () => {
+  const context = setupServiceWorkerContext();
+  const sender = { tab: { id: 502, url: "https://x.com/thsottiaux/with_replies" } };
+  const summary = (overrides: Record<string, unknown>) => ({
+    articleCount: 2,
+    timeElementCount: 2,
+    tweetTextCount: 2,
+    nonEmptyTweetTextCount: 2,
+    matchingTiboStatusCount: 1,
+    translatedTweetCount: 0,
+    tweetDatetimeCount: 2,
+    parseSuccessCount: 1,
+    currentUrl: "https://x.com/thsottiaux/with_replies",
+    selectorVersion: "v1.14-current-timeline-diagnostics",
+    scanTimestamp: "2026-10-21T00:10:00.000Z",
+    sourceTimeline: "with_replies",
+    recoveryStatus: "not_attempted",
+    recoveryMoveCount: 0,
+    recoveryMaxMoves: 4,
+    sessionStartedAt: "2026-10-20T23:00:00.000Z",
+    documentStartedAt: "2026-10-20T23:00:01.000Z",
+    scanSequence: 1,
+    lastSuccessfulParseAt: "2026-10-21T00:10:00.000Z",
+    ...overrides,
+  });
+
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:08:00.000Z",
+      scanSequence: 1,
+      lastSuccessfulParseAt: "2026-10-21T00:08:00.000Z",
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:10:00.000Z",
+      scanSequence: 2,
+      parseSuccessCount: 0,
+      lastSuccessfulParseAt: null,
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({ scanTimestamp: "2026-10-21T00:09:00.000Z", scanSequence: 1 }),
+  }, sender);
+
+  let saved = context.localStore.tibo_timeline_scan_summaries.with_replies;
+  assert.equal(saved.scanTimestamp, "2026-10-21T00:10:00.000Z");
+  assert.equal(saved.parseSuccessCount, 0);
+  assert.equal(saved.lastSuccessfulParseAt, "2026-10-21T00:08:00.000Z");
+
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:11:00.000Z",
+      scanSequence: 1,
+      sessionStartedAt: "2026-10-21T00:11:00.000Z",
+      documentStartedAt: "2026-10-21T00:11:01.000Z",
+      parseSuccessCount: 0,
+      lastSuccessfulParseAt: null,
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:10:30.000Z",
+      scanSequence: 4,
+      sessionStartedAt: "2026-10-20T23:00:00.000Z",
+      documentStartedAt: "2026-10-20T23:00:01.000Z",
+    }),
+  }, sender);
+
+  saved = context.localStore.tibo_timeline_scan_summaries.with_replies;
+  assert.equal(saved.scanTimestamp, "2026-10-21T00:11:00.000Z");
+  assert.equal(saved.lastSuccessfulParseAt, null, "a new timeline session must start with no inherited success");
+});
+
 test("leader heartbeat carries at most two open timeline health slots", async () => {
   const tabs = [
     { id: 501, url: "https://x.com/thsottiaux" },
@@ -1181,7 +1260,8 @@ test("leader heartbeat carries at most two open timeline health slots", async ()
   await context.sendMessage({ action: "POST_HEARTBEAT", payload: { sessionId: "session_two_timelines" } });
   const slots = context.mockFetchCalls[0].body.timelineDiagnostics;
 
-  assert.deepEqual(Object.keys(slots).sort(), ["profile", "with_replies"]);
+  assert.deepEqual(Object.keys(slots).sort(), ["formatVersion", "profile", "with_replies"]);
+  assert.equal(slots.formatVersion, 2);
   assert.equal(slots.profile.status, "healthy");
   assert.equal(slots.with_replies.status, "empty");
   assert.equal(slots.with_replies.recoveryStatus, "target_not_visible");

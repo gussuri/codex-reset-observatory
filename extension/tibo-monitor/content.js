@@ -7,8 +7,14 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.13-bounded-reply-capture";
+  const SELECTOR_VERSION = "v1.14-current-timeline-diagnostics";
   const SESSION_KEY = "tibo_session_id";
+  const SESSION_STARTED_AT_KEY = "tibo_session_started_at";
+  const SESSION_STARTED_ID_KEY = "tibo_session_started_for_id";
+  const DOCUMENT_STARTED_AT_KEY = "tibo_document_started_at";
+  const SCAN_SEQUENCE_KEY = "tibo_scan_sequence";
+  const LAST_SUCCESSFUL_PARSE_KEY = "tibo_last_successful_parse_at";
+  const REPLY_RECOVERY_STATE_KEY = "tibo_reply_recovery_budget_v1";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
   const REPLY_RECOVERY_MAX_MOVES = 4;
   const REPLY_RECOVERY_MAX_ELAPSED_MS = 10_000;
@@ -44,7 +50,68 @@
     sessionStorage.setItem(SESSION_KEY, sessionId);
   }
 
-  let lastSuccessfulParseAt = null;
+  function normalizeSessionTimestamp(value) {
+    if (typeof value !== "string" || !value) return null;
+    const timestamp = new Date(value);
+    return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+  }
+
+  function readSessionStorage(key) {
+    try {
+      return typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function writeSessionStorage(key, value) {
+    try {
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(key, String(value));
+    } catch {
+      // The monitor remains usable when browser storage is temporarily unavailable.
+    }
+  }
+
+  const existingSessionStartedAt = normalizeSessionTimestamp(readSessionStorage(SESSION_STARTED_AT_KEY));
+  const isNewContentSession = readSessionStorage(SESSION_STARTED_ID_KEY) !== (sessionId || "");
+  const sessionStartedAt = isNewContentSession
+    ? new Date(Math.max(
+        Date.now(),
+        existingSessionStartedAt ? new Date(existingSessionStartedAt).getTime() + 1 : 0,
+      )).toISOString()
+    : existingSessionStartedAt || new Date().toISOString();
+  writeSessionStorage(SESSION_STARTED_AT_KEY, sessionStartedAt);
+  writeSessionStorage(SESSION_STARTED_ID_KEY, sessionId || "");
+  if (isNewContentSession) {
+    writeSessionStorage(SCAN_SEQUENCE_KEY, 0);
+    writeSessionStorage(LAST_SUCCESSFUL_PARSE_KEY, "");
+    writeSessionStorage(REPLY_RECOVERY_STATE_KEY, "");
+  }
+
+  const previousDocumentStartedAt = normalizeSessionTimestamp(readSessionStorage(DOCUMENT_STARTED_AT_KEY));
+  const nextDocumentStartedAtMs = Math.max(
+    Date.now(),
+    previousDocumentStartedAt ? new Date(previousDocumentStartedAt).getTime() + 1 : 0,
+  );
+  const documentStartedAt = new Date(nextDocumentStartedAtMs).toISOString();
+  writeSessionStorage(DOCUMENT_STARTED_AT_KEY, documentStartedAt);
+
+  let scanSequence = isNewContentSession
+    ? 0
+    : Math.max(0, Math.min(1_000_000_000, Math.floor(Number(readSessionStorage(SCAN_SEQUENCE_KEY)) || 0)));
+  function nextScanSequence() {
+    scanSequence = Math.min(1_000_000_000, scanSequence + 1);
+    writeSessionStorage(SCAN_SEQUENCE_KEY, scanSequence);
+    return scanSequence;
+  }
+
+  let lastSuccessfulParseAt = isNewContentSession
+    ? null
+    : normalizeSessionTimestamp(readSessionStorage(LAST_SUCCESSFUL_PARSE_KEY));
+  if (lastSuccessfulParseAt && lastSuccessfulParseAt < sessionStartedAt) {
+    lastSuccessfulParseAt = null;
+    writeSessionStorage(LAST_SUCCESSFUL_PARSE_KEY, "");
+  }
   let lastSeenTweetId = null;
   let newestSeenTweetCreatedAt = null;
   let lastScanError = null;
@@ -56,11 +123,20 @@
   let mutationObserver = null;
   let monitoredTimeline = TiboMonitorScan.getTimelineSource(window.location.href);
   const timelineRestoreGate = TiboMonitorScan.createTimelineRestoreGate();
+  let persistedReplyRecoveryState = null;
+  try {
+    const saved = JSON.parse(readSessionStorage(REPLY_RECOVERY_STATE_KEY) || "null");
+    if (!isNewContentSession && saved?.sessionStartedAt === sessionStartedAt && saved?.state && typeof saved.state === "object") {
+      persistedReplyRecoveryState = saved.state;
+    }
+  } catch {
+  }
   const replyRecoveryController = TiboMonitorScan.createBoundedReplyRecoveryController({
     maxMoves: REPLY_RECOVERY_MAX_MOVES,
     maxElapsedMs: REPLY_RECOVERY_MAX_ELAPSED_MS,
     cooldownMs: REPLY_RECOVERY_COOLDOWN_MS,
     viewportRatio: REPLY_RECOVERY_VIEWPORT_RATIO,
+    initialState: persistedReplyRecoveryState || {},
   });
   let replyRecoveryTimerId = null;
   let userIntervenedWithPage = false;
@@ -396,6 +472,17 @@
     clearTimeout(replyRecoveryTimerId);
     replyRecoveryTimerId = null;
     replyRecoveryController.finishMove();
+    persistReplyRecoveryState();
+  }
+
+  function persistReplyRecoveryState() {
+    try {
+      writeSessionStorage(REPLY_RECOVERY_STATE_KEY, JSON.stringify({
+        sessionStartedAt,
+        state: replyRecoveryController.snapshot(),
+      }));
+    } catch {
+    }
   }
 
   function markUserIntervention(event) {
@@ -414,6 +501,7 @@
       maxMoves: REPLY_RECOVERY_MAX_MOVES,
     };
     cancelReplyRecoveryTimer();
+    persistReplyRecoveryState();
   }
 
   function runBoundedReplyRecovery(tweetArticles, records, sourceTimeline) {
@@ -434,10 +522,20 @@
         targetFound,
         userIntervened: userIntervenedWithPage,
         viewportHeight: window.innerHeight,
+        desiredScrollPixels: eligible
+          ? TiboMonitorScan.getReplyRecoveryScrollPixels(tweetArticles, {
+              sourceTimeline,
+              targetFound,
+              targetHandle: "@thsottiaux",
+              viewportHeight: window.innerHeight,
+              viewportRatio: REPLY_RECOVERY_VIEWPORT_RATIO,
+            })
+          : 0,
       }),
       maxMoves: REPLY_RECOVERY_MAX_MOVES,
     };
     lastReplyRecoveryResult = result;
+    persistReplyRecoveryState();
 
     if (result.action === "scroll") {
       try {
@@ -447,12 +545,14 @@
           ...replyRecoveryController.failMove(Date.now()),
           maxMoves: REPLY_RECOVERY_MAX_MOVES,
         };
+        persistReplyRecoveryState();
         return lastReplyRecoveryResult;
       }
 
       replyRecoveryTimerId = setTimeout(() => {
         replyRecoveryTimerId = null;
         replyRecoveryController.finishMove();
+        persistReplyRecoveryState();
         runExtensionTask(scanTweets, "bounded reply recovery scan");
       }, REPLY_RECOVERY_STEP_DELAY_MS);
     } else if (result.status !== "in_progress") {
@@ -789,6 +889,7 @@
     if (await restoreMonitoredTimelineIfNeeded()) return;
 
     const scanTimestamp = new Date().toISOString();
+    const currentScanSequence = nextScanSequence();
     let tweetArticles = [];
     const records = [];
     const scanMessages = [];
@@ -947,6 +1048,17 @@
       console.error("[Tibo Extension] Scan error:", err);
     }
 
+    if (records.some((record) => record && record.isParseSuccess)) {
+      lastSuccessfulParseAt = scanTimestamp;
+      writeSessionStorage(LAST_SUCCESSFUL_PARSE_KEY, lastSuccessfulParseAt);
+      lastSeenTweetId = newestParsedTweet?.tweetId || lastSeenTweetId;
+      newestSeenTweetCreatedAt = newestParsedTweet?.createdAt || newestSeenTweetCreatedAt;
+      lastScanError = null;
+      requestServiceWorker("MARK_CONTENT_SCAN_SUCCESS").catch((error) => {
+        handleExtensionError(error, "diagnostic recovery marker");
+      });
+    }
+
     const recoveryResult = runBoundedReplyRecovery(tweetArticles, records, sourceTimeline);
     const summary = TiboDiagnostics.buildScanSummary(
       records,
@@ -955,19 +1067,15 @@
       scanTimestamp,
       sourceTimeline,
       recoveryResult,
+      {
+        sessionStartedAt,
+        documentStartedAt,
+        scanSequence: currentScanSequence,
+        lastSuccessfulParseAt,
+      },
     );
     lastScanSummary = summary;
     reportTimelineScanSummary(summary);
-
-    if (summary.parseSuccessCount > 0) {
-      lastSuccessfulParseAt = new Date().toISOString();
-      lastSeenTweetId = newestParsedTweet?.tweetId || lastSeenTweetId;
-      newestSeenTweetCreatedAt = newestParsedTweet?.createdAt || newestSeenTweetCreatedAt;
-      lastScanError = null;
-      requestServiceWorker("MARK_CONTENT_SCAN_SUCCESS").catch((error) => {
-        handleExtensionError(error, "diagnostic recovery marker");
-      });
-    }
 
     const reasonCode = TiboDiagnostics.getScanFailureReason(summary);
     if (reasonCode) {
@@ -1059,14 +1167,14 @@
   // Initial Scan & MutationObserver Integration
   if (!extensionContextInvalidated) {
     if (typeof window.addEventListener === "function") {
-      window.addEventListener("wheel", markUserIntervention, { passive: true });
-      window.addEventListener("touchstart", markUserIntervention, { passive: true });
-      window.addEventListener("pointerdown", markUserIntervention, { passive: true });
+      window.addEventListener("wheel", markUserIntervention, { capture: true, passive: true });
+      window.addEventListener("touchstart", markUserIntervention, { capture: true, passive: true });
+      window.addEventListener("pointerdown", markUserIntervention, { capture: true, passive: true });
       window.addEventListener("keydown", (event) => {
         if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
           markUserIntervention(event);
         }
-      });
+      }, { capture: true });
     }
 
     mutationObserver = new MutationObserver(() => {

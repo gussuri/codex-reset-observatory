@@ -6,6 +6,7 @@
   const MASK_TEXT_KEY = "tibo_diagnostics_mask_text";
   const LAST_SUCCESS_KEY = "tibo_diagnostics_last_success_at";
   const TIMELINE_SCAN_SUMMARIES_KEY = "tibo_timeline_scan_summaries";
+  const TIMELINE_DIAGNOSTICS_FORMAT_VERSION = 2;
   const MAX_ENTRIES = 20;
   const MAX_TOTAL_CHARS = 1_000_000;
   const MAX_MESSAGE_CHARS = 2_000;
@@ -182,6 +183,18 @@
     const count = (key) => {
       return normalizeCount(source[key]);
     };
+    const sessionStartedAt = sanitizeTimestamp(source.sessionStartedAt);
+    const documentStartedAt = sanitizeTimestamp(source.documentStartedAt);
+    const scanSequence = Math.min(1_000_000_000, count("scanSequence"));
+    let lastSuccessfulParseAt = sanitizeTimestamp(source.lastSuccessfulParseAt);
+    if (lastSuccessfulParseAt && sessionStartedAt && lastSuccessfulParseAt < sessionStartedAt) {
+      lastSuccessfulParseAt = null;
+    }
+    if (count("parseSuccessCount") > 0) {
+      lastSuccessfulParseAt = !sessionStartedAt || scanTimestamp >= sessionStartedAt
+        ? scanTimestamp
+        : null;
+    }
 
     return {
       articleCount: count("articleCount"),
@@ -208,6 +221,57 @@
       selectorVersion: sanitizeSelectorVersion(source.selectorVersion),
       scanTimestamp,
       sourceTimeline: sanitizeSourceTimeline(source.sourceTimeline),
+      sessionStartedAt,
+      documentStartedAt,
+      scanSequence,
+      lastSuccessfulParseAt,
+    };
+  }
+
+  function compareTimestamp(left, right) {
+    if (!left && !right) return 0;
+    if (!left) return -1;
+    if (!right) return 1;
+    return new Date(left).getTime() - new Date(right).getTime();
+  }
+
+  function laterTimestamp(left, right) {
+    return compareTimestamp(left, right) >= 0 ? left : right;
+  }
+
+  function mergeTimelineScanSummary(currentValue, incomingValue) {
+    const current = sanitizeScanSummary(currentValue);
+    const incoming = sanitizeScanSummary(incomingValue);
+    if (!incoming) return current;
+    if (!current || current.sourceTimeline !== incoming.sourceTimeline) return incoming;
+
+    const sessionOrder = compareTimestamp(incoming.sessionStartedAt, current.sessionStartedAt);
+    if (sessionOrder < 0) return current;
+    if (sessionOrder > 0) return incoming;
+
+    const documentOrder = compareTimestamp(incoming.documentStartedAt, current.documentStartedAt);
+    if (documentOrder < 0) return current;
+    const sameSession = incoming.sessionStartedAt === current.sessionStartedAt;
+    if (sameSession && documentOrder > 0) {
+      return {
+        ...incoming,
+        lastSuccessfulParseAt: laterTimestamp(
+          current.lastSuccessfulParseAt,
+          incoming.lastSuccessfulParseAt,
+        ),
+      };
+    }
+
+    if (incoming.scanSequence < current.scanSequence) return current;
+    if (incoming.scanSequence === current.scanSequence
+      && compareTimestamp(incoming.scanTimestamp, current.scanTimestamp) < 0) return current;
+
+    return {
+      ...incoming,
+      lastSuccessfulParseAt: laterTimestamp(
+        current.lastSuccessfulParseAt,
+        incoming.lastSuccessfulParseAt,
+      ),
     };
   }
 
@@ -221,8 +285,14 @@
     return result;
   }
 
-  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp, sourceTimeline, recoveryState) {
+  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp, sourceTimeline, recoveryState, timelineContext) {
     const list = Array.isArray(records) ? records : [];
+    const safeScanTimestamp = truncate(scanTimestamp || new Date().toISOString(), 40);
+    const context = timelineContext && typeof timelineContext === "object" ? timelineContext : {};
+    const sessionStartedAt = sanitizeTimestamp(context.sessionStartedAt);
+    const lastSuccessfulParseAt = list.some((record) => record && record.isParseSuccess)
+      ? safeScanTimestamp
+      : sanitizeTimestamp(context.lastSuccessfulParseAt);
     return {
       articleCount: list.length,
       timeElementCount: list.filter((record) => record && record.hasTime).length,
@@ -257,8 +327,15 @@
       recoveryMaxMoves: Math.min(MAX_REPLY_RECOVERY_MOVES, normalizeCount(recoveryState?.maxMoves)),
       currentUrl: sanitizeCurrentUrl(currentUrl),
       selectorVersion: truncate(selectorVersion || "unknown", 100),
-      scanTimestamp: truncate(scanTimestamp || new Date().toISOString(), 40),
+      scanTimestamp: safeScanTimestamp,
       sourceTimeline: sanitizeSourceTimeline(sourceTimeline),
+      sessionStartedAt,
+      documentStartedAt: sanitizeTimestamp(context.documentStartedAt),
+      scanSequence: Math.min(1_000_000_000, normalizeCount(context.scanSequence)),
+      lastSuccessfulParseAt:
+        lastSuccessfulParseAt && sessionStartedAt && lastSuccessfulParseAt < sessionStartedAt
+          ? null
+          : lastSuccessfulParseAt,
     };
   }
 
@@ -495,6 +572,7 @@
     MASK_TEXT_KEY,
     LAST_SUCCESS_KEY,
     TIMELINE_SCAN_SUMMARIES_KEY,
+    TIMELINE_DIAGNOSTICS_FORMAT_VERSION,
     MAX_ENTRIES,
     MAX_TOTAL_CHARS,
     MAX_MESSAGE_CHARS,
@@ -511,6 +589,7 @@
     sanitizeSourceTimeline,
     sanitizeRecoveryStatus,
     sanitizeTimelineScanSummaries,
+    mergeTimelineScanSummary,
     sanitizePageReloadStatus,
     sanitizeScanSummary,
     getDiagnosticFingerprint,
