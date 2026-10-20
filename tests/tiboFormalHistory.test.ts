@@ -344,6 +344,77 @@ test("a confirmed Tibo teaser up to 72 hours old links while rejected, weak, sta
   );
 });
 
+test("does not attach an expired unresolved one-shot notice when no previous completion is available", () => {
+  const reset = resetSignal({
+    tweet_id: "2112432076767289678",
+    tweet_url: "https://x.com/thsottiaux/status/2112432076767289678",
+    tweet_created_at: "2026-10-20T06:33:48.000Z",
+  });
+  const expiredNotice = noticeSignal({
+    tweet_id: "2111492673890824348",
+    text: "Day 13/ Le limit reset",
+    tweet_url: "https://x.com/thsottiaux/status/2111492673890824348",
+    tweet_created_at: "2026-10-17T16:20:57.000Z",
+    expires_at: "2026-10-18T16:20:57.000Z",
+    verification_status: "confirmed",
+  });
+
+  assert.deepEqual(findRelatedTiboNotices(reset, [expiredNotice]), []);
+});
+
+test("evaluates one-shot expiry at reset event time when a valid reset is received late", () => {
+  const reset = resetSignal({
+    tweet_created_at: "2026-10-18T16:00:00.000Z",
+  });
+  const notice = noticeSignal({
+    tweet_created_at: "2026-10-17T16:20:57.000Z",
+    expires_at: "2026-10-18T16:20:57.000Z",
+    verification_status: "confirmed",
+  });
+
+  assert.equal(findRelatedTiboNotice(reset, [notice])?.tweet_id, notice.tweet_id);
+});
+
+test("uses a resolved schedule rather than collection expiry to attach a scheduled notice", () => {
+  const reset = resetSignal({
+    tweet_created_at: "2026-10-20T10:00:00.000Z",
+  });
+  const notice = noticeSignal({
+    tweet_created_at: "2026-10-17T16:20:57.000Z",
+    expires_at: "2026-10-18T16:20:57.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-20T09:00:00.000Z",
+    expected_end_at: "2026-10-20T12:00:00.000Z",
+  });
+
+  assert.equal(findRelatedTiboNotice(reset, [notice])?.tweet_id, notice.tweet_id);
+});
+
+test("excludes reply notices from completion provenance", () => {
+  const reset = resetSignal();
+  const reply = noticeSignal({ is_reply: true });
+
+  assert.equal(findRelatedTiboNotice(reset, [reply]), null);
+});
+
+test("applies explicit notice termination at the reset event time", () => {
+  const terminatedNotice = noticeSignal({
+    tweet_id: "2097043464538264003",
+    tweet_created_at: "2026-09-07T23:00:00.000Z",
+    expires_at: "2026-09-09T00:00:00.000Z",
+  });
+  const resetBeforeTermination = resetSignal({
+    tweet_created_at: "2026-09-08T01:00:00.000Z",
+  });
+  const resetAfterTermination = resetSignal({
+    tweet_created_at: "2026-09-08T02:00:00.000Z",
+  });
+
+  assert.equal(findRelatedTiboNotice(resetBeforeTermination, [terminatedNotice])?.tweet_id, terminatedNotice.tweet_id);
+  assert.equal(findRelatedTiboNotice(resetAfterTermination, [terminatedNotice]), null);
+});
+
 test("history separates the first announcement from the most specific representative notice", () => {
   const reset = resetSignal({
     tweet_created_at: "2026-08-01T09:00:00.000Z",

@@ -95,25 +95,53 @@ test("requires a non-empty apology-or-celebration reason and localized copy", ()
   assert.equal(invalidNote.status, "invalid_schema");
 });
 
-test("requires two or three short sentences in each public note", () => {
+test("accepts one concise factual sentence when the source supports no further note", () => {
   const oneSentence = parseResetEventMetadataResponse(
-    { ...validPayload, noteEn: "The notice described the quality fix." },
-    "test-model",
-    0,
-    sourceContext,
-  );
-  assert.equal(oneSentence.status, "invalid_schema");
-
-  const threeSentences = parseResetEventMetadataResponse(
     {
       ...validPayload,
-      noteJa: "予告投稿で品質問題の修正が説明されています。完了投稿でリセット実施が確認されました。記録上の出来事を振り返る内容です。",
+      noteJa: "完了投稿で利用枠のリセットが確認されました。",
+      noteEn: "The completion post confirmed the usage-limit reset.",
+      noteZh: "完成帖确认了使用额度已重置。",
     },
     "test-model",
     0,
     sourceContext,
   );
-  assert.equal(threeSentences.status, "success");
+  assert.equal(oneSentence.status, "success");
+
+  const naturalTwoToThreeSentences = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      noteJa: "予告投稿で品質問題の修正が説明されています。完了投稿でリセット実施が確認されました。",
+    },
+    "test-model",
+    0,
+    sourceContext,
+  );
+  assert.equal(naturalTwoToThreeSentences.status, "success");
+});
+
+test("accepts source quotations with internal punctuation, abbreviations, and decimals", () => {
+  const quotedSource = [
+    "Tibo noted the v1.5 update and a 3.5-hour window.",
+    "The completion post confirmed the usage-limit reset.",
+  ].join(" ");
+  const result = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      scope: null,
+      scopeEvidence: null,
+      noteJa: "Tibo氏はDay 15のリセット完了を報告しました。",
+      noteEn: "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.",
+      noteZh: "Tibo报告第15天重置完成。原文保留了烹饪相关的措辞。",
+    },
+    "test-model",
+    0,
+    quotedSource,
+  );
+
+  assert.equal(result.status, "success");
+  assert.equal(result.noteEn, "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.");
 });
 
 test("prompt treats all canonical related posts as one event and prioritizes specific cause context", () => {
@@ -150,6 +178,9 @@ test("short cooking callbacks get retrospective notes without invented incident 
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /source-grounded wordplay or callback/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /usage limits returning/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not add facts not supported/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /2–3 short factual sentences as a style target/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /single concise factual sentence is acceptable/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not pad.*or invent facts/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /If applicability is difficult to determine, return null/i);
   assert.doesNotMatch(prompt, /2112268918681485431/);
 });

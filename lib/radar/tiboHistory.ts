@@ -62,7 +62,10 @@ import {
   isManualBroadBankedScopeCorrection,
 } from "./bankedReset";
 import { resolveUniqueBankedTeaserLinks } from "./bankedTeaserLink";
-import { getOfficialNoticeConsumption } from "./officialNoticePolicy";
+import {
+  getOfficialNoticeConsumption,
+  isTiboForecastSignalTerminatedAt,
+} from "./officialNoticePolicy";
 
 export type TiboSignalType =
   | "official_notice"
@@ -660,6 +663,7 @@ export function findRelatedTiboNotices(
   const previousResetTime = getTimestamp(previousResetAt);
   const candidates = noticeSignals.filter((signal) => {
     const signalTime = getTimestamp(signal.tweet_created_at);
+    const noticeConsumption = getOfficialNoticeConsumption(signal.tweet_id);
     const confidenceThreshold = signal.signal_type === "official_notice"
       ? OFFICIAL_NOTICE_CONFIDENCE
       : TEASER_CONFIDENCE;
@@ -682,6 +686,16 @@ export function findRelatedTiboNotices(
           resetSignal.tweet_created_at,
         )
       : false;
+    const expiresAtTime = getTimestamp(signal.expires_at);
+    const hasExpiry = typeof signal.expires_at === "string" && signal.expires_at.trim().length > 0;
+    const expiredAtReset = noticeConsumption === "one_shot" &&
+      !hasResolvedSchedule &&
+      hasExpiry &&
+      (expiresAtTime === null || resetTime >= expiresAtTime);
+    const terminatedAtReset = isTiboForecastSignalTerminatedAt(
+      signal.tweet_id,
+      new Date(resetTime),
+    );
     const matchesLookback = signalTime !== null &&
       signalTime >= resetTime - NOTICE_LOOKBACK_MS;
 
@@ -689,8 +703,11 @@ export function findRelatedTiboNotices(
       signalTime !== null &&
         signalTime < resetTime &&
         (matchesResolvedSchedule || (!hasResolvedSchedule && matchesLookback)) &&
+        !expiredAtReset &&
+        !terminatedAtReset &&
         (previousResetTime === null || previousResetTime === undefined || signalTime > previousResetTime) &&
         signal.verification_status !== "rejected" &&
+        signal.is_reply !== true &&
         !isBankedDistributionNotice(signal.text) &&
         (signal.confidence ?? 0) >= confidenceThreshold,
     );
