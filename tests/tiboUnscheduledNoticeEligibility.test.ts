@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { isTiboUnscheduledOfficialNoticeEligible } from "../lib/radar/tiboNoticeEligibility";
+import {
+  findRelatedTiboNotices,
+  type FormalTiboResetSignal,
+  type TiboNoticeSignal,
+} from "../lib/radar/tiboHistory";
+import { interpretTiboSignal } from "../lib/radar/teaserStrength";
 
 const TEXT = "Day 13/ Le limit reset";
 
@@ -36,18 +42,68 @@ test("a high-confidence unscheduled official notice is eligible without inventin
   assert.equal(isTiboUnscheduledOfficialNoticeEligible(notice()), true);
 });
 
-test("only semantically grounded usage-limit notices use the unscheduled notice threshold", () => {
-  for (const text of [
-    "Day 13/ Le limit reset was cancelled",
-    "Day 13/ Le limit reset happened yesterday",
-    "Day 13/ cooking something",
-    "Day 13/ server reset",
-  ]) {
+test("classification-contract-equivalent wording remains eligible for display and history", () => {
+  const variants = [
+    { tweet_id: "2115992673890824348", text: "Day 13/ Le limit reset" },
+    { tweet_id: "2115992673890824349", text: "Codex usage allowances reset — timing to follow." },
+    { tweet_id: "2115992673890824350", text: "Codex 的使用额度重置，时间稍后公布。" },
+  ];
+
+  for (const variant of variants) {
+    const candidate = notice({
+      ...variant,
+      ai_evidence_quote: variant.text,
+    });
+    assert.equal(isTiboUnscheduledOfficialNoticeEligible(candidate), true, variant.text);
     assert.equal(
-      isTiboUnscheduledOfficialNoticeEligible(notice({ text, ai_evidence_quote: text })),
-      false,
-      text,
+      interpretTiboSignal(candidate as Parameters<typeof interpretTiboSignal>[0]).officialNoticeEligible,
+      true,
+      variant.text,
     );
+
+    const resetAt = new Date(Date.parse(candidate.tweet_created_at) + 2 * 60 * 60 * 1000).toISOString();
+    const reset: FormalTiboResetSignal = {
+      tweet_id: "2115992673890824399",
+      tweet_url: "https://x.com/thsottiaux/status/2115992673890824399",
+      tweet_created_at: resetAt,
+      text: "I reset usage limits for all paid users.",
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+    };
+    assert.deepEqual(
+      findRelatedTiboNotices(reset, [candidate as TiboNoticeSignal]).map((item) => item.tweet_id),
+      [variant.tweet_id],
+      variant.text,
+    );
+  }
+});
+
+test("explicit cancellation, historical, and unrelated controls remain ineligible", () => {
+  const rejectedCandidates = [
+    notice({
+      text: "Codex usage allowances reset — timing to follow, but the reset was cancelled.",
+      ai_evidence_quote: "Codex usage allowances reset — timing to follow, but the reset was cancelled.",
+    }),
+    notice({
+      text: "Codex usage allowances reset yesterday.",
+      ai_evidence_quote: "Codex usage allowances reset yesterday.",
+    }),
+    notice({
+      text: "Day 13/ server reset",
+      ai_evidence_quote: "Day 13/ server reset",
+    }),
+    notice({
+      text: "Day 13/ cooking something",
+      signal_type: "irrelevant",
+      ai_signal_type: "irrelevant",
+      ai_evidence_quote: "Day 13/ cooking something",
+    }),
+  ];
+
+  for (const candidate of rejectedCandidates) {
+    assert.equal(isTiboUnscheduledOfficialNoticeEligible(candidate), false, String(candidate.text));
   }
 });
 

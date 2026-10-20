@@ -33,8 +33,6 @@ export type TiboUnscheduledOfficialNoticeCandidate = {
   expected_end_at?: string | null;
 };
 
-const USAGE_LIMIT_RESET_SUBJECT = /\b(?:(?:(?:codex|chatgpt\s+work)\s+)?(?:(?:usage|rate)\s+)?limits?\s+(?:(?:are|will\s+be)\s+)?reset|reset(?:ting)?\s+(?:the\s+)?(?:(?:codex|chatgpt\s+work)\s+)?(?:(?:usage|rate)\s+)?limits?|quotas?\s+(?:(?:are|will\s+be)\s+)?reset|reset\s+quotas?)\b|(?:利用上限|利用枠).{0,18}リセット|リセット.{0,18}(?:利用上限|利用枠)/i;
-
 /** Admit only an explicitly un-timed, semantically grounded usage-limit notice. */
 export function isTiboUnscheduledOfficialNoticeEligible(
   signal: TiboUnscheduledOfficialNoticeCandidate,
@@ -59,7 +57,6 @@ export function isTiboUnscheduledOfficialNoticeEligible(
     confidence < UNSCHEDULED_OFFICIAL_NOTICE_CONFIDENCE ||
     !quote ||
     !text.includes(quote) ||
-    !USAGE_LIMIT_RESET_SUBJECT.test(text) ||
     getTiboClassificationSafetyDecision(text, "official_notice").signalType !== "official_notice"
   ) {
     return false;
