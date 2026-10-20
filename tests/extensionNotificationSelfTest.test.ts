@@ -68,6 +68,8 @@ test("options page exposes a safe notification test and reports its result", asy
     "diagnosticsEnabled",
     "diagnosticsMaskText",
     "diagnosticCount",
+    "profileScanSummary",
+    "repliesScanSummary",
     "refreshDiagnosticsBtn",
     "exportDiagnosticsBtn",
     "clearDiagnosticsBtn",
@@ -78,6 +80,8 @@ test("options page exposes a safe notification test and reports its result", asy
   const diagnostics = {
     ENABLED_KEY: "diagnostics_enabled",
     MASK_TEXT_KEY: "diagnostics_mask_text",
+    TIMELINE_SCAN_SUMMARIES_KEY: "tibo_timeline_scan_summaries",
+    sanitizeTimelineScanSummaries: () => ({ profile: null, with_replies: null }),
     getDiagnosticLogs: async () => [],
     serializeDiagnosticLogs: () => "[]",
     clearDiagnosticLogs: async () => {},

@@ -76,6 +76,9 @@ class FakeElement {
 class StructuralElement {
   readonly tagName: string;
   innerText: string;
+  clickCount = 0;
+  rectHeight = 0;
+  rectTop = 0;
   readonly children: StructuralElement[] = [];
   parentElement: StructuralElement | null = null;
   private readonly attributes: Record<string, string>;
@@ -141,6 +144,14 @@ class StructuralElement {
     visit(this);
     return matches;
   }
+
+  click() {
+    this.clickCount += 1;
+  }
+
+  getBoundingClientRect() {
+    return { top: this.rectTop, bottom: this.rectTop + this.rectHeight, height: this.rectHeight };
+  }
 }
 
 function matchesSelector(element: StructuralElement, selector: string) {
@@ -181,11 +192,13 @@ function makeThreadArticle(options: {
   incoming?: boolean;
   outgoing?: boolean;
   quoteText?: string;
+  height?: number;
   expandLabel?: string | null;
   expandInsideText?: boolean;
 }) {
   const cell = element({ attributes: { "data-testid": "cellInnerDiv" } });
   const article = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
+  article.rectHeight = options.height || 0;
   const outer = element();
   const body = element();
   const threadRow = element();
@@ -261,6 +274,7 @@ function loadScanUtils() {
   return (context as typeof context & {
     TiboMonitorScan: {
       getTimelineSource: (url: string) => string | null;
+      shouldRecoverMissingReplyTarget: (articles: StructuralElement[], options: Record<string, unknown>) => boolean;
       extractReplyMetadata: (article: FakeElement | StructuralElement, options?: { sourceTimeline?: string | null }) => {
         isReply: boolean;
         replyToHandles: string[];
@@ -363,6 +377,139 @@ test("timeline source recognizes profile and with-replies pages on both X hosts"
   assert.equal(scan.getTimelineSource("https://x.com/thsottiaux/with_replies"), "with_replies");
   assert.equal(scan.getTimelineSource("https://twitter.com/thsottiaux/with_replies/"), "with_replies");
   assert.equal(scan.getTimelineSource("https://x.com/thsottiaux/status/123"), null);
+});
+
+test("bounded reply recovery requires an oversized connected third-party parent on with-replies", () => {
+  const scan = loadScanUtils();
+  const parent = makeThreadArticle({
+    id: "998877665544332211",
+    handle: "theo",
+    text: "Long third-party parent",
+    outgoing: true,
+    height: 900,
+  });
+
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "with_replies",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), true);
+  parent.article.rectTop = 1001;
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "with_replies",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+  parent.article.rectTop = -901;
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "with_replies",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+  parent.article.rectTop = 0;
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "profile",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "with_replies",
+    targetFound: true,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+  parent.article.rectHeight = 500;
+  assert.equal(scan.shouldRecoverMissingReplyTarget([parent.article], {
+    sourceTimeline: "with_replies",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+  const disconnected = makeThreadArticle({
+    id: "998877665544332212",
+    handle: "theo",
+    text: "Long but unrelated third-party post",
+    height: 1000,
+  });
+  assert.equal(scan.shouldRecoverMissingReplyTarget([disconnected.article], {
+    sourceTimeline: "with_replies",
+    targetFound: false,
+    targetHandle: "@thsottiaux",
+    viewportHeight: 1000,
+  }), false);
+});
+
+test("content recovery scrolls only for a missing reply below an oversized connected parent", async () => {
+  const parent = makeThreadArticle({
+    id: "998877665544332213",
+    handle: "theo",
+    text: "Long parent body",
+    outgoing: true,
+    height: 1200,
+    expandLabel: "Show more",
+  });
+  const timeline = makeTimeline(parent.cell);
+  const scrolls: number[] = [];
+  const scanTasks: Promise<unknown>[] = [];
+  const contentContext = vm.createContext({
+    chrome: {
+      runtime: {
+        lastError: null,
+        onMessage: { addListener() {} },
+        sendMessage(message: Record<string, unknown>, callback: (response: any) => void) {
+          callback(message.action === "GET_CONTENT_MONITOR_STATE"
+            ? { success: true, data: {} }
+            : { success: true });
+        },
+      },
+    },
+    TiboMonitorScan: loadScanUtils(),
+    TiboExtensionRuntime: {
+      isExtensionContextInvalidated: () => false,
+      async runSafely(task: () => Promise<unknown>) {
+        const promise = task();
+        scanTasks.push(promise);
+        return promise;
+      },
+    },
+    TiboDiagnostics: {
+      MAX_SNAPSHOT_CHARS: 100,
+      buildScanSummary(records: Array<{ isParseSuccess?: boolean }>) {
+        return {
+          articleCount: records.length,
+          parseSuccessCount: records.filter((record) => record.isParseSuccess).length,
+          matchingTiboStatusCount: 0,
+        };
+      },
+      getScanFailureReason: () => null,
+    },
+    document: { body: {}, querySelectorAll: (selector: string) => timeline.querySelectorAll(selector) },
+    window: {
+      innerHeight: 1000,
+      location: { href: "https://x.com/thsottiaux/with_replies", pathname: "/thsottiaux/with_replies" },
+      scrollBy(_x: number, y: number) { scrolls.push(y); },
+      addEventListener() {},
+    },
+    sessionStorage: { getItem: () => "test-session", setItem() {} },
+    MutationObserver: class { observe() {} disconnect() {} },
+    setInterval: () => 1,
+    clearInterval() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    URL,
+    Blob,
+    console,
+  });
+  const contentSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/content.js"), "utf8");
+  vm.runInContext(contentSource, contentContext);
+  await Promise.all(scanTasks);
+
+  assert.deepEqual(scrolls, [700], "recovery should jump to the long parent's lower half only when the with-replies target is absent");
+  assert.equal(parent.article.querySelector("button")?.clickCount, 0, "third-party parent text must not be expanded");
 });
 
 test("explicit Replying to DOM metadata identifies a reply and visible parent context", () => {
@@ -489,7 +636,7 @@ test("with-replies sibling connectors recover the two observed Tibo reply parent
   }
 });
 
-test("collapsed sibling parent is held for expansion before webhook metadata is ready", () => {
+test("collapsed third-party sibling parent stays pending without requesting full expansion", () => {
   const scan = loadScanUtils();
   const parent = makeThreadArticle({
     id: "2100000000000000001",
@@ -508,15 +655,38 @@ test("collapsed sibling parent is held for expansion before webhook metadata is 
 
   const pending = scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" });
   assert.equal(pending.needsRetry, true);
-  assert.equal(pending.needsExpansion, true);
+  assert.equal(pending.needsExpansion, false);
   assert.equal(pending.replyContextText, null);
   assert.equal(pending.isReply, true);
   assert.equal(JSON.stringify(pending.replyToHandles), JSON.stringify(["@My_Ai_Bi"]));
-  assert.ok(pending.replyContextExpandControl);
+  assert.equal(pending.replyContextExpandControl, null);
   assert.equal(pending.replyContextExpansionKey, "2100000000000000001");
 });
 
-test("explicit Replying to markers also wait for a collapsed nested parent", () => {
+test("collapsed Tibo parent can still expand for bounded same-author context", () => {
+  const scan = loadScanUtils();
+  const parent = makeThreadArticle({
+    id: "2100000000000000005",
+    handle: "thsottiaux",
+    text: "Long Tibo parent opening...",
+    expandLabel: "Show more",
+    outgoing: true,
+  });
+  const child = makeThreadArticle({
+    id: "2100000000000000006",
+    handle: "thsottiaux",
+    text: "Tibo reply body",
+    incoming: true,
+  });
+  makeTimeline(parent.cell, child.cell);
+
+  const pending = scan.extractReplyMetadata(child.article, { sourceTimeline: "with_replies" });
+  assert.equal(pending.needsRetry, true);
+  assert.equal(pending.needsExpansion, true);
+  assert.ok(pending.replyContextExpandControl);
+});
+
+test("explicit Replying to markers keep collapsed third-party context optional", () => {
   const scan = loadScanUtils();
   const article = element({ tagName: "article", attributes: { "data-testid": "tweet" } });
   const marker = element({
@@ -538,11 +708,11 @@ test("explicit Replying to markers also wait for a collapsed nested parent", () 
 
   const pending = scan.extractReplyMetadata(article);
   assert.equal(pending.needsRetry, true);
-  assert.equal(pending.needsExpansion, true);
+  assert.equal(pending.needsExpansion, false);
   assert.equal(pending.isReply, true);
   assert.equal(JSON.stringify(pending.replyToHandles), JSON.stringify(["@alice"]));
   assert.equal(pending.replyContextText, null);
-  assert.ok(pending.replyContextExpandControl);
+  assert.equal(pending.replyContextExpandControl, null);
 });
 
 test("partial sibling parent without an expansion control is held without inventing context", () => {
@@ -828,6 +998,261 @@ test("actual content and service worker scripts preserve parent provenance throu
   assert.equal(postedBodies[1].replyParentTweetUrl, "https://x.com/parent_author/status/123456789012345678");
   assert.equal(postedBodies[1].replyContextText, "Parent body provenance");
   assert.deepEqual(Array.from(postedBodies[1].replyToHandles as string[]), ["@parent_author"]);
+});
+
+test("actual worker keeps a markerless contextless reply separate from later source-only enrichment", async () => {
+  const storage: Record<string, unknown> = {
+    webhook_secret: "test-only-secret",
+    observatory_domain: "https://example.test",
+  };
+  const storageLocal = {
+    async get(keys: string[]) {
+      return Object.fromEntries(keys.filter((key) => Object.hasOwn(storage, key)).map((key) => [key, storage[key]]));
+    },
+    async set(items: Record<string, unknown>) { Object.assign(storage, items); },
+    async setAccessLevel() {},
+  };
+  const listeners: Array<(request: any, sender: any, sendResponse: (response: any) => void) => unknown> = [];
+  const postedBodies: Array<Record<string, unknown>> = [];
+  const workerChrome = {
+    storage: { local: storageLocal },
+    runtime: {
+      onMessage: { addListener(listener: typeof listeners[number]) { listeners.push(listener); } },
+      onInstalled: { addListener() {} },
+      onStartup: { addListener() {} },
+      getManifest: () => ({ version: "test" }),
+    },
+    alarms: { get(_name: string, callback: (alarm: unknown) => void) { callback(null); }, create() {}, onAlarm: { addListener() {} } },
+    tabs: { query: async () => [] },
+  };
+  const workerContext = vm.createContext({
+    chrome: workerChrome,
+    TiboDiagnostics: { appendDiagnosticLog: async () => {}, markSuccessfulScan: async () => {} },
+    TiboMonitorScan: loadScanUtils(),
+    importScripts() {},
+    crypto: (await import("node:crypto")).webcrypto,
+    TextEncoder: (await import("node:util")).TextEncoder,
+    URL,
+    fetch: async (url: string, init: { body?: string }) => {
+      if (!url.endsWith("/api/webhook/tibo")) return { ok: true, status: 200, json: async () => ({}) };
+      const body = JSON.parse(init.body || "{}") as Record<string, unknown>;
+      postedBodies.push(body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body.kind === "source_context_enrichment"
+          ? { success: true, status: "applied" }
+          : { success: true },
+      };
+    },
+    console,
+  });
+  const workerSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/service-worker.js"), "utf8");
+  vm.runInContext(workerSource, workerContext);
+
+  const workerResponses: Promise<void>[] = [];
+  const dispatchToWorker = (request: any, callback: (response: any) => void) => {
+    const listener = listeners[listeners.length - 1];
+    workerResponses.push(new Promise((resolve) => listener(request, {}, (response) => {
+      callback(response);
+      resolve();
+    })));
+  };
+  const parent = makeThreadArticle({
+    id: "123456789012345678",
+    handle: "parent_author",
+    text: "A collapsed third-party parent opening",
+    outgoing: true,
+    expandLabel: "Show more",
+  });
+  const reply = makeThreadArticle({
+    id: "987654321098765432",
+    handle: "thsottiaux",
+    text: "The complete Tibo reply body",
+    incoming: true,
+  });
+  const timeline = makeTimeline(parent.cell, reply.cell);
+  const mutationCallback: { current: (() => void) | null } = { current: null };
+  const scanTasks: Promise<unknown>[] = [];
+  const sendMessages: Array<Record<string, unknown>> = [];
+  const contentContext = vm.createContext({
+    chrome: {
+      runtime: {
+        lastError: null,
+        onMessage: { addListener() {} },
+        sendMessage(message: Record<string, unknown>, callback: (response: any) => void) {
+          sendMessages.push(message);
+          dispatchToWorker(message, callback);
+        },
+      },
+    },
+    TiboMonitorScan: loadScanUtils(),
+    TiboExtensionRuntime: {
+      isExtensionContextInvalidated: () => false,
+      async runSafely(task: () => Promise<unknown>) {
+        const promise = task();
+        scanTasks.push(promise);
+        return promise;
+      },
+    },
+    TiboDiagnostics: {
+      MAX_SNAPSHOT_CHARS: 100,
+      buildScanSummary(records: Array<{ isParseSuccess?: boolean }>) {
+        return { parseSuccessCount: records.filter((record) => record.isParseSuccess).length, articleCount: records.length };
+      },
+      getScanFailureReason: () => null,
+    },
+    document: { body: {}, querySelectorAll: (selector: string) => timeline.querySelectorAll(selector) },
+    window: {
+      location: { href: "https://x.com/thsottiaux/with_replies", pathname: "/thsottiaux/with_replies" },
+      addEventListener() {},
+      innerHeight: 900,
+    },
+    sessionStorage: {
+      getItem: () => null,
+      setItem() {},
+    },
+    MutationObserver: class {
+      constructor(callback: () => void) { mutationCallback.current = callback; }
+      observe() {}
+      disconnect() {}
+    },
+    setInterval: () => 1,
+    clearInterval() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    URL,
+    Blob,
+    console,
+  });
+  const contentSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/content.js"), "utf8");
+  vm.runInContext(contentSource, contentContext);
+  await Promise.all(scanTasks);
+  await Promise.all(workerResponses);
+
+  const initialPost = postedBodies[0];
+  assert.equal(initialPost.kind, undefined);
+  assert.equal(initialPost.tweetId, "987654321098765432");
+  assert.equal(initialPost.isReply, true);
+  assert.deepEqual(Array.from(initialPost.replyToHandles as string[]), ["@parent_author"]);
+  assert.equal(initialPost.replyContextText, null);
+  assert.equal(initialPost.replyParentTweetId, undefined);
+  assert.equal(parent.article.querySelector("button")?.clickCount, 0, "the worker flow must not expand a foreign parent");
+
+  const parentText = parent.article.querySelector('[data-testid="tweetText"]') as StructuralElement;
+  parentText.innerText = "The verified complete third-party parent context";
+  parentText.children.splice(0);
+  mutationCallback.current?.();
+  await Promise.all(scanTasks);
+  await Promise.all(workerResponses);
+
+  assert.equal(postedBodies.length, 2);
+  assert.equal(postedBodies[1].kind, "source_context_enrichment");
+  assert.equal(postedBodies[1].tweetId, initialPost.tweetId);
+  assert.equal(postedBodies[1].replyParentTweetId, "123456789012345678");
+  assert.equal(postedBodies[1].replyParentTweetUrl, "https://x.com/parent_author/status/123456789012345678");
+  assert.equal(postedBodies[1].replyContextText, "The verified complete third-party parent context");
+  assert.deepEqual(Array.from(storage.tibo_pending_source_context_enrichments as unknown[]), []);
+  assert.equal((storage.tibo_processed_tweet_ids as string[]).includes("987654321098765432"), true);
+  assert.equal(sendMessages.filter((message) => message.action === "POST_TWEET").length, 1);
+  assert.equal(sendMessages.filter((message) => message.action === "POST_TWEET_CONTEXT_ENRICHMENT").length, 1);
+});
+
+test("a confirmed reply posts before a collapsed third-party parent is expanded and later enriches once", async () => {
+  const parent = makeThreadArticle({
+    id: "123456789012345678",
+    handle: "theo",
+    text: "A very long third-party parent opening",
+    outgoing: true,
+    expandLabel: "Show more",
+  });
+  const reply = makeThreadArticle({
+    id: "987654321098765432",
+    handle: "thsottiaux",
+    text: "The complete Tibo reply body",
+    incoming: true,
+  });
+  const timeline = makeTimeline(parent.cell, reply.cell);
+  const sendMessages: Array<Record<string, unknown>> = [];
+  const scanTasks: Promise<unknown>[] = [];
+  const mutationCallback: { current: (() => void) | null } = { current: null };
+  const runtime = {
+    lastError: null as { message: string } | null,
+    onMessage: { addListener() {} },
+    sendMessage(message: Record<string, unknown>, callback: (response: any) => void) {
+      sendMessages.push(message);
+      callback(message.action === "GET_CONTENT_MONITOR_STATE"
+        ? { success: true, data: {} }
+        : { success: true });
+    },
+  };
+  const contentContext = vm.createContext({
+    chrome: { runtime },
+    TiboMonitorScan: loadScanUtils(),
+    TiboExtensionRuntime: {
+      isExtensionContextInvalidated: () => false,
+      async runSafely(task: () => Promise<unknown>) {
+        const promise = task();
+        scanTasks.push(promise);
+        return promise;
+      },
+    },
+    TiboDiagnostics: {
+      MAX_SNAPSHOT_CHARS: 100,
+      buildScanSummary(records: Array<{ isParseSuccess?: boolean }>) {
+        return {
+          articleCount: records.length,
+          parseSuccessCount: records.filter((record) => record.isParseSuccess).length,
+        };
+      },
+      getScanFailureReason: () => null,
+    },
+    document: { body: {}, querySelectorAll: (selector: string) => timeline.querySelectorAll(selector) },
+    window: { location: { href: "https://x.com/thsottiaux/with_replies", pathname: "/thsottiaux/with_replies" } },
+    sessionStorage: { getItem: () => "test-session", setItem() {} },
+    MutationObserver: class {
+      constructor(callback: () => void) { mutationCallback.current = callback; }
+      observe() {}
+      disconnect() {}
+    },
+    setInterval: () => 1,
+    clearInterval() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    URL,
+    Blob,
+    console,
+  });
+  const contentSource = fs.readFileSync(path.join(process.cwd(), "extension/tibo-monitor/content.js"), "utf8");
+  vm.runInContext(contentSource, contentContext);
+  await Promise.all(scanTasks);
+
+  const initialPost = sendMessages.find((message) => message.action === "POST_TWEET") as
+    | { payload: Record<string, unknown> }
+    | undefined;
+  assert.ok(initialPost, "a fully parsed, structurally confirmed reply should not wait for parent text expansion");
+  assert.equal(initialPost.payload.tweetId, "987654321098765432");
+  assert.equal(initialPost.payload.text, "The complete Tibo reply body");
+  assert.equal(initialPost.payload.isReply, true);
+  assert.equal(initialPost.payload.replyContextText, null);
+  assert.equal(parent.article.querySelector("button")?.clickCount, 0, "third-party parent expansion must not be automatic");
+
+  const parentText = parent.article.querySelector('[data-testid="tweetText"]') as StructuralElement;
+  parentText.innerText = "The verified full parent context";
+  parentText.children.splice(0);
+  mutationCallback.current?.();
+  await Promise.all(scanTasks);
+
+  const postCount = sendMessages.filter((message) => message.action === "POST_TWEET").length;
+  const enrichment = sendMessages.find((message) => message.action === "POST_TWEET_CONTEXT_ENRICHMENT") as
+    | { payload: Record<string, unknown> }
+    | undefined;
+  assert.equal(postCount, 1, "parent context enrichment must not submit the reply a second time");
+  assert.ok(enrichment, "later verified parent context should use the source-only enrichment path");
+  assert.equal(enrichment.payload.tweetId, "987654321098765432");
+  assert.equal(enrichment.payload.replyParentTweetId, "123456789012345678");
+  assert.equal(enrichment.payload.replyParentTweetUrl, "https://x.com/theo/status/123456789012345678");
+  assert.equal(enrichment.payload.replyContextText, "The verified full parent context");
 });
 
 test("actual content and worker enrich a processed profile tweet from later with_replies evidence and retry it", async () => {

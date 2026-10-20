@@ -10,6 +10,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'tests/supabaseFoundation.test.ts'
       - 'tests/integration/codexUsageAtomic.integration.test.ts'
+      - 'tests/integration/tiboHeartbeatCas.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.cleanup.sql'
       - 'tests/resetPostAssociation.test.ts'
@@ -25,6 +26,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'tests/supabaseFoundation.test.ts'
       - 'tests/integration/codexUsageAtomic.integration.test.ts'
+      - 'tests/integration/tiboHeartbeatCas.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.cleanup.sql'
       - '.github/workflows/verify-supabase-migrations.yml'
@@ -118,6 +120,11 @@ jobs:
         env:
           SUPABASE_LOCAL_INTEGRATION: '1'
         run: corepack pnpm exec tsx --test tests/integration/tiboFormalReplyAdmission.integration.test.ts
+
+      - name: Tibo heartbeat compatibility and CAS database integration tests
+        env:
+          SUPABASE_LOCAL_INTEGRATION: '1'
+        run: corepack pnpm exec tsx --test tests/integration/tiboHeartbeatCas.integration.test.ts
 
       - name: Full test suite
         if: github.event_name != 'pull_request'

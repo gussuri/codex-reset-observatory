@@ -28,7 +28,14 @@ type Diagnostics = {
     selectorVersion: string,
     scanTimestamp: string,
     sourceTimeline?: "profile" | "with_replies",
+    recoveryState?: {
+      status?: string;
+      moveCount?: number;
+      maxMoves?: number;
+    },
   ) => Record<string, unknown>;
+  sanitizeScanSummary: (value: unknown) => Record<string, unknown> | null;
+  sanitizeTimelineScanSummaries: (value: unknown) => Record<string, unknown>;
   getScanFailureReason: (summary: Record<string, unknown>) => string | null;
   sanitizeReasonCode: (value: unknown) => string | null;
   sanitizeDiagnosticText: (value: unknown, maxChars?: number) => string;
@@ -285,6 +292,50 @@ test("diagnostic summaries distinguish profile and with-replies timelines", () =
     diagnostics.getDiagnosticFingerprint({ summary: profile, reasonCode: "article_missing" }),
     diagnostics.getDiagnosticFingerprint({ summary: replies, reasonCode: "article_missing" }),
   );
+});
+
+test("timeline scan summaries preserve only two safe, independently sanitized slots", () => {
+  const diagnostics = loadDiagnostics();
+  const summary = (timeline: "profile" | "with_replies", recoveryStatus: string) =>
+    diagnostics.buildScanSummary(
+      [{ hasTime: true, hasTweetText: true, hasMatchingTiboStatus: true }],
+      `https://x.com/thsottiaux${timeline === "with_replies" ? "/with_replies" : ""}?token=private`,
+      "v1.13-bounded-reply-capture",
+      "2026-10-21T00:00:00.000Z",
+      timeline,
+      { status: recoveryStatus, moveCount: 99, maxMoves: 99 },
+    );
+
+  const stored = diagnostics.sanitizeTimelineScanSummaries({
+    profile: summary("profile", "target_found"),
+    with_replies: summary("with_replies", "attempting"),
+    unexpected: { text: "must not be copied" },
+  });
+
+  assert.deepEqual(Object.keys(stored).sort(), ["profile", "with_replies"]);
+  assert.equal((stored.profile as Record<string, unknown>).sourceTimeline, "profile");
+  assert.equal((stored.profile as Record<string, unknown>).recoveryStatus, "target_found");
+  assert.equal((stored.profile as Record<string, unknown>).recoveryMoveCount, 4);
+  assert.equal((stored.with_replies as Record<string, unknown>).sourceTimeline, "with_replies");
+  assert.equal((stored.with_replies as Record<string, unknown>).recoveryStatus, "attempting");
+  assert.equal(JSON.stringify(stored).includes("private"), false);
+  assert.equal(JSON.stringify(stored).includes("must not be copied"), false);
+});
+
+test("timeline diagnostic storage keeps an unopened timeline explicitly empty", () => {
+  const diagnostics = loadDiagnostics();
+  const stored = diagnostics.sanitizeTimelineScanSummaries({
+    profile: diagnostics.buildScanSummary(
+      [],
+      "https://x.com/thsottiaux",
+      "v1.13-bounded-reply-capture",
+      "2026-10-21T00:00:00.000Z",
+      "profile",
+    ),
+  });
+
+  assert.equal((stored.profile as Record<string, unknown>).sourceTimeline, "profile");
+  assert.equal(stored.with_replies, null);
 });
 
 test("sanitizes DOM snapshots, URLs, secrets, and applies the character limit", () => {

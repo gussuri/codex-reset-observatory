@@ -5,11 +5,25 @@
   const ENABLED_KEY = "tibo_diagnostics_enabled";
   const MASK_TEXT_KEY = "tibo_diagnostics_mask_text";
   const LAST_SUCCESS_KEY = "tibo_diagnostics_last_success_at";
+  const TIMELINE_SCAN_SUMMARIES_KEY = "tibo_timeline_scan_summaries";
+  const TIMELINE_DIAGNOSTICS_FORMAT_VERSION = 2;
   const MAX_ENTRIES = 20;
   const MAX_TOTAL_CHARS = 1_000_000;
   const MAX_MESSAGE_CHARS = 2_000;
   const MAX_SNAPSHOT_CHARS = 20_000;
   const DEDUP_WINDOW_MS = 30 * 1000;
+  const MAX_REPLY_RECOVERY_MOVES = 4;
+  const SAFE_RECOVERY_STATES = new Set([
+    "not_attempted",
+    "attempting",
+    "in_progress",
+    "target_found",
+    "target_not_visible",
+    "cooldown",
+    "user_interrupted",
+    "navigation_interrupted",
+    "scroll_failed",
+  ]);
   const SAFE_SCAN_ERROR_CODES = new Set([
     "translated_text_detected",
     "scan_exception",
@@ -24,6 +38,11 @@
     "timeline_stalled",
     "scan_error",
     "reply_parent_retry",
+    "timeline_partial",
+    "target_not_visible",
+    "recovery_user_interrupted",
+    "recovery_navigation_interrupted",
+    "recovery_scroll_failed",
   ]);
 
   let writeQueue = Promise.resolve();
@@ -40,6 +59,8 @@
     "replyParentExpansionRequestedCount",
     "replyParentContextReadyCount",
     "replyParentRetryCount",
+    "recoveryMoveCount",
+    "recoveryMaxMoves",
   ];
 
   function truncate(value, maxChars) {
@@ -83,6 +104,10 @@
     if (value === null || typeof value === "undefined" || value === "") return null;
     const code = String(value);
     return SAFE_SCAN_ERROR_CODES.has(code) ? code : "scan_error";
+  }
+
+  function sanitizeRecoveryStatus(value) {
+    return SAFE_RECOVERY_STATES.has(String(value || "")) ? String(value) : "not_attempted";
   }
 
   function sanitizeTimestamp(value) {
@@ -139,6 +164,7 @@
     return JSON.stringify({
       reasonCode: sanitizeReasonCode(source.reasonCode),
       counts: SUMMARY_FINGERPRINT_FIELDS.map((field) => normalizeCount(summary[field])),
+      recoveryStatus: sanitizeRecoveryStatus(summary.recoveryStatus),
       currentUrl,
       selectorVersion,
       sourceTimeline: sanitizeSourceTimeline(summary.sourceTimeline),
@@ -157,6 +183,18 @@
     const count = (key) => {
       return normalizeCount(source[key]);
     };
+    const sessionStartedAt = sanitizeTimestamp(source.sessionStartedAt);
+    const documentStartedAt = sanitizeTimestamp(source.documentStartedAt);
+    const scanSequence = Math.min(1_000_000_000, count("scanSequence"));
+    let lastSuccessfulParseAt = sanitizeTimestamp(source.lastSuccessfulParseAt);
+    if (lastSuccessfulParseAt && sessionStartedAt && lastSuccessfulParseAt < sessionStartedAt) {
+      lastSuccessfulParseAt = null;
+    }
+    if (count("parseSuccessCount") > 0) {
+      lastSuccessfulParseAt = !sessionStartedAt || scanTimestamp >= sessionStartedAt
+        ? scanTimestamp
+        : null;
+    }
 
     return {
       articleCount: count("articleCount"),
@@ -176,15 +214,85 @@
       replyParentContextLengthMax: count("replyParentContextLengthMax"),
       tweetDatetimeCount: count("tweetDatetimeCount"),
       parseSuccessCount: count("parseSuccessCount"),
+      recoveryStatus: sanitizeRecoveryStatus(source.recoveryStatus),
+      recoveryMoveCount: Math.min(MAX_REPLY_RECOVERY_MOVES, count("recoveryMoveCount")),
+      recoveryMaxMoves: Math.min(MAX_REPLY_RECOVERY_MOVES, count("recoveryMaxMoves")),
       currentUrl,
       selectorVersion: sanitizeSelectorVersion(source.selectorVersion),
       scanTimestamp,
       sourceTimeline: sanitizeSourceTimeline(source.sourceTimeline),
+      sessionStartedAt,
+      documentStartedAt,
+      scanSequence,
+      lastSuccessfulParseAt,
     };
   }
 
-  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp, sourceTimeline) {
+  function compareTimestamp(left, right) {
+    if (!left && !right) return 0;
+    if (!left) return -1;
+    if (!right) return 1;
+    return new Date(left).getTime() - new Date(right).getTime();
+  }
+
+  function laterTimestamp(left, right) {
+    return compareTimestamp(left, right) >= 0 ? left : right;
+  }
+
+  function mergeTimelineScanSummary(currentValue, incomingValue) {
+    const current = sanitizeScanSummary(currentValue);
+    const incoming = sanitizeScanSummary(incomingValue);
+    if (!incoming) return current;
+    if (!current || current.sourceTimeline !== incoming.sourceTimeline) return incoming;
+
+    const sessionOrder = compareTimestamp(incoming.sessionStartedAt, current.sessionStartedAt);
+    if (sessionOrder < 0) return current;
+    if (sessionOrder > 0) return incoming;
+
+    const documentOrder = compareTimestamp(incoming.documentStartedAt, current.documentStartedAt);
+    if (documentOrder < 0) return current;
+    const sameSession = incoming.sessionStartedAt === current.sessionStartedAt;
+    if (sameSession && documentOrder > 0) {
+      return {
+        ...incoming,
+        lastSuccessfulParseAt: laterTimestamp(
+          current.lastSuccessfulParseAt,
+          incoming.lastSuccessfulParseAt,
+        ),
+      };
+    }
+
+    if (incoming.scanSequence < current.scanSequence) return current;
+    if (incoming.scanSequence === current.scanSequence
+      && compareTimestamp(incoming.scanTimestamp, current.scanTimestamp) < 0) return current;
+
+    return {
+      ...incoming,
+      lastSuccessfulParseAt: laterTimestamp(
+        current.lastSuccessfulParseAt,
+        incoming.lastSuccessfulParseAt,
+      ),
+    };
+  }
+
+  function sanitizeTimelineScanSummaries(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const result = { profile: null, with_replies: null };
+    for (const timeline of ["profile", "with_replies"]) {
+      const summary = sanitizeScanSummary(source[timeline]);
+      if (summary && summary.sourceTimeline === timeline) result[timeline] = summary;
+    }
+    return result;
+  }
+
+  function buildScanSummary(records, currentUrl, selectorVersion, scanTimestamp, sourceTimeline, recoveryState, timelineContext) {
     const list = Array.isArray(records) ? records : [];
+    const safeScanTimestamp = truncate(scanTimestamp || new Date().toISOString(), 40);
+    const context = timelineContext && typeof timelineContext === "object" ? timelineContext : {};
+    const sessionStartedAt = sanitizeTimestamp(context.sessionStartedAt);
+    const lastSuccessfulParseAt = list.some((record) => record && record.isParseSuccess)
+      ? safeScanTimestamp
+      : sanitizeTimestamp(context.lastSuccessfulParseAt);
     return {
       articleCount: list.length,
       timeElementCount: list.filter((record) => record && record.hasTime).length,
@@ -214,15 +322,31 @@
       ),
       tweetDatetimeCount: list.filter((record) => record && record.hasValidDatetime).length,
       parseSuccessCount: list.filter((record) => record && record.isParseSuccess).length,
+      recoveryStatus: sanitizeRecoveryStatus(recoveryState?.status),
+      recoveryMoveCount: Math.min(MAX_REPLY_RECOVERY_MOVES, normalizeCount(recoveryState?.moveCount)),
+      recoveryMaxMoves: Math.min(MAX_REPLY_RECOVERY_MOVES, normalizeCount(recoveryState?.maxMoves)),
       currentUrl: sanitizeCurrentUrl(currentUrl),
       selectorVersion: truncate(selectorVersion || "unknown", 100),
-      scanTimestamp: truncate(scanTimestamp || new Date().toISOString(), 40),
+      scanTimestamp: safeScanTimestamp,
       sourceTimeline: sanitizeSourceTimeline(sourceTimeline),
+      sessionStartedAt,
+      documentStartedAt: sanitizeTimestamp(context.documentStartedAt),
+      scanSequence: Math.min(1_000_000_000, normalizeCount(context.scanSequence)),
+      lastSuccessfulParseAt:
+        lastSuccessfulParseAt && sessionStartedAt && lastSuccessfulParseAt < sessionStartedAt
+          ? null
+          : lastSuccessfulParseAt,
     };
   }
 
   function getScanFailureReason(summary) {
     if (!summary || summary.parseSuccessCount > 0) return null;
+    const recoveryStatus = sanitizeRecoveryStatus(summary.recoveryStatus);
+    if (recoveryStatus === "target_not_visible") return "target_not_visible";
+    if (recoveryStatus === "attempting" || recoveryStatus === "in_progress") return "timeline_partial";
+    if (recoveryStatus === "user_interrupted") return "recovery_user_interrupted";
+    if (recoveryStatus === "navigation_interrupted") return "recovery_navigation_interrupted";
+    if (recoveryStatus === "scroll_failed") return "recovery_scroll_failed";
     if (summary.articleCount === 0) return "article_missing";
     if (summary.timeElementCount === 0) return "time_element_missing";
     if (summary.tweetTextCount === 0) return "tweet_text_missing";
@@ -324,12 +448,18 @@
         "replyParentContextLengthMax",
         "tweetDatetimeCount",
         "parseSuccessCount",
+        "recoveryMoveCount",
+        "recoveryMaxMoves",
       ]) {
         const number = Number(source.summary[key]);
+        const cap = key === "recoveryMoveCount" || key === "recoveryMaxMoves"
+          ? MAX_REPLY_RECOVERY_MOVES
+          : 10_000;
         result.summary[key] = Number.isFinite(number)
-          ? Math.max(0, Math.min(10_000, Math.floor(number)))
+          ? Math.max(0, Math.min(cap, Math.floor(number)))
           : 0;
       }
+      result.summary.recoveryStatus = sanitizeRecoveryStatus(source.summary.recoveryStatus);
       result.summary.selectorVersion = truncate(source.summary.selectorVersion || "unknown", 100);
       result.summary.scanTimestamp = truncate(source.summary.scanTimestamp || "", 40);
       result.summary.sourceTimeline = sanitizeSourceTimeline(source.summary.sourceTimeline);
@@ -441,6 +571,8 @@
     ENABLED_KEY,
     MASK_TEXT_KEY,
     LAST_SUCCESS_KEY,
+    TIMELINE_SCAN_SUMMARIES_KEY,
+    TIMELINE_DIAGNOSTICS_FORMAT_VERSION,
     MAX_ENTRIES,
     MAX_TOTAL_CHARS,
     MAX_MESSAGE_CHARS,
@@ -455,6 +587,9 @@
     sanitizeOpaqueId,
     sanitizeSelectorVersion,
     sanitizeSourceTimeline,
+    sanitizeRecoveryStatus,
+    sanitizeTimelineScanSummaries,
+    mergeTimelineScanSummary,
     sanitizePageReloadStatus,
     sanitizeScanSummary,
     getDiagnosticFingerprint,

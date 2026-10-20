@@ -466,6 +466,8 @@
   function getReplyParentContext(parentArticle) {
     const parentText = getOwnTweetTextState(parentArticle);
     const parentTweetId = getTweetId(parentArticle);
+    const parentHandle = getParentHandle(parentArticle);
+    const mayExpandParent = parentHandle?.toLowerCase() === "@thsottiaux";
 
     if (parentText.state === "ready") {
       return {
@@ -477,8 +479,10 @@
     return {
       ready: false,
       needsRetry: true,
-      needsExpansion: parentText.state === "needs_expansion",
-      replyContextExpandControl: parentText.expandControl,
+      // Third-party context is best-effort. Do not expand a large foreign post
+      // just to delay saving the verified reply itself.
+      needsExpansion: parentText.state === "needs_expansion" && mayExpandParent,
+      replyContextExpandControl: mayExpandParent ? parentText.expandControl : null,
       replyContextExpansionKey: parentTweetId || "unknown",
       replyContextState: parentText.state,
     };
@@ -629,12 +633,204 @@
     };
   }
 
+  function createBoundedReplyRecoveryController(options = {}) {
+    const maxMoves = Number.isFinite(options.maxMoves) ? Math.max(1, Math.floor(options.maxMoves)) : 4;
+    const maxElapsedMs = Number.isFinite(options.maxElapsedMs) ? Math.max(1, options.maxElapsedMs) : 10_000;
+    const cooldownMs = Number.isFinite(options.cooldownMs) ? Math.max(1, options.cooldownMs) : 60_000;
+    const viewportRatio = Number.isFinite(options.viewportRatio) ? Math.min(1, Math.max(0.1, options.viewportRatio)) : 0.75;
+    const maxScrollViewportHeights = Number.isFinite(options.maxScrollViewportHeights)
+      ? Math.max(1, Math.min(8, options.maxScrollViewportHeights))
+      : 4;
+    const initialState = options.initialState && typeof options.initialState === "object"
+      ? options.initialState
+      : {};
+
+    let attemptUrl = typeof initialState.attemptUrl === "string" ? initialState.attemptUrl : null;
+    let startedAt = Number.isFinite(initialState.startedAt) ? initialState.startedAt : null;
+    let lastAttemptAt = Number.isFinite(initialState.lastAttemptAt)
+      ? initialState.lastAttemptAt
+      : Number.NEGATIVE_INFINITY;
+    let moveCount = Math.min(maxMoves, Math.max(0, Math.floor(Number(initialState.moveCount) || 0)));
+    let totalScrollPixels = Math.max(0, Math.min(100_000, Math.floor(Number(initialState.totalScrollPixels) || 0)));
+    let maxScrollPixels = Math.max(0, Math.min(100_000, Math.floor(Number(initialState.maxScrollPixels) || 0)));
+    let inFlight = false;
+    const allowedStatuses = new Set([
+      "not_attempted",
+      "attempting",
+      "in_progress",
+      "target_found",
+      "target_not_visible",
+      "cooldown",
+      "user_interrupted",
+      "navigation_interrupted",
+      "scroll_failed",
+    ]);
+    let status = allowedStatuses.has(initialState.status) ? initialState.status : "not_attempted";
+    let blockedStatus = ["target_not_visible", "user_interrupted", "navigation_interrupted"].includes(initialState.blockedStatus)
+      ? initialState.blockedStatus
+      : null;
+
+    function finish(statusValue, now) {
+      inFlight = false;
+      status = statusValue;
+      lastAttemptAt = Number.isFinite(now) ? now : Date.now();
+      startedAt = null;
+      attemptUrl = null;
+      return { action: "none", status: statusValue, moveCount };
+    }
+
+    return {
+      consider(input = {}) {
+        const now = Number.isFinite(input.now) ? input.now : Date.now();
+        const currentUrl = typeof input.currentUrl === "string" ? input.currentUrl : "";
+
+        if (input.targetFound === true) {
+          return finish("target_found", now);
+        }
+        if (blockedStatus) return { action: "none", status: blockedStatus, moveCount };
+        if (input.userIntervened === true) {
+          blockedStatus = "user_interrupted";
+          return finish(blockedStatus, now);
+        }
+        if (attemptUrl && currentUrl !== attemptUrl) {
+          blockedStatus = "navigation_interrupted";
+          return finish(blockedStatus, now);
+        }
+        if (input.sourceTimeline !== "with_replies") {
+          return { action: "none", status: "not_attempted", moveCount: 0 };
+        }
+
+        if (!attemptUrl) {
+          if (input.eligible !== true) {
+            return { action: "none", status, moveCount: 0 };
+          }
+          if (!maxScrollPixels) {
+            const height = Number.isFinite(input.viewportHeight) ? Math.max(0, input.viewportHeight) : 0;
+            maxScrollPixels = Math.max(1, Math.round(height * maxScrollViewportHeights));
+          }
+          if (moveCount >= maxMoves || totalScrollPixels >= maxScrollPixels) {
+            blockedStatus = "target_not_visible";
+            return finish(blockedStatus, now);
+          }
+          if (now - lastAttemptAt < cooldownMs) {
+            status = "cooldown";
+            return { action: "none", status, moveCount };
+          }
+          attemptUrl = currentUrl;
+          startedAt = now;
+          status = "attempting";
+        }
+
+        if (inFlight) return { action: "none", status: "in_progress", moveCount };
+        if (now - startedAt >= maxElapsedMs || moveCount >= maxMoves) {
+          if (moveCount >= maxMoves || totalScrollPixels >= maxScrollPixels) {
+            blockedStatus = "target_not_visible";
+          }
+          return finish("target_not_visible", now);
+        }
+
+        const height = Number.isFinite(input.viewportHeight) ? Math.max(0, input.viewportHeight) : 0;
+        const remainingScrollPixels = Math.max(0, maxScrollPixels - totalScrollPixels);
+        if (remainingScrollPixels === 0) {
+          blockedStatus = "target_not_visible";
+          return finish(blockedStatus, now);
+        }
+        const requestedScrollPixels = Number.isFinite(input.desiredScrollPixels) && input.desiredScrollPixels > 0
+          ? Math.ceil(input.desiredScrollPixels)
+          : Math.max(1, Math.round(height * viewportRatio));
+        const scrollPixels = Math.min(requestedScrollPixels, remainingScrollPixels);
+        moveCount += 1;
+        totalScrollPixels += scrollPixels;
+        inFlight = true;
+        return {
+          action: "scroll",
+          status: "attempting",
+          move: moveCount,
+          moveCount,
+          scrollPixels,
+        };
+      },
+
+      finishMove() {
+        if (attemptUrl) inFlight = false;
+      },
+
+      failMove(nowValue) {
+        return finish("scroll_failed", Number.isFinite(nowValue) ? nowValue : Date.now());
+      },
+
+      interruptForNavigation(currentUrl, nowValue) {
+        if (blockedStatus) return { action: "none", status: blockedStatus, moveCount };
+        if (!attemptUrl || currentUrl === attemptUrl) return null;
+        blockedStatus = "navigation_interrupted";
+        return finish(blockedStatus, Number.isFinite(nowValue) ? nowValue : Date.now());
+      },
+
+      snapshot() {
+        return {
+          status,
+          moveCount,
+          maxMoves,
+          totalScrollPixels,
+          maxScrollPixels,
+          attemptUrl,
+          startedAt: Number.isFinite(startedAt) ? startedAt : null,
+          lastAttemptAt: Number.isFinite(lastAttemptAt) ? lastAttemptAt : null,
+          blockedStatus,
+        };
+      },
+    };
+  }
+
+  function findRecoverableReplyParent(articles, options = {}) {
+    if (options.sourceTimeline !== "with_replies" || options.targetFound === true) return false;
+    const viewportHeight = Number.isFinite(options.viewportHeight) ? Math.max(0, options.viewportHeight) : 0;
+    if (viewportHeight <= 0) return null;
+    const viewportRatio = Number.isFinite(options.viewportRatio)
+      ? Math.min(1, Math.max(0.5, options.viewportRatio))
+      : 0.8;
+    const targetHandle = String(options.targetHandle || "@thsottiaux").trim().replace(/^@?/, "@").toLowerCase();
+    const list = Array.isArray(articles) ? articles : [];
+
+    return list.find((article) => {
+      const identity = getTweetIdentity(article);
+      if (!identity || identity.authorHandle.toLowerCase() === targetHandle) return false;
+      if (!hasOutgoingThreadConnector(article)) return false;
+      const rect = article.getBoundingClientRect?.();
+      const height = Number(rect?.height);
+      const top = Number(rect?.top);
+      const bottom = Number(rect?.bottom);
+      return Number.isFinite(height)
+        && height >= viewportHeight * viewportRatio
+        && Number.isFinite(top)
+        && Number.isFinite(bottom)
+        && bottom > 0
+        && top < viewportHeight;
+    }) || null;
+  }
+
+  function shouldRecoverMissingReplyTarget(articles, options = {}) {
+    return Boolean(findRecoverableReplyParent(articles, options));
+  }
+
+  function getReplyRecoveryScrollPixels(articles, options = {}) {
+    const article = findRecoverableReplyParent(articles, options);
+    if (!article) return 0;
+    const viewportHeight = Math.max(0, Number(options.viewportHeight) || 0);
+    const bottom = Number(article.getBoundingClientRect?.().bottom);
+    if (!Number.isFinite(bottom) || viewportHeight <= 0) return 0;
+    return Math.max(1, Math.ceil(bottom - viewportHeight * 0.5));
+  }
+
   global.TiboMonitorScan = {
     selectNewestParsedTweet,
     getTimelineSource,
     isTiboStatusUrl,
     shouldRestoreMonitoredTimeline,
     createTimelineRestoreGate,
+    createBoundedReplyRecoveryController,
+    shouldRecoverMissingReplyTarget,
+    getReplyRecoveryScrollPixels,
     getDocumentTypeDeclaration,
     captureRawDomToDownload,
     getTweetTextState,

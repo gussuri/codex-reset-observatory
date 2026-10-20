@@ -179,6 +179,8 @@ function loadOptionsPage(
     "diagnosticsEnabled",
     "diagnosticsMaskText",
     "diagnosticCount",
+    "profileScanSummary",
+    "repliesScanSummary",
     "refreshDiagnosticsBtn",
     "exportDiagnosticsBtn",
     "clearDiagnosticsBtn",
@@ -251,6 +253,8 @@ function loadOptionsPage(
     TiboDiagnostics: {
       ENABLED_KEY: "diagnostics_enabled",
       MASK_TEXT_KEY: "diagnostics_mask_text",
+      TIMELINE_SCAN_SUMMARIES_KEY: "tibo_timeline_scan_summaries",
+      sanitizeTimelineScanSummaries: () => ({ profile: null, with_replies: null }),
       getDiagnosticLogs: async () => [],
       serializeDiagnosticLogs: () => "[]",
       clearDiagnosticLogs: async () => {},

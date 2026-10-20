@@ -43,6 +43,7 @@ test("health API reads the existing session start and returns warning as HTTP 20
   const route = readWorkflow(healthRoutePath);
 
   assert.match(route, /session_started_at,last_heartbeat_at,last_successful_parse_at/);
+  assert.match(route, /last_scan_summary/);
   assert.match(route, /health\.status === "unhealthy" \? 503 : 200/);
 });
 

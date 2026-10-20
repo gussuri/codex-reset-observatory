@@ -228,8 +228,158 @@ test("persists only the safe scan summary and never raw diagnostic content", () 
     currentUrl: "https://x.com/thsottiaux",
     selectorVersion: "v1.5-diagnostics",
     scanTimestamp: "2026-08-01T04:59:50.000Z",
+    sessionStartedAt: null,
+    documentStartedAt: null,
+    scanSequence: 0,
+    lastSuccessfulParseAt: null,
   });
   assert.doesNotMatch(JSON.stringify(payload.last_scan_summary), /secret HTML|snapshots/i);
+});
+
+test("persists only the two safe timeline diagnostics inside the existing JSON summary", () => {
+  const payload = buildHeartbeatRecord(
+    {
+      lastScanSummary: {
+        articleCount: 1,
+        timeElementCount: 1,
+        tweetTextCount: 1,
+        matchingTiboStatusCount: 1,
+        translatedTweetCount: 0,
+        tweetDatetimeCount: 1,
+        parseSuccessCount: 1,
+        currentUrl: "https://x.com/thsottiaux",
+        selectorVersion: "v1.14-current-timeline-diagnostics",
+        scanTimestamp: "2026-08-01T04:59:50.000Z",
+        snapshots: ["private text must not survive"],
+      },
+      timelineDiagnostics: {
+        formatVersion: 2,
+        profile: {
+          sourceTimeline: "profile",
+          status: "healthy",
+          observedAt: "2026-08-01T04:59:50.000Z",
+          scanTimestamp: "2026-08-01T04:59:50.000Z",
+          lastSuccessfulParseAt: "2026-08-01T04:59:50.000Z",
+          sessionStartedAt: "2026-08-01T04:00:00.000Z",
+          documentStartedAt: "2026-08-01T04:00:01.000Z",
+          scanSequence: 20,
+          articleCount: 4,
+          matchingTiboStatusCount: 1,
+          parseSuccessCount: 1,
+          selectorVersion: "v1.14-current-timeline-diagnostics",
+          recoveryStatus: "target_found",
+          recoveryMoveCount: 99,
+          recoveryMaxMoves: 99,
+          text: "private text must not survive",
+        },
+        with_replies: {
+          sourceTimeline: "with_replies",
+          status: "not_open",
+          observedAt: "2026-08-01T04:59:50.000Z",
+          scanTimestamp: null,
+          lastSuccessfulParseAt: null,
+          sessionStartedAt: "2026-08-01T04:00:00.000Z",
+          documentStartedAt: "2026-08-01T04:00:01.000Z",
+          scanSequence: 0,
+          text: "private",
+        },
+        other: { text: "drop this" },
+      },
+    },
+    null,
+    new Date("2026-08-01T05:00:00.000Z"),
+  );
+
+  assert.deepStrictEqual(payload.last_scan_summary?.timelineDiagnostics, {
+    formatVersion: 2,
+    profile: {
+      sourceTimeline: "profile",
+      status: "healthy",
+      observedAt: "2026-08-01T04:59:50.000Z",
+      scanTimestamp: "2026-08-01T04:59:50.000Z",
+      lastSuccessfulParseAt: "2026-08-01T04:59:50.000Z",
+      sessionStartedAt: "2026-08-01T04:00:00.000Z",
+      documentStartedAt: "2026-08-01T04:00:01.000Z",
+      scanSequence: 20,
+      articleCount: 4,
+      matchingTiboStatusCount: 1,
+      parseSuccessCount: 1,
+      selectorVersion: "v1.14-current-timeline-diagnostics",
+      recoveryStatus: "target_found",
+      recoveryMoveCount: 4,
+      recoveryMaxMoves: 4,
+    },
+    with_replies: {
+      sourceTimeline: "with_replies",
+      status: "not_open",
+      observedAt: "2026-08-01T04:59:50.000Z",
+      scanTimestamp: null,
+      lastSuccessfulParseAt: null,
+      sessionStartedAt: "2026-08-01T04:00:00.000Z",
+      documentStartedAt: "2026-08-01T04:00:01.000Z",
+      scanSequence: 0,
+      articleCount: 0,
+      matchingTiboStatusCount: 0,
+      parseSuccessCount: 0,
+      selectorVersion: "unknown",
+      recoveryStatus: "not_attempted",
+      recoveryMoveCount: 0,
+      recoveryMaxMoves: 0,
+    },
+  });
+  assert.doesNotMatch(JSON.stringify(payload.last_scan_summary), /private text|drop this|snapshots/i);
+});
+
+test("current timeline diagnostics survive heartbeats that omit a new scan summary", () => {
+  const existing = {
+    session_id: "timeline-session",
+    session_started_at: "2026-08-01T04:00:00.000Z",
+    last_heartbeat_at: "2026-08-01T04:59:00.000Z",
+    last_scan_summary: {
+      articleCount: 0,
+      timeElementCount: 0,
+      tweetTextCount: 0,
+      matchingTiboStatusCount: 0,
+      translatedTweetCount: 0,
+      tweetDatetimeCount: 0,
+      parseSuccessCount: 0,
+      currentUrl: "https://x.com/thsottiaux",
+      selectorVersion: "v1.14-current-timeline-diagnostics",
+      scanTimestamp: "2026-08-01T04:59:00.000Z",
+      timelineDiagnostics: {
+        formatVersion: 2,
+        profile: {
+          sourceTimeline: "profile",
+          status: "healthy",
+          observedAt: "2026-08-01T04:59:00.000Z",
+          scanTimestamp: "2026-08-01T04:59:00.000Z",
+          lastSuccessfulParseAt: "2026-08-01T04:59:00.000Z",
+          sessionStartedAt: "2026-08-01T04:00:00.000Z",
+          documentStartedAt: "2026-08-01T04:00:01.000Z",
+          scanSequence: 60,
+          parseSuccessCount: 2,
+        },
+        with_replies: {
+          sourceTimeline: "with_replies",
+          status: "empty",
+          observedAt: "2026-08-01T04:59:00.000Z",
+          scanTimestamp: "2026-08-01T04:58:00.000Z",
+          lastSuccessfulParseAt: "2026-08-01T04:50:00.000Z",
+          sessionStartedAt: "2026-08-01T04:00:00.000Z",
+          documentStartedAt: "2026-08-01T04:00:02.000Z",
+          scanSequence: 50,
+          parseSuccessCount: 0,
+        },
+      },
+    },
+  };
+  const payload = buildHeartbeatRecord(
+    { sessionId: "timeline-session" },
+    existing,
+    new Date("2026-08-01T05:00:00.000Z"),
+  );
+
+  assert.equal(payload.last_scan_summary?.timelineDiagnostics?.with_replies.status, "empty");
 });
 
 test("persists the newest valid tweet timestamp without affecting health fields", () => {

@@ -9,12 +9,19 @@ const QUEUE_KEY = "tibo_processed_tweet_ids";
 const PENDING_QUEUE_KEY = "tibo_pending_tweet_payloads";
 const SOURCE_CONTEXT_PENDING_QUEUE_KEY = "tibo_pending_source_context_enrichments";
 const SOURCE_CONTEXT_LEDGER_KEY = "tibo_source_context_revision_ledger";
+const TIMELINE_SCAN_SUMMARIES_KEY = TiboDiagnostics.TIMELINE_SCAN_SUMMARIES_KEY;
+const TIMELINE_SCAN_STALE_AFTER_MS = 15 * 60 * 1000;
 const MAX_SOURCE_CONTEXT_LEDGER_ENTRIES = 100;
 const MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET = 3;
 const MAX_SOURCE_CONTEXT_PENDING_ENTRIES = 50;
 const MAX_PENDING_TWEET_PAYLOADS = 50;
 const PENDING_RETRY_DELAY_MS = 10 * 60 * 1000;
 const MAX_PENDING_RETRY_ATTEMPTS = 3;
+const RETRYABLE_AI_CLASSIFICATION_STATUSES = new Set([
+  "timeout",
+  "rate_limited",
+  "api_error",
+]);
 const QUARANTINE_KEY = "tibo_quarantined_tweet_ids";
 const MAX_QUARANTINE_ENTRIES = 100;
 const AUTH_BLOCKED_REASON = "auth_blocked";
@@ -51,6 +58,7 @@ let notificationIconDiagnosticsUrl = null;
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
 let pendingQueueStorage = Promise.resolve();
+let timelineScanSummaryWriteQueue = Promise.resolve();
 let monitoredTabReloadPromise = null;
 
 function restrictLocalStorageToTrustedContexts() {
@@ -363,8 +371,13 @@ function persistPendingTweet(payload) {
   }).then((entries) => {
     const entry = entries.find((candidate) => candidate.tweetId === tweetId);
     return entry
-      ? { stored: true, retryExhausted: entry.retryExhausted === true }
-      : { stored: false, retryExhausted: false };
+      ? {
+          stored: true,
+          retryExhausted: entry.retryExhausted === true,
+          attempts: entry.attempts,
+          nextAttemptAt: entry.nextAttemptAt,
+        }
+      : { stored: false, retryExhausted: false, attempts: 0, nextAttemptAt: 0 };
   });
 }
 
@@ -1150,6 +1163,110 @@ function markContentScanSuccessful() {
   return TiboDiagnostics.markSuccessfulScan(chrome.storage.local);
 }
 
+function saveTimelineScanSummary(summary, sender) {
+  const safeSummary = TiboDiagnostics.sanitizeScanSummary(summary);
+  const senderTimeline = getMonitoredTimeline(sender?.tab?.url);
+  if (
+    !safeSummary
+    || !Number.isInteger(sender?.tab?.id)
+    || (Number.isInteger(sender?.frameId) && sender.frameId !== 0)
+    || !isValidRestoreTimeline(senderTimeline)
+    || safeSummary.sourceTimeline !== senderTimeline
+  ) {
+    return Promise.reject(new Error("invalid_timeline_scan_summary"));
+  }
+
+  const update = async () => {
+    const stored = await chrome.storage.local.get([TIMELINE_SCAN_SUMMARIES_KEY]);
+    const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
+      stored[TIMELINE_SCAN_SUMMARIES_KEY],
+    );
+    summaries[safeSummary.sourceTimeline] = TiboDiagnostics.mergeTimelineScanSummary(
+      summaries[safeSummary.sourceTimeline],
+      safeSummary,
+    );
+    await chrome.storage.local.set({ [TIMELINE_SCAN_SUMMARIES_KEY]: summaries });
+    return summaries;
+  };
+
+  const operation = timelineScanSummaryWriteQueue.catch(() => {}).then(update);
+  timelineScanSummaryWriteQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function getTimelineHeartbeatDiagnostics() {
+  try {
+    const [stored, tabs] = await Promise.all([
+      chrome.storage.local.get([TIMELINE_SCAN_SUMMARIES_KEY]),
+      chrome.tabs.query({
+        url: ["https://x.com/thsottiaux*", "https://twitter.com/thsottiaux*"],
+      }),
+    ]);
+    const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
+      stored[TIMELINE_SCAN_SUMMARIES_KEY],
+    );
+    const openTimelines = new Set(
+      (tabs || []).map((tab) => getMonitoredTimeline(tab.url)).filter(Boolean),
+    );
+    const now = Date.now();
+    const slots = { formatVersion: TiboDiagnostics.TIMELINE_DIAGNOSTICS_FORMAT_VERSION };
+    const observedAt = new Date(now).toISOString();
+
+    for (const timeline of ["profile", "with_replies"]) {
+      const summary = summaries[timeline];
+      if (!openTimelines.has(timeline)) {
+        slots[timeline] = {
+          sourceTimeline: timeline,
+          status: "not_open",
+          observedAt,
+          scanTimestamp: summary?.scanTimestamp || null,
+          lastSuccessfulParseAt: summary?.lastSuccessfulParseAt || null,
+          sessionStartedAt: summary?.sessionStartedAt || null,
+          documentStartedAt: summary?.documentStartedAt || null,
+          scanSequence: summary?.scanSequence || 0,
+          articleCount: summary?.articleCount || 0,
+          matchingTiboStatusCount: summary?.matchingTiboStatusCount || 0,
+          parseSuccessCount: summary?.parseSuccessCount || 0,
+          selectorVersion: summary?.selectorVersion || "unknown",
+          recoveryStatus: summary?.recoveryStatus || "not_attempted",
+          recoveryMoveCount: summary?.recoveryMoveCount || 0,
+          recoveryMaxMoves: summary?.recoveryMaxMoves || 0,
+        };
+        continue;
+      }
+
+      const scanTime = summary ? new Date(summary.scanTimestamp).getTime() : NaN;
+      const age = Number.isFinite(scanTime) ? now - scanTime : Infinity;
+      const status = age < 0 || age > TIMELINE_SCAN_STALE_AFTER_MS
+        ? "stale"
+        : summary.parseSuccessCount > 0
+          ? "healthy"
+          : "empty";
+      slots[timeline] = {
+        sourceTimeline: timeline,
+        status,
+        observedAt,
+        scanTimestamp: summary?.scanTimestamp || null,
+        lastSuccessfulParseAt: summary?.lastSuccessfulParseAt || null,
+        sessionStartedAt: summary?.sessionStartedAt || null,
+        documentStartedAt: summary?.documentStartedAt || null,
+        scanSequence: summary?.scanSequence || 0,
+        articleCount: summary?.articleCount || 0,
+        matchingTiboStatusCount: summary?.matchingTiboStatusCount || 0,
+        parseSuccessCount: summary?.parseSuccessCount || 0,
+        selectorVersion: summary?.selectorVersion || "unknown",
+        recoveryStatus: summary?.recoveryStatus || "not_attempted",
+        recoveryMoveCount: summary?.recoveryMoveCount || 0,
+        recoveryMaxMoves: summary?.recoveryMaxMoves || 0,
+      };
+    }
+
+    return slots;
+  } catch {
+    return null;
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "RESTORE_MONITORED_TIMELINE") {
     const timeline = request.timeline;
@@ -1202,6 +1319,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     saveContentScanDiagnostic(request.entry)
       .then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: false, error: "diagnostic_write_failed" }));
+    return true;
+  }
+
+  if (request.action === "REPORT_TIMELINE_SCAN") {
+    const requestedSummary = TiboDiagnostics.sanitizeScanSummary(request.summary);
+    saveTimelineScanSummary(requestedSummary, sender)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false, error: "timeline_scan_report_failed" }));
     return true;
   }
 
@@ -1272,17 +1397,28 @@ async function getConfig() {
 }
 
 function enqueuePostTweet(payload) {
-  const persisted = persistPendingTweet(payload).catch((error) => {
-    void saveServiceDiagnostic({
-      reasonCode: "pending_queue_persist_error",
-      messages: ["The pending tweet queue could not be persisted."],
-      error: error?.message || String(error),
-      payloadMetadata: getTweetPayloadMetadata(payload),
-    });
-  });
   const resultPromise = processQueue
-    .then(() => persisted)
-    .then((pendingState) => {
+    .then(async () => {
+      let pendingState;
+      try {
+        pendingState = await persistPendingTweet(payload);
+      } catch (error) {
+        void saveServiceDiagnostic({
+          reasonCode: "pending_queue_persist_error",
+          messages: ["The pending tweet queue could not be persisted."],
+          error: error?.message || String(error),
+          payloadMetadata: getTweetPayloadMetadata(payload),
+        });
+      }
+
+      if (!pendingState?.stored) {
+        return {
+          success: false,
+          retryable: true,
+          error: "Tweet retry queue is unavailable; webhook request was not sent.",
+        };
+      }
+
       if (pendingState?.retryExhausted) {
         return {
           success: false,
@@ -1290,6 +1426,19 @@ function enqueuePostTweet(payload) {
           error: "Tweet webhook retry limit reached; use explicit retry to try again.",
         };
       }
+
+      if (
+        pendingState?.attempts > 0 &&
+        Number.isFinite(pendingState.nextAttemptAt) &&
+        pendingState.nextAttemptAt > Date.now()
+      ) {
+        return {
+          success: false,
+          retryable: true,
+          error: "Tweet webhook retry is waiting for its scheduled attempt.",
+        };
+      }
+
       return executePostTweetWithRecovery(payload);
     });
   processQueue = resultPromise.catch(() => {});
@@ -1463,6 +1612,22 @@ async function executePostTweet(payload) {
     await notifyFormalAdoption(json?.formalAdoption, domain);
   } catch {
     // Keep the webhook success result even when notification APIs are absent.
+  }
+
+  // The webhook persists a rule fallback and returns 2xx for these failures.
+  // Keep the tweet pending so the bounded queue can replay classification.
+  if (RETRYABLE_AI_CLASSIFICATION_STATUSES.has(json?.aiStatus)) {
+    await saveServiceDiagnostic({
+      reasonCode: "ai_classification_retry",
+      messages: ["The tweet was saved with a rule fallback after a transient AI classification failure."],
+      payloadMetadata: getTweetPayloadMetadata(payload),
+    });
+    await recordPendingFailure(payload);
+    return {
+      success: false,
+      retryable: true,
+      error: "Tweet saved with fallback; AI classification will be retried.",
+    };
   }
 
   // 4. Save to chrome.storage.local on 2xx success and verify write persistence
@@ -1940,6 +2105,8 @@ async function handlePostHeartbeat(payload) {
     "tibo_last_page_reload_status",
     "tibo_last_page_reload_error",
   ]);
+  const timelineDiagnostics = await getTimelineHeartbeatDiagnostics();
+  const heartbeatObservedAt = new Date().toISOString();
 
   const rawLastPageReloadAt =
     payload.last_page_reload_at ||
@@ -1972,6 +2139,8 @@ async function handlePostHeartbeat(payload) {
     newestSeenTweetCreatedAt: TiboDiagnostics.sanitizeTimestamp(payload.newestSeenTweetCreatedAt),
     lastScanError: TiboDiagnostics.sanitizeReasonCode(payload.lastScanError),
     lastScanSummary: TiboDiagnostics.sanitizeScanSummary(payload.lastScanSummary),
+    timelineDiagnostics,
+    heartbeatObservedAt,
     selectorVersion: TiboDiagnostics.sanitizeSelectorVersion(payload.selectorVersion),
     last_page_reload_at: TiboDiagnostics.sanitizeTimestamp(rawLastPageReloadAt),
     last_page_reload_status: lastPageReloadStatus,
@@ -2040,6 +2209,7 @@ async function handleTestConnection() {
         leaderTabId: 9999,
         isLeader: true,
         lastSuccessfulParseAt: new Date().toISOString(),
+        heartbeatObservedAt: new Date().toISOString(),
         lastSeenTweetId: "test-connection",
         lastScanError: null,
         last_page_reload_at: storageData.tibo_last_page_reload_at || null,

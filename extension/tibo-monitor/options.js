@@ -11,6 +11,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const diagnosticsEnabled = document.getElementById("diagnosticsEnabled");
   const diagnosticsMaskText = document.getElementById("diagnosticsMaskText");
   const diagnosticCount = document.getElementById("diagnosticCount");
+  const profileScanSummary = document.getElementById("profileScanSummary");
+  const repliesScanSummary = document.getElementById("repliesScanSummary");
   const refreshDiagnosticsBtn = document.getElementById("refreshDiagnosticsBtn");
   const exportDiagnosticsBtn = document.getElementById("exportDiagnosticsBtn");
   const clearDiagnosticsBtn = document.getElementById("clearDiagnosticsBtn");
@@ -218,9 +220,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     diagnosticCount.innerText = `${logs.length}件 / 約${serialized.length.toLocaleString()}文字（Chromeローカルのみ）`;
   }
 
+  async function refreshTimelineScanSummaries() {
+    const data = await chrome.storage.local.get([TiboDiagnostics.TIMELINE_SCAN_SUMMARIES_KEY]);
+    const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
+      data[TiboDiagnostics.TIMELINE_SCAN_SUMMARIES_KEY],
+    );
+    const render = (timeline, element) => {
+      const summary = summaries[timeline];
+      if (!summary) {
+        element.innerText = "No scan has been reported yet.";
+        return;
+      }
+      element.innerText = [
+        `Scanned: ${summary.scanTimestamp}`,
+        `Last successful parse: ${summary.lastSuccessfulParseAt || "none in this tab session"}`,
+        `Articles: ${summary.articleCount}; Tibo matches: ${summary.matchingTiboStatusCount}; parsed: ${summary.parseSuccessCount}`,
+        `Recovery: ${summary.recoveryStatus} (${summary.recoveryMoveCount}/${summary.recoveryMaxMoves})`,
+        `Selector: ${summary.selectorVersion}`,
+      ].join("\n");
+    };
+    render("profile", profileScanSummary);
+    render("with_replies", repliesScanSummary);
+  }
+
   refreshDiagnosticsBtn.addEventListener("click", () => {
     refreshDiagnosticCount().catch(() => {
       diagnosticCount.innerText = "診断ログを読み込めませんでした。";
+    });
+    refreshTimelineScanSummaries().catch(() => {
+      profileScanSummary.innerText = "ローカルスキャン要約を読み込めませんでした。";
+      repliesScanSummary.innerText = "ローカルスキャン要約を読み込めませんでした。";
     });
   });
 
@@ -249,6 +278,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   refreshDiagnosticCount().catch(() => {
     diagnosticCount.innerText = "診断ログを読み込めませんでした。";
+  });
+  refreshTimelineScanSummaries().catch(() => {
+    profileScanSummary.innerText = "ローカルスキャン要約を読み込めませんでした。";
+    repliesScanSummary.innerText = "ローカルスキャン要約を読み込めませんでした。";
   });
 
   testBtn.addEventListener("click", () => {

@@ -879,7 +879,7 @@ test("403 is cleared by a successful connection test and can be sent again", asy
   assert.equal(context.mockFetchCalls.length, 3);
 });
 
-test("retryable webhook statuses are retried and are not quarantined", async () => {
+test("retryable webhook statuses remain pending until their scheduled retry", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext([], {
     fetchResponse: {
       ok: false,
@@ -901,11 +901,161 @@ test("retryable webhook statuses are retried and are not quarantined", async () 
   assert.equal(first.success, false);
   assert.equal(first.retryable, true);
   assert.equal(second.retryable, true);
-  assert.equal(mockFetchCalls.length, 2);
+  assert.equal(mockFetchCalls.length, 1);
+  assert.equal(localStore.tibo_pending_tweet_payloads[0].attempts, 1);
   assert.equal(localStore.tibo_quarantined_tweet_ids, undefined);
 });
 
-test("network webhook failures remain retryable and are not quarantined", async () => {
+test("transient AI classification fallback stays pending until a duplicate delivery succeeds", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: (_url, _fetchOpts, callIndex) => ({
+      ok: true,
+      status: 200,
+      json: async () => callIndex === 1
+        ? { success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }
+        : { success: true, aiStatus: "success", classificationSource: "gemini" },
+    }),
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149749",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149749",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.success, false);
+  assert.equal(first.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  assert.equal(context.localStore.tibo_processed_tweet_ids, undefined);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 1);
+
+  assert.equal((await context.sendMessage({ action: "POST_TWEET", payload })).retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+
+  const retry = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(retry.success, true);
+  assert.equal(context.mockFetchCalls.length, 2);
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, [payload.tweetId]);
+  assert.deepEqual(context.localStore.tibo_pending_tweet_payloads, []);
+
+  const duplicate = await context.sendMessage({ action: "POST_TWEET", payload });
+  assert.equal(duplicate.skipped, true);
+  assert.equal(context.mockFetchCalls.length, 2);
+});
+
+test("transient AI classification retries exhaust the existing bounded queue", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }),
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149750",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149750",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.retryable, true);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+  await context.sendMessage({ action: "POST_TWEET", payload });
+  const stopped = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(stopped.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 3);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].retryExhausted, true);
+});
+
+test("transient classification fallback recovers on the existing alarm without a duplicate tweet delivery", async () => {
+  const context = setupServiceWorkerContext([], {
+    fetchResponse: (_url, _fetchOpts, callIndex) => ({
+      ok: true,
+      status: 200,
+      json: async () => callIndex === 1
+        ? { success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }
+        : { success: true, aiStatus: "success", classificationSource: "gemini" },
+    }),
+  });
+  context.localStore.webhook_secret = "test-secret";
+  const payload = {
+    tweetId: "2112592264686149752",
+    text: "A valid tweet",
+    tweetUrl: "https://x.com/thsottiaux/status/2112592264686149752",
+    tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+  };
+
+  const first = await context.sendMessage({ action: "POST_TWEET", payload });
+
+  assert.equal(first.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 1);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads[0].attempts, 1);
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
+
+  await context.fireAlarm("tibo_page_reload_alarm");
+
+  assert.equal(context.mockFetchCalls.length, 2);
+  assert.deepEqual(context.localStore.tibo_processed_tweet_ids, [payload.tweetId]);
+  assert.deepEqual(context.localStore.tibo_pending_tweet_payloads, []);
+});
+
+test("a full retry queue prevents untracked webhook attempts", async () => {
+  const pendingPayloads = Array.from({ length: 50 }, (_value, index) => {
+    const tweetId = `220000000000000${String(index).padStart(4, "0")}`;
+    return {
+      tweetId,
+      payload: {
+        tweetId,
+        text: "A previously failed tweet",
+        tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+        tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+      },
+      attempts: 1,
+      nextAttemptAt: Date.now() + 60_000,
+      retryExhausted: false,
+    };
+  });
+  assert.equal(new Set(pendingPayloads.map((entry) => entry.tweetId)).size, 50);
+  const context = setupServiceWorkerContext([], {
+    initialLocalStore: {
+      tibo_pending_tweet_payloads: pendingPayloads,
+    },
+    fetchResponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, aiStatus: "api_error", classificationSource: "rule_fallback" }),
+    },
+  });
+  context.localStore.webhook_secret = "test-secret";
+
+  const response = await context.sendMessage({
+    action: "POST_TWEET",
+    payload: {
+      tweetId: "2112592264686149751",
+      text: "A valid tweet",
+      tweetUrl: "https://x.com/thsottiaux/status/2112592264686149751",
+      tweetCreatedAt: "2026-10-20T17:10:00.000Z",
+    },
+  });
+
+  assert.equal(response.retryable, true);
+  assert.equal(context.mockFetchCalls.length, 0);
+  assert.equal(context.localStore.tibo_pending_tweet_payloads.length, 50);
+});
+
+test("network webhook failures remain pending until their scheduled retry", async () => {
   const { sendMessage, localStore, mockFetchCalls } = setupServiceWorkerContext([], {
     fetchError: "network offline",
   });
@@ -922,7 +1072,8 @@ test("network webhook failures remain retryable and are not quarantined", async 
 
   assert.equal(first.retryable, true);
   assert.equal(second.retryable, true);
-  assert.equal(mockFetchCalls.length, 2);
+  assert.equal(mockFetchCalls.length, 1);
+  assert.equal(localStore.tibo_pending_tweet_payloads[0].attempts, 1);
   assert.equal(localStore.tibo_quarantined_tweet_ids, undefined);
 });
 
@@ -1022,7 +1173,9 @@ test("pending tweet retries stop after the conservative attempt limit", async ()
   };
 
   await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
   await context.sendMessage({ action: "POST_TWEET", payload });
+  context.localStore.tibo_pending_tweet_payloads[0].nextAttemptAt = 0;
   await context.sendMessage({ action: "POST_TWEET", payload });
   const stopped = await context.sendMessage({ action: "POST_TWEET", payload });
 
@@ -1094,6 +1247,190 @@ test("Service Worker sends only safe heartbeat counters and omits snapshot data"
   assert.equal(sentBody.newestSeenTweetCreatedAt, null);
   assert.equal(sentBody.lastScanSummary.snapshots, undefined);
   assert.doesNotMatch(JSON.stringify(sentBody), /secret HTML|raw secret error/i);
+});
+
+test("content scan reports merge both timeline slots without a read-modify-write loss", async () => {
+  const context = setupServiceWorkerContext();
+  const now = new Date().toISOString();
+  const summary = (sourceTimeline: "profile" | "with_replies") => ({
+    articleCount: 3,
+    timeElementCount: 3,
+    tweetTextCount: 3,
+    nonEmptyTweetTextCount: 3,
+    matchingTiboStatusCount: 1,
+    translatedTweetCount: 0,
+    tweetDatetimeCount: 3,
+    parseSuccessCount: 1,
+    currentUrl: `https://x.com/thsottiaux${sourceTimeline === "with_replies" ? "/with_replies" : ""}`,
+    selectorVersion: "v1.13-bounded-reply-capture",
+    scanTimestamp: now,
+    sourceTimeline,
+    recoveryStatus: "not_attempted",
+    recoveryMoveCount: 0,
+    recoveryMaxMoves: 4,
+  });
+
+  const results = await Promise.all([
+    context.sendMessage(
+      { action: "REPORT_TIMELINE_SCAN", summary: summary("profile") },
+      { tab: { id: 501, url: "https://x.com/thsottiaux" } },
+    ),
+    context.sendMessage(
+      { action: "REPORT_TIMELINE_SCAN", summary: summary("with_replies") },
+      { tab: { id: 502, url: "https://x.com/thsottiaux/with_replies" } },
+    ),
+  ]);
+
+  assert.deepEqual(results.map((result) => result.success), [true, true]);
+  assert.equal(context.localStore.tibo_timeline_scan_summaries.profile.sourceTimeline, "profile");
+  assert.equal(context.localStore.tibo_timeline_scan_summaries.with_replies.sourceTimeline, "with_replies");
+});
+
+test("timeline reports stay monotonic across delayed scans, documents, and sessions", async () => {
+  const context = setupServiceWorkerContext();
+  const sender = { tab: { id: 502, url: "https://x.com/thsottiaux/with_replies" } };
+  const summary = (overrides: Record<string, unknown>) => ({
+    articleCount: 2,
+    timeElementCount: 2,
+    tweetTextCount: 2,
+    nonEmptyTweetTextCount: 2,
+    matchingTiboStatusCount: 1,
+    translatedTweetCount: 0,
+    tweetDatetimeCount: 2,
+    parseSuccessCount: 1,
+    currentUrl: "https://x.com/thsottiaux/with_replies",
+    selectorVersion: "v1.14-current-timeline-diagnostics",
+    scanTimestamp: "2026-10-21T00:10:00.000Z",
+    sourceTimeline: "with_replies",
+    recoveryStatus: "not_attempted",
+    recoveryMoveCount: 0,
+    recoveryMaxMoves: 4,
+    sessionStartedAt: "2026-10-20T23:00:00.000Z",
+    documentStartedAt: "2026-10-20T23:00:01.000Z",
+    scanSequence: 1,
+    lastSuccessfulParseAt: "2026-10-21T00:10:00.000Z",
+    ...overrides,
+  });
+
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:08:00.000Z",
+      scanSequence: 1,
+      lastSuccessfulParseAt: "2026-10-21T00:08:00.000Z",
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:10:00.000Z",
+      scanSequence: 2,
+      parseSuccessCount: 0,
+      lastSuccessfulParseAt: null,
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({ scanTimestamp: "2026-10-21T00:09:00.000Z", scanSequence: 1 }),
+  }, sender);
+
+  let saved = context.localStore.tibo_timeline_scan_summaries.with_replies;
+  assert.equal(saved.scanTimestamp, "2026-10-21T00:10:00.000Z");
+  assert.equal(saved.parseSuccessCount, 0);
+  assert.equal(saved.lastSuccessfulParseAt, "2026-10-21T00:08:00.000Z");
+
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:11:00.000Z",
+      scanSequence: 1,
+      sessionStartedAt: "2026-10-21T00:11:00.000Z",
+      documentStartedAt: "2026-10-21T00:11:01.000Z",
+      parseSuccessCount: 0,
+      lastSuccessfulParseAt: null,
+    }),
+  }, sender);
+  await context.sendMessage({
+    action: "REPORT_TIMELINE_SCAN",
+    summary: summary({
+      scanTimestamp: "2026-10-21T00:10:30.000Z",
+      scanSequence: 4,
+      sessionStartedAt: "2026-10-20T23:00:00.000Z",
+      documentStartedAt: "2026-10-20T23:00:01.000Z",
+    }),
+  }, sender);
+
+  saved = context.localStore.tibo_timeline_scan_summaries.with_replies;
+  assert.equal(saved.scanTimestamp, "2026-10-21T00:11:00.000Z");
+  assert.equal(saved.lastSuccessfulParseAt, null, "a new timeline session must start with no inherited success");
+});
+
+test("leader heartbeat carries at most two open timeline health slots", async () => {
+  const tabs = [
+    { id: 501, url: "https://x.com/thsottiaux" },
+    { id: 502, url: "https://x.com/thsottiaux/with_replies" },
+  ];
+  const context = setupServiceWorkerContext(tabs);
+  const now = new Date().toISOString();
+  context.localStore.webhook_secret = "test-secret";
+  context.localStore.tibo_timeline_scan_summaries = {
+    profile: {
+      articleCount: 3,
+      timeElementCount: 3,
+      tweetTextCount: 3,
+      nonEmptyTweetTextCount: 3,
+      matchingTiboStatusCount: 1,
+      translatedTweetCount: 0,
+      tweetDatetimeCount: 3,
+      parseSuccessCount: 2,
+      currentUrl: "https://x.com/thsottiaux",
+      selectorVersion: "v1.13-bounded-reply-capture",
+      scanTimestamp: now,
+      sourceTimeline: "profile",
+      recoveryStatus: "not_attempted",
+      recoveryMoveCount: 0,
+      recoveryMaxMoves: 4,
+    },
+    with_replies: {
+      articleCount: 2,
+      timeElementCount: 2,
+      tweetTextCount: 2,
+      nonEmptyTweetTextCount: 2,
+      matchingTiboStatusCount: 0,
+      translatedTweetCount: 0,
+      tweetDatetimeCount: 2,
+      parseSuccessCount: 0,
+      currentUrl: "https://x.com/thsottiaux/with_replies",
+      selectorVersion: "v1.13-bounded-reply-capture",
+      scanTimestamp: now,
+      sourceTimeline: "with_replies",
+      recoveryStatus: "target_not_visible",
+      recoveryMoveCount: 4,
+      recoveryMaxMoves: 4,
+    },
+  };
+
+  await context.sendMessage({ action: "POST_HEARTBEAT", payload: { sessionId: "session_two_timelines" } });
+  const slots = context.mockFetchCalls[0].body.timelineDiagnostics;
+
+  assert.deepEqual(Object.keys(slots).sort(), ["formatVersion", "profile", "with_replies"]);
+  assert.equal(slots.formatVersion, 2);
+  assert.equal(slots.profile.status, "healthy");
+  assert.equal(slots.with_replies.status, "empty");
+  assert.equal(slots.with_replies.recoveryStatus, "target_not_visible");
+  assert.equal(slots.with_replies.recoveryMoveCount, 4);
+  assert.doesNotMatch(JSON.stringify(slots), /text|currentUrl|secret/i);
+});
+
+test("leader heartbeat labels unopened timeline slots without claiming them healthy", async () => {
+  const context = setupServiceWorkerContext([{ id: 501, url: "https://x.com/thsottiaux" }]);
+  context.localStore.webhook_secret = "test-secret";
+
+  await context.sendMessage({ action: "POST_HEARTBEAT", payload: { sessionId: "session_one_timeline" } });
+  const slots = context.mockFetchCalls[0].body.timelineDiagnostics;
+
+  assert.equal(slots.profile.status, "stale");
+  assert.equal(slots.with_replies.status, "not_open");
 });
 
 test("formal adoption creates one local notification and opens its source", async () => {
