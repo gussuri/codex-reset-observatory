@@ -69,6 +69,31 @@ test("published site URLs and robots sitemap use the new domain", () => {
   const sitemap = readFileSync("public/sitemap.xml", "utf8");
   assert.doesNotMatch(sitemap, new RegExp(legacyHost.replaceAll(".", "\\.")));
   assert.match(sitemap, new RegExp(`https://${newHost.replaceAll(".", "\\.")}/`));
+
+  const sitemapLocations = Array.from(
+    sitemap.matchAll(/<loc>([^<]+)<\/loc>/g),
+    (match) => match[1],
+  );
+  const expectedPaths = [
+    "/",
+    "/faq",
+    "/history",
+    "/about",
+    "/en",
+    "/en/faq",
+    "/en/history",
+    "/en/about",
+    "/zh",
+    "/zh/faq",
+    "/zh/history",
+    "/zh/about",
+  ];
+  assert.equal(sitemapLocations.length, 12);
+  assert.deepEqual(
+    new Set(sitemapLocations),
+    new Set(expectedPaths.map((path) => `https://${newHost}${path}`)),
+  );
+  assert.doesNotMatch(sitemap, /<lastmod\b/i, "omit unverified lastmod values");
 });
 
 test("extension keeps legacy access while defaulting all current links to the new domain", () => {
