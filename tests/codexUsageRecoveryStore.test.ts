@@ -191,6 +191,7 @@ function projectedTiboSignalsClient(
 
 function unscheduledOfficialNotice(tweetId: string, tweetCreatedAt: string) {
   const text = "Day 13/ Le limit reset";
+  const expiresAt = new Date(Date.parse(tweetCreatedAt) + 24 * 60 * 60_000).toISOString();
   return {
     tweet_id: tweetId,
     text,
@@ -222,7 +223,7 @@ function unscheduledOfficialNotice(tweetId: string, tweetCreatedAt: string) {
     temporal_resolution_status: "unresolved",
     is_reply: false,
     is_quote: false,
-    expires_at: null,
+    expires_at: expiresAt,
   };
 }
 

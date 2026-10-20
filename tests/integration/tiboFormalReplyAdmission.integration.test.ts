@@ -176,13 +176,14 @@ function targetRow(ids: CaseIds, createdAt = CREATED_AT) {
 }
 
 function standaloneResetRow(tweetId: string, createdAt: string) {
+  const expiresAt = new Date(Date.parse(createdAt) + 24 * 60 * 60_000).toISOString();
   return {
     tweet_id: tweetId,
     signal_type: "reset_executed",
     text: "I reset usage limits for everyone.",
     tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
     tweet_created_at: createdAt,
-    expires_at: null,
+    expires_at: expiresAt,
     verification_status: "auto_unverified",
     confidence: 0.99,
     classification_source: "gemini",
@@ -192,13 +193,14 @@ function standaloneResetRow(tweetId: string, createdAt: string) {
 }
 
 function unscheduledNoticeRow(tweetId: string, createdAt: string) {
+  const expiresAt = new Date(Date.parse(createdAt) + 24 * 60 * 60_000).toISOString();
   return {
     tweet_id: tweetId,
     signal_type: "official_notice",
     text: "Day 13/ Le limit reset",
     tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
     tweet_created_at: createdAt,
-    expires_at: null,
+    expires_at: expiresAt,
     verification_status: "auto_unverified",
     confidence: 0.85,
     classification_source: "gemini",
