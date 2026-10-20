@@ -216,6 +216,11 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
+  ai_evidence_quote?: string | null;
+  ai_notice_to_execution?: string | null;
+  ai_signal_type?: string | null;
+  ai_classification_status?: string | null;
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   ai_temporal_confidence?: number | null;

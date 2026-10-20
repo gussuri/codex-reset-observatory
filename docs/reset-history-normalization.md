@@ -51,6 +51,8 @@ source facts
 
 notice-to-execution は notice と execution の差を人間向けに表す derived presentation です。履歴の canonical execution timestamp そのものではありません。現在の表示処理では notice がない場合、または保存値が `0分` 相当の場合にこの行を空にできます。これによって event identity や execution timestamp を変更してはいけません。
 
+告知の有無と時刻の確度は別に判定します。Gemini が `official_notice`、時制 `unclear`、時刻 `unknown` と分類し、引用 evidence が本文にあり、利用上限リセットへの明示的な話題で、返信・引用・拒否・相殺・履歴・技術的 reset ではない投稿は、信頼度 `0.80` 以上なら unscheduled notice として表示・履歴連携できます。この例外は notice の存在だけを示します。予定時刻、実行時刻、probability teaser、完了済み reset は作らず、開始/終了時刻も公開しません。予定時刻がある通常 notice の `0.95` 閾値と、reset completion の判定は維持します。
+
 ### Legacy scope input の扱い
 
 `convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text や related notice に reset applicability の明示 evidence がない場合、product label を scope として作らず、scope を空にします。`Codex / ChatGPT Work` は canonical scopeではありません。旧partial labelは `normalizeResetScope()` で `一部ユーザー` としてread-side互換処理できますが、新しいcanonical/static/persisted rowは旧labelを出力しません。

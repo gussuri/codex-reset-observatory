@@ -120,6 +120,7 @@ function formalSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTib
     is_reply: true,
     is_quote: false,
     source_context_revision_hashes: [REVISION],
+    source_context_generation: 0,
     source_context_classified_revision_hashes: [REVISION],
     ...overrides,
   } as FormalTiboResetSignal;
@@ -136,7 +137,7 @@ test("same-global reset completion replies receive versioned proof over exact on
     const admissionProof = proof(depth);
     const signal = attachTiboFormalReplyAdmissionProof(formalSignal(), admissionProof);
 
-    assert.equal(admissionProof.version, "tibo-formal-reply-admission-v2");
+    assert.equal(admissionProof.version, "tibo-formal-reply-admission-v3");
     assert.equal(admissionProof.admissionMethod, "validated_same_global_reset_reply");
     assert.equal(admissionProof.resetMethod, "forced");
     assert.equal(admissionProof.resetScope, "all_paid_users");

@@ -120,6 +120,8 @@ export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "rule_signal_type",
   "ai_signal_type",
   "ai_temporal_direction",
+  "ai_notice_timing_status",
+  "ai_evidence_quote",
   "ai_reason_ja",
   "ai_reset_type_ja",
   "ai_notice_to_execution",
@@ -197,6 +199,7 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "ai_confidence",
   "ai_classification_status",
   "ai_temporal_direction",
+  "ai_notice_timing_status",
   "ai_evidence_quote",
   "teaser_strength",
   "secondary_signal",
@@ -218,6 +221,7 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "verification_status",
   "source_context_revision_hashes",
   "source_context_classified_revision_hashes",
+  "source_context_generation",
   "formal_reply_admission_proof",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
@@ -249,6 +253,7 @@ export const TIBO_RECENT_SELECT_FIELDS = [
   "ai_evidence_quote",
   "source_context_revision_hashes",
   "source_context_classified_revision_hashes",
+  "source_context_generation",
   "formal_reply_admission_proof",
 ].join(",");
 export const TIMED_TIBO_SIGNAL_MAX_ROWS = 40;
@@ -609,7 +614,7 @@ export function buildCanonicalTiboHistoryFilter(
   includeFormalReplyProofs = false,
 ) {
   const formalReplyClause = includeFormalReplyProofs
-    ? ",and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2)"
+    ? ",and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v3)"
     : "";
   if (!cursor) return `is_reply.is.null,is_reply.eq.false${formalReplyClause}`;
 
@@ -624,8 +629,8 @@ export function buildCanonicalTiboHistoryFilter(
   ];
   if (includeFormalReplyProofs) {
     filters.push(
-      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2," + olderThan + ")",
-      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2," + sameTimestampBefore + ")",
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v3," + olderThan + ")",
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v3," + sameTimestampBefore + ")",
     );
   }
   return filters.join(",");

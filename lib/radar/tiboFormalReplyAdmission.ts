@@ -25,7 +25,7 @@ export type TiboFormalReplyAdmissionMeaningEvidence = {
 };
 
 export type TiboFormalReplyAdmissionProof = {
-  version: "tibo-formal-reply-admission-v2";
+  version: "tibo-formal-reply-admission-v3";
   admissionMethod: "validated_same_global_reset_reply";
   targetTweetId: string;
   targetTweetUrl: string;
@@ -44,6 +44,7 @@ export type TiboFormalReplyAdmissionProof = {
   pathTweetIds: string[];
   pathRelations: Array<"reply">;
   sourceContextRevisionHashes: string[];
+  sourceContextGeneration: number;
 };
 
 export type TiboFormalReplyAdmissionCarrier = {
@@ -66,6 +67,7 @@ export type TiboFormalReplyAdmissionSignal = {
   classification_source?: unknown;
   source_context_revision_hashes?: unknown;
   source_context_classified_revision_hashes?: unknown;
+  source_context_generation?: unknown;
 } & TiboFormalReplyAdmissionCarrier;
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
@@ -179,7 +181,7 @@ function tweetIdentity(tweetUrl: string) {
 }
 
 function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
-  if (!isObject(value) || value.version !== "tibo-formal-reply-admission-v2"
+  if (!isObject(value) || value.version !== "tibo-formal-reply-admission-v3"
     || value.admissionMethod !== "validated_same_global_reset_reply"
     || value.contextualResetAssessment !== "same_global_reset"
     || value.temporalDirection !== "completed_now"
@@ -198,6 +200,8 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     || !isObject(value.resetMethodEvidence)
     || !isObject(value.resetScopeEvidence)
     || !validHashes(value.sourceContextRevisionHashes)
+    || !Number.isSafeInteger(value.sourceContextGeneration)
+    || (value.sourceContextGeneration as number) < 0
     || !Array.isArray(value.path)
     || value.path.length < 2
     || value.path.length > 3
@@ -258,7 +262,7 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     || value.pathTweetIds.some((tweetId, index) => tweetId !== pathTweetIds[index])) return null;
 
   return {
-    version: "tibo-formal-reply-admission-v2",
+    version: "tibo-formal-reply-admission-v3",
     admissionMethod: "validated_same_global_reset_reply",
     targetTweetId: value.targetTweetId,
     targetTweetUrl: targetIdentity.canonicalUrl,
@@ -277,15 +281,18 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     pathTweetIds,
     pathRelations: value.pathRelations as Array<"reply">,
     sourceContextRevisionHashes: [...value.sourceContextRevisionHashes],
+    sourceContextGeneration: value.sourceContextGeneration as number,
   };
 }
 
 export function createTiboFormalReplyAdmissionProof(
   input: TiboContextSafetyInput,
   sourceContextRevisionHashes: readonly string[],
+  sourceContextGeneration = 0,
 ): TiboFormalReplyAdmissionProof | null {
   const path = getValidatedTiboSameGlobalReplyPath(input);
-  if (!path || !validHashes([...sourceContextRevisionHashes])) return null;
+  if (!path || !validHashes([...sourceContextRevisionHashes])
+    || !Number.isSafeInteger(sourceContextGeneration) || sourceContextGeneration < 0) return null;
   if (input.isReply !== true || input.isQuote === true) return null;
   if (isBankedDistributionCompletionSignal(input.authorText)) return null;
   if (path.some((node) =>
@@ -324,7 +331,7 @@ export function createTiboFormalReplyAdmissionProof(
   if (!resetMethodEvidence || !resetScopeEvidence) return null;
 
   const proof = {
-    version: "tibo-formal-reply-admission-v2" as const,
+    version: "tibo-formal-reply-admission-v3" as const,
     admissionMethod: "validated_same_global_reset_reply" as const,
     targetTweetId: target.tweetId,
     targetTweetUrl: target.tweetUrl,
@@ -350,6 +357,7 @@ export function createTiboFormalReplyAdmissionProof(
     pathTweetIds: path.map((node) => node.tweetId),
     pathRelations: path.slice(1).map(() => "reply" as const),
     sourceContextRevisionHashes: normalizedRevisions,
+    sourceContextGeneration,
   };
   return parseProof(proof);
 }
@@ -397,7 +405,10 @@ export function isTiboFormalReplyAdmissionProofCurrent(
     || typeof signal.tweet_url !== "string"
     || typeof signal.tweet_created_at !== "string"
     || !validHashes(signal.source_context_revision_hashes)
-    || !validHashes(signal.source_context_classified_revision_hashes)) {
+    || !validHashes(signal.source_context_classified_revision_hashes)
+    || !Number.isSafeInteger(signal.source_context_generation)
+    || (signal.source_context_generation as number) < 0
+    || signal.source_context_generation !== proof.sourceContextGeneration) {
     return false;
   }
 

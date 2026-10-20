@@ -33,6 +33,7 @@ import {
 } from "./resetReason";
 import { normalizeResetScope } from "./resetScope";
 import { isTiboHandle } from "./tiboHandle";
+import { isTiboUnscheduledOfficialNoticeEligible } from "./tiboNoticeEligibility";
 import {
   getTiboClassificationSafetyDecision,
   isCurrentUsageResetAnnouncement,
@@ -98,21 +99,28 @@ export type TiboNoticeSignal = TiboEditIdentityFields & {
   confidence: number | null;
   verification_status: TiboVerificationStatus;
   classification_source?: TiboClassificationSource | null;
-  teaser_strength?: TeaserStrength | null;
-  expires_at?: string | null;
+  ai_signal_type?: string | null;
+  ai_classification_status?: string | null;
+  ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
+  ai_evidence_quote?: string | null;
+  ai_notice_to_execution?: string | null;
+  ai_temporal_confidence?: number | null;
   ai_temporal_expression?: string | null;
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_precision?: TemporalPrecision | null;
   ai_temporal_timezone?: string | null;
   temporal_expression?: string | null;
+  teaser_strength?: TeaserStrength | null;
+  expires_at?: string | null;
+  expected_start_at?: string | null;
+  expected_end_at?: string | null;
+  temporal_resolution_status?: TemporalResolutionStatus | null;
   temporal_kind?: TemporalKind | null;
   temporal_precision?: TemporalPrecision | null;
   temporal_timezone?: string | null;
   temporal_confidence?: number | null;
   temporal_resolution_source?: TemporalResolutionSource | null;
-  expected_start_at?: string | null;
-  expected_end_at?: string | null;
-  temporal_resolution_status?: TemporalResolutionStatus | null;
   is_reply?: boolean | null;
   is_quote?: boolean | null;
 };
@@ -181,10 +189,11 @@ export type FormalTiboResetSignal = TiboEditIdentityFields & {
   classification_reason?: string | null;
   classification_source?: TiboClassificationSource | null;
   rule_signal_type?: TiboSignalType | null;
-  ai_signal_type?: TiboSignalType | null;
+  ai_signal_type?: string | null;
   ai_confidence?: number | null;
   ai_classification_status?: string | null;
   ai_temporal_direction?: string | null;
+  ai_notice_timing_status?: string | null;
   ai_evidence_quote?: string | null;
   ai_reset_type_ja?: string | null;
   ai_notice_to_execution?: string | null;
@@ -221,6 +230,7 @@ export type FormalTiboResetSignal = TiboEditIdentityFields & {
   reply_context_text?: string | null;
   source_context_revision_hashes?: string[] | null;
   source_context_classified_revision_hashes?: string[] | null;
+  source_context_generation?: number | null;
   [TIBO_FORMAL_REPLY_ADMISSION_PROOF]?: TiboFormalReplyAdmissionProof | null;
   source_timeline?: "profile" | "with_replies" | null;
   codex_operational_status?: "none" | "investigating" | "active" | "recovered" | null;
@@ -586,7 +596,8 @@ export function findRelatedTiboNoticeCluster(
         notice.signal_type === "official_notice" &&
         notice.verification_status !== "rejected" &&
         !isBankedDistributionNotice(notice.text) &&
-        (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE,
+        ((notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE ||
+          isTiboUnscheduledOfficialNoticeEligible(notice)),
     );
   });
   return getNoticeCluster(candidates, representative);
@@ -680,9 +691,10 @@ export function findRelatedTiboNotices(
   const candidates = noticeSignals.filter((signal) => {
     const signalTime = getTimestamp(signal.tweet_created_at);
     const noticeConsumption = getOfficialNoticeConsumption(signal.tweet_id);
-    const confidenceThreshold = signal.signal_type === "official_notice"
-      ? OFFICIAL_NOTICE_CONFIDENCE
-      : TEASER_CONFIDENCE;
+    const confidenceEligible = signal.signal_type === "official_notice"
+      ? (signal.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE ||
+        isTiboUnscheduledOfficialNoticeEligible(signal)
+      : (signal.confidence ?? 0) >= TEASER_CONFIDENCE;
     const hasResolvedSchedule = signal.signal_type === "official_notice" &&
       signal.temporal_resolution_status === "resolved" &&
       getTimestamp(signal.expected_start_at) !== null;
@@ -725,7 +737,7 @@ export function findRelatedTiboNotices(
         signal.verification_status !== "rejected" &&
         signal.is_reply !== true &&
         !isBankedDistributionNotice(signal.text) &&
-        (signal.confidence ?? 0) >= confidenceThreshold,
+        confidenceEligible,
     );
   });
 
@@ -1718,6 +1730,13 @@ export function collectOfficialTiboNoticeSignals(
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
       classification_source: signal.classification_source ?? null,
+      ai_signal_type: signal.ai_signal_type ?? null,
+      ai_classification_status: signal.ai_classification_status ?? null,
+      ai_temporal_direction: signal.ai_temporal_direction ?? null,
+      ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+      ai_evidence_quote: signal.ai_evidence_quote ?? null,
+      ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+      ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
       teaser_strength: signal.teaser_strength ?? null,
       expires_at: signal.expires_at ?? null,
       ai_temporal_expression: signal.ai_temporal_expression ?? null,
@@ -1777,9 +1796,30 @@ function collectTiboRecoveryEvidenceSignals(
       signal_type: signalType,
       confidence: signal.confidence ?? null,
       verification_status: signal.verification_status ?? "auto_unverified",
+      classification_source: signal.classification_source ?? null,
+      ai_signal_type: signal.ai_signal_type ?? null,
+      ai_classification_status: signal.ai_classification_status ?? null,
+      ai_temporal_direction: signal.ai_temporal_direction ?? null,
+      ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+      ai_evidence_quote: signal.ai_evidence_quote ?? null,
+      ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+      ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
       expires_at: signal.expires_at ?? null,
+      ai_temporal_expression: signal.ai_temporal_expression ?? null,
+      ai_temporal_kind: signal.ai_temporal_kind ?? null,
+      ai_temporal_precision: signal.ai_temporal_precision ?? null,
+      ai_temporal_timezone: signal.ai_temporal_timezone ?? null,
+      temporal_expression: signal.temporal_expression ?? null,
+      temporal_kind: signal.temporal_kind ?? null,
+      temporal_precision: signal.temporal_precision ?? null,
+      temporal_timezone: signal.temporal_timezone ?? null,
+      temporal_confidence: signal.temporal_confidence ?? null,
+      temporal_resolution_source: signal.temporal_resolution_source ?? null,
+      expected_start_at: signal.expected_start_at ?? null,
+      expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
       is_reply: signal.is_reply ?? null,
+      is_quote: signal.is_quote ?? null,
       logical_post_id: signal.logical_post_id ?? null,
       edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
       edit_version: signal.edit_version ?? null,

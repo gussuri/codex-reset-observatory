@@ -1,5 +1,6 @@
 import type { WindowEventLike } from "./types";
 import { isEligibleRandomResetEvent } from "./resetEligibility";
+import { isTiboUnscheduledOfficialNoticeEligible } from "./tiboNoticeEligibility";
 
 export type CommunicationType = "formal_notice" | "teaser" | "silent";
 export type CommunicationProvenance = "observed_signal" | "legacy_history";
@@ -14,6 +15,24 @@ export type CommunicationSignalInput = {
   confidence: number | null;
   verificationStatus: string | null;
   isReply: boolean;
+  isQuote?: boolean;
+  text?: string | null;
+  classificationSource?: string | null;
+  aiSignalType?: string | null;
+  aiClassificationStatus?: string | null;
+  aiTemporalDirection?: string | null;
+  aiNoticeTimingStatus?: string | null;
+  aiEvidenceQuote?: string | null;
+  aiNoticeToExecution?: string | null;
+  aiTemporalExpression?: string | null;
+  aiTemporalKind?: string | null;
+  aiTemporalPrecision?: string | null;
+  aiTemporalTimezone?: string | null;
+  aiTemporalConfidence?: number | null;
+  temporalResolutionStatus?: string | null;
+  temporalExpression?: string | null;
+  expectedStartAt?: string | null;
+  expectedEndAt?: string | null;
 };
 
 export type CommunicationEventInput = {
@@ -75,7 +94,31 @@ function getCompletedAt(item: WindowEventLike) {
 export const productionCommunicationSignalValidity: SignalValidityPolicy = (signal) => {
   if (signal.verificationStatus === "rejected" || signal.isReply) return false;
   if (signal.signalType === "official_notice") {
-    return (signal.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE;
+    return (signal.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE ||
+      isTiboUnscheduledOfficialNoticeEligible({
+        text: signal.text,
+        signal_type: signal.signalType,
+        confidence: signal.confidence,
+        verification_status: signal.verificationStatus,
+        classification_source: signal.classificationSource,
+        is_reply: signal.isReply,
+        is_quote: signal.isQuote,
+        ai_signal_type: signal.aiSignalType,
+        ai_classification_status: signal.aiClassificationStatus,
+        ai_temporal_direction: signal.aiTemporalDirection,
+        ai_notice_timing_status: signal.aiNoticeTimingStatus,
+        ai_evidence_quote: signal.aiEvidenceQuote,
+        ai_notice_to_execution: signal.aiNoticeToExecution,
+        ai_temporal_expression: signal.aiTemporalExpression,
+        ai_temporal_kind: signal.aiTemporalKind,
+        ai_temporal_precision: signal.aiTemporalPrecision,
+        ai_temporal_timezone: signal.aiTemporalTimezone,
+        ai_temporal_confidence: signal.aiTemporalConfidence,
+        temporal_resolution_status: signal.temporalResolutionStatus,
+        temporal_expression: signal.temporalExpression,
+        expected_start_at: signal.expectedStartAt,
+        expected_end_at: signal.expectedEndAt,
+      });
   }
   if (signal.signalType === "teaser") {
     return (signal.confidence ?? 0) >= TEASER_CONFIDENCE;

@@ -63,6 +63,31 @@ test("formal notice has priority over teaser and uses observed provenance", () =
   assert.equal(result.legacyAgreement, true);
 });
 
+test("a narrow Gemini unscheduled notice is recognized without assigning a schedule", () => {
+  const result = classifyCommunicationEvent(
+    event(),
+    [signal({
+      signalType: "official_notice",
+      confidence: 0.85,
+      text: "Day 13/ Le limit reset",
+      classificationSource: "gemini",
+      aiSignalType: "official_notice",
+      aiClassificationStatus: "success",
+      aiTemporalDirection: "unclear",
+      aiNoticeTimingStatus: "unknown",
+      aiEvidenceQuote: "Le limit reset",
+      temporalResolutionStatus: "unresolved",
+      aiNoticeToExecution: null,
+      aiTemporalExpression: null,
+      aiTemporalConfidence: null,
+    })],
+    { previousRandomResetAt: previousResetAt, coverage: "confirmed" },
+  );
+
+  assert.equal(result.primaryType, "formal_notice");
+  assert.deepEqual(result.observedSignalIds, ["tweet-1"]);
+});
+
 test("post-reset reset_executed signals do not become pre-reset communication", () => {
   const result = classifyCommunicationEvent(
     event(),

@@ -6,8 +6,11 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { buildGeminiPrompt, TIBO_GEMINI_SYSTEM_PROMPT } from "../lib/radar/geminiClassification";
+import { toPublicTiboActivity } from "../lib/radar/publicDto";
 import { attachTiboFormalReplyAdmissionProof } from "../lib/radar/tiboFormalReplyAdmission";
-import { isFormalTiboResetSignal, type FormalTiboResetSignal } from "../lib/radar/tiboHistory";
+import { findRelatedTiboNotices, getNoticeBackedHistoryInputs, isFormalTiboResetSignal, type FormalTiboResetSignal, type TiboNoticeSignal } from "../lib/radar/tiboHistory";
+import { interpretTiboSignal } from "../lib/radar/teaserStrength";
+import type { RadarData } from "../lib/radar/types";
 import { POST } from "../app/api/webhook/tibo/route";
 
 const ENV_KEYS = [
@@ -143,7 +146,10 @@ function installSourceContextDatabase(
   } = {},
 ) {
   const original = globalThis.fetch;
-  const rows = new Map(initialRows.map((row) => [row.tweet_id, structuredClone(row)]));
+  const rows = new Map<string, WebhookRow>(initialRows.map((row) => [row.tweet_id, {
+    ...structuredClone(row),
+    source_context_generation: row.source_context_generation ?? 0,
+  }]));
   const formalAdoptions: WebhookRow[] = [];
   const formalAdoptionClaims: WebhookRow[] = [];
   const appliedRevisions = new Map<string, Set<string>>();
@@ -220,6 +226,7 @@ function installSourceContextDatabase(
       revisions.add(body.p_revision_hash);
       appliedRevisions.set(body.p_tweet_id, revisions);
       root.source_context_revision_hashes = Array.from(revisions);
+      root.source_context_generation = (root.source_context_generation ?? 0) + 1;
       root.source_context_classified_revision_hashes ??= [];
       return new Response(JSON.stringify({ status: "applied" }), { status: 200 });
     }
@@ -249,6 +256,7 @@ function installSourceContextDatabase(
         if (root && addRevisionBeforeNextContextClassificationUpdate) {
           const revisions = root.source_context_revision_hashes ?? [];
           root.source_context_revision_hashes = [...revisions, addRevisionBeforeNextContextClassificationUpdate];
+          root.source_context_generation = (root.source_context_generation ?? 0) + 1;
           addRevisionBeforeNextContextClassificationUpdate = undefined;
         }
         const revisionFilter = url.searchParams.get("source_context_revision_hashes") ?? "";
@@ -256,6 +264,10 @@ function installSourceContextDatabase(
           ? revisionFilter.slice(4, -1).split(",").filter(Boolean)
           : [];
         if (!root || JSON.stringify(root.source_context_revision_hashes ?? []) !== JSON.stringify(expected)) {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        const generationFilter = url.searchParams.get("source_context_generation")?.replace(/^eq\./, "");
+        if (generationFilter !== undefined && Number(root.source_context_generation ?? 0) !== Number(generationFilter)) {
           return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
         }
       }
@@ -302,6 +314,7 @@ function contextTargetRow() {
     source_context_snapshot: null,
     source_context_revision_hashes: [],
     source_context_classified_revision_hashes: [],
+    source_context_generation: 0,
   };
 }
 
@@ -314,6 +327,7 @@ function parentRow() {
     verification_status: "confirmed",
     is_reply: false,
     is_quote: false,
+    source_context_generation: 0,
   };
 }
 
@@ -352,6 +366,7 @@ test("an unscheduled reset headline survives parsing, selection, and persistence
   const tweetId = "2111492673890824348";
   const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
   const text = "Day 13/ Le limit reset";
+  const tweetCreatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
@@ -363,7 +378,7 @@ test("an unscheduled reset headline survives parsing, selection, and persistence
   const database = installSourceContextDatabase();
   const gemini = installGeminiPromptCapture({
     signalType: "official_notice",
-    confidence: 0.95,
+    confidence: 0.85,
     temporalDirection: "unclear",
     noticeTimingStatus: "unknown",
     evidenceQuote: text,
@@ -385,13 +400,14 @@ test("an unscheduled reset headline survives parsing, selection, and persistence
       tweetId,
       text,
       tweetUrl,
-      tweetCreatedAt: "2026-10-17T16:20:57.000Z",
+      tweetCreatedAt,
     }));
 
     assert.equal(response.status, 200);
     const row = database.rows.get(tweetId)!;
     assert.equal(row.ai_classification_status, "success");
     assert.equal(row.ai_temporal_direction, "unclear");
+    assert.equal(row.ai_notice_timing_status, "unknown");
     assert.equal(row.ai_notice_to_execution, null);
     assert.equal(row.ai_temporal_expression, null);
     assert.equal(row.signal_type, "official_notice");
@@ -400,6 +416,48 @@ test("an unscheduled reset headline survives parsing, selection, and persistence
     assert.equal(row.expected_start_at, null);
     assert.equal(row.expected_end_at, null);
     assert.equal(row.temporal_resolution_status, "unresolved");
+
+    const now = new Date();
+    assert.equal(
+      interpretTiboSignal(row as unknown as Parameters<typeof interpretTiboSignal>[0], now)
+        .officialNoticeEligible,
+      true,
+    );
+    const activity = toPublicTiboActivity(
+      { recent_tibo_signals: [row] } as RadarData,
+      now,
+      "en",
+      null,
+      null,
+      null,
+    );
+    assert.equal(activity?.classification, "official_notice");
+    assert.equal(activity?.temporalResolutionStatus, "unresolved");
+    assert.equal(activity?.expectedStartAt, undefined);
+    assert.equal(activity?.expectedEndAt, undefined);
+
+    const reset: FormalTiboResetSignal = {
+      tweet_id: "2111492673890824350",
+      text: "I reset usage limits for all paid users.",
+      tweet_url: "https://x.com/thsottiaux/status/2111492673890824350",
+      tweet_created_at: new Date(Date.parse(tweetCreatedAt) + 2 * 60 * 60 * 1000).toISOString(),
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+    };
+    const relatedNotices = findRelatedTiboNotices(
+      reset,
+      [row as TiboNoticeSignal],
+    );
+    assert.deepEqual(relatedNotices.map((notice) => notice.tweet_id), [tweetId]);
+
+    const quotedNoticeSignals = getNoticeBackedHistoryInputs({
+      recent_tibo_signals: [{ ...row, is_quote: true }],
+      active_tibo_signals: [],
+    } as never).noticeSignals;
+    assert.equal(quotedNoticeSignals.find((notice) => notice.tweet_id === tweetId)?.is_quote, true);
+    assert.deepEqual(findRelatedTiboNotices(reset, quotedNoticeSignals), []);
   } finally {
     gemini.restore();
     database.restore();
@@ -1114,11 +1172,11 @@ test("AI same-event judgments classify the real reset-button root and elliptical
           tweetUrl: targetUrl,
           tweetCreatedAt: createdAt,
           formal_reply_admission_proof: {
-            version: "tibo-formal-reply-admission-v2",
+            version: "tibo-formal-reply-admission-v3",
             contextualResetTweetId: rootId,
           },
           formalReplyAdmissionProof: {
-            version: "tibo-formal-reply-admission-v2",
+            version: "tibo-formal-reply-admission-v3",
             contextualResetTweetId: rootId,
           },
           ...sourceMetadata,
@@ -1148,7 +1206,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
         assert.match(gemini.prompts[1]!, new RegExp(rootId));
         if ("formalAdmission" in scenario && scenario.formalAdmission) {
           const admissionProof = finalRow.formal_reply_admission_proof;
-          assert.equal(admissionProof?.version, "tibo-formal-reply-admission-v2", scenario.name);
+          assert.equal(admissionProof?.version, "tibo-formal-reply-admission-v3", scenario.name);
           assert.equal(admissionProof?.admissionMethod, "validated_same_global_reset_reply", scenario.name);
           assert.equal(admissionProof?.resetMethod, "forced", scenario.name);
           assert.equal(admissionProof?.resetScope, "all_paid_users", scenario.name);

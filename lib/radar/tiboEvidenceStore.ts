@@ -17,6 +17,7 @@ export const TIBO_EVIDENCE_SELECT_COLUMNS = [
   "source_context_snapshot",
   "source_context_revision_hashes",
   "source_context_classified_revision_hashes",
+  "source_context_generation",
 ].join(",");
 
 export type TiboEvidenceStoreClient = {
@@ -50,6 +51,10 @@ function toEvidencePost(value: unknown): TiboEvidencePost {
     sourceContextSnapshot: value.source_context_snapshot,
     sourceContextRevisionHashes: revisionHashes,
     sourceContextClassifiedRevisionHashes: classifiedRevisionHashes,
+    sourceContextGeneration: Number.isSafeInteger(value.source_context_generation) &&
+      (value.source_context_generation as number) >= 0
+      ? value.source_context_generation as number
+      : undefined,
   };
 }
 

@@ -132,6 +132,14 @@ function toNoticeSpecificitySignal(
     signal_type: signal.signal_type === "official_notice" ? "official_notice" : "teaser",
     confidence: signal.confidence ?? null,
     verification_status: signal.verification_status ?? "auto_unverified",
+    classification_source: signal.classification_source ?? null,
+    ai_signal_type: signal.ai_signal_type ?? null,
+    ai_classification_status: signal.ai_classification_status ?? null,
+    ai_temporal_direction: signal.ai_temporal_direction ?? null,
+    ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+    ai_evidence_quote: signal.ai_evidence_quote ?? null,
+    ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
+    ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
     expires_at: signal.expires_at ?? null,
     ai_temporal_expression: signal.ai_temporal_expression ?? null,
     ai_temporal_kind: signal.ai_temporal_kind ?? null,
@@ -146,6 +154,8 @@ function toNoticeSpecificitySignal(
     expected_start_at: signal.expected_start_at ?? null,
     expected_end_at: signal.expected_end_at ?? null,
     temporal_resolution_status: signal.temporal_resolution_status ?? null,
+    is_reply: signal.is_reply ?? false,
+    is_quote: signal.is_quote ?? false,
   };
 }
 

@@ -15,6 +15,7 @@ export type TiboEvidencePost = {
   quoteContextText?: unknown;
   sourceContextRevisionHashes?: string[];
   sourceContextClassifiedRevisionHashes?: string[];
+  sourceContextGeneration?: number;
 };
 
 export type TiboEvidenceLookup = (tweetId: string) => Promise<readonly TiboEvidencePost[]>;
