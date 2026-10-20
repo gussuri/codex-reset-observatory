@@ -1096,6 +1096,110 @@ test("Service Worker sends only safe heartbeat counters and omits snapshot data"
   assert.doesNotMatch(JSON.stringify(sentBody), /secret HTML|raw secret error/i);
 });
 
+test("content scan reports merge both timeline slots without a read-modify-write loss", async () => {
+  const context = setupServiceWorkerContext();
+  const now = new Date().toISOString();
+  const summary = (sourceTimeline: "profile" | "with_replies") => ({
+    articleCount: 3,
+    timeElementCount: 3,
+    tweetTextCount: 3,
+    nonEmptyTweetTextCount: 3,
+    matchingTiboStatusCount: 1,
+    translatedTweetCount: 0,
+    tweetDatetimeCount: 3,
+    parseSuccessCount: 1,
+    currentUrl: `https://x.com/thsottiaux${sourceTimeline === "with_replies" ? "/with_replies" : ""}`,
+    selectorVersion: "v1.13-bounded-reply-capture",
+    scanTimestamp: now,
+    sourceTimeline,
+    recoveryStatus: "not_attempted",
+    recoveryMoveCount: 0,
+    recoveryMaxMoves: 4,
+  });
+
+  const results = await Promise.all([
+    context.sendMessage(
+      { action: "REPORT_TIMELINE_SCAN", summary: summary("profile") },
+      { tab: { id: 501, url: "https://x.com/thsottiaux" } },
+    ),
+    context.sendMessage(
+      { action: "REPORT_TIMELINE_SCAN", summary: summary("with_replies") },
+      { tab: { id: 502, url: "https://x.com/thsottiaux/with_replies" } },
+    ),
+  ]);
+
+  assert.deepEqual(results.map((result) => result.success), [true, true]);
+  assert.equal(context.localStore.tibo_timeline_scan_summaries.profile.sourceTimeline, "profile");
+  assert.equal(context.localStore.tibo_timeline_scan_summaries.with_replies.sourceTimeline, "with_replies");
+});
+
+test("leader heartbeat carries at most two open timeline health slots", async () => {
+  const tabs = [
+    { id: 501, url: "https://x.com/thsottiaux" },
+    { id: 502, url: "https://x.com/thsottiaux/with_replies" },
+  ];
+  const context = setupServiceWorkerContext(tabs);
+  const now = new Date().toISOString();
+  context.localStore.webhook_secret = "test-secret";
+  context.localStore.tibo_timeline_scan_summaries = {
+    profile: {
+      articleCount: 3,
+      timeElementCount: 3,
+      tweetTextCount: 3,
+      nonEmptyTweetTextCount: 3,
+      matchingTiboStatusCount: 1,
+      translatedTweetCount: 0,
+      tweetDatetimeCount: 3,
+      parseSuccessCount: 2,
+      currentUrl: "https://x.com/thsottiaux",
+      selectorVersion: "v1.13-bounded-reply-capture",
+      scanTimestamp: now,
+      sourceTimeline: "profile",
+      recoveryStatus: "not_attempted",
+      recoveryMoveCount: 0,
+      recoveryMaxMoves: 4,
+    },
+    with_replies: {
+      articleCount: 2,
+      timeElementCount: 2,
+      tweetTextCount: 2,
+      nonEmptyTweetTextCount: 2,
+      matchingTiboStatusCount: 0,
+      translatedTweetCount: 0,
+      tweetDatetimeCount: 2,
+      parseSuccessCount: 0,
+      currentUrl: "https://x.com/thsottiaux/with_replies",
+      selectorVersion: "v1.13-bounded-reply-capture",
+      scanTimestamp: now,
+      sourceTimeline: "with_replies",
+      recoveryStatus: "target_not_visible",
+      recoveryMoveCount: 4,
+      recoveryMaxMoves: 4,
+    },
+  };
+
+  await context.sendMessage({ action: "POST_HEARTBEAT", payload: { sessionId: "session_two_timelines" } });
+  const slots = context.mockFetchCalls[0].body.timelineDiagnostics;
+
+  assert.deepEqual(Object.keys(slots).sort(), ["profile", "with_replies"]);
+  assert.equal(slots.profile.status, "healthy");
+  assert.equal(slots.with_replies.status, "empty");
+  assert.equal(slots.with_replies.recoveryStatus, "target_not_visible");
+  assert.equal(slots.with_replies.recoveryMoveCount, 4);
+  assert.doesNotMatch(JSON.stringify(slots), /text|currentUrl|secret/i);
+});
+
+test("leader heartbeat labels unopened timeline slots without claiming them healthy", async () => {
+  const context = setupServiceWorkerContext([{ id: 501, url: "https://x.com/thsottiaux" }]);
+  context.localStore.webhook_secret = "test-secret";
+
+  await context.sendMessage({ action: "POST_HEARTBEAT", payload: { sessionId: "session_one_timeline" } });
+  const slots = context.mockFetchCalls[0].body.timelineDiagnostics;
+
+  assert.equal(slots.profile.status, "stale");
+  assert.equal(slots.with_replies.status, "not_open");
+});
+
 test("formal adoption creates one local notification and opens its source", async () => {
   const { sendMessage, localStore, createdNotifications, clickNotification, openedTabs } =
     setupServiceWorkerContext([], {

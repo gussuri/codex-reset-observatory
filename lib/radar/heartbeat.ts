@@ -10,6 +10,23 @@ export interface HeartbeatScanSummary {
   currentUrl: string;
   selectorVersion: string;
   scanTimestamp: string;
+  timelineDiagnostics?: Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic>;
+}
+
+export type TiboMonitorTimeline = "profile" | "with_replies";
+export type TiboTimelineHealthStatus = "not_open" | "healthy" | "empty" | "stale";
+
+export interface HeartbeatTimelineDiagnostic {
+  sourceTimeline: TiboMonitorTimeline;
+  status: TiboTimelineHealthStatus;
+  scanTimestamp?: string | null;
+  articleCount?: number;
+  matchingTiboStatusCount?: number;
+  parseSuccessCount?: number;
+  selectorVersion?: string;
+  recoveryStatus?: string;
+  recoveryMoveCount?: number;
+  recoveryMaxMoves?: number;
 }
 
 export interface HeartbeatRequestBody {
@@ -25,6 +42,7 @@ export interface HeartbeatRequestBody {
   last_page_reload_status?: string | null;
   last_page_reload_error?: string | null;
   last_scan_summary?: unknown | null;
+  timelineDiagnostics?: unknown | null;
   lastPageReloadAt?: string | null;
   lastPageReloadStatus?: string | null;
   lastPageReloadError?: string | null;
@@ -72,7 +90,26 @@ const SAFE_SCAN_ERROR_CODES = new Set([
   "tweet_datetime_missing",
   "no_parse_success",
   "scan_error",
+  "timeline_partial",
+  "target_not_visible",
+  "recovery_user_interrupted",
+  "recovery_navigation_interrupted",
+  "recovery_scroll_failed",
 ]);
+
+const SAFE_RECOVERY_STATES = new Set([
+  "not_attempted",
+  "attempting",
+  "in_progress",
+  "target_found",
+  "target_not_visible",
+  "cooldown",
+  "user_interrupted",
+  "navigation_interrupted",
+  "scroll_failed",
+]);
+
+const MAX_REPLY_RECOVERY_MOVES = 4;
 
 function normalizeScanError(value: unknown): string | null {
   if (value === null || typeof value === "undefined" || value === "") {
@@ -85,6 +122,55 @@ function normalizeScanError(value: unknown): string | null {
 function normalizeCount(value: unknown): number {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(10_000, Math.floor(number))) : 0;
+}
+
+function normalizeRecoveryStatus(value: unknown): string {
+  const status = String(value || "");
+  return SAFE_RECOVERY_STATES.has(status) ? status : "not_attempted";
+}
+
+function normalizeTimelineDiagnostics(value: unknown): Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic> | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const result = {} as Record<TiboMonitorTimeline, HeartbeatTimelineDiagnostic>;
+
+  for (const timeline of ["profile", "with_replies"] as const) {
+    const raw = source[timeline];
+    if (!raw || typeof raw !== "object") continue;
+    const diagnostic = raw as Record<string, unknown>;
+    if (diagnostic.sourceTimeline !== timeline) continue;
+    const status = diagnostic.status;
+    if (status !== "not_open" && status !== "healthy" && status !== "empty" && status !== "stale") {
+      continue;
+    }
+    if (status === "not_open") {
+      result[timeline] = { sourceTimeline: timeline, status };
+      continue;
+    }
+
+    const scanTimestampValue = diagnostic.scanTimestamp;
+    const scanTimestamp = typeof scanTimestampValue === "string"
+      && Number.isFinite(new Date(scanTimestampValue).getTime())
+      ? new Date(scanTimestampValue).toISOString()
+      : null;
+    const selectorVersionValue = String(diagnostic.selectorVersion || "unknown").slice(0, 100);
+    result[timeline] = {
+      sourceTimeline: timeline,
+      status,
+      scanTimestamp,
+      articleCount: normalizeCount(diagnostic.articleCount),
+      matchingTiboStatusCount: normalizeCount(diagnostic.matchingTiboStatusCount),
+      parseSuccessCount: normalizeCount(diagnostic.parseSuccessCount),
+      selectorVersion: /^[-A-Za-z0-9_.]+$/.test(selectorVersionValue)
+        ? selectorVersionValue
+        : "unknown",
+      recoveryStatus: normalizeRecoveryStatus(diagnostic.recoveryStatus),
+      recoveryMoveCount: Math.min(MAX_REPLY_RECOVERY_MOVES, normalizeCount(diagnostic.recoveryMoveCount)),
+      recoveryMaxMoves: Math.min(MAX_REPLY_RECOVERY_MOVES, normalizeCount(diagnostic.recoveryMaxMoves)),
+    };
+  }
+
+  return Object.keys(result).length === 2 ? result : null;
 }
 
 function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
@@ -104,6 +190,7 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
   const scanTimestamp = String(summary.scanTimestamp || "").slice(0, 40);
   if (!/^[-A-Za-z0-9_.]+$/.test(selectorVersion) || !scanTimestamp) return null;
 
+  const timelineDiagnostics = normalizeTimelineDiagnostics(summary.timelineDiagnostics);
   return {
     articleCount: normalizeCount(summary.articleCount),
     timeElementCount: normalizeCount(summary.timeElementCount),
@@ -120,6 +207,7 @@ function normalizeScanSummary(value: unknown): HeartbeatScanSummary | null {
     currentUrl,
     selectorVersion,
     scanTimestamp,
+    ...(timelineDiagnostics ? { timelineDiagnostics } : {}),
   };
 }
 
@@ -195,6 +283,17 @@ export function buildHeartbeatRecord(
     }
   }
 
+  const requestedSummary = normalizeScanSummary(requestedScanSummary);
+  const existingSummary = normalizeScanSummary(existing?.last_scan_summary);
+  const timelineDiagnostics =
+    normalizeTimelineDiagnostics(body.timelineDiagnostics) ??
+    normalizeTimelineDiagnostics(requestedSummary?.timelineDiagnostics) ??
+    normalizeTimelineDiagnostics(existingSummary?.timelineDiagnostics);
+  const summaryToPersist = typeof requestedScanSummary === "undefined"
+    ? existingSummary
+    : requestedSummary;
+  if (summaryToPersist && timelineDiagnostics) summaryToPersist.timelineDiagnostics = timelineDiagnostics;
+
   const record: HeartbeatRecord = {
     id: "main",
     session_id: normalizedSessionId,
@@ -207,10 +306,7 @@ export function buildHeartbeatRecord(
     last_page_reload_at: body.last_page_reload_at ?? body.lastPageReloadAt ?? null,
     last_page_reload_status: pageReloadStatus,
     last_page_reload_error: pageReloadStatus === "error" ? "page_reload_error" : null,
-    last_scan_summary:
-      typeof requestedScanSummary === "undefined"
-        ? normalizeScanSummary(existing?.last_scan_summary)
-        : normalizeScanSummary(requestedScanSummary),
+    last_scan_summary: summaryToPersist,
     heartbeat_count: heartbeatCount,
     max_gap_seconds: maxGapSeconds,
     last_gap_seconds: lastGapSeconds,

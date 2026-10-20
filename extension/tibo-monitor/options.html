@@ -187,6 +187,26 @@
       font-size: 0.8rem;
       line-height: 1.5;
     }
+    .timeline-diagnostics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .timeline-diagnostic-card {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+    .timeline-diagnostic-card strong {
+      display: block;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -238,6 +258,14 @@
       <p class="retry-tweet-description">処理済みのTweet IDを1件だけ解除し、現在開いているTibo監視タブへ再スキャンを通知します。</p>
       <input type="text" id="retryTweetId" inputmode="numeric" placeholder="Tweet ID（数字のみ）">
       <button id="retryTweetBtn" class="btn-secondary">この投稿を再送可能にする</button>
+    </div>
+
+    <div class="diagnostic-panel">
+      <label>Latest scan by timeline (local)</label>
+      <div class="timeline-diagnostics-grid">
+        <div class="timeline-diagnostic-card"><strong>Profile</strong><span id="profileScanSummary">読み込み中...</span></div>
+        <div class="timeline-diagnostic-card"><strong>With replies</strong><span id="repliesScanSummary">読み込み中...</span></div>
+      </div>
     </div>
 
     <div class="diagnostic-panel">

@@ -9,6 +9,8 @@ const QUEUE_KEY = "tibo_processed_tweet_ids";
 const PENDING_QUEUE_KEY = "tibo_pending_tweet_payloads";
 const SOURCE_CONTEXT_PENDING_QUEUE_KEY = "tibo_pending_source_context_enrichments";
 const SOURCE_CONTEXT_LEDGER_KEY = "tibo_source_context_revision_ledger";
+const TIMELINE_SCAN_SUMMARIES_KEY = TiboDiagnostics.TIMELINE_SCAN_SUMMARIES_KEY;
+const TIMELINE_SCAN_STALE_AFTER_MS = 15 * 60 * 1000;
 const MAX_SOURCE_CONTEXT_LEDGER_ENTRIES = 100;
 const MAX_SOURCE_CONTEXT_REVISIONS_PER_TWEET = 3;
 const MAX_SOURCE_CONTEXT_PENDING_ENTRIES = 50;
@@ -51,6 +53,7 @@ let notificationIconDiagnosticsUrl = null;
 // Promise queue for strict serialization (Mutex) across all tabs
 let processQueue = Promise.resolve();
 let pendingQueueStorage = Promise.resolve();
+let timelineScanSummaryWriteQueue = Promise.resolve();
 let monitoredTabReloadPromise = null;
 
 function restrictLocalStorageToTrustedContexts() {
@@ -1150,6 +1153,78 @@ function markContentScanSuccessful() {
   return TiboDiagnostics.markSuccessfulScan(chrome.storage.local);
 }
 
+function saveTimelineScanSummary(summary) {
+  const safeSummary = TiboDiagnostics.sanitizeScanSummary(summary);
+  if (!safeSummary || !isValidRestoreTimeline(safeSummary.sourceTimeline)) {
+    return Promise.reject(new Error("invalid_timeline_scan_summary"));
+  }
+
+  const update = async () => {
+    const stored = await chrome.storage.local.get([TIMELINE_SCAN_SUMMARIES_KEY]);
+    const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
+      stored[TIMELINE_SCAN_SUMMARIES_KEY],
+    );
+    summaries[safeSummary.sourceTimeline] = safeSummary;
+    await chrome.storage.local.set({ [TIMELINE_SCAN_SUMMARIES_KEY]: summaries });
+    return summaries;
+  };
+
+  const operation = timelineScanSummaryWriteQueue.catch(() => {}).then(update);
+  timelineScanSummaryWriteQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function getTimelineHeartbeatDiagnostics() {
+  try {
+    const [stored, tabs] = await Promise.all([
+      chrome.storage.local.get([TIMELINE_SCAN_SUMMARIES_KEY]),
+      chrome.tabs.query({
+        url: ["https://x.com/thsottiaux*", "https://twitter.com/thsottiaux*"],
+      }),
+    ]);
+    const summaries = TiboDiagnostics.sanitizeTimelineScanSummaries(
+      stored[TIMELINE_SCAN_SUMMARIES_KEY],
+    );
+    const openTimelines = new Set(
+      (tabs || []).map((tab) => getMonitoredTimeline(tab.url)).filter(Boolean),
+    );
+    const now = Date.now();
+    const slots = {};
+
+    for (const timeline of ["profile", "with_replies"]) {
+      if (!openTimelines.has(timeline)) {
+        slots[timeline] = { sourceTimeline: timeline, status: "not_open" };
+        continue;
+      }
+
+      const summary = summaries[timeline];
+      const scanTime = summary ? new Date(summary.scanTimestamp).getTime() : NaN;
+      const age = Number.isFinite(scanTime) ? now - scanTime : Infinity;
+      const status = age < 0 || age > TIMELINE_SCAN_STALE_AFTER_MS
+        ? "stale"
+        : summary.parseSuccessCount > 0
+          ? "healthy"
+          : "empty";
+      slots[timeline] = {
+        sourceTimeline: timeline,
+        status,
+        scanTimestamp: summary?.scanTimestamp || null,
+        articleCount: summary?.articleCount || 0,
+        matchingTiboStatusCount: summary?.matchingTiboStatusCount || 0,
+        parseSuccessCount: summary?.parseSuccessCount || 0,
+        selectorVersion: summary?.selectorVersion || "unknown",
+        recoveryStatus: summary?.recoveryStatus || "not_attempted",
+        recoveryMoveCount: summary?.recoveryMoveCount || 0,
+        recoveryMaxMoves: summary?.recoveryMaxMoves || 0,
+      };
+    }
+
+    return slots;
+  } catch {
+    return null;
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "RESTORE_MONITORED_TIMELINE") {
     const timeline = request.timeline;
@@ -1202,6 +1277,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     saveContentScanDiagnostic(request.entry)
       .then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: false, error: "diagnostic_write_failed" }));
+    return true;
+  }
+
+  if (request.action === "REPORT_TIMELINE_SCAN") {
+    const senderTimeline = getMonitoredTimeline(sender?.tab?.url);
+    const requestedSummary = TiboDiagnostics.sanitizeScanSummary(request.summary);
+    if (!senderTimeline || requestedSummary?.sourceTimeline !== senderTimeline) {
+      sendResponse({ success: false, error: "invalid_timeline_scan_report" });
+      return false;
+    }
+    saveTimelineScanSummary(requestedSummary)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false, error: "timeline_scan_report_failed" }));
     return true;
   }
 
@@ -1940,6 +2028,7 @@ async function handlePostHeartbeat(payload) {
     "tibo_last_page_reload_status",
     "tibo_last_page_reload_error",
   ]);
+  const timelineDiagnostics = await getTimelineHeartbeatDiagnostics();
 
   const rawLastPageReloadAt =
     payload.last_page_reload_at ||
@@ -1972,6 +2061,7 @@ async function handlePostHeartbeat(payload) {
     newestSeenTweetCreatedAt: TiboDiagnostics.sanitizeTimestamp(payload.newestSeenTweetCreatedAt),
     lastScanError: TiboDiagnostics.sanitizeReasonCode(payload.lastScanError),
     lastScanSummary: TiboDiagnostics.sanitizeScanSummary(payload.lastScanSummary),
+    timelineDiagnostics,
     selectorVersion: TiboDiagnostics.sanitizeSelectorVersion(payload.selectorVersion),
     last_page_reload_at: TiboDiagnostics.sanitizeTimestamp(rawLastPageReloadAt),
     last_page_reload_status: lastPageReloadStatus,

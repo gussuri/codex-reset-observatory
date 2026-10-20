@@ -7,9 +7,14 @@
 (function () {
   'use strict';
 
-  const SELECTOR_VERSION = "v1.12-source-context-enrichment";
+  const SELECTOR_VERSION = "v1.13-bounded-reply-capture";
   const SESSION_KEY = "tibo_session_id";
   const TAB_ID = "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
+  const REPLY_RECOVERY_MAX_MOVES = 4;
+  const REPLY_RECOVERY_MAX_ELAPSED_MS = 10_000;
+  const REPLY_RECOVERY_COOLDOWN_MS = 60_000;
+  const REPLY_RECOVERY_VIEWPORT_RATIO = 0.75;
+  const REPLY_RECOVERY_STEP_DELAY_MS = 750;
 
   // In-flight tracking within this tab for immediate UI-level throttling
   const inFlightTweetIds = new Set();
@@ -44,11 +49,27 @@
   let newestSeenTweetCreatedAt = null;
   let lastScanError = null;
   let lastScanSummary = null;
+  let lastTimelineScanReportAt = 0;
+  let lastTimelineScanReportFingerprint = null;
   let extensionContextInvalidated = false;
   const intervalIds = [];
   let mutationObserver = null;
   let monitoredTimeline = TiboMonitorScan.getTimelineSource(window.location.href);
   const timelineRestoreGate = TiboMonitorScan.createTimelineRestoreGate();
+  const replyRecoveryController = TiboMonitorScan.createBoundedReplyRecoveryController({
+    maxMoves: REPLY_RECOVERY_MAX_MOVES,
+    maxElapsedMs: REPLY_RECOVERY_MAX_ELAPSED_MS,
+    cooldownMs: REPLY_RECOVERY_COOLDOWN_MS,
+    viewportRatio: REPLY_RECOVERY_VIEWPORT_RATIO,
+  });
+  let replyRecoveryTimerId = null;
+  let userIntervenedWithPage = false;
+  let lastReplyRecoveryResult = {
+    action: "none",
+    status: "not_attempted",
+    moveCount: 0,
+    maxMoves: REPLY_RECOVERY_MAX_MOVES,
+  };
 
   function getSourceTimeline() {
     const detected = TiboMonitorScan.getTimelineSource(window.location.href);
@@ -97,6 +118,8 @@
       expansionRescanTimers.clear();
       replyContextExpansionRescanTimers.forEach((timerId) => clearTimeout(timerId));
       replyContextExpansionRescanTimers.clear();
+      if (replyRecoveryTimerId !== null) clearTimeout(replyRecoveryTimerId);
+      replyRecoveryTimerId = null;
       mutationObserver?.disconnect();
       return;
     }
@@ -368,6 +391,77 @@
     }
   }
 
+  function cancelReplyRecoveryTimer() {
+    if (replyRecoveryTimerId === null) return;
+    clearTimeout(replyRecoveryTimerId);
+    replyRecoveryTimerId = null;
+    replyRecoveryController.finishMove();
+  }
+
+  function markUserIntervention(event) {
+    if (event?.isTrusted !== true) return;
+    userIntervenedWithPage = true;
+    lastReplyRecoveryResult = {
+      ...replyRecoveryController.consider({
+        sourceTimeline: getSourceTimeline(),
+        currentUrl: window.location.href,
+        now: Date.now(),
+        eligible: false,
+        targetFound: false,
+        userIntervened: true,
+        viewportHeight: window.innerHeight,
+      }),
+      maxMoves: REPLY_RECOVERY_MAX_MOVES,
+    };
+    cancelReplyRecoveryTimer();
+  }
+
+  function runBoundedReplyRecovery(tweetArticles, records, sourceTimeline) {
+    const targetFound = records.some((record) => record.hasMatchingTiboStatus);
+    const eligible = TiboMonitorScan.shouldRecoverMissingReplyTarget(tweetArticles, {
+      sourceTimeline,
+      targetFound,
+      targetHandle: "@thsottiaux",
+      viewportHeight: window.innerHeight,
+      viewportRatio: REPLY_RECOVERY_VIEWPORT_RATIO,
+    });
+    const result = {
+      ...replyRecoveryController.consider({
+        sourceTimeline,
+        currentUrl: window.location.href,
+        now: Date.now(),
+        eligible,
+        targetFound,
+        userIntervened: userIntervenedWithPage,
+        viewportHeight: window.innerHeight,
+      }),
+      maxMoves: REPLY_RECOVERY_MAX_MOVES,
+    };
+    lastReplyRecoveryResult = result;
+
+    if (result.action === "scroll") {
+      try {
+        window.scrollBy(0, result.scrollPixels);
+      } catch {
+        lastReplyRecoveryResult = {
+          ...replyRecoveryController.failMove(Date.now()),
+          maxMoves: REPLY_RECOVERY_MAX_MOVES,
+        };
+        return lastReplyRecoveryResult;
+      }
+
+      replyRecoveryTimerId = setTimeout(() => {
+        replyRecoveryTimerId = null;
+        replyRecoveryController.finishMove();
+        runExtensionTask(scanTweets, "bounded reply recovery scan");
+      }, REPLY_RECOVERY_STEP_DELAY_MS);
+    } else if (result.status !== "in_progress") {
+      cancelReplyRecoveryTimer();
+    }
+
+    return lastReplyRecoveryResult;
+  }
+
   function clearReplyContextExpansionState(tweetId) {
     const prefix = `${tweetId}:`;
     for (const key of replyContextExpansionRequestedKeys) {
@@ -521,6 +615,30 @@
     return false;
   }
 
+  function reportTimelineScanSummary(summary) {
+    const sourceTimeline = TiboMonitorScan.getTimelineSource(window.location.href);
+    if (!sourceTimeline || summary?.sourceTimeline !== sourceTimeline) return;
+
+    const fingerprint = JSON.stringify({
+      sourceTimeline,
+      articleCount: summary.articleCount,
+      matchingTiboStatusCount: summary.matchingTiboStatusCount,
+      parseSuccessCount: summary.parseSuccessCount,
+      recoveryStatus: summary.recoveryStatus,
+      recoveryMoveCount: summary.recoveryMoveCount,
+      selectorVersion: summary.selectorVersion,
+    });
+    const now = Date.now();
+    if (fingerprint === lastTimelineScanReportFingerprint && now - lastTimelineScanReportAt < 30_000) {
+      return;
+    }
+    lastTimelineScanReportFingerprint = fingerprint;
+    lastTimelineScanReportAt = now;
+    requestServiceWorker("REPORT_TIMELINE_SCAN", { summary }).catch((error) => {
+      handleExtensionError(error, "timeline scan summary");
+    });
+  }
+
   async function sendHeartbeat() {
     const isLeader = await tryAcquireLeaderLock();
     if (!isLeader) return;
@@ -657,6 +775,17 @@
   }
 
   async function scanTweets() {
+    const navigationResult = replyRecoveryController.interruptForNavigation(
+      window.location.href,
+      Date.now(),
+    );
+    if (navigationResult) {
+      lastReplyRecoveryResult = {
+        ...navigationResult,
+        maxMoves: REPLY_RECOVERY_MAX_MOVES,
+      };
+      cancelReplyRecoveryTimer();
+    }
     if (await restoreMonitoredTimelineIfNeeded()) return;
 
     const scanTimestamp = new Date().toISOString();
@@ -765,7 +894,6 @@
           record.replyParentFound = true;
         }
         if (replyMetadata?.needsRetry === true) {
-          record.isParseSuccess = false;
           record.replyParentRetry = true;
           if (replyMetadata.needsExpansion) {
             record.replyParentExpansionRequested = requestReplyContextExpansion(
@@ -774,7 +902,13 @@
               replyMetadata.replyContextExpandControl,
             );
           }
-          continue;
+          // A verified reply's own URL, author, time, and body are enough to
+          // submit a contextless reply. Unknown reply relationships still fail
+          // closed instead of being submitted as ordinary posts.
+          if (replyMetadata.isReply !== true) {
+            record.isParseSuccess = false;
+            continue;
+          }
         }
 
         if (replyMetadata?.isReply === true) {
@@ -813,14 +947,17 @@
       console.error("[Tibo Extension] Scan error:", err);
     }
 
+    const recoveryResult = runBoundedReplyRecovery(tweetArticles, records, sourceTimeline);
     const summary = TiboDiagnostics.buildScanSummary(
       records,
       window.location.href,
       SELECTOR_VERSION,
       scanTimestamp,
-      getSourceTimeline(),
+      sourceTimeline,
+      recoveryResult,
     );
     lastScanSummary = summary;
+    reportTimelineScanSummary(summary);
 
     if (summary.parseSuccessCount > 0) {
       lastSuccessfulParseAt = new Date().toISOString();
@@ -921,6 +1058,17 @@
 
   // Initial Scan & MutationObserver Integration
   if (!extensionContextInvalidated) {
+    if (typeof window.addEventListener === "function") {
+      window.addEventListener("wheel", markUserIntervention, { passive: true });
+      window.addEventListener("touchstart", markUserIntervention, { passive: true });
+      window.addEventListener("pointerdown", markUserIntervention, { passive: true });
+      window.addEventListener("keydown", (event) => {
+        if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
+          markUserIntervention(event);
+        }
+      });
+    }
+
     mutationObserver = new MutationObserver(() => {
       runExtensionTask(scanTweets, "DOM scan");
     });

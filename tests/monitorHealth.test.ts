@@ -296,3 +296,96 @@ test("allows a missing page reload status when current heartbeat data is healthy
     parseAgeSeconds: 300,
   });
 });
+
+test("an open but empty timeline downgrades healthy monitor status to warning", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_scan_summary: {
+        timelineDiagnostics: {
+          profile: {
+            sourceTimeline: "profile",
+            status: "healthy",
+            scanTimestamp: "2026-08-01T23:59:00.000Z",
+            articleCount: 4,
+            parseSuccessCount: 2,
+            selectorVersion: "v1.13-bounded-reply-capture",
+            recoveryStatus: "not_attempted",
+            recoveryMoveCount: 0,
+            recoveryMaxMoves: 4,
+          },
+          with_replies: {
+            sourceTimeline: "with_replies",
+            status: "empty",
+            scanTimestamp: "2026-08-01T23:59:30.000Z",
+            articleCount: 2,
+            parseSuccessCount: 0,
+            selectorVersion: "v1.13-bounded-reply-capture",
+            recoveryStatus: "target_not_visible",
+            recoveryMoveCount: 4,
+            recoveryMaxMoves: 4,
+          },
+        },
+      },
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "warning");
+  assert.equal(result.detail, "timeline_scan_empty");
+  assert.equal(result.timelines?.profile?.status, "healthy");
+  assert.equal(result.timelines?.with_replies?.status, "empty");
+  assert.equal(result.timelines?.with_replies?.recoveryMoveCount, 4);
+});
+
+test("an open but stale timeline is unhealthy while an unopened timeline stays optional", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_scan_summary: {
+        timelineDiagnostics: {
+          profile: {
+            sourceTimeline: "profile",
+            status: "stale",
+            scanTimestamp: "2026-08-01T23:40:00.000Z",
+            articleCount: 1,
+            parseSuccessCount: 1,
+            selectorVersion: "v1.13-bounded-reply-capture",
+            recoveryStatus: "not_attempted",
+            recoveryMoveCount: 0,
+            recoveryMaxMoves: 4,
+          },
+          with_replies: { sourceTimeline: "with_replies", status: "not_open" },
+        },
+      },
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "unhealthy");
+  assert.equal(result.detail, "timeline_scan_stale");
+  assert.equal(result.timelines?.profile?.status, "stale");
+  assert.equal(result.timelines?.with_replies?.status, "not_open");
+});
+
+test("a timeline marked not_open is optional when the other monitored timeline is healthy", () => {
+  const result = evaluateTiboHeartbeat(
+    snapshot({
+      last_scan_summary: {
+        timelineDiagnostics: {
+          profile: {
+            sourceTimeline: "profile",
+            status: "healthy",
+            scanTimestamp: "2026-08-01T23:59:00.000Z",
+            articleCount: 4,
+            parseSuccessCount: 2,
+          },
+          with_replies: { sourceTimeline: "with_replies", status: "not_open" },
+        },
+      },
+    }),
+    now,
+  );
+
+  assert.equal(result.status, "healthy");
+  assert.equal(result.timelines?.profile?.status, "healthy");
+  assert.equal(result.timelines?.with_replies?.status, "not_open");
+});

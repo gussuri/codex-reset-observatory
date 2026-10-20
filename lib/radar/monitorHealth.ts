@@ -14,7 +14,23 @@ export type MonitorHealthDetail =
   | "parse_future"
   | "parse_stale"
   | "scan_error"
-  | "page_reload_failed";
+  | "page_reload_failed"
+  | "timeline_scan_empty"
+  | "timeline_scan_stale";
+
+export type MonitorTimeline = "profile" | "with_replies";
+export type MonitorTimelineStatus = "not_open" | "healthy" | "empty" | "stale";
+
+export interface MonitorTimelineHealth {
+  status: MonitorTimelineStatus;
+  scanAgeSeconds?: number;
+  articleCount?: number;
+  parseSuccessCount?: number;
+  selectorVersion?: string;
+  recoveryStatus?: string;
+  recoveryMoveCount?: number;
+  recoveryMaxMoves?: number;
+}
 
 export interface TiboHeartbeatSnapshot {
   session_started_at: string | null;
@@ -23,6 +39,19 @@ export interface TiboHeartbeatSnapshot {
   last_scan_error: string | null;
   last_page_reload_status: string | null;
   last_page_reload_error: string | null;
+  last_scan_summary?: {
+    timelineDiagnostics?: Partial<Record<MonitorTimeline, {
+      sourceTimeline?: string;
+      status?: string;
+      scanTimestamp?: string | null;
+      articleCount?: number;
+      parseSuccessCount?: number;
+      selectorVersion?: string;
+      recoveryStatus?: string;
+      recoveryMoveCount?: number;
+      recoveryMaxMoves?: number;
+    }>>;
+  } | null;
 }
 
 export interface MonitorHealthResult {
@@ -30,6 +59,7 @@ export interface MonitorHealthResult {
   detail: MonitorHealthDetail;
   heartbeatAgeSeconds?: number;
   parseAgeSeconds?: number;
+  timelines?: Partial<Record<MonitorTimeline, MonitorTimelineHealth>>;
 }
 
 function getTimestamp(value: unknown): number | null {
@@ -76,7 +106,7 @@ function isWithinParseAlertAge(
   );
 }
 
-export function evaluateTiboHeartbeat(
+function evaluateBaseTiboHeartbeat(
   snapshot: TiboHeartbeatSnapshot | null | undefined,
   now: Date,
 ): MonitorHealthResult {
@@ -195,4 +225,77 @@ export function evaluateTiboHeartbeat(
     heartbeatAgeSeconds,
     parseAgeSeconds,
   };
+}
+
+function getTimelineHealth(
+  snapshot: TiboHeartbeatSnapshot,
+  now: Date,
+): Partial<Record<MonitorTimeline, MonitorTimelineHealth>> | null {
+  const diagnostics = snapshot.last_scan_summary?.timelineDiagnostics;
+  if (!diagnostics || typeof diagnostics !== "object") return null;
+  const result: Partial<Record<MonitorTimeline, MonitorTimelineHealth>> = {};
+
+  for (const timeline of ["profile", "with_replies"] as const) {
+    const diagnostic = diagnostics[timeline];
+    if (!diagnostic || diagnostic.sourceTimeline !== timeline) continue;
+    if (diagnostic.status === "not_open") {
+      result[timeline] = { status: "not_open" };
+      continue;
+    }
+
+    const scanTimestamp = getTimestamp(diagnostic.scanTimestamp);
+    const scanAgeSeconds = scanTimestamp === null
+      ? undefined
+      : getAgeSeconds(scanTimestamp, now);
+    const stale =
+      scanTimestamp === null ||
+      scanTimestamp > now.getTime() ||
+      scanAgeSeconds === undefined ||
+      scanAgeSeconds > MONITOR_HEALTH_MAX_AGE_SECONDS;
+    const parseSuccessCount = Math.max(0, Math.min(10_000, Math.floor(Number(diagnostic.parseSuccessCount) || 0)));
+    const status: MonitorTimelineStatus = stale
+      ? "stale"
+      : parseSuccessCount > 0
+        ? "healthy"
+        : "empty";
+    const selectorVersion = /^[\w.-]{1,100}$/.test(String(diagnostic.selectorVersion || ""))
+      ? String(diagnostic.selectorVersion)
+      : "unknown";
+    const recoveryStatus = /^[\w.-]{1,64}$/.test(String(diagnostic.recoveryStatus || ""))
+      ? String(diagnostic.recoveryStatus)
+      : "not_attempted";
+
+    result[timeline] = {
+      status,
+      ...(scanAgeSeconds === undefined ? {} : { scanAgeSeconds }),
+      articleCount: Math.max(0, Math.min(10_000, Math.floor(Number(diagnostic.articleCount) || 0))),
+      parseSuccessCount,
+      selectorVersion,
+      recoveryStatus,
+      recoveryMoveCount: Math.max(0, Math.min(4, Math.floor(Number(diagnostic.recoveryMoveCount) || 0))),
+      recoveryMaxMoves: Math.max(0, Math.min(4, Math.floor(Number(diagnostic.recoveryMaxMoves) || 0))),
+    };
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+export function evaluateTiboHeartbeat(
+  snapshot: TiboHeartbeatSnapshot | null | undefined,
+  now: Date,
+): MonitorHealthResult {
+  const base = evaluateBaseTiboHeartbeat(snapshot, now);
+  if (!snapshot) return base;
+  const timelines = getTimelineHealth(snapshot, now);
+  if (!timelines) return base;
+
+  const timelineStale = Object.values(timelines).some((timeline) => timeline?.status === "stale");
+  const timelineEmpty = Object.values(timelines).some((timeline) => timeline?.status === "empty");
+  if (timelineStale && base.status !== "unhealthy") {
+    return { ...base, status: "unhealthy", detail: "timeline_scan_stale", timelines };
+  }
+  if (timelineEmpty && base.status === "healthy") {
+    return { ...base, status: "warning", detail: "timeline_scan_empty", timelines };
+  }
+  return { ...base, timelines };
 }

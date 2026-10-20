@@ -1,6 +1,17 @@
 name: Verify Browser E2E
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-browser-e2e.yml
+      - app/api/monitor/health/**
+      - e2e/tibo-reply-capture.spec.ts
+      - extension/tibo-monitor/**
+      - lib/radar/heartbeat.ts
+      - lib/radar/monitorHealth.ts
+      - package.json
+      - playwright.config.ts
+      - pnpm-lock.yaml
   push:
     branches: [main]
   workflow_dispatch:
