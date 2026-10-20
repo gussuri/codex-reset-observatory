@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  findFormalTiboResetCluster,
+  findRecentFormalTiboReset,
+} from "../../lib/codexUsageRecoveryStore";
+import {
   attachTiboFormalReplyAdmissionProof,
   createTiboFormalReplyAdmissionProof,
 } from "../../lib/radar/tiboFormalReplyAdmission";
@@ -46,6 +50,10 @@ const SCOPE_QUOTE = "for all paid users";
 const REVISION = "a".repeat(64);
 const CREATED_AT = "2026-10-20T08:00:00.000Z";
 const PARENT_CREATED_AT = "2026-10-20T07:55:00.000Z";
+const PREVIOUS_REPLY_CREATED_AT = "2026-10-20T07:00:00.000Z";
+const BOUNDARY_NOTICE_CREATED_AT = "2026-10-20T06:45:00.000Z";
+const UNSCHEDULED_RESET_CREATED_AT = "2026-10-20T12:00:00.000Z";
+const UNSCHEDULED_NOTICE_CREATED_AT = "2026-10-20T11:30:00.000Z";
 
 type CaseIds = { targetId: string; parentId: string };
 const CASES: Record<string, CaseIds> = {
@@ -54,9 +62,11 @@ const CASES: Record<string, CaseIds> = {
   parentVerification: { targetId: "2119999000000000021", parentId: "2119999000000000022" },
   targetVerification: { targetId: "2119999000000000031", parentId: "2119999000000000032" },
   confidenceThreshold: { targetId: "2119999000000000041", parentId: "2119999000000000042" },
+  previousReplyBoundary: { targetId: "2119999000000000051", parentId: "2119999000000000052" },
 };
 
-function sourceContext(ids: CaseIds): TiboEvidenceContext {
+function sourceContext(ids: CaseIds, createdAt = CREATED_AT): TiboEvidenceContext {
+  const parentCreatedAt = new Date(Date.parse(createdAt) - 5 * 60_000).toISOString();
   return {
     version: "tibo-evidence-context-v1",
     status: "complete",
@@ -65,7 +75,7 @@ function sourceContext(ids: CaseIds): TiboEvidenceContext {
       tweetUrl: `https://x.com/thsottiaux/status/${ids.targetId}`,
       authorHandle: "@thsottiaux",
       text: TARGET_BODY,
-      createdAt: CREATED_AT,
+      createdAt,
       sourceContextRevisionHashes: [REVISION],
     },
     relatedPosts: [{
@@ -73,7 +83,7 @@ function sourceContext(ids: CaseIds): TiboEvidenceContext {
       tweetUrl: `https://x.com/thsottiaux/status/${ids.parentId}`,
       authorHandle: "@thsottiaux",
       text: RESET_MEANING,
-      createdAt: PARENT_CREATED_AT,
+      createdAt: parentCreatedAt,
     }],
     edges: [{ fromTweetId: ids.targetId, toTweetId: ids.parentId, relation: "reply" }],
     omissions: [],
@@ -81,7 +91,7 @@ function sourceContext(ids: CaseIds): TiboEvidenceContext {
   };
 }
 
-function proofInput(ids: CaseIds): TiboContextSafetyInput {
+function proofInput(ids: CaseIds, createdAt = CREATED_AT): TiboContextSafetyInput {
   return {
     authorText: TARGET_BODY,
     isReply: true,
@@ -102,24 +112,24 @@ function proofInput(ids: CaseIds): TiboContextSafetyInput {
     },
     targetTweetId: ids.targetId,
     targetTweetUrl: `https://x.com/thsottiaux/status/${ids.targetId}`,
-    targetTweetCreatedAt: CREATED_AT,
-    validatedSourceContext: sourceContext(ids),
+    targetTweetCreatedAt: createdAt,
+    validatedSourceContext: sourceContext(ids, createdAt),
   };
 }
 
-function proofFor(ids: CaseIds) {
-  const value = createTiboFormalReplyAdmissionProof(proofInput(ids), [REVISION], 0);
+function proofFor(ids: CaseIds, createdAt = CREATED_AT) {
+  const value = createTiboFormalReplyAdmissionProof(proofInput(ids, createdAt), [REVISION], 0);
   assert.ok(value, "fixture must produce a current formal reply proof");
   return value;
 }
 
-function parentRow(parentId: string) {
+function parentRow(parentId: string, createdAt = PARENT_CREATED_AT) {
   return {
     tweet_id: parentId,
     signal_type: "official_notice",
     text: RESET_MEANING,
     tweet_url: `https://x.com/thsottiaux/status/${parentId}`,
-    tweet_created_at: PARENT_CREATED_AT,
+    tweet_created_at: createdAt,
     expires_at: "2026-10-21T08:00:00.000Z",
     verification_status: "confirmed",
     confidence: 0.97,
@@ -129,13 +139,13 @@ function parentRow(parentId: string) {
   };
 }
 
-function targetRow(ids: CaseIds) {
+function targetRow(ids: CaseIds, createdAt = CREATED_AT) {
   return {
     tweet_id: ids.targetId,
     signal_type: "reset_executed",
     text: TARGET_BODY,
     tweet_url: `https://x.com/thsottiaux/status/${ids.targetId}`,
-    tweet_created_at: CREATED_AT,
+    tweet_created_at: createdAt,
     expires_at: "2026-10-21T08:00:00.000Z",
     verification_status: "auto_unverified",
     confidence: 0.96,
@@ -161,7 +171,60 @@ function targetRow(ids: CaseIds) {
     source_context_revision_hashes: [REVISION],
     source_context_classified_revision_hashes: [REVISION],
     source_context_generation: 0,
-    formal_reply_admission_proof: proofFor(ids),
+    formal_reply_admission_proof: proofFor(ids, createdAt),
+  };
+}
+
+function standaloneResetRow(tweetId: string, createdAt: string) {
+  return {
+    tweet_id: tweetId,
+    signal_type: "reset_executed",
+    text: "I reset usage limits for everyone.",
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: createdAt,
+    expires_at: null,
+    verification_status: "auto_unverified",
+    confidence: 0.99,
+    classification_source: "gemini",
+    is_reply: false,
+    is_quote: false,
+  };
+}
+
+function unscheduledNoticeRow(tweetId: string, createdAt: string) {
+  return {
+    tweet_id: tweetId,
+    signal_type: "official_notice",
+    text: "Day 13/ Le limit reset",
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: createdAt,
+    expires_at: null,
+    verification_status: "auto_unverified",
+    confidence: 0.85,
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_confidence: 0.85,
+    ai_classification_status: "success",
+    ai_temporal_direction: "unclear",
+    ai_notice_timing_status: "unknown",
+    ai_evidence_quote: "Le limit reset",
+    ai_notice_to_execution: null,
+    ai_temporal_confidence: null,
+    ai_temporal_expression: null,
+    ai_temporal_kind: null,
+    ai_temporal_precision: null,
+    ai_temporal_timezone: null,
+    temporal_expression: null,
+    temporal_kind: null,
+    temporal_precision: null,
+    temporal_timezone: null,
+    temporal_confidence: null,
+    temporal_resolution_source: null,
+    expected_start_at: null,
+    expected_end_at: null,
+    temporal_resolution_status: "unresolved",
+    is_reply: false,
+    is_quote: false,
   };
 }
 
@@ -217,10 +280,11 @@ async function assertFormalAfterReload(client: SupabaseClient, ids: CaseIds, exp
   return signal;
 }
 
-async function insertPair(client: SupabaseClient, ids: CaseIds) {
-  const { error: parentError } = await client.from("tibo_signals").insert(parentRow(ids.parentId));
+async function insertPair(client: SupabaseClient, ids: CaseIds, createdAt = CREATED_AT) {
+  const parentCreatedAt = new Date(Date.parse(createdAt) - 5 * 60_000).toISOString();
+  const { error: parentError } = await client.from("tibo_signals").insert(parentRow(ids.parentId, parentCreatedAt));
   if (parentError) throw parentError;
-  const { error: targetError } = await client.from("tibo_signals").insert(targetRow(ids));
+  const { error: targetError } = await client.from("tibo_signals").insert(targetRow(ids, createdAt));
   if (targetError) throw targetError;
   await assertFormalAfterReload(client, ids, true);
 }
@@ -233,6 +297,49 @@ test("loopback Supabase proof triggers preserve harmless updates and reject stal
   try {
     const stable = CASES.stable!;
     await insertPair(client, stable);
+
+    const recentReply = await findRecentFormalTiboReset(client, CREATED_AT, 60_000);
+    assert.equal(recentReply.tweetId, stable.targetId);
+
+    const currentReplyCluster = await findFormalTiboResetCluster(
+      client,
+      "2119999000000000091",
+      CREATED_AT,
+    );
+    assert.equal(currentReplyCluster.primaryTweetId, stable.targetId);
+
+    const previousReply = CASES.previousReplyBoundary!;
+    await insertPair(client, previousReply, PREVIOUS_REPLY_CREATED_AT);
+    const { error: boundaryNoticeError } = await client.from("tibo_signals").insert(
+      unscheduledNoticeRow("2119999000000000053", BOUNDARY_NOTICE_CREATED_AT),
+    );
+    if (boundaryNoticeError) throw boundaryNoticeError;
+
+    const previousReplyCluster = await findFormalTiboResetCluster(client, stable.targetId, CREATED_AT);
+    assert.equal(previousReplyCluster.primaryTweetId, stable.targetId);
+    assert.ok(
+      !previousReplyCluster.sourceTweetIds.includes("2119999000000000053"),
+      "a valid previous-generation reply must stop its earlier .85 notice from joining the current reset",
+    );
+
+    const unscheduledResetId = "2119999000000000054";
+    const { error: unscheduledResetError } = await client.from("tibo_signals").insert(
+      standaloneResetRow(unscheduledResetId, UNSCHEDULED_RESET_CREATED_AT),
+    );
+    if (unscheduledResetError) throw unscheduledResetError;
+    const unscheduledNoticeId = "2119999000000000055";
+    const { error: unscheduledNoticeError } = await client.from("tibo_signals").insert(
+      unscheduledNoticeRow(unscheduledNoticeId, UNSCHEDULED_NOTICE_CREATED_AT),
+    );
+    if (unscheduledNoticeError) throw unscheduledNoticeError;
+
+    const unscheduledCluster = await findFormalTiboResetCluster(
+      client,
+      unscheduledResetId,
+      UNSCHEDULED_RESET_CREATED_AT,
+    );
+    assert.equal(unscheduledCluster.representativeNoticeId, unscheduledNoticeId);
+    assert.equal(unscheduledCluster.representativeNoticeAt, UNSCHEDULED_NOTICE_CREATED_AT);
 
     const reasonUpdate = await client.from("tibo_signals")
       .update({ classification_reason: "The parent explanation was revised." })
