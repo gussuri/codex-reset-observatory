@@ -341,7 +341,11 @@ test("loopback Supabase proof triggers preserve harmless updates and reject stal
       UNSCHEDULED_RESET_CREATED_AT,
     );
     assert.equal(unscheduledCluster.representativeNoticeId, unscheduledNoticeId);
-    assert.equal(unscheduledCluster.representativeNoticeAt, UNSCHEDULED_NOTICE_CREATED_AT);
+    const actualNoticeAt = Date.parse(unscheduledCluster.representativeNoticeAt ?? "");
+    const expectedNoticeAt = Date.parse(UNSCHEDULED_NOTICE_CREATED_AT);
+    assert.ok(Number.isFinite(actualNoticeAt), "the database notice timestamp must be valid");
+    assert.ok(Number.isFinite(expectedNoticeAt), "the expected fixture timestamp must be valid");
+    assert.equal(actualNoticeAt, expectedNoticeAt);
 
     const reasonUpdate = await client.from("tibo_signals")
       .update({ classification_reason: "The parent explanation was revised." })
