@@ -23,9 +23,9 @@ Chromeの通知ページは投稿スキャンの対象になり得ます。通�
 2. Service WorkerのChrome Alarmは約10分ごとに動きます。起動時再読み込みの直後にalarmも動いた場合、同じtimeline/tabが直前60秒以内に正常再読み込み済みなら二重再読み込みを省きます。
 3. 起動時・alarmのどちらも、プロフィールと返信の各URLについて既存タブを最大1つずつ扱います。タブを自動で新規作成・閉鎖することはありません。タブがなければ従来の `monitored_tab_missing` 診断を記録します。再読み込み後のContent Scriptが、表示中の投稿DOMをスキャンします。
 4. 投稿の追加・更新はMutationObserverで検知し、念のため60秒ごとの再スキャンも行います。
-5. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信と返信先を復元します。返信関係とTibo自身の投稿情報を確認できれば、第三者の親文脈が未取得でも返信本文を通常のWebhookへ送ります。第三者の親本文は自動展開せず、取得できない文脈は後続のsource-context更新に任せます。
-6. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。
-7. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類も1投稿につき最大1回実行します。
+5. `@thsottiaux/status/{tweet_id}` の正規URL、本文、`time`要素の投稿日時を取得します。返信タブでは、Xの「Replying to / 返信先 / 回复给」領域、または子側のincoming connectorと直前の親cell側のoutgoing connectorが両方確認できる場合に返信と返信先を復元します。返信関係とTibo自身の投稿情報を確認できれば、第三者の親文脈が未取得でも返信本文をWebhookへ送ります。第三者の親本文は自動展開せず、親cellの本文とauthorだけを文脈として保存します。取得できない文脈は後続のsource-context更新に任せます。
+6. 投稿はService Workerで直列化・重複排除され、`/api/webhook/tibo`へ送信されます。通常は2xx応答後に処理済みIDがChromeのローカル保存へ追加されます。応答の `aiStatus` が `timeout`、`rate_limited`、`api_error` の場合は保存済みfallbackを残したまま再送キューへ入れ、Gemini成功後か試行上限に達するまで処理済みにはしません。試行上限に達した投稿は明示的な再試行が必要です。
+7. Webhookはルール分類を行い、`GEMINI_CLASSIFICATION_MODE` が `off` 以外ならGemini分類を実行します。`timeout`、`rate_limited`、`api_error` の場合だけWebhookごとに1回再試行し、1回のWebhookあたり最大2回呼び出します。
 8. `primary`（または後方互換の `hybrid`）では、Geminiの有効な成功結果を最終分類に採用し、失敗時だけルール分類へfallbackします。
 9. 分類結果と監査列がSupabaseの `tibo_signals` にtweet_id単位でupsertされます。返信であること自体はシグナルを強めません。返信は既定で正式リセット履歴・公開確率へ反映されません。
 10. 返信でない投稿のうち、条件を満たす `reset_executed` は次回のレーダーデータ取得で正式リセット履歴へ自動統合されます。返信は、同じglobal resetに至るTibo本人の検証済みreply path（最大2辺）があり、成功したGemini分類が `reset_executed` / confidence `0.95`以上 / `completed_now` で、同じ分類応答の引用が強制方式と全有料または全ユーザー範囲の両方を裏付け、現在のsource-context revisionに結び付くproofを通過した場合に限り採用されます。proofがない・古い・不明な返信は引き続き除外されます。採用されても `confirmed` へ自動変更せず、`auto_unverified` のまま条件を満たせば反映されます。詳細は [`docs/reset-history-normalization.md`](../reset-history-normalization.md) のsection 7を参照してください。
