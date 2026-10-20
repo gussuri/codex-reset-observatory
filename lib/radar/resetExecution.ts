@@ -133,6 +133,8 @@ export type DisplayExecutionDecision = {
 
 export type ResolveDisplayExecutionTimeInput = {
   resetEventKey: string;
+  /** True when Tibo notice/reset provenance was freshly resolved from the source rows. */
+  tiboProvenanceResolved?: boolean;
   tiboAnnouncedAt?: string | null;
   tiboPrimaryTweetId?: string | null;
   tiboSourceTweetIds?: string[];
@@ -379,8 +381,12 @@ export function buildResetExecutionEstimate(
     tiboAnnouncedAt: parseTimestamp(input.tiboAnnouncedAt),
     tiboPrimaryTweetId: input.tiboPrimaryTweetId ?? null,
     tiboSourceTweetIds: Array.from(new Set(input.tiboSourceTweetIds ?? [])),
-    officialNoticeTweetId: input.officialNoticeTweetId ?? input.persistedEstimate?.officialNoticeTweetId ?? null,
-    officialNoticeAt: parseTimestamp(input.officialNoticeAt ?? input.persistedEstimate?.officialNoticeAt),
+    officialNoticeTweetId: input.officialNoticeTweetId ?? (
+      input.tiboProvenanceResolved ? null : input.persistedEstimate?.officialNoticeTweetId ?? null
+    ),
+    officialNoticeAt: parseTimestamp(input.officialNoticeAt ?? (
+      input.tiboProvenanceResolved ? null : input.persistedEstimate?.officialNoticeAt
+    )),
     estimatorVersion: decision.estimatorVersion,
     manualOverrideAt: manualOverride?.manualOverrideAt ?? null,
     manualOverrideBy: manualOverride?.manualOverrideBy ?? null,

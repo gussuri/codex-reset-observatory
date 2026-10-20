@@ -1,7 +1,7 @@
 import { RANDOM_RESET_NAME_MODEL } from "./randomResetNameConfig";
 import type { ResetReasonType, ResetScopeType } from "./types";
 
-export const RESET_EVENT_METADATA_PROMPT_VERSION = "reset-event-metadata-v2";
+export const RESET_EVENT_METADATA_PROMPT_VERSION = "reset-event-metadata-v3";
 export const RESET_EVENT_METADATA_MODEL = RANDOM_RESET_NAME_MODEL;
 export const RESET_EVENT_METADATA_TEMPERATURE = 0.15;
 
@@ -72,7 +72,7 @@ Rules:
 - If scope is not null, scopeEvidence MUST be a short exact substring of the supplied source context that contains both reset/credit applicability and the stated audience. A greeting alone is not evidence.
 - If scope is null, scopeEvidence MUST be null.
 - summaryJa, summaryEn, and summaryZh must concisely describe the same event-specific fact in Japanese, English, and Simplified Chinese.
-- Public notes must only add short factual context about the event that is not already stated by its summary, title, reasonType, or scope. Write each noteJa, noteEn, and noteZh as one short factual sentence in its corresponding language.
+- Public notes must only add short factual context about the event that is not already stated by its summary, title, reasonType, or scope. Write each noteJa, noteEn, and noteZh as 2–3 short factual sentences in its corresponding language. Use natural retrospective wording to explain a source-grounded wordplay or callback when it adds context and state the concrete moment or outcome the posts confirm, such as usage limits returning when the source supports it. Avoid formulaic phrases such as "this post says".
 - Do not use a public note to explain reasonType, provide classification rationale, negate another reason type, explain scope, describe internal classification or processing, or state an AI/system interpretation.
 - reasonJa must be a short Japanese internal audit explanation of why reasonType and scope were chosen.
 - Keep wording factual and neutral. Do not invent an official event name.
@@ -146,6 +146,18 @@ function parseRequiredText(
   return normalized;
 }
 
+function hasTwoOrThreeSentences(value: string) {
+  const sentenceEndings = /[.!?。！？]+(?:["'”’」』】）)]*)?/g;
+  let sentenceCount = 0;
+  let finalEnding = 0;
+  let match: RegExpExecArray | null;
+  while ((match = sentenceEndings.exec(value)) !== null) {
+    sentenceCount += 1;
+    finalEnding = (match.index ?? 0) + match[0].length;
+  }
+  return sentenceCount >= 2 && sentenceCount <= 3 && value.slice(finalEnding).trim().length === 0;
+}
+
 const RESET_APPLICABILITY_PATTERN =
   /(?:reset|re-?set|refresh|credit|quota|limit|usage|allowance|リセット|上限|クレジット|配布|補償|重置|额度)/i;
 const BROAD_APPLICABILITY_PATTERN =
@@ -205,6 +217,9 @@ export function parseResetEventMetadataResponse(
     !noteJa ||
     !noteEn ||
     !noteZh ||
+    !hasTwoOrThreeSentences(noteJa) ||
+    !hasTwoOrThreeSentences(noteEn) ||
+    !hasTwoOrThreeSentences(noteZh) ||
     !reasonJa ||
     (scope === null && value.scopeEvidence !== undefined && value.scopeEvidence !== null) ||
     (scope !== null && (

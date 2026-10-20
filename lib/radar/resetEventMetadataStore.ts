@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getCompletedResetTimestamp } from "./probability";
 import {
   generateResetEventMetadata,
+  RESET_EVENT_METADATA_PROMPT_VERSION,
   type GeneratedResetReasonType,
   type ResetEventMetadataResult,
 } from "./resetEventMetadata";
@@ -201,7 +202,8 @@ export async function ensureResetEventMetadataForEvent(
 
   if (
     existing?.event_metadata_status === "success" &&
-    existing.event_metadata_input_hash === inputHash
+    existing.event_metadata_input_hash === inputHash &&
+    existing.event_metadata_prompt_version === RESET_EVENT_METADATA_PROMPT_VERSION
   ) {
     return { eventKey, status: "reused", wrote: false, skipped: true };
   }

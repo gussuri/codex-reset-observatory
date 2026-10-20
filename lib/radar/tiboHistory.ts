@@ -901,24 +901,70 @@ function getHistorySourceTweetIds(item: WindowEventLike) {
   ]);
 }
 
-function getRelatedNoticeIds(row: TiboLogicalPostRow) {
-  const source = row as TiboLogicalPostRow & {
-    related_notice?: TiboNoticeSignal | null;
-    related_notices?: TiboNoticeSignal[];
-  };
+function getHistoryIdentityTweetIds(item: WindowEventLike) {
+  const officialNoticeTweetId = item.officialNoticeTweetId?.trim();
+  const sourceUrlTweetId = getTweetId(getHistorySourceUrl(item));
   return uniqueTweetIds([
-    ...(source.related_notices ?? []).map((notice) => notice.tweet_id),
-    source.related_notice?.tweet_id,
+    ...(item.sourceTweetIds ?? []).filter((tweetId) => tweetId !== officialNoticeTweetId),
+    sourceUrlTweetId && sourceUrlTweetId !== officialNoticeTweetId ? sourceUrlTweetId : null,
   ]);
 }
 
 function getCanonicalHistorySourceTweetIds(
   logicalPost: TiboLogicalPost<TiboLogicalPostRow>,
+  relatedNotices: ReadonlyArray<TiboNoticeSignal>,
 ) {
   return uniqueTweetIds([
     ...logicalPost.sourceTweetIds,
-    ...logicalPost.rawVersions.flatMap(getRelatedNoticeIds),
+    ...relatedNotices.map((notice) => notice.tweet_id),
   ]);
+}
+
+function getFormalResetTime(
+  logicalPost: TiboLogicalPost<TiboLogicalPostRow>,
+  formalTweetIds: ReadonlySet<string>,
+) {
+  const times = logicalPost.rawVersions
+    .filter((row) => formalTweetIds.has(row.tweet_id))
+    .map((row) => getTimestamp(row.tweet_created_at))
+    .filter((time): time is number => time !== null);
+  return times.length > 0 ? Math.min(...times) : null;
+}
+
+function getPreviousFormalResetAt(
+  currentPost: TiboLogicalPost<TiboLogicalPostRow>,
+  authoritativePosts: ReadonlyArray<TiboLogicalPost<TiboLogicalPostRow>>,
+  formalTweetIds: ReadonlySet<string>,
+  persistedHistory: ReadonlyArray<WindowEventLike>,
+) {
+  const currentTime = getFormalResetTime(currentPost, formalTweetIds);
+  if (currentTime === null) return null;
+
+  const previousPostTimes = authoritativePosts
+    .filter((post) => post.logicalPostId !== currentPost.logicalPostId)
+    .map((post) => getFormalResetTime(post, formalTweetIds))
+    .filter((time): time is number => time !== null && time < currentTime);
+  const previousHistoryTimes = persistedHistory
+    .filter((event) => event.recordKind === "confirmed_global")
+    .map((event) => getTimestamp(getCompletedAt(event)))
+    .filter((time): time is number => time !== null && time < currentTime);
+  const previousTime = Math.max(...previousPostTimes, ...previousHistoryTimes);
+  return Number.isFinite(previousTime) ? new Date(previousTime).toISOString() : null;
+}
+
+function getLogicalPostRelatedNotices(
+  logicalPost: TiboLogicalPost<TiboLogicalPostRow>,
+) {
+  return logicalPost.rawVersions.flatMap((row) => {
+    const source = row as TiboLogicalPostRow & {
+      related_notice?: TiboNoticeSignal | null;
+      related_notices?: TiboNoticeSignal[];
+    };
+    return [
+      ...(source.related_notices ?? []),
+      ...(source.related_notice ? [source.related_notice] : []),
+    ];
+  });
 }
 
 function toHistoryEventReference(item: WindowEventLike) {
@@ -1000,6 +1046,9 @@ function getCanonicalHistorySourceUrl(
   const staticUrl = staticSource ? getHistorySourceUrl(staticSource) : null;
   if (staticUrl) return staticUrl;
 
+  const logicalPostUrl = logicalPost.effectiveContent?.tweet_url;
+  if (logicalPostUrl) return logicalPostUrl;
+
   const estimate = estimates.find((candidate) => candidate.resetEventKey === eventKey);
   if (estimate) {
     const estimateTweetId = estimate.tiboPrimaryTweetId?.trim() ||
@@ -1016,7 +1065,7 @@ function getCanonicalHistorySourceUrl(
   const dynamicUrl = dynamicSource ? getHistorySourceUrl(dynamicSource) : null;
   if (dynamicUrl) return dynamicUrl;
 
-  return logicalPost.effectiveContent?.tweet_url ?? null;
+  return null;
 }
 
 function addCanonicalSourceIds(
@@ -1050,7 +1099,7 @@ function getCanonicalFormalHistoryEvent(
   estimates: ReadonlyArray<ResetExecutionEstimate>,
   adoptionLedgers: ReadonlyArray<TiboFormalAdoptionLedgerLike>,
   dynamicEvents: ReadonlyArray<WindowEventLike>,
-  persistedRelatedNotices: ReadonlyArray<TiboNoticeSignal>,
+  relatedNotices: ReadonlyArray<TiboNoticeSignal>,
   allowEffectiveContent: boolean,
 ) {
   const effectiveRow = allowEffectiveContent
@@ -1061,26 +1110,18 @@ function getCanonicalFormalHistoryEvent(
     .sort(compareRepresentativeSignals)[0];
   if (!representativeRow) return null;
 
-  const relatedNotices = [...logicalPost.rawVersions
-    .flatMap((row) => {
-      const source = row as TiboLogicalPostRow & {
-        related_notice?: TiboNoticeSignal | null;
-        related_notices?: TiboNoticeSignal[];
-      };
-      return [
-        ...(source.related_notices ?? []),
-        ...(source.related_notice ? [source.related_notice] : []),
-      ];
-    }), ...persistedRelatedNotices]
-    .filter((notice, index, all) =>
-      all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
-    );
+  const canonicalSignal = {
+    ...representativeRow,
+    related_notice: null,
+    related_notices: [...relatedNotices],
+  } as FormalTiboResetSignal;
+
   const earliestTweetAt = formalRows
     .map((row) => ({ row, time: getTimestamp(row.tweet_created_at) }))
     .filter((value): value is { row: FormalTiboResetSignal; time: number } => value.time !== null)
     .sort((left, right) => left.time - right.time)[0]?.row.tweet_created_at;
   const event = convertTiboResetSignalToHistoryEvent(
-    representativeRow as FormalTiboResetSignal,
+    canonicalSignal,
     selectRepresentativeTiboNotice(relatedNotices),
     earliestTweetAt,
     relatedNotices,
@@ -1126,13 +1167,15 @@ function buildCanonicalFormalHistory(
       .flatMap((conflict) => conflict.tweetIds),
   );
   const sourceTweetIdsByEventKey = new Map<string, string[]>();
-  const authoritativePosts = projection.logicalPosts.filter((post) =>
+  const formalPosts = projection.logicalPosts.filter((post) =>
     post.rawVersions.some((row) => formalTweetIds.has(row.tweet_id)),
   );
+  const authoritativePosts = formalPosts.filter((post) => post.authoritative);
   const handledFormalTweetIds = new Set<string>();
   const legacySignals: FormalTiboResetSignal[] = [];
   const generatedEvents: WindowEventLike[] = [];
   const dynamicEvents = context.dynamicEvents ?? [];
+  const persistedHistory = [...staticHistory, ...dynamicEvents];
   const recoveryObservations = context.recoveryObservations ?? [];
   const adoptionLedgers = context.adoptionLedgers ?? [];
   const staticReferences = staticHistory
@@ -1143,15 +1186,74 @@ function buildCanonicalFormalHistory(
     .map(toHistoryEventReference)
     .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference));
 
-  for (const logicalPost of authoritativePosts) {
+  for (const logicalPost of formalPosts) {
     const formalRows = logicalPost.rawVersions.filter((row) => formalTweetIds.has(row.tweet_id));
     formalRows.forEach((row) => handledFormalTweetIds.add(row.tweet_id));
     if (!logicalPost.authoritative) {
-      legacySignals.push(...(formalRows as FormalTiboResetSignal[]));
+      const previousResetAt = getPreviousFormalResetAt(
+        logicalPost,
+        formalPosts,
+        formalTweetIds,
+        persistedHistory,
+      );
+      const formalAnchor = formalRows
+        .slice()
+        .sort((left, right) =>
+          (getTimestamp(left.tweet_created_at) ?? Number.MAX_SAFE_INTEGER) -
+          (getTimestamp(right.tweet_created_at) ?? Number.MAX_SAFE_INTEGER),
+        )[0] as FormalTiboResetSignal | undefined;
+      const candidates = [
+        ...noticeSignals.filter((signal): signal is TiboNoticeSignal =>
+          signal.signal_type === "official_notice" || signal.signal_type === "teaser",
+        ),
+        ...getLogicalPostRelatedNotices(logicalPost),
+      ].filter((notice, index, all) =>
+        all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
+      );
+      const relatedNotices = formalAnchor
+        ? findRelatedTiboNotices(formalAnchor, candidates, previousResetAt)
+        : [];
+      legacySignals.push(...(formalRows as FormalTiboResetSignal[]).map((row) => ({
+        ...row,
+        related_notice: selectRepresentativeTiboNotice(relatedNotices),
+        related_notices: relatedNotices,
+      })));
       continue;
     }
 
-    const sourceTweetIds = getCanonicalHistorySourceTweetIds(logicalPost);
+    const previousResetAt = getPreviousFormalResetAt(
+      logicalPost,
+      formalPosts,
+      formalTweetIds,
+      persistedHistory,
+    );
+    const formalAnchor = formalRows
+      .slice()
+      .sort((left, right) =>
+        (getTimestamp(left.tweet_created_at) ?? Number.MAX_SAFE_INTEGER) -
+        (getTimestamp(right.tweet_created_at) ?? Number.MAX_SAFE_INTEGER),
+      )[0] as FormalTiboResetSignal | undefined;
+    const persistedRelatedNotices = formalAnchor
+      ? findRelatedTiboNotices(
+          formalAnchor,
+          noticeSignals.filter((signal): signal is TiboNoticeSignal =>
+            signal.signal_type === "official_notice" || signal.signal_type === "teaser",
+          ),
+          previousResetAt,
+        )
+      : [];
+    const logicalPostRelatedNotices = formalAnchor
+      ? findRelatedTiboNotices(
+          formalAnchor,
+          getLogicalPostRelatedNotices(logicalPost),
+          previousResetAt,
+        )
+      : [];
+    const relatedNotices = [...logicalPostRelatedNotices, ...persistedRelatedNotices]
+      .filter((notice, index, all) =>
+        all.findIndex((candidate) => candidate.tweet_id === notice.tweet_id) === index,
+      );
+    const sourceTweetIds = getCanonicalHistorySourceTweetIds(logicalPost, relatedNotices);
     const resolution = resolveTiboResetEventIdentity(logicalPost, {
       recoveryObservationId: getRecoveryObservationIdForLogicalPost(
         logicalPost,
@@ -1185,10 +1287,22 @@ function buildCanonicalFormalHistory(
         .filter((reference) => reference.eventKey === resolution.resetEventKey)
         .flatMap((reference) => reference.sourceTweetIds ?? []),
     ]);
+    const knownNoticeTweetIds = new Set([
+      ...noticeSignals
+        .filter((signal): signal is TiboNoticeSignal =>
+          signal.signal_type === "official_notice" || signal.signal_type === "teaser",
+        )
+        .map((signal) => signal.tweet_id),
+      ...getLogicalPostRelatedNotices(logicalPost).map((notice) => notice.tweet_id),
+    ]);
+    const relatedNoticeTweetIds = new Set(relatedNotices.map((notice) => notice.tweet_id));
+    const safeReferenceSourceIds = matchedReferencesSourceIds.filter((tweetId) =>
+      !knownNoticeTweetIds.has(tweetId) || relatedNoticeTweetIds.has(tweetId),
+    );
     addCanonicalSourceIds(
       sourceTweetIdsByEventKey,
       resolution.resetEventKey,
-      [...resolution.sourceTweetIds, ...matchedReferencesSourceIds],
+      [...resolution.sourceTweetIds, ...safeReferenceSourceIds],
     );
 
     // Existing blocked/conflicted events remain represented by their existing
@@ -1208,33 +1322,6 @@ function buildCanonicalFormalHistory(
     const canonicalEventKey = resolution.resetEventKey ??
       `tibo-reset-${logicalPost.logicalPostId}`;
     const canonicalSourceTweetIds = sourceTweetIdsByEventKey.get(canonicalEventKey) ?? sourceTweetIds;
-    const logicalPostTweetIds = new Set(logicalPost.sourceTweetIds);
-    const persistedNoticeTweetIds = new Set(
-      matchedReferencesSourceIds.filter((tweetId) => !logicalPostTweetIds.has(tweetId)),
-    );
-    const persistedLinkReference = (resolution.canRunFormalEnrichments
-      ? toEffectiveTiboLogicalPostRow(logicalPost)
-      : null) ?? (formalRows as FormalTiboResetSignal[])
-      .slice()
-      .sort(compareRepresentativeSignals)[0];
-    const resetTime = getTimestamp(persistedLinkReference?.tweet_created_at);
-    const persistedRelatedNotices = noticeSignals.filter((signal): signal is TiboNoticeSignal => {
-      if (
-        !persistedNoticeTweetIds.has(signal.tweet_id) ||
-        logicalPostTweetIds.has(signal.tweet_id) ||
-        (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") ||
-        signal.is_reply === true ||
-        signal.verification_status === "rejected"
-      ) {
-        return false;
-      }
-      const signalTime = getTimestamp(signal.tweet_created_at);
-      if (signalTime === null || resetTime === null || signalTime >= resetTime) return false;
-      const confidenceThreshold = signal.signal_type === "official_notice"
-        ? OFFICIAL_NOTICE_CONFIDENCE
-        : TEASER_CONFIDENCE;
-      return (signal.confidence ?? 0) >= confidenceThreshold;
-    });
     if (!resolution.canRunFormalEnrichments) {
       // A persisted formal reset is already historical evidence. Preserve its
       // boundary when a later edit is blocked, but let an existing event
@@ -1261,7 +1348,7 @@ function buildCanonicalFormalHistory(
         estimates,
         adoptionLedgers,
         dynamicEvents,
-        persistedRelatedNotices,
+        relatedNotices,
         false,
       );
       if (fallbackEvent) generatedEvents.push(fallbackEvent);
@@ -1277,7 +1364,7 @@ function buildCanonicalFormalHistory(
       estimates,
       adoptionLedgers,
       dynamicEvents,
-      persistedRelatedNotices,
+      relatedNotices,
       true,
     );
     if (canonicalEvent) generatedEvents.push(canonicalEvent);
@@ -1316,42 +1403,43 @@ function isSameReset(left: WindowEventLike, right: WindowEventLike) {
 
   const leftLogicalPostId = left.tiboLogicalPostId?.trim();
   const rightLogicalPostId = right.tiboLogicalPostId?.trim();
+  const sharesOfficialNotice = Boolean(
+    (left.officialNoticeTweetId &&
+      (right.officialNoticeTweetId === left.officialNoticeTweetId ||
+        right.sourceTweetIds?.includes(left.officialNoticeTweetId))) ||
+    (right.officialNoticeTweetId &&
+      left.sourceTweetIds?.includes(right.officialNoticeTweetId)),
+  );
+  if (
+    (leftLogicalPostId && leftLogicalPostId === right.officialNoticeTweetId) ||
+    (rightLogicalPostId && rightLogicalPostId === left.officialNoticeTweetId)
+  ) {
+    return true;
+  }
+
   if (leftLogicalPostId || rightLogicalPostId) {
     if (leftLogicalPostId && rightLogicalPostId && leftLogicalPostId === rightLogicalPostId) {
       return true;
     }
 
-    const leftSourceTweetIds = new Set(getHistorySourceTweetIds(left));
-    const sharesExplicitSource = getHistorySourceTweetIds(right)
+    const leftSourceTweetIds = new Set(getHistoryIdentityTweetIds(left));
+    const sharesExplicitSource = getHistoryIdentityTweetIds(right)
       .some((tweetId) => leftSourceTweetIds.has(tweetId));
-    if (!sharesExplicitSource) return false;
-  }
-
-  if (
-    left.officialNoticeTweetId &&
-    right.officialNoticeTweetId &&
-    left.officialNoticeTweetId === right.officialNoticeTweetId
-  ) {
-    return true;
-  }
-
-  if (
-    left.officialNoticeTweetId &&
-    right.sourceTweetIds?.includes(left.officialNoticeTweetId)
-  ) {
-    return true;
-  }
-
-  if (
-    right.officialNoticeTweetId &&
-    left.sourceTweetIds?.includes(right.officialNoticeTweetId)
-  ) {
+    if (sharesExplicitSource) return true;
+    if (!sharesOfficialNotice) return false;
+  } else if (sharesOfficialNotice) {
     return true;
   }
 
   const leftTweetId = getTweetId(left.source_url);
   const rightTweetId = getTweetId(right.source_url);
-  if (leftTweetId && rightTweetId && leftTweetId === rightTweetId) return true;
+  if (
+    leftTweetId &&
+    rightTweetId &&
+    leftTweetId === rightTweetId &&
+    leftTweetId !== left.officialNoticeTweetId &&
+    rightTweetId !== right.officialNoticeTweetId
+  ) return true;
 
   const leftMethod = left.details?.resetMethod;
   const rightMethod = right.details?.resetMethod;
@@ -2259,7 +2347,36 @@ function buildCanonicalResetHistoryParts(
     noticeSignals,
     recoveryObservations,
     estimates,
-  );
+  ).map((event) => {
+    const canonicalEvent = tiboItems.find((item) =>
+      getHistoryEventKey(item) === getHistoryEventKey(event),
+    );
+    if (
+      !canonicalEvent ||
+      canonicalEvent.officialNoticeTweetId === event.officialNoticeTweetId
+    ) return event;
+
+    const staleNoticeId = event.officialNoticeTweetId;
+    const fallbackDetails = {
+      cycleType: "ランダムリセット",
+      resetMethod: "強制リセット",
+      noticeToExecution: "0分",
+    };
+    return {
+      ...event,
+      opened_at: canonicalEvent.opened_at,
+      window_minutes: canonicalEvent.window_minutes,
+      source_url: canonicalEvent.source_url ?? event.source_url,
+      sourceTweetIds: (event.sourceTweetIds ?? []).filter((tweetId) =>
+        tweetId !== staleNoticeId,
+      ),
+      officialNoticeTweetId: canonicalEvent.officialNoticeTweetId,
+      details: {
+        ...(event.details ?? fallbackDetails),
+        ...(canonicalEvent.details ?? {}),
+      },
+    };
+  });
   const fallbackBankedSignals = noticeSignals.filter(
     (signal): signal is TiboNoticeSignal => signal.signal_type === "official_notice",
   );

@@ -870,9 +870,9 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
       summaryJa: "GPT Astraリリースに伴うリセット",
       summaryEn: "Reset associated with the GPT Astra release",
       summaryZh: "与GPT Astra发布相关的重置",
-      noteJa: "関連する公式投稿を根拠にしたイベント情報です。",
-      noteEn: "This metadata is based on the related official post.",
-      noteZh: "此元数据基于相关官方帖子。",
+      noteJa: "関連する公式投稿でリセットの文脈が説明されています。完了投稿で利用枠の復活が確認されました。",
+      noteEn: "The related official post described the reset context. The completion post confirmed the limit restoration.",
+      noteZh: "相关官方帖子说明了重置的背景。完成帖确认了使用额度已恢复。",
       reasonJa: "関連投稿に示されたリリース文脈を根拠にしました。",
     },
   });

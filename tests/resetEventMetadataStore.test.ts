@@ -5,6 +5,7 @@ import {
   ensureResetEventMetadataForEvent,
   hashResetEventMetadataInput,
 } from "../lib/radar/resetEventMetadataStore";
+import { RESET_EVENT_METADATA_PROMPT_VERSION } from "../lib/radar/resetEventMetadata";
 import type { ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 
 const eventKey = "tibo-reset-event-metadata-store";
@@ -170,6 +171,7 @@ test("reuses a successful same-input row without a duplicate metadata generation
   const mock = setupStoreFetch(record({
     event_metadata_status: "success",
     event_metadata_input_hash: inputHash,
+    event_metadata_prompt_version: RESET_EVENT_METADATA_PROMPT_VERSION,
   }));
   let generatedCalls = 0;
 
@@ -197,6 +199,59 @@ test("reuses a successful same-input row without a duplicate metadata generation
     assert.equal(result.wrote, false);
     assert.equal(generatedCalls, 0);
     assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("regenerates same-input metadata after the prompt version changes", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const inputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+  });
+  const mock = setupStoreFetch(record({
+    event_metadata_status: "success",
+    event_metadata_input_hash: inputHash,
+    event_metadata_prompt_version: "reset-event-metadata-v2",
+    manual_name_ja: "手動名を維持",
+  }));
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureResetEventMetadataForEvent(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        return {
+          ...generated,
+          status: "success" as const,
+          flags: [],
+          model: "test-model",
+          promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+          latencyMs: 0,
+          httpStatus: 200,
+          retryAfterSeconds: null,
+        };
+      },
+    });
+
+    assert.equal(result.status, "success");
+    assert.equal(result.wrote, true);
+    assert.equal(generatedCalls, 1);
+    assert.equal(mock.writes[0]?.event_metadata_prompt_version, RESET_EVENT_METADATA_PROMPT_VERSION);
+    assert.equal(mock.writes[0]?.manual_name_ja, "手動名を維持");
   } finally {
     mock.restore();
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;

@@ -472,6 +472,97 @@ test("an existing execution estimate keeps its event and primary provenance duri
   assert.deepEqual(persistedUpdatePayload?.tibo_source_tweet_ids, ["tweet-A", "tweet-B", "notice-old"]);
 });
 
+test("a successful current cluster replaces stale notice provenance without changing monitor timing", async () => {
+  const existingEstimate = {
+    id: "estimate-current-reset",
+    reset_event_key: "tibo-reset-current-reset",
+    display_execution_at: "2026-10-20T06:34:03.741Z",
+    execution_time_source: "usage_observation",
+    execution_time_confidence: "high",
+    execution_time_precision: "approximate",
+    execution_window_start_at: "2026-10-20T06:32:03.403Z",
+    execution_window_end_at: "2026-10-20T06:34:03.741Z",
+    recovery_observation_id: "observation-current-reset",
+    recovery_previous_observed_at: "2026-10-20T06:32:03.403Z",
+    recovery_observed_at: "2026-10-20T06:34:03.741Z",
+    tibo_announced_at: "2026-10-17T16:20:57.000Z",
+    tibo_primary_tweet_id: "old-notice",
+    tibo_source_tweet_ids: ["old-notice", "current-reset"],
+    official_notice_tweet_id: "old-notice",
+    official_notice_at: "2026-10-17T16:20:57.000Z",
+    estimator_version: "usage-execution-monitor-v1",
+    manual_override_at: null,
+    manual_override_by: null,
+    manual_override_reason: null,
+    manual_execution_at: null,
+    manual_execution_precision: null,
+    created_at: "2026-10-20T06:34:03.741Z",
+    updated_at: "2026-10-20T06:34:03.741Z",
+  };
+  let fromCalls = 0;
+  let updatePayload: Record<string, unknown> | null = null;
+  const client = {
+    from() {
+      fromCalls += 1;
+      const call = fromCalls;
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.eq = () => builder;
+      builder.update = (values: Record<string, unknown>) => {
+        updatePayload = values;
+        return builder;
+      };
+      builder.maybeSingle = async () => call === 1
+        ? { data: existingEstimate, error: null }
+        : { data: { ...existingEstimate, ...updatePayload }, error: null };
+      return builder;
+    },
+  };
+
+  const result = await upsertResetExecutionEstimate(client as never, {
+    resetEventKey: "tibo-reset-current-reset",
+    tiboProvenanceResolved: true,
+    tiboAnnouncedAt: "2026-10-20T06:33:48.000Z",
+    tiboPrimaryTweetId: "current-reset",
+    tiboSourceTweetIds: ["current-reset"],
+    officialNoticeTweetId: null,
+    officialNoticeAt: null,
+    usageObservation: {
+      id: "observation-current-reset",
+      sourceKey: "local-codex-app-server",
+      observedAt: "2026-10-20T06:34:03.741Z",
+      previousObservedAt: "2026-10-20T06:32:03.403Z",
+      previousUsedPercent: 97,
+      currentUsedPercent: 0,
+      previousResetsAt: 1_792_468_800,
+      currentResetsAt: 1_793_073_600,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "confirmed",
+      matchedTiboTweetId: "current-reset",
+      confirmedAt: "2026-10-20T06:36:06.139Z",
+      createdAt: "2026-10-20T06:34:03.741Z",
+      updatedAt: "2026-10-20T06:36:06.139Z",
+    },
+  });
+
+  assert.equal(result.error, null);
+  assert.equal(result.estimate?.resetEventKey, "tibo-reset-current-reset");
+  assert.equal(result.estimate?.displayExecutionAt, "2026-10-20T06:34:03.741Z");
+  assert.equal(result.estimate?.executionWindowStartAt, "2026-10-20T06:32:03.403Z");
+  assert.equal(result.estimate?.executionWindowEndAt, "2026-10-20T06:34:03.741Z");
+  assert.equal(result.estimate?.recoveryObservationId, "observation-current-reset");
+  assert.equal(result.estimate?.tiboAnnouncedAt, "2026-10-20T06:33:48.000Z");
+  assert.equal(result.estimate?.tiboPrimaryTweetId, "current-reset");
+  assert.deepEqual(result.estimate?.tiboSourceTweetIds, ["current-reset"]);
+  assert.equal(result.estimate?.officialNoticeTweetId, null);
+  assert.equal(result.estimate?.officialNoticeAt, null);
+  const persistedUpdatePayload = updatePayload as Record<string, unknown> | null;
+  assert.deepEqual(persistedUpdatePayload?.tibo_source_tweet_ids, ["current-reset"]);
+  assert.equal(persistedUpdatePayload?.official_notice_tweet_id, null);
+  assert.equal(persistedUpdatePayload?.official_notice_at, null);
+});
+
 test("findLatestBankedGrant includes the legacy Production BANKED estimator version", async () => {
   let estimatorVersions: string[] = [];
   const client = {
@@ -795,7 +886,8 @@ test("upsertResetExecutionEstimate and upsertBankedDistributionEstimate filter o
   filters.length = 0;
   await upsertResetExecutionEstimate(client as never, {
     resetEventKey: "forced-event-key",
-    tiboSourceTweetIds: ["notice-123"],
+    tiboPrimaryTweetId: "reset-123",
+    tiboSourceTweetIds: ["notice-123", "reset-123"],
     isMonitorObserved: true,
     usageObservation: {
       id: "obs-1",
@@ -816,6 +908,11 @@ test("upsertResetExecutionEstimate and upsertBankedDistributionEstimate filter o
     (f) => f.method === "neq" && f.column === "estimator_version" && f.value === "banked-distribution-observation-v2",
   );
   assert.ok(forcedNeqFilter, "upsertResetExecutionEstimate must filter neq banked-distribution-observation-v2");
+  assert.deepEqual(
+    filters.find((f) => f.method === "overlaps" && f.column === "tibo_source_tweet_ids")?.value,
+    ["reset-123"],
+    "estimate identity lookup must not match by an official notice ID",
+  );
 
   filters.length = 0;
   await upsertBankedDistributionEstimate(client as never, {
@@ -887,5 +984,119 @@ test("findFormalTiboResetCluster queries notice candidates with a 72-hour lookba
   assert.equal(noticeGte.value, "2026-08-23T12:00:00.000Z");
   assert.equal(cluster.representativeNoticeId, "notice-within-72h");
   assert.ok(cluster.sourceTweetIds.includes("notice-within-72h"));
+});
+
+test("findFormalTiboResetCluster excludes notices consumed by the previous formal reset", async () => {
+  const currentResetAt = "2026-10-20T06:33:48.000Z";
+  const previousResetAt = "2026-10-17T17:00:00.000Z";
+  const oldNoticeAt = "2026-10-17T16:20:00.000Z";
+  const queries: Array<{
+    signalTypes: string[];
+    lower?: string;
+    upper?: string;
+    upperOperator?: "lt" | "lte";
+  }> = [];
+
+  const client = {
+    from(table: string) {
+      assert.equal(table, "tibo_signals");
+      const query = {
+        signalTypes: [] as string[],
+        lower: undefined as string | undefined,
+        upper: undefined as string | undefined,
+        upperOperator: undefined as "lt" | "lte" | undefined,
+      };
+      queries.push(query);
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.eq = (column: string, value: string) => {
+        if (column === "signal_type") query.signalTypes = [value];
+        return builder;
+      };
+      builder.neq = () => builder;
+      builder.in = (column: string, values: string[]) => {
+        if (column === "signal_type") query.signalTypes = values;
+        return builder;
+      };
+      builder.gte = (_column: string, value: string) => {
+        query.lower = value;
+        return builder;
+      };
+      builder.lt = (_column: string, value: string) => {
+        query.upper = value;
+        query.upperOperator = "lt";
+        return builder;
+      };
+      builder.lte = (_column: string, value: string) => {
+        query.upper = value;
+        query.upperOperator = "lte";
+        return builder;
+      };
+      builder.order = () => builder;
+      builder.limit = async () => {
+        if (query.signalTypes.includes("official_notice")) {
+          return {
+            data: [{
+              tweet_id: "day-13-notice",
+              text: "Usage limits reset soon.",
+              tweet_url: "https://x.com/thsottiaux/status/day-13-notice",
+              tweet_created_at: oldNoticeAt,
+              signal_type: "official_notice",
+              confidence: 0.98,
+              verification_status: "confirmed",
+              is_reply: false,
+              expires_at: null,
+            }],
+            error: null,
+          };
+        }
+        if (query.signalTypes.includes("reset_executed") && query.upperOperator === "lte") {
+          return {
+            data: [{
+              tweet_id: "day-15-reset",
+              tweet_created_at: currentResetAt,
+              signal_type: "reset_executed",
+              confidence: 0.99,
+              verification_status: "confirmed",
+              is_reply: false,
+            }],
+            error: null,
+          };
+        }
+        return {
+          data: [{
+            tweet_id: "day-13-reset",
+            text: "Day 13/ Reset all propagated. Enjoy.",
+            tweet_url: "https://x.com/thsottiaux/status/day-13-reset",
+            tweet_created_at: previousResetAt,
+            signal_type: "reset_executed",
+            confidence: 0.99,
+            verification_status: "confirmed",
+            classification_source: "rule",
+            is_reply: false,
+          }],
+          error: null,
+        };
+      };
+      return builder;
+    },
+  };
+
+  const cluster = await findFormalTiboResetCluster(
+    client as never,
+    "day-15-reset",
+    currentResetAt,
+  );
+
+  assert.equal(cluster.error, null);
+  assert.equal(cluster.representativeNoticeId, null);
+  assert.equal(cluster.representativeNoticeAt, null);
+  assert.equal(cluster.announcedAt, currentResetAt);
+  assert.deepEqual(cluster.sourceTweetIds, ["day-15-reset"]);
+  assert.ok(queries.some((query) =>
+    query.signalTypes.includes("reset_executed") &&
+    query.upperOperator === "lt" &&
+    query.upper === currentResetAt,
+  ));
 });
 

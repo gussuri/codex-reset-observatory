@@ -1612,11 +1612,14 @@ async function handleTiboWebhookPost(
             formalEnrichmentFailed = true;
           } else {
             const enrichedSourceTweetIds = Array.from(new Set([
-              ...formalFlowSourceTweetIds,
+              ...adoptionResolution.logicalPostTweetIds,
               ...formalFlowCluster.sourceTweetIds,
             ]));
+            const sourceProvenanceChanged =
+              enrichedSourceTweetIds.length !== formalFlowSourceTweetIds.length ||
+              enrichedSourceTweetIds.some((sourceId) => !formalFlowSourceTweetIds.includes(sourceId));
             if (
-              enrichedSourceTweetIds.length !== formalFlowSourceTweetIds.length &&
+              sourceProvenanceChanged &&
               adoptionClaim?.record &&
               adoptionResolution.resetEventKey
             ) {
@@ -1642,9 +1645,11 @@ async function handleTiboWebhookPost(
             }
 
             if (!formalEnrichmentFailed) {
+              formalFlowSourceTweetIds = enrichedSourceTweetIds;
               const isExecutionAnnouncement = isCurrentUsageResetAnnouncement(effectiveFormalCandidate.text);
               const estimateResult = await upsertResetExecutionEstimate(supabase, {
                 resetEventKey: adoptionResolution.resetEventKey,
+                tiboProvenanceResolved: true,
                 tiboAnnouncedAt: isExecutionAnnouncement
                   ? effectiveFormalCandidate.tweet_created_at
                   : formalFlowCluster.announcedAt ?? effectiveFormalCandidate.tweet_created_at,
@@ -1671,8 +1676,7 @@ async function handleTiboWebhookPost(
         if (!formalEnrichmentFailed) {
           try {
             const displayNameSourceTweetIds = Array.from(new Set([
-              ...formalFlowSourceTweetIds,
-              ...logicalPost?.sourceTweetIds ?? [],
+              ...(adoptionResolution?.logicalPostTweetIds ?? []),
               ...(formalFlowCluster?.sourceTweetIds ?? []),
             ]));
             const canonicalSourceRows = await fetchCanonicalTiboSourceRows(
