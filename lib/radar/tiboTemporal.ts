@@ -214,6 +214,7 @@ const SOURCE_TIMEZONE_PATTERN =
   /\b(?:UTC|GMT)(?:[+-][A-Za-z0-9:]*)?(?![A-Za-z0-9:+-])|\b(?:PST|PDT|EST|EDT|PT|ET|JST)\b|\b[A-Za-z]+\/[A-Za-z_]+\b/gi;
 const SOURCE_DAY_PATTERN =
   /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+const DAY_COUNT_HEADING_PATTERN = /\bday\s*(\d{1,3})\s*[/|:—–-]/i;
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
 const RESET_CUE_PATTERN =
   /\b(?:reset|resets|resetting|quota|usage limits?|rate limits?|land(?:s|ed|ing)?|refresh(?:ed|es|ing)?|performative)\b/i;
@@ -1300,11 +1301,33 @@ function isIndependentScheduleCandidate(candidate: SourceTemporalCandidate) {
     semantics.temporalKind === "range";
 }
 
+function isDayCountOnlyTemporalClaim(semantics: TiboTemporalSemantics, sourceText: string) {
+  const match = DAY_COUNT_HEADING_PATTERN.exec(sourceText);
+  if (!match || match.index === undefined) return false;
+  const headingEnd = match.index + match[0].length;
+  const counterValue = Number(match[1]);
+  const expressionRange = semantics.temporalExpression
+    ? getUniqueEvidenceQuoteRange(semantics.temporalExpression, sourceText)
+    : null;
+
+  if (expressionRange && expressionRange.start < headingEnd && expressionRange.end <= headingEnd) {
+    return true;
+  }
+  if (!expressionRange && (
+    semantics.explicitDateParts?.day === counterValue ||
+    semantics.relativeDayOffset === counterValue
+  )) {
+    return true;
+  }
+  return false;
+}
+
 export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
   const sourceExtraction = parseDeterministicTemporalSemantics(sourceText);
   if (sourceExtraction.rejected) return null;
 
   const geminiSemantics = parseGeminiTemporalSemantics(value, sourceText);
+  if (geminiSemantics && isDayCountOnlyTemporalClaim(geminiSemantics, sourceText)) return null;
   const candidates = filterConditionalTemporalCandidates(sourceText, sourceExtraction.candidates);
   const hasEod = SOURCE_EOD_DEADLINE_PATTERN.test(sourceText);
   SOURCE_EOD_DEADLINE_PATTERN.lastIndex = 0;

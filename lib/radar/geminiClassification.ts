@@ -235,6 +235,17 @@ event while a later phrase refers to the same reset mechanism in the future. Tre
 historical-only only when no later passage reasonably reactivates that same Codex usage-reset
 mechanism. If a later passage is unrelated to reset or usage limits, keep the post irrelevant.
 
+Handle short, headline-style reset posts semantically rather than treating their brevity as
+historical evidence. A day-count heading such as "Day 10/ Reset" or "Day 13/ Le limit reset" can
+be the whole reset-related announcement; "Day N" may be a series label, not a date or elapsed-time
+claim. Such day-count headings are not historical by default. Decide whether the author's own text
+announces a future reset, confirms a current/completed reset, or leaves the speech act unresolved.
+Do not turn the day number into a clock time, schedule, or event timestamp. If there is no reliable
+time or tense cue, use temporalDirection="unclear" and leave temporal expressions, dates, and times
+unset. Do not let a headline become a false positive when the surrounding text is retrospective,
+cancels or conditions the reset, names an unrelated product/technical reset, discusses product
+features, or uses generic "day"/"cooking" language without a usage-reset meaning.
+
 When one post mentions multiple reset events, select the primary event by time meaning:
 - An explicit current/completed event ("now", "done", "landed", "enjoy", "just reset", "already reset")
   takes priority over a secondary future event in the same post, so "One reset now, another later"

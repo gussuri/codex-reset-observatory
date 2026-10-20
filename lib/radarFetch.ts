@@ -65,6 +65,7 @@ import {
   type NextGenerationTrainingState,
 } from "@/lib/radar/nextGenerationTraining";
 import { TIBO_EDIT_IDENTITY_COLUMNS } from "@/lib/radar/tiboEditIdentity";
+import { attachTiboFormalReplyAdmissionProof } from "@/lib/radar/tiboFormalReplyAdmission";
 import { isMissingTiboOptionalColumnError } from "@/lib/radar/tiboSchemaCompatibility";
 import {
   RADAR_CACHE_TAGS,
@@ -193,6 +194,10 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "classification_source",
   "rule_signal_type",
   "ai_signal_type",
+  "ai_confidence",
+  "ai_classification_status",
+  "ai_temporal_direction",
+  "ai_evidence_quote",
   "teaser_strength",
   "secondary_signal",
   "ai_teaser_strength",
@@ -211,6 +216,9 @@ export const TIBO_HISTORY_SELECT_FIELDS = [
   "temporal_resolution_status",
   "is_reply",
   "verification_status",
+  "source_context_revision_hashes",
+  "source_context_classified_revision_hashes",
+  "formal_reply_admission_proof",
   ...TIBO_EDIT_IDENTITY_COLUMNS.split(","),
 ].join(",");
 
@@ -235,7 +243,14 @@ const TIBO_HISTORY_FALLBACK_SELECT_FIELDS = [
 // across every page using a stable keyset cursor.
 export const TIBO_HISTORY_PAGE_SIZE = 1000;
 export const TIBO_RECENT_MAX_ROWS = 20;
-export const TIBO_RECENT_SELECT_FIELDS = ACTIVE_TIBO_SIGNAL_SELECT_FIELDS;
+export const TIBO_RECENT_SELECT_FIELDS = [
+  ...ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(","),
+  "ai_confidence",
+  "ai_evidence_quote",
+  "source_context_revision_hashes",
+  "source_context_classified_revision_hashes",
+  "formal_reply_admission_proof",
+].join(",");
 export const TIMED_TIBO_SIGNAL_MAX_ROWS = 40;
 export const TIMED_TIBO_SIGNAL_SELECT_FIELDS = [
   "tweet_id",
@@ -317,6 +332,7 @@ type TiboHistoryQueryRunner = (
   includeReplies: boolean,
   limit?: number,
   cursor?: TiboHistoryCursor,
+  includeFormalReplyProofs?: boolean,
 ) => Promise<TiboHistoryQueryResult>;
 
 type TiboHistoryQueryBuilder = {
@@ -523,9 +539,11 @@ export function splitTiboHistorySignals(
     // Keep the database ordering for canonical history consumers. The wider
     // recent/UI projection is fetched separately and is not derived here.
     withReplies: signals,
-    // This matches the former PostgREST `is_reply IS NULL OR is_reply = false`
-    // predicate without transferring the same wide rows twice.
-    withoutReplies: signals.filter((signal) => signal.is_reply !== true),
+    // Verified completion replies join canonical history only through the
+    // same proof gate used by every formal-history consumer.
+    withoutReplies: signals.filter((signal) =>
+      signal.is_reply !== true || isFormalTiboResetSignal(signal),
+    ),
   };
 }
 
@@ -551,11 +569,19 @@ async function executeTiboHistoryQuery(
   fallbackFields = TIBO_HISTORY_FALLBACK_SELECT_FIELDS,
   cursor?: TiboHistoryCursor,
 ): Promise<TiboHistoryQueryResult> {
-  let result = await queryTiboHistory(fields, includeReplies, limit, cursor);
+  let result = await queryTiboHistory(fields, includeReplies, limit, cursor, true);
   if (result.error && isMissingTiboOptionalColumnError(result.error)) {
-    result = await queryTiboHistory(fallbackFields, includeReplies, limit, cursor);
+    result = await queryTiboHistory(fields, includeReplies, limit, cursor, false);
   }
-  return result;
+  if (result.error && isMissingTiboOptionalColumnError(result.error)) {
+    result = await queryTiboHistory(fallbackFields, includeReplies, limit, cursor, false);
+  }
+  return {
+    ...result,
+    data: result.data?.map((row) => attachTiboFormalReplyAdmissionProof(
+      row as FormalTiboResetSignal & Record<string, unknown>,
+    ) as FormalTiboResetSignal) ?? null,
+  };
 }
 
 function getTiboHistoryCursor(row: FormalTiboResetSignal | undefined): TiboHistoryCursor | null {
@@ -578,18 +604,31 @@ function getTiboHistoryCursorKey(cursor: TiboHistoryCursor) {
   return cursor.tweetCreatedAt + "\u0000" + cursor.tweetId;
 }
 
-export function buildCanonicalTiboHistoryFilter(cursor?: TiboHistoryCursor) {
-  if (!cursor) return "is_reply.is.null,is_reply.eq.false";
+export function buildCanonicalTiboHistoryFilter(
+  cursor?: TiboHistoryCursor,
+  includeFormalReplyProofs = false,
+) {
+  const formalReplyClause = includeFormalReplyProofs
+    ? ",and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1)"
+    : "";
+  if (!cursor) return `is_reply.is.null,is_reply.eq.false${formalReplyClause}`;
 
   const olderThan = "tweet_created_at.lt." + cursor.tweetCreatedAt;
   const sameTimestampBefore = "tweet_created_at.eq." + cursor.tweetCreatedAt +
     ",tweet_id.lt." + cursor.tweetId;
-  return [
+  const filters = [
     "and(is_reply.is.null," + olderThan + ")",
     "and(is_reply.eq.false," + olderThan + ")",
     "and(is_reply.is.null," + sameTimestampBefore + ")",
     "and(is_reply.eq.false," + sameTimestampBefore + ")",
-  ].join(",");
+  ];
+  if (includeFormalReplyProofs) {
+    filters.push(
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1," + olderThan + ")",
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1," + sameTimestampBefore + ")",
+    );
+  }
+  return filters.join(",");
 }
 
 export async function readTiboHistorySignals(
@@ -695,13 +734,14 @@ async function fetchRawTiboHistorySignals(): Promise<TiboHistoryReadResult> {
       includeReplies,
       limit = TIBO_HISTORY_PAGE_SIZE,
       cursor,
+      includeFormalReplyProofs = true,
     ) => {
       const query = supabase
         .from("tibo_signals")
         .select(fields) as unknown as TiboHistoryQueryBuilder;
       const filteredQuery = includeReplies
         ? query
-        : query.or(buildCanonicalTiboHistoryFilter(cursor));
+        : query.or(buildCanonicalTiboHistoryFilter(cursor, includeFormalReplyProofs));
       return await filteredQuery
         .order("tweet_created_at", { ascending: false })
         .order("tweet_id", { ascending: false })

@@ -208,6 +208,46 @@ function hasValidatedContextualResetReference(input: TiboContextSafetyInput, aut
   return true;
 }
 
+/** Return only a fully verified, same-author reply path to an AI-identified global reset. */
+export function getValidatedTiboSameGlobalReplyPath(input: TiboContextSafetyInput) {
+  if (
+    input.isReply !== true ||
+    input.isQuote === true ||
+    input.contextualResetAssessment !== "same_global_reset" ||
+    input.selectedSignalType !== "reset_executed" ||
+    input.temporalDirection !== "completed_now"
+  ) return null;
+
+  const targetTweetId = input.targetTweetId?.trim();
+  const contextualTweetId = input.contextualResetTweetId?.trim();
+  const context = input.validatedSourceContext;
+  if (!targetTweetId || !contextualTweetId || !context) return null;
+  if (!hasValidatedContextualResetReference(input, normalizeContext(input.authorText))) return null;
+
+  const path = getValidatedPath(context, targetTweetId, contextualTweetId);
+  if (!path || path.length < 2 || path.length > 3 || path.some((node) => !isTiboHandle(node.authorHandle))) {
+    return null;
+  }
+  if (path[0]!.tweetId !== targetTweetId || path.at(-1)!.tweetId !== contextualTweetId) return null;
+  if (input.replyParentTweetId !== path[1]!.tweetId) return null;
+
+  const pathEdges = path.slice(1).map((node, index) => {
+    const matches = context.edges.filter((edge) =>
+      edge.fromTweetId === path[index]!.tweetId && edge.toTweetId === node.tweetId,
+    );
+    return matches.length === 1 ? matches[0]! : null;
+  });
+  if (pathEdges.some((edge) => edge?.relation !== "reply")) return null;
+
+  const targetTime = Date.parse(path[0]!.createdAt);
+  if (path.some((node, index) =>
+    index > 0 && Date.parse(node.createdAt) >= Date.parse(path[index - 1]!.createdAt),
+  )) return null;
+  if (!Number.isFinite(targetTime)) return null;
+
+  return path;
+}
+
 function hasExternalSourceContext(input: TiboContextSafetyInput) {
   return input.isReply === true ||
     input.isQuote === true ||

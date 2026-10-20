@@ -822,6 +822,37 @@ test("findRecentFormalTiboReset skips rows with manual classification source", a
   assert.equal(result.needsPromotion, false);
 });
 
+test("findRecentFormalTiboReset excludes legacy rows with unknown reply state", async () => {
+  const client = {
+    from() {
+      const builder: Record<string, any> = {};
+      builder.select = () => builder;
+      builder.or = () => builder;
+      builder.neq = () => builder;
+      builder.gte = () => builder;
+      builder.lte = () => builder;
+      builder.order = () => builder;
+      builder.limit = async () => ({
+        data: [{
+          tweet_id: "unknown-reply-state",
+          text: "I have reset usage limits for everyone.",
+          tweet_created_at: OBSERVED_AT,
+          signal_type: "reset_executed",
+          confidence: 0.99,
+          verification_status: "confirmed",
+          classification_source: "gemini",
+          is_reply: null,
+        }],
+        error: null,
+      });
+      return builder;
+    },
+  };
+
+  const result = await findRecentFormalTiboReset(client as never, OBSERVED_AT, 60_000);
+  assert.equal(result.tweetId, null);
+});
+
 test("findRecentFormalTiboReset preserves a trusted edit identity for monitor promotion", async () => {
   const rootId = "2112432076767289678";
   const editId = "2112432076767289679";

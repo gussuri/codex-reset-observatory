@@ -25,6 +25,7 @@ export type TiboEvidenceNode = {
   authorHandle: string;
   text: string;
   createdAt: string;
+  sourceContextRevisionHashes?: string[];
 };
 
 export type TiboEvidenceOmissionReason =
@@ -150,6 +151,8 @@ function validPost(post: TiboEvidencePost, expectedId?: string): { valid: true; 
         authorHandle: identity.authorHandle,
         text: post.text,
         createdAt: new Date(createdAtMs).toISOString(),
+        sourceContextRevisionHashes: (post.sourceContextRevisionHashes ?? [])
+          .filter((hash): hash is string => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash)),
       },
       createdAtMs,
     },

@@ -142,6 +142,8 @@ function installSourceContextDatabase(
 ) {
   const original = globalThis.fetch;
   const rows = new Map(initialRows.map((row) => [row.tweet_id, structuredClone(row)]));
+  const formalAdoptions: WebhookRow[] = [];
+  const formalAdoptionClaims: WebhookRow[] = [];
   const appliedRevisions = new Map<string, Set<string>>();
   const upserts: WebhookRow[] = [];
   const urls: string[] = [];
@@ -154,6 +156,42 @@ function installSourceContextDatabase(
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const body = init?.body ? JSON.parse(String(init.body)) as WebhookRow : {};
     urls.push(url.toString());
+
+    if (url.pathname.endsWith("/rpc/claim_tibo_formal_adoption")) {
+      formalAdoptionClaims.push(body);
+      const existing = formalAdoptions.find((row) => row.reset_event_key === body.p_reset_event_key);
+      const record = existing ?? {
+        id: `adoption-${body.p_logical_post_id}`,
+        logical_post_id: body.p_logical_post_id,
+        logical_post_tweet_ids: body.p_logical_post_tweet_ids,
+        reset_event_key: body.p_reset_event_key,
+        representative_tweet_id: body.p_representative_tweet_id,
+        source_tweet_ids: body.p_source_tweet_ids,
+        claim_source: body.p_claim_source,
+        adopted_at: body.p_adopted_at,
+        claimed_at: body.p_claimed_at,
+        created_at: body.p_claimed_at,
+        updated_at: body.p_claimed_at,
+      };
+      if (!existing) formalAdoptions.push(record);
+      return new Response(JSON.stringify({ status: existing ? "existing" : "claimed_new", record }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    if (url.pathname.endsWith("/rest/v1/tibo_formal_adoptions") && method === "GET"
+      && failFormalAdoptionReadOnce) {
+      failFormalAdoptionReadOnce = false;
+      return new Response(JSON.stringify({ message: "injected formal adoption read failure" }), { status: 500 });
+    }
+
+    if (url.pathname.endsWith("/rest/v1/tibo_formal_adoptions") && method === "GET") {
+      return new Response(JSON.stringify(formalAdoptions), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
     if (url.pathname.endsWith("/rpc/merge_tibo_source_context_enrichment")) {
       contextMergeCalls += 1;
@@ -192,12 +230,6 @@ function installSourceContextDatabase(
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    }
-
-    if (url.pathname.endsWith("/rest/v1/tibo_formal_adoptions") && method === "GET"
-      && failFormalAdoptionReadOnce) {
-      failFormalAdoptionReadOnce = false;
-      return new Response(JSON.stringify({ message: "injected formal adoption read failure" }), { status: 500 });
     }
 
     if (url.pathname.endsWith("/rest/v1/tibo_signals") && (method === "POST" || method === "PATCH")) {
@@ -248,6 +280,7 @@ function installSourceContextDatabase(
     rows,
     upserts,
     urls,
+    formalAdoptionClaims,
     get contextMergeCalls() { return contextMergeCalls; },
     restore() { globalThis.fetch = original; },
   };
@@ -389,6 +422,8 @@ test("a formal-flow failure leaves the source-context revision pending for retry
     temporalDirection: "completed_now",
     evidenceQuote: formalText,
     reasonJa: "利用上限をリセットしました。",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: PARENT_ID,
     teaserStrength: "none",
     teaserStrengthConfidence: 0.99,
     teaserStrengthEvidenceQuote: null,
@@ -854,14 +889,24 @@ test("AI same-event judgments classify the real reset-button root and elliptical
       temporalDirection: "completed_now",
       pathLength: 2,
     },
+    {
+      name: "Day 13 direct notice followed by Done completion",
+      targetId: "2115000000000000136",
+      targetText: "Done and dusted.",
+      signalType: "reset_executed",
+      temporalDirection: "completed_now",
+      pathLength: 1,
+      rootText: "Day 13/ Le limit reset",
+    },
   ] as const;
 
   try {
     for (const scenario of scenarios) {
       const intermediateId = "2115000000000000135";
       const intermediateText = "A difficult day, but we are still here.";
+      const scenarioRootText = "rootText" in scenario ? scenario.rootText : rootText;
       const parentId = scenario.pathLength === 1 ? rootId : intermediateId;
-      const parentText = scenario.pathLength === 1 ? rootText : intermediateText;
+      const parentText = scenario.pathLength === 1 ? scenarioRootText : intermediateText;
       const parentUrl = `https://x.com/thsottiaux/status/${parentId}`;
       const targetUrl = `https://x.com/thsottiaux/status/${scenario.targetId}`;
       const createdAt = TARGET_CREATED_AT;
@@ -889,9 +934,9 @@ test("AI same-event judgments classify the real reset-button root and elliptical
       };
       const rootRow = {
         tweet_id: rootId,
-        text: rootText,
+        text: scenarioRootText,
         tweet_url: rootUrl,
-        tweet_created_at: PARENT_CREATED_AT,
+        tweet_created_at: scenario.pathLength === 2 ? "2026-10-16T08:00:00.000Z" : PARENT_CREATED_AT,
         verification_status: "confirmed",
         is_reply: false,
         is_quote: false,
@@ -911,7 +956,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
                 tweetId: rootId,
                 tweetUrl: rootUrl,
                 authorHandle: "@thsottiaux",
-                text: rootText,
+                text: scenarioRootText,
               },
             },
           };
@@ -942,10 +987,19 @@ test("AI same-event judgments classify the real reset-button root and elliptical
           text: scenario.targetText,
           tweetUrl: targetUrl,
           tweetCreatedAt: createdAt,
+          formal_reply_admission_proof: {
+            version: "tibo-formal-reply-admission-v1",
+            contextualResetTweetId: rootId,
+          },
+          formalReplyAdmissionProof: {
+            version: "tibo-formal-reply-admission-v1",
+            contextualResetTweetId: rootId,
+          },
           ...sourceMetadata,
         }));
         assert.equal(initialResponse.status, 200, `${scenario.name} initial delivery`);
         assert.equal(database.rows.get(scenario.targetId)?.signal_type, "irrelevant");
+        assert.equal(database.rows.get(scenario.targetId)?.formal_reply_admission_proof, null);
 
         const enrichmentResponse = await POST(buildRequest({
           tweetId: scenario.targetId,
@@ -966,8 +1020,23 @@ test("AI same-event judgments classify the real reset-button root and elliptical
           `${scenario.name} records the classified revision`,
         );
         assert.match(gemini.prompts[1]!, new RegExp(rootId));
-        assert.equal(database.urls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
-        assert.equal(database.urls.some((url) => url.includes("reset_execution_estimates")), false);
+        if (scenario.signalType === "reset_executed") {
+          const admissionProof = finalRow.formal_reply_admission_proof;
+          assert.equal(admissionProof?.version, "tibo-formal-reply-admission-v1", scenario.name);
+          assert.equal(admissionProof?.admissionMethod, "validated_same_global_reset_reply", scenario.name);
+          assert.equal(admissionProof?.contextualResetTweetId, rootId, scenario.name);
+          assert.equal(admissionProof?.path.length, scenario.pathLength + 1, scenario.name);
+          assert.deepEqual(admissionProof?.sourceContextRevisionHashes, finalRow.source_context_revision_hashes);
+          assert.equal(database.formalAdoptionClaims.length, 1, scenario.name);
+          assert.deepEqual(
+            database.formalAdoptionClaims[0]?.p_source_tweet_ids,
+            admissionProof?.pathTweetIds,
+            `${scenario.name} adopts only the verified path IDs`,
+          );
+        } else {
+          assert.equal(finalRow.formal_reply_admission_proof, null, scenario.name);
+          assert.equal(database.formalAdoptionClaims.length, 0, scenario.name);
+        }
       } finally {
         gemini.restore();
         database.restore();

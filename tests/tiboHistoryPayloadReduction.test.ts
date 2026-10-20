@@ -21,7 +21,6 @@ import {
 import type { TiboSecondarySignal } from "../lib/radar/tiboSecondarySignal";
 
 const REMOVED_HISTORY_FIELDS = [
-  "ai_classification_status",
   "ai_reset_type_ja",
   "ai_notice_to_execution",
   "ai_teaser_strength_confidence",
@@ -49,6 +48,10 @@ const REQUIRED_HISTORY_FIELDS = [
   "classification_source",
   "rule_signal_type",
   "ai_signal_type",
+  "ai_confidence",
+  "ai_classification_status",
+  "ai_temporal_direction",
+  "ai_evidence_quote",
   "teaser_strength",
   "secondary_signal",
   "ai_teaser_strength",
@@ -67,6 +70,9 @@ const REQUIRED_HISTORY_FIELDS = [
   "temporal_resolution_status",
   "is_reply",
   "verification_status",
+  "source_context_revision_hashes",
+  "source_context_classified_revision_hashes",
+  "formal_reply_admission_proof",
   "logical_post_id",
   "edit_history_tweet_ids",
   "edit_version",
