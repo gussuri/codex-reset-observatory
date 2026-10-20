@@ -3,6 +3,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 import { POST as postTiboHeartbeat } from "../app/api/webhook/tibo/heartbeat/route";
 import {
+  classifyHeartbeatPayloadObservation,
   isStaleHeartbeatPayload,
   type HeartbeatRecord,
   type HeartbeatTimelineDiagnostic,
@@ -67,7 +68,7 @@ function makeBody(
   };
 }
 
-function makeRequest(body: ReturnType<typeof makeBody>) {
+function makeRequest(body: unknown) {
   return new NextRequest("http://localhost/api/webhook/tibo/heartbeat", {
     method: "POST",
     headers: {
@@ -115,6 +116,15 @@ function makeInitialRow(): HeartbeatRecord {
 }
 
 test("heartbeat staleness falls back to the stored heartbeat time for legacy rows", () => {
+  assert.equal(isStaleHeartbeatPayload({
+    sessionId: "live-old-extension",
+    lastSuccessfulParseAt: "2026-10-21T00:10:00.000Z",
+    selectorVersion: "v1.12",
+  }, {
+    last_heartbeat_at: "2026-10-21T00:09:00.000Z",
+    last_scan_summary: null,
+  }), false, "legacy clients without the observation-time contract must remain live by receipt time");
+
   assert.equal(isStaleHeartbeatPayload({ heartbeatObservedAt: initialAt }, {
     last_heartbeat_at: initialAt,
     last_scan_summary: null,
@@ -123,6 +133,45 @@ test("heartbeat staleness falls back to the stored heartbeat time for legacy row
     last_heartbeat_at: initialAt,
     last_scan_summary: null,
   }), false);
+});
+
+test("unknown declared timeline formats without a heartbeat timestamp are invalid, not legacy", () => {
+  assert.deepEqual(classifyHeartbeatPayloadObservation({
+    selectorVersion: "v2.4-any-name",
+    timelineDiagnostics: { formatVersion: 99 },
+  }), { kind: "invalid" });
+});
+
+test("heartbeat route rejects a timestamp-less payload that declares timeline diagnostics", async () => {
+  const previousEnv = {
+    TIBO_WEBHOOK_SECRET: process.env.TIBO_WEBHOOK_SECRET,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  process.env.TIBO_WEBHOOK_SECRET = "test-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+  globalThis.fetch = async () => new Response(JSON.stringify(makeInitialRow()), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+
+  try {
+    const response = await postTiboHeartbeat(makeRequest({
+      sessionId: "current-extension",
+      selectorVersion: "v1.14-current-timeline-diagnostics",
+      timelineDiagnostics: makeLaneDiagnostics(freshAt, 0),
+    }));
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, "Invalid heartbeat observation timestamp.");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("heartbeat route rejects delayed and concurrent stale payloads using updated_at CAS", async () => {

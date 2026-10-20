@@ -273,16 +273,49 @@ function getStoredHeartbeatObservedAt(summary: unknown): string | null {
   return normalizeSafeTimestamp((summary as Record<string, unknown>).heartbeatObservedAt);
 }
 
+export type HeartbeatPayloadObservation =
+  | { kind: "legacy" }
+  | { kind: "observed"; observedAt: string }
+  | { kind: "invalid" };
+
+function hasOwnField(value: Record<string, unknown> | null, field: string): boolean {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, field));
+}
+
+export function classifyHeartbeatPayloadObservation(value: unknown): HeartbeatPayloadObservation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "invalid" };
+  const body = value as Record<string, unknown>;
+  const rawSummary = body.last_scan_summary ?? body.lastScanSummary;
+  const summary = rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+    ? rawSummary as Record<string, unknown>
+    : null;
+  const declaresObservationContract =
+    hasOwnField(body, "heartbeatObservedAt") ||
+    hasOwnField(body, "timelineDiagnostics") ||
+    hasOwnField(summary, "heartbeatObservedAt") ||
+    hasOwnField(summary, "timelineDiagnostics") ||
+    hasOwnField(summary, "sessionStartedAt") ||
+    hasOwnField(summary, "documentStartedAt") ||
+    hasOwnField(summary, "scanSequence");
+  const hasTopLevelTimestamp = hasOwnField(body, "heartbeatObservedAt");
+  const rawObservedAt = hasTopLevelTimestamp ? body.heartbeatObservedAt : undefined;
+  const observedAt = normalizeSafeTimestamp(rawObservedAt);
+
+  if (observedAt) return { kind: "observed", observedAt };
+  return declaresObservationContract ? { kind: "invalid" } : { kind: "legacy" };
+}
+
 export function isStaleHeartbeatPayload(
   body: HeartbeatRequestBody,
   existing: ExistingHeartbeatRecord | null,
 ): boolean {
+  const incomingObservation = classifyHeartbeatPayloadObservation(body);
+  if (incomingObservation.kind !== "observed") return false;
   const existingObservedAt =
     getStoredHeartbeatObservedAt(existing?.last_scan_summary) ??
     normalizeSafeTimestamp(existing?.last_heartbeat_at);
   if (!existingObservedAt) return false;
-  const incomingObservedAt = normalizeSafeTimestamp(body.heartbeatObservedAt);
-  return !incomingObservedAt || incomingObservedAt <= existingObservedAt;
+  return incomingObservation.observedAt <= existingObservedAt;
 }
 
 function compareSafeTimestamps(left: string | null | undefined, right: string | null | undefined): number {
